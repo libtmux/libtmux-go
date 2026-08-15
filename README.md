@@ -212,8 +212,8 @@ one tmux server: create panes, send keys, read output, wait for text.
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.1
 ```
 
-See [`mcp/README.md`](mcp/README.md) for client configuration and the tool
-reference.
+See [`mcp/README.md`](mcp/README.md) for client configuration, and
+[`mcp/TOOLS.md`](mcp/TOOLS.md) for the tool reference.
 
 ## Testing your own code
 

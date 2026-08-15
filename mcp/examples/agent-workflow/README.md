@@ -53,5 +53,5 @@ got.
 
 ## See also
 
-- [`mcp/README.md`](../../README.md) — the tool reference
+- [`mcp/TOOLS.md`](../../TOOLS.md) — the tool reference
 - [`libtmux-mcp`](../../cmd/libtmux-mcp) — the binary a real client launches
