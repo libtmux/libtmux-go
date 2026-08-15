@@ -1,0 +1,4766 @@
+{
+  "schema": 2,
+  "featureFloor": "3.2a",
+  "featureCeiling": "3.7",
+  "sourceTag": "3.7b",
+  "aliases": [
+    {
+      "name": "clock-mode-color",
+      "canonical": "clock-mode-colour"
+    },
+    {
+      "name": "cursor-color",
+      "canonical": "cursor-colour"
+    },
+    {
+      "name": "display-panes-active-color",
+      "canonical": "display-panes-active-colour"
+    },
+    {
+      "name": "display-panes-color",
+      "canonical": "display-panes-colour"
+    },
+    {
+      "name": "pane-colors",
+      "canonical": "pane-colours"
+    },
+    {
+      "name": "prompt-cursor-color",
+      "canonical": "prompt-cursor-colour"
+    }
+  ],
+  "options": [
+    {
+      "name": "activity-action",
+      "goName": "ActivityAction",
+      "goType": "ActivityAction",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "none",
+            "any",
+            "current",
+            "other"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "aggressive-resize",
+      "goName": "AggressiveResize",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "allow-passthrough",
+      "goName": "AllowPassthrough",
+      "goType": "AllowPassthrough",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        },
+        {
+          "since": "3.4",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "all"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "allow-rename",
+      "goName": "AllowRename",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "allow-set-title",
+      "goName": "AllowSetTitle",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.5",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alternate-screen",
+      "goName": "AlternateScreen",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "assume-paste-time",
+      "goName": "AssumePasteTime",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "automatic-rename",
+      "goName": "AutomaticRename",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "automatic-rename-format",
+      "goName": "AutomaticRenameFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "backspace",
+      "goName": "Backspace",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "KEY",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "base-index",
+      "goName": "BaseIndex",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bell-action",
+      "goName": "BellAction",
+      "goType": "BellAction",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "none",
+            "any",
+            "current",
+            "other"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "buffer-limit",
+      "goName": "BufferLimit",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "clock-mode-colour",
+      "goName": "ClockModeColour",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "clock-mode-style",
+      "goName": "ClockModeStyle",
+      "goType": "ClockModeStyle",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "12",
+            "24"
+          ]
+        },
+        {
+          "since": "3.6",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "12",
+            "24",
+            "12-with-seconds",
+            "24-with-seconds"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "codepoint-widths",
+      "goName": "CodepointWidths",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "command-alias",
+      "goName": "CommandAlias",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-command",
+      "goName": "CopyCommand",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-current-line-number-style",
+      "goName": "CopyModeCurrentLineNumberStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-current-match-style",
+      "goName": "CopyModeCurrentMatchStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-line-number-style",
+      "goName": "CopyModeLineNumberStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-line-numbers",
+      "goName": "CopyModeLineNumbers",
+      "goType": "CopyModeLineNumbers",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "off",
+            "default",
+            "absolute",
+            "relative",
+            "hybrid"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-mark-style",
+      "goName": "CopyModeMarkStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-match-style",
+      "goName": "CopyModeMatchStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-position-format",
+      "goName": "CopyModePositionFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-position-style",
+      "goName": "CopyModePositionStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "copy-mode-selection-style",
+      "goName": "CopyModeSelectionStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cursor-colour",
+      "goName": "CursorColour",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cursor-style",
+      "goName": "CursorStyle",
+      "goType": "CursorStyle",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+            "default",
+            "blinking-block",
+            "block",
+            "blinking-underline",
+            "underline",
+            "blinking-bar",
+            "bar"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "default-client-command",
+      "goName": "DefaultClientCommand",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "default-command",
+      "goName": "DefaultCommand",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "default-shell",
+      "goName": "DefaultShell",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "default-size",
+      "goName": "DefaultSize",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "default-terminal",
+      "goName": "DefaultTerminal",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "destroy-unattached",
+      "goName": "DestroyUnattached",
+      "goType": "DestroyUnattached",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        },
+        {
+          "since": "3.4",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "keep-last",
+            "keep-group"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "detach-on-destroy",
+      "goName": "DetachOnDestroy",
+      "goType": "DetachOnDestroy",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "no-detached"
+          ]
+        },
+        {
+          "since": "3.4",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "no-detached",
+            "previous",
+            "next"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "display-panes-active-colour",
+      "goName": "DisplayPanesActiveColour",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "display-panes-colour",
+      "goName": "DisplayPanesColour",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "display-panes-time",
+      "goName": "DisplayPanesTime",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "display-time",
+      "goName": "DisplayTime",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "editor",
+      "goName": "Editor",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "escape-time",
+      "goName": "EscapeTime",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "exit-empty",
+      "goName": "ExitEmpty",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "exit-unattached",
+      "goName": "ExitUnattached",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "extended-keys",
+      "goName": "ExtendedKeys",
+      "goType": "ExtendedKeys",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "always"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "extended-keys-format",
+      "goName": "ExtendedKeysFormat",
+      "goType": "ExtendedKeysFormat",
+      "choiceNames": {
+        "csi-u": "CSIU",
+        "xterm": "XTerm"
+      },
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.5",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+            "csi-u",
+            "xterm"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fill-character",
+      "goName": "FillCharacter",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "focus-events",
+      "goName": "FocusEvents",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "focus-follows-mouse",
+      "goName": "FocusFollowsMouse",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "get-clipboard",
+      "goName": "GetClipboard",
+      "goType": "GetClipboard",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+            "off",
+            "buffer",
+            "request",
+            "both"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "history-file",
+      "goName": "HistoryFile",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "history-limit",
+      "goName": "HistoryLimit",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "initial-repeat-time",
+      "goName": "InitialRepeatTime",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "input-buffer-size",
+      "goName": "InputBufferSize",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "key-table",
+      "goName": "KeyTable",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lock-after-time",
+      "goName": "LockAfterTime",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lock-command",
+      "goName": "LockCommand",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "main-pane-height",
+      "goName": "MainPaneHeight",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "main-pane-width",
+      "goName": "MainPaneWidth",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "menu-border-lines",
+      "goName": "MenuBorderLines",
+      "goType": "MenuBorderLines",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.4",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "single",
+            "double",
+            "heavy",
+            "simple",
+            "rounded",
+            "padded",
+            "none"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "menu-border-style",
+      "goName": "MenuBorderStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.4",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "menu-selected-style",
+      "goName": "MenuSelectedStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.4",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "menu-style",
+      "goName": "MenuStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.4",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "message-command-style",
+      "goName": "MessageCommandStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "message-format",
+      "goName": "MessageFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "message-limit",
+      "goName": "MessageLimit",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "message-line",
+      "goName": "MessageLine",
+      "goType": "MessageLine",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.4",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "message-style",
+      "goName": "MessageStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mode-keys",
+      "goName": "ModeKeys",
+      "goType": "ModeKeys",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "emacs",
+            "vi"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mode-style",
+      "goName": "ModeStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "monitor-activity",
+      "goName": "MonitorActivity",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "monitor-bell",
+      "goName": "MonitorBell",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "monitor-silence",
+      "goName": "MonitorSilence",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mouse",
+      "goName": "Mouse",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "other-pane-height",
+      "goName": "OtherPaneHeight",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "other-pane-width",
+      "goName": "OtherPaneWidth",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-active-border-style",
+      "goName": "PaneActiveBorderStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        },
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-base-index",
+      "goName": "PaneBaseIndex",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-border-format",
+      "goName": "PaneBorderFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        },
+        {
+          "since": "3.3",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-border-indicators",
+      "goName": "PaneBorderIndicators",
+      "goType": "PaneBorderIndicators",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "off",
+            "colour",
+            "arrows",
+            "both"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-border-lines",
+      "goName": "PaneBorderLines",
+      "goType": "PaneBorderLines",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "single",
+            "double",
+            "heavy",
+            "simple",
+            "number"
+          ]
+        },
+        {
+          "since": "3.6",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "single",
+            "double",
+            "heavy",
+            "simple",
+            "number",
+            "spaces"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-border-status",
+      "goName": "PaneBorderStatus",
+      "goType": "PaneBorderStatus",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "off",
+            "top",
+            "bottom"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-border-style",
+      "goName": "PaneBorderStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        },
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-colours",
+      "goName": "PaneColours",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-scrollbars",
+      "goName": "PaneScrollbars",
+      "goType": "PaneScrollbars",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "off",
+            "modal",
+            "on"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-scrollbars-position",
+      "goName": "PaneScrollbarsPosition",
+      "goType": "PaneScrollbarsPosition",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "right",
+            "left"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-scrollbars-style",
+      "goName": "PaneScrollbarsStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-status-current-style",
+      "goName": "PaneStatusCurrentStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-status-style",
+      "goName": "PaneStatusStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "popup-border-lines",
+      "goName": "PopupBorderLines",
+      "goType": "PopupBorderLines",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "single",
+            "double",
+            "heavy",
+            "simple",
+            "rounded",
+            "padded",
+            "none"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "popup-border-style",
+      "goName": "PopupBorderStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "popup-style",
+      "goName": "PopupStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prefix",
+      "goName": "Prefix",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "KEY",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prefix-timeout",
+      "goName": "PrefixTimeout",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.5",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prefix2",
+      "goName": "Prefix2",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "KEY",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prompt-command-cursor-style",
+      "goName": "PromptCommandCursorStyle",
+      "goType": "PromptCommandCursorStyle",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "default",
+            "blinking-block",
+            "block",
+            "blinking-underline",
+            "underline",
+            "blinking-bar",
+            "bar"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prompt-cursor-colour",
+      "goName": "PromptCursorColour",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prompt-cursor-style",
+      "goName": "PromptCursorStyle",
+      "goType": "PromptCursorStyle",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "default",
+            "blinking-block",
+            "block",
+            "blinking-underline",
+            "underline",
+            "blinking-bar",
+            "bar"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prompt-history-limit",
+      "goName": "PromptHistoryLimit",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "remain-on-exit",
+      "goName": "RemainOnExit",
+      "goType": "RemainOnExit",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "failed"
+          ]
+        },
+        {
+          "since": "3.7",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "failed",
+            "key"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "remain-on-exit-format",
+      "goName": "RemainOnExitFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "renumber-windows",
+      "goName": "RenumberWindows",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "repeat-time",
+      "goName": "RepeatTime",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "scroll-on-clear",
+      "goName": "ScrollOnClear",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session-status-current-style",
+      "goName": "SessionStatusCurrentStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session-status-style",
+      "goName": "SessionStatusStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "set-clipboard",
+      "goName": "SetClipboard",
+      "goType": "SetClipboard",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+            "off",
+            "external",
+            "on"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "set-titles",
+      "goName": "SetTitles",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "set-titles-string",
+      "goName": "SetTitlesString",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "silence-action",
+      "goName": "SilenceAction",
+      "goType": "SilenceAction",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "none",
+            "any",
+            "current",
+            "other"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status",
+      "goName": "Status",
+      "goType": "Status",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-bg",
+      "goName": "StatusBG",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-fg",
+      "goName": "StatusFG",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COLOUR",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-format",
+      "goName": "StatusFormat",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-interval",
+      "goName": "StatusInterval",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-justify",
+      "goName": "StatusJustify",
+      "goType": "StatusJustify",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "left",
+            "centre",
+            "right",
+            "absolute-centre"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-keys",
+      "goName": "StatusKeys",
+      "goType": "StatusKeys",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "emacs",
+            "vi"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-left",
+      "goName": "StatusLeft",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-left-length",
+      "goName": "StatusLeftLength",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-left-style",
+      "goName": "StatusLeftStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-position",
+      "goName": "StatusPosition",
+      "goType": "StatusPosition",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "top",
+            "bottom"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-right",
+      "goName": "StatusRight",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-right-length",
+      "goName": "StatusRightLength",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-right-style",
+      "goName": "StatusRightStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status-style",
+      "goName": "StatusStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "synchronize-panes",
+      "goName": "SynchronizePanes",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "terminal-features",
+      "goName": "TerminalFeatures",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "terminal-overrides",
+      "goName": "TerminalOverrides",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tiled-layout-max-columns",
+      "goName": "TiledLayoutMaxColumns",
+      "goType": "int64",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "NUMBER",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tree-mode-preview-format",
+      "goName": "TreeModePreviewFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tree-mode-preview-style",
+      "goName": "TreeModePreviewStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "update-environment",
+      "goName": "UpdateEnvironment",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "user-keys",
+      "goName": "UserKeys",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "variation-selector-always-wide",
+      "goName": "VariationSelectorAlwaysWide",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "server"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "visual-activity",
+      "goName": "VisualActivity",
+      "goType": "VisualActivity",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "both"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "visual-bell",
+      "goName": "VisualBell",
+      "goType": "VisualBell",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "both"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "visual-silence",
+      "goName": "VisualSilence",
+      "goType": "VisualSilence",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+            "off",
+            "on",
+            "both"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-active-style",
+      "goName": "WindowActiveStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-pane-current-status-format",
+      "goName": "WindowPaneCurrentStatusFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-pane-status-format",
+      "goName": "WindowPaneStatusFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.7",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-size",
+      "goName": "WindowSize",
+      "goType": "WindowSize",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "CHOICE",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+            "largest",
+            "smallest",
+            "manual",
+            "latest"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-activity-style",
+      "goName": "WindowStatusActivityStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-bell-style",
+      "goName": "WindowStatusBellStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-current-format",
+      "goName": "WindowStatusCurrentFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-current-style",
+      "goName": "WindowStatusCurrentStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-format",
+      "goName": "WindowStatusFormat",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-last-style",
+      "goName": "WindowStatusLastStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-separator",
+      "goName": "WindowStatusSeparator",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-status-style",
+      "goName": "WindowStatusStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-style",
+      "goName": "WindowStyle",
+      "goType": "string",
+      "array": false,
+      "style": true,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "word-separators",
+      "goName": "WordSeparators",
+      "goType": "string",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "STRING",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wrap-search",
+      "goName": "WrapSearch",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "xterm-keys",
+      "goName": "XTermKeys",
+      "goType": "bool",
+      "array": false,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "FLAG",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "hooks": [
+    {
+      "name": "after-bind-key",
+      "goName": "AfterBindKey",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-capture-pane",
+      "goName": "AfterCapturePane",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-copy-mode",
+      "goName": "AfterCopyMode",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-display-message",
+      "goName": "AfterDisplayMessage",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-display-panes",
+      "goName": "AfterDisplayPanes",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-kill-pane",
+      "goName": "AfterKillPane",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-list-buffers",
+      "goName": "AfterListBuffers",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-list-clients",
+      "goName": "AfterListClients",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-list-keys",
+      "goName": "AfterListKeys",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-list-panes",
+      "goName": "AfterListPanes",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-list-sessions",
+      "goName": "AfterListSessions",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-list-windows",
+      "goName": "AfterListWindows",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-load-buffer",
+      "goName": "AfterLoadBuffer",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-lock-server",
+      "goName": "AfterLockServer",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-new-session",
+      "goName": "AfterNewSession",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-new-window",
+      "goName": "AfterNewWindow",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-paste-buffer",
+      "goName": "AfterPasteBuffer",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-pipe-pane",
+      "goName": "AfterPipePane",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-queue",
+      "goName": "AfterQueue",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-refresh-client",
+      "goName": "AfterRefreshClient",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-rename-session",
+      "goName": "AfterRenameSession",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-rename-window",
+      "goName": "AfterRenameWindow",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-resize-pane",
+      "goName": "AfterResizePane",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-resize-window",
+      "goName": "AfterResizeWindow",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-save-buffer",
+      "goName": "AfterSaveBuffer",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-select-layout",
+      "goName": "AfterSelectLayout",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-select-pane",
+      "goName": "AfterSelectPane",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-select-window",
+      "goName": "AfterSelectWindow",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-send-keys",
+      "goName": "AfterSendKeys",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-set-buffer",
+      "goName": "AfterSetBuffer",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-set-environment",
+      "goName": "AfterSetEnvironment",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-set-hook",
+      "goName": "AfterSetHook",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-set-option",
+      "goName": "AfterSetOption",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-show-environment",
+      "goName": "AfterShowEnvironment",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-show-messages",
+      "goName": "AfterShowMessages",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-show-options",
+      "goName": "AfterShowOptions",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-split-window",
+      "goName": "AfterSplitWindow",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "after-unbind-key",
+      "goName": "AfterUnbindKey",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alert-activity",
+      "goName": "AlertActivity",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alert-bell",
+      "goName": "AlertBell",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alert-silence",
+      "goName": "AlertSilence",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-active",
+      "goName": "ClientActive",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-attached",
+      "goName": "ClientAttached",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-dark-theme",
+      "goName": "ClientDarkTheme",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-detached",
+      "goName": "ClientDetached",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-focus-in",
+      "goName": "ClientFocusIn",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-focus-out",
+      "goName": "ClientFocusOut",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-light-theme",
+      "goName": "ClientLightTheme",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.6",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-resized",
+      "goName": "ClientResized",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-session-changed",
+      "goName": "ClientSessionChanged",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "command-error",
+      "goName": "CommandError",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.5",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-died",
+      "goName": "PaneDied",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-exited",
+      "goName": "PaneExited",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-focus-in",
+      "goName": "PaneFocusIn",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-focus-out",
+      "goName": "PaneFocusOut",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-mode-changed",
+      "goName": "PaneModeChanged",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-set-clipboard",
+      "goName": "PaneSetClipboard",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pane-title-changed",
+      "goName": "PaneTitleChanged",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window",
+            "pane"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session-closed",
+      "goName": "SessionClosed",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session-created",
+      "goName": "SessionCreated",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session-renamed",
+      "goName": "SessionRenamed",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session-window-changed",
+      "goName": "SessionWindowChanged",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-layout-changed",
+      "goName": "WindowLayoutChanged",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-linked",
+      "goName": "WindowLinked",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        },
+        {
+          "since": "3.3",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-pane-changed",
+      "goName": "WindowPaneChanged",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-renamed",
+      "goName": "WindowRenamed",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-resized",
+      "goName": "WindowResized",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.3",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    },
+    {
+      "name": "window-unlinked",
+      "goName": "WindowUnlinked",
+      "goType": "SparseArray[string]",
+      "array": true,
+      "style": false,
+      "variants": [
+        {
+          "since": "3.2a",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "window"
+          ],
+          "choices": [
+
+          ]
+        },
+        {
+          "since": "3.3",
+          "tmuxKind": "COMMAND",
+          "scopes": [
+            "session"
+          ],
+          "choices": [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "notifications": [
+    {
+      "pythonField": "client_detached_control",
+      "wireName": "%client-detached",
+      "goName": "ClientDetached",
+      "since": "3.2a",
+      "prefixArguments": 0,
+      "prefixLabels": [],
+      "tail": "required",
+      "tailLabel": "client",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "client_session_changed_control",
+      "wireName": "%client-session-changed",
+      "goName": "ClientSessionChanged",
+      "since": "3.2a",
+      "prefixArguments": 2,
+      "prefixLabels": ["client", "session ID"],
+      "tail": "required",
+      "tailLabel": "session name",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "config_error",
+      "wireName": "%config-error",
+      "goName": "ConfigError",
+      "since": "3.4",
+      "prefixArguments": 0,
+      "prefixLabels": [],
+      "tail": "required",
+      "tailLabel": "text",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "continue_control",
+      "wireName": "%continue",
+      "goName": "Continue",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["pane ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "exit_control",
+      "wireName": "%exit",
+      "goName": "Exit",
+      "since": "3.2a",
+      "prefixArguments": 0,
+      "prefixLabels": [],
+      "tail": "optional",
+      "tailLabel": "reason",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "extended_output",
+      "wireName": "%extended-output",
+      "goName": "ExtendedOutput",
+      "since": "3.2a",
+      "prefixArguments": 2,
+      "prefixLabels": ["pane ID", "age"],
+      "tail": "colon",
+      "tailLabel": "data",
+      "allowEmptyTail": true
+    },
+    {
+      "pythonField": "layout_change",
+      "wireName": "%layout-change",
+      "goName": "LayoutChange",
+      "since": "3.2a",
+      "prefixArguments": 3,
+      "prefixLabels": ["window ID", "layout", "visible layout"],
+      "tail": "required",
+      "tailLabel": "flags",
+      "allowEmptyTail": true
+    },
+    {
+      "pythonField": "message_control",
+      "wireName": "%message",
+      "goName": "Message",
+      "since": "3.4",
+      "prefixArguments": 0,
+      "prefixLabels": [],
+      "tail": "required",
+      "tailLabel": "text",
+      "allowEmptyTail": true
+    },
+    {
+      "pythonField": "output",
+      "wireName": "%output",
+      "goName": "Output",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["pane ID"],
+      "tail": "required",
+      "tailLabel": "data",
+      "allowEmptyTail": true
+    },
+    {
+      "pythonField": "pane_mode_changed",
+      "wireName": "%pane-mode-changed",
+      "goName": "PaneModeChanged",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["pane ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "paste_buffer_changed",
+      "wireName": "%paste-buffer-changed",
+      "goName": "PasteBufferChanged",
+      "since": "3.4",
+      "prefixArguments": 0,
+      "prefixLabels": [],
+      "tail": "required",
+      "tailLabel": "name",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "paste_buffer_deleted",
+      "wireName": "%paste-buffer-deleted",
+      "goName": "PasteBufferDeleted",
+      "since": "3.4",
+      "prefixArguments": 0,
+      "prefixLabels": [],
+      "tail": "required",
+      "tailLabel": "name",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "pause_control",
+      "wireName": "%pause",
+      "goName": "Pause",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["pane ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "session_changed_control",
+      "wireName": "%session-changed",
+      "goName": "SessionChanged",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["session ID"],
+      "tail": "required",
+      "tailLabel": "session name",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "session_renamed_control",
+      "wireName": "%session-renamed",
+      "goName": "SessionRenamed",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["session ID"],
+      "tail": "required",
+      "tailLabel": "session name",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "session_window_changed",
+      "wireName": "%session-window-changed",
+      "goName": "SessionWindowChanged",
+      "since": "3.2a",
+      "prefixArguments": 2,
+      "prefixLabels": ["session ID", "window ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "sessions_changed",
+      "wireName": "%sessions-changed",
+      "goName": "SessionsChanged",
+      "since": "3.2a",
+      "prefixArguments": 0,
+      "prefixLabels": [],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "subscription_changed",
+      "wireName": "%subscription-changed",
+      "goName": "SubscriptionChanged",
+      "since": "3.2a",
+      "prefixArguments": 5,
+      "prefixLabels": ["name", "session ID", "window ID", "window index", "pane ID"],
+      "tail": "colon",
+      "tailLabel": "value",
+      "allowEmptyTail": true
+    },
+    {
+      "pythonField": "unlinked_window_add",
+      "wireName": "%unlinked-window-add",
+      "goName": "UnlinkedWindowAdd",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["window ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "unlinked_window_close",
+      "wireName": "%unlinked-window-close",
+      "goName": "UnlinkedWindowClose",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["window ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "unlinked_window_renamed",
+      "wireName": "%unlinked-window-renamed",
+      "goName": "UnlinkedWindowRenamed",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["window ID"],
+      "tail": "required",
+      "tailLabel": "name",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "window_add",
+      "wireName": "%window-add",
+      "goName": "WindowAdd",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["window ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "window_close",
+      "wireName": "%window-close",
+      "goName": "WindowClose",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["window ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "window_pane_changed",
+      "wireName": "%window-pane-changed",
+      "goName": "WindowPaneChanged",
+      "since": "3.2a",
+      "prefixArguments": 2,
+      "prefixLabels": ["window ID", "pane ID"],
+      "tail": "none",
+      "tailLabel": "",
+      "allowEmptyTail": false
+    },
+    {
+      "pythonField": "window_renamed_control",
+      "wireName": "%window-renamed",
+      "goName": "WindowRenamed",
+      "since": "3.2a",
+      "prefixArguments": 1,
+      "prefixLabels": ["window ID"],
+      "tail": "required",
+      "tailLabel": "name",
+      "allowEmptyTail": false
+    }
+  ]
+}

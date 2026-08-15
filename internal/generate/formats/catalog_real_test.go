@@ -1,0 +1,166 @@
+//go:build aix || darwin || dragonfly || freebsd || illumos || linux || netbsd || openbsd || solaris
+
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	tmux "github.com/tmux-python/libtmux/golang"
+)
+
+func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	directory := t.TempDir()
+	socket := filepath.Join(directory, "tmux.sock")
+	config := filepath.Join(directory, "tmux.conf")
+	if err := os.WriteFile(config, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cleanupCancel()
+		command := exec.CommandContext(cleanupCtx, "tmux", "-S", socket, "kill-server")
+		output, _ := command.CombinedOutput()
+		if err := cleanupCtx.Err(); err != nil {
+			t.Errorf("kill isolated tmux server: %v: %s", err, strings.TrimSpace(string(output)))
+		}
+	})
+	runCatalogTmux(ctx, t, socket, "-f", config, "new-session", "-d", "-s", "catalog")
+
+	version := strings.TrimSpace(runCatalogTmux(
+		ctx,
+		t,
+		socket,
+		"display-message",
+		"-p",
+		"#{version}",
+	))
+	current, err := parseCatalogVersion(version)
+	if err != nil {
+		t.Fatalf("parse server format version %q: %v", version, err)
+	}
+
+	spec, err := readFormatSpec("spec.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := make(map[string]fieldSpec, len(spec.Fields))
+	for _, field := range spec.Fields {
+		fields[field.Name] = field
+	}
+
+	inventory := runCatalogTmux(ctx, t, socket, "display-message", "-p", "-a")
+	seen := make(map[string]struct{})
+	missing := make([]string, 0)
+	incompatible := make([]string, 0)
+	for lineNumber, line := range strings.Split(strings.TrimSuffix(inventory, "\n"), "\n") {
+		name, _, found := strings.Cut(line, "=")
+		if !found || name == "" {
+			t.Fatalf("display-message -a line %d is malformed: %q", lineNumber+1, line)
+		}
+		if _, duplicate := seen[name]; duplicate {
+			t.Fatalf("display-message -a contains duplicate field %q", name)
+		}
+		seen[name] = struct{}{}
+
+		field, found := fields[name]
+		if !found {
+			missing = append(missing, name)
+			continue
+		}
+		minimum, err := parseCatalogVersion(field.Since)
+		if err != nil {
+			t.Fatalf("parse catalog version for %q: %v", name, err)
+		}
+		if !catalogVersionAtLeast(current, minimum) {
+			incompatible = append(
+				incompatible,
+				fmt.Sprintf("%s requires %s on %s", name, field.Since, version),
+			)
+		}
+	}
+	slices.Sort(missing)
+	slices.Sort(incompatible)
+	if len(missing) != 0 || len(incompatible) != 0 {
+		t.Fatalf(
+			"format catalog does not cover tmux %s inventory: missing=%q incompatible=%q",
+			version,
+			missing,
+			incompatible,
+		)
+	}
+}
+
+func runCatalogTmux(
+	ctx context.Context,
+	t *testing.T,
+	socket string,
+	arguments ...string,
+) string {
+	t.Helper()
+
+	commandArguments := append([]string{"-S", socket}, arguments...)
+	command := exec.CommandContext(ctx, "tmux", commandArguments...)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf(
+			"tmux %q failed: %v: %s",
+			arguments,
+			err,
+			strings.TrimSpace(string(output)),
+		)
+	}
+	return string(output)
+}
+
+func parseCatalogVersion(raw string) (tmux.Version, error) {
+	return tmux.ParseVersion(raw)
+}
+
+func catalogVersionAtLeast(current, minimum tmux.Version) bool {
+	return current.AtLeast(minimum)
+}
+
+func TestParseCatalogVersionAcceptsServerTokens(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		current string
+		minimum string
+		want    bool
+	}{
+		{name: "numbered release below floor", current: "3.5", minimum: "3.6"},
+		{name: "development build", current: "master", minimum: "3.7", want: true},
+		{name: "unprobed OpenBSD base system", current: "openbsd-7.8", minimum: "3.7"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			current, err := parseCatalogVersion(test.current)
+			if err != nil {
+				t.Fatalf("parseCatalogVersion(%q) error = %v", test.current, err)
+			}
+			minimum, err := parseCatalogVersion(test.minimum)
+			if err != nil {
+				t.Fatalf("parseCatalogVersion(%q) error = %v", test.minimum, err)
+			}
+			if got := catalogVersionAtLeast(current, minimum); got != test.want {
+				t.Fatalf("catalogVersionAtLeast(%q, %q) = %t, want %t", test.current, test.minimum, got, test.want)
+			}
+		})
+	}
+}

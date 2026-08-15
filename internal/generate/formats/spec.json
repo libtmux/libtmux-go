@@ -1,0 +1,1207 @@
+{
+  "fields": [
+    {
+      "name": "active_window_index",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "alternate_on",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "alternate_saved_x",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "alternate_saved_y",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "bracket_paste_flag",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "bool"
+    },
+    {
+      "name": "buffer_mode_format",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "buffer_name",
+      "scope": "buffer",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "buffer_sample",
+      "scope": "buffer",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "buffer_size",
+      "scope": "buffer",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "client_activity",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "time"
+    },
+    {
+      "name": "client_cell_height",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "client_cell_width",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "client_control_mode",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "client_created",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "time"
+    },
+    {
+      "name": "client_discarded",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "client_flags",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_height",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "client_key_table",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_last_session",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_mode_format",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_name",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "client-name"
+    },
+    {
+      "name": "client_pid",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int",
+      "ownAccessor": "ProcessPID"
+    },
+    {
+      "name": "client_prefix",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "client_readonly",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "client_session",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_termfeatures",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_termname",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_termtype",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_tty",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "client_uid",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int",
+      "ownAccessor": "ProcessUID"
+    },
+    {
+      "name": "client_user",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "string",
+      "ownAccessor": "ProcessUser"
+    },
+    {
+      "name": "client_utf8",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "client_width",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "client_written",
+      "scope": "client",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "command",
+      "scope": "context",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "command_list_alias",
+      "scope": "context",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "command_list_name",
+      "scope": "context",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "command_list_usage",
+      "scope": "context",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "config_files",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "copy_cursor_line",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "copy_cursor_word",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "copy_cursor_x",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "copy_cursor_y",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "current_file",
+      "scope": "context",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "cursor_blinking",
+      "scope": "pane",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
+      "name": "cursor_character",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "cursor_colour",
+      "scope": "pane",
+      "since": "3.6",
+      "kind": "string"
+    },
+    {
+      "name": "cursor_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "cursor_shape",
+      "scope": "pane",
+      "since": "3.6",
+      "kind": "string"
+    },
+    {
+      "name": "cursor_very_visible",
+      "scope": "pane",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
+      "name": "cursor_x",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "cursor_y",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "history_all_bytes",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "history_bytes",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "history_limit",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "history_size",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "host",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "host_short",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "insert_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "keypad_cursor_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "keypad_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "last_window_index",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "line",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "loop_last_flag",
+      "scope": "context",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
+      "name": "mouse_all_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "mouse_any_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "mouse_button_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "mouse_sgr_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "mouse_standard_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "mouse_utf8_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "next_session_id",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "session-id"
+    },
+    {
+      "name": "origin_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_active",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_at_bottom",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_at_left",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_at_right",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_at_top",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_bg",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_bottom",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_current_command",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_current_path",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_dead",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_dead_signal",
+      "scope": "pane",
+      "since": "3.3",
+      "kind": "string"
+    },
+    {
+      "name": "pane_dead_status",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_dead_time",
+      "scope": "pane",
+      "since": "3.3",
+      "kind": "time"
+    },
+    {
+      "name": "pane_fg",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_flags",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "string"
+    },
+    {
+      "name": "pane_floating_flag",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_format",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_height",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_id",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "pane-id"
+    },
+    {
+      "name": "pane_in_mode",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_index",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_input_off",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_key_mode",
+      "scope": "pane",
+      "since": "3.5",
+      "kind": "string"
+    },
+    {
+      "name": "pane_last",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_left",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_marked",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_marked_set",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_mode",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_path",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_pb_progress",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "int"
+    },
+    {
+      "name": "pane_pb_state",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "string"
+    },
+    {
+      "name": "pane_pid",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int",
+      "ownAccessor": "ProcessPID"
+    },
+    {
+      "name": "pane_pipe",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool",
+      "ownAccessor": "Piping"
+    },
+    {
+      "name": "pane_pipe_pid",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "int"
+    },
+    {
+      "name": "pane_right",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_search_string",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_start_command",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_start_path",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_synchronized",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_tabs",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_title",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_top",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_tty",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "pane_unseen_changes",
+      "scope": "pane",
+      "since": "3.4",
+      "kind": "bool"
+    },
+    {
+      "name": "pane_width",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "pane_x",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "int"
+    },
+    {
+      "name": "pane_y",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "int"
+    },
+    {
+      "name": "pane_z",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "int"
+    },
+    {
+      "name": "pane_zoomed_flag",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "bool"
+    },
+    {
+      "name": "pid",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "scroll_position",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "scroll_region_lower",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "scroll_region_upper",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "search_match",
+      "scope": "context",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "selection_end_x",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "selection_end_y",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "selection_start_x",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "selection_start_y",
+      "scope": "event",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "server_sessions",
+      "scope": "universal",
+      "since": "3.4",
+      "kind": "int"
+    },
+    {
+      "name": "session_activity",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "time"
+    },
+    {
+      "name": "session_activity_flag",
+      "scope": "session",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
+      "name": "session_alert",
+      "scope": "session",
+      "since": "3.6",
+      "kind": "string"
+    },
+    {
+      "name": "session_alerts",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_attached",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "session_attached_list",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_bell_flag",
+      "scope": "session",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
+      "name": "session_created",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "time"
+    },
+    {
+      "name": "session_format",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "session_group",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_group_attached",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "session_group_attached_list",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_group_list",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_group_many_attached",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "session_group_size",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "session_grouped",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "session_id",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "session-id"
+    },
+    {
+      "name": "session_last_attached",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "time"
+    },
+    {
+      "name": "session_many_attached",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "session_marked",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "session_name",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_path",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_silence_flag",
+      "scope": "session",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
+      "name": "session_stack",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "session_windows",
+      "scope": "session",
+      "since": "3.2a",
+      "kind": "int",
+      "ownAccessor": "WindowCount"
+    },
+    {
+      "name": "sixel_support",
+      "scope": "universal",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
+      "name": "socket_path",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "start_time",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "time"
+    },
+    {
+      "name": "synchronized_output_flag",
+      "scope": "pane",
+      "since": "3.7",
+      "kind": "bool"
+    },
+    {
+      "name": "tree_mode_format",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "uid",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "user",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "version",
+      "scope": "universal",
+      "since": "3.2a",
+      "kind": "version"
+    },
+    {
+      "name": "window_active",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_active_clients",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_active_clients_list",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_active_sessions",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_active_sessions_list",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_activity",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "time"
+    },
+    {
+      "name": "window_activity_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_bell_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_bigger",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_cell_height",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_cell_width",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_end_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_flags",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_format",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_height",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_id",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "window-id"
+    },
+    {
+      "name": "window_index",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_last_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_layout",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_linked",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_linked_sessions",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int",
+      "ownAccessor": "LinkedSessionCount"
+    },
+    {
+      "name": "window_linked_sessions_list",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_marked_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_name",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_offset_x",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_offset_y",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_panes",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int",
+      "ownAccessor": "PaneCount"
+    },
+    {
+      "name": "window_raw_flags",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_silence_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_stack_index",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_start_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "window_visible_layout",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "string"
+    },
+    {
+      "name": "window_width",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "int"
+    },
+    {
+      "name": "window_zoomed_flag",
+      "scope": "window",
+      "since": "3.2a",
+      "kind": "bool"
+    },
+    {
+      "name": "wrap_flag",
+      "scope": "pane",
+      "since": "3.2a",
+      "kind": "bool"
+    }
+  ],
+  "schema": 2
+}

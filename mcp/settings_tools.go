@@ -1,0 +1,479 @@
+package mcp
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+
+	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	tmux "github.com/tmux-python/libtmux/golang"
+)
+
+// Options, environment, and hooks: the settings that explain a pane's
+// behaviour when the pane itself does not.
+//
+// A client that reads a pane and finds nothing wrong is often looking at a
+// setting: history-limit says why scrollback stopped, remain-on-exit says why
+// a dead pane is still there, and a hook says why something happened that no
+// tool here did. These are read because a client that cannot see them
+// misdiagnoses what it can.
+//
+// Hooks are read-only. A hook is a command tmux runs on its own afterwards, so
+// writing one is leaving something behind that outlives this connection and
+// fires when nobody is watching; a person's tmux configuration is where that
+// belongs. Options are writable because they are the ordinary way to make a
+// pane behave, and they die with the object they are set on.
+
+// scopeOption resolves which tmux scope a settings call means.
+const (
+	scopeServer  = "server"
+	scopeSession = "session"
+	scopeWindow  = "window"
+	scopePane    = "pane"
+)
+
+// showOptionInput reads one option.
+type showOptionInput struct {
+	// Name is the option, such as "history-limit" or "remain-on-exit".
+	Name string `json:"name" jsonschema:"the tmux option name, such as history-limit"`
+	// Scope is where to read it: server, session, window, or pane. Empty reads
+	// it at pane scope, where tmux's own inheritance means a pane option falls
+	// back through window and session to the global value.
+	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty reads at pane scope"`
+	// PaneID, WindowID, and SessionName pick the object to read it on.
+	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to read the option on"`
+	// WindowID picks the window for window scope.
+	WindowID string `json:"windowId,omitempty" jsonschema:"the window to read the option on"`
+	// SessionName picks the session for session scope, and resolves the
+	// others when they are empty.
+	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read the option on"`
+}
+
+// showOptionOutput carries an option's value.
+type showOptionOutput struct {
+	// Name is the option that was read.
+	Name string `json:"name"`
+	// Scope is where it was read.
+	Scope string `json:"scope"`
+	// Value is what tmux reported.
+	Value string `json:"value"`
+	// Set reports whether the option had a value at all. An unset option and
+	// one set to an empty string are different things, and only this
+	// distinguishes them.
+	Set bool `json:"set"`
+}
+
+// showOption reads one tmux option.
+func (t *tools) showOption(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input showOptionInput,
+) (*mcp.CallToolResult, showOptionOutput, error) {
+	if strings.TrimSpace(input.Name) == "" {
+		return nil, showOptionOutput{}, fmt.Errorf("name is required")
+	}
+	scope, err := resolveScope(input.Scope)
+	if err != nil {
+		return nil, showOptionOutput{}, err
+	}
+	output := showOptionOutput{Name: input.Name, Scope: scope}
+
+	var value string
+	var set bool
+	switch scope {
+	case scopeServer:
+		value, set, err = t.strict().RawOption(ctx, input.Name)
+	case scopeSession:
+		session, sessionErr := t.resolveSession(ctx, input.SessionName)
+		if sessionErr != nil {
+			return nil, output, sessionErr
+		}
+		value, set, err = session.RawOption(ctx, input.Name)
+	case scopeWindow:
+		window, windowErr := t.resolveWindow(ctx, input.WindowID, input.SessionName)
+		if windowErr != nil {
+			return nil, output, windowErr
+		}
+		value, set, err = window.RawOption(ctx, input.Name)
+	default:
+		pane, paneErr := t.resolvePane(ctx, input.PaneID, input.SessionName)
+		if paneErr != nil {
+			return nil, output, paneErr
+		}
+		value, set, err = pane.RawOption(ctx, input.Name)
+	}
+	if err != nil {
+		return nil, output, err
+	}
+	output.Value = value
+	output.Set = set
+	return nil, output, nil
+}
+
+// setOptionInput writes one option.
+type setOptionInput struct {
+	// Name is the option to set.
+	Name string `json:"name" jsonschema:"the tmux option name, such as history-limit"`
+	// Value is what to set it to.
+	Value string `json:"value" jsonschema:"the value to set"`
+	// Scope is where to set it: server, session, window, or pane. Empty sets
+	// it at pane scope, which is the narrowest and affects nothing else.
+	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty sets at pane scope"`
+	// PaneID, WindowID, and SessionName pick the object to set it on.
+	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to set the option on"`
+	// WindowID picks the window for window scope.
+	WindowID string `json:"windowId,omitempty" jsonschema:"the window to set the option on"`
+	// SessionName picks the session for session scope, and resolves the others
+	// when they are empty.
+	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to set the option on"`
+}
+
+// setOptionOutput reports what was set.
+type setOptionOutput struct {
+	// Name is the option that was set.
+	Name string `json:"name"`
+	// Scope is where it was set.
+	Scope string `json:"scope"`
+	// Value is what it was set to.
+	Value string `json:"value"`
+}
+
+// setOption writes one tmux option.
+//
+// Pane scope by default, because it is the narrowest: an option set there
+// affects the pane and nothing else, where the same option set on the server
+// changes every session a person has open. A client that meant the wider one
+// says so.
+func (t *tools) setOption(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input setOptionInput,
+) (*mcp.CallToolResult, setOptionOutput, error) {
+	if strings.TrimSpace(input.Name) == "" {
+		return nil, setOptionOutput{}, fmt.Errorf("name is required")
+	}
+	scope, err := resolveScope(input.Scope)
+	if err != nil {
+		return nil, setOptionOutput{}, err
+	}
+	output := setOptionOutput{Name: input.Name, Scope: scope, Value: input.Value}
+
+	switch scope {
+	case scopeServer:
+		err = t.strict().SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+	case scopeSession:
+		session, sessionErr := t.resolveSession(ctx, input.SessionName)
+		if sessionErr != nil {
+			return nil, output, sessionErr
+		}
+		err = session.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+	case scopeWindow:
+		window, windowErr := t.resolveWindow(ctx, input.WindowID, input.SessionName)
+		if windowErr != nil {
+			return nil, output, windowErr
+		}
+		err = window.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+	default:
+		pane, paneErr := t.resolvePane(ctx, input.PaneID, input.SessionName)
+		if paneErr != nil {
+			return nil, output, paneErr
+		}
+		err = pane.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+	}
+	if err != nil {
+		return nil, output, err
+	}
+	return nil, output, nil
+}
+
+// resolveScope reads the scope a settings call named.
+func resolveScope(requested string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(requested)) {
+	case "":
+		return scopePane, nil
+	case scopeServer:
+		return scopeServer, nil
+	case scopeSession:
+		return scopeSession, nil
+	case scopeWindow:
+		return scopeWindow, nil
+	case scopePane:
+		return scopePane, nil
+	default:
+		return "", fmt.Errorf(
+			"scope %q is not server, session, window, or pane", requested)
+	}
+}
+
+// showEnvironmentInput reads a session's environment.
+type showEnvironmentInput struct {
+	// SessionName is the session to read. Empty reads the only one.
+	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read; empty uses the only session"`
+	// Name reads one variable rather than all of them.
+	Name string `json:"name,omitempty" jsonschema:"one variable to read; empty reads all of them"`
+}
+
+// environmentEntry is one variable in a session's environment.
+type environmentEntry struct {
+	// Name is the variable.
+	Name string `json:"name"`
+	// Value is what new processes will see.
+	Value string `json:"value"`
+	// Removed reports that tmux will unset this variable for new processes
+	// rather than set it, which is a thing tmux can be told to do and which no
+	// value alone expresses.
+	Removed bool `json:"removed,omitempty"`
+}
+
+// showEnvironmentOutput carries a session's environment.
+type showEnvironmentOutput struct {
+	// SessionName is the session that was read.
+	SessionName string `json:"sessionName"`
+	// Variables are its environment entries, sorted by name.
+	Variables []environmentEntry `json:"variables,omitempty"`
+}
+
+// showEnvironment reads what new processes in a session will inherit.
+//
+// This is what a pane started later will see, which is not what a pane started
+// earlier got: tmux hands each process the environment as it stood when the
+// process began. A client debugging why a command cannot find something reads
+// this to learn what the next pane would get.
+//
+// Values are reported as tmux holds them. A session environment is a place
+// people put credentials, so the caller is receiving whatever is there;
+// reading one variable by name rather than all of them is the narrower ask.
+func (t *tools) showEnvironment(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input showEnvironmentInput,
+) (*mcp.CallToolResult, showEnvironmentOutput, error) {
+	session, err := t.resolveSession(ctx, input.SessionName)
+	if err != nil {
+		return nil, showEnvironmentOutput{}, err
+	}
+	name, _ := session.Formats().SessionName()
+	output := showEnvironmentOutput{SessionName: name}
+
+	if wanted := strings.TrimSpace(input.Name); wanted != "" {
+		value, ok, err := session.GetEnvironment(ctx, wanted)
+		if err != nil {
+			return nil, output, err
+		}
+		if ok {
+			output.Variables = []environmentEntry{{
+				Name: wanted, Value: value.Value, Removed: value.Removed,
+			}}
+		}
+		return nil, output, nil
+	}
+
+	variables, err := session.ShowEnvironment(ctx)
+	if err != nil {
+		return nil, output, err
+	}
+	output.Variables = make([]environmentEntry, 0, len(variables))
+	for key, value := range variables {
+		output.Variables = append(output.Variables, environmentEntry{
+			Name: key, Value: value.Value, Removed: value.Removed,
+		})
+	}
+	sort.Slice(output.Variables, func(i, j int) bool {
+		return output.Variables[i].Name < output.Variables[j].Name
+	})
+	return nil, output, nil
+}
+
+// setEnvironmentInput writes a session's environment.
+type setEnvironmentInput struct {
+	// SessionName is the session to write. Empty writes the only one.
+	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to write; empty uses the only session"`
+	// Name is the variable to set.
+	Name string `json:"name" jsonschema:"the variable to set"`
+	// Value is what to set it to. Ignored when Unset is true.
+	Value string `json:"value,omitempty" jsonschema:"the value to set"`
+	// Unset removes the variable instead of setting it.
+	Unset bool `json:"unset,omitempty" jsonschema:"remove the variable instead of setting it"`
+}
+
+// setEnvironmentOutput reports what changed.
+type setEnvironmentOutput struct {
+	// SessionName is the session that was written.
+	SessionName string `json:"sessionName"`
+	// Name is the variable that changed.
+	Name string `json:"name"`
+	// Unset reports whether it was removed rather than set.
+	Unset bool `json:"unset"`
+}
+
+// setEnvironment sets what new processes in a session will inherit.
+//
+// It changes nothing already running. A pane that is already open keeps the
+// environment it started with, so a client setting a variable and then
+// wondering why the pane cannot see it needs a new pane, or respawn_pane.
+func (t *tools) setEnvironment(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input setEnvironmentInput,
+) (*mcp.CallToolResult, setEnvironmentOutput, error) {
+	if strings.TrimSpace(input.Name) == "" {
+		return nil, setEnvironmentOutput{}, fmt.Errorf("name is required")
+	}
+	session, err := t.resolveSession(ctx, input.SessionName)
+	if err != nil {
+		return nil, setEnvironmentOutput{}, err
+	}
+	name, _ := session.Formats().SessionName()
+	output := setEnvironmentOutput{SessionName: name, Name: input.Name, Unset: input.Unset}
+
+	if input.Unset {
+		if err := session.UnsetEnvironment(ctx, input.Name); err != nil {
+			return nil, output, err
+		}
+		return nil, output, nil
+	}
+	if err := session.SetEnvironment(
+		ctx, input.Name, input.Value, tmux.SetEnvironmentOptions{},
+	); err != nil {
+		return nil, output, err
+	}
+	return nil, output, nil
+}
+
+// showHooksInput reads the hooks in force.
+type showHooksInput struct {
+	// Scope is where to read them: server, session, window, or pane. Empty
+	// reads them at pane scope.
+	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty reads at pane scope"`
+	// PaneID, WindowID, and SessionName pick the object to read them on.
+	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to read hooks on"`
+	// WindowID picks the window for window scope.
+	WindowID string `json:"windowId,omitempty" jsonschema:"the window to read hooks on"`
+	// SessionName picks the session for session scope, and resolves the others
+	// when they are empty.
+	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read hooks on"`
+}
+
+// hook is one command tmux runs on its own.
+type hook struct {
+	// Name is the event, such as "pane-died" or "after-split-window".
+	Name string `json:"name"`
+	// Command is what tmux runs when it happens.
+	Command string `json:"command"`
+}
+
+// showHooksOutput carries the hooks found.
+type showHooksOutput struct {
+	// Scope is where they were read.
+	Scope string `json:"scope"`
+	// Hooks are the hooks set there, sorted by name.
+	Hooks []hook `json:"hooks,omitempty"`
+}
+
+// showHooks reads the commands tmux will run on its own.
+//
+// A hook is the explanation for behaviour no tool here caused: a pane that
+// closed itself, a window that renamed itself, a command that ran when
+// something was split. A client debugging a session it did not configure has
+// no other way to see them.
+//
+// Reading only. A hook written here would outlive this connection and fire
+// when nothing is watching, which is a change to someone's tmux rather than to
+// their session; that belongs in their configuration file.
+func (t *tools) showHooks(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input showHooksInput,
+) (*mcp.CallToolResult, showHooksOutput, error) {
+	scope, err := resolveScope(input.Scope)
+	if err != nil {
+		return nil, showHooksOutput{}, err
+	}
+	output := showHooksOutput{Scope: scope}
+
+	// tmux reports hooks through show-hooks, whose output is one hook per line
+	// as a name and the command it runs. The typed accessors cover the hooks
+	// tmux documents; this reports whatever is actually set, including hooks a
+	// version knows and this build's catalog does not.
+	arguments := []string{"show-hooks"}
+	switch scope {
+	case scopeServer:
+		arguments = append(arguments, "-g")
+	case scopeSession:
+		session, sessionErr := t.resolveSession(ctx, input.SessionName)
+		if sessionErr != nil {
+			return nil, output, sessionErr
+		}
+		arguments = append(arguments, "-t", session.ID().String())
+	case scopeWindow:
+		window, windowErr := t.resolveWindow(ctx, input.WindowID, input.SessionName)
+		if windowErr != nil {
+			return nil, output, windowErr
+		}
+		arguments = append(arguments, "-w", "-t", window.ID().String())
+	default:
+		pane, paneErr := t.resolvePane(ctx, input.PaneID, input.SessionName)
+		if paneErr != nil {
+			return nil, output, paneErr
+		}
+		arguments = append(arguments, "-p", "-t", pane.ID().String())
+	}
+
+	result, err := t.strict().Cmd(ctx, arguments...)
+	if err != nil {
+		return nil, output, err
+	}
+	output.Hooks = make([]hook, 0, len(result.Stdout))
+	for _, line := range result.Stdout {
+		name, command, found := strings.Cut(strings.TrimSpace(line), " ")
+		if !found || name == "" {
+			continue
+		}
+		output.Hooks = append(output.Hooks, hook{Name: name, Command: command})
+	}
+	sort.Slice(output.Hooks, func(i, j int) bool {
+		return output.Hooks[i].Name < output.Hooks[j].Name
+	})
+	return nil, output, nil
+}
+
+// addSettingsTools advertises the tools for options, environment, and hooks.
+func addSettingsTools(server *mcp.Server, t *tools) {
+	register(server, t, &mcp.Tool{
+		Name:        "show_option",
+		Annotations: readOnly("Read a tmux Option"),
+		Description: "Read one tmux option at server, session, window, or pane " +
+			"scope. Options explain behaviour a pane's contents do not: " +
+			"history-limit is why scrollback stopped, remain-on-exit is why a " +
+			"dead pane is still there.",
+	}, t.showOption)
+	register(server, t, &mcp.Tool{
+		Name:        "set_option",
+		Annotations: mutating("Set a tmux Option"),
+		Description: "Set one tmux option. Pane scope by default, which affects " +
+			"that pane and nothing else; server scope changes every session the " +
+			"person has open.",
+	}, t.setOption)
+	register(server, t, &mcp.Tool{
+		Name:        "show_environment",
+		Annotations: readOnly("Read a Session's Environment"),
+		Description: "What new processes in a session will inherit. Panes " +
+			"already running keep the environment they started with, so this is " +
+			"what the next pane gets rather than what the current one has.",
+	}, t.showEnvironment)
+	register(server, t, &mcp.Tool{
+		Name:        "set_environment",
+		Annotations: mutating("Set a Session's Environment"),
+		Description: "Set or remove a variable for processes a session starts " +
+			"from now on. It changes nothing already running.",
+	}, t.setEnvironment)
+	register(server, t, &mcp.Tool{
+		Name:        "show_hooks",
+		Annotations: readOnly("Read tmux Hooks"),
+		Description: "The commands tmux will run on its own at a given scope. " +
+			"This is the explanation for behaviour no tool here caused. Reading " +
+			"only: a hook belongs in a person's tmux configuration, not in a " +
+			"connection that will end.",
+	}, t.showHooks)
+}

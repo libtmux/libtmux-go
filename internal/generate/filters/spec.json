@@ -1,0 +1,289 @@
+{
+  "schema": 1,
+  "maxDepth": 64,
+  "models": [
+    {
+      "name": "Session",
+      "fields": [
+        {
+          "name": "ID",
+          "json": "id",
+          "goType": "SessionID",
+          "kind": "string",
+          "exactConstructor": "SessionIDIs",
+          "description": "the stable tmux session identifier from [Session.ID], including its $ sigil",
+          "source": {"kind": "method", "name": "ID"},
+          "operators": ["exact", "in"]
+        },
+        {
+          "name": "Name",
+          "json": "name",
+          "goType": "string",
+          "kind": "string",
+          "exactConstructor": "SessionNameIs",
+          "description": "the materialized session name from [Session.Name]",
+          "source": {"kind": "format-string", "name": "Name"},
+          "operators": ["exact", "in", "contains", "regex"]
+        },
+        {
+          "name": "Attached",
+          "json": "attached",
+          "goType": "bool",
+          "kind": "bool",
+          "exactConstructor": "SessionAttachedIs",
+          "description": "the materialized attachment state from [Session.Attached]",
+          "source": {"kind": "format-int-bool", "name": "Attached"},
+          "operators": ["exact"]
+        }
+      ],
+      "relations": [
+        {
+          "name": "Windows",
+          "json": "windows",
+          "target": "Window",
+          "cardinality": "many",
+          "method": "Windows",
+          "description": "the materialized window views returned by [Session.Windows]"
+        },
+        {
+          "name": "Panes",
+          "json": "panes",
+          "target": "Pane",
+          "cardinality": "many",
+          "method": "Panes",
+          "description": "the materialized pane views returned by [Session.Panes]"
+        }
+      ]
+    },
+    {
+      "name": "Window",
+      "fields": [
+        {
+          "name": "SessionID",
+          "json": "sessionId",
+          "goType": "SessionID",
+          "kind": "string",
+          "exactConstructor": "WindowSessionIDIs",
+          "description": "the stable tmux session identifier from [Window.SessionID], including its $ sigil",
+          "source": {"kind": "method", "name": "SessionID"},
+          "operators": ["exact", "in"]
+        },
+        {
+          "name": "ID",
+          "json": "id",
+          "goType": "WindowID",
+          "kind": "string",
+          "exactConstructor": "WindowIDIs",
+          "description": "the stable tmux window identifier from [Window.ID], including its @ sigil",
+          "source": {"kind": "method", "name": "ID"},
+          "operators": ["exact", "in"]
+        },
+        {
+          "name": "Index",
+          "json": "index",
+          "goType": "int",
+          "kind": "int",
+          "exactConstructor": "WindowIndexIs",
+          "description": "the nonnegative winlink index from [Window.Index]",
+          "minimum": 0,
+          "source": {"kind": "method", "name": "Index"},
+          "operators": ["exact", "in", "gt", "gte", "lt", "lte"]
+        },
+        {
+          "name": "Name",
+          "json": "name",
+          "goType": "string",
+          "kind": "string",
+          "exactConstructor": "WindowNameIs",
+          "description": "the materialized window name from [Window.Name]",
+          "source": {"kind": "format-string", "name": "Name"},
+          "operators": ["exact", "in", "contains", "regex"]
+        },
+        {
+          "name": "Active",
+          "json": "active",
+          "goType": "bool",
+          "kind": "bool",
+          "exactConstructor": "WindowActiveIs",
+          "description": "the materialized active state from [Window.Active]",
+          "source": {"kind": "format-bool", "name": "Active"},
+          "operators": ["exact"]
+        }
+      ],
+      "relations": [
+        {
+          "name": "Session",
+          "json": "session",
+          "target": "Session",
+          "cardinality": "one",
+          "method": "Session",
+          "description": "the materialized parent returned by [Window.Session]"
+        },
+        {
+          "name": "Panes",
+          "json": "panes",
+          "target": "Pane",
+          "cardinality": "many",
+          "method": "Panes",
+          "description": "the materialized pane views returned by [Window.Panes]"
+        }
+      ]
+    },
+    {
+      "name": "Pane",
+      "fields": [
+        {
+          "name": "SessionID",
+          "json": "sessionId",
+          "goType": "SessionID",
+          "kind": "string",
+          "exactConstructor": "PaneSessionIDIs",
+          "description": "the stable tmux session identifier from [Pane.SessionID], including its $ sigil",
+          "source": {"kind": "method", "name": "SessionID"},
+          "operators": ["exact", "in"]
+        },
+        {
+          "name": "WindowID",
+          "json": "windowId",
+          "goType": "WindowID",
+          "kind": "string",
+          "exactConstructor": "PaneWindowIDIs",
+          "description": "the stable tmux window identifier from [Pane.WindowID], including its @ sigil",
+          "source": {"kind": "method", "name": "WindowID"},
+          "operators": ["exact", "in"]
+        },
+        {
+          "name": "ID",
+          "json": "id",
+          "goType": "PaneID",
+          "kind": "string",
+          "exactConstructor": "PaneIDIs",
+          "description": "the stable tmux pane identifier from [Pane.ID], including its % sigil",
+          "source": {"kind": "method", "name": "ID"},
+          "operators": ["exact", "in"]
+        },
+        {
+          "name": "WindowIndex",
+          "json": "windowIndex",
+          "goType": "int",
+          "kind": "int",
+          "exactConstructor": "PaneWindowIndexIs",
+          "description": "the nonnegative winlink index from [Pane.WindowIndex]",
+          "minimum": 0,
+          "source": {"kind": "method", "name": "WindowIndex"},
+          "operators": ["exact", "in", "gt", "gte", "lt", "lte"]
+        },
+        {
+          "name": "Index",
+          "json": "index",
+          "goType": "int",
+          "kind": "int",
+          "exactConstructor": "PaneIndexIs",
+          "description": "the nonnegative pane index from [Pane.Index]",
+          "minimum": 0,
+          "source": {"kind": "method", "name": "Index"},
+          "operators": ["exact", "in", "gt", "gte", "lt", "lte"]
+        },
+        {
+          "name": "Command",
+          "json": "command",
+          "goType": "string",
+          "kind": "string",
+          "exactConstructor": "PaneCommandIs",
+          "description": "the materialized current command from [Pane.CurrentCommand]",
+          "source": {"kind": "format-string", "name": "CurrentCommand"},
+          "operators": ["exact", "in", "contains", "regex"]
+        },
+        {
+          "name": "Active",
+          "json": "active",
+          "goType": "bool",
+          "kind": "bool",
+          "exactConstructor": "PaneActiveIs",
+          "description": "the materialized active state from [Pane.Active]",
+          "source": {"kind": "format-bool", "name": "Active"},
+          "operators": ["exact"]
+        },
+        {
+          "name": "Title",
+          "json": "title",
+          "goType": "string",
+          "kind": "string",
+          "exactConstructor": "PaneTitleIs",
+          "description": "the materialized title from [Pane.Title]",
+          "source": {"kind": "format-string", "name": "Title"},
+          "operators": ["exact", "in", "contains", "regex"]
+        }
+      ],
+      "relations": [
+        {
+          "name": "Session",
+          "json": "session",
+          "target": "Session",
+          "cardinality": "one",
+          "method": "Session",
+          "description": "the materialized parent returned by [Pane.Session]"
+        },
+        {
+          "name": "Window",
+          "json": "window",
+          "target": "Window",
+          "cardinality": "one",
+          "method": "Window",
+          "description": "the materialized parent returned by [Pane.Window]"
+        }
+      ]
+    },
+    {
+      "name": "Client",
+      "fields": [
+        {
+          "name": "Name",
+          "json": "name",
+          "goType": "ClientName",
+          "kind": "string",
+          "exactConstructor": "ClientNameIs",
+          "description": "the stable tmux client name from [Client.Name]",
+          "source": {"kind": "method", "name": "Name"},
+          "operators": ["exact", "in", "contains", "regex"]
+        },
+        {
+          "name": "ReadOnly",
+          "json": "readOnly",
+          "goType": "bool",
+          "kind": "bool",
+          "exactConstructor": "ClientReadOnlyIs",
+          "description": "the materialized read-only state from [Client.ReadOnly]",
+          "source": {"kind": "format-bool", "name": "ReadOnly"},
+          "operators": ["exact"]
+        }
+      ],
+      "relations": [
+        {
+          "name": "Session",
+          "json": "session",
+          "target": "Session",
+          "cardinality": "one",
+          "method": "AttachedSession",
+          "description": "the materialized attachment returned by [Client.AttachedSession]"
+        },
+        {
+          "name": "Window",
+          "json": "window",
+          "target": "Window",
+          "cardinality": "one",
+          "method": "AttachedWindow",
+          "description": "the materialized attachment returned by [Client.AttachedWindow]"
+        },
+        {
+          "name": "Pane",
+          "json": "pane",
+          "target": "Pane",
+          "cardinality": "one",
+          "method": "AttachedPane",
+          "description": "the materialized attachment returned by [Client.AttachedPane]"
+        }
+      ]
+    }
+  ]
+}

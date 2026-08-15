@@ -1,0 +1,65 @@
+// Command environment demonstrates session environment access and pane discovery.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"time"
+
+	tmux "github.com/tmux-python/libtmux/golang"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() (err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	server := tmux.NewServer(tmux.ServerOptions{}).WithStrictErrors()
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-environment"})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		defer cleanupCancel()
+		err = errors.Join(err, session.Kill(cleanupCtx))
+	}()
+
+	windowName := "discovery"
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
+	if err != nil {
+		return err
+	}
+	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{})
+	if err != nil {
+		return err
+	}
+	if err := session.SetEnvironment(ctx, "LIBTMUX_EXAMPLE", "ready", tmux.SetEnvironmentOptions{}); err != nil {
+		return err
+	}
+	value, present, err := session.GetEnvironment(ctx, "LIBTMUX_EXAMPLE")
+	if err != nil || !present {
+		return errors.Join(err, errors.New("session environment value is absent"))
+	}
+
+	result, err := server.Cmd(ctx, "display-message", "-p", "-t", pane.ID().String(), "#{socket_path}")
+	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
+		return errors.Join(err, errors.New("resolve tmux socket path"))
+	}
+	environment := map[string]string{
+		"TMUX":      fmt.Sprintf("%s,1,%s", result.Stdout[0], session.ID()),
+		"TMUX_PANE": pane.ID().String(),
+	}
+	discovered, err := tmux.PaneFromEnv(ctx, environment)
+	if err != nil {
+		return err
+	}
+	fmt.Println(value.Value, discovered.ID() == pane.ID())
+	return nil
+}
