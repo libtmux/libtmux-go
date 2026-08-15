@@ -3,11 +3,8 @@
 A typed Go wrapper for [tmux], with no runtime dependencies.
 
 ```console
-$ go get github.com/libtmux/libtmux-go
+$ go get github.com/libtmux/libtmux-go/tmux
 ```
-
-The import needs a name, because the path ends in the repository name and the
-package is called `tmux`:
 
 ```go
 import "github.com/libtmux/libtmux-go/tmux"

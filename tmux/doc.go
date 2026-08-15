@@ -1,10 +1,12 @@
 // Package tmux provides a typed, context-aware API with tmux 3.2a as its
 // minimum supported version, tested through tmux 3.7b.
 //
-// The import takes a name, because the module path ends in the repository name
-// while the package is called tmux:
+// The import needs no name: the path ends in the package's own name, which is
+// what supplies the identifier a caller writes.
 //
 //	import "github.com/libtmux/libtmux-go/tmux"
+//
+//	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
 //
 // # Where to start
 //
