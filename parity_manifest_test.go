@@ -3430,9 +3430,19 @@ func parityNoOpTestCall(call *ast.CallExpr, testingParameters map[string]bool) b
 	}
 }
 
+// parityRealTmuxScope reports whether a real-tmux proof may live in this
+// package.
+//
+// Such a proof has to drive tmux the way a caller does, so it must sit outside
+// the package it proves: an external test package, the harness, or the
+// integration package, which is a package of its own importing the public API.
 func parityRealTmuxScope(packageName string, external bool) bool {
-	return external || packageName == "tmuxtest"
+	return external || packageName == "tmuxtest" || packageName == parityIntegrationPackage
 }
+
+// parityIntegrationPackage is the alias the symbol index gives the package
+// holding the tests that drive a real tmux.
+const parityIntegrationPackage = "internal/integration"
 
 func parityRealTmuxMarker(declaration *ast.FuncDecl) bool {
 	if declaration.Doc == nil {
