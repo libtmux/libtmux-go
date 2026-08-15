@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 
-	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/workspace"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )

@@ -36,7 +36,7 @@ preference:
 
 The other modules are separate module graphs, so `./...` in the tmux module
 never reaches them. Go also skips any directory whose name begins with an
-underscore, so `./...` never reaches `_examples/` either. Both have to be named
+underscore, so `./...` never reaches `examples/` either. Both have to be named
 explicitly or they rot unchecked.
 
 ## Gates
@@ -48,7 +48,7 @@ time or they rot unchecked.
 Format, lint, vet, and test the tmux module and its examples:
 
 ```console
-$ gofumpt -w . && golangci-lint run ./... ./_examples/* && go vet ./... && go test ./... ./_examples/*
+$ gofumpt -w . && golangci-lint run ./... ./examples/* && go vet ./... && go test ./... ./examples/*
 ```
 
 Then each of the other modules, from its own directory:

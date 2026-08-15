@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/libtmux/libtmux-go"
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
+	"github.com/libtmux/libtmux-go/tmux"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

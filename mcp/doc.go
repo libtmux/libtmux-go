@@ -87,6 +87,6 @@
 // Every pane this server reports carries isCaller, and get_server_info answers
 // the same question directly. A pane it reports as this one is the terminal
 // the conversation is happening through, so acting on it acts on the
-// conversation. See _examples/agent-workflow for a program that finds its own
+// conversation. See examples/agent-workflow for a program that finds its own
 // pane, splits it, runs a command in the new one and reports the layout.
 package mcp

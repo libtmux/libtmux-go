@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmux"
 )
 
 // TestMatrixAnswersAgree is the claim the whole table rests on.

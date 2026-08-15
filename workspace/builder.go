@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmux"
 )
 
 // Build creates the workspace on server and returns the created session.

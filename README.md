@@ -10,7 +10,7 @@ The import needs a name, because the path ends in the repository name and the
 package is called `tmux`:
 
 ```go
-import tmux "github.com/libtmux/libtmux-go"
+import "github.com/libtmux/libtmux-go/tmux"
 ```
 
 ```go

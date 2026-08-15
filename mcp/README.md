@@ -519,12 +519,12 @@ an already-running one has.
 
 ## An agent-shaped program
 
-`_examples/agent-workflow` is the whole loop in one file: it works out which
+`examples/agent-workflow` is the whole loop in one file: it works out which
 pane it is running in, splits it, runs a command in the new pane and waits for
 the exit status, then reports the layout.
 
 ```console
-$ go run ./_examples/agent-workflow -socket-name my-application
+$ go run ./examples/agent-workflow -socket-name my-application
 ```
 
 Run from inside the tmux server it drives, it finds its own pane:

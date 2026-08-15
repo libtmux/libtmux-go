@@ -5,7 +5,7 @@ on: [push, pull_request]
 # Every job below names its modules one at a time. `go test ./...` stops at a
 # module boundary, so the consumer modules and the benchmarks are invisible to
 # the core module's wildcard and would rot unchecked. Go also skips a directory
-# whose name begins with an underscore, which is why `_examples` is named too.
+# whose name begins with an underscore, which is why `examples` is named too.
 env:
   # A tmux namespace of this repository's own. Sibling checkouts run their own
   # suites on the same machine, and a shared socket directory is one suite
@@ -67,8 +67,8 @@ jobs:
 
       - name: Test the examples
         run: |
-          go vet ./_examples/*
-          go test -count=1 ./_examples/*
+          go vet ./examples/*
+          go test -count=1 ./examples/*
 
   lint:
     runs-on: ubuntu-latest

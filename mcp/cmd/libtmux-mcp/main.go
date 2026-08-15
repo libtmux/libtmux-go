@@ -28,8 +28,8 @@ import (
 	"syscall"
 	"time"
 
-	tmux "github.com/libtmux/libtmux-go"
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )

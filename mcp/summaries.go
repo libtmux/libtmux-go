@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 
-	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmux"
 )
 
 // One description of each kind of tmux object, shared by every tool and
