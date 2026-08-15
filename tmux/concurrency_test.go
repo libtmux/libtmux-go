@@ -15,13 +15,26 @@ func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
 
 	server := NewServer(ServerOptions{Binary: os.Args[0]})
 	const workers = 24
+
+	// Generous, because this deadline is not part of what is being tested. What
+	// is asserted below is that concurrent commands each get their own answer
+	// back; how long the machine takes to start 24 processes is not a property
+	// of the code under test. A short deadline instead asserts that the machine
+	// is fast, and on a two-core runner starting 24 copies of this test binary
+	// it fails: the context ends the process, its pipes do not drain inside the
+	// runner's WaitDelay, and the error is "WaitDelay expired before I/O
+	// complete" rather than anything about concurrency. It stays bounded so a
+	// command that never returns still fails here rather than hanging until the
+	// whole test binary is killed.
+	const perCommand = 60 * time.Second
+
 	errors := make(chan error, workers)
 	var group sync.WaitGroup
 	for worker := range workers {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), perCommand)
 			defer cancel()
 			want := strconv.Itoa(worker)
 			result, err := server.Cmd(
