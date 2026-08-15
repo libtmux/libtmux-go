@@ -45,6 +45,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
+	// docs:quickstart
 	windowName := "work"
 	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
 	if err != nil {
@@ -60,6 +61,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command, Literal: true}); err != nil {
 		return fmt.Errorf("send command: %w", err)
 	}
+	// docs:end
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()

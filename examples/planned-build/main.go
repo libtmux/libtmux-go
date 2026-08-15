@@ -59,12 +59,14 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	// it returns does not exist -- but it can already be named, which is what
 	// lets the steps after it be written here rather than after a round trip
 	// that learns its ID.
+	// docs:planning
 	plan := tmux.NewPlan()
 	plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 	editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 	plan.SetPaneTitle(editor, "editor")
 	plan.SendKeys(editor, tmux.SendKeysRequest{Command: tmux.Ptr("echo built")})
 	plan.DisplayMessage(editor, "#{pane_title}")
+	// docs:end
 
 	// Nothing has been sent yet. Preview renders the argument vectors, leaving
 	// a step nil when it names a pane no earlier step has created here -- which

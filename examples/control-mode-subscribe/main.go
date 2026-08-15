@@ -60,6 +60,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("rename session: %w", err)
 	}
 
+	// docs:watching
 	for notification, err := range control.Notifications(ctx) {
 		if err != nil {
 			return fmt.Errorf("read notification: %w", err)
@@ -70,5 +71,6 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 			return nil
 		}
 	}
+	// docs:end
 	return errors.New("control stream ended before the rename it was watching for")
 }

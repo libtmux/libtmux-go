@@ -95,11 +95,13 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	// The same ten reads over a control-mode connection. The pool returns the
 	// session on the connected handle; the one passed in still starts a
 	// process per command, so the returned value is the one to keep.
+	// docs:control-pool
 	_, connected, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
 	if err != nil {
 		return fmt.Errorf("open control pool: %w", err)
 	}
 	defer func() { _ = pool.Close() }()
+	// docs:end
 
 	processes.reset()
 	if err := readTenTimes(ctx, connected); err != nil {
