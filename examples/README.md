@@ -21,11 +21,13 @@ $ go -C examples run ./quickstart
 | [`planned-build/`](planned-build/) | Recording commands, then sending them | Naming a pane before it exists, and reading a plan before it runs |
 | [`control-mode-subscribe/`](control-mode-subscribe/) | `Notifications` as a range loop | Watching what tmux says on its own |
 
-Two run as tests rather than commands, because what they demonstrate is an
-assertion:
+Each directory has a page of its own explaining what to look at, and each has a
+test that runs the example against a real tmux and reads what it printed. The
+tests use a socket the harness owns and removes, so they reach neither your tmux
+nor the socket the examples use when you run them:
 
 ```console
-$ go -C examples test ./planned-build ./control-mode-subscribe
+$ go -C examples test ./...
 ```
 
 ## Requirements
