@@ -14,7 +14,7 @@ import (
 const codexConfig = `model = "gpt-5"
 approval_policy = "on-request"
 
-[projects."/home/d/work"]
+[projects."/home/user/project"]
 trust_level = "trusted"
 
 [mcp_servers.tmux]
@@ -46,7 +46,7 @@ func TestATOMLSwapTouchesOnlyItsOwnTable(t *testing.T) {
 	for _, kept := range []string{
 		`model = "gpt-5"`,
 		`approval_policy = "on-request"`,
-		`[projects."/home/d/work"]`,
+		`[projects."/home/user/project"]`,
 		`[mcp_servers.other]`,
 		`command = "other-server"`,
 	} {
