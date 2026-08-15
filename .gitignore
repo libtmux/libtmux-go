@@ -1,0 +1,31 @@
+# Build artefacts are deliberately absent from this file.
+#
+# The generate check lists untracked files without excluding ignored ones,
+# because its point is that nothing stray sits in the tree while generated
+# output is compared. Hiding a stray binary here would defeat it: the check
+# would still fail while git status looked clean, and the file that caused it
+# would appear nowhere a reader would look. Delete the artefact instead.
+#
+# What follows is only what is genuinely per-machine or per-run.
+
+# Coverage and profiling output.
+*.prof
+coverage.out
+coverage.html
+
+# Go workspace files, which stitch this module to a checkout of something else
+# on one machine and mean nothing anywhere else.
+go.work
+go.work.sum
+
+# Editor and OS noise.
+*.swp
+*~
+.DS_Store
+.idea/
+.vscode/
+
+# Per-machine agent configuration, which does not belong to the project.
+# CLAUDE.md itself is tracked; only the local overrides are ignored.
+CLAUDE.local.md
+.claude/settings.local.json
