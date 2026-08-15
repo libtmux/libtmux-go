@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -132,11 +133,19 @@ func (adapter commandRunnerAdapter) Run(
 // that the captures promising them return. Delegating keeps all of that
 // correct in a wrapper that does not care about any of it.
 func SubprocessRunner() CommandRunner {
+	return subprocessRunner(0)
+}
+
+// subprocessRunner is SubprocessRunner with the transport's wait delay exposed.
+// Zero keeps the transport's own default, which is what every caller outside
+// this package gets. It is separate only because a test standing in for tmux
+// with something far heavier than tmux needs longer than that default allows.
+func subprocessRunner(waitDelay time.Duration) CommandRunner {
 	return CommandRunnerFunc(func(
 		ctx context.Context,
 		request CommandRequest,
 	) (CommandResult, error) {
-		result, err := tmuxcmd.Runner{}.Run(ctx, tmuxcmd.Request{
+		result, err := tmuxcmd.Runner{WaitDelay: waitDelay}.Run(ctx, tmuxcmd.Request{
 			Binary:      request.Binary,
 			Arguments:   slices.Clone(request.Arguments),
 			Environment: slices.Clone(request.Environment),
