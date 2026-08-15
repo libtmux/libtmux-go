@@ -32,7 +32,9 @@ var exampleWorkflowSources = []string{
 	"examples/option-hook-editing/main.go",
 	"examples/filter-query/main.go",
 	"examples/environment/main.go",
-	"examples/control-mode-subscribe/example_test.go",
+	"examples/control-mode-subscribe/main.go",
+	"examples/planned-build/main.go",
+	"examples/fast-path/main.go",
 }
 
 const tmuxModulePath = "github.com/libtmux/libtmux-go/tmux"
@@ -444,33 +446,42 @@ func typedBooleanStringComparison(
 
 func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 	moduleRoot := documentationModuleRoot(t)
+	// Every example is a command, so every one of them is built and run the same
+	// way. An example that could only be built as a test binary would be one the
+	// README calls runnable and a reader cannot run.
 	workflows := []struct {
 		name        string
 		packagePath string
-		testBinary  bool
 	}{
 		{name: "quickstart", packagePath: "./quickstart"},
 		{name: "snapshot-browser", packagePath: "./snapshot-browser"},
 		{name: "option-hook-editing", packagePath: "./option-hook-editing"},
 		{name: "filter-query", packagePath: "./filter-query"},
 		{name: "environment", packagePath: "./environment"},
-		{name: "control-mode-subscribe", packagePath: "./control-mode-subscribe", testBinary: true},
+		{name: "control-mode-subscribe", packagePath: "./control-mode-subscribe"},
+		{name: "planned-build", packagePath: "./planned-build"},
 	}
 	for _, workflow := range workflows {
 		t.Run(workflow.name, func(t *testing.T) {
 			binary := filepath.Join(t.TempDir(), "example")
-			arguments := []string{"build", "-o", binary, workflow.packagePath}
-			if workflow.testBinary {
-				arguments = []string{"test", "-c", "-o", binary, workflow.packagePath}
-			}
-			build := exec.Command("go", arguments...)
+			build := exec.Command("go", "build", "-o", binary, workflow.packagePath)
 			build.Dir = filepath.Join(moduleRoot, "examples")
 			build.Env = append(os.Environ(), "GOWORK=off")
 			if output, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build %s: %v\n%s", workflow.packagePath, err, output)
 			}
 
-			runtimeRoot := t.TempDir()
+			// Not t.TempDir: it puts the test's name in the path it returns, and
+			// a tmux socket path may be no longer than about a hundred bytes. The
+			// longest example name alone overflows that budget once the socket
+			// tmux appends to this root is counted, which fails as "File name too
+			// long" from tmux rather than as anything about the example.
+			//nolint:usetesting // t.TempDir is what overflows the socket path
+			runtimeRoot, err := os.MkdirTemp("", "ltg-ex")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.RemoveAll(runtimeRoot) })
 			home := filepath.Join(runtimeRoot, "home")
 			tmuxRoot := filepath.Join(runtimeRoot, "tmux")
 			if err := os.MkdirAll(home, 0o700); err != nil {
@@ -481,11 +492,7 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-			runArguments := []string(nil)
-			if workflow.testBinary {
-				runArguments = []string{"-test.run", "^TestControlModeSubscribe$", "-test.v"}
-			}
-			run := exec.CommandContext(ctx, binary, runArguments...)
+			run := exec.CommandContext(ctx, binary)
 			run.Env = isolatedExampleEnvironment(home, tmuxRoot)
 			if output, err := run.CombinedOutput(); err != nil {
 				t.Fatalf("run %s: %v\n%s", workflow.packagePath, err, output)

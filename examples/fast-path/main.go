@@ -19,9 +19,19 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := start(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// start owns the context and the server, so that main does nothing but
+// report a failure. log.Fatal exits without running deferred calls, and the
+// cancel below has to run.
+func start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	return run(ctx, tmux.ServerOptions{SocketName: "libtmux-go-example-fast-path"})
 }
 
 // counter records how many tmux processes a server started, by wrapping the
@@ -56,15 +66,14 @@ func (c *counter) total() int {
 	return c.started
 }
 
-func run() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
+// run holds the example itself. It takes the options rather than a built server
+// because the counting runner has to be installed before the server exists,
+// which lets main run it on a socket of this example's own and the test beside
+// it run the same code on a socket path the test owns.
+func run(ctx context.Context, options tmux.ServerOptions) error {
 	processes := &counter{}
-	server := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-fast-path",
-		Runner:     processes.runner(),
-	}).WithStrictErrors()
+	options.Runner = processes.runner()
+	server := tmux.NewServer(options).WithStrictErrors()
 	defer func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

@@ -12,15 +12,26 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := start(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run() (err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// start owns the context and the server, so that main does nothing but
+// report a failure. log.Fatal exits without running deferred calls, and the
+// cancel below has to run.
+func start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
 	server := tmux.NewServer(tmux.ServerOptions{}).WithStrictErrors()
+	return run(ctx, server)
+}
+
+// run holds the example itself, so that main runs it against a socket of this
+// example's own and the test beside it runs the same code against a server the
+// test harness throws away.
+func run(ctx context.Context, server tmux.Server) (err error) {
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-options"})
 	if err != nil {
 		return err

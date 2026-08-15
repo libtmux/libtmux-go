@@ -1,12 +1,13 @@
-package control_mode_subscribe_test
+package main
 
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/examples/internal/exampletest"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -14,34 +15,25 @@ func TestMain(m *testing.M) {
 	os.Exit(tmuxtest.Main(m))
 }
 
+// TestControlModeSubscribe runs the example itself against a real tmux. The
+// harness gives it a server on a socket path of its own and takes it away
+// afterwards, so this reaches neither the socket the example uses when a reader
+// runs it nor any tmux already on the machine.
 func TestControlModeSubscribe(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
-	sessions, err := server.Sessions(ctx)
-	if err != nil || len(sessions) != 1 {
-		t.Fatalf("Sessions() = (%v, %v), want one session", sessions, err)
-	}
-	control, err := server.OpenControl(ctx, sessions[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := control.Close(); err != nil {
-			t.Errorf("Close() error = %v", err)
-		}
-	})
-	if _, err := sessions[0].Rename(ctx, "control-example"); err != nil {
-		t.Fatal(err)
-	}
 
-	for notification, err := range control.Notifications(ctx) {
-		if err != nil {
-			t.Fatal(err)
-		}
-		if notification.Kind() == tmux.ControlNotificationSessionRenamed {
-			return
-		}
+	printed := exampletest.Output(t, func() error {
+		return run(ctx, tmuxtest.NewServer(ctx, t).WithStrictErrors())
+	})
+
+	// The example only returns without an error once it has seen the rename it
+	// caused, so reaching here already proves the stream delivered. What the
+	// output adds is that it was heard as a notification rather than inferred.
+	if want := "heard the rename"; !strings.Contains(printed, want) {
+		t.Errorf("printed %q, want it to contain %q", printed, want)
 	}
-	t.Fatal("control stream ended before the rename it was watching for")
+	if want := "notification:"; !strings.Contains(printed, want) {
+		t.Errorf("printed %q, want it to name the notifications it read", printed)
+	}
 }
