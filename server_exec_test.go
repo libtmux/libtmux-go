@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 // libtmux:parity libtmux.server.Server.run_shell

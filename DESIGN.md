@@ -4,7 +4,7 @@ This document defines the architecture of the Go module.
 
 ## Compatibility contract
 
-- The module path is `github.com/tmux-python/libtmux/golang`; its root package
+- The module path is `github.com/libtmux/libtmux-go`; its root package
   name is `tmux`.
 - The language baseline is Go 1.23. No runtime dependency is accepted without a
   measured need and a focused bakeoff; the initial implementation is standard

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 //go:generate go run ./internal/generate/formats -spec internal/generate/formats/spec.json -output format_generated.go

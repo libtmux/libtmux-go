@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // A control client opens in an environment that names no UTF-8 locale.

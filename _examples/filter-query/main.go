@@ -8,8 +8,8 @@ import (
 	"log"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxq"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxq"
 )
 
 func main() {

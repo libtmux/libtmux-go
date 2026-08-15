@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // TestPlanTargetsWhatItHasNotCreatedYet is the gate on forward references.

@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 func main() {

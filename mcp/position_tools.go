@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // paneGeometry is where a pane sits in its window, in terminal cells.

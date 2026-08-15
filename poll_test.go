@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 func TestPollStopsWhenTheConditionHolds(t *testing.T) {

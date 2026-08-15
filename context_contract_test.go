@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 func TestReadOnlyOperationsPreserveContextCancellation(t *testing.T) {

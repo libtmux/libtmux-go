@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // Three ways to put something into a pane, because they are not the same

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 
+	tmux "github.com/libtmux/libtmux-go"
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
-	tmuxmcp "github.com/tmux-python/libtmux/golang/mcp"
 )
 
 // Serve one tmux server over stdin and stdout, which is what an agent CLI

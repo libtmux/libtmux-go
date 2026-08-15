@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // What this server is pointed at, and what else is out there.

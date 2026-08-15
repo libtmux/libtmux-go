@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 // libtmux:parity libtmux.pane.Pane.display_popup

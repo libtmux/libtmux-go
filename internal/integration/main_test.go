@@ -12,7 +12,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // TestMain gives these tests the harness the root package's own TestMain gives

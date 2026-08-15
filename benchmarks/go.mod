@@ -1,7 +1,7 @@
-module github.com/tmux-python/libtmux/golang/benchmarks
+module github.com/libtmux/libtmux-go/benchmarks
 
 go 1.23.0
 
-require github.com/tmux-python/libtmux/golang v0.0.0
+require github.com/libtmux/libtmux-go v0.0.0
 
-replace github.com/tmux-python/libtmux/golang => ../
+replace github.com/libtmux/libtmux-go => ../

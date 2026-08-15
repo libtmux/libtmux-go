@@ -3,9 +3,9 @@ package mcp
 import (
 	"context"
 
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/workspace"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/workspace"
 )
 
 // createWindowInput adds one window to a session.

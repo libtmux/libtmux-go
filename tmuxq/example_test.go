@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/tmux-python/libtmux/golang/tmuxq"
+	"github.com/libtmux/libtmux-go/tmuxq"
 )
 
 type pane struct {

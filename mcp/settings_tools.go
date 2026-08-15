@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // Options, environment, and hooks: the settings that explain a pane's

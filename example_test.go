@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxq"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxq"
 )
 
 // killExampleServer stops an example's tmux server on a context of its own.

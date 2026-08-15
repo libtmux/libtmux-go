@@ -3,7 +3,7 @@ package tmuxtest_test
 import (
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 func TestTemporaryResourcePublicSurfaceCompiles(_ *testing.T) {

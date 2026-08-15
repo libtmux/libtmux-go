@@ -25,9 +25,9 @@ func TestExportedWorkflowCompilesFromDownstreamModule(t *testing.T) {
 
 go 1.23.0
 
-require github.com/tmux-python/libtmux/golang v0.0.0
+require github.com/libtmux/libtmux-go v0.0.0
 
-replace github.com/tmux-python/libtmux/golang => %q
+replace github.com/libtmux/libtmux-go => %q
 `, moduleRoot)
 	writeDownstreamFile(t, filepath.Join(directory, "go.mod"), module)
 	writeDownstreamFile(t, filepath.Join(directory, "workflow_test.go"), `package smoke
@@ -37,9 +37,9 @@ import (
 	"errors"
 	"testing"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxq"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxq"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 func compileWorkflow(ctx context.Context, t *testing.T, server tmux.Server) error {
@@ -150,7 +150,7 @@ func writeDownstreamFile(t *testing.T, path string, contents string) {
 // while the test sits in the module root, which these no longer do.
 func findModuleRoot() (string, error) {
 	output, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}",
-		"github.com/tmux-python/libtmux/golang").Output()
+		"github.com/libtmux/libtmux-go").Output()
 	if err != nil {
 		return "", fmt.Errorf("locate the tmux module: %w", err)
 	}

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 // recordingEngine records every request one transport was asked to carry and

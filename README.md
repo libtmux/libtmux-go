@@ -3,14 +3,14 @@
 A typed Go wrapper for [tmux], with no runtime dependencies.
 
 ```console
-$ go get github.com/tmux-python/libtmux/golang
+$ go get github.com/libtmux/libtmux-go
 ```
 
-The import needs a name, because the path ends in the repository's directory
-and the package is called `tmux`:
+The import needs a name, because the path ends in the repository name and the
+package is called `tmux`:
 
 ```go
-import tmux "github.com/tmux-python/libtmux/golang"
+import tmux "github.com/libtmux/libtmux-go"
 ```
 
 ```go
@@ -26,7 +26,7 @@ The package documentation is the reference, and is written to be read
 start to finish rather than searched:
 
 ```console
-$ go doc github.com/tmux-python/libtmux/golang
+$ go doc github.com/libtmux/libtmux-go
 ```
 
 It opens with a task index, then the rule that maps a tmux command to its Go

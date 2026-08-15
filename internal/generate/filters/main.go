@@ -25,7 +25,7 @@ var goDocumentationLinkPattern = regexp.MustCompile(`\[[A-Za-z_][A-Za-z0-9_]*(?:
 
 var expectedModels = [...]string{"Session", "Window", "Pane", "Client"}
 
-const tmuxModulePath = "github.com/tmux-python/libtmux/golang"
+const tmuxModulePath = "github.com/libtmux/libtmux-go"
 
 type filterSpec struct {
 	Schema   int         `json:"schema"`

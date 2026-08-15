@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	"github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // libtmux:parity libtmux.session.Session.from_env

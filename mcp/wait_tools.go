@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // Waiting is a tool, because polling is a client's way of paying for one

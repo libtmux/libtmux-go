@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 func TestSparseArrayZeroValueIsEmptyAndReturnsFreshSlices(t *testing.T) {

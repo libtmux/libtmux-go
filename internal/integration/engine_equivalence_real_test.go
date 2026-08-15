@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // equivalenceFormats are materialized tmux formats compared across transports.

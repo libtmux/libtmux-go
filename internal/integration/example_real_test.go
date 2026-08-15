@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxq"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxq"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 func TestCreationMutationExampleAgainstRealTmux(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 func TestStartControlModeRequiresExplicitSocketProvenance(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 // libtmux:parity libtmux.constants.RESIZE_ADJUSTMENT_DIRECTION_FLAG_MAP

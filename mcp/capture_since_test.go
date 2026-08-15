@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	tmux "github.com/libtmux/libtmux-go"
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
-	tmuxmcp "github.com/tmux-python/libtmux/golang/mcp"
 )
 
 // What tmux does to a cursor when a pane reaches its history limit.

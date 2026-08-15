@@ -176,7 +176,7 @@ The package documentation is the reference, and is written to be read start to
 finish rather than searched:
 
 ```console
-$ go doc github.com/tmux-python/libtmux/golang
+$ go doc github.com/libtmux/libtmux-go
 ```
 
 Every exported declaration carries a doc comment, and every switch a caller can

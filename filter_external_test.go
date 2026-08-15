@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 func TestFilterJSONRoundTripIsStrictStableWireForm(t *testing.T) {

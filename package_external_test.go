@@ -3,7 +3,7 @@ package tmux_test
 import (
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 // libtmux:parity libtmux#export:Client

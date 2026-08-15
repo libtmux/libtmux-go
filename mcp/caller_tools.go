@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 // callerIdentity is what this process can prove about the pane it runs in.

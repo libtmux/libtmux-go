@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/tmux-python/libtmux/golang/internal/goname"
+	"github.com/libtmux/libtmux-go/internal/goname"
 )
 
 // libtmux:parity libtmux.exc.DeprecatedError

@@ -66,7 +66,7 @@ const buildDirectoryName = "libtmux-mcp"
 // modulePath is where a released build comes from. It is the module line of
 // this command's own go.mod, which cannot be read at runtime from an installed
 // binary, so it is written here and kept in step by a test.
-const modulePath = "github.com/tmux-python/libtmux/golang/mcp"
+const modulePath = "github.com/libtmux/libtmux-go/mcp"
 
 // buildMode names which build of the server the clients are pointed at.
 type buildMode string

@@ -3,8 +3,8 @@ package mcp
 import (
 	"context"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // listPanesInput takes no arguments; every pane on the configured server is

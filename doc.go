@@ -1,10 +1,10 @@
 // Package tmux provides a typed, context-aware API with tmux 3.2a as its
 // minimum supported version, tested through tmux 3.7b.
 //
-// The import takes a name, because this module's path ends in the directory it
-// occupies while the package is called tmux:
+// The import takes a name, because the module path ends in the repository name
+// while the package is called tmux:
 //
-//	import tmux "github.com/tmux-python/libtmux/golang"
+//	import tmux "github.com/libtmux/libtmux-go"
 //
 // # Where to start
 //

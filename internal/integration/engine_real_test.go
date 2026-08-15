@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // countingRunner is the library's own subprocess transport with a counter in

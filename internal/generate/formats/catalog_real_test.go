@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {

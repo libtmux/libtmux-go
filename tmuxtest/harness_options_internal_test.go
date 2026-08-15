@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 func TestRunCommandUsesCallerContext(t *testing.T) {

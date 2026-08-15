@@ -6,7 +6,7 @@ import (
 	"go/token"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 func TestMaterializedIdentityFieldsArePrivate(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 // Resolving what a client named into what tmux addresses.

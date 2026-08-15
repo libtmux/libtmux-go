@@ -10,7 +10,7 @@
 //
 //	import (
 //		sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-//		tmuxmcp "github.com/tmux-python/libtmux/golang/mcp"
+//		tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 //	)
 //
 // Every tool addresses one tmux server chosen when the MCP server is

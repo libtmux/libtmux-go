@@ -28,10 +28,10 @@ import (
 	"syscall"
 	"time"
 
+	tmux "github.com/libtmux/libtmux-go"
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
-	tmuxmcp "github.com/tmux-python/libtmux/golang/mcp"
 )
 
 func main() {

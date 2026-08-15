@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 func TestPTYProcessReturnsLiveAndFinalOutput(t *testing.T) {

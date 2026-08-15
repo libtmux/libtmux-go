@@ -3,7 +3,7 @@ package goname_test
 import (
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/internal/goname"
+	"github.com/libtmux/libtmux-go/internal/goname"
 )
 
 func TestExportedAppliesTheGoNamingConvention(t *testing.T) {

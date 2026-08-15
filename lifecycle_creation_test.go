@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 func TestAuxiliaryCreationFailuresRedactPayloads(t *testing.T) {

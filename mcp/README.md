@@ -12,7 +12,7 @@ runtime dependency; speaking MCP needs one, so this lives in its own module and
 **Requirements:** Go 1.23+, and `tmux` on `$PATH`.
 
 ```console
-$ go install github.com/tmux-python/libtmux/golang/mcp/cmd/libtmux-mcp@latest
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
 That puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client launches it as
@@ -550,7 +550,7 @@ and stdout.
 ```go
 import (
     sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-    tmuxmcp "github.com/tmux-python/libtmux/golang/mcp"
+    tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 )
 ```
 
@@ -637,10 +637,8 @@ later as a server that will not start, separately, in each client. Pass
 `--no-preflight` to skip it when offline.
 
 `released` needs the Go module to be published under a tag the proxy can
-resolve. It is not yet: the repository's tags are libtmux's Python versions, so
-`@latest` finds `github.com/tmux-python/libtmux` without the `golang/mcp`
-package in it, and the preflight says so rather than writing an entry that
-cannot start.
+resolve. This repository has no such tag yet, so `@latest` resolves nothing and
+the preflight says so rather than writing an entry that cannot start.
 
 Driving it by hand still works:
 

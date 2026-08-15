@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // starvedRunner runs tmux with a wait delay far too short to drain a listing,

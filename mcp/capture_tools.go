@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // capturePaneInput selects the pane to read and how much of it.

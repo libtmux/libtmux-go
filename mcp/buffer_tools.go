@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // tmux's paste buffers, which is how text gets from anywhere to a pane.

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 // panesPerWindow is the workload size. It is small enough to stay quick under

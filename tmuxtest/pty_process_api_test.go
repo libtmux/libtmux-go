@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 func TestPTYProcessPublicSurfaceCompiles(_ *testing.T) {

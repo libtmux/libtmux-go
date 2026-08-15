@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 // CommandKind names what one tmux request needs from the transport that runs

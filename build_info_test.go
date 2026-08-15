@@ -11,7 +11,7 @@ import (
 func TestPackageVersionReadsGoModuleBuildMetadata(t *testing.T) {
 	t.Parallel()
 
-	if ModulePath != "github.com/tmux-python/libtmux/golang" {
+	if ModulePath != "github.com/libtmux/libtmux-go" {
 		t.Fatalf("ModulePath = %q", ModulePath)
 	}
 

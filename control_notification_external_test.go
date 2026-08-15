@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 // libtmux:parity libtmux._internal.constants.Hooks

@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 // libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:filter_expression:741088570e6e

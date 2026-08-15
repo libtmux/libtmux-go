@@ -77,7 +77,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
+	tmux "github.com/libtmux/libtmux-go"
 )
 
 // ServerOptions configures a harness-owned [tmux.Server]. All inputs are copied

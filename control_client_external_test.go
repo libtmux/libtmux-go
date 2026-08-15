@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 type openControlSignature func(tmux.Server, context.Context, tmux.Session) (*tmux.ControlClient, error)

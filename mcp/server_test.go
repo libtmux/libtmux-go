@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	tmux "github.com/libtmux/libtmux-go"
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
-	tmuxmcp "github.com/tmux-python/libtmux/golang/mcp"
 )
 
 // connect starts the MCP server against a tmux server unique to the test and

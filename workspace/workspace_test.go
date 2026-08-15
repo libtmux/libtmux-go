@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/workspace"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/workspace"
 )
 
 // testServer returns a server on a socket unique to the test, and kills it when

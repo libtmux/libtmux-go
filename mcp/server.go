@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	tmux "github.com/libtmux/libtmux-go"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // Version is reported to MCP clients during initialization.

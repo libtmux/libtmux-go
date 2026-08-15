@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmux-python/libtmux/golang"
+	"github.com/libtmux/libtmux-go"
 )
 
 func TestScrubTmuxEnvironmentRemovesTargetingVariables(t *testing.T) {

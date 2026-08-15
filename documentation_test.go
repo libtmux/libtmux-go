@@ -35,7 +35,7 @@ var exampleWorkflowSources = []string{
 	"_examples/control-mode-subscribe/example_test.go",
 }
 
-const tmuxModulePath = "github.com/tmux-python/libtmux/golang"
+const tmuxModulePath = "github.com/libtmux/libtmux-go"
 
 var removedReceiverMethods = map[string]map[string]bool{
 	"Session": {
@@ -316,7 +316,7 @@ func valid(other Other, value string) {
 		{
 			name: "obsolete pane method",
 			source: `package sample
-import tmux "github.com/tmux-python/libtmux/golang"
+import tmux "github.com/libtmux/libtmux-go"
 func invalid(pane tmux.Pane) { _ = pane.PaneActive() }
 `,
 			want: "removed receiver-stuttering method PaneActive",
@@ -324,7 +324,7 @@ func invalid(pane tmux.Pane) { _ = pane.PaneActive() }
 		{
 			name: "typed boolean string comparison",
 			source: `package sample
-import tmux "github.com/tmux-python/libtmux/golang"
+import tmux "github.com/libtmux/libtmux-go"
 func invalid(pane tmux.Pane) {
 	active, _ := pane.Active()
 	_ = active == "1"

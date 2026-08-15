@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	tmux "github.com/libtmux/libtmux-go"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
-	tmux "github.com/tmux-python/libtmux/golang"
 )
 
 // A client can be told a pane changed rather than asking whether it did.

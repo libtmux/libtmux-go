@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	tmux "github.com/tmux-python/libtmux/golang"
-	"github.com/tmux-python/libtmux/golang/tmuxtest"
+	tmux "github.com/libtmux/libtmux-go"
+	"github.com/libtmux/libtmux-go/tmuxtest"
 )
 
 // libtmux:parity libtmux._internal.control_mode.ControlMode

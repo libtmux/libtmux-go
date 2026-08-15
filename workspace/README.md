@@ -10,8 +10,8 @@ runtime dependency; parsing YAML needs one, so this lives in its own module and
 
 ```go
 import (
-    tmux "github.com/tmux-python/libtmux/golang"
-    "github.com/tmux-python/libtmux/golang/workspace"
+    tmux "github.com/libtmux/libtmux-go"
+    "github.com/libtmux/libtmux-go/workspace"
 )
 ```
 

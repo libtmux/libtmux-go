@@ -5,7 +5,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 // ServerOptions configures a [Server] without executing tmux. [NewServer]

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 // libtmux:parity libtmux.pane.Pane.capture_pane#warning:03c1f413095c

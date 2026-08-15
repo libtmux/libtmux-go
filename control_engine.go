@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/tmux-python/libtmux/golang/internal/tmuxcmd"
+	"github.com/libtmux/libtmux-go/internal/tmuxcmd"
 )
 
 // Engine returns an [Engine] that carries tmux commands over the receiver's
