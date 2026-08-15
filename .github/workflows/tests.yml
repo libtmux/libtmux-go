@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [".", "workspace", "mcp", "benchmarks"]
+        module: [".", "examples", "workspace", "mcp", "benchmarks"]
     steps:
       - uses: actions/checkout@v5
 
@@ -39,6 +39,8 @@ jobs:
       # report the core as uncovered by the tests that cover it.
       - name: Test ${{ matrix.module }}
         working-directory: ${{ matrix.module }}
+        env:
+          GOWORK: off
         run: |
           go vet ./...
           go test -race -count=1 -coverpkg=./... -coverprofile=coverage.out ./...
@@ -49,33 +51,12 @@ jobs:
           path: ${{ matrix.module }}/coverage.out
           if-no-files-found: ignore
 
-  examples:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: stable
-          cache-dependency-path: go.mod
-
-      - name: Install tmux
-        run: sudo apt-get update && sudo apt-get install --yes tmux
-
-      - name: Create the tmux socket directory
-        run: mkdir -p "$TMUX_TMPDIR"
-
-      - name: Test the examples
-        run: |
-          go vet ./examples/*
-          go test -count=1 ./examples/*
-
   lint:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        module: [".", "workspace", "mcp", "benchmarks"]
+        module: [".", "examples", "workspace", "mcp", "benchmarks"]
     steps:
       - uses: actions/checkout@v5
 
@@ -134,3 +115,56 @@ jobs:
             go run .
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The supported tmux range is a claim the README makes, so something has to
+  # check it. Ubuntu ships one tmux; version-specific breakage is why this
+  # exists -- 3.4 stopped taking split-window's -p that 3.3a and 3.5 both take,
+  # and pane_start_path does not exist before 3.3.
+  tmux-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tmux-version: ['3.2a', '3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b']
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+
+      - name: Cache the tmux build for ${{ matrix.tmux-version }}
+        id: tmux-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/tmux-builds/tmux-${{ matrix.tmux-version }}
+          key: tmux-${{ matrix.tmux-version }}
+
+      - name: Build tmux ${{ matrix.tmux-version }}
+        if: steps.tmux-cache.outputs.cache-hit != 'true'
+        env:
+          TMUX_VERSION: ${{ matrix.tmux-version }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
+            libutempter-dev bison autoconf automake pkg-config
+          git clone --depth 1 --branch "$TMUX_VERSION" \
+            https://github.com/tmux/tmux.git ~/tmux-src
+          cd ~/tmux-src
+          sh autogen.sh
+          ./configure --prefix="$HOME/tmux-builds/tmux-$TMUX_VERSION"
+          make && make install
+
+      - name: Test every module against tmux ${{ matrix.tmux-version }}
+        env:
+          TMUX_VERSION: ${{ matrix.tmux-version }}
+        run: |
+          sudo apt-get install --yes libevent-2.1-7
+          export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
+          tmux -V
+          mkdir -p "$TMUX_TMPDIR"
+          for module in . examples workspace mcp benchmarks; do
+            echo "--- $module ---"
+            (cd "$module" && GOWORK=off go test -count=1 ./...)
+          done

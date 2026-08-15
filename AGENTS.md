@@ -71,6 +71,22 @@ test, because most of what exercises the core lives in `internal/integration`:
 $ go test -coverpkg=./... -coverprofile=coverage.out ./...
 ```
 
+Known vulnerabilities are checked per module, because each resolves its own
+dependencies:
+
+```console
+$ for module in . examples workspace mcp benchmarks; do (cd "$module" && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...) || break; done
+```
+
+One tmux is not enough, and the supported range is a claim the README makes.
+`scripts/matrix.sh` runs every module against every supported release; it needs
+a directory of tmux builds and skips with an explanation when there is none,
+rather than reporting a pass it did not earn:
+
+```console
+$ bash scripts/matrix.sh
+```
+
 The race detector is not optional before anything ships:
 
 ```console
