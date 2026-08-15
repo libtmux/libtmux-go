@@ -825,7 +825,7 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 			// this is checking for, so it must not be reachable.
 			result, err := plan.RunWith(
 				context.Background(),
-				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-golang-plan-unreachable"}),
+				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
 				countingPlanner{dispatches: malformed.dispatches},
 			)
 			var refused *tmux.PlanError
@@ -893,7 +893,7 @@ func TestPlanRefusesAMarkedGroupItCannotReportSeparately(t *testing.T) {
 			// the command list is being built, before anything is sent.
 			result, err := plan.RunWith(
 				context.Background(),
-				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-golang-plan-unreachable"}),
+				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
 				markingPlanner{ops: ops},
 			)
 			var problem *tmux.PlanError
