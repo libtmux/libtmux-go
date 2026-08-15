@@ -101,7 +101,12 @@ const (
 	harnessIsolationConfig = ""
 	maxSocketPathBytes     = 103
 	cleanupTimeout         = 3 * time.Second
-	perTestCleanupTries    = 2
+	perTestCleanupTries    = 3
+	// cleanupRetryGap is how long a failed cleanup waits before trying again.
+	// Long enough for a server that was mid-shutdown to have finished, short
+	// enough that it costs a passing test nothing, since it is only ever waited
+	// after a failure.
+	cleanupRetryGap = 100 * time.Millisecond
 )
 
 var (
@@ -639,12 +644,29 @@ func cleanupAndUnregister(record *serverRecord) error {
 }
 
 func cleanupWithRetries(record *serverRecord, attempts int) error {
+	return retryCleanup(attempts, cleanupRetryGap, func() error {
+		return cleanupAndUnregister(record)
+	})
+}
+
+// retryCleanup runs attempt until it succeeds, waiting gap between tries.
+//
+// The wait is the point. What fails here is a server caught partway through
+// shutting down: the process has been told to stop and has not finished, or the
+// socket it owned is still on disk. Trying again immediately asks the same
+// question inside the same moment and gets the same answer, which is why two
+// attempts back to back used to report the same failure twice rather than
+// giving the condition a chance to change.
+func retryCleanup(attempts int, gap time.Duration, attempt func() error) error {
 	if attempts < 1 {
 		return errors.New("tmuxtest: cleanup requires at least one attempt")
 	}
 	var failures []error
-	for range attempts {
-		if err := cleanupAndUnregister(record); err != nil {
+	for try := range attempts {
+		if try > 0 {
+			time.Sleep(gap)
+		}
+		if err := attempt(); err != nil {
 			failures = append(failures, harnessFailure("cleanup tmux server", err))
 			continue
 		}

@@ -258,6 +258,49 @@ func TestCleanupRetryResumesAfterPartialArtifactRemoval(t *testing.T) {
 	}
 }
 
+// TestRetryCleanupWaitsBetweenAttempts covers the wait rather than the retry.
+// What cleanup contends with is a server partway through shutting down, and
+// asking again inside the same moment gets the same answer -- which is how two
+// attempts came to report one failure twice on a loaded machine.
+func TestRetryCleanupWaitsBetweenAttempts(t *testing.T) {
+	const gap = 20 * time.Millisecond
+	attempts := 0
+	started := time.Now()
+	err := retryCleanup(3, gap, func() error {
+		attempts++
+		if attempts < 3 {
+			return errInvalidHarnessState
+		}
+		return nil
+	})
+	elapsed := time.Since(started)
+
+	if err != nil {
+		t.Fatalf("retryCleanup() error = %v, want the third attempt to succeed", err)
+	}
+	if attempts != 3 {
+		t.Errorf("attempts = %d, want 3", attempts)
+	}
+	if want := 2 * gap; elapsed < want {
+		t.Errorf("two retries took %v, want at least %v spent waiting between them",
+			elapsed, want)
+	}
+}
+
+func TestRetryCleanupReportsEveryFailureWhenNoneSucceed(t *testing.T) {
+	attempts := 0
+	err := retryCleanup(2, time.Millisecond, func() error {
+		attempts++
+		return errInvalidHarnessState
+	})
+	if err == nil {
+		t.Fatal("retryCleanup() error = nil, want the failures it collected")
+	}
+	if attempts != 2 {
+		t.Errorf("attempts = %d, want 2", attempts)
+	}
+}
+
 func TestCleanupRetriesTransientKillFailure(t *testing.T) {
 	realBinary, err := exec.LookPath("tmux")
 	if err != nil {
