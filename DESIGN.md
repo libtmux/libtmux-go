@@ -27,6 +27,36 @@ The nested module uses its own semantic versions and `golang/vX.Y.Z` tags. A
 future v2 also adds `/v2` to the module path. The Python release workflow must
 accept only root `vX.Y.Z` tags before the first Go tag is published.
 
+## Where each package sits
+
+Placement follows the imports rather than taste, and every rule below was
+measured rather than assumed.
+
+The library lives in `tmux/` rather than at the repository root, so the last
+element of its import path is the name of the package it names. Go permits a
+mismatch and warns that it surprises readers; the large analogues resolve it the
+same way, with `go-github` putting package `github` in `github/` and
+`client_golang` putting package `prometheus` in `prometheus/`. The import needs
+no alias either way — the package clause supplies the identifier — so the reason
+is the convention, not a compiler requirement.
+
+`tmuxtest` sits beneath `tmux` because it imports it, which is where the
+standard library puts `httptest` relative to `http`. `tmuxq` stays a sibling
+because it imports nothing here and nothing here imports it. `internal` sits
+beneath `tmux` because nothing outside `tmux` uses any of it, and putting it
+there turns that from a habit into a rule the compiler enforces: an internal
+package is importable only from beneath the parent of its `internal` directory,
+which the consumer modules are not. A root `internal/` would be visible to them,
+and is the right home for anything genuinely shared — there is nothing today.
+
+`examples/` is a module of its own. Its examples import nothing outside this
+repository now, and a module boundary is what keeps that true: an example
+reaching for a dependency cannot put it in the tmux module's `go.mod`, which is
+the module whose claim is that it has none.
+
+The parity manifest lives in `tmux/internal/parity` because `//go:embed` cannot
+reach outside the directory of the package that embeds it.
+
 ## Package shape
 
 | Package | Responsibility |
@@ -51,6 +81,16 @@ shared package holding most of the model anyway, or interfaces standing in for
 concrete values the compatibility contract keeps concrete. Navigability is
 therefore a naming and view-type problem rather than a packaging one, which is
 why format values live behind `Formats` instead of on each receiver.
+
+A dependency analysis over the root package -- asking each used object where it
+was declared -- found `control`, `filter` and `search` reachable in one direction
+only, and `plan` reachable once one shared argument builder moves. They stay
+anyway. Extracting `control` would strand `Server.OpenControl` and
+`Server.OpenControlPool`, whose discoverability from `server.` is the point of
+the mode table; extracting `search` would strand the eight methods that are its
+API; and `filter` is a cycle in practice, because the search signatures name
+filter types while the filter predicates name the model. The finding is recorded
+so the question does not have to be reopened from scratch.
 
 `Plan` follows that rule for a reason of its own. A recorded operation and the
 method that runs the same command share one argv builder, which is what stops a
