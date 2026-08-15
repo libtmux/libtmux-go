@@ -1,69 +1,127 @@
-# tmux
+# libtmux for Go
 
-A typed Go wrapper for [tmux], with no runtime dependencies.
+[![Go Reference](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
+
+Drive tmux from Go: sessions, windows, and panes as typed values, every tmux
+option and hook as a typed accessor, and errors classified by what tmux actually
+refused.
+
+- **No runtime dependencies.** The core module imports only the standard library.
+- **Go 1.23+**, tmux **3.2a through 3.7b**, checked against every release in that
+  range on each change.
+- **Records never refresh behind you.** A `Session` you hold is what tmux said
+  when you asked, not a live handle that changes underneath.
 
 ```console
 $ go get github.com/libtmux/libtmux-go/tmux
 ```
 
-```go
-import "github.com/libtmux/libtmux-go/tmux"
-```
+## Quick start
 
 ```go
-server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
-if err != nil {
-    return err
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	ctx := context.Background()
+	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() { _ = session.Kill(ctx) }()
+
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Command: "top"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
+		Direction: tmux.PaneDirectionRight,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	name, _ := window.Name()
+	fmt.Println(name, pane.ID())
 }
-window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Command: "top"})
 ```
 
-The package documentation is the reference, and is written to be read
-start to finish rather than searched:
+Runnable: [`examples/quickstart`](examples/quickstart) — `go -C examples run ./quickstart`.
 
-```console
-$ go doc github.com/libtmux/libtmux-go
+## What querying looks like
+
+Two ways to ask, and they answer the same question at different costs.
+
+**Let tmux filter**, which sends one command and gets back only matches:
+
+```go
+live := tmux.TmuxFilter("#{==:#{session_name},work}")
+sessions, err := server.SearchSessions(ctx, &live)
 ```
 
-It opens with a task index, then the rule that maps a tmux command to its Go
-method, so a command usually leads to its method without a lookup: `kill-pane`
-is `Pane.Kill`, `rename-session` is `Session.Rename`.
+**Or read once and filter in Go**, when you want several answers from one read:
 
-## What it gives you
+```go
+snapshot, err := server.Snapshot(ctx)
+if err != nil {
+	return err
+}
+predicate, err := tmux.PaneActiveIs(true).Predicate()
+if err != nil {
+	return err
+}
+active := tmuxq.Where(snapshot.Panes(), predicate)
+```
 
-Sessions, windows, and panes as records that never refresh behind your back;
-every tmux option and hook as a typed accessor; searches that run inside tmux
-or in Go; and errors classified by what tmux actually refused, so a missing
-target and a misspelled option are different `errors.Is` checks.
+Typed filters compose, and the generated ones push down into tmux's own `-f`
+where tmux can evaluate them:
 
-Reading a pane back, and waiting for one, are their own topic — a shell echoes
-the command you sent, so searching the screen for what you are waiting for
-finds your own request. See "Waiting for a pane" in the package documentation.
+```go
+filter := tmux.PaneFilter{
+	Active:      tmux.Ptr(true),
+	CurrentPath: tmux.Ptr("/home/you/project"),
+}
+panes, err := server.SearchPanes(ctx, &filter)
+```
 
-## Going faster
+Runnable: [`examples/filter-query`](examples/filter-query).
 
-Every command starts a tmux process by default. How they are carried, whether
-they are batched, and how many run at once are three independent switches, each
-one visible line to turn on and one to take back. "Choosing a mode" in the
-package documentation is the table of all five, with what each costs and when
-to reach for it.
+## Choosing a mode
 
-A control-mode connection carries commands without starting a process for each:
+Every command starts a tmux process unless you turn something on. Each switch is
+one line to turn on, one to take back, and independent of the others:
+
+| Mode | Turn it on | Cost | Reach for it |
+| --- | --- | --- | --- |
+| process | nothing, the default | a tmux process each | one-shot commands |
+| control | `OpenControlPool` | one tmux client | more than a few commands |
+| concurrent | `Connections: N` | N tmux clients | parallel readers |
+| chained | `NewPlan` then `Run` | no records back | builds and layouts |
+| streaming | `Notifications` | a connection | watching what a pane does |
+
+A control connection carries commands without starting a process for each. It is
+a tmux client while open — it appears in `list-clients` and counts toward
+`session_attached` — which is why it is chosen rather than automatic:
 
 ```go
 connected, session, pool, err := server.OpenControlPool(
-    ctx, session, tmux.ControlPoolRequest{},
+	ctx, session, tmux.ControlPoolRequest{},
 )
+defer func() { _ = pool.Close() }()
 ```
 
-That connection is a tmux client while it is open: it appears in
-`list-clients`, counts toward `session_attached`, and fires a `client-attached`
-hook. That is why it is chosen rather than automatic.
-
-A plan is the other axis. It records commands instead of running them, sends
-the ones that need no answer to tmux together, and hands back a reference to
-what a step is going to create, so a build is written in one pass:
+A plan records commands instead of running them, sends the ones needing no
+answer together, and hands back a reference to what a step *will* create — so a
+build is written in one pass:
 
 ```go
 plan := tmux.NewPlan()
@@ -72,22 +130,96 @@ plan.SendKeys(pane, tmux.SendKeysRequest{Command: tmux.Ptr("top")})
 result, err := plan.Run(ctx, server)
 ```
 
-## Testing against it
+Runnable: [`examples/fast-path`](examples/fast-path) and
+[`examples/planned-build`](examples/planned-build).
+[`BENCHMARKS.md`](BENCHMARKS.md) is what each mode costs, measured on every
+supported tmux.
 
-The `tmuxtest` package gives tests a real tmux server that cleans itself up.
-`ServerOptions.Runner` replaces process execution entirely, so code that drives
-tmux can be unit tested on a machine without it.
+## Watching tmux
 
-## In this repository
+```go
+for notification, err := range client.Notifications(ctx) {
+	if err != nil {
+		return err
+	}
+	if pane, output, ok := notification.Output(); ok {
+		fmt.Printf("%s: %s", pane, output)
+	}
+}
+```
 
-| Path | What it is |
+Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe).
+
+## Packages
+
+| Package | Import | What it is |
+| --- | --- | --- |
+| [`tmux/`](tmux/) | `github.com/libtmux/libtmux-go/tmux` | The library. Sessions, windows, panes, options, hooks, formats, filters, snapshots, plans. |
+| [`tmux/tmuxtest/`](tmux/tmuxtest/) | `.../tmux/tmuxtest` | A real tmux server for your tests, that cleans itself up. |
+| [`tmuxq/`](tmuxq/) | `github.com/libtmux/libtmux-go/tmuxq` | Model-free generic helpers for slices and `iter.Seq`. |
+
+Three more ship as **separate modules**, so `go get` on the library pulls in
+none of them:
+
+| Module | What it is |
 | --- | --- |
-| [`workspace/`](workspace/) | Loads tmuxp-style YAML workspaces and builds them |
-| [`mcp/`](mcp/) | Serves one tmux server to Model Context Protocol clients |
-| [`DESIGN.md`](DESIGN.md) | The conventions this package holds itself to |
-| [`PARITY.md`](PARITY.md) | How the surface is checked against libtmux |
-| [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
+| [`mcp/`](mcp/) | **A tmux server for AI agents** over the Model Context Protocol. Install it as a binary. |
+| [`workspace/`](workspace/) | Loads tmuxp-style YAML workspaces and builds them. |
+| [`benchmarks/`](benchmarks/) | Prints what each way of reaching tmux costs. |
 
-Both consumers are separate modules, so `go get` on this one pulls in neither.
+### For agents
+
+[`mcp/`](mcp/) is a standalone Model Context Protocol server that gives an agent
+one tmux server: create panes, send keys, read output, wait for text.
+
+```console
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
+```
+
+See [`mcp/README.md`](mcp/README.md) for client configuration and the tool
+reference.
+
+## Testing your own code
+
+[`tmux/tmuxtest`](tmux/tmuxtest/) gives a test a real tmux server on its own
+socket, killed when the test ends:
+
+```go
+func TestSomething(t *testing.T) {
+	ctx := context.Background()
+	server := tmuxtest.NewServer(ctx, t)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+	// ...
+}
+```
+
+For a machine with no tmux at all, `ServerOptions.Runner` replaces process
+execution entirely.
+
+## Documentation
+
+The package documentation is the reference, written to be read start to finish
+rather than searched:
+
+```console
+$ go doc github.com/libtmux/libtmux-go/tmux
+```
+
+It opens with a task index, then the rule mapping a tmux command to its Go
+method — `kill-pane` is `Pane.Kill`, `rename-session` is `Session.Rename` — so a
+command usually leads to its method without a lookup.
+
+| | |
+| --- | --- |
+| [`DESIGN.md`](DESIGN.md) | The conventions this package holds itself to, and the bakeoffs behind them |
+| [`PARITY.md`](PARITY.md) | How the surface is checked against the Python libtmux |
+| [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
+| [`AGENTS.md`](AGENTS.md) | Working on this repository |
+| [`examples/`](examples/) | Runnable programs for each of the above |
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
 
 [tmux]: https://github.com/tmux/tmux

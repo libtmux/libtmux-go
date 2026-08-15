@@ -648,7 +648,7 @@ $ go run ./cmd/libtmux-mcp -socket-name my-application
 
 It reads JSON-RPC from stdin, so a pipe that closes immediately ends the server
 before it answers. Hold stdin open while waiting for replies. See
-[`golang/AGENTS.md`](../AGENTS.md) for what else is worth knowing before
+[`AGENTS.md`](../AGENTS.md) for what else is worth knowing before
 testing this by hand.
 
 ## Logs
@@ -702,5 +702,5 @@ instead of seeing an opaque protocol error:
 tmux: command failed: kill-session exited 1: can't find session: no-such-session
 ```
 
-[tmux module]: ../
+[tmux module]: ../tmux/
 [Go MCP SDK]: https://github.com/modelcontextprotocol/go-sdk

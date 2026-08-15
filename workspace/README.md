@@ -6,6 +6,10 @@ This is a consumer of the tmux module, not part of it. The tmux module takes no
 runtime dependency; parsing YAML needs one, so this lives in its own module and
 `go get` on the tmux module never pulls it in.
 
+```console
+$ go get github.com/libtmux/libtmux-go/workspace
+```
+
 ## Using it
 
 ```go
@@ -133,4 +137,4 @@ A window's first pane is created with the window, so `window_shell` and a
 `shell` on that pane name the same command. Either one runs it; setting both is
 rejected.
 
-[tmux module]: ../
+[tmux module]: ../tmux/
