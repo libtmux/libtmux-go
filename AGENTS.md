@@ -35,26 +35,33 @@ preference:
 - Starts a tmux server — goes to `internal/integration`.
 
 The other modules are separate module graphs, so `./...` in the tmux module
-never reaches them. Go also skips any directory whose name begins with an
-underscore, so `./...` never reaches `examples/` either. Both have to be named
-explicitly or they rot unchecked.
+reaches none of them. Each has to be named explicitly or it rots unchecked.
+`examples/` is one of them: it is a module of its own so that an example
+reaching for a dependency can never put that dependency in the tmux module's
+go.mod, which is what keeps the core free of runtime dependencies.
 
 ## Gates
 
-`go test ./...` stops at a module boundary, and Go skips a directory whose name
-begins with an underscore, so every module and the examples are named one at a
-time or they rot unchecked.
+`go test ./...` stops at a module boundary, so every module is named one at a
+time or it rots unchecked.
 
-Format, lint, vet, and test the tmux module and its examples:
+Format, lint, vet, and test the tmux module:
 
 ```console
-$ gofumpt -w . && golangci-lint run ./... ./examples/* && go vet ./... && go test ./... ./examples/*
+$ gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...
 ```
 
 Then each of the other modules, from its own directory:
 
 ```console
-$ for module in workspace mcp benchmarks; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
+$ for module in examples workspace mcp benchmarks; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
+```
+
+Run them with `GOWORK=off`, which is how a consumer resolves them. A workspace
+makes a module that cannot resolve on its own look healthy:
+
+```console
+$ GOWORK=off go test ./...
 ```
 
 Coverage has to name the core module rather than defaulting to the package under
