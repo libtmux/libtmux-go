@@ -900,7 +900,7 @@ const taskIndexHeading = "# Where to start"
 var taskIndexLink = regexp.MustCompile(`\[([A-Z]\w*(?:\.\w+)?)\]`)
 
 // taskIndexSymbols returns the symbols the package doc's task index names.
-func taskIndexSymbols(t *testing.T, moduleRoot string) []string {
+func taskIndexSymbols(t *testing.T) []string {
 	t.Helper()
 
 	fileSet := token.NewFileSet()
@@ -948,7 +948,7 @@ func taskIndexSymbols(t *testing.T, moduleRoot string) []string {
 func TestTaskIndexEntryPointsCarryRunnableExamples(t *testing.T) {
 	t.Parallel()
 
-	symbols := taskIndexSymbols(t, documentationPackageDir(t))
+	symbols := taskIndexSymbols(t)
 	if len(symbols) == 0 {
 		t.Fatal("the task index names no symbols")
 	}
