@@ -1,6 +1,6 @@
 # tmuxq
 
-[![Go Reference](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq)
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmuxq.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq)
 
 Generic helpers for filtering and collecting tmux records. It imports no tmux
 types, so it works on any slice or `iter.Seq`.

@@ -1,6 +1,6 @@
 # tmux
 
-[![Go Reference](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 
 > [!WARNING]
 > **Alpha.** Releases are tagged `-alpha` and the API is not settled. Pin an

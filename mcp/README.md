@@ -1,5 +1,7 @@
 # mcp
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/mcp.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
+
 > [!WARNING]
 > **Alpha.** Releases are tagged `-alpha` and the API is not settled. Pin an
 > exact version.

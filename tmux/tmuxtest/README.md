@@ -1,6 +1,6 @@
 # tmuxtest
 
-[![Go Reference](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux/tmuxtest.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
 
 A real tmux server for your tests, on its own socket, killed when the test ends.
 
