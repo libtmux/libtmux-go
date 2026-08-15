@@ -697,6 +697,30 @@ The compatibility matrix covers the same supported tmux releases as Python.
 The race lane stresses parallel server creation, global options, hooks,
 environment, cancellation, cleanup, and control-client teardown.
 
+## Releasing
+
+This is alpha. Releases carry an `-alpha` prerelease tag, and the lowest clean
+one is `v0.0.1-alpha.1`: semver permits `v0.0.0-alpha.1`, but `v0.0.0-` is the
+namespace the go command generates pseudo-versions in, so a real tag there reads
+as one. Under semver a prerelease sorts below its own release, and `v0.x` already
+carries no compatibility promise, so the tag says what the version number alone
+would leave implied.
+
+Each module is tagged in its own directory, which is how the go command finds a
+module that does not sit at the repository root:
+
+| Module | Tag |
+| --- | --- |
+| the tmux module | `v0.0.1-alpha.1` |
+| `mcp` | `mcp/v0.0.1-alpha.1` |
+| `workspace` | `workspace/v0.0.1-alpha.1` |
+| `benchmarks`, `examples` | not published |
+
+A consumer module's `require` on the core has to name a version the proxy can
+resolve, so the core is tagged before the modules that depend on it. The local
+`replace` directives are what make the tree build before any of that exists;
+they are not a substitute for the requirement.
+
 ## Bakeoff decisions
 
 | Problem | Selected approach | Rejected approaches |

@@ -2,6 +2,10 @@
 
 [![Go Reference](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 
+> [!WARNING]
+> **Alpha.** Releases are tagged `-alpha` and the API is not settled. Pin an
+> exact version.
+
 The library. A typed, context-aware tmux API with no runtime dependencies.
 
 ```console

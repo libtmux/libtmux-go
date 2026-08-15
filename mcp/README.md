@@ -1,5 +1,9 @@
 # mcp
 
+> [!WARNING]
+> **Alpha.** Releases are tagged `-alpha` and the API is not settled. Pin an
+> exact version.
+
 Serve one tmux server to Model Context Protocol clients, built on the
 [tmux module] and the [Go MCP SDK].
 
@@ -12,7 +16,7 @@ runtime dependency; speaking MCP needs one, so this lives in its own module and
 **Requirements:** Go 1.23+, and `tmux` on `$PATH`.
 
 ```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.1
 ```
 
 That puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client launches it as

@@ -490,8 +490,11 @@
 //
 // # API stability
 //
-// The module is pre-v1. Until v1.0.0, a minor release may make a documented
-// breaking API change. Starting with v1, exported identifiers, method
+// This is alpha software. Releases carry an -alpha prerelease tag, the API is
+// not settled, and any release may change or remove exported identifiers
+// without a deprecation period. Pin an exact version.
+//
+// Until v1.0.0, a minor release may make a documented breaking API change. Starting with v1, exported identifiers, method
 // signatures, error classification, and documented behavior follow semantic
 // versioning: compatible additions may ship within v1, while removals and
 // incompatible changes require a v2 module path.

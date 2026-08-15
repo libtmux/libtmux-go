@@ -1,5 +1,9 @@
 # workspace
 
+> [!WARNING]
+> **Alpha.** Releases are tagged `-alpha` and the API is not settled. Pin an
+> exact version.
+
 Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
 This is a consumer of the tmux module, not part of it. The tmux module takes no

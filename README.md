@@ -2,6 +2,11 @@
 
 [![Go Reference](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 
+> [!WARNING]
+> **Alpha.** Releases are tagged `-alpha`, the API is not settled, and any
+> release may change or remove exported identifiers without a deprecation
+> period. Pin an exact version. Not recommended for production.
+
 Drive tmux from Go: sessions, windows, and panes as typed values, every tmux
 option and hook as a typed accessor, and errors classified by what tmux actually
 refused.
@@ -13,8 +18,11 @@ refused.
   when you asked, not a live handle that changes underneath.
 
 ```console
-$ go get github.com/libtmux/libtmux-go/tmux
+$ go get github.com/libtmux/libtmux-go/tmux@v0.0.1-alpha.1
 ```
+
+Modules are tagged per directory, so the consumers carry their own versions:
+`mcp/v0.0.1-alpha.1`, `workspace/v0.0.1-alpha.1`.
 
 ## Quick start
 
@@ -173,7 +181,7 @@ none of them:
 one tmux server: create panes, send keys, read output, wait for text.
 
 ```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.1
 ```
 
 See [`mcp/README.md`](mcp/README.md) for client configuration and the tool

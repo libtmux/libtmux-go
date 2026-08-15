@@ -21,7 +21,7 @@ var Version = buildVersion()
 
 // fallbackVersion is what a build from source reports, where the module
 // version is unknown to the toolchain.
-const fallbackVersion = "v0.1.0"
+const fallbackVersion = "v0.0.1-alpha.1"
 
 // buildVersion reports the module version this binary was built from.
 func buildVersion() string {
