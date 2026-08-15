@@ -1,0 +1,136 @@
+name: tests
+
+on: [push, pull_request]
+
+# Every job below names its modules one at a time. `go test ./...` stops at a
+# module boundary, so the consumer modules and the benchmarks are invisible to
+# the core module's wildcard and would rot unchecked. Go also skips a directory
+# whose name begins with an underscore, which is why `_examples` is named too.
+env:
+  # A tmux namespace of this repository's own. Sibling checkouts run their own
+  # suites on the same machine, and a shared socket directory is one suite
+  # ending servers another is still using.
+  TMUX_TMPDIR: /tmp/libtmux-go-ci
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", "workspace", "mcp", "benchmarks"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: ${{ matrix.module }}/go.mod
+
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install --yes tmux
+
+      - name: Create the tmux socket directory
+        run: mkdir -p "$TMUX_TMPDIR"
+
+      # Coverage names the core module explicitly rather than defaulting to the
+      # package under test. The tests that exercise the core live in
+      # internal/integration, so counting only the package under test would
+      # report the core as uncovered by the tests that cover it.
+      - name: Test ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        run: |
+          go vet ./...
+          go test -race -count=1 -coverpkg=./... -coverprofile=coverage.out ./...
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.module }}
+          path: ${{ matrix.module }}/coverage.out
+          if-no-files-found: ignore
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install --yes tmux
+
+      - name: Create the tmux socket directory
+        run: mkdir -p "$TMUX_TMPDIR"
+
+      - name: Test the examples
+        run: |
+          go vet ./_examples/*
+          go test -count=1 ./_examples/*
+
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", "workspace", "mcp", "benchmarks"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: ${{ matrix.module }}/go.mod
+
+      - name: Check formatting
+        working-directory: ${{ matrix.module }}
+        run: |
+          if ! output=$(go run mvdan.cc/gofumpt@v0.9.2 -l .); then
+            echo "gofumpt failed" >&2
+            exit 1
+          fi
+          if [ -n "$output" ]; then
+            echo "these files are not gofumpt-formatted:" >&2
+            echo "$output" >&2
+            exit 1
+          fi
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.4
+          working-directory: ${{ matrix.module }}
+
+      - name: Report known vulnerabilities
+        working-directory: ${{ matrix.module }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  # The benchmarks module prints the table BENCHMARKS.md holds. Publishing it
+  # here is what lets the checked-in numbers be compared against a run other
+  # than the one they were recorded on.
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: benchmarks/go.mod
+
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install --yes tmux
+
+      - name: Publish the switch matrix
+        continue-on-error: true
+        working-directory: benchmarks
+        run: |
+          mkdir -p "$TMUX_TMPDIR"
+          {
+            echo '### Switch matrix'
+            echo
+            echo '```'
+            go run .
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
