@@ -4,14 +4,15 @@ Building one 6-pane window, four ways, plus the two snapshot reads. Regenerate
 with:
 
 ```console
-$ go test -run TestSwitchMatrix -v .
+$ go -C benchmarks run .
 ```
 
-The test is the source of these numbers and also the gate on them: it runs one
-query through every mode and fails if the answers differ, so the table cannot
-quietly start comparing two different things. CI runs it on every supported tmux
-and publishes the table it printed, so these can be checked against a version
-they were not recorded on.
+The `benchmarks` module is the source of these numbers and also the gate on
+them. The command above prints the table; `go -C benchmarks test ./...` runs the
+same measurement and fails if the modes answer one query differently, so the
+table cannot quietly start comparing two different things. CI runs both and
+publishes what it printed, so these can be checked against a run other than the
+one they were recorded on.
 
 Recorded on a 12th Gen Intel Core i7-12700H, 20 threads, Linux, go1.26.5.
 Each table below is the same workload on a different tmux.

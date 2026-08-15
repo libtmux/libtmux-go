@@ -1,0 +1,53 @@
+version: "2"
+
+run:
+  go: "1.23"
+  modules-download-mode: readonly
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - asciicheck
+    - bidichk
+    - copyloopvar
+    - durationcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - gocheckcompilerdirectives
+    - gocritic
+    - gomoddirectives
+    - goprintffuncname
+    - iotamixing
+    - makezero
+    - misspell
+    - nilerr
+    - nilnesserr
+    - nolintlint
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - unconvert
+    - usetesting
+    - wastedassign
+  settings:
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+    gomoddirectives:
+      # This module consumes the tmux module from the same repository. That
+      # module is not published, so it is resolved from the tree rather than
+      # from the proxy.
+      replace-local: true
+
+formatters:
+  enable:
+    - gofumpt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

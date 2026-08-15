@@ -7,24 +7,43 @@ unless this file says so.
 
 ## What is here
 
-Three Go modules, each with its own `go.mod`:
+Four Go modules, each with its own `go.mod`:
 
 | Path | Module | What it is |
 | --- | --- | --- |
 | `.` | the tmux module | Server, sessions, windows, panes, options, hooks, formats, filters, snapshots, engines, and plans. Zero runtime dependencies. |
 | `workspace/` | consumer | Loads tmuxp-style YAML workspaces and builds them |
 | `mcp/` | consumer | Serves one tmux server to Model Context Protocol clients |
+| `benchmarks/` | tool | Prints what each way of reaching tmux costs |
 
 Inside the tmux module, `tmuxq` holds model-free generics, `tmuxtest` gives
 tests a real tmux server that cleans itself up, and `internal/` holds the
-subprocess transport and the checked-in generators.
+subprocess transport, the checked-in generators, and `internal/integration`.
 
-The consumer modules are separate module graphs, so `./...` in the tmux module
+### Where a test goes
+
+`internal/integration` holds the tests that drive a real tmux through the public
+API. Everything else stays beside the code it tests, and the split is not a
+preference:
+
+- Reaches an unexported identifier — stays, because only a test in the package
+  can see it.
+- Declares an `Example` — stays, because pkg.go.dev renders examples only from
+  the package's own directory.
+- Parses the package's source, or asserts the surface compiles — stays, because
+  it is a structural gate on the package rather than a test of tmux.
+- Starts a tmux server — goes to `internal/integration`.
+
+The other modules are separate module graphs, so `./...` in the tmux module
 never reaches them. Go also skips any directory whose name begins with an
 underscore, so `./...` never reaches `_examples/` either. Both have to be named
 explicitly or they rot unchecked.
 
 ## Gates
+
+`go test ./...` stops at a module boundary, and Go skips a directory whose name
+begins with an underscore, so every module and the examples are named one at a
+time or they rot unchecked.
 
 Format, lint, vet, and test the tmux module and its examples:
 
@@ -32,14 +51,17 @@ Format, lint, vet, and test the tmux module and its examples:
 $ gofumpt -w . && golangci-lint run ./... ./_examples/* && go vet ./... && go test ./... ./_examples/*
 ```
 
-Then each consumer module, from its own directory:
+Then each of the other modules, from its own directory:
 
 ```console
-$ (cd workspace && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...)
+$ for module in workspace mcp benchmarks; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
 ```
 
+Coverage has to name the core module rather than defaulting to the package under
+test, because most of what exercises the core lives in `internal/integration`:
+
 ```console
-$ (cd mcp && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...)
+$ go test -coverpkg=./... -coverprofile=coverage.out ./...
 ```
 
 The race detector is not optional before anything ships:

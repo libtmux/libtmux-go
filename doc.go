@@ -257,10 +257,10 @@
 //		}
 //	}
 //
-// The choice is only ever about cost, never about behavior, and
-// TestSwitchMatrix in this package is what keeps that true: it builds the same
-// window every way, prints what each spent, and fails if any of them answers
-// the same query differently.
+// The choice is only ever about cost, never about behavior, and the benchmarks
+// module is what keeps that true: "go -C benchmarks run ." builds the same
+// window every way and prints what each spent, and its test fails if any of
+// them answers the same query differently.
 //
 // # What a transport costs
 //
