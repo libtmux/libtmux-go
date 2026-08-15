@@ -1,7 +1,9 @@
 package tmux
 
 import (
+	"os/exec"
 	"runtime/debug"
+	"strings"
 	"testing"
 )
 
@@ -11,8 +13,13 @@ import (
 func TestPackageVersionReadsGoModuleBuildMetadata(t *testing.T) {
 	t.Parallel()
 
-	if ModulePath != "github.com/libtmux/libtmux-go/tmux" {
-		t.Fatalf("ModulePath = %q", ModulePath)
+	// Read it from go.mod rather than repeating the string. Asserting the
+	// constant against itself is what let this drift: the package moved into a
+	// directory, the constant followed the import path, and every test kept
+	// passing because each one built its fixture from the constant.
+	declared := declaredModulePath(t)
+	if ModulePath != declared {
+		t.Fatalf("ModulePath = %q, but go.mod declares %q", ModulePath, declared)
 	}
 
 	tests := []struct {
@@ -76,4 +83,15 @@ func TestPackageVersionMatchesCurrentBuildInfo(t *testing.T) {
 	if got != want || gotOK != wantOK {
 		t.Fatalf("PackageVersion() = (%q, %t), want (%q, %t)", got, gotOK, want, wantOK)
 	}
+}
+
+// declaredModulePath is the module path in go.mod, which is what Go build
+// metadata reports for this package's module.
+func declaredModulePath(t *testing.T) string {
+	t.Helper()
+	output, err := exec.Command("go", "list", "-m", "-f", "{{.Path}}").Output()
+	if err != nil {
+		t.Fatalf("read the declared module path: %v", err)
+	}
+	return strings.TrimSpace(string(output))
 }

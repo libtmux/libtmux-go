@@ -2,8 +2,9 @@ package tmux
 
 import "runtime/debug"
 
-// ModulePath is the canonical Go module path for this package.
-const ModulePath = "github.com/libtmux/libtmux-go/tmux"
+// ModulePath is the Go module this package belongs to. It is the module path
+// rather than the package path, because that is what Go build metadata records.
+const ModulePath = "github.com/libtmux/libtmux-go"
 
 // PackageVersion returns the release version recorded in Go build metadata.
 // Development builds and binaries without module metadata return "", false.
