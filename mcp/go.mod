@@ -5,17 +5,19 @@ go 1.25.0
 require (
 	github.com/libtmux/libtmux-go v0.0.0
 	github.com/libtmux/libtmux-go/workspace v0.0.0
-	// Held below v1.7.0 by choice, not by fault. That version negotiates
-	// protocol 2026-07-28, where SEP-2575 makes ServerSession.Log carry only
-	// when the client opted in on that very request, through an optional
-	// _meta key rather than through logging/setLevel. The SDK's own client
-	// does not send it, and is documented not to: the key is optional and
-	// SEP-2577 deprecates the logging feature outright, functional only for a
-	// deprecation window. So this server's explanation of why a wait ended
-	// with nothing would reach such a client only if it asked per call.
+	// Held below v1.7.0 until modelcontextprotocol/go-sdk#1168 is released.
 	//
-	// Raising this means deciding what this server should say, and how, once
-	// logging is on its way out of the protocol -- not waiting for a fix.
+	// Under protocol 2026-07-28 a log message carries only when the client
+	// opted in on that very request (SEP-2575), which is deliberate. How
+	// v1.7.0 carries that opt-in is not: it writes the level into shared
+	// session state, so two requests in flight at once clear or inherit each
+	// other's threshold. Both directions are wrong -- a caller that asked
+	// for logs loses them, and a caller that did not ask receives them,
+	// which the spec requires be dropped. Concurrent tool calls are this
+	// server's ordinary case; batch makes them its explicit one.
+	//
+	// There is nothing to work around it with: a server cannot decline a
+	// protocol version, and the level cannot be set from outside the SDK.
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 )
 
