@@ -22,7 +22,11 @@ func TestEveryModuleResolvesWithoutAWorkspace(t *testing.T) {
 	root := repositoryRoot(t)
 	for _, module := range modules {
 		t.Run(module, func(t *testing.T) {
-			build := exec.Command("go", "build", "./...")
+			// Build into a temporary directory. A module holding a main
+			// package would otherwise have a binary written into it, which
+			// is a build artefact this repository deletes rather than
+			// ignores -- and one a wildcard commit would carry in.
+			build := exec.Command("go", "build", "-o", t.TempDir()+string(os.PathSeparator), "./...")
 			build.Dir = filepath.Join(root, module)
 			build.Env = append(os.Environ(), "GOWORK=off")
 			if output, err := build.CombinedOutput(); err != nil {
