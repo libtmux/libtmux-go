@@ -23,7 +23,13 @@ import (
 //libtmux:real-tmux
 func TestAttachSessionAgainstRealTmuxPTY(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// One budget covers every case below, each of which attaches a real tmux
+	// client over a pty and detaches it again. How long that takes is a fact
+	// about the machine rather than about attaching, and a budget tight enough
+	// to notice ends the run partway through the first case with a deadline
+	// instead of anything about what was being tested. It stays bounded so a
+	// client that never detaches still fails here.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {
@@ -96,7 +102,10 @@ func TestAttachSessionAgainstRealTmuxPTY(t *testing.T) {
 //libtmux:real-tmux
 func TestAttachSessionCancellationAgainstRealTmuxPTY(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Generous for the same reason, and unrelated to the one-second deadline
+	// this test is about: that one is set inside the helper process, where
+	// AttachSession is required to return context.DeadlineExceeded.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {
