@@ -51,6 +51,29 @@ jobs:
           path: ${{ matrix.module }}/coverage.out
           if-no-files-found: ignore
 
+  # Generated output is checked in, so the check is that regenerating it changes
+  # nothing. The Go in the README is generated from the examples, which is what
+  # stops a snippet drifting from the program it was copied from.
+  generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+
+      - name: Regenerate
+        run: go generate ./...
+
+      - name: Report anything regenerating changed
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::generated files are out of date; run 'go generate ./...'" >&2
+            exit 1
+          fi
+
   lint:
     runs-on: ubuntu-latest
     strategy:

@@ -87,6 +87,16 @@ rather than reporting a pass it did not earn:
 $ bash scripts/matrix.sh
 ```
 
+The Go in the markdown is generated from the examples, so a snippet cannot drift
+from the program it was copied from. A region is named where it is written, with
+`// docs:<name>` and `// docs:end`, and a markdown file asks for it between
+`<!-- docs:<name> -->` and `<!-- docs:end -->`. An unmarked block is hand-written
+and says so by not being marked:
+
+```console
+$ go generate ./... && git diff --exit-code
+```
+
 The race detector is not optional before anything ships:
 
 ```console

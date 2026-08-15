@@ -512,3 +512,9 @@
 // Version-gated optional behavior is reported through [WarningHandler] where
 // the owning request documents it.
 package tmux
+
+// The root is the repository rather than this package, because the markdown
+// this fills in belongs to the repository and the Go it quotes lives in the
+// example modules beside it.
+//
+//go:generate go run ./internal/generate/docs -root ..

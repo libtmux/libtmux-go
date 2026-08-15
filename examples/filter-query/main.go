@@ -43,6 +43,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
+	// docs:query-in-go
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		return err
@@ -52,10 +53,13 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return err
 	}
 	active := tmuxq.Where(snapshot.Panes(), predicate)
+	// docs:end
 	fmt.Println("active panes:", len(active))
 
+	// docs:query-in-tmux
 	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 	sessions, err := server.SearchSessions(ctx, &live)
+	// docs:end
 	if err != nil {
 		return err
 	}

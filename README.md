@@ -71,12 +71,18 @@ Two ways to ask, and they answer the same question at different costs.
 
 **Let tmux filter**, which sends one command and gets back only matches:
 
+<!-- docs:query-in-tmux -->
+
 ```go
-live := tmux.TmuxFilter("#{==:#{session_name},work}")
+live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 sessions, err := server.SearchSessions(ctx, &live)
 ```
 
+<!-- docs:end -->
+
 **Or read once and filter in Go**, when you want several answers from one read:
+
+<!-- docs:query-in-go -->
 
 ```go
 snapshot, err := server.Snapshot(ctx)
@@ -89,6 +95,8 @@ if err != nil {
 }
 active := tmuxq.Where(snapshot.Panes(), predicate)
 ```
+
+<!-- docs:end -->
 
 Typed filters compose, and the generated ones push down into tmux's own `-f`
 where tmux can evaluate them:
