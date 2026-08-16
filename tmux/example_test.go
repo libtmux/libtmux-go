@@ -35,14 +35,18 @@ func killExampleServer(server tmux.Server) {
 }
 
 func Example() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-workflow",
+	})
+	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "project", WindowName: "editor",
 	})
 	if err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
 	windowName := "tests"
@@ -50,17 +54,33 @@ func Example() {
 		Name: &windowName, Attach: true,
 	})
 	if err != nil {
+		fmt.Println("create window:", err)
 		return
 	}
 	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
 		Direction: tmux.PaneDirectionRight,
 	})
 	if err != nil {
+		fmt.Println("split pane:", err)
 		return
 	}
-	if _, err := pane.Select(ctx, tmux.PaneSelectRequest{}); err != nil {
+	selected, err := pane.Select(ctx, tmux.PaneSelectRequest{})
+	if err != nil {
+		fmt.Println("select pane:", err)
 		return
 	}
+
+	// window is the record NewWindow returned, so the panes it carries are the
+	// ones it was created with. SearchPanes asks tmux instead, which is what
+	// sees the split.
+	panes, err := window.SearchPanes(ctx, nil)
+	if err != nil {
+		fmt.Println("search panes:", err)
+		return
+	}
+	name, _ := window.Name()
+	fmt.Println(name, len(panes), selected.ID() == pane.ID())
+	// Output: tests 2 true
 }
 
 func ExamplePane_SendKeys() {
@@ -293,28 +313,44 @@ func ExampleSparseArray() {
 }
 
 func ExampleErrNoServer() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-no-server",
+	})
+	defer killExampleServer(server)
 
-	sessions, err := server.Sessions(ctx)
-	switch {
-	case errors.Is(err, tmux.ErrNoServer):
-		// Nothing is running yet, which is not a failure worth reporting: a
-		// tmux server holding no sessions exits, so an absent server and an
-		// empty one are the same state.
-		fmt.Println("no sessions")
-		return
-	case err != nil:
-		// Anything else means the question could not be answered: a socket
-		// that cannot be read, a path that is not a socket, a tmux too old.
-		var commandError *tmux.CommandError
-		if errors.As(err, &commandError) {
-			fmt.Println(commandError.Subcommand, commandError.Result.ExitCode)
+	// Nothing has started a server on this socket yet, which is the state
+	// ErrNoServer reports.
+	report := func() {
+		sessions, err := server.Sessions(ctx)
+		switch {
+		case errors.Is(err, tmux.ErrNoServer):
+			// Nothing is running yet, which is not a failure worth reporting: a
+			// tmux server holding no sessions exits, so an absent server and an
+			// empty one are the same state.
+			fmt.Println("no sessions")
+		case err != nil:
+			// Anything else means the question could not be answered: a socket
+			// that cannot be read, a path that is not a socket, a tmux too old.
+			var commandError *tmux.CommandError
+			if errors.As(err, &commandError) {
+				fmt.Println(commandError.Subcommand, commandError.Result.ExitCode)
+			}
+		default:
+			fmt.Println(len(sessions), "sessions")
 		}
+	}
+
+	report()
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
-	fmt.Println(len(sessions), "sessions")
+	report()
+	// Output:
+	// no sessions
+	// 1 sessions
 }
 
 func ExampleSession_Options() {
@@ -388,18 +424,38 @@ func ExampleGlobalSessionScope_SetHook() {
 }
 
 func ExampleServer_SearchPanes() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
-	filter := tmux.TmuxFilter("#{==:#{pane_current_command},nvim}")
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-search-panes",
+	})
+	defer killExampleServer(server)
 
-	panes, err := server.SearchPanes(ctx, &filter)
-	if err != nil {
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
-	for _, pane := range panes {
-		fmt.Println(pane.ID())
+
+	// tmux evaluates the filter, so a pane is matched by what it is running
+	// rather than by anything this program has to fetch and compare.
+	editors := tmux.TmuxFilter("#{==:#{pane_current_command},nvim}")
+	matched, err := server.SearchPanes(ctx, &editors)
+	if err != nil {
+		fmt.Println("search panes:", err)
+		return
 	}
+	fmt.Println("editors:", len(matched))
+
+	// A nil filter asks for every pane.
+	all, err := server.SearchPanes(ctx, nil)
+	if err != nil {
+		fmt.Println("search panes:", err)
+		return
+	}
+	fmt.Println("panes:", len(all))
+	// Output:
+	// editors: 0
+	// panes: 1
 }
 
 func ExampleNewServer() {
