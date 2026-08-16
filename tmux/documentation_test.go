@@ -26,15 +26,46 @@ var documentationLinkPattern = regexp.MustCompile(
 	`\[(?:[A-Z_][A-Za-z0-9_]*(?:\.[A-Z_][A-Za-z0-9_]*)*|[a-z_][A-Za-z0-9_]*\.[A-Z_][A-Za-z0-9_]*(?:\.[A-Z_][A-Za-z0-9_]*)*)\]`,
 )
 
-var exampleWorkflowSources = []string{
-	"examples/quickstart/main.go",
-	"examples/snapshot-browser/main.go",
-	"examples/option-hook-editing/main.go",
-	"examples/filter-query/main.go",
-	"examples/environment/main.go",
-	"examples/control-mode-subscribe/main.go",
-	"examples/planned-build/main.go",
-	"examples/fast-path/main.go",
+// exampleWorkflows returns every runnable example program, discovered from the
+// examples module rather than listed.
+//
+// A listed one is a list to keep in step with the directory, and the gates that
+// consume it disagreed once already: an example was added, one list learned
+// about it, and the gate that builds and runs each program did not, so the
+// example nobody remembered to add was the one nothing ran.
+func exampleWorkflows(t *testing.T) []string {
+	t.Helper()
+
+	root := filepath.Join(documentationModuleRoot(t), "examples")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read examples: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "internal" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, entry.Name(), "main.go")); err != nil {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	if len(names) < 8 {
+		t.Fatalf("found %d example programs, want at least 8", len(names))
+	}
+	return names
+}
+
+func exampleWorkflowSources(t *testing.T) []string {
+	t.Helper()
+
+	names := exampleWorkflows(t)
+	sources := make([]string, 0, len(names))
+	for _, name := range names {
+		sources = append(sources, "examples/"+name+"/main.go")
+	}
+	return sources
 }
 
 const tmuxModulePath = "github.com/libtmux/libtmux-go/tmux"
@@ -276,7 +307,7 @@ func TestExamplesUseFinalTypedAPI(t *testing.T) {
 		"tmux/example_test.go",
 		"tmuxq/example_test.go",
 		"tmux/tmuxtest/example_test.go",
-	}, exampleWorkflowSources...)
+	}, exampleWorkflowSources(t)...)
 	for index, relative := range sources {
 		path := filepath.Join(moduleRoot, filepath.FromSlash(relative))
 		file, err := parser.ParseFile(fileSet, path, nil, 0)
@@ -449,26 +480,14 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 	// Every example is a command, so every one of them is built and run the same
 	// way. An example that could only be built as a test binary would be one the
 	// README calls runnable and a reader cannot run.
-	workflows := []struct {
-		name        string
-		packagePath string
-	}{
-		{name: "quickstart", packagePath: "./quickstart"},
-		{name: "snapshot-browser", packagePath: "./snapshot-browser"},
-		{name: "option-hook-editing", packagePath: "./option-hook-editing"},
-		{name: "filter-query", packagePath: "./filter-query"},
-		{name: "environment", packagePath: "./environment"},
-		{name: "control-mode-subscribe", packagePath: "./control-mode-subscribe"},
-		{name: "planned-build", packagePath: "./planned-build"},
-	}
-	for _, workflow := range workflows {
-		t.Run(workflow.name, func(t *testing.T) {
+	for _, workflow := range exampleWorkflows(t) {
+		t.Run(workflow, func(t *testing.T) {
 			binary := filepath.Join(t.TempDir(), "example")
-			build := exec.Command("go", "build", "-o", binary, workflow.packagePath)
+			build := exec.Command("go", "build", "-o", binary, "./"+workflow)
 			build.Dir = filepath.Join(moduleRoot, "examples")
 			build.Env = append(os.Environ(), "GOWORK=off")
 			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build %s: %v\n%s", workflow.packagePath, err, output)
+				t.Fatalf("build %s: %v\n%s", workflow, err, output)
 			}
 
 			// Not t.TempDir: it puts the test's name in the path it returns, and
@@ -495,13 +514,13 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 			run := exec.CommandContext(ctx, binary)
 			run.Env = isolatedExampleEnvironment(home, tmuxRoot)
 			if output, err := run.CombinedOutput(); err != nil {
-				t.Fatalf("run %s: %v\n%s", workflow.packagePath, err, output)
+				t.Fatalf("run %s: %v\n%s", workflow, err, output)
 			}
 
 			probe := exec.Command("tmux", "list-sessions")
 			probe.Env = isolatedExampleEnvironment(home, tmuxRoot)
 			if output, err := probe.CombinedOutput(); err == nil {
-				t.Fatalf("%s left an isolated tmux server running:\n%s", workflow.packagePath, output)
+				t.Fatalf("%s left an isolated tmux server running:\n%s", workflow, output)
 			}
 		})
 	}
