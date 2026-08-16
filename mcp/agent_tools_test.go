@@ -11,6 +11,7 @@ import (
 
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -1117,5 +1118,181 @@ func reportOwnPaneFromInside(t *testing.T, socket, report string) {
 	}
 	if err := os.WriteFile(report, []byte(answer), 0o600); err != nil {
 		t.Fatalf("write the report: %v", err)
+	}
+}
+
+// connectAsking is connect with a client that can be asked questions. The
+// handler decides what the person says.
+func connectAsking(
+	t *testing.T,
+	answer func(*sdk.ElicitRequest) string,
+) (*sdk.ClientSession, tmux.Server, context.Context, *int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+
+	asked := 0
+	options := &sdk.ClientOptions{}
+	if answer != nil {
+		options.ElicitationHandler = func(
+			_ context.Context,
+			request *sdk.ElicitRequest,
+		) (*sdk.ElicitResult, error) {
+			asked++
+			return &sdk.ElicitResult{Action: answer(request)}, nil
+		}
+	}
+	client := sdk.NewClient(&sdk.Implementation{Name: "asking-client"}, options)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = clientSession.Close() })
+	return clientSession, target, ctx, &asked
+}
+
+// TestWritingToTheCallerPaneIsAskedAbout covers the one pane where being wrong
+// cannot be undone. Typing into the pane this server runs in reaches the
+// terminal the conversation is happening in, and isCaller in a reply is only a
+// note that a model with a task may not read.
+//
+//libtmux:real-tmux
+func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
+	// A fresh server hands out predictable pane ids, which is what lets the
+	// environment name one before the server reporting it exists.
+	const ownPane = "%0"
+
+	arrange := func(
+		t *testing.T,
+		answer func(*sdk.ElicitRequest) string,
+	) (*sdk.ClientSession, context.Context, *int) {
+		t.Helper()
+		t.Setenv("TMUX_PANE", ownPane)
+		t.Setenv("TMUX", "")
+		session, target, ctx, asked := connectAsking(t, answer)
+		workspace(ctx, t, session, "session_name: guarded\nwindows:\n  - panes:\n      - {}\n")
+		socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+		if err != nil || len(socket.Stdout) == 0 {
+			t.Fatalf("read the socket path: %v", err)
+		}
+		t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+		return session, ctx, asked
+	}
+
+	t.Run("declining stops the write", func(t *testing.T) {
+		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "decline" })
+		result := call(ctx, t, session, "send_keys", map[string]any{
+			"paneId": ownPane, "command": "echo into-my-own-terminal",
+		}, nil)
+		if !result.IsError {
+			t.Error("a declined write to the caller pane went through anyway")
+		}
+		if *asked != 1 {
+			t.Errorf("the person was asked %d times, want once", *asked)
+		}
+	})
+
+	t.Run("accepting lets it through", func(t *testing.T) {
+		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "accept" })
+		result := call(ctx, t, session, "send_keys", map[string]any{
+			"paneId": ownPane, "command": "true",
+		}, nil)
+		if result.IsError {
+			t.Errorf("an accepted write was refused: %#v", result.Content)
+		}
+		if *asked != 1 {
+			t.Errorf("the person was asked %d times, want once", *asked)
+		}
+	})
+
+	t.Run("another pane is not asked about", func(t *testing.T) {
+		t.Setenv("TMUX_PANE", ownPane)
+		t.Setenv("TMUX", "")
+		session, target, ctx, asked := connectAsking(t,
+			func(*sdk.ElicitRequest) string { return "decline" })
+		workspace(ctx, t, session,
+			"session_name: elsewhere\nwindows:\n  - panes:\n      - {}\n      - {}\n")
+		socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+		if err != nil || len(socket.Stdout) == 0 {
+			t.Fatalf("read the socket path: %v", err)
+		}
+		t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+		panes := paneIDs(ctx, t, session)
+		other := ""
+		for _, pane := range panes {
+			if pane != ownPane {
+				other = pane
+				break
+			}
+		}
+		if other == "" {
+			t.Fatal("the workspace built no pane other than the caller's")
+		}
+		result := call(ctx, t, session, "send_keys", map[string]any{
+			"paneId": other, "command": "true",
+		}, nil)
+		if result.IsError {
+			t.Errorf("writing to somebody else's pane was refused: %#v", result.Content)
+		}
+		if *asked != 0 {
+			t.Errorf("the person was asked about a pane that is not the caller's")
+		}
+	})
+
+	t.Run("a client that cannot be asked keeps working", func(t *testing.T) {
+		session, ctx, _ := arrange(t, nil)
+		result := call(ctx, t, session, "send_keys", map[string]any{
+			"paneId": ownPane, "command": "true",
+		}, nil)
+		if result.IsError {
+			t.Errorf("a client without elicitation was blocked: %#v", result.Content)
+		}
+	})
+}
+
+// TestEnteringCopyModeOnTheCallerPaneIsAskedAbout covers the write that does
+// not look like one. Copy mode takes the person's keystrokes away from their
+// shell, which is the thing the guard exists for; exit_copy_mode is the way
+// out of it and so must not be guarded.
+//
+//libtmux:real-tmux
+func TestEnteringCopyModeOnTheCallerPaneIsAskedAbout(t *testing.T) {
+	const ownPane = "%0"
+	t.Setenv("TMUX_PANE", ownPane)
+	t.Setenv("TMUX", "")
+	session, target, ctx, asked := connectAsking(t,
+		func(*sdk.ElicitRequest) string { return "decline" })
+	workspace(ctx, t, session, "session_name: copymode\nwindows:\n  - panes:\n      - {}\n")
+	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || len(socket.Stdout) == 0 {
+		t.Fatalf("read the socket path: %v", err)
+	}
+	t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+	if result := call(ctx, t, session, "enter_copy_mode",
+		map[string]any{"paneId": ownPane}, nil); !result.IsError {
+		t.Error("entering copy mode on the caller pane was not asked about")
+	}
+	if *asked != 1 {
+		t.Errorf("the person was asked %d times, want once", *asked)
+	}
+
+	// The way out is never blocked, or a declined entry would be unrecoverable
+	// through this server.
+	if result := call(ctx, t, session, "exit_copy_mode",
+		map[string]any{"paneId": ownPane}, nil); result.IsError {
+		t.Errorf("leaving copy mode was refused: %#v", result.Content)
+	}
+	if *asked != 1 {
+		t.Errorf("leaving copy mode asked the person as well")
 	}
 }

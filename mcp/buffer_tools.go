@@ -146,14 +146,14 @@ type pasteBufferOutput struct {
 // pasteBuffer delivers a staged buffer into a pane.
 func (t *tools) pasteBuffer(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input pasteBufferInput,
 ) (*mcp.CallToolResult, pasteBufferOutput, error) {
 	name, err := ownBufferName(input.Name)
 	if err != nil {
 		return nil, pasteBufferOutput{}, err
 	}
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting a buffer")
 	if err != nil {
 		return nil, pasteBufferOutput{}, err
 	}

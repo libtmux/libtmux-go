@@ -52,13 +52,13 @@ type sendKeysBatchOutput struct {
 // client answer a prompt, quit a pager, or leave an editor.
 func (t *tools) sendKeysBatch(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input sendKeysBatchInput,
 ) (*mcp.CallToolResult, sendKeysBatchOutput, error) {
 	if len(input.Keys) == 0 {
 		return nil, sendKeysBatchOutput{}, fmt.Errorf("keys is required")
 	}
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
 	if err != nil {
 		return nil, sendKeysBatchOutput{}, err
 	}
@@ -125,13 +125,13 @@ type pasteTextOutput struct {
 // hand.
 func (t *tools) pasteText(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input pasteTextInput,
 ) (*mcp.CallToolResult, pasteTextOutput, error) {
 	if input.Text == "" {
 		return nil, pasteTextOutput{}, fmt.Errorf("text is required")
 	}
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting text")
 	if err != nil {
 		return nil, pasteTextOutput{}, err
 	}
@@ -205,10 +205,14 @@ type copyModeOutput struct {
 // reports inMode, and exit_copy_mode is the way back.
 func (t *tools) enterCopyMode(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input copyModeInput,
 ) (*mcp.CallToolResult, copyModeOutput, error) {
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	// Guarded like a write, because it is one from the person's side: copy
+	// mode takes their keystrokes away from their shell. exit_copy_mode is
+	// deliberately not guarded, being the way out of exactly that.
+	pane, err := t.resolvePaneToWrite(
+		ctx, request, input.PaneID, input.SessionName, "entering copy mode")
 	if err != nil {
 		return nil, copyModeOutput{}, err
 	}
@@ -237,13 +241,13 @@ func (t *tools) exitCopyMode(
 // sendKeys types a command into a pane and presses Enter.
 func (t *tools) sendKeys(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input sendKeysInput,
 ) (*mcp.CallToolResult, sendKeysOutput, error) {
 	if strings.TrimSpace(input.Command) == "" {
 		return nil, sendKeysOutput{}, fmt.Errorf("command is required")
 	}
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
 	if err != nil {
 		return nil, sendKeysOutput{}, err
 	}

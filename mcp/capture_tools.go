@@ -124,10 +124,11 @@ type clearPaneOutput struct {
 // separate flag rather than part of the same word.
 func (t *tools) clearPane(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input clearPaneInput,
 ) (*mcp.CallToolResult, clearPaneOutput, error) {
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	pane, err := t.resolvePaneToWrite(
+		ctx, request, input.PaneID, input.SessionName, "clearing it")
 	if err != nil {
 		return nil, clearPaneOutput{}, err
 	}

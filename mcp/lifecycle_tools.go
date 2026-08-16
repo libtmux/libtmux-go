@@ -122,7 +122,7 @@ type killPaneOutput struct {
 // killPane ends one pane and the program in it.
 func (t *tools) killPane(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input killPaneInput,
 ) (*mcp.CallToolResult, killPaneOutput, error) {
 	if strings.TrimSpace(input.PaneID) == "" {
@@ -130,6 +130,11 @@ func (t *tools) killPane(
 	}
 	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
+		return nil, killPaneOutput{}, err
+	}
+	// Named rather than resolved, so the guard is asked for here rather than
+	// by the resolver every other write goes through.
+	if err := t.confirmCallerWrite(ctx, request, pane, "ending it"); err != nil {
 		return nil, killPaneOutput{}, err
 	}
 	windowID := pane.WindowID()
@@ -213,19 +218,19 @@ type respawnPaneOutput struct {
 // quietly reading the new program's output as the old one's.
 func (t *tools) respawnPane(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input respawnPaneInput,
 ) (*mcp.CallToolResult, respawnPaneOutput, error) {
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "restarting the pane")
 	if err != nil {
 		return nil, respawnPaneOutput{}, err
 	}
-	request := tmux.RespawnRequest{Kill: input.Kill}
+	respawn := tmux.RespawnRequest{Kill: input.Kill}
 	if input.Command != "" {
 		command := input.Command
-		request.Command = &command
+		respawn.Command = &command
 	}
-	respawned, err := pane.Respawn(ctx, request)
+	respawned, err := pane.Respawn(ctx, respawn)
 	if err != nil {
 		return nil, respawnPaneOutput{}, err
 	}
