@@ -215,6 +215,35 @@ $ go doc github.com/libtmux/libtmux-go
 Every exported declaration carries a doc comment, and every switch a caller can
 flip is discoverable there rather than only in the README.
 
+### Write what every renderer can render
+
+Doc comments are Go doc comment syntax, which is documented at
+<https://go.dev/doc/comment#syntax> and is not Markdown. It has paragraphs,
+`# ` headings, lists, indented preformatted blocks, and links. It has no bold,
+no italics, and no inline backticks: those arrive at the reader as the
+characters they are.
+
+Square brackets are doc links, not emphasis. `[Run]` and `[tmux.Server]`
+resolve; a bracketed unexported identifier resolves nowhere and renders as its
+own brackets on pkg.go.dev, so write the thing in prose instead.
+
+Markdown files keep to what a plain CommonMark renderer understands. No
+renderer-specific extension, and in particular no GitHub alert blocks —
+`> [!NOTE]`, `> [!WARNING]` and the rest are literal text everywhere but
+GitHub, which is where the fewest readers of a Go module are. State the thing
+in a sentence: prose that renders everywhere beats a callout that renders once.
+
+Three things this does not restrict:
+
+- **Code blocks.** Fenced blocks in Markdown are how this repository shows
+  commands, and the rules in [Code Blocks](#code-blocks) govern them.
+- **Tables, badges, and links** in Markdown. They are CommonMark or near
+  enough, and every renderer that matters handles them.
+- **Directive comments.** `//go:build`, `//go:generate`, `//nolint:`,
+  `//libtmux:real-tmux` and `//libtmux:parity` are instructions to a tool, not
+  prose for a reader. They are exempt from all of the above and must not be
+  reformatted to suit it.
+
 ## Comments earn their maintenance cost
 
 A comment ships only if it passes all three gates. Fail any: delete or rewrite.
