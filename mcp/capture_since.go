@@ -659,8 +659,10 @@ func addCaptureTools(server *mcp.Server, t *tools) {
 		Annotations: readOnly("Capture a tmux Pane"),
 		Description: "Read what one pane holds: its visible screen, or its " +
 			"scrollback too with includeHistory. The reply is bounded and says " +
-			"what it dropped. Use capture_since instead to read a pane " +
-			"repeatedly without paying for the same screen each time.",
+			"what it dropped. Pass styles for a program that reports success or " +
+			"failure in colour rather than in words, which a capture otherwise " +
+			"strips. Use capture_since instead to read a pane repeatedly without " +
+			"paying for the same screen each time.",
 	}, t.capturePane)
 	register(server, t, &mcp.Tool{
 		Name:        "capture_since",

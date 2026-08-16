@@ -353,6 +353,10 @@ type showHooksInput struct {
 	// SessionName picks the session for session scope, and resolves the others
 	// when they are empty.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read hooks on"`
+	// Name reports one hook rather than the table. A caller checking whether
+	// something is hooked knows the name it is asking about, and the whole
+	// table is most of a reply it will discard.
+	Name string `json:"name,omitempty" jsonschema:"report only this hook, such as pane-died; empty reports every hook in force"`
 }
 
 // hook is one command tmux runs on its own.
@@ -430,12 +434,27 @@ func (t *tools) showHooks(
 		if !found || name == "" {
 			continue
 		}
+		// tmux indexes a hook that has several commands as name[0], name[1].
+		// A caller naming the hook means all of them, so the index is not part
+		// of what is compared.
+		if input.Name != "" && input.Name != name && input.Name != hookBaseName(name) {
+			continue
+		}
 		output.Hooks = append(output.Hooks, hook{Name: name, Command: command})
 	}
 	sort.Slice(output.Hooks, func(i, j int) bool {
 		return output.Hooks[i].Name < output.Hooks[j].Name
 	})
 	return nil, output, nil
+}
+
+// hookBaseName strips the index tmux appends when one hook runs several
+// commands, so that "pane-died" matches "pane-died[0]" as a caller means it to.
+func hookBaseName(name string) string {
+	if base, _, found := strings.Cut(name, "["); found {
+		return base
+	}
+	return name
 }
 
 // addSettingsTools advertises the tools for options, environment, and hooks.
@@ -472,7 +491,8 @@ func addSettingsTools(server *mcp.Server, t *tools) {
 		Name:        "show_hooks",
 		Annotations: readOnly("Read tmux Hooks"),
 		Description: "The commands tmux will run on its own at a given scope. " +
-			"This is the explanation for behaviour no tool here caused. Reading " +
+			"This is the explanation for behaviour no tool here caused. Pass name " +
+			"to ask about one hook rather than reading the whole table. Reading " +
 			"only: a hook belongs in a person's tmux configuration, not in a " +
 			"connection that will end.",
 	}, t.showHooks)

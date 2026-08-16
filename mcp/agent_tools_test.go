@@ -1767,3 +1767,194 @@ func TestWindowsAndSessionsNarrowToo(t *testing.T) {
 		t.Errorf("total = %d, want every session it selected from", named.Total)
 	}
 }
+
+// TestServerInfoTellsWhoIsWatching covers the distinction a count cannot make.
+// This server's own control connection is a tmux client, so a caller asking
+// whether a person is looking at a session has to be able to tell the two
+// apart before it decides that selecting a window is polite.
+//
+//libtmux:real-tmux
+func TestServerInfoTellsWhoIsWatching(t *testing.T) {
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: watched\nwindows:\n  - panes:\n      - {}\n")
+
+	sessions, err := target.Sessions(ctx)
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("sessions: %v", err)
+	}
+	control, err := target.WithEngine(target.SubprocessEngine()).OpenControl(ctx, sessions[0])
+	if err != nil {
+		t.Fatalf("open a control client: %v", err)
+	}
+	defer func() { _ = control.Close() }()
+
+	var info struct {
+		Clients         int `json:"clients"`
+		AttachedClients []struct {
+			Name        string `json:"name"`
+			Session     string `json:"session"`
+			ControlMode bool   `json:"controlMode"`
+		} `json:"attachedClients"`
+	}
+	call(ctx, t, session, "get_server_info", map[string]any{}, &info)
+	if info.Clients != len(info.AttachedClients) {
+		t.Errorf("counted %d clients but described %d",
+			info.Clients, len(info.AttachedClients))
+	}
+	if len(info.AttachedClients) == 0 {
+		t.Fatal("a server with a control client attached described none")
+	}
+	if !slices.ContainsFunc(info.AttachedClients, func(client struct {
+		Name        string `json:"name"`
+		Session     string `json:"session"`
+		ControlMode bool   `json:"controlMode"`
+	},
+	) bool {
+		return client.ControlMode
+	}) {
+		t.Errorf("a control-mode client was reported as a person watching: %+v",
+			info.AttachedClients)
+	}
+}
+
+// TestOneHookIsReadableWithoutTheTable covers the cost of asking: a caller
+// checking whether one thing is hooked should not be handed every hook in
+// force to search through.
+//
+//libtmux:real-tmux
+func TestOneHookIsReadableWithoutTheTable(t *testing.T) {
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: hooked\nwindows:\n  - panes:\n      - {}\n")
+	// tmux reports every hook it knows, set or not, and show_hooks keeps only
+	// the ones with a command. So the hook read back here has to be one this
+	// test set, and one every supported tmux knows by that name.
+	// Two, so that filtering to one has something to leave out. A single hook
+	// would make the comparison below true whether or not the name was read.
+	for _, event := range []string{"after-split-window", "after-new-window"} {
+		if _, err := target.Cmd(ctx, "set-hook", "-g", event, "display-message hi"); err != nil {
+			t.Fatalf("set a hook to read back: %v", err)
+		}
+	}
+
+	type hooks struct {
+		Hooks []struct {
+			Name string `json:"name"`
+		} `json:"hooks"`
+	}
+	var everything hooks
+	call(ctx, t, session, "show_hooks", map[string]any{"scope": "server"}, &everything)
+	if len(everything.Hooks) == 0 {
+		t.Fatal("no hooks were reported at all")
+	}
+
+	var one hooks
+	call(ctx, t, session, "show_hooks", map[string]any{
+		"scope": "server", "name": "after-split-window",
+	}, &one)
+	if len(one.Hooks) == 0 {
+		t.Fatal("naming a hook that is set reported none")
+	}
+	for _, reported := range one.Hooks {
+		if !strings.HasPrefix(reported.Name, "after-split-window") {
+			t.Errorf("naming after-split-window also reported %q", reported.Name)
+		}
+	}
+	if len(everything.Hooks) < 2 {
+		t.Fatalf("only %d hooks were set, so filtering proves nothing", len(everything.Hooks))
+	}
+	if len(one.Hooks) >= len(everything.Hooks) {
+		t.Errorf("naming one hook returned %d of %d, so the name was not read",
+			len(one.Hooks), len(everything.Hooks))
+	}
+}
+
+// TestAPaneKeepsItsIdentityWhenItMoves covers what move_pane is for: killing
+// and splitting again loses whatever the pane was running, and every id that
+// addressed it.
+//
+//libtmux:real-tmux
+func TestAPaneKeepsItsIdentityWhenItMoves(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: moving\nwindows:\n"+
+		"  - window_name: from\n    panes:\n      - {}\n      - {}\n"+
+		"  - window_name: to\n    panes:\n      - {}\n")
+
+	var before listing
+	call(ctx, t, session, "list_panes", map[string]any{}, &before)
+	mover := before.Panes[1]
+	var destination string
+	for _, pane := range before.Panes {
+		if pane.WindowID != mover.WindowID {
+			destination = pane.WindowID
+			break
+		}
+	}
+	if destination == "" {
+		t.Fatal("the workspace did not build a second window")
+	}
+
+	var joined struct {
+		PaneID    string `json:"paneId"`
+		WindowID  string `json:"windowId"`
+		BrokenOut bool   `json:"brokenOut"`
+	}
+	result := call(ctx, t, session, "move_pane", map[string]any{
+		"paneId": mover.ID, "toWindowId": destination,
+	}, &joined)
+	if result.IsError {
+		t.Fatalf("move_pane: %#v", result.Content)
+	}
+	if joined.PaneID != mover.ID {
+		t.Errorf("the pane came back as %s, want its own id %s", joined.PaneID, mover.ID)
+	}
+	if joined.WindowID != destination {
+		t.Errorf("the pane landed in %s, want %s", joined.WindowID, destination)
+	}
+
+	var broken struct {
+		PaneID    string `json:"paneId"`
+		WindowID  string `json:"windowId"`
+		BrokenOut bool   `json:"brokenOut"`
+	}
+	call(ctx, t, session, "move_pane", map[string]any{"paneId": mover.ID}, &broken)
+	if !broken.BrokenOut {
+		t.Error("breaking a pane out did not report that it did")
+	}
+	if broken.WindowID == destination || broken.WindowID == "" {
+		t.Errorf("the broken-out pane is in %q, want a window of its own", broken.WindowID)
+	}
+}
+
+// TestStyledCaptureKeepsColour covers the state a plain capture throws away.
+// A program that says whether it passed by colouring one word says nothing at
+// all once the colour is stripped.
+//
+//libtmux:real-tmux
+func TestStyledCaptureKeepsColour(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: coloured\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+	run(ctx, t, session, pane, `printf '\033[31mFAILED\033[0m\n'`)
+
+	var plain struct {
+		Lines []string `json:"lines"`
+	}
+	call(ctx, t, session, "capture_pane", map[string]any{"paneId": pane}, &plain)
+	if strings.Contains(strings.Join(plain.Lines, "\n"), "\x1b[") {
+		t.Error("a plain capture carried escape sequences")
+	}
+
+	var styled struct {
+		Lines []string `json:"lines"`
+	}
+	call(ctx, t, session, "capture_pane", map[string]any{
+		"paneId": pane, "styles": true,
+	}, &styled)
+	joined := strings.Join(styled.Lines, "\n")
+	if !strings.Contains(joined, "FAILED") {
+		t.Fatalf("the styled capture missed the output entirely: %q", joined)
+	}
+	if !strings.Contains(joined, "\x1b[") {
+		t.Errorf("a styled capture carried no colour: %q", joined)
+	}
+}

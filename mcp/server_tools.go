@@ -24,8 +24,33 @@ import (
 // who wants a client on another socket starts another server pointed at it,
 // which is a decision made where the others were.
 
-// getServerInfoInput takes no arguments.
-type getServerInfoInput struct{}
+// getServerInfoInput chooses how much is reported.
+type getServerInfoInput struct {
+	// IncludeMessages adds tmux's own message log, which is where tmux
+	// records what it refused and why. It is off by default because it is
+	// diagnostic and can be long.
+	IncludeMessages bool `json:"includeMessages,omitempty" jsonschema:"add tmux's own server message log, which records what tmux refused and why"`
+}
+
+// attachedClient is one tmux client attached to this server.
+//
+// Whether anyone is looking changes what is polite to do. Selecting a window
+// or splitting a pane moves what a person sees; doing it to a session nobody
+// is attached to moves nothing. A caller cannot tell the difference from a
+// count, because this server's own control connection is one of them.
+type attachedClient struct {
+	// Name is the client's name, which is usually its terminal device.
+	Name string `json:"name"`
+	// TTY is the terminal it is attached to.
+	TTY string `json:"tty,omitempty"`
+	// Session is the session it is looking at.
+	Session string `json:"session,omitempty"`
+	// ControlMode reports a client driving tmux through control mode rather
+	// than a person at a terminal. This server's own connection is one, so a
+	// caller asking whether anybody is watching wants the ones where this is
+	// false.
+	ControlMode bool `json:"controlMode"`
+}
 
 // getServerInfoOutput describes the tmux server these tools address.
 type getServerInfoOutput struct {
@@ -46,6 +71,11 @@ type getServerInfoOutput struct {
 	// Clients is how many tmux clients are attached, which includes this
 	// process when it holds a control connection.
 	Clients int `json:"clients"`
+	// AttachedClients is what each of them is, so a caller can tell a person
+	// watching a session from this server's own control connection.
+	AttachedClients []attachedClient `json:"attachedClients,omitempty"`
+	// Messages is tmux's own message log, reported only when asked for.
+	Messages []string `json:"messages,omitempty"`
 	// InsideThisServer reports whether this MCP server is itself running in a
 	// pane of the tmux server it addresses. When true, CallerPaneID names that
 	// pane and anything done to it is done to the terminal this is running in.
@@ -69,7 +99,7 @@ type getServerInfoOutput struct {
 func (t *tools) getServerInfo(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
-	_ getServerInfoInput,
+	input getServerInfoInput,
 ) (*mcp.CallToolResult, getServerInfoOutput, error) {
 	caller := t.callerIdentityFor(ctx)
 	output := getServerInfoOutput{
@@ -92,15 +122,54 @@ func (t *tools) getServerInfo(
 	output.InsideThisServer = caller.inside && socket != "" &&
 		resolvePath(socket) == caller.socket
 
+	// One snapshot answers all of these. A snapshot per question would let the
+	// counts disagree with each other and would cost a listing each.
 	if snapshot, err := t.target.Snapshot(ctx); err == nil {
 		output.Sessions = len(snapshot.Sessions())
 		output.Windows = len(snapshot.Windows())
 		output.Panes = len(snapshot.Panes())
-	}
-	if clients, err := t.target.Clients(ctx); err == nil {
+		clients := snapshot.Clients()
 		output.Clients = len(clients)
+		output.AttachedClients = summarizeClients(clients)
+	}
+	if input.IncludeMessages {
+		if messages, err := t.target.ShowMessages(ctx, tmux.ShowMessagesRequest{}); err == nil {
+			output.Messages = boundMessages(messages)
+		}
 	}
 	return nil, output, nil
+}
+
+// serverMessagesMax bounds the message log a reply carries. tmux keeps its
+// last message-limit lines, which an operator can set into the thousands, and
+// the recent ones are what explain what just happened.
+const serverMessagesMax = 100
+
+// boundMessages keeps the most recent messages, which are the ones that
+// explain what a caller just saw.
+func boundMessages(messages []string) []string {
+	if len(messages) <= serverMessagesMax {
+		return messages
+	}
+	return messages[len(messages)-serverMessagesMax:]
+}
+
+// summarizeClients describes who is attached.
+func summarizeClients(clients []tmux.Client) []attachedClient {
+	summaries := make([]attachedClient, 0, len(clients))
+	for _, client := range clients {
+		formats := client.Formats()
+		session, _ := formats.SessionName()
+		tty, _ := formats.ClientTTY()
+		control, _ := formats.ClientControlMode()
+		summaries = append(summaries, attachedClient{
+			Name:        client.Name().String(),
+			TTY:         tty,
+			Session:     session,
+			ControlMode: control,
+		})
+	}
+	return summaries
 }
 
 // listServersInput takes no arguments.
@@ -132,6 +201,12 @@ type listServersOutput struct {
 	// expected a server and did not find one can tell whether it was looking
 	// in the right place.
 	SearchedIn string `json:"searchedIn"`
+	// UnreachableNote says what to do about a server this one is not, and is
+	// present only when there is a live one it is not. A caller that finds
+	// another socket here would otherwise try every tool looking for the
+	// argument that reaches it, and there is none: the target is fixed when
+	// this command starts.
+	UnreachableNote string `json:"unreachableNote,omitempty"`
 }
 
 // listServers reports the tmux servers on this machine.
@@ -181,6 +256,18 @@ func (t *tools) listServers(
 	}
 	// The target first, then the rest by name, so a client reading the first
 	// entry reads the server it is talking to.
+	// Only when there is somewhere the caller cannot get to. A note that
+	// appears on every listing is a note nobody reads.
+	for _, found := range output.Servers {
+		if found.Alive && !found.IsTarget {
+			output.UnreachableNote = "Only the server marked isTarget can be " +
+				"reached from here; no tool takes a socket. To drive another " +
+				"one, start a second libtmux-mcp with -socket-path and add it " +
+				"to the client's configuration under its own name."
+			break
+		}
+	}
+
 	sort.SliceStable(output.Servers, func(i, j int) bool {
 		if output.Servers[i].IsTarget != output.Servers[j].IsTarget {
 			return output.Servers[i].IsTarget

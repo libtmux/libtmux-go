@@ -30,6 +30,11 @@ type capturePaneInput struct {
 	// JoinWrapped rejoins a line the terminal wrapped, so a long line arrives
 	// as one line rather than as however many the pane is wide.
 	JoinWrapped bool `json:"joinWrapped,omitempty" jsonschema:"rejoin lines the terminal wrapped"`
+	// Styles keeps the terminal's colour and attribute sequences, which a
+	// capture otherwise strips. In a program that reports its state by colour
+	// rather than in words, the colour is the state: a red FAILED and a green
+	// PASSED are the same six letters without it.
+	Styles bool `json:"styles,omitempty" jsonschema:"keep colour and attribute escape sequences, for a program that says pass or fail in colour rather than in words"`
 	// MaxLines caps how many lines come back, keeping the last ones. Zero uses
 	// the server's default.
 	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many lines to return at most, keeping the last ones"`
@@ -69,7 +74,10 @@ func (t *tools) capturePane(
 		return nil, capturePaneOutput{}, err
 	}
 
-	request := tmux.CapturePaneRequest{JoinWrapped: input.JoinWrapped}
+	request := tmux.CapturePaneRequest{
+		JoinWrapped:     input.JoinWrapped,
+		EscapeSequences: input.Styles,
+	}
 	switch {
 	case input.StartLine != nil || input.EndLine != nil:
 		if input.StartLine != nil {

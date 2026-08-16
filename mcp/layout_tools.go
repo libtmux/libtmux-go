@@ -47,6 +47,105 @@ var splitDirections = map[string]tmux.PaneDirection{
 	"left":  tmux.PaneDirectionLeft,
 }
 
+// movePaneInput moves a pane between windows, or out into one of its own.
+type movePaneInput struct {
+	// PaneID is the pane to move.
+	PaneID string `json:"paneId" jsonschema:"the tmux pane id to move, such as %1"`
+	// ToWindowID is the window to move it into. Empty breaks the pane out
+	// into a new window of its own.
+	ToWindowID string `json:"toWindowId,omitempty" jsonschema:"the window to move the pane into, such as @2; empty breaks it out into a new window"`
+	// Direction places the moved pane relative to the destination's active
+	// pane: below, above, right, or left. Empty places it below, as tmux does.
+	Direction string `json:"direction,omitempty" jsonschema:"where the moved pane goes in the destination: below, above, right, or left"`
+	// Percentage gives the moved pane that share of the destination, 1 to 100.
+	Percentage int `json:"percentage,omitempty" jsonschema:"the moved pane's share of the destination window, 1 to 100"`
+	// Name is the new window's name when the pane is broken out.
+	Name string `json:"name,omitempty" jsonschema:"the new window's name when breaking the pane out"`
+	// Focus makes the pane active where it lands, and the new window current
+	// when it was broken out. Off by default, because moving what a person is
+	// looking at is a bigger change than moving a pane.
+	Focus bool `json:"focus,omitempty" jsonschema:"make the pane active where it lands, moving what a person sees"`
+}
+
+// movePaneOutput reports where the pane ended up.
+type movePaneOutput struct {
+	// PaneID is the pane that moved. It keeps its id: a pane somewhere else is
+	// the same pane, so anything addressing it still can.
+	PaneID string `json:"paneId"`
+	// WindowID is the window it is in now.
+	WindowID string `json:"windowId"`
+	// BrokenOut reports that the window it is in was made for it.
+	BrokenOut bool `json:"brokenOut"`
+}
+
+// movePane moves a pane into another window, or out into a new one.
+//
+// Rearranging across windows was the gap between splitting and killing: a
+// caller that put a pane in the wrong window could only kill it and split
+// again, losing whatever it was running. Both directions are one tool because
+// they are one question with the destination left out -- naming a window moves
+// the pane there, naming none gives it a window of its own.
+//
+// Moving the last pane out of a window destroys that window, and the session
+// with it if it held nothing else. That is tmux's own behaviour rather than
+// this tool's, and it is why the pane's new window is reported rather than
+// assumed.
+func (t *tools) movePane(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input movePaneInput,
+) (*mcp.CallToolResult, movePaneOutput, error) {
+	direction, known := splitDirections[strings.ToLower(strings.TrimSpace(input.Direction))]
+	if !known {
+		return nil, movePaneOutput{}, fmt.Errorf(
+			"direction %q is not below, above, right, or left", input.Direction)
+	}
+	if input.Percentage < 0 || input.Percentage > 100 {
+		return nil, movePaneOutput{}, fmt.Errorf(
+			"percentage %d is not between 1 and 100", input.Percentage)
+	}
+	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
+	if err != nil {
+		return nil, movePaneOutput{}, err
+	}
+
+	if input.ToWindowID == "" {
+		window, breakErr := pane.BreakPane(ctx, tmux.BreakPaneRequest{
+			Attach: input.Focus,
+			Name:   input.Name,
+		})
+		if breakErr != nil {
+			return nil, movePaneOutput{}, breakErr
+		}
+		return nil, movePaneOutput{
+			PaneID:    pane.ID().String(),
+			WindowID:  window.ID().String(),
+			BrokenOut: true,
+		}, nil
+	}
+
+	destination, err := t.target.Window(ctx, tmux.WindowID(input.ToWindowID))
+	if err != nil {
+		return nil, movePaneOutput{}, err
+	}
+	request := tmux.JoinPaneRequest{
+		TargetWindow: destination,
+		Attach:       input.Focus,
+		Direction:    direction,
+	}
+	if input.Percentage > 0 {
+		request.Percentage = tmux.Ptr(input.Percentage)
+	}
+	moved, err := pane.Join(ctx, request)
+	if err != nil {
+		return nil, movePaneOutput{}, err
+	}
+	return nil, movePaneOutput{
+		PaneID:   moved.ID().String(),
+		WindowID: moved.WindowID().String(),
+	}, nil
+}
+
 // splitWindow divides a pane and reports the new one's id.
 func (t *tools) splitWindow(
 	ctx context.Context,
@@ -463,6 +562,14 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 		Description: "Exchange two panes' positions. Both keep their ids, so " +
 			"anything addressing them still can.",
 	}, t.swapPane)
+	register(server, t, &mcp.Tool{
+		Name:        "move_pane",
+		Annotations: mutating("Move a tmux Pane"),
+		Description: "Move a pane into another window, or break it out into a " +
+			"window of its own by naming no destination. The pane keeps its id " +
+			"and whatever it is running, which killing and splitting again does " +
+			"not. Moving a window's last pane destroys that window.",
+	}, t.movePane)
 	register(server, t, &mcp.Tool{
 		Name:        "resize_window",
 		Annotations: mutating("Resize a tmux Window"),
