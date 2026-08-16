@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,8 +15,13 @@ import (
 
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
 
 // connect starts the MCP server against a tmux server unique to the test and
 // returns a connected client session. Both are torn down with the test.
@@ -24,13 +30,7 @@ func connect(t *testing.T) (*sdk.ClientSession, tmux.Server, context.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
-	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer killCancel()
-		_ = target.Kill(killCtx)
-	})
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
