@@ -2,9 +2,8 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 
-> [!WARNING]
-> **Alpha.** Releases are tagged `-alpha` and the API is not settled. Pin an
-> exact version.
+Alpha software. Releases carry an -alpha prerelease tag and the API is not
+settled. Pin an exact version.
 
 The library. A typed, context-aware tmux API with no runtime dependencies.
 

@@ -2,9 +2,8 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/workspace.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace)
 
-> [!WARNING]
-> **Alpha.** Releases are tagged `-alpha` and the API is not settled. Pin an
-> exact version.
+Alpha software. Releases carry an -alpha prerelease tag and the API is not
+settled. Pin an exact version.
 
 Load tmuxp-style YAML workspace files and build them with the [tmux module].
 

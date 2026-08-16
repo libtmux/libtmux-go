@@ -90,7 +90,7 @@ var toolGroups = []func(*mcp.Server, *tools){
 // NewServer returns an MCP server exposing target through the tools below.
 //
 // Anything the server holds beyond the process is released by [Run]. A caller
-// driving the returned server itself keeps at most [jobsRetained] temporary
+// driving the returned server itself keeps a bounded number of temporary
 // directories, which the operating system reclaims with the process.
 func NewServer(target tmux.Server) *mcp.Server {
 	server, _ := newServer(target)

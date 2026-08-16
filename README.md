@@ -3,10 +3,9 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 [![tests](https://github.com/libtmux/libtmux-go/actions/workflows/tests.yml/badge.svg)](https://github.com/libtmux/libtmux-go/actions/workflows/tests.yml)
 
-> [!WARNING]
-> **Alpha.** Releases are tagged `-alpha`, the API is not settled, and any
-> release may change or remove exported identifiers without a deprecation
-> period. Pin an exact version. Not recommended for production.
+Alpha software. Releases carry an -alpha prerelease tag, the API is not
+settled, and any release may change or remove exported identifiers without a
+deprecation period. Pin an exact version. Not recommended for production.
 
 Drive tmux from Go: sessions, windows, and panes as typed values, every tmux
 option and hook as a typed accessor, and errors classified by what tmux actually
