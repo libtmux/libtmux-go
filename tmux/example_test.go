@@ -171,34 +171,58 @@ func ExamplePane_CaptureBytes() {
 }
 
 func ExampleServer_Sessions() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-sessions",
+	})
+	defer killExampleServer(server)
 
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "build", WindowName: "editor",
+	}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// Sessions resolves the hierarchy, so each record carries its windows and
+	// each window its panes. Reading them costs no further tmux command.
 	sessions, err := server.Sessions(ctx)
 	if err != nil {
+		fmt.Println("list sessions:", err)
 		return
 	}
 	for _, session := range sessions {
 		name, _ := session.Name()
-		fmt.Println(name)
-		relatedWindows, _ := session.Windows()
-		for _, window := range relatedWindows {
-			relatedPanes, _ := window.Panes()
-			for _, pane := range relatedPanes {
-				fmt.Println(window.ID(), pane.ID())
-			}
+		windows, _ := session.Windows()
+		for _, window := range windows {
+			windowName, _ := window.Name()
+			panes, _ := window.Panes()
+			fmt.Println(name, windowName, len(panes))
 		}
 	}
+	// Output: build editor 1
 }
 
 func ExampleServer_Cmd() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-cmd",
+	})
+	defer killExampleServer(server)
 
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// Cmd runs a tmux command this package has no typed method for. It reports
+	// tmux's own failure through the result rather than through err, which is
+	// reserved for the command not running at all.
 	result, err := server.Cmd(ctx, "display-message", "-p", "#{session_name}")
 	if err != nil {
+		fmt.Println("run display-message:", err)
 		return
 	}
 	if result.ExitCode != 0 {
@@ -207,6 +231,9 @@ func ExampleServer_Cmd() {
 	}
 	fmt.Println(result.Stdout)
 	fmt.Printf("%q\n", result.RawStdout)
+	// Output:
+	// [build]
+	// "build\n"
 }
 
 func ExampleServer_OpenControl() {
@@ -264,72 +291,135 @@ func ExampleServer_OpenControl() {
 }
 
 func ExampleServer_ShowBufferBytes() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-show-buffer",
+	})
+	defer killExampleServer(server)
 
-	name := "clipboard"
-	output, err := server.ShowBufferBytes(ctx, &name)
-	if err != nil {
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
-	fmt.Printf("%x\n", output)
+	name := "clipboard"
+	if err := server.SetBuffer(ctx, tmux.SetBufferRequest{
+		Name: &name, Data: "copied text",
+	}); err != nil {
+		fmt.Println("set buffer:", err)
+		return
+	}
+
+	// A buffer holds whatever was copied into it, which need not be text, so
+	// the bytes accessor returns it undecoded.
+	output, err := server.ShowBufferBytes(ctx, &name)
+	if err != nil {
+		fmt.Println("show buffer:", err)
+		return
+	}
+	fmt.Printf("%q\n", output)
+	// Output: "copied text"
 }
 
 func ExampleServer_Snapshot() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-snapshot",
+	})
+	defer killExampleServer(server)
 
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// A snapshot reads the whole server once. Every record it holds carries its
+	// relations, so walking the hierarchy afterwards runs no further command
+	// and cannot see the server change underneath it.
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
+		fmt.Println("snapshot:", err)
 		return
 	}
 	for _, session := range snapshot.Sessions() {
-		relatedPanes, _ := session.Panes()
-		for _, pane := range relatedPanes {
-			command, _ := pane.CurrentCommand()
-			fmt.Println(session.ID(), pane.ID(), command)
-		}
+		name, _ := session.Name()
+		panes, _ := session.Panes()
+		fmt.Println(name, len(panes))
 	}
+	fmt.Println(len(snapshot.Windows()), len(snapshot.Panes()))
+	// Output:
+	// build 1
+	// 1 1
 }
 
 func ExampleSession_ResolveActiveWindow() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-resolve-window",
+	})
+	defer killExampleServer(server)
 
-	session, err := server.Session(ctx, tmux.SessionID("$1"))
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "build", WindowName: "editor",
+	})
 	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// A session record names its active window but does not carry it. Resolving
+	// asks tmux, so the answer reflects a window selected since.
+	window, err := session.ResolveActiveWindow(ctx)
+	if err != nil {
+		fmt.Println("resolve window:", err)
+		return
+	}
+	name, _ := window.Name()
+	fmt.Println(name)
+	// Output: editor
+}
+
+func ExamplePaneFilter_Predicate() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-pane-filter",
+	})
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
+	if err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
 	window, err := session.ResolveActiveWindow(ctx)
 	if err != nil {
+		fmt.Println("resolve window:", err)
 		return
 	}
-	fmt.Println(window.ID())
-}
-
-func ExamplePaneFilter_Predicate() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
-	panes, err := server.Panes(ctx)
+	if _, err := window.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
+		fmt.Println("split pane:", err)
+		return
+	}
+	panes, err := window.SearchPanes(ctx, nil)
 	if err != nil {
+		fmt.Println("search panes:", err)
 		return
 	}
+
+	// A filter compiles to a predicate once and is then applied in Go, which is
+	// what makes it usable against records already in hand.
 	minimumIndex := 0
-	predicate, err := (tmux.PaneFilter{
-		IDIn:    []tmux.PaneID{"%1", "%3"},
-		IndexGT: &minimumIndex,
-	}).Predicate()
+	predicate, err := (tmux.PaneFilter{IndexGT: &minimumIndex}).Predicate()
 	if err != nil {
+		fmt.Println("compile filter:", err)
 		return
 	}
 
-	for _, pane := range tmuxq.Where(panes, predicate) {
-		fmt.Println(pane.ID())
-	}
+	fmt.Println(len(panes), len(tmuxq.Where(panes, predicate)))
+	// Output: 2 1
 }
 
 func ExamplePtr() {
@@ -407,73 +497,145 @@ func ExampleErrNoServer() {
 }
 
 func ExampleSession_Options() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-session-options",
+	})
+	defer killExampleServer(server)
 
-	sessions, err := server.Sessions(ctx)
-	if err != nil || len(sessions) == 0 {
-		return
-	}
-	options, err := sessions[0].Options(ctx)
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
 	if err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
+	if err := session.SetMouse(ctx, true); err != nil {
+		fmt.Println("set mouse:", err)
+		return
+	}
+
+	options, err := session.Options(ctx)
+	if err != nil {
+		fmt.Println("read options:", err)
+		return
+	}
+
+	// Origin separates a value set at this scope from one reaching it from a
+	// parent, which is the difference between configured here and merely in
+	// effect here.
 	mouse, present := options.Mouse().Get()
-	origin, _ := options.Mouse().Origin()
-	fmt.Println(mouse, present, origin)
+	mouseOrigin, _ := options.Mouse().Origin()
+	fmt.Println(mouse, present, mouseOrigin)
+
+	// base-index was never set on this session, so it reaches it from the
+	// global scope. What it holds depends on the configuration tmux loaded;
+	// where it came from does not.
+	baseOrigin, _ := options.BaseIndex().Origin()
+	fmt.Println(baseOrigin)
+	// Output:
+	// true true local
+	// inherited
 }
 
 func ExampleSession_SetMouse() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-set-mouse",
+	})
+	defer killExampleServer(server)
 
-	sessions, err := server.Sessions(ctx)
-	if err != nil || len(sessions) == 0 {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
+	if err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
-	_ = sessions[0].SetMouse(ctx, true)
+
+	// The typed setter takes the option's own type, so a boolean option is set
+	// with a bool rather than with tmux's "on" and "off".
+	if err := session.SetMouse(ctx, true); err != nil {
+		fmt.Println("set mouse:", err)
+		return
+	}
+
+	options, err := session.Options(ctx)
+	if err != nil {
+		fmt.Println("read options:", err)
+		return
+	}
+	mouse, _ := options.Mouse().Get()
+	fmt.Println(mouse)
+	// Output: true
 }
 
 func ExampleSession_SetUpdateEnvironment() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-update-environment",
+	})
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// An array option is addressed by index, and the indices need not be
+	// contiguous: this sets 0 and 3 and leaves 1 and 2 unset.
 	values, err := tmux.NewSparseArray(
 		tmux.SparseEntry[string]{Index: 0, Value: "DISPLAY"},
 		tmux.SparseEntry[string]{Index: 3, Value: "SSH_AUTH_SOCK"},
 	)
 	if err != nil {
+		fmt.Println("build array:", err)
 		return
 	}
-
-	sessions, err := server.Sessions(ctx)
-	if err != nil || len(sessions) == 0 {
-		return
-	}
-	result, err := sessions[0].SetUpdateEnvironment(ctx, values)
+	result, err := session.SetUpdateEnvironment(ctx, values)
 	if err != nil {
+		fmt.Println("set update-environment:", err)
 		return
 	}
 	fmt.Println(result.Replaced, result.AppliedIndices)
+	// Output: true [0 3]
 }
 
 func ExampleGlobalSessionScope_SetHook() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
-	global := server.GlobalSessionScope()
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-global-hook",
+	})
+	defer killExampleServer(server)
 
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// The global scope sets a hook for every session, including ones created
+	// after it, rather than for one session that already exists.
+	global := server.GlobalSessionScope()
 	if err := global.SetHook(ctx, "client-attached", "display-message 'client attached'"); err != nil {
+		fmt.Println("set hook:", err)
 		return
 	}
 	hooks, err := global.Hooks(ctx)
 	if err != nil {
+		fmt.Println("read hooks:", err)
 		return
 	}
-	_, present := hooks.ClientAttached().Get()
-	fmt.Println(present)
+	// A hook holds an array of commands rather than one, so the value is
+	// sparse: tmux numbers the entries and any index may be absent.
+	commands, present := hooks.ClientAttached().Get()
+	if !present {
+		fmt.Println("no client-attached hook")
+		return
+	}
+	command, _ := commands.Get(0)
+	fmt.Println(commands.Indices(), command)
+	// Output: [0] display-message "client attached"
 }
 
 func ExampleServer_SearchPanes() {

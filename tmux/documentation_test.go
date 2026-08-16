@@ -82,18 +82,6 @@ var examplesWithoutOutput = map[string]string{
 	"ExampleRunInPane":     "takes a testing.TB an Example cannot supply",
 	"ExampleWaitForScreen": "takes a testing.TB an Example cannot supply",
 
-	"ExampleGlobalSessionScope_SetHook": "pending conversion",
-	"ExamplePaneFilter_Predicate":       "pending conversion",
-
-	"ExampleServer_Cmd":                   "pending conversion",
-	"ExampleServer_Sessions":              "pending conversion",
-	"ExampleServer_ShowBufferBytes":       "pending conversion",
-	"ExampleServer_Snapshot":              "pending conversion",
-	"ExampleSession_Options":              "pending conversion",
-	"ExampleSession_ResolveActiveWindow":  "pending conversion",
-	"ExampleSession_SetMouse":             "pending conversion",
-	"ExampleSession_SetUpdateEnvironment": "pending conversion",
-
 	// The MCP server is a module of its own, so converting these lands there.
 	"ExampleNewServer":        "pending conversion",
 	"ExampleRun":              "pending conversion",
