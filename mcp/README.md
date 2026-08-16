@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.libtmux/libtmux-mcp -->
+
 # mcp
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/mcp.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
@@ -219,6 +221,28 @@ says so in `effectiveTimeoutSeconds` and `timeoutClamped`. The ceiling bounds
 the caller rather than the transport: these tools await throughout, so a long
 wait blocks nothing else. What an unbounded one costs is the agent's turn, and
 MCP gives it no way to change its mind mid-call.
+
+## Publishing it to the MCP registry
+
+`server.json` is this server's entry for the [MCP registry], where clients look
+for servers by name rather than by import path. It carries no `packages` block:
+the registry knows npm, PyPI, NuGet, Cargo, OCI and prebuilt binaries, and `go
+install` is none of them, so the entry points at this repository instead.
+
+The name is `io.github.libtmux/libtmux-mcp`, which the registry ties to the
+GitHub organisation of the same name, and the `mcp-name:` comment at the top of
+this file is the marker it looks for. Publishing needs that organisation's
+credentials:
+
+```console
+$ mcp-publisher login github
+```
+
+```console
+$ mcp-publisher publish
+```
+
+[MCP registry]: https://registry.modelcontextprotocol.io/
 
 ## The tools
 
