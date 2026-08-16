@@ -22,7 +22,8 @@ import (
 // gone and the reply must say so — a gap reported as completeness is the one
 // outcome a caller cannot detect.
 
-// TestATrimmedAnchorIsReportedAsLinesMissed covers what tmux does to a cursor: when tmux trims scrollback, the absolute row the cursor recorded stops
+// TestATrimmedAnchorIsReportedAsLinesMissed covers what tmux does to a cursor:
+// when tmux trims scrollback, the absolute row the cursor recorded stops
 // meaning the row it recorded, and the delta silently starts too late.
 // linesMissed stays false, so the gap is invisible.
 //

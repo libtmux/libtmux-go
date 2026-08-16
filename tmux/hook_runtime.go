@@ -371,7 +371,8 @@ func (s GlobalWindowScope) RunHook(ctx context.Context, name string) error {
 
 // RunHook asks tmux to run one session hook directly at this stable target. It
 // intentionally performs no racy liveness preflight after validation. Completed
-// failures are secret-safe option errors; cancellation does not prove execution did not occur.
+// failures are secret-safe option errors; cancellation does not prove execution
+// did not occur.
 func (s Session) RunHook(ctx context.Context, name string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {

@@ -71,8 +71,9 @@
 // selected, or the process inside it. [Session.Rename], [Window.Resize], and
 // [Pane.Select] do; the last takes a request where [Window.Select] takes only a
 // context, because selecting a pane has optional direction and marking to
-// express and selecting a window has none. Everything else returns only an error, including commands
-// that change fields describing what a record is doing rather than which record
+// express and selecting a window has none. Everything else returns only an
+// error, including commands that change fields describing what a record is
+// doing rather than which record
 // it is, such as [Pane.CopyMode] and [Pane.Pipe]. Records never refresh in
 // place, so [Session.Refresh] and its counterparts re-read one when a method
 // returned no record.
@@ -520,10 +521,11 @@
 // not settled, and any release may change or remove exported identifiers
 // without a deprecation period. Pin an exact version.
 //
-// Until v1.0.0, a minor release may make a documented breaking API change. Starting with v1, exported identifiers, method
-// signatures, error classification, and documented behavior follow semantic
-// versioning: compatible additions may ship within v1, while removals and
-// incompatible changes require a v2 module path.
+// Until v1.0.0, a minor release may make a documented breaking API change.
+// Starting with v1, exported identifiers, method signatures, error
+// classification, and documented behavior follow semantic versioning:
+// compatible additions may ship within v1, while removals and incompatible
+// changes require a v2 module path.
 //
 // Generated exported identifiers follow the same policy as handwritten API.
 // Python parity describes supported behavior, not a permanent name-for-name Go

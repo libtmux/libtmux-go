@@ -137,9 +137,10 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 	return runServerKeyCommand(ctx, s, "unbind-key", arguments)
 }
 
-// ListKeys returns an owned snapshot of raw tmux key-binding lines. Format requires tmux 3.7 or
-// newer; older versions synchronously deliver a warning to the caller-goroutine
-// [WarningHandler] before running the reduced command with tmux's default format.
+// ListKeys returns an owned snapshot of raw tmux key-binding lines. Format
+// requires tmux 3.7 or newer; older versions synchronously deliver a warning to
+// the caller-goroutine [WarningHandler] before running the reduced command with
+// tmux's default format.
 // tmux 3.7, 3.7a, and 3.7b redirect a table's sole matching binding to a
 // client status message, leaving stdout empty; this method preserves that
 // upstream and Python behavior. Development tmux has corrected the issue.

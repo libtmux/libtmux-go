@@ -64,8 +64,9 @@ type ControlPoolRequest struct {
 // program holds, so no record can predate its engine.
 //
 // The returned handle is an ordinary immutable [Server]: it copies freely, and
-// every session, window, and pane derived from it carries the transport too. The lifetime lives in the
-// second return value rather than in a Close method on the handle, because a
+// every session, window, and pane derived from it carries the transport too.
+// The lifetime lives in the second return value rather than in a Close method
+// on the handle, because a
 // handle is embedded in every record it produces and copied into every one of
 // them, so no copy could own the shutdown of the others.
 //
