@@ -330,6 +330,7 @@ func runSuite(run func() int) int {
 
 	code := run()
 	cleanupErr := cleanupRegisteredServers()
+	surviving := registeredServers()
 	if cleanupErr != nil {
 		fmt.Fprintln(os.Stderr, "tmuxtest: suite cleanup failed")
 		if code == 0 {
@@ -348,7 +349,7 @@ func runSuite(run func() int) int {
 			code = 1
 		}
 	}
-	if cleanupErr == nil {
+	if cleanupErr == nil || !reachableDaemonRemains(surviving) {
 		if err := os.RemoveAll(root); err != nil {
 			fmt.Fprintln(os.Stderr, harnessFailure("remove temporary root", err))
 			if code == 0 {
@@ -776,6 +777,35 @@ func unregisterServer(socketPath string) {
 	suite.Lock()
 	defer suite.Unlock()
 	delete(suite.records, socketPath)
+}
+
+// registeredServers returns the records still registered. A record is
+// unregistered as it is cleaned, so after cleanup what remains is what failed.
+func registeredServers() []*serverRecord {
+	suite.Lock()
+	defer suite.Unlock()
+	records := make([]*serverRecord, 0, len(suite.records))
+	for _, record := range suite.records {
+		records = append(records, record)
+	}
+	return records
+}
+
+// reachableDaemonRemains reports whether any of records may still have a tmux
+// daemon running.
+//
+// The socket inside the suite root is the only way left to reach such a daemon,
+// so the root outlives the run that failed to stop it. A cleanup that failed
+// without leaving anything running -- a tmux that never started, or one already
+// gone -- leaves nothing to reach, and a root kept for it is never read: the
+// failure diagnostic reports paths to nobody by design.
+func reachableDaemonRemains(records []*serverRecord) bool {
+	for _, record := range records {
+		if !record.daemonStopped && record.pid > 0 && processAlive(record.pid) {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanupRegisteredServers() error {

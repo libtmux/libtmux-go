@@ -54,6 +54,37 @@ func TestCleanupFailureRemainsRegisteredForSuiteRetry(t *testing.T) {
 	}
 }
 
+// TestOnlyALiveDaemonKeepsTheSuiteRoot covers which failed cleanups are worth
+// keeping a temporary root for.
+//
+// The root holds the socket, and the socket is the only way left to reach a
+// daemon the suite could not stop. A cleanup that failed with nothing running
+// leaves nothing to reach, so keeping its root only adds a directory nobody
+// reads: the failure diagnostic reports no paths, by design.
+func TestOnlyALiveDaemonKeepsTheSuiteRoot(t *testing.T) {
+	alive := &serverRecord{pid: os.Getpid()}
+	stopped := &serverRecord{pid: os.Getpid(), daemonStopped: true}
+	never := &serverRecord{}
+
+	for _, testCase := range []struct {
+		name    string
+		records []*serverRecord
+		want    bool
+	}{
+		{name: "none", records: nil, want: false},
+		{name: "never started", records: []*serverRecord{never}, want: false},
+		{name: "already stopped", records: []*serverRecord{stopped}, want: false},
+		{name: "still running", records: []*serverRecord{alive}, want: true},
+		{name: "one of several", records: []*serverRecord{never, stopped, alive}, want: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := reachableDaemonRemains(testCase.records); got != testCase.want {
+				t.Fatalf("reachableDaemonRemains() = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestFailedCleanupPreservesSocketForSuiteRetry(t *testing.T) {
 	realBinary, err := exec.LookPath("tmux")
 	if err != nil {
