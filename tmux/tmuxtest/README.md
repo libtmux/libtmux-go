@@ -15,20 +15,24 @@ import "github.com/libtmux/libtmux-go/tmux/tmuxtest"
 
 ## Testing a program
 
-Three lines. The server, its session, and its pane end with the test:
+Run it, wait for what it draws, type at it. The server, its session, and its
+pane end with the test:
+
+<!-- docs:tmuxtest-quickstart -->
 
 ```go
-func TestReadyBanner(t *testing.T) {
-	ctx := context.Background()
-	pane := tmuxtest.RunInPane(ctx, t, "./mytui --watch")
+pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
-	tmuxtest.WaitForText(ctx, t, pane, "ready")
-	tmuxtest.Type(ctx, t, pane, "q")
-}
+tmuxtest.WaitForText(ctx, t, pane, "ready")
+tmuxtest.Type(ctx, t, pane, "a line for the program")
+tmuxtest.WaitForLine(ctx, t, pane, "a line for the program")
 ```
 
+<!-- docs:end -->
+
 No sleeps: `WaitForText` polls, so a quick program costs milliseconds and a slow
-one is still waited for.
+one is still waited for. That block is generated from a test in this package, so
+it cannot describe something the package does not do.
 
 ## When a wait fails
 

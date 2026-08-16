@@ -225,17 +225,20 @@ See [`mcp/README.md`](mcp/README.md) for client configuration, and
 ## Testing your own code
 
 [`tmux/tmuxtest`](tmux/tmuxtest/) runs your program inside a real tmux and lets
-a test assert on what it drew, with no sleeps:
+a test assert on what it drew, with no sleeps. Run it, wait for what it draws,
+type at it:
+
+<!-- docs:tmuxtest-quickstart -->
 
 ```go
-func TestReadyBanner(t *testing.T) {
-	ctx := context.Background()
-	pane := tmuxtest.RunInPane(ctx, t, "./mytui --watch")
+pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
-	tmuxtest.WaitForText(ctx, t, pane, "ready")
-	tmuxtest.Type(ctx, t, pane, "q")
-}
+tmuxtest.WaitForText(ctx, t, pane, "ready")
+tmuxtest.Type(ctx, t, pane, "a line for the program")
+tmuxtest.WaitForLine(ctx, t, pane, "a line for the program")
 ```
+
+<!-- docs:end -->
 
 A wait that runs out fails with the screen the pane last held, rather than
 sending you back to add a print statement:

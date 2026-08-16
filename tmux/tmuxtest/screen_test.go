@@ -12,14 +12,22 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// TestRunInPaneReachesAnAssertionInThreeLines is the shape the package is for:
-// a program under test, a pane running it, and an assertion about what it drew.
-func TestRunInPaneReachesAnAssertionInThreeLines(t *testing.T) {
+// TestRunInPaneReachesAnAssertionInFourLines is the shape the package is for: a
+// program under test, a pane running it, and assertions about what it drew.
+//
+// It is also what the README shows, generated from here so that the snippet
+// cannot claim something this does not do.
+func TestRunInPaneReachesAnAssertionInFourLines(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pane := tmuxtest.RunInPane(ctx, t, "printf 'tmuxtest ready\\n'")
-	tmuxtest.WaitForLine(ctx, t, pane, "tmuxtest ready")
+	// docs:tmuxtest-quickstart
+	pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
+
+	tmuxtest.WaitForText(ctx, t, pane, "ready")
+	tmuxtest.Type(ctx, t, pane, "a line for the program")
+	tmuxtest.WaitForLine(ctx, t, pane, "a line for the program")
+	// docs:end
 }
 
 // TestScreenDropsTmuxPadding proves a read returns what the program drew rather
