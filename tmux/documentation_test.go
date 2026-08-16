@@ -70,23 +70,12 @@ func exampleWorkflowSources(t *testing.T) []string {
 }
 
 // examplesWithoutOutput names the Example functions that compile without
-// running, and says why each one does.
-//
-// Two of them cannot run at all: they demonstrate helpers taking a testing.TB,
-// which an Example function has nowhere to obtain. The rest are a burn-down
-// list. Each one is convertible in the way the runnable examples beside them
-// already are -- its own socket under the example namespace, state it builds
-// rather than finds, and a fixed result -- and removing an entry from here is
-// what converting one looks like.
+// running, and says why each one does. An entry is a claim that the example
+// cannot assert anything stable, which is why there are three of them.
 var examplesWithoutOutput = map[string]string{
 	"ExampleRunInPane":     "takes a testing.TB an Example cannot supply",
 	"ExampleWaitForScreen": "takes a testing.TB an Example cannot supply",
-
-	// The MCP server is a module of its own, so converting these lands there.
-	"ExampleNewServer":        "pending conversion",
-	"ExampleRun":              "pending conversion",
-	"Example_runningACommand": "pending conversion",
-	"Example_watchingAPane":   "pending conversion",
+	"ExampleRun":           "serves stdio until its client disconnects",
 }
 
 // TestEveryExampleRuns gates the difference between an example that is checked
