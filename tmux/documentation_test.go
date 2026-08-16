@@ -82,10 +82,10 @@ var examplesWithoutOutput = map[string]string{
 	"ExampleRunInPane":     "takes a testing.TB an Example cannot supply",
 	"ExampleWaitForScreen": "takes a testing.TB an Example cannot supply",
 
-	"ExampleGlobalSessionScope_SetHook":   "pending conversion",
-	"ExamplePaneFilter_Predicate":         "pending conversion",
-	"ExamplePane_CaptureBytes":            "pending conversion",
-	"ExamplePane_SendKeys":                "pending conversion",
+	"ExampleGlobalSessionScope_SetHook": "pending conversion",
+	"ExamplePaneFilter_Predicate":       "pending conversion",
+	"ExamplePane_CaptureBytes":          "pending conversion",
+
 	"ExampleServer_Cmd":                   "pending conversion",
 	"ExampleServer_OpenControl":           "pending conversion",
 	"ExampleServer_Sessions":              "pending conversion",

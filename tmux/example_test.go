@@ -86,21 +86,33 @@ func Example() {
 func ExamplePane_SendKeys() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-send-keys",
+	})
+	defer killExampleServer(server)
 
-	panes, err := server.Panes(ctx)
-	if err != nil || len(panes) == 0 {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
+	if err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
-	pane := panes[0]
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", err)
+		return
+	}
+
 	command := "printf 'build ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
 		Command: &command,
 		Literal: true,
 	}); err != nil {
+		fmt.Println("send keys:", err)
 		return
 	}
 
+	// Keys reach a shell, which runs them when it gets to them, so the pane is
+	// read until the output appears rather than once afterwards.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -109,17 +121,22 @@ func ExamplePane_SendKeys() {
 			End:   tmux.CaptureBoundary,
 		})
 		if err != nil {
+			fmt.Println("capture:", err)
 			return
 		}
 		if slices.Contains(lines, "build ready") {
-			return
+			break
 		}
 		select {
 		case <-ctx.Done():
+			fmt.Println("the pane never showed it")
 			return
 		case <-ticker.C:
 		}
 	}
+
+	fmt.Println("the pane echoed the command's output")
+	// Output: the pane echoed the command's output
 }
 
 func ExamplePane_CaptureBytes() {
