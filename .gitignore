@@ -29,3 +29,6 @@ go.work.sum
 # CLAUDE.md itself is tracked; only the local overrides are ignored.
 CLAUDE.local.md
 .claude/settings.local.json
+
+# The benchmarks module builds to a binary named after its directory.
+/benchmarks/benchmarks
