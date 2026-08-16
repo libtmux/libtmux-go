@@ -20,7 +20,13 @@ jobs:
       matrix:
         module: [".", "examples", "workspace", "mcp", "benchmarks"]
     steps:
+      # Tags, because a test checks that the version the mcp module reports
+      # from a source build has not fallen behind the releases. A checkout
+      # without them skips that test rather than failing it, which would make
+      # the check quietly stop happening here.
       - uses: actions/checkout@v5
+        with:
+          fetch-tags: true
 
       - uses: actions/setup-go@v6
         with:
