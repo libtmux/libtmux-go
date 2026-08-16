@@ -38,6 +38,43 @@ func TestMainShortensBothTemporaryRoots(t *testing.T) {
 	}
 }
 
+// TestMainKeepsANamedSocketInsideTheSuite covers the socket a test names rather
+// than one it gives a path.
+//
+// tmux resolves a name under TMUX_TMPDIR, so a test naming its own socket --
+// which is what an Example has to do, having no place to put a temporary path --
+// reaches the directory the person running the tests keeps their real sessions
+// in unless the harness redirects it. Nothing about such a test fails: it
+// passes, and leaves a socket behind next to theirs.
+func TestMainKeepsANamedSocketInsideTheSuite(t *testing.T) {
+	root := os.Getenv("TMPDIR")
+	if got := os.Getenv("TMUX_TMPDIR"); got != root {
+		t.Fatalf("TMUX_TMPDIR = %q, want the suite root %q", got, root)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmux.NewServer(tmux.ServerOptions{SocketName: "tmuxtest-named-socket"})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = server.Kill(killCtx)
+	})
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "named"}); err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+
+	// tmux puts a named socket in a per-user directory of its own, so the
+	// socket is found rather than named outright.
+	matches, err := filepath.Glob(filepath.Join(root, "tmux-*", "tmuxtest-named-socket"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("named sockets under the suite root = %v, want exactly one", matches)
+	}
+}
+
 func TestFailureGuidanceReportsSafeReproductionAndCleanup(t *testing.T) {
 	recordPath := filepath.Join(t.TempDir(), "owned-paths")
 	secret := "private-fixture-value"

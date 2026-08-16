@@ -280,8 +280,18 @@ var failureGuidance = struct {
 	states map[testing.TB]*failureGuidanceState
 }{states: make(map[testing.TB]*failureGuidanceState)}
 
+// suiteEnvironment names the variables redirected into the suite's temporary
+// root while it runs.
+//
+// TMPDIR and GOTMPDIR keep every path the harness derives short enough for a
+// socket. TMUX_TMPDIR is where tmux resolves a socket named rather than pathed,
+// so redirecting it is what keeps a test naming its own socket inside the root
+// as well, instead of in the directory the person running the tests keeps their
+// real sessions in.
+var suiteEnvironment = []string{"TMPDIR", "GOTMPDIR", "TMUX_TMPDIR"}
+
 // Main runs the one-call package lifecycle for tmuxtest. It prepares short
-// temporary paths, temporarily sets TMPDIR and GOTMPDIR, runs m, cleans
+// temporary paths, redirects [suiteEnvironment] into them, runs m, cleans
 // registered servers, restores the environment, and returns the final status.
 // TestMain should return its result through [os.Exit].
 func Main(m *testing.M) int {
@@ -298,16 +308,9 @@ func runSuite(run func() int) int {
 		fmt.Fprintln(os.Stderr, harnessFailure("create short temporary root", err))
 		return 2
 	}
-	restoreTMPDIR, err := replaceEnvironment("TMPDIR", root)
+	restoreEnvironment, err := replaceSuiteEnvironment(root)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, harnessFailure("set TMPDIR", err))
-		_ = os.RemoveAll(root)
-		return 2
-	}
-	restoreGOTMPDIR, err := replaceEnvironment("GOTMPDIR", root)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, harnessFailure("set GOTMPDIR", err))
-		_ = restoreTMPDIR()
+		fmt.Fprintln(os.Stderr, harnessFailure("redirect the suite environment", err))
 		_ = os.RemoveAll(root)
 		return 2
 	}
@@ -316,8 +319,7 @@ func runSuite(run func() int) int {
 	if suite.active {
 		suite.Unlock()
 		fmt.Fprintln(os.Stderr, "tmuxtest: Main called while another suite is active")
-		_ = restoreGOTMPDIR()
-		_ = restoreTMPDIR()
+		_ = restoreEnvironment()
 		_ = os.RemoveAll(root)
 		return 2
 	}
@@ -340,14 +342,8 @@ func runSuite(run func() int) int {
 	suite.root = ""
 	suite.records = make(map[string]*serverRecord)
 	suite.Unlock()
-	if err := restoreGOTMPDIR(); err != nil {
-		fmt.Fprintln(os.Stderr, harnessFailure("restore GOTMPDIR", err))
-		if code == 0 {
-			code = 1
-		}
-	}
-	if err := restoreTMPDIR(); err != nil {
-		fmt.Fprintln(os.Stderr, harnessFailure("restore TMPDIR", err))
+	if err := restoreEnvironment(); err != nil {
+		fmt.Fprintln(os.Stderr, harnessFailure("restore the suite environment", err))
 		if code == 0 {
 			code = 1
 		}
@@ -811,6 +807,32 @@ func scrubTmuxEnvironment(environment []string) []string {
 		}
 	}
 	return cleaned
+}
+
+// replaceSuiteEnvironment points every variable in [suiteEnvironment] at root
+// and returns one call that restores all of them. A variable that cannot be set
+// undoes the ones already replaced, so a failure leaves the environment as it
+// was found rather than half redirected.
+func replaceSuiteEnvironment(root string) (func() error, error) {
+	restores := make([]func() error, 0, len(suiteEnvironment))
+	restore := func() error {
+		var first error
+		for index := len(restores) - 1; index >= 0; index-- {
+			if err := restores[index](); err != nil && first == nil {
+				first = err
+			}
+		}
+		return first
+	}
+	for _, key := range suiteEnvironment {
+		undo, err := replaceEnvironment(key, root)
+		if err != nil {
+			_ = restore()
+			return nil, fmt.Errorf("%s: %w", key, err)
+		}
+		restores = append(restores, undo)
+	}
+	return restore, nil
 }
 
 func replaceEnvironment(key, value string) (func() error, error) {
