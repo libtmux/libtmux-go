@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go/ast"
+	"go/doc"
 	"go/doc/comment"
 	"go/importer"
 	"go/parser"
@@ -66,6 +67,114 @@ func exampleWorkflowSources(t *testing.T) []string {
 		sources = append(sources, "examples/"+name+"/main.go")
 	}
 	return sources
+}
+
+// examplesWithoutOutput names the Example functions that compile without
+// running, and says why each one does.
+//
+// Two of them cannot run at all: they demonstrate helpers taking a testing.TB,
+// which an Example function has nowhere to obtain. The rest are a burn-down
+// list. Each one is convertible in the way the runnable examples beside them
+// already are -- its own socket under the example namespace, state it builds
+// rather than finds, and a fixed result -- and removing an entry from here is
+// what converting one looks like.
+var examplesWithoutOutput = map[string]string{
+	"ExampleRunInPane":     "takes a testing.TB an Example cannot supply",
+	"ExampleWaitForScreen": "takes a testing.TB an Example cannot supply",
+
+	"ExampleGlobalSessionScope_SetHook":   "pending conversion",
+	"ExamplePaneFilter_Predicate":         "pending conversion",
+	"ExamplePane_CaptureBytes":            "pending conversion",
+	"ExamplePane_SendKeys":                "pending conversion",
+	"ExampleServer_Cmd":                   "pending conversion",
+	"ExampleServer_OpenControl":           "pending conversion",
+	"ExampleServer_Sessions":              "pending conversion",
+	"ExampleServer_ShowBufferBytes":       "pending conversion",
+	"ExampleServer_Snapshot":              "pending conversion",
+	"ExampleSession_Options":              "pending conversion",
+	"ExampleSession_ResolveActiveWindow":  "pending conversion",
+	"ExampleSession_SetMouse":             "pending conversion",
+	"ExampleSession_SetUpdateEnvironment": "pending conversion",
+
+	// The MCP server is a module of its own, so converting these lands there.
+	"ExampleNewServer":        "pending conversion",
+	"ExampleRun":              "pending conversion",
+	"Example_runningACommand": "pending conversion",
+	"Example_watchingAPane":   "pending conversion",
+}
+
+// TestEveryExampleRuns gates the difference between an example that is checked
+// and one that is only compiled.
+//
+// Go runs an Example only when it ends in an output comment. Without one it is
+// type-checked and never executed, so it renders on the package page exactly
+// like a working example while being free to be wrong forever. Nothing about
+// reading it reveals which kind it is, which is what this reports.
+func TestEveryExampleRuns(t *testing.T) {
+	t.Parallel()
+
+	root := documentationModuleRoot(t)
+	var unchecked []string
+	for _, path := range exampleTestFiles(t, root) {
+		fileSet := token.NewFileSet()
+		file, err := parser.ParseFile(fileSet, path, nil, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, example := range doc.Examples(file) {
+			name := "Example" + example.Suffix
+			if example.Name != "" {
+				name = "Example" + example.Name
+				if example.Suffix != "" {
+					name += "_" + example.Suffix
+				}
+			}
+			if example.Output != "" || example.EmptyOutput {
+				continue
+			}
+			if _, allowed := examplesWithoutOutput[name]; allowed {
+				continue
+			}
+			unchecked = append(unchecked, filepath.ToSlash(relative)+": "+name)
+		}
+	}
+	slices.Sort(unchecked)
+	if len(unchecked) != 0 {
+		t.Fatalf("examples that compile but never run (%d):\n%s",
+			len(unchecked), strings.Join(unchecked, "\n"))
+	}
+}
+
+// exampleTestFiles returns every test file in the repository that may declare
+// an Example, across every module: a compiled-only example is the same defect
+// wherever it renders.
+func exampleTestFiles(t *testing.T, root string) []string {
+	t.Helper()
+
+	var paths []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if name := entry.Name(); name == ".git" || name == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", root, err)
+	}
+	return paths
 }
 
 const tmuxModulePath = "github.com/libtmux/libtmux-go/tmux"
