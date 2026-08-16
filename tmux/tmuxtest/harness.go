@@ -50,8 +50,10 @@
 //
 // Call [Main] exactly once from the package's TestMain before calling
 // [NewServer] or [NewServerWithOptions]. Main creates short temporary roots,
-// temporarily redirects TMPDIR and GOTMPDIR, and cleans every registered server
-// after the test package returns.
+// temporarily redirects TMPDIR, GOTMPDIR, and TMUX_TMPDIR into them, and cleans
+// every registered server after the test package returns. Redirecting
+// TMUX_TMPDIR is what keeps a socket named rather than pathed -- a test or an
+// example that names its own -- inside the suite as well.
 //
 //	func TestMain(m *testing.M) {
 //		os.Exit(tmuxtest.Main(m))
