@@ -100,11 +100,13 @@ func discoverEnvironmentHierarchy(
 	if err != nil {
 		return Pane{}, Window{}, Session{}, err
 	}
+	// One pane's row projects into all three kinds, so each is listed: the
+	// pane's window and session are known, and are the only ones there are.
 	snapshot, err := newSnapshotWithIdentity(server, version, snapshotRecords{
 		sessions: []formatValues{values},
 		windows:  []formatValues{values},
 		panes:    []formatValues{values},
-	}, &identity)
+	}, listedSessions|listedWindows|listedPanes, &identity)
 	if err != nil {
 		return Pane{}, Window{}, Session{}, err
 	}

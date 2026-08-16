@@ -221,7 +221,7 @@ func TestCopyModeUsesLinkedReceiverAndSourcePaneAgainstRealTmux(t *testing.T) {
 
 	snapshot := mustRealSnapshot(t, server)
 	firstSession := snapshot.Sessions()[0]
-	shared := firstSession.Windows()[0]
+	shared := relatedWindows(t, firstSession)[0]
 	secondSession, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "go-mode-linked-target",
 	})
@@ -254,7 +254,7 @@ func TestCopyModeUsesLinkedReceiverAndSourcePaneAgainstRealTmux(t *testing.T) {
 
 	snapshot = mustRealSnapshot(t, server)
 	receiver := exactRealWindow(t, snapshot, receiverSession.ID(), shared.ID())
-	targetPanes := receiver.Panes()
+	targetPanes := relatedPanes(t, receiver)
 	if len(targetPanes) != 1 {
 		t.Fatalf("receiver panes = %#v, want one", targetPanes)
 	}

@@ -409,11 +409,13 @@ func TestRebindMovesAHeldRecordOntoAnEngineWithoutALookup(t *testing.T) {
 	// A snapshot's relations are read out of state the original handle built, so
 	// a rebind that stopped at the receiver would hand back forking children.
 	runner.reset()
-	for _, window := range bound.Windows() {
+	relatedWindows := relatedWindows(t, bound)
+	for _, window := range relatedWindows {
 		if _, err := window.Refresh(ctx); err != nil {
 			t.Fatalf("Refresh() through a rebound relation error = %v", err)
 		}
-		for _, pane := range window.Panes() {
+		relatedPanes := relatedPanes(t, window)
+		for _, pane := range relatedPanes {
 			if _, err := pane.Refresh(ctx); err != nil {
 				t.Fatalf("Refresh() through a rebound pane error = %v", err)
 			}

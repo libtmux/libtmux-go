@@ -1568,7 +1568,14 @@ func renderRelationMatch(output *bytes.Buffer, relation relationSpec) {
 		return
 	}
 	fmt.Fprintf(output, "\t\tif %sSome != nil || %sEvery != nil || %sNone != nil {\n", base, base, base)
-	fmt.Fprintf(output, "\t\t\trelated := value.%s()\n", relation.Method)
+	// A record carrying no relations cannot answer a relation criterion, so it
+	// does not match one. That is what the to-one branch above already does
+	// with its found result, and an empty slice would instead report a session
+	// with no windows, which tmux does not have.
+	fmt.Fprintf(output, "\t\t\trelated, found := value.%s()\n", relation.Method)
+	output.WriteString("\t\t\tif !found {\n")
+	output.WriteString("\t\t\t\treturn false\n")
+	output.WriteString("\t\t\t}\n")
 	fmt.Fprintf(output, "\t\t\tif %sSome != nil {\n", base)
 	output.WriteString("\t\t\t\tmatched := false\n")
 	output.WriteString("\t\t\t\tfor index := range related {\n")

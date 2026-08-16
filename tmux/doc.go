@@ -123,6 +123,21 @@
 // accessors never query tmux. They return newly allocated slices containing
 // shallow copies, so changing a returned slice cannot change the snapshot.
 //
+// A record's own relationship accessors -- [Session.Windows], [Session.Panes],
+// [Window.Panes], and [Window.LinkedSessions] -- report whether the record
+// carries relations at all, because a record from a targeted lookup does not
+// and an empty result cannot say so. tmux destroys a window when its last pane
+// closes and a session when its last window closes, so neither an empty window
+// nor an empty session exists: no window ever truthfully has no panes, and a
+// range over an empty result would run zero times with nothing to explain it.
+// A record that cannot answer still can through tmux, with
+// [Window.SearchPanes] and its neighbours.
+//
+// The graph a record navigates is the whole snapshot it came from, and holding
+// one record keeps all of it reachable. For a program that caches a record
+// rather than re-reading, [Session.Refresh] and its neighbours return a record
+// materialized on its own, which is also why their relations report false.
+//
 // # Errors and context
 //
 // [Server.Cmd] exposes raw tmux results: [CommandResult.Stdout] provides decoded

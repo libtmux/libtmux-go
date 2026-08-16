@@ -97,7 +97,7 @@ func TestSnapshotSupportsConcurrentReadAndFreshSliceMutation(t *testing.T) {
 				}
 				_, _ = beta.ActiveWindow()
 				_, _ = beta.ActivePane()
-				_ = snapshot.WindowsByID("@0")[0].LinkedSessions()
+				_, _ = snapshot.WindowsByID("@0")[0].LinkedSessions()
 				client, err := snapshot.ClientByName("/dev/pts/9")
 				if err != nil {
 					t.Error(err)

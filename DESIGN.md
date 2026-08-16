@@ -107,6 +107,35 @@ state. `Session`, `Window`, `Pane`, and `Client` are concrete values containing
 typed snapshot state plus that handle for follow-up operations. Snapshot fields
 never refresh implicitly; live relationships are context-first methods.
 
+Relationship accessors on a record report whether the record carries relations
+at all: `Session.Windows`, `Session.Panes`, `Window.Panes`, and
+`Window.LinkedSessions` are comma-ok, matching `Window.Session` and
+`Pane.Window`, which always were.
+
+The rejected alternative was returning an empty slice, which is what a record
+from a targeted lookup used to answer. It cannot be right: tmux destroys a
+window when its last pane closes and a session when its last window closes, so
+a materialized window with no panes does not exist, and `Server.Snapshot` reads
+the whole server rather than a scope, so an empty relation is never a truthful
+answer. A caller ranging over one got a loop that ran zero times with nothing
+to say why -- and `Refresh`, which reads as "make this current", returned a
+record whose panes had silently gone from two to none.
+
+Which kinds a snapshot listed is recorded on it rather than inferred, because a
+point lookup builds a real snapshot holding its own row: a window looked up by
+ID has a snapshot with no pane index, which is indistinguishable from a window
+whose panes were listed and found to be none. `Server.Snapshot` lists
+everything; a point lookup and a search list one kind; the pane-from-environment
+lookup projects one row into three.
+
+A generated filter naming a relation does not match a record that cannot answer
+it, which is what the to-one branch always did with its found result.
+
+Holding one record keeps its whole snapshot reachable, because that graph is
+what the record navigates. `Refresh` returns a record materialized on its own,
+which is the way to keep an identity without the graph, and is why its relations
+report false.
+
 Blocking list and refresh methods materialize a new `Snapshot`. A snapshot
 contains complete indexes for sessions, winlinks, windows, panes, and clients.
 It emits one window view per winlink. Linked windows can therefore share a

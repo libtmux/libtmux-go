@@ -93,7 +93,11 @@ func (c Client) ResolveAttachment(ctx context.Context) (ClientAttachment, error)
 func attachmentActiveWindow(session Session) (Window, bool, error) {
 	var active Window
 	matches := 0
-	for _, window := range session.Windows() {
+	windows, ok := session.Windows()
+	if !ok {
+		return Window{}, false, nil
+	}
+	for _, window := range windows {
 		value, queried := window.Active()
 		if !queried || !value {
 			continue
@@ -114,7 +118,11 @@ func attachmentActiveWindow(session Session) (Window, bool, error) {
 func attachmentActivePane(window Window) (Pane, bool, error) {
 	var active Pane
 	matches := 0
-	for _, pane := range window.Panes() {
+	panes, ok := window.Panes()
+	if !ok {
+		return Pane{}, false, nil
+	}
+	for _, pane := range panes {
 		value, queried := pane.Active()
 		if !queried || !value {
 			continue

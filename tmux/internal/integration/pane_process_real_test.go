@@ -59,7 +59,7 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 	if err := beta.SetEnvironment(ctx, "RESPAWN_CONTEXT", "beta", tmux.SetEnvironmentOptions{}); err != nil {
 		t.Fatalf("SetEnvironment() error = %v", err)
 	}
-	pane := betaWindow.Panes()[0]
+	pane := relatedPanes(t, betaWindow)[0]
 	workDirectory, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 	}
 
 	betaWindow = processWindowView(ctx, t, server, beta.ID(), betaWindow.ID())
-	pane = betaWindow.Panes()[0]
+	pane = relatedPanes(t, betaWindow)[0]
 	readyPath := filepath.Join(workDirectory, "paste-ready")
 	pasteOutput := filepath.Join(workDirectory, "paste-byte")
 	readerCommand := "printf ready > " + strconv.Quote(readyPath) +
@@ -143,7 +143,7 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 	}
 
 	betaWindow = processWindowView(ctx, t, server, beta.ID(), betaWindow.ID())
-	pane = betaWindow.Panes()[0]
+	pane = relatedPanes(t, betaWindow)[0]
 	pipeOutput := filepath.Join(workDirectory, "pipe-context")
 	pipeCommand := "echo \"#{session_name}\" > " + strconv.Quote(pipeOutput) + "; sleep 30"
 	if err := pane.Pipe(ctx, tmux.PipePaneRequest{Command: &pipeCommand}); err != nil {

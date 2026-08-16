@@ -38,7 +38,7 @@ func TestWindowRespawnAgainstRealTmux(t *testing.T) {
 	}
 	alphaWindow = processWindowView(ctx, t, server, alphaWindow.SessionID(), alphaWindow.ID())
 	betaWindow = processWindowView(ctx, t, server, beta.ID(), betaWindow.ID())
-	before := alphaWindow.Panes()
+	before := relatedPanes(t, alphaWindow)
 	if len(before) != 2 {
 		t.Fatalf("panes before Respawn() = %#v, want two", before)
 	}
@@ -68,10 +68,10 @@ func TestWindowRespawnAgainstRealTmux(t *testing.T) {
 
 	alphaWindow = processWindowView(ctx, t, server, alphaWindow.SessionID(), alphaWindow.ID())
 	betaWindow = processWindowView(ctx, t, server, beta.ID(), betaWindow.ID())
-	if panes := alphaWindow.Panes(); len(panes) != 1 || panes[0].ID() != before[0].ID() {
+	if panes := relatedPanes(t, alphaWindow); len(panes) != 1 || panes[0].ID() != before[0].ID() {
 		t.Fatalf("alpha panes after Respawn() = %#v, want retained first pane %s", panes, before[0].ID())
 	}
-	if panes := betaWindow.Panes(); len(panes) != 1 || panes[0].ID() != before[0].ID() {
+	if panes := relatedPanes(t, betaWindow); len(panes) != 1 || panes[0].ID() != before[0].ID() {
 		t.Fatalf("beta panes after Respawn() = %#v, want same linked physical pane", panes)
 	}
 }
@@ -123,7 +123,7 @@ func soleProcessWindow(
 	if err != nil {
 		t.Fatalf("SessionByID(%s) error = %v", sessionID, err)
 	}
-	windows := session.Windows()
+	windows := relatedWindows(t, session)
 	if len(windows) != 1 {
 		t.Fatalf("session %s windows = %#v, want one", sessionID, windows)
 	}
@@ -146,7 +146,8 @@ func processWindowView(
 	if err != nil {
 		t.Fatalf("SessionByID(%s) error = %v", sessionID, err)
 	}
-	for _, window := range session.Windows() {
+	relatedWindows := relatedWindows(t, session)
+	for _, window := range relatedWindows {
 		if window.ID() == windowID {
 			return window
 		}

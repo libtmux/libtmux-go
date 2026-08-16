@@ -90,7 +90,10 @@ func (t *tools) listWindows(
 	}
 	summaries := make([]windowSummary, 0, len(snapshot.Windows()))
 	for _, window := range snapshot.Windows() {
-		summaries = append(summaries, summarizeWindow(window, len(window.Panes())))
+		// Snapshot records carry their relations, so the pane count is there
+		// to read rather than another listing.
+		panes, _ := window.Panes()
+		summaries = append(summaries, summarizeWindow(window, len(panes)))
 	}
 	return nil, listWindowsOutput{Windows: summaries}, nil
 }
@@ -116,7 +119,8 @@ func (t *tools) listSessions(
 	}
 	summaries := make([]sessionSummary, 0, len(snapshot.Sessions()))
 	for _, session := range snapshot.Sessions() {
-		summaries = append(summaries, summarizeSession(session, len(session.Windows())))
+		windows, _ := session.Windows()
+		summaries = append(summaries, summarizeSession(session, len(windows)))
 	}
 	return nil, listSessionsOutput{Sessions: summaries}, nil
 }

@@ -220,7 +220,7 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 
 	snapshot := mustRealSnapshot(t, server)
 	firstSession := snapshot.Sessions()[0]
-	shared := firstSession.Windows()[0]
+	shared := relatedWindows(t, firstSession)[0]
 	secondSession, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "go-popup-linked-target",
 	})
@@ -265,7 +265,7 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 
 	snapshot = mustRealSnapshot(t, server)
 	receiver := exactRealWindow(t, snapshot, receiverSession.ID(), shared.ID())
-	receiverPanes := receiver.Panes()
+	receiverPanes := relatedPanes(t, receiver)
 	if len(receiverPanes) != 1 {
 		t.Fatalf("receiver panes = %#v, want one", receiverPanes)
 	}

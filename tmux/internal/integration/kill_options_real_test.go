@@ -40,7 +40,7 @@ func TestKillOthersAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SessionByID() after Window.KillOthers error = %v", err)
 	}
-	windows := snapshotSession.Windows()
+	windows := relatedWindows(t, snapshotSession)
 	if len(windows) != 1 || windows[0].ID() != keep.ID() {
 		t.Fatalf("windows after KillOthers = %#v, want only %s", windows, keep.ID())
 	}
@@ -63,7 +63,7 @@ func TestKillOthersAgainstRealTmux(t *testing.T) {
 	if !ok {
 		t.Fatalf("window %s:%s missing after Pane.KillOthers", session.ID(), keep.ID())
 	}
-	panes := snapshotWindow.Panes()
+	panes := relatedPanes(t, snapshotWindow)
 	if len(panes) != 1 || panes[0].ID() != first.ID() {
 		t.Fatalf("panes after KillOthers = %#v, want only %s", panes, first.ID())
 	}
@@ -195,11 +195,11 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 		t.Fatalf("Snapshot() for ClearAlerts setup error = %v", err)
 	}
 	alertWindow, ok := killOptionsWindow(setupSnapshot, session.ID(), alertWindowID)
-	if !ok || len(alertWindow.Panes()) != 1 {
-		t.Fatalf("alert window panes = %#v, want one pane", alertWindow.Panes())
+	if !ok || len(relatedPanes(t, alertWindow)) != 1 {
+		t.Fatalf("alert window panes = %#v, want one pane", relatedPanes(t, alertWindow))
 	}
 	activityCommand := "printf clear-alerts-activity"
-	if err := alertWindow.Panes()[0].SendKeys(ctx, tmux.SendKeysRequest{Command: &activityCommand}); err != nil {
+	if err := relatedPanes(t, alertWindow)[0].SendKeys(ctx, tmux.SendKeysRequest{Command: &activityCommand}); err != nil {
 		t.Fatalf("SendKeys(activity) error = %v", err)
 	}
 	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
@@ -243,8 +243,8 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 	if !ok || afterWindowID != current.ID() {
 		t.Fatalf("current window after ClearAlerts = %q, want %s", afterWindowID, current.ID())
 	}
-	if len(after.Windows()) != len(before.Windows()) {
-		t.Fatalf("windows after ClearAlerts = %d, want %d", len(after.Windows()), len(before.Windows()))
+	if len(relatedWindows(t, after)) != len(relatedWindows(t, before)) {
+		t.Fatalf("windows after ClearAlerts = %d, want %d", len(relatedWindows(t, after)), len(relatedWindows(t, before)))
 	}
 	if activity := killOptionsActivityFlag(t, after, alertWindowID); activity {
 		t.Fatal("activity flag after ClearAlerts = true, want false")
@@ -253,7 +253,8 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 
 func killOptionsActivityFlag(t *testing.T, session tmux.Session, windowID tmux.WindowID) bool {
 	t.Helper()
-	for _, window := range session.Windows() {
+	relatedWindows := relatedWindows(t, session)
+	for _, window := range relatedWindows {
 		if window.ID() == windowID {
 			activity, _ := window.ActivityFlag()
 			return activity
@@ -389,7 +390,7 @@ func TestWindowKillOthersUsesLinkedReceiverSessionAgainstRealTmux(t *testing.T) 
 	if err != nil {
 		t.Fatalf("beta SessionByID() error = %v", err)
 	}
-	if windows := betaSnapshot.Windows(); len(windows) != 1 || windows[0].ID() != shared.ID() {
+	if windows := relatedWindows(t, betaSnapshot); len(windows) != 1 || windows[0].ID() != shared.ID() {
 		t.Fatalf("beta windows after KillOthers = %#v, want only shared window", windows)
 	}
 }

@@ -130,10 +130,14 @@ func (s Session) navigateWindow(
 
 func windowProjectedBySession(session Session) (Window, error) {
 	windowID, _ := session.Formats().WindowID()
-	snapshot, err := newSnapshot(
+	// One window projected out of a session's own row: only windows are listed,
+	// so a relation reached from the result is unknown rather than empty.
+	snapshot, err := newSnapshotWithIdentity(
 		session.server,
 		session.formats.tmuxVersion(),
 		snapshotRecords{windows: []formatValues{session.formats}},
+		listedWindows,
+		nil,
 	)
 	if err != nil {
 		return Window{}, err

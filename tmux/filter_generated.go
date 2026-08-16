@@ -2675,7 +2675,10 @@ func (filter *SessionFilter) compile() (func(*Session) bool, error) {
 			return false
 		}
 		if windowsSome != nil || windowsEvery != nil || windowsNone != nil {
-			related := value.Windows()
+			related, found := value.Windows()
+			if !found {
+				return false
+			}
 			if windowsSome != nil {
 				matched := false
 				for index := range related {
@@ -2704,7 +2707,10 @@ func (filter *SessionFilter) compile() (func(*Session) bool, error) {
 			}
 		}
 		if panesSome != nil || panesEvery != nil || panesNone != nil {
-			related := value.Panes()
+			related, found := value.Panes()
+			if !found {
+				return false
+			}
 			if panesSome != nil {
 				matched := false
 				for index := range related {
@@ -2961,7 +2967,10 @@ func (filter *WindowFilter) compile() (func(*Window) bool, error) {
 			}
 		}
 		if panesSome != nil || panesEvery != nil || panesNone != nil {
-			related := value.Panes()
+			related, found := value.Panes()
+			if !found {
+				return false
+			}
 			if panesSome != nil {
 				matched := false
 				for index := range related {

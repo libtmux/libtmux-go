@@ -101,6 +101,7 @@ type Snapshot struct {
 type snapshotState struct {
 	server  Server
 	version Version
+	listed  snapshotCollections
 
 	sessions []Session
 	windows  []Window
@@ -141,6 +142,30 @@ type snapshotRecords struct {
 	windows  []formatValues
 	panes    []formatValues
 	clients  []formatValues
+}
+
+// snapshotCollections names the object kinds a snapshot listed.
+//
+// A kind that was not listed is unknown rather than empty, and the two are not
+// the same answer: tmux destroys a window when its last pane closes, so a
+// window with no panes does not exist, and reporting one from a record built by
+// a targeted lookup would be a traversal that silently reaches nothing. The
+// relation accessors report which of the two they hold.
+type snapshotCollections uint8
+
+const (
+	listedSessions snapshotCollections = 1 << iota
+	listedWindows
+	listedPanes
+	listedClients
+
+	// listedEverything is what [Server.Snapshot] materializes.
+	listedEverything = listedSessions | listedWindows | listedPanes | listedClients
+)
+
+// holds reports whether every kind in wanted was listed.
+func (c snapshotCollections) holds(wanted snapshotCollections) bool {
+	return c&wanted == wanted
 }
 
 // Version returns the tmux version that selected this snapshot's format fields.
@@ -354,7 +379,7 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	if !sameSnapshotIdentity(identity, closingIdentity) {
 		return Snapshot{}, snapshotIdentityChangeError(closingIdentity)
 	}
-	return newSnapshotWithIdentity(s, identity.version, records, &identity)
+	return newSnapshotWithIdentity(s, identity.version, records, listedEverything, &identity)
 }
 
 // snapshotAfterListingFailure reports why a listing failed, and says so
@@ -506,18 +531,20 @@ func contextError(err error) bool {
 }
 
 func newSnapshot(server Server, version Version, records snapshotRecords) (Snapshot, error) {
-	return newSnapshotWithIdentity(server, version, records, nil)
+	return newSnapshotWithIdentity(server, version, records, listedEverything, nil)
 }
 
 func newSnapshotWithIdentity(
 	server Server,
 	version Version,
 	records snapshotRecords,
+	listed snapshotCollections,
 	expectedIdentity *snapshotServerIdentity,
 ) (Snapshot, error) {
 	state := &snapshotState{
 		server:           server,
 		version:          version,
+		listed:           listed,
 		sessions:         make([]Session, 0, len(records.sessions)),
 		windows:          make([]Window, 0, len(records.windows)),
 		panes:            make([]Pane, 0, len(records.panes)),

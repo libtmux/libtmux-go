@@ -150,7 +150,11 @@ windows:
 	byName := map[string]int{}
 	for _, window := range windows {
 		windowName, _ := window.Name()
-		byName[windowName] = len(window.Panes())
+		panes, ok := window.Panes()
+		if !ok {
+			t.Fatalf("window %q carries no panes", windowName)
+		}
+		byName[windowName] = len(panes)
 	}
 	if byName["editor"] != 2 {
 		t.Errorf("editor panes = %d, want 2", byName["editor"])

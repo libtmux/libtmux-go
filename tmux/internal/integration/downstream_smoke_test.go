@@ -99,6 +99,9 @@ func compileWorkflow(ctx context.Context, t *testing.T, server tmux.Server) erro
 	for _, pane := range snapshot.Panes() {
 		_, _ = pane.Active()
 		_, _ = pane.Formats().Raw("pane_active")
+		if window, ok := pane.Window(); ok {
+			_, _ = window.Panes()
+		}
 	}
 	filter := tmux.TmuxFilter("#{==:#{session_name},work}")
 	_, err = strict.SearchSessions(ctx, &filter)

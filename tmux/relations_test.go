@@ -36,7 +36,10 @@ func TestSnapshotActiveRelationsAndLinkedSessions(t *testing.T) {
 		t.Fatalf("Window.ActivePane() = (%#v, %t), want %%0", windowPane, ok)
 	}
 
-	linked := snapshot.WindowsByID(WindowID("@0"))[0].LinkedSessions()
+	linked, ok := snapshot.WindowsByID(WindowID("@0"))[0].LinkedSessions()
+	if !ok {
+		t.Fatal("snapshot window carries no linked sessions")
+	}
 	linkedIDs := make([]SessionID, len(linked))
 	for index, session := range linked {
 		linkedIDs[index] = session.sessionID
@@ -58,8 +61,17 @@ func TestZeroModelRelationsReturnCommaOKFalseAndFreshEmpty(t *testing.T) {
 	if _, ok := (Window{}).ActivePane(); ok {
 		t.Fatal("zero Window has an active pane")
 	}
-	if sessions := (Window{}).LinkedSessions(); sessions == nil || len(sessions) != 0 {
-		t.Fatalf("zero Window.LinkedSessions() = %#v, want non-nil empty", sessions)
+	if sessions, ok := (Window{}).LinkedSessions(); ok || sessions != nil {
+		t.Fatalf("zero Window.LinkedSessions() = (%#v, %t), want (nil, false)", sessions, ok)
+	}
+	if windows, ok := (Session{}).Windows(); ok || windows != nil {
+		t.Fatalf("zero Session.Windows() = (%#v, %t), want (nil, false)", windows, ok)
+	}
+	if panes, ok := (Session{}).Panes(); ok || panes != nil {
+		t.Fatalf("zero Session.Panes() = (%#v, %t), want (nil, false)", panes, ok)
+	}
+	if panes, ok := (Window{}).Panes(); ok || panes != nil {
+		t.Fatalf("zero Window.Panes() = (%#v, %t), want (nil, false)", panes, ok)
 	}
 }
 
@@ -467,12 +479,14 @@ func TestRebindingARecordCarriesItsRelationsAcross(t *testing.T) {
 
 	sockets := map[string]bool{}
 	record := func(value string) { sockets[value] = true }
-	for _, window := range moved.Windows() {
+	relatedWindows, _ := moved.Windows()
+	for _, window := range relatedWindows {
 		record(window.Server().SocketPath())
 		if parent, ok := window.Session(); ok {
 			record(parent.Server().SocketPath())
 		}
-		for _, pane := range window.Panes() {
+		relatedPanes, _ := window.Panes()
+		for _, pane := range relatedPanes {
 			record(pane.Server().SocketPath())
 			if parent, ok := pane.Window(); ok {
 				record(parent.Server().SocketPath())
@@ -482,7 +496,8 @@ func TestRebindingARecordCarriesItsRelationsAcross(t *testing.T) {
 			}
 		}
 	}
-	for _, pane := range moved.Panes() {
+	relatedPanes, _ := moved.Panes()
+	for _, pane := range relatedPanes {
 		record(pane.Server().SocketPath())
 	}
 	if activeWindow, ok := moved.ActiveWindow(); ok {
@@ -523,5 +538,87 @@ func TestRebindingARecordCarriesItsRelationsAcross(t *testing.T) {
 	}
 	if got := snapshot.Sessions()[0].Server().SocketPath(); got != "" {
 		t.Fatalf("WithServer() changed the snapshot it read from: SocketPath() = %q", got)
+	}
+}
+
+// TestRelationsDistinguishUnknownFromEmpty is the gate on a relation accessor
+// never reporting no children for a record that simply did not list them.
+//
+// tmux destroys a window when its last pane closes and a session when its last
+// window closes, so neither an empty window nor an empty session exists. An
+// empty result from a record that carries relations is therefore impossible,
+// and one from a record that does not would be a traversal that silently
+// reaches nothing: the loop over it runs zero times and nothing says why.
+func TestRelationsDistinguishUnknownFromEmpty(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	rows := snapshotRecords{
+		sessions: []formatValues{
+			snapshotValues(t, version, "session_id", "$0", "session_name", "alpha"),
+		},
+		windows: []formatValues{
+			snapshotValues(t, version,
+				"session_id", "$0", "window_id", "@0", "window_index", "0",
+				"window_name", "shell", "window_active", "1",
+			),
+		},
+		panes: []formatValues{
+			snapshotValues(t, version,
+				"session_id", "$0", "window_id", "@0", "window_index", "0",
+				"pane_id", "%0", "pane_index", "0", "pane_active", "1",
+			),
+		},
+	}
+
+	full, err := newSnapshot(Server{}, version, rows)
+	if err != nil {
+		t.Fatalf("newSnapshot() error = %v", err)
+	}
+	// The same rows, listed the way a targeted window lookup lists them.
+	partial, err := newSnapshotWithIdentity(
+		Server{}, version, snapshotRecords{windows: rows.windows}, listedWindows, nil,
+	)
+	if err != nil {
+		t.Fatalf("newSnapshotWithIdentity() error = %v", err)
+	}
+
+	fullWindow, err := full.WindowByID(WindowID("@0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	partialWindow, err := partial.WindowByID(WindowID("@0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if panes, ok := fullWindow.Panes(); !ok || len(panes) != 1 {
+		t.Fatalf("listed window Panes() = (%d, %t), want (1, true)", len(panes), ok)
+	}
+	if panes, ok := partialWindow.Panes(); ok || panes != nil {
+		t.Fatalf("unlisted window Panes() = (%#v, %t), want (nil, false)", panes, ok)
+	}
+	if sessions, ok := partialWindow.LinkedSessions(); ok || sessions != nil {
+		t.Fatalf("unlisted window LinkedSessions() = (%#v, %t), want (nil, false)", sessions, ok)
+	}
+	// ActivePane reads Panes, so it reports absence rather than picking one out
+	// of a relation it does not hold.
+	if pane, ok := partialWindow.ActivePane(); ok {
+		t.Fatalf("unlisted window ActivePane() = (%#v, true), want false", pane)
+	}
+
+	// A filter naming a relation cannot match a record that does not carry it,
+	// which is what the to-one branch has always done with its found result.
+	predicate, err := (WindowFilter{
+		Panes: &PaneRel{Some: &PaneFilter{}},
+	}).Predicate()
+	if err != nil {
+		t.Fatalf("Predicate() error = %v", err)
+	}
+	if !predicate(&fullWindow) {
+		t.Fatal("listed window did not match a relation filter")
+	}
+	if predicate(&partialWindow) {
+		t.Fatal("unlisted window matched a relation filter it cannot answer")
 	}
 }

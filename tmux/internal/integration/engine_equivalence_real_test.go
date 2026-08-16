@@ -71,8 +71,9 @@ func TestControlEngineMaterializesTheSameStateAsProcesses(t *testing.T) {
 	}
 
 	compared := 0
+	controlPanes := viaControl.Panes()
 	for index, processPane := range viaProcess.Panes() {
-		controlPane := viaControl.Panes()[index]
+		controlPane := controlPanes[index]
 		for _, format := range equivalenceFormats {
 			processValue, processOK := processPane.Formats().Raw(format)
 			controlValue, controlOK := controlPane.Formats().Raw(format)

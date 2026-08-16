@@ -38,7 +38,7 @@ func TestWindowPaneSelectionAndRotationAgainstRealTmux(t *testing.T) {
 
 	snapshot := mustRealSnapshot(t, server)
 	window := snapshot.Windows()[0]
-	first := window.Panes()[0]
+	first := relatedPanes(t, window)[0]
 	second, err := window.SplitPane(ctx, tmux.SplitPaneRequest{})
 	if err != nil {
 		t.Fatalf("SplitPane() error = %v", err)
@@ -97,7 +97,8 @@ func TestWindowPaneSelectionAndRotationAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Rotate() error = %v", err)
 	}
 	var rotatedSecond tmux.Pane
-	for _, pane := range rotated.Panes() {
+	relatedPanes := relatedPanes(t, rotated)
+	for _, pane := range relatedPanes {
 		if pane.ID() == second.ID() {
 			rotatedSecond = pane
 			break
@@ -153,7 +154,7 @@ func TestPaneTopologyAndLinkedContextAgainstRealTmux(t *testing.T) {
 	snapshot := mustRealSnapshot(t, server)
 	session := snapshot.Sessions()[0]
 	sourceWindow := snapshot.Windows()[0]
-	sourceBase := sourceWindow.Panes()[0]
+	sourceBase := relatedPanes(t, sourceWindow)[0]
 	source, err := sourceWindow.SplitPane(ctx, tmux.SplitPaneRequest{})
 	if err != nil {
 		t.Fatalf("SplitPane(source) error = %v", err)
@@ -171,7 +172,7 @@ func TestPaneTopologyAndLinkedContextAgainstRealTmux(t *testing.T) {
 			break
 		}
 	}
-	destinationPanes := destinationWindow.Panes()
+	destinationPanes := relatedPanes(t, destinationWindow)
 	if len(destinationPanes) != 1 {
 		t.Fatalf("destination panes = %d, want 1", len(destinationPanes))
 	}
@@ -259,7 +260,7 @@ func TestPaneTopologyAndLinkedContextAgainstRealTmux(t *testing.T) {
 	if linked.ID() == "" {
 		t.Fatalf("linked window %s missing from guest %s", windowSwap.Window.ID(), guest.ID())
 	}
-	linkedPane := linked.Panes()[0]
+	linkedPane := relatedPanes(t, linked)[0]
 	selected, err := linked.SelectPane(ctx, tmux.WindowSelectPaneRequest{Target: linkedPane})
 	if err != nil {
 		t.Fatalf("linked SelectPane() error = %v", err)

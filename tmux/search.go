@@ -225,10 +225,13 @@ func (s Server) searchSnapshot(
 	if !sameSnapshotIdentity(identity, closing) {
 		return Snapshot{}, snapshotIdentityChangeError(closing)
 	}
+	// A search lists one kind, so a relation reached from a record it returns
+	// is unknown rather than empty.
 	return newSnapshotWithIdentity(
 		s,
 		identity.version,
 		searchSnapshotRecords(collection, rows),
+		searchListedCollection(collection),
 		&identity,
 	)
 }
@@ -260,6 +263,21 @@ func matchingSearchRows(rows []formatValues, matches []searchRowMatch) []formatV
 		}
 	}
 	return matching
+}
+
+// searchListedCollection names the one kind a search materializes.
+func searchListedCollection(collection searchCollection) snapshotCollections {
+	switch collection {
+	case searchSessions:
+		return listedSessions
+	case searchWindows:
+		return listedWindows
+	case searchPanes:
+		return listedPanes
+	case searchClients:
+		return listedClients
+	}
+	return 0
 }
 
 func searchSnapshotRecords(collection searchCollection, rows []formatValues) snapshotRecords {

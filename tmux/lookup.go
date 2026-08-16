@@ -14,9 +14,11 @@ func (s Server) Session(ctx context.Context, id SessionID) (Session, error) {
 	if err != nil {
 		return Session{}, err
 	}
+	// A point lookup lists one kind, so a relation reached from the record it
+	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		sessions: []formatValues{values},
-	}, &identity)
+	}, listedSessions, &identity)
 	if err != nil {
 		return Session{}, err
 	}
@@ -33,9 +35,11 @@ func (s Server) Window(ctx context.Context, id WindowID) (Window, error) {
 	if err != nil {
 		return Window{}, err
 	}
+	// A point lookup lists one kind, so a relation reached from the record it
+	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		windows: []formatValues{values},
-	}, &identity)
+	}, listedWindows, &identity)
 	if err != nil {
 		return Window{}, err
 	}
@@ -52,9 +56,11 @@ func (s Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
 	if err != nil {
 		return Pane{}, err
 	}
+	// A point lookup lists one kind, so a relation reached from the record it
+	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		panes: []formatValues{values},
-	}, &identity)
+	}, listedPanes, &identity)
 	if err != nil {
 		return Pane{}, err
 	}
@@ -69,9 +75,11 @@ func (s Server) Client(ctx context.Context, name ClientName) (Client, error) {
 	if err != nil {
 		return Client{}, err
 	}
+	// A point lookup lists one kind, so a relation reached from the record it
+	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		clients: []formatValues{values},
-	}, &identity)
+	}, listedClients, &identity)
 	if err != nil {
 		return Client{}, err
 	}

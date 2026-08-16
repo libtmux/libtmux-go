@@ -645,11 +645,11 @@ func onlyRealOptionHierarchy(t *testing.T, snapshot tmux.Snapshot) (tmux.Session
 	if len(sessions) != 1 {
 		t.Fatalf("snapshot sessions = %d, want 1", len(sessions))
 	}
-	windows := sessions[0].Windows()
+	windows := relatedWindows(t, sessions[0])
 	if len(windows) != 1 {
 		t.Fatalf("session windows = %d, want 1", len(windows))
 	}
-	panes := windows[0].Panes()
+	panes := relatedPanes(t, windows[0])
 	if len(panes) != 1 {
 		t.Fatalf("window panes = %d, want 1", len(panes))
 	}

@@ -133,8 +133,10 @@ func ExampleServer_Sessions() {
 	for _, session := range sessions {
 		name, _ := session.Name()
 		fmt.Println(name)
-		for _, window := range session.Windows() {
-			for _, pane := range window.Panes() {
+		relatedWindows, _ := session.Windows()
+		for _, window := range relatedWindows {
+			relatedPanes, _ := window.Panes()
+			for _, pane := range relatedPanes {
 				fmt.Println(window.ID(), pane.ID())
 			}
 		}
@@ -211,7 +213,8 @@ func ExampleServer_Snapshot() {
 		return
 	}
 	for _, session := range snapshot.Sessions() {
-		for _, pane := range session.Panes() {
+		relatedPanes, _ := session.Panes()
+		for _, pane := range relatedPanes {
 			command, _ := pane.CurrentCommand()
 			fmt.Println(session.ID(), pane.ID(), command)
 		}
@@ -714,30 +717,45 @@ func ExampleWindow_Panes() {
 		return
 	}
 
-	// Panes reads the record's own materialized state and never queries tmux, so
-	// it is empty unless the record came from a snapshot. A targeted point
-	// lookup does not carry relations; a resolver does.
+	// Panes reads the record's own materialized state and never queries tmux.
+	// The second result says whether the record carries relations at all, which
+	// is the difference between "this window has no panes" -- a window tmux
+	// would have destroyed -- and "this record cannot answer". A targeted point
+	// lookup cannot; a resolver can.
 	looked, err := server.Window(ctx, window.ID())
 	if err != nil {
 		fmt.Println("look up window:", err)
 		return
 	}
-	fmt.Println("from a point lookup:", len(looked.Panes()))
-	fmt.Println("from a resolver:", len(window.Panes()))
+	lookedPanes, ok := looked.Panes()
+	fmt.Println("from a point lookup:", len(lookedPanes), ok)
 
-	// A snapshot materializes the whole hierarchy, so its records do carry them.
+	resolvedPanes, ok := window.Panes()
+	fmt.Println("from a resolver:", len(resolvedPanes), ok)
+
+	// A snapshot materializes the whole hierarchy, so its records carry them.
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		fmt.Println("snapshot:", err)
 		return
 	}
 	for _, materialized := range snapshot.Windows() {
-		fmt.Println("from a snapshot:", len(materialized.Panes()))
+		panes, ok := materialized.Panes()
+		fmt.Println("from a snapshot:", len(panes), ok)
 	}
+
+	// A record that cannot answer still can, through tmux: SearchPanes asks.
+	searched, err := looked.SearchPanes(ctx, nil)
+	if err != nil {
+		fmt.Println("search panes:", err)
+		return
+	}
+	fmt.Println("from a search:", len(searched))
 	// Output:
-	// from a point lookup: 0
-	// from a resolver: 1
-	// from a snapshot: 1
+	// from a point lookup: 0 false
+	// from a resolver: 1 true
+	// from a snapshot: 1 true
+	// from a search: 1
 }
 
 func ExampleServer_SetOption() {

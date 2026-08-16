@@ -464,6 +464,7 @@ func duplicateWinlinkSnapshot() Snapshot {
 		{sessionID: "$2", windowID: "@7", windowIndex: 3, paneID: "%11"},
 	}
 	return Snapshot{state: &snapshotState{
+		listed:  listedEverything,
 		windows: windows,
 		panes:   panes,
 		windowsByID: map[WindowID][]int{

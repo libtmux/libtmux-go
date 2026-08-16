@@ -22,7 +22,7 @@ func TestLiveWindowAndPaneResolutionUsesTmuxCanonicalWinlink(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	initial := mustRealSnapshot(t, server)
 	shared := initial.Windows()[0]
-	sharedPane := shared.Panes()[0]
+	sharedPane := relatedPanes(t, shared)[0]
 
 	mustRealCommand(t, server, "new-session", "-d", "-s", "beta", "-n", "own")
 	mustRealCommand(t, server, "link-window", "-s", shared.ID().String(), "-t", "beta:7")
@@ -60,7 +60,7 @@ func TestLiveWindowAndPaneResolutionUsesTmuxCanonicalWinlink(t *testing.T) {
 	for _, candidate := range snapshot.WindowsByID(shared.ID()) {
 		if candidate.SessionID() != wantSession || candidate.Index() != wantIndex {
 			staleWindow = candidate
-			panes := candidate.Panes()
+			panes := relatedPanes(t, candidate)
 			if len(panes) == 1 {
 				stalePane = panes[0]
 			}
@@ -162,6 +162,39 @@ func TestLiveRelationshipResolversAgainstRealTmux(t *testing.T) {
 	if paneSession.ID() != pointPane.SessionID() {
 		t.Fatalf("Pane.ResolveSession() = %#v, want %s", paneSession, pointPane.SessionID())
 	}
+}
+
+// relatedWindows and relatedPanes read a record's materialized relations and
+// fail when it carries none.
+//
+// Every caller below holds a record from a snapshot or a resolver, so a false
+// result means the record lost its relations on the way, which is the failure
+// these accessors report and a test that discarded the flag would not notice.
+func relatedWindows(t *testing.T, session tmux.Session) []tmux.Window {
+	t.Helper()
+	windows, ok := session.Windows()
+	if !ok {
+		t.Fatalf("session %s carries no windows", session.ID())
+	}
+	return windows
+}
+
+func relatedPanes(t *testing.T, window tmux.Window) []tmux.Pane {
+	t.Helper()
+	panes, ok := window.Panes()
+	if !ok {
+		t.Fatalf("window %s carries no panes", window.ID())
+	}
+	return panes
+}
+
+func relatedSessionPanes(t *testing.T, session tmux.Session) []tmux.Pane {
+	t.Helper()
+	panes, ok := session.Panes()
+	if !ok {
+		t.Fatalf("session %s carries no panes", session.ID())
+	}
+	return panes
 }
 
 func mustRealSnapshot(t *testing.T, server tmux.Server) tmux.Snapshot {

@@ -82,11 +82,11 @@ func TestPaneFilterPredicateExampleAgainstRealTmux(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
-	windows := sessions[0].Windows()
+	windows := relatedWindows(t, sessions[0])
 	if len(windows) != 1 {
 		t.Fatalf("session windows = %d, want 1", len(windows))
 	}
-	initialPanes := windows[0].Panes()
+	initialPanes := relatedPanes(t, windows[0])
 	if len(initialPanes) != 1 {
 		t.Fatalf("window panes = %d, want 1", len(initialPanes))
 	}
@@ -136,12 +136,12 @@ func TestDocumentedBlockingWorkflowsAgainstRealTmux(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
-	windows := sessions[0].Windows()
+	windows := relatedWindows(t, sessions[0])
 	if len(windows) != 1 {
 		t.Fatalf("session windows = %d, want 1", len(windows))
 	}
 	for _, window := range windows {
-		if panes := window.Panes(); len(panes) != 1 {
+		if panes := relatedPanes(t, window); len(panes) != 1 {
 			t.Fatalf("window %s panes = %d, want 1", window.ID(), len(panes))
 		}
 	}
@@ -151,7 +151,8 @@ func TestDocumentedBlockingWorkflowsAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Snapshot() = (%#v, %v), want one session and pane", snapshot, err)
 	}
 	for _, session := range snapshot.Sessions() {
-		for _, pane := range session.Panes() {
+		relatedPanes := relatedSessionPanes(t, session)
+		for _, pane := range relatedPanes {
 			command, present := pane.CurrentCommand()
 			if !present || command == "" {
 				t.Fatalf("CurrentCommand() = (%q, %t), want a present command", command, present)

@@ -74,7 +74,8 @@ func TestSnapshotMatchesLinkedRealTmuxGraph(t *testing.T) {
 
 	var sharedWindows []tmux.Window
 	var windowNames []string
-	for _, window := range snapshot.Windows() {
+	relatedWindows := snapshot.Windows()
+	for _, window := range relatedWindows {
 		name, ok := window.Name()
 		if ok {
 			windowNames = append(windowNames, name)
@@ -92,8 +93,8 @@ func TestSnapshotMatchesLinkedRealTmuxGraph(t *testing.T) {
 	if sharedWindows[0].SessionID() == sharedWindows[1].SessionID() {
 		t.Fatalf("linked window session IDs are both %s", sharedWindows[0].SessionID())
 	}
-	firstPanes := sharedWindows[0].Panes()
-	secondPanes := sharedWindows[1].Panes()
+	firstPanes := relatedPanes(t, sharedWindows[0])
+	secondPanes := relatedPanes(t, sharedWindows[1])
 	if len(firstPanes) != 1 || len(secondPanes) != 1 || firstPanes[0].ID() != secondPanes[0].ID() {
 		t.Fatalf("linked pane views = (%#v, %#v), want one shared pane ID", firstPanes, secondPanes)
 	}

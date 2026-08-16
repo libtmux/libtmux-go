@@ -68,37 +68,42 @@ func (s Session) WithServer(server Server) Session {
 }
 
 // Windows returns newly allocated shallow copies of this snapshot record's
-// winlink views. It never queries tmux, so it returns an empty slice unless the
-// receiver was materialized from a snapshot. [Server.Snapshot] and the
-// resolvers carry relations; a targeted point lookup, [Session.Refresh], and
-// [Server.NewSession] do not. Use [Session.SearchWindows] with a nil filter for
-// the session's current windows.
-func (s Session) Windows() []Window {
-	if s.snapshot == nil {
-		return make([]Window, 0)
+// winlink views, and reports whether the receiver carries relations at all.
+//
+// It never queries tmux. [Server.Snapshot] and the resolvers carry relations; a
+// targeted point lookup, [Session.Refresh], and [Server.NewSession] do not, and
+// report false rather than no windows. The distinction is not decoration: tmux
+// destroys a session when its last window closes, so a materialized session
+// with no windows does not exist, and reporting one would be a record that
+// silently traverses to nothing. Use [Session.SearchWindows] with a nil filter
+// for the session's current windows.
+func (s Session) Windows() ([]Window, bool) {
+	if s.snapshot == nil || !s.snapshot.listed.holds(listedWindows) {
+		return nil, false
 	}
 	return boundTo(
 		valuesAt(s.snapshot.windows, s.snapshot.windowsBySession[s.sessionID]),
 		Window.WithServer,
 		s.server,
-	)
+	), true
 }
 
 // Panes returns newly allocated shallow copies of this snapshot record's pane
-// views. It never queries tmux, so it returns an empty slice unless the
-// receiver was materialized from a snapshot. [Server.Snapshot] and the
-// resolvers carry relations; a targeted point lookup, [Session.Refresh], and
-// [Server.NewSession] do not. Use [Session.SearchPanes] with a nil filter for
-// the session's current panes.
-func (s Session) Panes() []Pane {
-	if s.snapshot == nil {
-		return make([]Pane, 0)
+// views, and reports whether the receiver carries relations at all.
+//
+// It never queries tmux. [Server.Snapshot] and the resolvers carry relations; a
+// targeted point lookup, [Session.Refresh], and [Server.NewSession] do not, and
+// report false rather than no panes. Use [Session.SearchPanes] with a nil
+// filter for the session's current panes.
+func (s Session) Panes() ([]Pane, bool) {
+	if s.snapshot == nil || !s.snapshot.listed.holds(listedPanes) {
+		return nil, false
 	}
 	return boundTo(
 		valuesAt(s.snapshot.panes, s.snapshot.panesBySession[s.sessionID]),
 		Pane.WithServer,
 		s.server,
-	)
+	), true
 }
 
 // Window is one materialized (session, index, window) winlink record. It is
@@ -162,22 +167,26 @@ func (w Window) Session() (Session, bool) {
 	return session.WithServer(w.server), true
 }
 
-// Panes returns newly allocated shallow copies of panes for this exact winlink.
-// It never queries tmux, so it returns an empty slice unless the receiver was
-// materialized from a snapshot. [Server.Snapshot], the resolvers, and
+// Panes returns newly allocated shallow copies of panes for this exact winlink,
+// and reports whether the receiver carries relations at all.
+//
+// It never queries tmux. [Server.Snapshot], the resolvers, and
 // [Session.NewWindow] carry relations; a targeted point lookup and
-// [Window.Refresh] do not. Use [Window.SearchPanes] with a nil filter for the
-// window's current panes.
-func (w Window) Panes() []Pane {
-	if w.snapshot == nil {
-		return make([]Pane, 0)
+// [Window.Refresh] do not, and report false rather than no panes. tmux destroys
+// a window when its last pane closes, so a materialized window with no panes
+// does not exist: false is the only thing an empty result could honestly mean,
+// and this is where it is said. Use [Window.SearchPanes] with a nil filter for
+// the window's current panes.
+func (w Window) Panes() ([]Pane, bool) {
+	if w.snapshot == nil || !w.snapshot.listed.holds(listedPanes) {
+		return nil, false
 	}
 	key := winlinkKey{sessionID: w.sessionID, windowID: w.windowID, index: w.windowIndex}
 	return boundTo(
 		valuesAt(w.snapshot.panes, w.snapshot.panesByWinlink[key]),
 		Pane.WithServer,
 		w.server,
-	)
+	), true
 }
 
 // Pane is one materialized pane record within a specific winlink. It is

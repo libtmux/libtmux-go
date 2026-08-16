@@ -698,6 +698,7 @@ func assertClientFilter(t *testing.T, filter ClientFilter, value Client, want bo
 
 func newFilterGraph() filterGraph {
 	state := &snapshotState{
+		listed:           listedEverything,
 		sessionsByID:     map[SessionID][]int{"$1": {0}, "$2": {1}},
 		windowsBySession: map[SessionID][]int{"$1": {0, 1}},
 		windowsByWinlink: map[winlinkKey][]int{},

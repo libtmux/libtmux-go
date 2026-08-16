@@ -76,7 +76,7 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot().SessionByID() error = %v", err)
 	}
-	windows := session.Windows()
+	windows := relatedWindows(t, session)
 	if len(windows) != 1 {
 		t.Fatalf("new session windows = %d, want 1", len(windows))
 	}
@@ -282,7 +282,7 @@ func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
-	hostWindow := sessions[0].Windows()[0]
+	hostWindow := relatedWindows(t, sessions[0])[0]
 	guest, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "phase6-guest"})
 	if err != nil {
 		t.Fatalf("NewSession(guest) error = %v", err)
@@ -294,7 +294,7 @@ func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Link() error = %v", err)
 	}
 	linked := exactRealWindow(t, mustRealSnapshot(t, server), guest.ID(), hostWindow.ID())
-	panes := linked.Panes()
+	panes := relatedPanes(t, linked)
 	if len(panes) != 1 {
 		t.Fatalf("linked panes = %d, want 1", len(panes))
 	}

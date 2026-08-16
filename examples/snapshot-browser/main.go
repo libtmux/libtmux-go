@@ -51,9 +51,14 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	for _, session := range snapshot.Sessions() {
 		name, _ := session.Name()
 		fmt.Printf("session %s %q\n", session.ID(), name)
-		for _, window := range session.Windows() {
+		// These records came from a snapshot, so they carry their relations and
+		// the second result is always true. A record from a point lookup does
+		// not, and reports false rather than no windows.
+		windows, _ := session.Windows()
+		for _, window := range windows {
 			fmt.Printf("  window %s:%d\n", window.ID(), window.Index())
-			for _, pane := range window.Panes() {
+			panes, _ := window.Panes()
+			for _, pane := range panes {
 				command, _ := pane.CurrentCommand()
 				fmt.Printf("    pane %s %q\n", pane.ID(), command)
 			}

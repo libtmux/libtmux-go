@@ -111,15 +111,17 @@ func TestSnapshotPreservesLinkedWinlinkAndPaneViews(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := windowKeys(beta.Windows()); !slices.Equal(got, []string{"$1:0", "$1:7"}) {
+	betaWindows, _ := beta.Windows()
+	if got := windowKeys(betaWindows); !slices.Equal(got, []string{"$1:0", "$1:7"}) {
 		t.Fatalf("beta.Windows() = %v, want [$1:0 $1:7]", got)
 	}
-	if got := paneKeys(beta.Panes()); !slices.Equal(got, []string{"$1:0:%1", "$1:7:%0"}) {
+	betaPanes, _ := beta.Panes()
+	if got := paneKeys(betaPanes); !slices.Equal(got, []string{"$1:0:%1", "$1:7:%0"}) {
 		t.Fatalf("beta.Panes() = %v, want [$1:0:%%1 $1:7:%%0]", got)
 	}
 
 	shared := linked[1]
-	panes := shared.Panes()
+	panes, _ := shared.Panes()
 	if got := paneKeys(panes); !slices.Equal(got, []string{"$1:7:%0"}) {
 		t.Fatalf("linked window panes = %v, want [$1:7:%%0]", got)
 	}

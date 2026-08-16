@@ -11,7 +11,11 @@ import (
 func (s Session) ActiveWindow() (Window, bool) {
 	var active Window
 	found := false
-	for _, window := range s.Windows() {
+	windows, ok := s.Windows()
+	if !ok {
+		return Window{}, false
+	}
+	for _, window := range windows {
 		value, queried := window.Active()
 		if !queried || !value {
 			continue
@@ -38,7 +42,11 @@ func (s Session) ActivePane() (Pane, bool) {
 // ActivePane returns the first active pane in this materialized winlink view.
 // It never queries tmux; use [Window.ResolveActivePane] for live state.
 func (w Window) ActivePane() (Pane, bool) {
-	for _, pane := range w.Panes() {
+	panes, ok := w.Panes()
+	if !ok {
+		return Pane{}, false
+	}
+	for _, pane := range panes {
 		value, queried := pane.Active()
 		if queried && value {
 			return pane, true
@@ -47,11 +55,16 @@ func (w Window) ActivePane() (Pane, bool) {
 	return Pane{}, false
 }
 
-// LinkedSessions returns newly allocated shallow copies of materialized sessions
-// containing this window. It never queries tmux.
-func (w Window) LinkedSessions() []Session {
-	if w.snapshot == nil {
-		return make([]Session, 0)
+// LinkedSessions returns newly allocated shallow copies of materialized
+// sessions containing this window, and reports whether the receiver carries
+// relations at all. It never queries tmux.
+//
+// A winlink belongs to at least the session it is linked into, so a
+// materialized window with no sessions does not exist; false is what an empty
+// result would otherwise have to mean.
+func (w Window) LinkedSessions() ([]Session, bool) {
+	if w.snapshot == nil || !w.snapshot.listed.holds(listedSessions|listedWindows) {
+		return nil, false
 	}
 	result := make([]Session, 0)
 	seen := make(map[SessionID]struct{})
@@ -66,7 +79,7 @@ func (w Window) LinkedSessions() []Session {
 			result = append(result, session)
 		}
 	}
-	return result
+	return result, true
 }
 
 // ResolveActiveWindow snapshots live tmux state and returns this session's sole

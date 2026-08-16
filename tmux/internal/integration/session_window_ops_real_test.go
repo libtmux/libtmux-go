@@ -26,7 +26,7 @@ func TestSessionWindowNavigationAgainstRealTmux(t *testing.T) {
 
 	snapshot := mustRealSnapshot(t, server)
 	session := snapshot.Sessions()[0]
-	first := session.Windows()[0]
+	first := relatedWindows(t, session)[0]
 	second, err := session.NewWindow(ctx, tmux.NewWindowRequest{
 		Name: newWindowName("nav-second"), Attach: true,
 	})
@@ -198,7 +198,7 @@ func TestWindowResizeUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 
 	snapshot := mustRealSnapshot(t, server)
 	firstSession := snapshot.Sessions()[0]
-	shared := firstSession.Windows()[0]
+	shared := relatedWindows(t, firstSession)[0]
 	secondSession, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "resize-linked-target",
 	})
@@ -287,7 +287,7 @@ func TestWindowSelectLayoutUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 
 	snapshot := mustRealSnapshot(t, server)
 	firstSession := snapshot.Sessions()[0]
-	shared := firstSession.Windows()[0]
+	shared := relatedWindows(t, firstSession)[0]
 	if _, err := shared.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
 		t.Fatalf("SplitPane() error = %v", err)
 	}
@@ -378,7 +378,7 @@ func TestWindowHighLevelOperationsUseReceiverWinlinkAgainstRealTmux(t *testing.T
 
 	snapshot := mustRealSnapshot(t, server)
 	firstSession := snapshot.Sessions()[0]
-	shared := firstSession.Windows()[0]
+	shared := relatedWindows(t, firstSession)[0]
 	secondSession, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "typed-window-linked-target",
 	})
@@ -476,7 +476,7 @@ func TestWindowHighLevelOperationsUseReceiverWinlinkAgainstRealTmux(t *testing.T
 		t.Fatalf("run-hook context = (%q, %t), want receiver session", value, present)
 	}
 
-	receiverPanes := receiver.Panes()
+	receiverPanes := relatedPanes(t, receiver)
 	if len(receiverPanes) != 1 {
 		t.Fatalf("receiver panes = %#v, want one", receiverPanes)
 	}
@@ -697,7 +697,7 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 
 	snapshot := mustRealSnapshot(t, server)
 	sourceSession := snapshot.Sessions()[0]
-	shared := sourceSession.Windows()[0]
+	shared := relatedWindows(t, sourceSession)[0]
 	targetSession, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "window-ops-target", WindowName: "target-base",
 	})
@@ -792,7 +792,8 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 	}
 	snapshot = mustRealSnapshot(t, server)
 	indices := make([]int, 0)
-	for _, window := range snapshot.Windows() {
+	relatedWindows := snapshot.Windows()
+	for _, window := range relatedWindows {
 		if window.SessionID() == sourceSession.ID() {
 			indices = append(indices, window.Index())
 		}
@@ -812,7 +813,7 @@ func TestWindowUnlinkTargetsDuplicateWinlinkByIndexAgainstRealTmux(t *testing.T)
 	defer cancel()
 
 	snapshot := mustRealSnapshot(t, server)
-	shared := snapshot.Sessions()[0].Windows()[0]
+	shared := relatedWindows(t, snapshot.Sessions()[0])[0]
 	target, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "duplicate-winlink-target"})
 	if err != nil {
 		t.Fatalf("NewSession(target) error = %v", err)
