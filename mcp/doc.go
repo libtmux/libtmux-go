@@ -35,6 +35,24 @@
 // a cursor a previous call handed out. Reading a pane every turn otherwise
 // costs the whole screen every turn, most of it already read.
 //
+// Waiting is also optional. run_command with detach returns a handle as soon
+// as the command is typed and get_job collects the exit status and the output
+// later, so a build costs what typing it costs rather than what running it
+// does. What a wait costs is the caller's turn, since MCP gives a caller no way
+// to change its mind once a call is in flight; every wait is therefore bounded
+// by a ceiling, and a request above it is shortened and reported rather than
+// refused.
+//
+// Listings narrow. Every one of them used to answer with the whole server,
+// which grows with somebody else's tmux rather than with the question; they
+// now take criteria, and report the total they selected from. The criteria are
+// matched against the snapshot the tool already takes rather than pushed into
+// tmux as a -f expression, because a tmux filter is a format and a format
+// containing #(...) runs it as a shell command against a long-lived client --
+// which this server holds. list_panes with detail full also reports each
+// matching pane's process state from that same snapshot, which is how to check
+// on several panes without capturing any of them.
+//
 // Everything a tool returns from a pane is bounded, because a pane's
 // scrollback is measured against a terminal's memory and the reply is measured
 // against a caller's context. A bound that was hit is reported rather than
@@ -56,13 +74,20 @@
 //   - you do not know which pane: search_panes, which returns the lines that
 //     matched as well as the panes
 //   - state without contents, such as whether the process exited:
-//     get_pane_info
+//     get_pane_info for one pane, or list_panes with detail full for every
+//     pane matching some criteria
+//   - what a program said in colour rather than in words: capture_pane with
+//     styles, which keeps the escape sequences a capture otherwise strips
 //   - anything else tmux knows: display_message, which expands a tmux format
 //
 // Waiting, rather than looking again:
 //   - a command you run, its exit status and its output: run_command
+//   - a command whose answer you do not need yet: run_command with detach,
+//     collected later by get_job
 //   - output you did not author, such as a service announcing itself:
 //     wait_for_text, with stop set to the failure markers you already know
+//   - a program whose finishing you cannot predict the words of:
+//     wait_for_text with idleSeconds, which ends when the pane goes quiet
 //   - anything that signals a tmux channel: wait_for_channel
 //
 // Putting something into a pane, in order of how much tmux reads:
@@ -72,21 +97,31 @@
 //   - text taken literally, for anything you did not write by hand: paste_text
 //
 // Making and arranging: create_session, create_window, split_window,
-// build_workspace; then select_layout, resize_pane, swap_pane, select_pane and
-// select_window to arrange it, and rename_window and set_pane_title to label
-// it. call_mutating_tools_batch does a run of these in one request.
+// build_workspace; then select_layout, resize_pane, swap_pane, move_pane,
+// select_pane and select_window to arrange it, and rename_window and
+// set_pane_title to label it. move_pane is the one that keeps what a pane is
+// running, which killing and splitting again does not.
+// call_mutating_tools_batch does a run of these in one request.
 //
 // Ending things: kill_pane, kill_window, kill_session and kill_server, none of
 // which any later call undoes.
 //
 // When a pane makes no sense and its contents do not explain it, the reason is
-// usually a setting: show_option, show_hooks, show_environment.
+// usually a setting: show_option, show_hooks, show_environment, or
+// get_server_info with includeMessages for tmux's own log of what it refused.
 //
 // # Finding your own pane
 //
 // Every pane this server reports carries isCaller, and get_server_info answers
 // the same question directly. A pane it reports as this one is the terminal
 // the conversation is happening through, so acting on it acts on the
-// conversation. See examples/agent-workflow for a program that finds its own
-// pane, splits it, runs a command in the new one and reports the layout.
+// conversation.
+//
+// A write to that pane asks the person first, through MCP elicitation, and a
+// decline fails the call. A client that did not declare the capability keeps
+// the behaviour it had before, because this is a guard rail rather than a
+// boundary: as above, a caller with send_keys can run anything the user can.
+//
+// See examples/agent-workflow for a program that finds its own pane, splits
+// it, runs a command in the new one and reports the layout.
 package mcp

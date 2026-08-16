@@ -83,22 +83,67 @@ func run(socketName string) error {
 	}
 	fmt.Printf("split into %s\n", split.PaneID)
 
-	// Run something there and wait for it. This is one call: no polling, and
-	// no reading the screen to guess whether the command finished.
-	var ran struct {
-		ExitStatus *int     `json:"exitStatus"`
-		TimedOut   bool     `json:"timedOut"`
-		Output     []string `json:"output"`
+	// Start something there without waiting for it. detach returns as soon as
+	// the command is typed, so the work below happens while it runs rather
+	// than after it.
+	var started struct {
+		JobID string `json:"jobId"`
 	}
 	if err := call(ctx, session, "run_command", map[string]any{
-		"paneId":         split.PaneID,
-		"command":        "tmux -V && echo ready",
+		"paneId":  split.PaneID,
+		"command": "sleep 2 && tmux -V && echo ready",
+		"detach":  true,
+	}, &started); err != nil {
+		return err
+	}
+	fmt.Printf("started job %s without waiting for it\n", started.JobID)
+
+	// Meanwhile: check on every pane in this window without capturing any of
+	// them. The criteria keep the reply to the panes asked about, and detail
+	// full adds each one's state from the snapshot the listing already took,
+	// so this is one tmux command rather than one per pane.
+	var listed struct {
+		Total int `json:"total"`
+		Panes []struct {
+			ID             string `json:"id"`
+			CurrentCommand string `json:"currentCommand"`
+			Status         *struct {
+				Dead         bool `json:"dead"`
+				HistoryLines int  `json:"historyLines"`
+			} `json:"status"`
+		} `json:"panes"`
+	}
+	if err := call(ctx, session, "list_panes", map[string]any{
+		"windowId": window(ctx, session, split.PaneID),
+		"detail":   "full",
+	}, &listed); err != nil {
+		return err
+	}
+	fmt.Printf("%d of %d panes in this window:\n", len(listed.Panes), listed.Total)
+	for _, pane := range listed.Panes {
+		lines := 0
+		if pane.Status != nil {
+			lines = pane.Status.HistoryLines
+		}
+		fmt.Printf("  %s running %s, %d lines of scrollback\n",
+			pane.ID, pane.CurrentCommand, lines)
+	}
+
+	// Now collect the job. Asking again would give the same answer: the first
+	// read that finds a status keeps it.
+	var ran struct {
+		Finished   bool     `json:"finished"`
+		ExitStatus *int     `json:"exitStatus"`
+		Output     []string `json:"output"`
+	}
+	if err := call(ctx, session, "get_job", map[string]any{
+		"jobId":          started.JobID,
 		"timeoutSeconds": 30,
 	}, &ran); err != nil {
 		return err
 	}
 	switch {
-	case ran.TimedOut:
+	case !ran.Finished:
 		fmt.Println("the command did not finish in time")
 	case ran.ExitStatus != nil:
 		fmt.Printf("exit %d, %d lines of output\n", *ran.ExitStatus, len(ran.Output))
@@ -136,6 +181,22 @@ func run(socketName string) error {
 			pane.Geometry.Width, pane.Geometry.Height, mine)
 	}
 	return nil
+}
+
+// window reports which window a pane is in, so the listing below can be
+// narrowed to it. One call rather than a guess: a pane id says nothing about
+// its window on its own.
+func window(ctx context.Context, session *sdk.ClientSession, paneID string) string {
+	var info struct {
+		Pane struct {
+			WindowID string `json:"windowId"`
+		} `json:"pane"`
+	}
+	if err := call(ctx, session, "get_pane_info",
+		map[string]any{"paneId": paneID}, &info); err != nil {
+		return ""
+	}
+	return info.Pane.WindowID
 }
 
 // connect joins a client to the server in memory.

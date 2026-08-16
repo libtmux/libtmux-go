@@ -192,9 +192,17 @@ look and finds the shell's echo of the command rather than its result:
   - output this client did not author, such as a service announcing itself:
     wait_for_text, with stop set to the failure markers you already know so a
     failed run returns at once instead of at the deadline
+  - a program whose finishing you cannot predict the words of: wait_for_text
+    with idleSeconds, which returns when the pane goes quiet
   - anything that signals a tmux channel, including another client:
     wait_for_channel
 capture_pane is for what a pane shows right now, not for waiting.
+
+DO NOT WAIT AT ALL FOR WORK YOU CAN COME BACK TO. run_command with detach
+returns a jobId as soon as the command is typed, and get_job collects the exit
+status and output when you want them. Use it for a build or a test run and
+spend the turn on something else. Every wait is bounded either way, and the
+reply says which bound it ran under.
 
 WATCHING ACROSS TURNS IS capture_since. It returns what a pane wrote since the
 cursor the last call gave you, so a pane you check every turn costs its new
@@ -206,6 +214,12 @@ REPLIES ARE BOUNDED. Anything that returns pane text keeps the last lines and
 says what it dropped, so a pane holding a day of output cannot fill your
 context. Ask for more with maxLines; ask for scrollback with includeHistory.
 
+NARROW A LISTING RATHER THAN READING THE SERVER. list_panes takes sessionName,
+windowId, command, pathUnder, dead, and active; list_windows and list_sessions
+take their own. Every reply says the total it selected from. On a machine
+carrying somebody else's tmux, asking for the pane running a command rather
+than for every pane is one answer instead of forty.
+
 PREFER THE WHOLE ANSWER. snapshot_pane reads a pane's contents and its state in
 one call; capture_pane followed by list_panes is two calls whose answers can
 disagree. search_panes finds which pane shows something, and the lines that
@@ -214,9 +228,17 @@ one request.
 
 LISTING TELLS YOU WHAT EXISTS, NOT WHAT IS IN IT. list_windows and list_panes
 report names, indexes, and positions; search_panes and capture_pane are what
-read the text a pane is showing. get_pane_info reports a pane's state without
-its contents: whether its process exited, and whether it is in a mode that will
-swallow the keys you send.
+read the text a pane is showing. For state without contents, list_panes with
+detail full adds every matching pane's exit status, path, title, history size,
+and whether it is in a mode that swallows keys -- which is how to check on
+several panes in one call, capturing none of them, since a history size that
+has not moved means that pane wrote nothing. get_pane_info says the same about
+one pane you can name.
+
+BEFORE YOU MOVE WHAT SOMEBODY IS LOOKING AT, get_server_info reports every
+attached client and the session each is watching, marking the ones that are
+programs rather than people. Selecting a window in a session nobody is
+attached to moves nothing.
 
 PUTTING TEXT IN A PANE, in order of how much tmux reads:
   - send_keys types a line and presses Enter, reading tmux key names, so "C-c"
@@ -228,16 +250,20 @@ PUTTING TEXT IN A PANE, in order of how much tmux reads:
     sent as that key
 
 CHANGING THINGS. split_window and create_window make room; select_layout,
-resize_pane, swap_pane and select_window arrange it; build_workspace lays out a
-whole session from a tmuxp-style document, which is more than is wanted for one
-more window. rename_window and set_pane_title label what you built for whoever
-reads it. kill_pane, kill_window, kill_session and kill_server end things, and
-nothing undoes them.
+resize_pane, swap_pane and select_window arrange it; move_pane puts a pane in
+another window, or breaks it out into one of its own, keeping whatever it is
+running; build_workspace lays out a whole session from a tmuxp-style document,
+which is more than is wanted for one more window. rename_window and
+set_pane_title label what you built for whoever reads it. kill_pane,
+kill_window, kill_session and kill_server end things, and nothing undoes them.
 
 WHEN A PANE MAKES NO SENSE, the reason is often a setting rather than its
 contents: show_option for why scrollback stopped or a dead pane is still there,
-show_hooks for behaviour nothing here caused, show_environment for what a new
-pane would inherit, display_message for anything else tmux knows.
+show_hooks with a name for behaviour nothing here caused, show_environment for
+what a new pane would inherit, get_server_info with includeMessages for tmux's
+own log of what it refused, display_message for anything else tmux knows. If a
+program reports success or failure by colouring a word rather than saying so,
+capture_pane with styles keeps the colour a capture strips.
 `)
 	text.WriteString("\n" + safetyFromEnvironment().describe() + "\n")
 

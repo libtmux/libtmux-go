@@ -830,6 +830,9 @@ they are not a substitute for the requirement.
 | Queries | Generated criteria with explicit validation and predicate compilation | Regex work inside every match; forcing filters through a generic matcher interface |
 | Test isolation | Per-test explicit `-S` socket with two-layer cleanup | Named `-L` sockets; a shared suite server |
 | Batching | Recorded `Op` values, a forward-reference `Ref`, and planners as values | A name-keyed planner registry; attributing a merged stdout to grouped operations by position; a `Result` interface or a type parameter per operation kind |
+| MCP listing criteria | Typed criteria matched in Go against the snapshot the tool already takes | A caller-supplied tmux `-f` expression; typed criteria compiled into one |
+| MCP detached commands | An in-process handle table, bounded, whose entries keep their answer once read | A handle encoding the paths it needs; one-shot collection |
+| MCP per-pane state | A field on the listing's own row type | A field on the shared pane summary; a separate digest tool |
 
 The execution bakeoff showed that some apparently missing tmux targets still
 return success for `display-message`; failure tests use commands with stable
@@ -839,6 +842,31 @@ can be preserved with one allocation.
 The harness bakeoff exposed inherited pane targeting, stale named sockets,
 shared global-state leakage, and the need to control both Go temporary-root
 variables.
+The listing bakeoff was settled by a security result rather than by ergonomics.
+tmux's `-f` filter is a format, and a format containing `#(...)` reaches
+`format_job_get` and runs it as a shell job. It does not reproduce from a
+one-shot tmux client, because the job is filed under that client's job tree and
+`server_client_lost` frees it microseconds later; it reproduces first try over a
+control-mode client, which is what the MCP server holds open whenever the tmux
+server has a session. Passing a caller's filter through would therefore have
+made every listing tool an execution vector while it still reported
+`readOnlyHint: true`, and would have done so only on the transport the server
+prefers. Compiling typed criteria into `-f` was rejected for the same reason one
+level removed: the pushdown it buys is a local pipe carrying a few kilobytes,
+and it puts a format assembler on the boundary for good.
+
+The detached-command bakeoff settled two things. A handle that carried the paths
+it needs would be a caller-supplied path this server later reads, so the state
+stays in process. One-shot collection was rejected after the annotation gate
+caught it: a handle that stops answering once read is not idempotent, and asking
+twice is how a caller checks on something, so the first read that finds a status
+keeps it and every later read is answered from that.
+
+The per-pane state bakeoff was settled by measuring the tool list. Hanging the
+state off the shared pane summary added its schema to the four other tools that
+report a pane and never fill it in -- 304 bytes each, advertised to every client
+on every session. A row type belonging to the listing costs it once.
+
 The batching bakeoff settled the result shape. Distinguishing what an operation
 produced by its Go type reaches for either an interface with one implementation
 or a type parameter that every plan method would have to thread, and both buy

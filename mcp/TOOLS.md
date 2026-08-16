@@ -24,8 +24,16 @@ Four, invoked by name from a client's own menu:
 Tools are verbs and resources are nouns; neither says what a person wants done.
 A prompt is the job with its method attached, so someone who has never read the
 tool list can ask for the thing they want. There are deliberately few: a prompt
-per tool would be a second, worse tool list. `set_up_workspace` is withheld on
-a read-only server, where it would be advice the server cannot carry out.
+per tool would be a second, worse tool list. `set_up_workspace` and
+`recover_pane` are withheld on a read-only server, where they would be advice
+the server cannot carry out.
+
+Most of what this server knows about which tool to use, and in what order, is
+in these four. A client that does not implement the prompts protocol shows a
+model none of it — so `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1` also offers them as one
+`get_recipe` tool, whose own description names all four. It is off by default,
+because a server that offers both describes the same four things twice, and the
+tool list is the expensive place to say anything.
 
 ## Resources
 
@@ -76,11 +84,11 @@ read a listing does not spend a call on one.
 
 | Tool | Does |
 | --- | --- |
-| `list_sessions` | Every session with its window count and attached clients |
-| `list_windows` | Every window with its session, name, index, pane count, and active flag |
-| `list_panes` | Every pane with its session, window, index, current command, active flag, and position |
+| `list_sessions` | Sessions with their window count and attached clients; narrow with `name` or `attached` |
+| `list_windows` | Windows with their session, name, index, pane count, and active flag; narrow with `sessionName`, `name`, or `active` |
+| `list_panes` | Panes with their session, window, index, current command, active flag, and position; narrow with `sessionName`, `windowId`, `command`, `pathUnder`, `dead`, or `active`, and add per-pane state with `detail: full` |
 | `list_servers` | Every tmux socket on this machine, with the addressed one marked |
-| `get_server_info` | Which socket these tools address, and whether this server runs in one of its panes |
+| `get_server_info` | Which socket these tools address, who is attached to it, whether this server runs in one of its panes, and tmux's own message log with `includeMessages` |
 | `get_session_info` | One session's windows, working directory, and creation time |
 | `get_window_info` | One window's size, layout string, and panes |
 | `get_pane_info` | One pane's process, exit status, scrollback size, and mode, without its contents |
@@ -91,7 +99,7 @@ read a listing does not spend a call on one.
 
 | Tool | Does |
 | --- | --- |
-| `capture_pane` | What a pane holds: its screen, or its scrollback too |
+| `capture_pane` | What a pane holds: its screen, or its scrollback too; `styles` keeps colour |
 | `capture_since` | Only what a pane wrote since the cursor a previous call returned |
 | `snapshot_pane` | One pane's contents with its state, in one call |
 | `search_panes` | Which panes show some text, and the lines that showed it |
@@ -102,8 +110,9 @@ read a listing does not spend a call on one.
 
 | Tool | Does |
 | --- | --- |
-| `run_command` | Run a command in one pane, wait for it, and report its exit status and output |
-| `wait_for_text` | Wait until a pane writes one of several patterns, or one of the failure markers you named |
+| `run_command` | Run a command in one pane, wait for it, and report its exit status and output; `detach` returns a `jobId` instead of waiting |
+| `get_job` | Collect a detached command: whether it finished, its exit status, and its output |
+| `wait_for_text` | Wait until a pane writes one of several patterns, one of the failure markers you named, or `idleSeconds` of quiet |
 | `wait_for_channel` | Wait until something signals a tmux wait-for channel |
 | `signal_channel` | Signal a channel, releasing whoever waits on it |
 
@@ -129,6 +138,7 @@ read a listing does not spend a call on one.
 | `select_layout` | Arrange a window's panes, or restore a layout string |
 | `resize_pane` / `resize_window` | Set a size in cells, or zoom a pane |
 | `swap_pane` / `move_window` | Exchange two panes, or move a window's place or session |
+| `move_pane` | Move a pane into another window, or break it out into one of its own |
 | `rename_session` / `rename_window` / `set_pane_title` | Label what was built |
 | `respawn_pane` | Restart what a pane runs, keeping the pane and its place |
 
@@ -138,7 +148,7 @@ read a listing does not spend a call on one.
 | --- | --- |
 | `show_option` / `set_option` | Read or set a tmux option at server, session, window, or pane scope |
 | `show_environment` / `set_environment` | What new processes in a session will inherit |
-| `show_hooks` | The commands tmux will run on its own; reading only |
+| `show_hooks` | The commands tmux will run on its own, all of them or one by `name`; reading only |
 | `call_readonly_tools_batch` | Run several reading tools in one request |
 | `call_mutating_tools_batch` | Run several tools in one request, stopping at the first failure |
 | `call_destructive_tools_batch` | The same, including the ones that end something |
@@ -179,6 +189,54 @@ paid by whoever is talking to the model. A reply that hits it is refused with a
 message naming the tool, which is a defect report rather than a limit to work
 around.
 
+### Narrowing a listing
+
+A listing used to answer with the whole server, which is the answer to a
+question nobody asks: a caller wants the pane running the dev server, not the
+forty around it, and pays for the difference in context it cannot get back. All
+three listing tools take criteria, combined with AND, and every reply reports
+the `total` it selected from — so a caller can tell a filter that matched one
+pane from a server that only has one.
+
+Measured against a real 18-pane server over stdio: the unfiltered listing is
+7.3 kB, one session's panes 2.2 kB, and `{"command": "vim"}` 535 bytes.
+
+The criteria are matched against the snapshot the tool already takes, not
+pushed into tmux as a `-f` expression. tmux's filter language is a format, and
+a format containing `#(...)` runs it as a shell command — reliably so against a
+long-lived client, which is what this server holds. Compiling a caller's words
+into that language would make every listing tool an execution vector while it
+still reported `readOnlyHint: true`.
+
+`detail: full` adds each matching pane's exit status, working directory, title,
+history size, and whether it is in a mode that swallows keys. Every value comes
+from the snapshot already taken, so it costs no further tmux command. It is how
+to supervise several panes in one call without capturing any of them: a history
+size that has not moved since the last reading means that pane wrote nothing.
+
+### Not waiting at all
+
+`run_command` waits, which is right when the answer is the point and wrong when
+the command is a build and the caller has reading to do. `detach` returns a
+`jobId` as soon as the command is typed; `get_job` collects it later — at once
+to ask whether it has finished, or with `timeoutSeconds` to wait a bounded
+while. The command is identical either way: the same wrapper records the same
+exit status against the same tmux channel, and only who waits changes.
+
+Collecting is idempotent. The first read that finds a status keeps it and
+releases the files behind it; every later read is answered from what was kept.
+Asking twice is how a caller checks on something, and a handle that stopped
+answering once used would report a finished command as a lost one. The last 32
+handles are kept.
+
+A handle does not outlive the process that issued it, and it says which process
+that was, so a handle presented after a restart is refused with that reason
+rather than blamed on newer commands. The command itself is unaffected — it is
+running in a pane, not in this server — so a lost handle is recovered by
+reading the pane. Clients that keep one server per session, which is all of
+them in ordinary use, never see this; a client that respawns the server per
+call, as the MCP Inspector's `--cli` does, sees it every time.
+
 ### Waiting rather than looking
 
 Prefer `run_command` to `send_keys` followed by `capture_pane`. A shell echoes
@@ -201,10 +259,47 @@ happened *again*. Pass `stop` with the failure markers already known, and a run
 that failed returns in milliseconds instead of at the deadline. The reply says
 why the wait ended rather than only whether it succeeded.
 
+When you cannot predict what finishing prints, `idleSeconds` ends the wait once
+the pane has been quiet that long. The window is measured from the pane's own
+output, so a program still working is not mistaken for one that has finished,
+and an `idle` outcome with no lines means the pane never wrote at all — which
+is what a command that was never started looks like.
+
+Every wait is bounded by a ceiling, 300 seconds by default and set by
+`LIBTMUX_MCP_WAIT_MAX_SECONDS`. A larger `timeoutSeconds` is clamped rather
+than refused: the reply carries `effectiveTimeoutSeconds`, and
+`timeoutClamped` when the ceiling was the lower of the two. The ceiling bounds
+the caller rather than the transport — these tools await throughout, so a long
+wait blocks nothing else. What it costs is the turn it happens in, because MCP
+gives a caller no way to change its mind once a call is in flight.
+
 `send_keys` and `run_command` both take `suppressHistory`, which prefixes the
 command with a space so a shell told to ignore such lines keeps it out of its
 history. An agent typing into a person's pane otherwise fills their history with
 commands they never ran.
+
+### The pane this server is running in
+
+Every pane summary carries `isCaller`, and a pane where it is true is the one
+this server runs in: typing into it reaches the terminal the conversation is
+happening in, and no later call undoes it. That was the whole of the
+protection, and a note in a reply is something a model with forty tools and a
+task does not always read.
+
+So a write to that pane asks first, through MCP elicitation, and a decline
+fails the call. A write here is what reaches the person's keyboard or their
+shell: `send_keys`, `send_keys_batch`, `paste_text`, `paste_buffer`,
+`run_command`, `respawn_pane`, `clear_pane`, `kill_pane`, and
+`enter_copy_mode`, which takes their keystrokes away from their shell.
+Splitting the pane is not one — finding your own pane and making room beside it
+is the ordinary opening move — and neither is `exit_copy_mode`, which is the
+way out of the one mode that is.
+
+A client that did not declare the elicitation capability gets the behaviour it
+had before — the write goes through with `isCaller` reported beside it. This is
+a guard rail, not a boundary: a caller with `send_keys` can run anything the
+user can, and refusing every write on every client that cannot be asked would
+break them all to enforce something that was never enforceable.
 
 ### Text, keys, and the difference
 
@@ -226,8 +321,8 @@ which call failed.
 
 ## Recipes
 
-Four jobs, in the order the calls actually go. The tool list says what exists;
-these say what to reach for and what goes wrong.
+Jobs in the order the calls actually go. The tool list says what exists; these
+say what to reach for and what goes wrong.
 
 ### Start a service and wait for it before running dependent work
 
@@ -293,6 +388,50 @@ every turn and cannot tell you whether anything changed. Also: check
 record of that pane has a hole in it — which is worth saying out loud rather
 than quietly summarising over.
 
+**When it is not your build.** If the pane is running something you started,
+`run_command` with `detach` and `get_job` is cheaper still: no cursor to carry,
+and an exit status at the end.
+
+### Run a build without spending the turn on it
+
+**Situation.** A test suite that takes minutes, and other work to do meanwhile.
+
+> Run the suite and start reading the failing module while it goes.
+
+**Discover.** Nothing to discover: `run_command` with `detach: true` returns a
+`jobId` as soon as the command is typed.
+
+**Decide.** Spend the turn on the other work. Come back with `get_job`.
+
+**Act.** `get_job` with the handle and no timeout reports whether it has
+finished and what the pane is running if it has not. With `timeoutSeconds` it
+waits that long. A finished job carries the exit status and everything the
+command printed.
+
+**The non-obvious part.** Asking again is free and gives the same answer: the
+first read that finds a status keeps it. And `detach` does not change the
+command — the same wrapper records the same status against the same channel, so
+a detached run and a waited one report identically.
+
+### Check on eight panes without reading any of them
+
+**Situation.** A workspace you built, several panes into a long job.
+
+> Which of those are still going?
+
+**Discover.** `list_panes` with `detail: full`, narrowed to the session you
+built.
+
+**Decide.** `status.dead` with `status.exitStatus` says which finished and how.
+`status.historyLines` compared against your last reading says which wrote
+anything since.
+
+**Act.** Capture only the panes whose history moved.
+
+**The non-obvious part.** All of it comes from the snapshot the listing already
+takes, so it is one tmux command for every pane, not one per pane — and no
+pane's contents are read, so nothing is paid for output already seen.
+
 ### Recover a pane that stopped answering
 
 **Situation.** A `run_command` timed out. Every later one in that pane times out
@@ -342,8 +481,19 @@ history. A shell not configured that way keeps it anyway. It is a courtesy to
 the person whose terminal this is, not a guarantee.
 
 **Listing is not reading.** `list_panes` and `list_windows` report names,
-indexes and positions. They never report what a pane is *showing* —
-`search_panes` and `capture_pane` do that.
+indexes and positions, and with `detail: full` a pane's process state. They
+never report what a pane is *showing* — `search_panes` and `capture_pane` do
+that.
+
+**`run_command` runs in a subshell.** The command is wrapped in `( ... )` so
+that one ending in `exit` ends the subshell rather than the pane's shell, which
+would take the status recording with it. A consequence: `cd`, `export`, and
+anything else that changes the shell itself does not outlive the call. Use
+`send_keys` for those.
+
+**A capture strips colour.** A program that reports whether it passed by
+colouring one word says nothing at all once the colour is gone. `styles` keeps
+tmux's escape sequences.
 
 ## Logs
 

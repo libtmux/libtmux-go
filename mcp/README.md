@@ -137,6 +137,23 @@ pane wrote since the last look rather than its whole screen again. That is the
 difference — not more access to tmux, but a better place to put the control
 loop, and a smaller bill for keeping it there.
 
+## Not spending the agent's turn
+
+Three things here exist because an agent's context and its turn are the scarce
+resources, not tmux:
+
+- **A listing narrows.** `list_panes` takes `sessionName`, `windowId`,
+  `command`, `pathUnder`, `dead`, and `active`, and reports the `total` it
+  selected from. On a real 18-pane server, asking which pane runs `vim` is 535
+  bytes where the whole listing is 7.3 kB.
+- **A command need not be waited for.** `run_command` with `detach` returns a
+  `jobId` at once; `get_job` collects the exit status and output later. A build
+  costs what typing it costs.
+- **Checking is not capturing.** `list_panes` with `detail: full` adds every
+  matching pane's exit status, path, title, and history size from the snapshot
+  it already took — one tmux command for eight panes, and no pane's contents
+  read at all.
+
 ## Knowing its own pane
 
 A pane this server runs in is the terminal the conversation is happening
@@ -153,6 +170,19 @@ the pane the way it can always be found — it descends from whatever tmux
 started in that pane, so the pane whose process is one of its own ancestors is
 its own. That answer is the stronger one, because the panes were listed from
 the server being addressed and no second socket exists for an id to collide on.
+
+## Asking before it types into your terminal
+
+A pane reported with `isCaller` true is the one this server runs in, and typing
+into it reaches the terminal you are talking to it through. A note in a reply is
+something a model with a task does not always read, so a write to that pane asks
+first, through MCP elicitation, and a decline fails the call.
+
+A client that did not declare the elicitation capability keeps the behaviour it
+had before. This is a guard rail rather than a boundary: a caller with
+`send_keys` can run anything you can, and refusing every write on every client
+that cannot be asked would break them all to enforce something that was never
+enforceable.
 
 ## Limiting what a client can do
 
@@ -171,9 +201,29 @@ withheld rather than missing. The level is derived from each tool's own
 annotations, so a tool declaring itself destructive is governed by having said
 so.
 
+## Everything else an operator can set
+
+| Variable | Does |
+| --- | --- |
+| `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
+| `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
+| `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the four recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
+| `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |
+
+The names match the Python server, so an operator running both writes one
+thing. Which tmux is used is a flag rather than a variable — `-binary`,
+`-socket-name`, `-socket-path` — because the target is fixed when the server
+starts and a client cannot change it.
+
+A wait longer than the ceiling is shortened rather than refused, and the reply
+says so in `effectiveTimeoutSeconds` and `timeoutClamped`. The ceiling bounds
+the caller rather than the transport: these tools await throughout, so a long
+wait blocks nothing else. What an unbounded one costs is the agent's turn, and
+MCP gives it no way to change its mind mid-call.
+
 ## The tools
 
-Thirty-odd tools, each with the arguments a client sends and what comes back,
+Fifty-odd tools, each with the arguments a client sends and what comes back,
 plus recipes, gotchas, and what the server logs:
 
 **[Tool reference →](TOOLS.md)**
@@ -201,6 +251,14 @@ stated in the server instructions the client already received.
 **It reaches the wrong tmux.** `-doctor` names the socket it addresses and
 lists the others on the machine. A client's environment is not your shell's:
 `TMUX_TMPDIR` set in your profile is not set for a server the client spawned.
+
+**Sessions you can see are reported as nothing there.** Compare the tmux
+version `-doctor` prints against your shell's `tmux -V`. A client starts its
+servers with a curated `PATH`, which can resolve a different tmux than the one
+that started your sessions, and a tmux client cannot talk to a server built
+from another protocol version — it reports `server exited unexpectedly`, which
+is indistinguishable from a server that has gone. Point `-binary` at the tmux
+your sessions belong to.
 
 **A command works in your shell but not through a tool.** The pane's shell is
 not your shell — it has the environment tmux gave it when it started.
