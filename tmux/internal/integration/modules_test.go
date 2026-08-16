@@ -34,10 +34,6 @@ var readmeInstall = regexp.MustCompile(
 	`(github\.com/libtmux/libtmux-go[a-zA-Z0-9./_-]*)@(v\d[0-9A-Za-z.-]*)`,
 )
 
-// readmeTag matches a tag the README names for a module of its own, which is
-// how a multi-module repository spells a version that is not the core's.
-var readmeTag = regexp.MustCompile("`(workspace|mcp)/(v\\d[0-9A-Za-z.-]*)`")
-
 // ownRequirement matches a require directive naming a module of this
 // repository, capturing the version a consumer would resolve.
 var ownRequirement = regexp.MustCompile(
@@ -46,12 +42,14 @@ var ownRequirement = regexp.MustCompile(
 
 // TestEveryAdvertisedVersionAgrees gates the release surface against drift.
 //
-// A module's version is written down in two unrelated places: the commands the
-// README tells a reader to run, and the require directives deciding what a
-// consumer resolves. Modules are tagged per directory and their versions move
-// independently, so the invariant is per module rather than one version across
-// the repository -- and a require is not a local concern, because a replace
-// directive beside it is read only here.
+// Every module here that another one requires must be required at one version.
+// Modules are tagged per directory and their versions move independently, so
+// the invariant is per module rather than one version across the repository --
+// and a require is not a local concern, because a replace directive beside it
+// is read only here.
+//
+// Documentation is no longer a source of versions; see
+// TestNoDocumentationPinsAModuleVersion for why it must not be one.
 func TestEveryAdvertisedVersionAgrees(t *testing.T) {
 	t.Parallel()
 
@@ -62,23 +60,6 @@ func TestEveryAdvertisedVersionAgrees(t *testing.T) {
 			sources[module] = map[string][]string{}
 		}
 		sources[module][version] = append(sources[module][version], where)
-	}
-
-	readme, err := os.ReadFile(filepath.Join(root, "README.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, match := range readmeInstall.FindAllStringSubmatch(string(readme), -1) {
-		module, ok := longestModulePrefix(match[1])
-		if !ok {
-			t.Errorf("README fetches %s, which is in no module of this repository", match[1])
-			continue
-		}
-		record(module, match[2], "README.md fetches "+match[1])
-	}
-	for _, match := range readmeTag.FindAllStringSubmatch(string(readme), -1) {
-		record("github.com/libtmux/libtmux-go/"+match[1], match[2],
-			"README.md names the tag "+match[1]+"/"+match[2])
 	}
 
 	for _, module := range modules {
@@ -93,11 +74,10 @@ func TestEveryAdvertisedVersionAgrees(t *testing.T) {
 
 	for module := range publishedModules {
 		versions := sources[module]
-		if len(versions) == 0 {
-			t.Errorf("%s is published but no version of it is written down anywhere", module)
-			continue
-		}
-		if len(versions) == 1 {
+		// A module nothing here requires is constrained by nothing here. Its
+		// version lives in its tag, which is the one place that cannot drift
+		// from itself.
+		if len(versions) <= 1 {
 			continue
 		}
 		report := make([]string, 0, len(versions))
@@ -229,5 +209,58 @@ func moduleRootFrom(t *testing.T, directory string) string {
 			t.Fatalf("no go.mod declaring %s above %s", tmuxModulePath, directory)
 		}
 		current = parent
+	}
+}
+
+// TestNoDocumentationPinsAModuleVersion gates the treadmill rather than one
+// lap of it.
+//
+// A README that names a version to fetch is a copy of the tag list, and it went
+// stale exactly as a copy does: two of them told a reader to install
+// v0.0.1-alpha.1 for the whole life of v0.0.1-alpha.4, and that version is
+// retracted, so the command they were given refuses to run. The gate above did
+// not see it, because it read only the README at the repository root and
+// compared what it found against the other written-down values rather than
+// against the tags -- so a set that agreed with itself and with nothing else
+// passed.
+//
+// The rule that cannot rot is to pin nothing: @latest resolves whatever is
+// newest, and the alpha notice already tells a reader to pin an exact version
+// in their own go.mod, which is the file where a pin belongs and is checked.
+//
+// CHANGELOG.md is exempt. Naming released versions is the whole point of it,
+// and an entry describing a release is a record rather than an instruction.
+func TestNoDocumentationPinsAModuleVersion(t *testing.T) {
+	root := repositoryRoot(t)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".md" || entry.Name() == "CHANGELOG.md" {
+			return nil
+		}
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		where, _ := filepath.Rel(root, path)
+		for _, match := range readmeInstall.FindAllStringSubmatch(string(content), -1) {
+			if _, ok := longestModulePrefix(match[1]); !ok {
+				continue
+			}
+			t.Errorf("%s tells a reader to fetch %s@%s; use @latest, so the "+
+				"instruction cannot outlive the release it names",
+				where, match[1], match[2])
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
