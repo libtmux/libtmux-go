@@ -124,6 +124,42 @@ func TestEveryExampleRuns(t *testing.T) {
 	}
 }
 
+// TestEveryPublicPackageHasAnExample gates the first thing a reader looks for.
+//
+// A reference page listing types and methods with nothing runnable beside them
+// leaves the question it was opened to answer -- what do I write -- unanswered,
+// and nothing about the page says an example was meant to be there.
+func TestEveryPublicPackageHasAnExample(t *testing.T) {
+	t.Parallel()
+
+	root := documentationModuleRoot(t)
+	for _, directory := range []string{"tmux", "tmuxq", "tmux/tmuxtest", "workspace", "mcp"} {
+		t.Run(directory, func(t *testing.T) {
+			t.Parallel()
+
+			entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(directory)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			examples := 0
+			for _, entry := range entries {
+				if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
+					continue
+				}
+				path := filepath.Join(root, filepath.FromSlash(directory), entry.Name())
+				file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
+				if err != nil {
+					t.Fatalf("parse %s: %v", path, err)
+				}
+				examples += len(doc.Examples(file))
+			}
+			if examples == 0 {
+				t.Errorf("%s has no example, so its reference page shows no usage", directory)
+			}
+		})
+	}
+}
+
 // exampleTestFiles returns every test file in the repository that may declare
 // an Example, across every module: a compiled-only example is the same defect
 // wherever it renders.
