@@ -19,9 +19,10 @@ var ErrUnknownColor = errors.New("tmux: unknown color mode")
 // errors.Is for [CommandError].
 var ErrCommand = errors.New("tmux: command failed")
 
-// ErrNoServer identifies a command tmux refused before running it, because it
-// reached no server on the configured socket. It is matched by errors.Is for
-// [CommandError], alongside [ErrCommand].
+// ErrNoServer identifies a command that no tmux server answered: either tmux
+// refused it before running it, because it reached no server on the configured
+// socket, or the server it reached went away before answering. It is matched by
+// errors.Is for [CommandError], alongside [ErrCommand].
 //
 // It exists because a tmux server holding no sessions exits, so "nothing is
 // running yet" is ordinary state rather than a fault, and a program that starts
@@ -40,7 +41,11 @@ var ErrCommand = errors.New("tmux: command failed")
 // socket, or holds a server this process may not reach is never answered with
 // an empty collection.
 //
-// It does not separate an absent server from one that is present and
+// It does not separate a server that was never reached from one that has just
+// gone, because a program killing a server and reading from it immediately
+// produces either, depending on whether its client had connected first.
+//
+// It also does not separate an absent server from one that is present and
 // unreachable, because tmux does not either: client.c treats ECONNREFUSED and
 // ENOENT alike, prints a constant message only for the first, and renders every
 // other errno through strerror, whose text follows the process locale. Matching
@@ -238,8 +243,8 @@ func (e *CommandError) Unwrap() error {
 	return ErrCommand
 }
 
-// Is reports [ErrNoServer] for a failure tmux produced before any command ran,
-// because no server answered on the configured socket.
+// Is reports [ErrNoServer] for a failure that means no tmux server answered:
+// either the command never reached one, or the one it reached is gone.
 func (e *CommandError) Is(target error) bool {
 	return target == ErrNoServer && e.noServer
 }
@@ -319,8 +324,35 @@ func commandServerUnreachable(stderr []string) bool {
 				return true
 			}
 		}
+		for _, message := range commandServerGoneMessages {
+			if line == message {
+				return true
+			}
+		}
 	}
 	return false
+}
+
+// commandServerGoneMessages are what tmux prints when a command reached a
+// server and did not get an answer from it, which client.c renders from its
+// exit reason and writes to stderr verbatim for a command client.
+//
+// They are matched whole rather than by prefix, because "server exited" is a
+// prefix of "server exited unexpectedly" and both are constants with nothing
+// interpolated into them, so an exact match is both safe to disclose and
+// independent of the process locale.
+//
+// The distinction between these and the connect failures above is real but not
+// one a caller can act on differently: killing a server and reading from it
+// immediately produces either, depending on whether the client had connected
+// before it went. Classifying only one of them would make the answer to "is
+// anything running" depend on that race.
+var commandServerGoneMessages = [...]string{
+	// CLIENT_EXIT_LOST_SERVER: the connection went while the command was in
+	// flight.
+	"server exited unexpectedly",
+	// CLIENT_EXIT_SERVER_EXITED: the server shut down and said so.
+	"server exited",
 }
 
 // commandTargetNotFoundObjects are the object words tmux names when target
