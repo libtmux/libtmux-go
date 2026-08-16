@@ -642,7 +642,7 @@ func ExampleServer_SearchPanes() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-search-panes",
+		SocketName: "libtmux-go-example-server-search-panes",
 	})
 	defer killExampleServer(server)
 

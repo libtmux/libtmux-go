@@ -124,6 +124,49 @@ func TestEveryExampleRuns(t *testing.T) {
 	}
 }
 
+// exampleSocketName matches a socket an example names for itself.
+var exampleSocketName = regexp.MustCompile(`SocketName:\s*"(libtmux-go-example-[^"]*)"`)
+
+// TestEveryExampleNamesItsOwnSocket gates examples against each other.
+//
+// Examples run one after another, each killing its server as it leaves, so two
+// sharing a socket usually work. What they share is a failure: when the first
+// one's teardown is slow or fails, the second finds a session that already
+// exists, and the example that fails is the one that did nothing wrong.
+func TestEveryExampleNamesItsOwnSocket(t *testing.T) {
+	t.Parallel()
+
+	root := documentationModuleRoot(t)
+	owners := map[string][]string{}
+	for _, path := range exampleTestFiles(t, root) {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range exampleSocketName.FindAllStringSubmatch(string(content), -1) {
+			owners[match[1]] = append(owners[match[1]], filepath.ToSlash(relative))
+		}
+	}
+
+	if len(owners) == 0 {
+		t.Fatal("no example socket found, so this gate proves nothing")
+	}
+	var shared []string
+	for socket, files := range owners {
+		if len(files) > 1 {
+			shared = append(shared, socket+" in "+strings.Join(files, ", "))
+		}
+	}
+	slices.Sort(shared)
+	if len(shared) != 0 {
+		t.Fatalf("examples share a socket:\n%s", strings.Join(shared, "\n"))
+	}
+}
+
 // TestEveryPublicPackageHasAnExample gates the first thing a reader looks for.
 //
 // A reference page listing types and methods with nothing runnable beside them
