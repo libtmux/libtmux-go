@@ -811,10 +811,13 @@ module that does not sit at the repository root:
 
 | Module | Tag |
 | --- | --- |
-| the tmux module | `v0.0.1-alpha.1` |
-| `mcp` | `mcp/v0.0.1-alpha.1` |
-| `workspace` | `workspace/v0.0.1-alpha.1` |
+| the tmux module | `vX.Y.Z` |
+| `mcp` | `mcp/vX.Y.Z` |
+| `workspace` | `workspace/vX.Y.Z` |
 | `benchmarks`, `examples` | not published |
+
+The shape rather than the numbers: a table naming the current tags is a copy of
+`git tag` that nothing updates.
 
 A consumer module's `require` on the core has to name a version the proxy can
 resolve, so the core is tagged before the modules that depend on it. The local

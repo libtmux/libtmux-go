@@ -7,7 +7,43 @@ version.
 Modules are tagged per directory, so each carries its own version: the core as
 `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`.
 
-## v0.0.1-alpha.1 — unreleased
+## Unreleased
+
+### mcp
+
+Documentation no longer names a version to install. Two READMEs had told a
+reader to fetch `v0.0.1-alpha.1` for the whole life of `v0.0.1-alpha.4`, and
+that version is retracted, so the command they gave refused to run.
+
+## mcp/v0.0.1-alpha.4
+
+Adds the MCP registry entry and the marker it is verified against.
+
+## v0.0.1-alpha.2, workspace/v0.0.1-alpha.2
+
+Documentation. The alpha notice no longer uses GitHub's alert extension, which
+is literal text in every other renderer. No change to either package.
+
+## mcp/v0.0.1-alpha.3
+
+Listings take criteria and report the total they selected from, so asking which
+pane runs a command costs one answer rather than forty. `detail: full` adds each
+matching pane's process state from the snapshot the listing already takes.
+
+Waiting is bounded by a ceiling that clamps rather than refuses, and optional:
+`run_command` detaches and `get_job` collects. `wait_for_text` gains
+`idleSeconds` for a program whose finishing cannot be predicted.
+
+Writes to the pane the server itself runs in ask the person first, through MCP
+elicitation. `move_pane`, styled captures, per-hook reads, and the attached
+clients and message log on `get_server_info` reach tmux the tools could not.
+
+## mcp/v0.0.1-alpha.2
+
+Retracts `mcp/v0.0.1-alpha.1`, whose go.mod carried replace directives that
+`go install` refuses.
+
+## v0.0.1-alpha.1
 
 First release.
 

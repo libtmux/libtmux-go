@@ -28,7 +28,7 @@ builds with Go 1.23; the MCP SDK this server speaks through is what raises the
 floor here.
 
 ```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.1
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
 That puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client launches it as
@@ -433,8 +433,9 @@ later as a server that will not start, separately, in each client. Pass
 `--no-preflight` to skip it when offline.
 
 `released` needs the Go module to be published under a tag the proxy can
-resolve. This repository has no such tag yet, so `@latest` resolves nothing and
-the preflight says so rather than writing an entry that cannot start.
+resolve. When one cannot be resolved — an unpublished version, or a proxy that
+has not seen it yet — the preflight says so rather than writing an entry that
+cannot start.
 
 Driving it by hand still works:
 

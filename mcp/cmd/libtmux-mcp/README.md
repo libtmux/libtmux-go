@@ -9,7 +9,7 @@ by a client, so a client reaches only the socket the operator selected.
 ## Installing it
 
 ```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.1
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
 ## Answering questions without a client
@@ -22,7 +22,7 @@ $ libtmux-mcp -version
 ```
 
 ```
-libtmux-mcp v0.0.1-alpha.1
+libtmux-mcp v0.0.1-alpha.4
 ```
 
 List every tool the server exposes, as a client would see them:

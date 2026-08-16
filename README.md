@@ -18,11 +18,12 @@ refused.
   when you asked, not a live handle that changes underneath.
 
 ```console
-$ go get github.com/libtmux/libtmux-go/tmux@v0.0.1-alpha.1
+$ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
 
-Modules are tagged per directory, so the consumers carry their own versions:
-`mcp/v0.0.1-alpha.2`, `workspace/v0.0.1-alpha.1`.
+Modules are tagged per directory, so each consumer carries its own version:
+the tags are `mcp/vN` and `workspace/vN` beside the core's plain `vN`. Pin the
+exact ones you want in your own go.mod; the commands here fetch the newest.
 
 **Contents** — [Quick start](#quick-start) · [Querying](#what-querying-looks-like)
 · [Choosing a mode](#choosing-a-mode) · [Watching tmux](#watching-tmux) ·
@@ -215,7 +216,7 @@ none of them:
 one tmux server: create panes, send keys, read output, wait for text.
 
 ```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.2
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
 See [`mcp/README.md`](mcp/README.md) for client configuration, and
