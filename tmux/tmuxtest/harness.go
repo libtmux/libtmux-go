@@ -1,5 +1,48 @@
-// Package tmuxtest provides isolated tmux servers and supporting processes for
-// tests that exercise a real tmux daemon.
+// Package tmuxtest runs your program inside a real tmux and lets a test assert
+// on what it drew.
+//
+// tmux is awkward to test against for two reasons, and this package exists for
+// both. Servers leak between tests unless every socket, configuration file, and
+// environment variable is accounted for. And a pane settles some time after it
+// is asked to do something, with nothing to say when: the usual answer is a
+// sleep, which is slow when it is generous and flaky when it is not.
+//
+// # Testing a program
+//
+// A test whose subject is a program rather than tmux needs three lines. The
+// server, its session, and its pane belong to t and end with it:
+//
+//	func TestReadyBanner(t *testing.T) {
+//		ctx := context.Background()
+//		pane := tmuxtest.RunInPane(ctx, t, "./mytui --watch")
+//
+//		tmuxtest.WaitForText(ctx, t, pane, "ready")
+//		tmuxtest.Type(ctx, t, pane, "q")
+//	}
+//
+// [WaitForText] polls until the text appears, so a quick program costs
+// milliseconds and a slow one is still waited for. A program that never shows
+// it fails the test with the screen the pane last held, which is what a print
+// statement would have been added to see:
+//
+//	tmuxtest: pane %1 never showed a line containing "ready"
+//	the pane showed 3 line(s):
+//	    | tmuxtest$ ./mytui --watch
+//	    | loading widgets
+//	    | connecting
+//
+// [WaitForLine] matches a whole line, [WaitForScreen] takes a condition of your
+// own, and [Screen] reads the pane without waiting.
+//
+// Every pane runs a POSIX shell with no start-up files and the fixed
+// [ShellPrompt], so a pane shows the same thing on every machine rather than
+// whatever prompt the person running the tests has configured.
+//
+// # Testing tmux itself
+//
+// [NewServer] returns a [tmux.Server] for a test whose subject is tmux: an
+// isolated daemon on a socket of its own, with [NewSession] and [NewWindow] for
+// resources that clean themselves up.
 //
 // # Setup and lifecycle
 //
@@ -97,11 +140,32 @@ type ServerOptions struct {
 	InitialSession *tmux.NewSessionRequest
 }
 
+// ShellPrompt is the prompt every harness pane draws.
+//
+// A pane's shell is fixed by the harness rather than inherited, so what a pane
+// shows is the same on every machine. Without that, a pane opens on whatever
+// the person running the tests has configured -- a prompt carrying a git
+// branch, a path, colours -- and an assertion about the screen passes or fails
+// according to whose laptop ran it.
+//
+// It is exported because it is what a screen read has to account for: the first
+// line of a pane is this, and a test matching loosely against the whole screen
+// should know what is already there.
+const ShellPrompt = "tmuxtest$ "
+
 const (
-	harnessIsolationConfig = ""
-	maxSocketPathBytes     = 103
-	cleanupTimeout         = 3 * time.Second
-	perTestCleanupTries    = 3
+	// harnessIsolationConfig fixes what a pane runs.
+	//
+	// default-shell and default-command together give every pane a POSIX shell
+	// with no start-up files: ENV is cleared so sh reads none, and PS1 is the
+	// prompt above. tmux still runs an explicit command given to split-window
+	// or new-window in preference to this, so a test that wants its own program
+	// in a pane is unaffected.
+	harnessIsolationConfig = "set -g default-shell /bin/sh\n" +
+		"set -g default-command \"ENV= PS1='" + ShellPrompt + "' /bin/sh -i\"\n"
+	maxSocketPathBytes  = 103
+	cleanupTimeout      = 3 * time.Second
+	perTestCleanupTries = 3
 	// cleanupRetryGap is how long a failed cleanup waits before trying again.
 	// Long enough for a server that was mid-shutdown to have finished, short
 	// enough that it costs a passing test nothing, since it is only ever waited

@@ -198,7 +198,7 @@ Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe).
 | Package | Source | Reference | What it is |
 | --- | --- | --- | --- |
 | `tmux` | [`tmux/`](tmux/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) | The library. Sessions, windows, panes, options, hooks, formats, filters, snapshots, plans. |
-| `tmuxtest` | [`tmux/tmuxtest/`](tmux/tmuxtest/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest) | A real tmux server for your tests, that cleans itself up. |
+| `tmuxtest` | [`tmux/tmuxtest/`](tmux/tmuxtest/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest) | Run your program in a real tmux and assert on what it drew. |
 | `tmuxq` | [`tmuxq/`](tmuxq/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) | Model-free generic helpers for slices and `iter.Seq`. |
 
 Three more ship as **separate modules**, so `go get` on the library pulls in
@@ -224,8 +224,32 @@ See [`mcp/README.md`](mcp/README.md) for client configuration, and
 
 ## Testing your own code
 
-[`tmux/tmuxtest`](tmux/tmuxtest/) gives a test a real tmux server on its own
-socket, killed when the test ends:
+[`tmux/tmuxtest`](tmux/tmuxtest/) runs your program inside a real tmux and lets
+a test assert on what it drew, with no sleeps:
+
+```go
+func TestReadyBanner(t *testing.T) {
+	ctx := context.Background()
+	pane := tmuxtest.RunInPane(ctx, t, "./mytui --watch")
+
+	tmuxtest.WaitForText(ctx, t, pane, "ready")
+	tmuxtest.Type(ctx, t, pane, "q")
+}
+```
+
+A wait that runs out fails with the screen the pane last held, rather than
+sending you back to add a print statement:
+
+```
+tmuxtest: pane %1 never showed a line containing "ready"
+the pane showed 3 line(s):
+    | tmuxtest$ ./mytui --watch
+    | loading widgets
+    | connecting
+```
+
+It works for a test whose subject is tmux itself too, giving a server on its own
+socket that is killed when the test ends:
 
 ```go
 func TestSomething(t *testing.T) {

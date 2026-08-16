@@ -2,13 +2,69 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux/tmuxtest.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
 
-A real tmux server for your tests, on its own socket, killed when the test ends.
+Run your program inside a real tmux and assert on what it drew.
 
 ```go
 import "github.com/libtmux/libtmux-go/tmux/tmuxtest"
 ```
 
-## One server per test
+**Contents** — [Testing a program](#testing-a-program) ·
+[When a wait fails](#when-a-wait-fails) · [The waits](#the-waits) ·
+[Testing tmux itself](#testing-tmux-itself) ·
+[What it guarantees](#what-it-guarantees)
+
+## Testing a program
+
+Three lines. The server, its session, and its pane end with the test:
+
+```go
+func TestReadyBanner(t *testing.T) {
+	ctx := context.Background()
+	pane := tmuxtest.RunInPane(ctx, t, "./mytui --watch")
+
+	tmuxtest.WaitForText(ctx, t, pane, "ready")
+	tmuxtest.Type(ctx, t, pane, "q")
+}
+```
+
+No sleeps: `WaitForText` polls, so a quick program costs milliseconds and a slow
+one is still waited for.
+
+## When a wait fails
+
+The failure carries the screen, which is what you would have added a print
+statement to see:
+
+```
+tmuxtest: pane %1 never showed a line containing "ready"
+the pane showed 3 line(s):
+    | tmuxtest$ ./mytui --watch
+    | loading widgets
+    | connecting
+```
+
+## The waits
+
+| Wait | Holds when |
+| --- | --- |
+| `WaitForText` | some line contains a string |
+| `WaitForLine` | some line is exactly a string |
+| `WaitForScreen` | a condition of your own returns true |
+| `WaitForShellReady` | the pane's shell will accept typing |
+
+`Screen` reads the pane without waiting. All of them read the visible screen
+rather than the scrollback, so what they search is what a failure prints.
+
+Every pane runs a POSIX shell with no start-up files and the prompt
+`tmuxtest$ `, so a pane shows the same thing on every machine rather than
+whatever prompt the person running the tests has configured.
+
+## Testing tmux itself
+
+`NewServer` returns a [`tmux.Server`](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux#Server)
+for a test whose subject is tmux rather than a program running inside it.
+
+### One server per test
 
 ```go
 func TestMain(m *testing.M) {
