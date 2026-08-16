@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.libtmux/libtmux-mcp",
+  "name": "io.github.libtmux/tmux-mcp-go",
   "title": "tmux",
   "description": "Drive one tmux server: sessions, windows, panes, and the output they produce.",
-  "version": "0.0.1-alpha.4",
+  "version": "0.0.1-alpha.5",
   "repository": {
     "url": "https://github.com/libtmux/libtmux-go",
     "source": "github",

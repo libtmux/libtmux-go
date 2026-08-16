@@ -11,6 +11,10 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### mcp
 
+The registry entry is named for the language rather than the project, since
+every server under this namespace drives tmux and the namespace already says
+whose it is.
+
 Documentation no longer names a version to install. Two READMEs had told a
 reader to fetch `v0.0.1-alpha.1` for the whole life of `v0.0.1-alpha.4`, and
 that version is retracted, so the command they gave refused to run.

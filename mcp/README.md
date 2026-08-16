@@ -1,4 +1,4 @@
-<!-- mcp-name: io.github.libtmux/libtmux-mcp -->
+<!-- mcp-name: io.github.libtmux/tmux-mcp-go -->
 
 # mcp
 
@@ -229,9 +229,12 @@ for servers by name rather than by import path. It carries no `packages` block:
 the registry knows npm, PyPI, NuGet, Cargo, OCI and prebuilt binaries, and `go
 install` is none of them, so the entry points at this repository instead.
 
-The name is `io.github.libtmux/libtmux-mcp`, which the registry ties to the
+The name is `io.github.libtmux/tmux-mcp-go`, which the registry ties to the
 GitHub organisation of the same name, and the `mcp-name:` comment at the top of
-this file is the marker it looks for.
+this file is the marker it looks for. The language rather than the project,
+because every server in that namespace drives tmux: `libtmux-mcp` would repeat
+what `io.github.libtmux` already says and leave the one distinguishing thing
+unsaid.
 
 The publisher is a Go program, so the toolchain this repository already needs
 builds it. It installs as `publisher`, though its own help calls it
