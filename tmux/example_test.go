@@ -16,19 +16,16 @@ import (
 	"github.com/libtmux/libtmux-go/tmuxq"
 )
 
-// killExampleServer stops an example's tmux server on a context of its own.
-//
-// An example's ctx is expired exactly when the run failed on its deadline,
-// which is when cleanup matters most, and every example names a fixed socket.
-// A server left running therefore fails every later run of that example with a
-// session that already exists, long after the slow machine that caused it.
-// exampleWaitBudget bounds an example that waits for a program running in a
-// pane. It is generous because it is a ceiling rather than a delay: each wait
-// below ends as soon as its condition holds. A budget tight enough to be
-// exceeded on a busy machine turns a passing example into a failing one
-// without anything being wrong with what it demonstrates.
+// exampleWaitBudget bounds an example waiting on a program in a pane. It is a
+// ceiling rather than a delay -- each wait below ends as soon as its condition
+// holds -- so it is generous: one tight enough to be exceeded on a busy machine
+// fails an example with nothing wrong with it.
 const exampleWaitBudget = 60 * time.Second
 
+// killExampleServer stops an example's server on a context of its own. An
+// example's ctx is expired exactly when its run failed on the deadline, which
+// is when cleanup matters most, and the socket it names is fixed: a server left
+// running fails every later run with a session that already exists.
 func killExampleServer(server tmux.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
