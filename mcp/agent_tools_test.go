@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1294,5 +1295,298 @@ func TestEnteringCopyModeOnTheCallerPaneIsAskedAbout(t *testing.T) {
 	}
 	if *asked != 1 {
 		t.Errorf("leaving copy mode asked the person as well")
+	}
+}
+
+// TestAWaitIsClampedRatherThanRefused covers the ceiling's whole point: a
+// caller that asked for more than the server will run should still get its
+// wait, and should learn the policy from the answer.
+//
+// Refusing instead would teach a model nothing it can act on, and a model
+// cannot change its mind once a call is in flight.
+//
+//libtmux:real-tmux
+func TestAWaitIsClampedRatherThanRefused(t *testing.T) {
+	t.Setenv(tmuxmcp.WaitCeilingEnvironmentVariable, "2")
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: clamped\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var ended struct {
+		Outcome                 string `json:"outcome"`
+		EffectiveTimeoutSeconds int    `json:"effectiveTimeoutSeconds"`
+		TimeoutClamped          bool   `json:"timeoutClamped"`
+	}
+	started := time.Now()
+	result := call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{"NEVER-APPEARS"},
+		"sinceEntry": true, "timeoutSeconds": 3600,
+	}, &ended)
+	if result.IsError {
+		t.Fatalf("wait_for_text: %#v", result.Content)
+	}
+	if !ended.TimeoutClamped {
+		t.Error("a wait past the ceiling did not report that it was clamped")
+	}
+	if ended.EffectiveTimeoutSeconds != 2 {
+		t.Errorf("effectiveTimeoutSeconds = %d, want the ceiling of 2",
+			ended.EffectiveTimeoutSeconds)
+	}
+	if elapsed := time.Since(started); elapsed > 20*time.Second {
+		t.Errorf("the wait ran %v, so the ceiling did not bound it", elapsed)
+	}
+}
+
+// TestEveryWaitReportsTheBudgetItRan covers the default being invisible: a
+// caller that sent no timeout at all cannot otherwise tell what it is waiting
+// for, so the reply says so even when nothing was clamped.
+//
+//libtmux:real-tmux
+func TestEveryWaitReportsTheBudgetItRan(t *testing.T) {
+	t.Setenv(tmuxmcp.WaitCeilingEnvironmentVariable, "30")
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: budget\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var ended struct {
+		EffectiveTimeoutSeconds int  `json:"effectiveTimeoutSeconds"`
+		TimeoutClamped          bool `json:"timeoutClamped"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "idleSeconds": 1, "sinceEntry": true,
+	}, &ended)
+	if ended.TimeoutClamped {
+		t.Error("a wait that asked for nothing was reported as clamped")
+	}
+	if ended.EffectiveTimeoutSeconds == 0 {
+		t.Error("a wait that asked for nothing did not report the budget it ran")
+	}
+}
+
+// TestAQuietPaneEndsAnIdleWait covers the ending for a program whose output
+// cannot be predicted. A caller that does not know what finishing prints still
+// knows that finishing means quiet, and should not have to wait out a deadline
+// to find out.
+//
+//libtmux:real-tmux
+func TestAQuietPaneEndsAnIdleWait(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: quiet\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var ended struct {
+		Outcome string   `json:"outcome"`
+		Found   bool     `json:"found"`
+		Lines   []string `json:"lines"`
+	}
+	started := time.Now()
+	result := call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "idleSeconds": 2, "sinceEntry": true, "timeoutSeconds": 60,
+	}, &ended)
+	if result.IsError {
+		t.Fatalf("wait_for_text: %#v", result.Content)
+	}
+	if ended.Outcome != "idle" || ended.Found {
+		t.Errorf("outcome = %q found = %v, want idle and not found", ended.Outcome, ended.Found)
+	}
+	if elapsed := time.Since(started); elapsed > 40*time.Second {
+		t.Errorf("a quiet pane took %v to end an idle wait", elapsed)
+	}
+}
+
+// TestOutputExtendsAnIdleWait covers the semantic that makes an idle wait
+// usable: the window is measured from the last thing the pane wrote, so a
+// program that is still working is not mistaken for one that has finished.
+//
+// Discriminating needs the pane to write for longer than the window, with gaps
+// shorter than it. A loaded machine stretches those gaps, and once one exceeds
+// the window the wait ends early for a correct implementation too -- so a run
+// that did not see enough output reports that it could not tell rather than
+// reporting a defect it did not observe.
+//
+//libtmux:real-tmux
+func TestOutputExtendsAnIdleWait(t *testing.T) {
+	const (
+		lines = 6
+		idle  = 3
+		// Two lines is where the cases separate. A window that never reset
+		// ends at idle seconds flat however much the pane went on to write;
+		// one that resets cannot end before idle seconds after the last line
+		// it saw, which is a gap later than that.
+		enough = 2
+	)
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: extending\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	send(ctx, t, session, pane,
+		fmt.Sprintf("for i in $(seq 1 %d); do echo LINE$i; sleep 1; done", lines))
+
+	var ended struct {
+		Outcome        string   `json:"outcome"`
+		ElapsedSeconds float64  `json:"elapsedSeconds"`
+		Lines          []string `json:"lines"`
+	}
+	result := call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "idleSeconds": idle, "sinceEntry": true, "timeoutSeconds": 40,
+	}, &ended)
+	if result.IsError {
+		t.Fatalf("wait_for_text: %#v", result.Content)
+	}
+	if ended.Outcome != "idle" {
+		t.Fatalf("outcome = %q, want idle", ended.Outcome)
+	}
+
+	seen := 0
+	for index := 1; index <= lines; index++ {
+		if slices.ContainsFunc(ended.Lines, func(line string) bool {
+			return strings.Contains(line, fmt.Sprintf("LINE%d", index))
+		}) {
+			seen++
+		}
+	}
+	if seen < enough {
+		t.Skipf("the pane wrote %d of %d lines inside a %ds window, "+
+			"so this machine is too loaded to tell a reset window from a fixed one",
+			seen, lines, idle)
+	}
+	// A fixed window ends at idle seconds exactly. A window that reset ran on
+	// past that by however long the pane kept writing, which is at least the
+	// gap between the lines it saw. Load only lengthens that, so this bound
+	// does not tighten on a busy machine.
+	if ended.ElapsedSeconds < float64(idle)+0.5 {
+		t.Errorf("the wait saw %d lines but ended after %.1fs, barely past the %ds "+
+			"window, so output did not extend it", seen, ended.ElapsedSeconds, idle)
+	}
+}
+
+// TestADetachedCommandReturnsBeforeItFinishes covers the point of detaching:
+// the call costs what typing costs, not what the command costs, so a caller
+// with other work to do keeps its turn.
+//
+//libtmux:real-tmux
+func TestADetachedCommandReturnsBeforeItFinishes(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: detached\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var started struct {
+		JobID    string `json:"jobId"`
+		Detached bool   `json:"detached"`
+	}
+	sent := time.Now()
+	result := call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "sleep 5; echo FINISHED", "detach": true,
+	}, &started)
+	if result.IsError {
+		t.Fatalf("run_command: %#v", result.Content)
+	}
+	if !started.Detached || started.JobID == "" {
+		t.Fatalf("a detached run reported %+v", started)
+	}
+	if elapsed := time.Since(sent); elapsed > 4*time.Second {
+		t.Errorf("detaching took %v, so it waited for the command", elapsed)
+	}
+
+	// Unfinished, and honest about it rather than reporting a status.
+	var checked struct {
+		Finished   bool `json:"finished"`
+		ExitStatus *int `json:"exitStatus"`
+	}
+	call(ctx, t, session, "get_job", map[string]any{"jobId": started.JobID}, &checked)
+	if checked.Finished || checked.ExitStatus != nil {
+		t.Errorf("a command still running reported %+v", checked)
+	}
+
+	var collected struct {
+		Finished   bool     `json:"finished"`
+		ExitStatus *int     `json:"exitStatus"`
+		Output     []string `json:"output"`
+	}
+	call(ctx, t, session, "get_job", map[string]any{
+		"jobId": started.JobID, "timeoutSeconds": 30,
+	}, &collected)
+	if !collected.Finished || collected.ExitStatus == nil || *collected.ExitStatus != 0 {
+		t.Fatalf("collecting the job reported %+v", collected)
+	}
+	if !slices.ContainsFunc(collected.Output, func(line string) bool {
+		return strings.Contains(line, "FINISHED")
+	}) {
+		t.Errorf("the collected output was %q, want the command's own", collected.Output)
+	}
+}
+
+// TestAJobAnswersTheSameWayTwice covers the ordinary thing a caller does with
+// a handle: ask again. A handle that stopped answering once it had been read
+// would turn checking on a command into an error that reads like the command
+// was lost.
+//
+//libtmux:real-tmux
+func TestAJobAnswersTheSameWayTwice(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: onceonly\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var started struct {
+		JobID string `json:"jobId"`
+	}
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "true", "detach": true,
+	}, &started)
+
+	type collection struct {
+		Finished   bool     `json:"finished"`
+		ExitStatus *int     `json:"exitStatus"`
+		Output     []string `json:"output"`
+	}
+	var first collection
+	call(ctx, t, session, "get_job", map[string]any{
+		"jobId": started.JobID, "timeoutSeconds": 30,
+	}, &first)
+	if !first.Finished || first.ExitStatus == nil {
+		t.Fatalf("the job never finished: %+v", first)
+	}
+
+	var again collection
+	result := call(ctx, t, session, "get_job", map[string]any{"jobId": started.JobID}, &again)
+	if result.IsError {
+		t.Fatalf("asking about a collected job failed: %#v", result.Content)
+	}
+	if !again.Finished || again.ExitStatus == nil || *again.ExitStatus != *first.ExitStatus {
+		t.Errorf("the second reading said %+v, want the same as %+v", again, first)
+	}
+}
+
+// TestAHandleFromAnotherRunSaysSo covers an error that would otherwise send a
+// caller looking for something that never happened. A handle does not outlive
+// the process that issued it, and reporting that as "newer commands crowded it
+// out" describes commands the caller never started.
+//
+//libtmux:real-tmux
+func TestAHandleFromAnotherRunSaysSo(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: handles\nwindows:\n  - panes:\n      - {}\n")
+
+	// A handle shaped like this server's, issued by a process that is not it.
+	foreign := fmt.Sprintf("libtmux-mcp-%d-1", os.Getpid()+1)
+	result := call(ctx, t, session, "get_job", map[string]any{"jobId": foreign}, nil)
+	if !result.IsError {
+		t.Fatal("a handle from another process was accepted")
+	}
+	text, ok := result.Content[0].(*sdk.TextContent)
+	if !ok || !strings.Contains(text.Text, "different run") {
+		t.Errorf("the refusal did not name the reason: %#v", result.Content)
+	}
+
+	// One this server could have issued and simply does not hold.
+	mine := fmt.Sprintf("libtmux-mcp-%d-99999", os.Getpid())
+	result = call(ctx, t, session, "get_job", map[string]any{"jobId": mine}, nil)
+	if !result.IsError {
+		t.Fatal("an unheld handle was accepted")
+	}
+	text, ok = result.Content[0].(*sdk.TextContent)
+	if !ok || strings.Contains(text.Text, "different run") {
+		t.Errorf("a handle this server could have issued was blamed on a restart: %#v",
+			result.Content)
 	}
 }

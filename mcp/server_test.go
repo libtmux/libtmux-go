@@ -1440,6 +1440,7 @@ func TestEveryToolCarriesAnnotations(t *testing.T) {
 		"get_pane_info": true, "get_window_info": true, "get_session_info": true,
 		"get_server_info": true, "display_message": true, "show_buffer": true,
 		"show_option": true, "show_environment": true, "show_hooks": true,
+		"get_job": true,
 	}
 	enders := map[string]bool{
 		"kill_session": true, "kill_window": true, "kill_pane": true,

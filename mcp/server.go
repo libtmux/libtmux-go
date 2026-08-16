@@ -87,13 +87,25 @@ var toolGroups = []func(*mcp.Server, *tools){
 }
 
 // NewServer returns an MCP server exposing target through the tools below.
+//
+// Anything the server holds beyond the process is released by [Run]. A caller
+// driving the returned server itself keeps at most [jobsRetained] temporary
+// directories, which the operating system reclaims with the process.
 func NewServer(target tmux.Server) *mcp.Server {
+	server, _ := newServer(target)
+	return server
+}
+
+// newServer builds the server and hands back the tools behind it, so that Run
+// can release what they hold when it stops.
+func newServer(target tmux.Server) (*mcp.Server, *tools) {
 	level := safetyFromEnvironment()
 	tools := &tools{
 		target:      target,
 		level:       level,
 		dispatchers: map[string]dispatcher{},
 		batchable:   true,
+		jobs:        newJobs(),
 	}
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "libtmux",
@@ -119,7 +131,7 @@ func NewServer(target tmux.Server) *mcp.Server {
 	addResources(server, tools)
 	addPrompts(server, level)
 
-	return server
+	return server, tools
 }
 
 // Run serves target over stdin and stdout until ctx is done.
@@ -128,7 +140,12 @@ func Run(ctx context.Context, target tmux.Server) error {
 	if pool != nil {
 		defer func() { _ = pool.Close() }()
 	}
-	return NewServer(connected).Run(ctx, handshakeOrderedTransport{inner: &mcp.StdioTransport{}})
+	server, tools := newServer(connected)
+	// A command left running records itself in a temporary directory this
+	// process owns. Collecting it removes that directory; a server that stops
+	// while some are uncollected removes the rest here.
+	defer tools.jobs.close()
+	return server.Run(ctx, handshakeOrderedTransport{inner: &mcp.StdioTransport{}})
 }
 
 // Connect puts the server on a control-mode transport when it can, so a client
@@ -194,6 +211,8 @@ type tools struct {
 	// process tree and a listing.
 	caller     callerIdentity
 	callerOnce sync.Once
+	// jobs holds the commands a caller detached and has not collected.
+	jobs *jobs
 }
 
 // socketPath asks tmux where its socket is, so a pane's server can be compared

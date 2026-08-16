@@ -41,7 +41,67 @@ const (
 	// pane writing continuously would otherwise grow this without limit, and
 	// nothing beyond the last of it can match a pattern anyway.
 	waitBufferMax = 256 * 1024
+	// waitCeilingDefault bounds how long any one wait may be asked to run.
+	// Longer than a build a person waits for, short enough that one wrong
+	// pattern costs a wait rather than the conversation it was part of.
+	waitCeilingDefault = 300 * time.Second
 )
+
+// WaitCeilingEnvironmentVariable names the variable that raises or lowers the
+// longest wait this server will run, in seconds. It matches the Python server
+// so an operator configuring both writes one thing.
+const WaitCeilingEnvironmentVariable = "LIBTMUX_MCP_WAIT_MAX_SECONDS"
+
+// A wait is the only thing here that runs for as long as a caller asks, so it
+// is the only thing that can spend a caller's turn without producing anything.
+//
+// The ceiling bounds the caller rather than the transport. These tools await
+// throughout, so a long wait blocks nothing else; what it costs is the turn it
+// happens in, because MCP gives a caller no way to change its mind once a call
+// is in flight. A model that guesses the wrong pattern and asks for an hour
+// gets an hour of nothing. The ceiling makes that mistake cost a wait.
+//
+// Clamp rather than refuse. An over-large timeout is a caller that does not
+// know the policy, and failing the call teaches it nothing it can act on; the
+// wait runs at the ceiling instead and every reply carries the timeout it
+// actually used, so the policy is learned from an answer rather than an error.
+//
+// Every reply carries it even when nothing was clamped, because the default is
+// otherwise invisible: a caller that sent no timeout at all has no way to know
+// what it is waiting for.
+func waitCeiling() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(WaitCeilingEnvironmentVariable))
+	if raw == "" {
+		return waitCeilingDefault
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		// An unreadable ceiling selects the default, on the same reasoning as
+		// the safety level: refusing to start over a misspelled variable is
+		// worse than running at the value it would have run at anyway.
+		return waitCeilingDefault
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// resolveWaitTimeout turns the seconds a caller asked for into the wait this
+// server will run, and reports whether the ceiling shortened it.
+//
+// Only a caller that asked for more than the ceiling is told it was clamped.
+// A ceiling below the default shortens that too, but a call that named no
+// timeout had nothing of its own shortened, and reporting one would send a
+// caller looking for a request it never made.
+func resolveWaitTimeout(requested int) (timeout time.Duration, clamped bool) {
+	ceiling := waitCeiling()
+	timeout = time.Duration(requested) * time.Second
+	if timeout <= 0 {
+		return min(runCommandDefaultTimeout, ceiling), false
+	}
+	if timeout > ceiling {
+		return ceiling, true
+	}
+	return timeout, false
+}
 
 var runCommandSequence atomic.Int64
 
@@ -59,6 +119,9 @@ type runCommandInput struct {
 	// for send_keys. It covers the wrapper too, which is this package's own
 	// bookkeeping and has no business in a person's history either.
 	SuppressHistory bool `json:"suppressHistory,omitempty" jsonschema:"keep the command out of the shell's history by prefixing a space"`
+	// Detach returns as soon as the command is typed, with a handle to collect
+	// it by, instead of waiting for it to finish.
+	Detach bool `json:"detach,omitempty" jsonschema:"return a jobId at once instead of waiting; collect it later with get_job"`
 	// MaxLines caps the returned output, keeping the last lines.
 	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many lines of output to return at most, keeping the last ones"`
 	// MaxBytes caps the returned output's size, keeping the last lines.
@@ -85,6 +148,20 @@ type runCommandOutput struct {
 	// the pane stood when it was sent. It is the command's output as a person
 	// would see it, so it includes whatever the program painted.
 	Output []string `json:"output,omitempty"`
+	// EffectiveTimeoutSeconds is the wait this call actually ran, which is
+	// what timeoutSeconds asked for unless the server's ceiling was lower. It
+	// is absent from a detached run, which waited for nothing.
+	EffectiveTimeoutSeconds int `json:"effectiveTimeoutSeconds,omitempty"`
+	// TimeoutClamped reports that the ceiling shortened the wait, so a caller
+	// that asked for longer learns the policy from a reply rather than from a
+	// failed call.
+	TimeoutClamped bool `json:"timeoutClamped,omitempty"`
+	// JobID is the handle a detached run is collected by, and is absent from
+	// one that waited.
+	JobID string `json:"jobId,omitempty"`
+	// Detached reports that the command was left running, so nothing here
+	// describes how it ended yet.
+	Detached bool `json:"detached,omitempty"`
 	// truncation reports what the bounds dropped from Output.
 	truncation
 }
@@ -118,35 +195,83 @@ func (t *tools) runCommand(
 	request *mcp.CallToolRequest,
 	input runCommandInput,
 ) (*mcp.CallToolResult, runCommandOutput, error) {
-	if strings.TrimSpace(input.Command) == "" {
-		return nil, runCommandOutput{}, fmt.Errorf("command is required")
-	}
 	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
 	if err != nil {
 		return nil, runCommandOutput{}, err
 	}
-	server := t.target
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
+	started, err := t.startCommand(ctx, request, input)
 	if err != nil {
 		return nil, runCommandOutput{}, err
 	}
-	output := runCommandOutput{PaneID: pane.ID().String()}
+	output := runCommandOutput{PaneID: started.paneID.String()}
 
-	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	// A detached run is finished here. The handle is what collects it, and the
+	// directory it records itself in outlives this call because of that.
+	if input.Detach {
+		t.jobs.keep(started)
+		output.JobID = started.id
+		output.Detached = true
+		return nil, output, nil
+	}
+	defer func() { _ = os.RemoveAll(started.directory) }()
+
+	pane, err := t.target.Pane(ctx, started.paneID)
 	if err != nil {
 		return nil, output, err
 	}
+	return t.awaitCommand(ctx, request, awaiting{
+		server:     t.target,
+		pane:       pane,
+		channel:    started.channel,
+		statusPath: started.statusAt,
+		openedPath: started.openedAt,
+		closedPath: started.closedAt,
+		limits:     limits,
+		requested:  input.TimeoutSeconds,
+		output:     output,
+	})
+}
+
+// startCommand types a command into a pane and returns the handle that
+// identifies it, without waiting for anything.
+//
+// It is separate from waiting because the two are independent: the wrapper
+// records the same status against the same channel whether or not this process
+// is the one that reads it, so detaching changes who waits and nothing else.
+func (t *tools) startCommand(
+	ctx context.Context,
+	request *mcp.CallToolRequest,
+	input runCommandInput,
+) (*job, error) {
+	if strings.TrimSpace(input.Command) == "" {
+		return nil, fmt.Errorf("command is required")
+	}
+	server := t.target
+	pane, err := t.resolvePaneToWrite(
+		ctx, request, input.PaneID, input.SessionName, "running a command")
+	if err != nil {
+		return nil, err
+	}
+
+	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil {
+		return nil, err
+	}
 	if len(socket.Stdout) == 0 || socket.Stdout[0] == "" {
-		return nil, output, fmt.Errorf("tmux did not report its socket path")
+		return nil, fmt.Errorf("tmux did not report its socket path")
 	}
 
 	directory, err := os.MkdirTemp("", "libtmux-mcp-run")
 	if err != nil {
-		return nil, output, err
+		return nil, err
 	}
-	defer func() { _ = os.RemoveAll(directory) }()
 
-	channel := "libtmux-mcp-" + strconv.FormatInt(runCommandSequence.Add(1), 10)
+	// The channel names the process as well as the command, so that two of
+	// these servers driving one tmux cannot signal each other's waits, and so
+	// that a handle from a previous run is recognisable as one rather than
+	// looking like a handle this run has forgotten.
+	channel := fmt.Sprintf("libtmux-mcp-%d-%d",
+		os.Getpid(), runCommandSequence.Add(1))
 	statusPath := filepath.Join(directory, "status")
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")
@@ -192,13 +317,45 @@ func (t *tools) runCommand(
 		Command:         &script,
 		SuppressHistory: input.SuppressHistory,
 	}); err != nil {
-		return nil, output, err
+		_ = os.RemoveAll(directory)
+		return nil, err
 	}
+	return &job{
+		id:        channel,
+		paneID:    pane.ID(),
+		channel:   channel,
+		command:   input.Command,
+		directory: directory,
+		openedAt:  openedPath,
+		closedAt:  closedPath,
+		statusAt:  statusPath,
+		started:   time.Now(),
+	}, nil
+}
 
-	timeout := time.Duration(input.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = runCommandDefaultTimeout
-	}
+// awaiting is what a wait for one command needs to know, gathered so that the
+// wait reads as one step rather than eight parameters.
+type awaiting struct {
+	server                             tmux.Server
+	pane                               tmux.Pane
+	channel                            string
+	statusPath, openedPath, closedPath string
+	limits                             bounds
+	requested                          int
+	output                             runCommandOutput
+}
+
+// awaitCommand blocks until a started command signals its channel, and reads
+// back its status and the rows it wrote.
+func (t *tools) awaitCommand(
+	ctx context.Context,
+	request *mcp.CallToolRequest,
+	waiting awaiting,
+) (*mcp.CallToolResult, runCommandOutput, error) {
+	output := waiting.output
+	timeout, clamped := resolveWaitTimeout(waiting.requested)
+	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+	output.TimeoutClamped = clamped
 	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
 	defer waitCancel()
 	reporter := newProgressReporter(request, timeout, "waiting for the command to finish")
@@ -206,11 +363,11 @@ func (t *tools) runCommand(
 
 	// The wait runs on a handle with no engine, because a command that blocks
 	// inside tmux holds a pooled connection for as long as it blocks.
-	waiter := server.WithEngine(server.SubprocessEngine())
-	if err := waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: channel}); err != nil {
+	waiter := waiting.server.WithEngine(waiting.server.SubprocessEngine())
+	if err := waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: waiting.channel}); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
 			running := ""
-			if fresh, freshErr := server.Pane(ctx, pane.ID()); freshErr == nil {
+			if fresh, freshErr := waiting.server.Pane(ctx, waiting.pane.ID()); freshErr == nil {
 				running, _ = fresh.Formats().PaneCurrentCommand()
 			}
 			// The result says the command did not finish; why is diagnostic
@@ -218,19 +375,20 @@ func (t *tools) runCommand(
 			// asked for rather than into the reply.
 			logToClient(ctx, request, "warning", map[string]any{
 				"event":   "run_command timed out",
-				"pane":    pane.ID().String(),
+				"pane":    waiting.pane.ID().String(),
 				"running": running,
 				"seconds": int(timeout.Seconds()),
 			})
 			output.TimedOut = true
 			output.Running = running
-			attachCommandOutput(ctx, pane, openedPath, closedPath, limits, &output)
+			attachCommandOutput(ctx, waiting.pane,
+				waiting.openedPath, waiting.closedPath, waiting.limits, &output)
 			return nil, output, nil
 		}
 		return nil, output, err
 	}
 
-	recorded, err := os.ReadFile(statusPath)
+	recorded, err := os.ReadFile(waiting.statusPath)
 	if err != nil {
 		return nil, output, fmt.Errorf("command finished without recording a status: %w", err)
 	}
@@ -239,7 +397,8 @@ func (t *tools) runCommand(
 		return nil, output, fmt.Errorf("unreadable exit status %q", recorded)
 	}
 	output.ExitStatus = &status
-	attachCommandOutput(ctx, pane, openedPath, closedPath, limits, &output)
+	attachCommandOutput(ctx, waiting.pane,
+		waiting.openedPath, waiting.closedPath, waiting.limits, &output)
 	return nil, output, nil
 }
 
@@ -338,6 +497,11 @@ type waitForTextInput struct {
 	// after the call began can match. Use it when the pattern is something the
 	// pane may have said before and the question is whether it says it again.
 	SinceEntry bool `json:"sinceEntry,omitempty" jsonschema:"ignore what the pane already shows and match only new output"`
+	// IdleSeconds ends the wait when the pane has written nothing for that
+	// long. It is the ending for a program whose output cannot be predicted:
+	// a caller that does not know what "done" prints still knows that done
+	// means quiet. Zero waits for a pattern or the deadline instead.
+	IdleSeconds int `json:"idleSeconds,omitempty" jsonschema:"end the wait once the pane has written nothing for this many seconds"`
 	// TimeoutSeconds bounds the wait. Zero uses a default.
 	TimeoutSeconds int `json:"timeoutSeconds,omitempty" jsonschema:"how long to wait before giving up"`
 	// MaxLines caps the returned output, keeping the last lines.
@@ -358,6 +522,11 @@ const (
 	// outcomeOutput means the pane wrote something, which is what an empty
 	// Patterns waits for.
 	outcomeOutput = "output"
+	// outcomeIdle means the pane went quiet for idleSeconds. Lines reports
+	// what it wrote before it did, and an empty Lines with this outcome means
+	// the pane never wrote at all, which is what a command that was never
+	// started looks like.
+	outcomeIdle = "idle"
 	// outcomeTimeout means the deadline arrived first.
 	outcomeTimeout = "timeout"
 )
@@ -383,6 +552,13 @@ type waitForTextOutput struct {
 	Lines []string `json:"lines,omitempty"`
 	// ElapsedSeconds is how long the wait took.
 	ElapsedSeconds float64 `json:"elapsedSeconds"`
+	// EffectiveTimeoutSeconds is the wait this call actually ran, which is
+	// what timeoutSeconds asked for unless the server's ceiling was lower.
+	EffectiveTimeoutSeconds int `json:"effectiveTimeoutSeconds"`
+	// TimeoutClamped reports that the ceiling shortened the wait, so a caller
+	// that asked for longer learns the policy from a reply rather than from a
+	// failed call.
+	TimeoutClamped bool `json:"timeoutClamped,omitempty"`
 	// truncation reports what the bounds dropped from Lines.
 	truncation
 }
@@ -428,6 +604,12 @@ func (t *tools) waitForText(
 	}
 	output := waitForTextOutput{PaneID: pane.ID().String(), Outcome: outcomeTimeout}
 	started := time.Now()
+	// Resolved before the entry check rather than beside the wait it bounds,
+	// so that a match already on the screen reports the same budget a match
+	// arriving a minute later would have.
+	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+	output.TimeoutClamped = clamped
 
 	// What the pane already shows counts unless the caller said otherwise. A
 	// client cannot start a program and wait for it in the same request, so by
@@ -458,16 +640,13 @@ func (t *tools) waitForText(
 	}
 	defer func() { _ = control.Close() }()
 
-	timeout := time.Duration(input.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = runCommandDefaultTimeout
-	}
 	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
 	defer waitCancel()
 	reporter := newProgressReporter(request, timeout, "watching the pane")
 	defer reporter.stop()
 
-	written, outcome, matched, err := watchPane(waitCtx, control, pane.ID(), patterns, stops)
+	idle := time.Duration(input.IdleSeconds) * time.Second
+	written, outcome, matched, err := watchPane(waitCtx, control, pane.ID(), patterns, stops, idle)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		return nil, output, err
 	}
@@ -484,22 +663,40 @@ func (t *tools) waitForText(
 }
 
 // watchPane reads a pane's output until something matches or the wait ends.
+//
+// A nonzero idle ends the wait once the pane has been quiet for that long. The
+// window is measured from this pane's output alone: tmux reports structural
+// changes on the same connection, and a window opening elsewhere is not this
+// pane saying something, so it must not count as the pane still working.
 func watchPane(
 	ctx context.Context,
 	control *tmux.ControlClient,
 	paneID tmux.PaneID,
 	patterns, stops []namedMatcher,
+	idle time.Duration,
 ) (written string, outcome, matched string, err error) {
 	var buffer strings.Builder
+	quiet := time.Now().Add(idle)
 	for {
-		notification, notifyErr := control.NextNotification(ctx)
+		readCtx, cancelRead := ctx, context.CancelFunc(func() {})
+		if idle > 0 {
+			readCtx, cancelRead = context.WithDeadline(ctx, quiet)
+		}
+		notification, notifyErr := control.NextNotification(readCtx)
+		cancelRead()
 		if notifyErr != nil {
+			// The idle window closing is an answer; the whole wait running out
+			// is not. Only the outer context being live tells them apart.
+			if idle > 0 && ctx.Err() == nil {
+				return buffer.String(), outcomeIdle, "", nil
+			}
 			return buffer.String(), outcomeTimeout, "", notifyErr
 		}
 		id, data, isOutput := notification.Output()
 		if !isOutput || id != paneID {
 			continue
 		}
+		quiet = time.Now().Add(idle)
 		buffer.Write(data)
 		if buffer.Len() > waitBufferMax {
 			// Only the tail can still complete a match, and a pane writing
@@ -515,9 +712,11 @@ func watchPane(
 		if name, hit := firstMatch(patterns, seen); hit {
 			return seen, outcomeMatched, name, nil
 		}
-		if len(patterns) == 0 && len(stops) == 0 {
+		if len(patterns) == 0 && len(stops) == 0 && idle == 0 {
 			// Nothing to match means the caller is waiting for the pane to say
-			// anything at all, and it just has.
+			// anything at all, and it just has. An idle window is the other
+			// way round: the caller is waiting for the pane to stop, so the
+			// first byte is the start of what it waits out rather than an end.
 			return seen, outcomeOutput, "", nil
 		}
 	}
@@ -617,8 +816,19 @@ func addWaitTools(server *mcp.Server, t *tools) {
 			"followed by capture_pane: it does not read the screen to decide the " +
 			"command is done, so the shell's echo of the command cannot be " +
 			"mistaken for the command's output, and an exit status is something " +
-			"no capture recovers.",
+			"no capture recovers. Pass detach for a command you do not need the " +
+			"answer to yet, such as a build: it returns a jobId at once, you do " +
+			"other work, and get_job collects the status and the output later.",
 	}, t.runCommand)
+	register(server, t, &mcp.Tool{
+		Name:        "get_job",
+		Annotations: readOnly("Collect a Detached Command"),
+		Description: "Collect a command started with run_command and detach. " +
+			"Without timeoutSeconds it reports whether the command has finished " +
+			"and returns at once, which is what to call between other work; with " +
+			"one it waits that long. A finished job reports its exit status and " +
+			"its output, and answers the same way however often you ask.",
+	}, t.getJob)
 	register(server, t, &mcp.Tool{
 		Name:        "wait_for_text",
 		Annotations: readOnly("Wait for Pane Output"),
@@ -627,6 +837,8 @@ func addWaitTools(server *mcp.Server, t *tools) {
 			"client did not author, such as a service announcing it is ready. " +
 			"Pass stop with the markers of failure you already know, so a run " +
 			"that failed returns at once instead of at the deadline. Omit " +
-			"patterns to wait for any output at all.",
+			"patterns to wait for any output at all. When you cannot predict what " +
+			"finishing prints, set idleSeconds and wait for the pane to go quiet " +
+			"instead.",
 	}, t.waitForText)
 }
