@@ -55,6 +55,7 @@ the pane showed 3 line(s):
 | `WaitForLine` | some line is exactly a string |
 | `WaitForScreen` | a condition of your own returns true |
 | `WaitForShellReady` | the pane's shell will accept typing |
+| `TypeAndWait` | a command you typed has finished, pass or fail |
 
 `Screen` reads the pane without waiting. All of them read the visible screen
 rather than the scrollback, so what they search is what a failure prints.

@@ -2,6 +2,8 @@ package tmuxtest
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -171,6 +173,40 @@ func Type(ctx context.Context, t testing.TB, pane tmux.Pane, command string) {
 	}); err != nil {
 		t.Fatal(harnessFailure("send pane command", err))
 	}
+}
+
+// TypeAndWait sends command to the pane and blocks until it has finished.
+//
+// [Type] returns as soon as tmux has the keys, which says nothing about the
+// program: a test that types "make build" and reads the screen reads it while
+// make is still running. This waits for the command to be over, whether it
+// succeeded or failed, so the screen that follows is the one it left.
+//
+// It works by asking the shell to print a marker after the command, and waiting
+// for that marker on its own line. The command's own exit status is not
+// reported: a test that wants it should ask for it, by typing a command that
+// prints it.
+func TypeAndWait(ctx context.Context, t testing.TB, pane tmux.Pane, command string) {
+	t.Helper()
+	marker, err := finishedMarker()
+	if err != nil {
+		t.Fatal(harnessFailure("generate command marker", err))
+	}
+	// Separated by ";" rather than "&&" so that a command which fails is still
+	// a command that finished.
+	Type(ctx, t, pane, command+"; printf '\\n"+marker+"\\n'")
+	// Matched whole: the shell echoes the line above, and that echo contains
+	// the marker as a substring of a longer line.
+	WaitForLine(ctx, t, pane, marker)
+}
+
+// finishedMarker returns a line that a command's own output will not contain.
+func finishedMarker() (string, error) {
+	raw := make([]byte, 8)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return "tmuxtest-finished-" + hex.EncodeToString(raw), nil
 }
 
 // RunInPane returns a pane running command on a tmux server of its own.

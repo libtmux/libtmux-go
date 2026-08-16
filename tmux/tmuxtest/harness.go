@@ -32,7 +32,8 @@
 //	    | connecting
 //
 // [WaitForLine] matches a whole line, [WaitForScreen] takes a condition of your
-// own, and [Screen] reads the pane without waiting.
+// own, and [Screen] reads the pane without waiting. [TypeAndWait] is [Type] for
+// a command whose end matters rather than its output.
 //
 // [RunInPane] gives its panes a POSIX shell with no start-up files and the
 // fixed [ShellPrompt], so a pane shows the same thing on every machine rather

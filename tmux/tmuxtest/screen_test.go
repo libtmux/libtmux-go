@@ -195,3 +195,36 @@ func (r *recordingTB) record(message string) {
 	}
 	runtime.Goexit()
 }
+
+// TestTypeAndWaitReturnsAfterTheCommandIsOver proves the wait is about the
+// command rather than about its output: the screen is read once TypeAndWait
+// returns, with nothing else waited for, and the command's own last line is
+// already there.
+func TestTypeAndWaitReturnsAfterTheCommandIsOver(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pane := tmuxtest.RunInPane(ctx, t, "true")
+	tmuxtest.TypeAndWait(ctx, t, pane, "printf 'slow start\\n'; sleep 0.4; printf 'slow finish\\n'")
+
+	screen := tmuxtest.Screen(ctx, t, pane)
+	var finished bool
+	for _, line := range screen {
+		finished = finished || line == "slow finish"
+	}
+	if !finished {
+		t.Fatalf("TypeAndWait() returned before the command's last line: %#v", screen)
+	}
+}
+
+// TestTypeAndWaitReturnsForACommandThatFailed keeps the wait about finishing
+// rather than succeeding. A test asserting on what a failing command left
+// behind needs it to return.
+func TestTypeAndWaitReturnsForACommandThatFailed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pane := tmuxtest.RunInPane(ctx, t, "true")
+	tmuxtest.TypeAndWait(ctx, t, pane, "printf 'before failing\\n'; false")
+	tmuxtest.WaitForLine(ctx, t, pane, "before failing")
+}
