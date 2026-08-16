@@ -20,7 +20,7 @@ import (
 //
 //libtmux:real-tmux
 func TestSessionWindowNavigationAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -88,7 +88,7 @@ func TestSessionWindowNavigationAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestWindowLayoutAndResizeAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -192,7 +192,7 @@ func TestWindowLayoutAndResizeAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestWindowResizeUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -281,7 +281,7 @@ func TestWindowResizeUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestWindowSelectLayoutUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -372,7 +372,7 @@ func TestWindowSelectLayoutUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestWindowHighLevelOperationsUseReceiverWinlinkAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -691,7 +691,7 @@ func TestWindowHighLevelOperationsUseReceiverWinlinkAgainstRealTmux(t *testing.T
 //
 //libtmux:real-tmux
 func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -807,7 +807,7 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestWindowUnlinkTargetsDuplicateWinlinkByIndexAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -867,7 +867,7 @@ func TestWindowUnlinkTargetsDuplicateWinlinkByIndexAgainstRealTmux(t *testing.T)
 
 //libtmux:real-tmux
 func TestSessionLastWindowErrorAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	session := mustRealSnapshot(t, server).Sessions()[0]

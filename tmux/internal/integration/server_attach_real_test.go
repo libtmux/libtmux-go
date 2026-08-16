@@ -22,7 +22,7 @@ import (
 //
 //libtmux:real-tmux
 func TestAttachSessionAgainstRealTmuxPTY(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	// One budget covers every case below, each of which attaches a real tmux
 	// client over a pty and detaches it again. How long that takes is a fact
 	// about the machine rather than about attaching, and a budget tight enough
@@ -101,7 +101,7 @@ func TestAttachSessionAgainstRealTmuxPTY(t *testing.T) {
 
 //libtmux:real-tmux
 func TestAttachSessionCancellationAgainstRealTmuxPTY(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	// Generous for the same reason, and unrelated to the one-second deadline
 	// this test is about: that one is set inside the helper process, where
 	// AttachSession is required to return context.DeadlineExceeded.
@@ -144,7 +144,7 @@ func TestAttachSessionRealHelper(t *testing.T) {
 		Binary:     os.Getenv("LIBTMUX_ATTACH_BINARY"),
 		SocketPath: os.Getenv("LIBTMUX_ATTACH_SOCKET"),
 		ConfigFile: os.Getenv("LIBTMUX_ATTACH_CONFIG"),
-	}).WithStrictErrors()
+	})
 	mode := os.Getenv("LIBTMUX_ATTACH_MODE")
 	ctx := context.Background()
 	if mode == "cancel" {

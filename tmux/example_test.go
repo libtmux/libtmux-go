@@ -66,7 +66,7 @@ func Example() {
 func ExamplePane_SendKeys() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"}).WithStrictErrors()
+	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
 	panes, err := server.Panes(ctx)
 	if err != nil || len(panes) == 0 {
@@ -105,7 +105,7 @@ func ExamplePane_SendKeys() {
 func ExamplePane_CaptureBytes() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"}).WithStrictErrors()
+	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
 	panes, err := server.Panes(ctx)
 	if err != nil || len(panes) == 0 {
@@ -126,7 +126,7 @@ func ExampleServer_Sessions() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil {
 		return
 	}
@@ -161,7 +161,7 @@ func ExampleServer_Cmd() {
 func ExampleServer_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"}).WithStrictErrors()
+	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -206,7 +206,7 @@ func ExampleServer_Snapshot() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
-	snapshot, err := server.WithStrictErrors().Snapshot(ctx)
+	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		return
 	}
@@ -238,7 +238,7 @@ func ExamplePaneFilter_Predicate() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
-	panes, err := server.WithStrictErrors().Panes(ctx)
+	panes, err := server.Panes(ctx)
 	if err != nil {
 		return
 	}
@@ -289,19 +289,29 @@ func ExampleSparseArray() {
 	//  false
 }
 
-func ExampleServer_WithStrictErrors() {
+func ExampleErrNoServer() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
-	_, err := server.WithStrictErrors().Sessions(ctx)
-	if err == nil {
+	sessions, err := server.Sessions(ctx)
+	switch {
+	case errors.Is(err, tmux.ErrNoServer):
+		// Nothing is running yet, which is not a failure worth reporting: a
+		// tmux server holding no sessions exits, so an absent server and an
+		// empty one are the same state.
+		fmt.Println("no sessions")
+		return
+	case err != nil:
+		// Anything else means the question could not be answered: a socket
+		// that cannot be read, a path that is not a socket, a tmux too old.
+		var commandError *tmux.CommandError
+		if errors.As(err, &commandError) {
+			fmt.Println(commandError.Subcommand, commandError.Result.ExitCode)
+		}
 		return
 	}
-	var commandError *tmux.CommandError
-	if errors.As(err, &commandError) {
-		fmt.Println(commandError.Subcommand, commandError.Result.ExitCode)
-	}
+	fmt.Println(len(sessions), "sessions")
 }
 
 func ExampleSession_Options() {
@@ -309,7 +319,7 @@ func ExampleSession_Options() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
 		return
 	}
@@ -327,7 +337,7 @@ func ExampleSession_SetMouse() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
 		return
 	}
@@ -346,7 +356,7 @@ func ExampleSession_SetUpdateEnvironment() {
 		return
 	}
 
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
 		return
 	}
@@ -380,7 +390,7 @@ func ExampleServer_SearchPanes() {
 	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
 	filter := tmux.TmuxFilter("#{==:#{pane_current_command},nvim}")
 
-	panes, err := server.WithStrictErrors().SearchPanes(ctx, &filter)
+	panes, err := server.SearchPanes(ctx, &filter)
 	if err != nil {
 		return
 	}
@@ -402,7 +412,7 @@ func ExampleServer_NewSession() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-new-session",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -421,7 +431,7 @@ func ExampleSession_NewWindow() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-new-window",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -448,7 +458,7 @@ func ExampleWindow_SplitPane() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-split-pane",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -485,7 +495,7 @@ func ExamplePane_Capture() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -553,7 +563,7 @@ func ExampleServer_Session() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-session-lookup",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	created, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -578,7 +588,7 @@ func ExampleServer_Window() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-window-lookup",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
@@ -609,7 +619,7 @@ func ExampleServer_Pane() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-pane-lookup",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -637,7 +647,7 @@ func ExampleServer_Client() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-client-lookup",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -657,7 +667,7 @@ func ExampleWindow_SearchPanes() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-search-panes",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -690,7 +700,7 @@ func ExampleWindow_Panes() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-window-panes",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -735,7 +745,7 @@ func ExampleServer_SetOption() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-set-option",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -759,7 +769,7 @@ func ExampleServer_RawOption() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-raw-option",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -778,7 +788,7 @@ func ExampleSession_SetBellAction() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-bell-action",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -808,7 +818,7 @@ func ExampleServer_WithEngine() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-with-engine",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -843,7 +853,7 @@ func ExampleControlClient_Engine() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-client-engine",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -881,7 +891,7 @@ func ExampleServer_WaitFor() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-wait-for",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -915,7 +925,7 @@ func ExampleServer_WaitFor_paneCompletion() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
 	socket := "libtmux-go-example-wait-for-pane"
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: socket}).WithStrictErrors()
+	server := tmux.NewServer(tmux.ServerOptions{SocketName: socket})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -949,7 +959,7 @@ func ExamplePoll() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-poll",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -1014,7 +1024,7 @@ func ExampleSubprocessRunner() {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-subprocess-runner",
 		Runner:     counting,
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"}); err != nil {
@@ -1039,7 +1049,7 @@ func ExampleControlClient_NextNotification() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-output-events",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "stream"})
@@ -1111,7 +1121,7 @@ func ExamplePane_WithServer() {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-with-server",
 		Runner:     counting,
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -1168,7 +1178,7 @@ func ExamplePane_CaptureToFile() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture-to-file",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	// tmux writes this file, so it has to be a path the tmux server can reach.
@@ -1229,7 +1239,7 @@ func ExampleServer_OpenControlPool() {
 	defer cancel()
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-control-pool",
-	}).WithStrictErrors()
+	})
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})

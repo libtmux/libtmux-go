@@ -24,8 +24,8 @@ type SetHooksResult struct {
 }
 
 // Hooks returns a freshly decoded, caller-owned view of known global
-// session-scope hooks, including inherited values. List failures are lenient
-// unless the originating [Server] had [Server.WithStrictErrors] enabled.
+// session-scope hooks, including inherited values. A read failure is returned
+// rather than answered with zero values.
 func (s GlobalSessionScope) Hooks(ctx context.Context) (ServerHookValues, error) {
 	values, err := readTypedOptionValues(
 		ctx,
@@ -42,8 +42,8 @@ func (s GlobalSessionScope) Hooks(ctx context.Context) (ServerHookValues, error)
 }
 
 // Hooks returns a freshly decoded, caller-owned view of known global window
-// hooks, including defaults. List failures are lenient unless the originating
-// [Server] had [Server.WithStrictErrors] enabled; context errors propagate.
+// hooks, including defaults. A read failure is returned rather than answered
+// with zero values; context errors propagate.
 func (s GlobalWindowScope) Hooks(ctx context.Context) (WindowHookValues, error) {
 	values, err := readTypedOptionValues(
 		ctx,
@@ -60,8 +60,8 @@ func (s GlobalWindowScope) Hooks(ctx context.Context) (WindowHookValues, error) 
 }
 
 // Hooks returns a freshly decoded, caller-owned view of known hooks at this
-// stable session target, including inherited values. List failures are lenient
-// unless [Server.WithStrictErrors] is enabled.
+// stable session target, including inherited values. A read failure is returned
+// rather than answered with zero values.
 func (s Session) Hooks(ctx context.Context) (SessionHookValues, error) {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -83,8 +83,8 @@ func (s Session) Hooks(ctx context.Context) (SessionHookValues, error) {
 
 // Hooks returns a freshly decoded, caller-owned view of known hooks at this
 // exact window target, including inherited values. The receiver's exact linked
-// session context controls tmux format evaluation. List failures are lenient
-// unless [Server.WithStrictErrors] is enabled.
+// session context controls tmux format evaluation. A read failure is returned
+// rather than answered with zero values.
 func (w Window) Hooks(ctx context.Context) (WindowHookValues, error) {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -106,8 +106,8 @@ func (w Window) Hooks(ctx context.Context) (WindowHookValues, error) {
 
 // Hooks returns a freshly decoded, caller-owned view of known hooks at this
 // exact pane target, including inherited values. The receiver's exact linked
-// session context controls tmux format evaluation. List failures are lenient
-// unless [Server.WithStrictErrors] is enabled.
+// session context controls tmux format evaluation. A read failure is returned
+// rather than answered with zero values.
 func (p Pane) Hooks(ctx context.Context) (PaneHookValues, error) {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {

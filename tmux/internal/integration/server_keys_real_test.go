@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -109,9 +110,16 @@ func TestBindListAndUnbindKeyAgainstRealTmux(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UnbindKey(all) error = %v", err)
 	}
+	// tmux drops a key table once its last binding goes, and then reports the
+	// table as missing. That message is the same one a misspelled table name
+	// produces, so it is returned rather than read as a table holding no
+	// bindings: only the caller knows which of the two it meant.
 	lines, err = server.ListKeys(ctx, tmux.ListKeysRequest{KeyTable: &allTable})
-	if err != nil || lines == nil || len(lines) != 0 {
-		t.Fatalf("ListKeys(all table) after unbind = (%#v, %v), want nonnil empty", lines, err)
+	if !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("ListKeys(all table) after unbind error = %v, want ErrCommand", err)
+	}
+	if lines != nil {
+		t.Fatalf("ListKeys(all table) after unbind = %#v, want no rows beside an error", lines)
 	}
 	if err := server.UnbindKey(ctx, tmux.UnbindKeyRequest{
 		KeyTable: &allTable,
@@ -257,7 +265,7 @@ func onlyServerKeySession(
 	server tmux.Server,
 ) tmux.Session {
 	t.Helper()
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil {
 		t.Fatalf("Sessions() error = %v", err)
 	}

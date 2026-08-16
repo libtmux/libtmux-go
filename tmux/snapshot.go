@@ -292,9 +292,10 @@ func (s Snapshot) ClientByName(name ClientName) (Client, error) {
 
 // Snapshot materializes sessions, winlinks, panes, and clients. Its commands
 // run sequentially, so the result is observational rather than an atomic tmux
-// transaction. In lenient mode it normalizes only completed command and
-// transport failures from collection reads; context, decode, version, and
-// identity-change failures remain errors. Canceling ctx stops the current tmux
+// transaction. A tmux command or transport failure is returned rather than
+// answered with an empty snapshot, and [ErrNoServer] classifies a server that
+// was not reached; context, decode, version, and identity-change failures are
+// errors of their own. Canceling ctx stops the current tmux
 // command wait; earlier listings may already have completed.
 //
 // The result is proven to describe one tmux server. A server that exits and is
@@ -307,12 +308,9 @@ func (s Snapshot) ClientByName(name ClientName) (Client, error) {
 // the closing read. The opening one stays: it reports the server's version as
 // well as its identity, and the listing formats are chosen from that.
 func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
-	identity, normalized, err := s.probeSnapshotIdentity(ctx)
+	identity, err := s.probeSnapshotIdentity(ctx)
 	if err != nil {
 		return Snapshot{}, err
-	}
-	if normalized {
-		return newSnapshot(s, Version{}, snapshotRecords{})
 	}
 	minimum, err := ParseVersion(MinimumSupportedVersion)
 	if err != nil {
@@ -335,7 +333,7 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 		{command: "list-clients", target: &records.clients},
 	}
 	for _, current := range listings {
-		values, normalized, listErr := s.snapshotListing(
+		values, listErr := s.snapshotListing(
 			ctx,
 			current.command,
 			current.extra,
@@ -343,21 +341,15 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 		)
 		if listErr != nil {
 			if snapshotCollectionError(listErr) {
-				return s.snapshotAfterStrictListingFailure(ctx, identity, listErr)
+				return s.snapshotAfterListingFailure(ctx, identity, listErr)
 			}
 			return Snapshot{}, listErr
 		}
-		if normalized {
-			return s.snapshotAfterNormalizedListing(ctx, identity)
-		}
 		*current.target = values
 	}
-	closingIdentity, normalized, err := s.probeClosingIdentity(ctx, identity)
+	closingIdentity, err := s.probeClosingIdentity(ctx, identity)
 	if err != nil {
 		return Snapshot{}, err
-	}
-	if normalized {
-		return newSnapshot(s, Version{}, snapshotRecords{})
 	}
 	if !sameSnapshotIdentity(identity, closingIdentity) {
 		return Snapshot{}, snapshotIdentityChangeError(closingIdentity)
@@ -365,40 +357,23 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	return newSnapshotWithIdentity(s, identity.version, records, &identity)
 }
 
-func (s Server) snapshotAfterNormalizedListing(
-	ctx context.Context,
-	opening snapshotServerIdentity,
-) (Snapshot, error) {
-	probe := s
-	probe.strictErrors = false
-	closing, normalized, err := probe.probeClosingIdentity(ctx, opening)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	if normalized {
-		return newSnapshot(s, Version{}, snapshotRecords{})
-	}
-	if !sameSnapshotIdentity(opening, closing) {
-		return Snapshot{}, snapshotIdentityChangeError(closing)
-	}
-	return newSnapshotWithIdentity(s, opening.version, snapshotRecords{}, &opening)
-}
-
-func (s Server) snapshotAfterStrictListingFailure(
+// snapshotAfterListingFailure reports why a listing failed, and says so
+// alongside a server identity change when the server was also replaced. The
+// identity probe is allowed to fail: a server that has gone is the likeliest
+// reason the listing failed, and the listing error is the one worth reporting.
+func (s Server) snapshotAfterListingFailure(
 	ctx context.Context,
 	opening snapshotServerIdentity,
 	listErr error,
 ) (Snapshot, error) {
-	probe := s
-	probe.strictErrors = false
-	closing, normalized, err := probe.probeClosingIdentity(ctx, opening)
+	closing, err := s.probeClosingIdentity(ctx, opening)
 	if err != nil {
 		if contextError(err) {
 			return Snapshot{}, err
 		}
-		return Snapshot{}, errors.Join(listErr, err)
+		return Snapshot{}, listErr
 	}
-	if !normalized && !sameSnapshotIdentity(opening, closing) {
+	if !sameSnapshotIdentity(opening, closing) {
 		return Snapshot{}, errors.Join(listErr, snapshotIdentityChangeError(closing))
 	}
 	return Snapshot{}, listErr
@@ -441,14 +416,14 @@ func snapshotIdentityFields() []formatField {
 func (s Server) probeClosingIdentity(
 	ctx context.Context,
 	opening snapshotServerIdentity,
-) (snapshotServerIdentity, bool, error) {
+) (snapshotServerIdentity, error) {
 	if s.boundToInstance() {
-		return opening, false, nil
+		return opening, nil
 	}
 	return s.probeSnapshotIdentity(ctx)
 }
 
-func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdentity, bool, error) {
+func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdentity, error) {
 	fields := snapshotIdentityFields()
 	result, rawOutput, err := s.literalCmdWithRaw(
 		ctx,
@@ -457,27 +432,17 @@ func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdenti
 		formatTemplate(fields),
 	)
 	if err != nil {
-		if contextError(err) || s.strictErrors {
-			return snapshotServerIdentity{}, false, err
-		}
-		var transportError *commandTransportError
-		if errors.As(err, &transportError) {
-			return snapshotServerIdentity{}, true, nil
-		}
-		return snapshotServerIdentity{}, false, err
+		return snapshotServerIdentity{}, err
 	}
 	if result.ExitCode != 0 {
-		if s.strictErrors {
-			return snapshotServerIdentity{}, false, newCommandError("display-message", result)
-		}
-		return snapshotServerIdentity{}, true, nil
+		return snapshotServerIdentity{}, newCommandError("display-message", result)
 	}
 	rows, err := decodeFormatRecords(rawOutput, Version{}, fields)
 	if err != nil {
-		return snapshotServerIdentity{}, false, err
+		return snapshotServerIdentity{}, err
 	}
 	if len(rows) != 1 {
-		return snapshotServerIdentity{}, false, newSnapshotDecodeError(
+		return snapshotServerIdentity{}, newSnapshotDecodeError(
 			"server",
 			0,
 			"identity",
@@ -487,15 +452,15 @@ func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdenti
 	}
 	identity, err := decodeSnapshotIdentity("server", 0, rows[0])
 	if err != nil {
-		return snapshotServerIdentity{}, false, err
+		return snapshotServerIdentity{}, err
 	}
 	if isOpenBSDVersionToken(identity.version.String()) {
 		capabilities, versionErr := s.Version(ctx)
 		if versionErr != nil {
-			return snapshotServerIdentity{}, false, versionErr
+			return snapshotServerIdentity{}, versionErr
 		}
 		if capabilities.String() != identity.version.String() {
-			return snapshotServerIdentity{}, false, newVersionQueryError(
+			return snapshotServerIdentity{}, newVersionQueryError(
 				CommandResult{},
 				"tmux binary version differed from server version",
 			)
@@ -505,7 +470,7 @@ func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdenti
 		identity.version.patch = capabilities.patch
 		identity.version.development = capabilities.development
 	}
-	return identity, false, nil
+	return identity, nil
 }
 
 func (s Server) snapshotListing(
@@ -513,10 +478,10 @@ func (s Server) snapshotListing(
 	command string,
 	extra []string,
 	version Version,
-) ([]formatValues, bool, error) {
+) ([]formatValues, error) {
 	fields, err := formatFieldsFor(command, version)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	arguments := make([]string, 0, 2+len(extra))
 	arguments = append(arguments, command)
@@ -524,26 +489,16 @@ func (s Server) snapshotListing(
 	arguments = append(arguments, "-F"+formatTemplate(fields))
 	result, rawOutput, err := s.literalCmdWithRaw(ctx, arguments...)
 	if err != nil {
-		if contextError(err) || s.strictErrors {
-			return nil, false, err
-		}
-		var transportError *commandTransportError
-		if errors.As(err, &transportError) {
-			return nil, true, nil
-		}
-		return nil, false, err
+		return nil, err
 	}
 	if result.ExitCode != 0 {
-		if s.strictErrors {
-			return nil, false, newCommandError(command, result)
-		}
-		return nil, true, nil
+		return nil, newCommandError(command, result)
 	}
 	values, err := decodeFormatRecords(rawOutput, version, fields)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	return values, false, nil
+	return values, nil
 }
 
 func contextError(err error) bool {

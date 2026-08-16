@@ -64,7 +64,7 @@ func TestDisplayPopupVersionedFieldsAgainstRealTmux(t *testing.T) {
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -124,7 +124,7 @@ func TestDisplayPopupVersionedFieldsAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestDisplayPopupNoKeysAndCloseOnAnyKeyPrecedenceAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -210,7 +210,7 @@ func TestDisplayPopupNoKeysAndCloseOnAnyKeyPrecedenceAgainstRealTmux(t *testing.
 
 //libtmux:real-tmux
 func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

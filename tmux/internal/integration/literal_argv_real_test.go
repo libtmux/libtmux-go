@@ -32,7 +32,7 @@ func TestLiteralArgumentsAndRawSeparatorsAgainstRealTmux(t *testing.T) {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: socket,
 		ConfigFile: configuration,
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	alive, err := server.IsAlive(ctx)

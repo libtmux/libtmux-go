@@ -296,7 +296,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 			"session_id": "$7", "session_name": "alpha",
 		})...,
 	)}
-	server := serverWithRunner(runner).WithStrictErrors()
+	server := serverWithRunner(runner)
 
 	session, err := server.NewSession(context.Background(), NewSessionRequest{
 		Name:           "alpha",
@@ -316,7 +316,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	name, _ := session.Name()
 	producing := session.Server()
 	if session.sessionID != "$7" || name != "alpha" ||
-		!producing.strictErrors || producing.connectionState().runner != runner {
+		producing.connectionState().runner != runner {
 		t.Fatalf("NewSession() = %#v with name %q, want live $7 alpha model", session, name)
 	}
 
@@ -442,7 +442,7 @@ func TestNewWindowBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 			nil,
 		)...,
 	)}
-	server := serverWithRunner(runner).WithStrictErrors()
+	server := serverWithRunner(runner)
 	session := Session{server: server, sessionID: "$1"}
 
 	window, err := session.NewWindow(context.Background(), NewWindowRequest{
@@ -486,7 +486,7 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 			},
 		)...,
 	)}
-	server := serverWithRunner(runner).WithStrictErrors()
+	server := serverWithRunner(runner)
 	window := Window{server: server, sessionID: "$1", windowID: "@8", windowIndex: 4}
 
 	pane, err := window.SplitPane(context.Background(), SplitPaneRequest{
@@ -625,7 +625,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 			responses := []versionResponse{{result: tmuxcmd.Result{ExitCode: 0}}}
 			responses = append(responses, lifecycleLookupResponses(t, version, test.listing, test.row)...)
 			runner := &versionQueueRunner{responses: responses}
-			got, err := test.invoke(serverWithRunner(runner).WithStrictErrors())
+			got, err := test.invoke(serverWithRunner(runner))
 			if err != nil {
 				t.Fatalf("%s operation error = %v", test.command, err)
 			}
@@ -860,7 +860,7 @@ func TestCreationReturnsIdentityHandleWhenLiveLookupFails(t *testing.T) {
 				{result: tmuxcmd.Result{Stdout: []string{identities[test.name]}, ExitCode: 0}},
 				{err: context.Canceled},
 			}}
-			server := serverWithRunner(runner).WithStrictErrors()
+			server := serverWithRunner(runner)
 			identity, producingServer, err := test.invoke(server)
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("create error = %v, want context canceled lookup error", err)
@@ -931,7 +931,7 @@ func TestCreationTransportErrorPreservesPrintedIdentity(t *testing.T) {
 				result: tmuxcmd.Result{Stdout: []string{test.identity}, ExitCode: -1},
 				err:    context.Canceled,
 			}}}
-			server := serverWithRunner(runner).WithStrictErrors()
+			server := serverWithRunner(runner)
 			identity, producingServer, err := test.invoke(server)
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("create error = %v, want context canceled", err)
@@ -1258,7 +1258,7 @@ func TestMutationReturnsReceiverWhenRefreshFails(t *testing.T) {
 				{result: tmuxcmd.Result{ExitCode: 0}},
 				{err: context.Canceled},
 			}}
-			server := serverWithRunner(runner).WithStrictErrors()
+			server := serverWithRunner(runner)
 			identity, producingServer, err := test.invoke(server)
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("mutation error = %v, want context canceled refresh error", err)
@@ -1331,7 +1331,7 @@ func TestNewSessionUsesOneScrubbedHandleAcrossTheLifecycle(t *testing.T) {
 			"session_id": "$7", "session_name": "alpha",
 		})...,
 	)}
-	original := serverWithRunner(runner).WithStrictErrors()
+	original := serverWithRunner(runner)
 
 	session, err := original.NewSession(context.Background(), NewSessionRequest{
 		Name: "alpha", KillExisting: true,
@@ -1361,9 +1361,6 @@ func TestNewSessionUsesOneScrubbedHandleAcrossTheLifecycle(t *testing.T) {
 	); ok {
 		t.Fatalf("returned server TMUX = %q, want absent", value)
 	}
-	if !producing.strictErrors {
-		t.Fatal("returned server lost strict error mode")
-	}
 	if got := os.Getenv("TMUX"); got != "/tmp/foreign,123,0" {
 		t.Fatalf("process TMUX after NewSession() = %q, want unchanged", got)
 	}
@@ -1381,12 +1378,23 @@ func TestServerKillUsesDaemonStateAfterCompletedFailure(t *testing.T) {
 		wantOK     bool
 	}{
 		{
+			// tmux naming the server as gone proves the kill did what it was
+			// asked, whatever it printed on the way out.
 			name:       "dead after unfamiliar shutdown diagnostic",
+			killStderr: []string{"server exited unexpectedly"},
+			probe: versionResponse{result: tmuxcmd.Result{
+				Stderr: []string{"no server running on /tmp/socket"}, ExitCode: 1,
+			}},
+			wantOK: true,
+		},
+		{
+			// An unrecognized diagnostic proves nothing, so a kill that failed
+			// stays failed rather than being read as a server that is gone.
+			name:       "unproved after unfamiliar probe diagnostic",
 			killStderr: []string{"server exited unexpectedly"},
 			probe: versionResponse{result: tmuxcmd.Result{
 				Stderr: []string{"unavailable"}, ExitCode: 1,
 			}},
-			wantOK: true,
 		},
 		{
 			name:       "alive despite familiar diagnostic",

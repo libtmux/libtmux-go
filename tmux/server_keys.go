@@ -2,7 +2,6 @@ package tmux
 
 import (
 	"context"
-	"errors"
 )
 
 var serverKeysVersion37 = Version{raw: "3.7", major: 3, minor: 7}
@@ -144,7 +143,7 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 // tmux 3.7, 3.7a, and 3.7b redirect a table's sole matching binding to a
 // client status message, leaving stdout empty; this method preserves that
 // upstream and Python behavior. Development tmux has corrected the issue.
-// List failures are lenient unless [Server.WithStrictErrors] is enabled.
+// A list failure is returned rather than answered with no rows.
 func (s Server) ListKeys(
 	ctx context.Context,
 	request ListKeysRequest,
@@ -166,7 +165,7 @@ func (s Server) ListKeys(
 	if hasFormat {
 		current, err := s.Version(ctx)
 		if err != nil {
-			return normalizeServerListVersionFailure(ctx, s, err)
+			return nil, err
 		}
 		if current.AtLeast(serverKeysVersion37) {
 			arguments = append(arguments, "-F", format)
@@ -183,7 +182,7 @@ func (s Server) ListKeys(
 }
 
 // ListCommands returns an owned snapshot of raw tmux command-description lines.
-// List failures are lenient unless [Server.WithStrictErrors] is enabled.
+// A list failure is returned rather than answered with no rows.
 func (s Server) ListCommands(
 	ctx context.Context,
 	request ListCommandsRequest,
@@ -203,14 +202,14 @@ func (s Server) ListCommands(
 }
 
 // ListClients returns an owned snapshot of raw tmux client-description lines.
-// List failures are lenient unless [Server.WithStrictErrors] is enabled.
+// A list failure is returned rather than answered with no rows.
 func (s Server) ListClients(ctx context.Context) ([]string, error) {
 	return runServerListCommand(ctx, s, []string{"list-clients"})
 }
 
 // ShowMessages returns an owned snapshot of the tmux message log, terminal capabilities, job
 // summary, or both terminal and job summaries. A zero TargetClient selects tmux's
-// current client; list failures are lenient unless [Server.WithStrictErrors] is enabled.
+// current client; a list failure is returned rather than answered with no rows.
 func (s Server) ShowMessages(
 	ctx context.Context,
 	request ShowMessagesRequest,
@@ -265,23 +264,4 @@ func validateServerKeyArguments(
 	arguments ...serverCommandArgument,
 ) error {
 	return validateServerCommandArguments(subcommand, arguments...)
-}
-
-func normalizeServerListVersionFailure(
-	ctx context.Context,
-	server Server,
-	err error,
-) ([]string, error) {
-	if server.strictErrors || isContextOperationError(ctx, err) {
-		return nil, err
-	}
-	var transportError *versionTransportError
-	if errors.As(err, &transportError) {
-		return make([]string, 0), nil
-	}
-	var queryError *VersionQueryError
-	if errors.As(err, &queryError) && queryError.failedCommand() {
-		return make([]string, 0), nil
-	}
-	return nil, err
 }

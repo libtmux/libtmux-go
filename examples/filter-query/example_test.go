@@ -24,7 +24,7 @@ func TestFilterQuery(t *testing.T) {
 	defer cancel()
 
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t).WithStrictErrors())
+		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
 	// The point of the example is that a filter tmux evaluates itself returns

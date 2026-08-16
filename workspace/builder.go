@@ -31,7 +31,6 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 	if err := workspace.Validate(); err != nil {
 		return tmux.Session{}, err
 	}
-	server = server.WithStrictErrors()
 
 	first := workspace.Windows[0]
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{

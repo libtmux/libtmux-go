@@ -66,7 +66,7 @@ func (t *tools) loadBuffer(
 	if err != nil {
 		return nil, bufferRef{}, err
 	}
-	if err := t.strict().SetBuffer(ctx, tmux.SetBufferRequest{
+	if err := t.target.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
 		Name: &name,
 	}); err != nil {
@@ -113,7 +113,7 @@ func (t *tools) showBuffer(
 	if err != nil {
 		return nil, showBufferOutput{}, err
 	}
-	contents, err := t.strict().ShowBuffer(ctx, &name)
+	contents, err := t.target.ShowBuffer(ctx, &name)
 	if err != nil {
 		return nil, showBufferOutput{}, err
 	}
@@ -189,7 +189,7 @@ func (t *tools) deleteBuffer(
 	if err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
-	if err := t.strict().DeleteBuffer(ctx, &name); err != nil {
+	if err := t.target.DeleteBuffer(ctx, &name); err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
 	return nil, deleteBufferOutput{Deleted: name}, nil

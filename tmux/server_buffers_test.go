@@ -531,7 +531,7 @@ func TestListBuffersFailureDoesNotRetainData(t *testing.T) {
 		Stderr:   []string{"failed: " + secret},
 		ExitCode: 1,
 	}}}}
-	_, err := serverWithRunner(runner).WithStrictErrors().ListBuffers(
+	_, err := serverWithRunner(runner).ListBuffers(
 		context.Background(),
 		ListBuffersRequest{Format: &format},
 	)
@@ -635,13 +635,12 @@ func TestServerBufferCommandsRejectNULBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestListBuffersNormalizesFailuresAndOwnsResults(t *testing.T) {
+func TestListBuffersReportsFailuresAndOwnsResults(t *testing.T) {
 	t.Parallel()
 
 	source := []string{"one", "two"}
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{Stdout: source, ExitCode: 0}},
-		{result: tmuxcmd.Result{Stdout: []string{"partial"}, Stderr: []string{"failed"}, ExitCode: 1}},
 		{result: tmuxcmd.Result{Stdout: []string{"partial"}, Stderr: []string{"failed"}, ExitCode: 1}},
 		{err: errors.New("transport")},
 		{err: context.DeadlineExceeded},
@@ -658,15 +657,12 @@ func TestListBuffersNormalizesFailuresAndOwnsResults(t *testing.T) {
 	}
 
 	got, err = server.ListBuffers(context.Background(), ListBuffersRequest{})
-	if err != nil || got == nil || len(got) != 0 {
-		t.Fatalf("lenient completed failure = (%#v, %v), want nonnil empty", got, err)
-	}
-	if _, err := server.WithStrictErrors().ListBuffers(context.Background(), ListBuffersRequest{}); !errors.Is(err, ErrCommand) {
-		t.Fatalf("strict completed failure error = %v, want ErrCommand", err)
+	if !errors.Is(err, ErrCommand) || got != nil {
+		t.Fatalf("completed failure = (%#v, %v), want ErrCommand and no rows", got, err)
 	}
 	got, err = server.ListBuffers(context.Background(), ListBuffersRequest{})
-	if err != nil || got == nil || len(got) != 0 {
-		t.Fatalf("lenient transport failure = (%#v, %v), want nonnil empty", got, err)
+	if err == nil || got != nil {
+		t.Fatalf("transport failure = (%#v, %v), want a reported failure", got, err)
 	}
 	if _, err := server.ListBuffers(context.Background(), ListBuffersRequest{}); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("context failure error = %v, want deadline", err)

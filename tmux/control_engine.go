@@ -20,8 +20,8 @@ import (
 //
 // The engine borrows the client rather than owning it: [ControlClient.Close]
 // stops the underlying process, and commands issued afterwards report
-// [ErrControlClosed] as transport failures, which a lenient collection read
-// normalizes exactly as it normalizes a dead tmux server.
+// [ErrControlClosed] as transport failures, which reach the caller rather than
+// reading as a tmux server holding nothing.
 //
 // It supports [CommandServer] only. Interactive attachment and the tmux -V
 // version probe need their own process and keep starting one, as do the reads

@@ -126,7 +126,7 @@ func startRealControlClient(t *testing.T, server tmux.Server, target string) *tm
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil {
 		t.Fatalf("Sessions() error = %v", err)
 	}

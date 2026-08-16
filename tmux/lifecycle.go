@@ -1347,8 +1347,7 @@ func newSessionCommandServer(server Server) Server {
 			options: options,
 			runner:  state.runner,
 		},
-		engine:       server.engine,
-		strictErrors: server.strictErrors,
+		engine: server.engine,
 	}
 }
 

@@ -261,10 +261,7 @@ func showEnvironment(
 		return nil, err
 	}
 	if result.ExitCode != 0 {
-		if server.strictErrors {
-			return nil, newRedactedCommandError(arguments[0], result)
-		}
-		return make(map[string]EnvironmentValue), nil
+		return nil, newRedactedCommandError(arguments[0], result)
 	}
 	return parseEnvironmentLines(result.Stdout)
 }
@@ -287,7 +284,7 @@ func getEnvironment(
 		return EnvironmentValue{}, false, err
 	}
 	if result.ExitCode != 0 {
-		if !server.strictErrors || environmentVariableMissing(result, name) {
+		if environmentVariableMissing(result, name) {
 			return EnvironmentValue{}, false, nil
 		}
 		return EnvironmentValue{}, false, newRedactedCommandError(arguments[0], result)

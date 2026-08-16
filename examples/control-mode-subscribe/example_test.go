@@ -24,7 +24,7 @@ func TestControlModeSubscribe(t *testing.T) {
 	defer cancel()
 
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t).WithStrictErrors())
+		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
 	// The example only returns without an error once it has seen the rename it

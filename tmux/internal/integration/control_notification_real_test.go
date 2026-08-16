@@ -18,7 +18,7 @@ import (
 
 //libtmux:real-tmux
 func TestParseControlNotificationAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

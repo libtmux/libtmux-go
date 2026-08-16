@@ -173,7 +173,7 @@ func TestRawSearchMethodsPassFiltersAtEachScope(t *testing.T) {
 				}},
 				liveIdentityResponse(version),
 			}}
-			server := serverWithRunner(runner).WithStrictErrors()
+			server := serverWithRunner(runner)
 
 			got, err := test.search(server)
 			if err != nil {
@@ -426,37 +426,25 @@ func TestWindowSearchPanesDiscardsRowsOutsideExactWinlink(t *testing.T) {
 	})
 }
 
-func TestRawSearchListFailureIsLenientByDefaultAndStrictOnOptIn(t *testing.T) {
+// TestRawSearchListFailureIsReported proves a failed listing is an error rather
+// than an empty result, which a caller cannot tell from a server holding
+// nothing.
+func TestRawSearchListFailureIsReported(t *testing.T) {
 	t.Parallel()
 
 	version := mustParseVersion(t, "3.7")
-	for _, strict := range []bool{false, true} {
-		t.Run(map[bool]string{false: "lenient", true: "strict"}[strict], func(t *testing.T) {
-			t.Parallel()
-			runner := &versionQueueRunner{responses: []versionResponse{
-				liveIdentityResponse(version),
-				{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"failed"}}},
-				liveIdentityResponse(version),
-			}}
-			server := serverWithRunner(runner)
-			if strict {
-				server = server.WithStrictErrors()
-			}
+	runner := &versionQueueRunner{responses: []versionResponse{
+		liveIdentityResponse(version),
+		{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"failed"}}},
+		liveIdentityResponse(version),
+	}}
 
-			values, err := server.SearchSessions(context.Background(), nil)
-			if strict {
-				var commandError *CommandError
-				if !errors.As(err, &commandError) {
-					t.Fatalf("SearchSessions() error = %v, want CommandError", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("SearchSessions() error = %v", err)
-			}
-			if values == nil || len(values) != 0 {
-				t.Fatalf("SearchSessions() = %#v, want non-nil empty slice", values)
-			}
-		})
+	values, err := serverWithRunner(runner).SearchSessions(context.Background(), nil)
+	var commandError *CommandError
+	if !errors.As(err, &commandError) {
+		t.Fatalf("SearchSessions() error = %v, want CommandError", err)
+	}
+	if values != nil {
+		t.Fatalf("SearchSessions() = %#v, want no sessions beside an error", values)
 	}
 }

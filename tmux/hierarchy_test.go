@@ -12,7 +12,7 @@ import (
 // libtmux:parity libtmux.server.Server.panes
 // libtmux:parity libtmux.server.Server.sessions
 // libtmux:parity libtmux.server.Server.windows
-func TestServerHierarchyListsShareLenientAndStrictPolicy(t *testing.T) {
+func TestServerHierarchyListsReportFailures(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -55,16 +55,13 @@ func TestServerHierarchyListsShareLenientAndStrictPolicy(t *testing.T) {
 
 			runner := &versionQueueRunner{responses: []versionResponse{
 				{result: tmuxcmd.Result{Stderr: []string{"no server"}, ExitCode: 1}},
-				{result: tmuxcmd.Result{Stderr: []string{"no server"}, ExitCode: 1}},
 			}}
-			server := serverWithRunner(runner)
-			length, nonNil, err := test.list(server)
-			if err != nil || !nonNil || length != 0 {
-				t.Fatalf("lenient list = (len %d, nonnil %t, %v), want (0, true, nil)", length, nonNil, err)
-			}
-			_, _, err = test.list(server.WithStrictErrors())
+			length, nonNil, err := test.list(serverWithRunner(runner))
 			if !errors.Is(err, ErrCommand) {
-				t.Fatalf("strict list error = %v, want ErrCommand", err)
+				t.Fatalf("list error = %v, want ErrCommand", err)
+			}
+			if nonNil || length != 0 {
+				t.Fatalf("list = (len %d, nonnil %t), want no rows beside an error", length, nonNil)
 			}
 		})
 	}

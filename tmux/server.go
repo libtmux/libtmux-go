@@ -3,6 +3,7 @@ package tmux
 import (
 	"bytes"
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 type ServerOptions struct {
 	// Binary is the tmux executable name or path. Empty resolves tmux through
 	// PATH for each invocation. A binary that cannot be resolved fails every
-	// operation in both lenient and strict mode, as an os/exec.Error. Match it
+	// operation, as an os/exec.Error. Match it
 	// with errors.As rather than errors.Is(err, exec.ErrNotFound), which holds
 	// only for a bare name missing from PATH and not for an absent explicit
 	// path.
@@ -64,9 +65,8 @@ type ServerOptions struct {
 // Copying a Server preserves its configuration and shares version-cache
 // coordination; only the documented concurrent operations are safe to share.
 type Server struct {
-	state        *serverState
-	engine       Engine
-	strictErrors bool
+	state  *serverState
+	engine Engine
 }
 
 type serverState struct {
@@ -257,23 +257,23 @@ func (s Server) dispatch(
 	return commandResult, bytes.Clone(result.RawStdout), nil
 }
 
-// WithStrictErrors returns a handle whose collection methods expose completed
-// command and transport failures. The returned handle shares immutable
-// configuration and version-cache coordination with s.
-func (s Server) WithStrictErrors() Server {
-	s.strictErrors = true
-	return s
-}
-
-// IsAlive reports whether the configured tmux server answers list-sessions.
-// A completed nonzero exit reports false without an error; cancellation and
-// transport failures return an error.
+// IsAlive reports whether a tmux server answers on the configured socket.
+// Only an absent server reports false without an error: a socket that exists
+// but cannot be reached, such as one the process may not read, is a question
+// that could not be answered and is returned as an error.
 func (s Server) IsAlive(ctx context.Context) (bool, error) {
 	result, err := s.literalCmd(ctx, "list-sessions")
 	if err != nil {
 		return false, err
 	}
-	return result.ExitCode == 0, nil
+	if result.ExitCode == 0 {
+		return true, nil
+	}
+	commandErr := newCommandError("list-sessions", result)
+	if errors.Is(commandErr, ErrNoServer) {
+		return false, nil
+	}
+	return false, commandErr
 }
 
 // RaiseIfDead returns a [CommandError] when the configured server is not

@@ -188,12 +188,9 @@ func (s Server) searchSnapshot(
 	}
 	extra = append(append([]string(nil), extra...), filterArguments...)
 
-	identity, normalized, err := s.probeSnapshotIdentity(ctx)
+	identity, err := s.probeSnapshotIdentity(ctx)
 	if err != nil {
 		return Snapshot{}, err
-	}
-	if normalized {
-		return newSnapshot(s, Version{}, snapshotRecords{})
 	}
 	minimum, err := ParseVersion(MinimumSupportedVersion)
 	if err != nil {
@@ -210,26 +207,20 @@ func (s Server) searchSnapshot(
 		}
 	}
 
-	rows, normalized, listErr := s.snapshotListing(ctx, command, extra, identity.version)
+	rows, listErr := s.snapshotListing(ctx, command, extra, identity.version)
 	if listErr != nil {
 		if snapshotCollectionError(listErr) {
-			return s.snapshotAfterStrictListingFailure(ctx, identity, listErr)
+			return s.snapshotAfterListingFailure(ctx, identity, listErr)
 		}
 		return Snapshot{}, listErr
-	}
-	if normalized {
-		return s.snapshotAfterNormalizedListing(ctx, identity)
 	}
 	if len(matches) != 0 {
 		rows = matchingSearchRows(rows, matches)
 	}
 
-	closing, normalized, err := s.probeClosingIdentity(ctx, identity)
+	closing, err := s.probeClosingIdentity(ctx, identity)
 	if err != nil {
 		return Snapshot{}, err
-	}
-	if normalized {
-		return newSnapshot(s, Version{}, snapshotRecords{})
 	}
 	if !sameSnapshotIdentity(identity, closing) {
 		return Snapshot{}, snapshotIdentityChangeError(closing)

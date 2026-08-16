@@ -119,7 +119,7 @@ func measuredServer(t *testing.T, harness tmux.Server) (tmux.Server, *countingRu
 		ConfigFile:         harness.ConfigFile(),
 		ProcessEnvironment: harness.ProcessEnvironment(),
 		Runner:             runner,
-	}).WithStrictErrors(), runner
+	}), runner
 }
 
 //libtmux:real-tmux
@@ -583,7 +583,7 @@ func TestControlPoolServesConcurrentCallersWithoutProcesses(t *testing.T) {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -672,7 +672,7 @@ func TestARecordOutlivesThePoolThatCarriedIt(t *testing.T) {
 			warnings = append(warnings, warning)
 			mutex.Unlock()
 		},
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -737,7 +737,7 @@ func TestARecordOutlivesThePoolThatCarriedIt(t *testing.T) {
 func TestEngineReportsTheChosenTransport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 
 	if server.Engine() != nil {
 		t.Fatal("a fresh handle reports an engine, want nil for process execution")
@@ -788,7 +788,7 @@ func TestThePoolHandsBackAConnectedSession(t *testing.T) {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -837,7 +837,7 @@ func TestABlockingCommandHoldsItsConnection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "blocking"})
 	if err != nil {
 		t.Fatalf("create session: %v", err)
@@ -940,7 +940,7 @@ func TestAConnectionProvesItsOwnServerIdentity(t *testing.T) {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -1026,7 +1026,7 @@ func (e *subcommandEngine) total(subcommand string) int {
 func TestATmuxFilterNarrowsTheListing(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "filter"})
 	if err != nil {
 		t.Fatalf("create session: %v", err)

@@ -83,7 +83,7 @@ func (t *tools) showOption(
 	var set bool
 	switch scope {
 	case scopeServer:
-		value, set, err = t.strict().RawOption(ctx, input.Name)
+		value, set, err = t.target.RawOption(ctx, input.Name)
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -161,7 +161,7 @@ func (t *tools) setOption(
 
 	switch scope {
 	case scopeServer:
-		err = t.strict().SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+		err = t.target.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -420,7 +420,7 @@ func (t *tools) showHooks(
 		arguments = append(arguments, "-p", "-t", pane.ID().String())
 	}
 
-	result, err := t.strict().Cmd(ctx, arguments...)
+	result, err := t.target.Cmd(ctx, arguments...)
 	if err != nil {
 		return nil, output, err
 	}

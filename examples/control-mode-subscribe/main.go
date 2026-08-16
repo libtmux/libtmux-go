@@ -29,7 +29,7 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server := tmux.NewServer(tmux.ServerOptions{}).WithStrictErrors()
+	server := tmux.NewServer(tmux.ServerOptions{})
 	return run(ctx, server)
 }
 

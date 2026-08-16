@@ -16,7 +16,7 @@ func TestGlobalScopeFactoriesReturnConcreteCapturedHandles(t *testing.T) {
 
 	sessionFactory := Server.GlobalSessionScope
 	windowFactory := Server.GlobalWindowScope
-	server := Server{state: &serverState{}, strictErrors: true}
+	server := Server{state: &serverState{}}
 
 	sessionScope := sessionFactory(server)
 	if sessionScope.server != server {
@@ -772,41 +772,49 @@ func TestOptionsRejectFutureGeneratedRecordInjectedByCustomName(t *testing.T) {
 	}
 }
 
-func TestOptionsVersionBoundaryLeniencyDistinguishesProbeFailuresFromMalformedOutput(t *testing.T) {
+// TestOptionsVersionBoundaryFailuresAreReportedWithoutDisclosure covers the
+// version probe an option decode depends on. Every way it can fail is reported,
+// because a zero option value is indistinguishable from one tmux set, and none
+// of them may quote the option value or the version output back: both are
+// caller data that an error is not a place for.
+func TestOptionsVersionBoundaryFailuresAreReportedWithoutDisclosure(t *testing.T) {
 	t.Parallel()
 
 	const (
 		optionSecret  = "option-value-must-not-be-reported"
 		versionSecret = "version-output-must-not-be-reported"
 	)
+	transport := errors.New("version transport failed")
 	tests := []struct {
-		name       string
-		response   versionResponse
-		wantError  error
-		wantSilent bool
+		name          string
+		response      versionResponse
+		wantError     error
+		wantMalformed bool
 	}{
 		{
-			name:       "transport failure is lenient",
-			response:   versionResponse{err: errors.New("version transport failed")},
-			wantSilent: true,
+			name:      "transport failure",
+			response:  versionResponse{err: transport},
+			wantError: transport,
 		},
 		{
-			name: "completed failure is lenient",
+			name: "completed failure",
 			response: versionResponse{result: tmuxcmd.Result{
 				Stderr:   []string{"version command failed"},
 				ExitCode: 1,
 			}},
-			wantSilent: true,
-		},
-		{
-			name:      "invalid version token is loud",
-			response:  versionResponse{result: tmuxcmd.Result{Stdout: []string{"tmux " + versionSecret}}},
 			wantError: ErrVersionQuery,
 		},
 		{
-			name:      "malformed successful output is loud",
-			response:  versionResponse{result: tmuxcmd.Result{Stdout: []string{versionSecret}}},
-			wantError: ErrVersionQuery,
+			name:          "invalid version token",
+			response:      versionResponse{result: tmuxcmd.Result{Stdout: []string{"tmux " + versionSecret}}},
+			wantError:     ErrVersionQuery,
+			wantMalformed: true,
+		},
+		{
+			name:          "malformed successful output",
+			response:      versionResponse{result: tmuxcmd.Result{Stdout: []string{versionSecret}}},
+			wantError:     ErrVersionQuery,
+			wantMalformed: true,
 		},
 	}
 
@@ -822,19 +830,13 @@ func TestOptionsVersionBoundaryLeniencyDistinguishesProbeFailuresFromMalformedOu
 				test.response,
 			}}
 			values, err := serverWithRunner(runner).Options(context.Background())
-			if test.wantSilent {
-				if err != nil {
-					t.Fatalf("Options() error = %v, want lenient empty result", err)
-				}
-				if _, ok := values.CodepointWidths().Get(); ok {
-					t.Fatal("Options() accepted a value after a lenient version probe failure")
-				}
-				return
-			}
 			if !errors.Is(err, test.wantError) {
 				t.Fatalf("Options() error = %v, want %v", err, test.wantError)
 			}
-			if !errors.Is(err, ErrMalformedOptionOutput) {
+			if _, ok := values.CodepointWidths().Get(); ok {
+				t.Fatal("Options() returned a decoded value beside an error")
+			}
+			if test.wantMalformed && !errors.Is(err, ErrMalformedOptionOutput) {
 				t.Fatalf("Options() error = %v, want ErrMalformedOptionOutput", err)
 			}
 			if strings.Contains(err.Error(), optionSecret) || strings.Contains(err.Error(), versionSecret) {
@@ -892,36 +894,25 @@ func TestOptionsRejectMalformedRecognizedRecordsWithoutDisclosingValues(t *testi
 	}
 }
 
-func TestOptionBulkReadLeniencyAndStrictness(t *testing.T) {
+func TestOptionBulkReadReportsFailures(t *testing.T) {
 	t.Parallel()
 
 	t.Run("completed failure discards partial output", func(t *testing.T) {
 		t.Parallel()
 
-		responses := []versionResponse{
-			{result: tmuxcmd.Result{
+		runner := &versionQueueRunner{responses: []versionResponse{{
+			result: tmuxcmd.Result{
 				RawStdout: []byte("status-left leaked-partial\n"),
 				Stderr:    []string{"unknown option: private"},
 				ExitCode:  1,
-			}},
-			{result: tmuxcmd.Result{
-				RawStdout: []byte("status-left leaked-partial\n"),
-				Stderr:    []string{"unknown option: private"},
-				ExitCode:  1,
-			}},
-		}
-		runner := &versionQueueRunner{responses: responses}
-		server := serverWithRunner(runner)
-		values, err := server.Options(context.Background())
-		if err != nil {
-			t.Fatalf("lenient Options() error = %v", err)
+			},
+		}}}
+		values, err := serverWithRunner(runner).Options(context.Background())
+		if !errors.Is(err, ErrUnknownOption) {
+			t.Fatalf("Options() error = %v, want ErrUnknownOption", err)
 		}
 		if _, ok := values.Backspace().Get(); ok {
-			t.Fatal("lenient Options() parsed partial failure output")
-		}
-		_, err = server.WithStrictErrors().Options(context.Background())
-		if !errors.Is(err, ErrUnknownOption) {
-			t.Fatalf("strict Options() error = %v, want ErrUnknownOption", err)
+			t.Fatal("Options() parsed the partial output tmux wrote before failing")
 		}
 	})
 
@@ -929,16 +920,9 @@ func TestOptionBulkReadLeniencyAndStrictness(t *testing.T) {
 		t.Parallel()
 
 		transport := errors.New("transport failed")
-		runner := &versionQueueRunner{responses: []versionResponse{
-			{err: transport},
-			{err: transport},
-		}}
-		server := serverWithRunner(runner)
-		if _, err := server.Options(context.Background()); err != nil {
-			t.Fatalf("lenient Options() transport error = %v", err)
-		}
-		if _, err := server.WithStrictErrors().Options(context.Background()); !errors.Is(err, transport) {
-			t.Fatalf("strict Options() transport error = %v, want transport", err)
+		runner := &versionQueueRunner{responses: []versionResponse{{err: transport}}}
+		if _, err := serverWithRunner(runner).Options(context.Background()); !errors.Is(err, transport) {
+			t.Fatalf("Options() transport error = %v, want transport", err)
 		}
 	})
 
@@ -949,7 +933,7 @@ func TestOptionBulkReadLeniencyAndStrictness(t *testing.T) {
 			runner := &versionQueueRunner{responses: []versionResponse{{err: contextError}}}
 			_, err := serverWithRunner(runner).Options(context.Background())
 			if !errors.Is(err, contextError) {
-				t.Fatalf("lenient Options() context error = %v, want %v", err, contextError)
+				t.Fatalf("Options() context error = %v, want %v", err, contextError)
 			}
 		})
 	}
@@ -967,31 +951,25 @@ func TestOptionBulkReadLeniencyAndStrictness(t *testing.T) {
 	})
 }
 
-func TestGlobalOptionScopesCaptureBulkReadStrictness(t *testing.T) {
+func TestGlobalOptionScopesReportBulkReadFailures(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		run  func(Server) (error, error)
+		run  func(Server) error
 	}{
 		{
 			name: "session",
-			run: func(server Server) (error, error) {
-				lenient := server.GlobalSessionScope()
-				strict := server.WithStrictErrors().GlobalSessionScope()
-				_, lenientErr := lenient.Options(context.Background())
-				_, strictErr := strict.Options(context.Background())
-				return lenientErr, strictErr
+			run: func(server Server) error {
+				_, err := server.GlobalSessionScope().Options(context.Background())
+				return err
 			},
 		},
 		{
 			name: "window",
-			run: func(server Server) (error, error) {
-				lenient := server.GlobalWindowScope()
-				strict := server.WithStrictErrors().GlobalWindowScope()
-				_, lenientErr := lenient.Options(context.Background())
-				_, strictErr := strict.Options(context.Background())
-				return lenientErr, strictErr
+			run: func(server Server) error {
+				_, err := server.GlobalWindowScope().Options(context.Background())
+				return err
 			},
 		},
 	}
@@ -999,16 +977,13 @@ func TestGlobalOptionScopesCaptureBulkReadStrictness(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			failed := versionResponse{result: tmuxcmd.Result{
-				Stderr: []string{"invalid option: private"}, ExitCode: 1,
-			}}
-			runner := &versionQueueRunner{responses: []versionResponse{failed, failed}}
-			lenientErr, strictErr := test.run(serverWithRunner(runner))
-			if lenientErr != nil {
-				t.Fatalf("lenient Options() error = %v", lenientErr)
-			}
-			if !errors.Is(strictErr, ErrInvalidOption) {
-				t.Fatalf("strict Options() error = %v, want ErrInvalidOption", strictErr)
+			runner := &versionQueueRunner{responses: []versionResponse{{
+				result: tmuxcmd.Result{
+					Stderr: []string{"invalid option: private"}, ExitCode: 1,
+				},
+			}}}
+			if err := test.run(serverWithRunner(runner)); !errors.Is(err, ErrInvalidOption) {
+				t.Fatalf("Options() error = %v, want ErrInvalidOption", err)
 			}
 		})
 	}

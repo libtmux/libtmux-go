@@ -190,9 +190,14 @@ func TestEngineTransportFailureStaysDetectable(t *testing.T) {
 	if _, err := server.Cmd(context.Background(), "list-sessions"); !errors.Is(err, want) {
 		t.Fatalf("Cmd() error = %v, want %v", err, want)
 	}
+	// A transport that cannot carry the listing has not proved the server holds
+	// nothing, so the failure reaches the caller rather than becoming a result.
 	sessions, err := server.Sessions(context.Background())
-	if err != nil || len(sessions) != 0 {
-		t.Fatalf("Sessions() = (%#v, %v), want a lenient empty collection", sessions, err)
+	if !errors.Is(err, want) {
+		t.Fatalf("Sessions() error = %v, want %v", err, want)
+	}
+	if sessions != nil {
+		t.Fatalf("Sessions() = %#v, want no sessions beside an error", sessions)
 	}
 }
 

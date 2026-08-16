@@ -175,42 +175,29 @@ func TestPromptHistoryRequiresTmux33BeforeCommand(t *testing.T) {
 	}
 }
 
-func TestShowPromptHistoryVersionProbeFollowsListPolicy(t *testing.T) {
+// TestShowPromptHistoryReportsVersionProbeFailures proves that a version probe
+// the listing depends on reports its failure rather than answering with an
+// empty history, which would read as a server holding no prompt history.
+func TestShowPromptHistoryReportsVersionProbeFailures(t *testing.T) {
 	t.Parallel()
 
 	transport := errors.New("version transport failed")
 	tests := []struct {
 		name         string
 		response     historyResponse
-		strict       bool
-		wantEmpty    bool
 		wantAnyError bool
 		wantError    error
 	}{
 		{
-			name:      "lenient transport failure",
-			response:  historyResponse{err: transport},
-			wantEmpty: true,
-		},
-		{
-			name: "lenient completed failure",
-			response: historyResponse{result: tmuxcmd.Result{
-				Stderr: []string{"version command failed"}, ExitCode: 1,
-			}},
-			wantEmpty: true,
-		},
-		{
-			name:         "strict transport failure",
+			name:         "transport failure",
 			response:     historyResponse{err: transport},
-			strict:       true,
 			wantAnyError: true,
 		},
 		{
-			name: "strict completed failure",
+			name: "completed failure",
 			response: historyResponse{result: tmuxcmd.Result{
 				Stderr: []string{"version command failed"}, ExitCode: 1,
 			}},
-			strict:    true,
 			wantError: ErrVersionQuery,
 		},
 		{
@@ -240,19 +227,15 @@ func TestShowPromptHistoryVersionProbeFollowsListPolicy(t *testing.T) {
 
 			runner := &historyQueueRunner{responses: []historyResponse{test.response}}
 			server := historyServerWithRunner(runner)
-			if test.strict {
-				server = server.WithStrictErrors()
-			}
 			output, err := server.ShowPromptHistory(
 				context.Background(), PromptHistoryRequest{},
 			)
-			if test.wantEmpty {
-				if err != nil || output == nil || len(output) != 0 {
-					t.Fatalf("ShowPromptHistory() = (%#v, %v), want lenient nonnil empty", output, err)
-				}
-			} else if test.wantAnyError {
+			if output != nil {
+				t.Fatalf("ShowPromptHistory() = %#v, want no history beside an error", output)
+			}
+			if test.wantAnyError {
 				if err == nil {
-					t.Fatal("ShowPromptHistory() error = nil, want strict transport error")
+					t.Fatal("ShowPromptHistory() error = nil, want transport error")
 				}
 			} else if !errors.Is(err, test.wantError) {
 				t.Fatalf("ShowPromptHistory() error = %v, want %v", err, test.wantError)
@@ -272,9 +255,7 @@ func TestShowPromptHistoryCommandFollowsListPolicyAndOwnsOutput(t *testing.T) {
 	tests := []struct {
 		name         string
 		response     historyResponse
-		strict       bool
 		want         []string
-		wantEmpty    bool
 		wantAnyError bool
 		wantError    error
 	}{
@@ -284,29 +265,15 @@ func TestShowPromptHistoryCommandFollowsListPolicyAndOwnsOutput(t *testing.T) {
 			want:     []string{"History for command:", "1: list-sessions"},
 		},
 		{
-			name: "lenient completed failure",
+			name: "completed failure",
 			response: historyResponse{result: tmuxcmd.Result{
 				Stdout: []string{"partial"}, Stderr: []string{"failed"}, ExitCode: 1,
 			}},
-			wantEmpty: true,
-		},
-		{
-			name:      "lenient transport failure",
-			response:  historyResponse{err: transport},
-			wantEmpty: true,
-		},
-		{
-			name: "strict completed failure",
-			response: historyResponse{result: tmuxcmd.Result{
-				Stdout: []string{"partial"}, Stderr: []string{"failed"}, ExitCode: 1,
-			}},
-			strict:    true,
 			wantError: ErrCommand,
 		},
 		{
-			name:         "strict transport failure",
+			name:         "transport failure",
 			response:     historyResponse{err: transport},
-			strict:       true,
 			wantAnyError: true,
 		},
 		{
@@ -325,20 +292,13 @@ func TestShowPromptHistoryCommandFollowsListPolicyAndOwnsOutput(t *testing.T) {
 				test.response,
 			}}
 			server := historyServerWithRunner(runner)
-			if test.strict {
-				server = server.WithStrictErrors()
-			}
 			output, err := server.ShowPromptHistory(
 				context.Background(), PromptHistoryRequest{},
 			)
 			switch {
-			case test.wantEmpty:
-				if err != nil || output == nil || len(output) != 0 {
-					t.Fatalf("ShowPromptHistory() = (%#v, %v), want lenient nonnil empty", output, err)
-				}
 			case test.wantAnyError:
 				if err == nil {
-					t.Fatal("ShowPromptHistory() error = nil, want strict transport error")
+					t.Fatal("ShowPromptHistory() error = nil, want transport error")
 				}
 			case test.wantError != nil:
 				if !errors.Is(err, test.wantError) {

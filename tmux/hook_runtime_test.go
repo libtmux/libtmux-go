@@ -747,15 +747,10 @@ func TestHooksRejectMalformedRecognizedRecordsWithoutDisclosingCommands(t *testi
 	}
 }
 
-func TestHookBulkReadLeniencyStrictnessAndDecodeLoudness(t *testing.T) {
+func TestHookBulkReadReportsFailuresAndDecodeErrors(t *testing.T) {
 	t.Parallel()
 
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{
-			RawStdout: []byte("session-renamed[0] partial\n"),
-			Stderr:    []string{"invalid option: hook"},
-			ExitCode:  0,
-		}},
 		{result: tmuxcmd.Result{
 			RawStdout: []byte("session-renamed[0] partial\n"),
 			Stderr:    []string{"invalid option: hook"},
@@ -767,46 +762,38 @@ func TestHookBulkReadLeniencyStrictnessAndDecodeLoudness(t *testing.T) {
 		}},
 	}}
 	server := serverWithRunner(runner)
+
 	values, err := server.GlobalSessionScope().Hooks(context.Background())
-	if err != nil {
-		t.Fatalf("lenient Hooks() error = %v", err)
+	if !errors.Is(err, ErrInvalidOption) {
+		t.Fatalf("Hooks() error = %v, want ErrInvalidOption", err)
 	}
 	if _, ok := values.SessionRenamed().Get(); ok {
-		t.Fatal("lenient Hooks() parsed partial failure output")
-	}
-	if _, err := server.WithStrictErrors().GlobalSessionScope().Hooks(context.Background()); !errors.Is(err, ErrInvalidOption) {
-		t.Fatalf("strict Hooks() error = %v, want ErrInvalidOption", err)
+		t.Fatal("Hooks() parsed the partial output tmux wrote before failing")
 	}
 	if _, err := server.GlobalSessionScope().Hooks(context.Background()); !errors.Is(err, ErrMalformedOptionOutput) {
-		t.Fatalf("lenient Hooks() decode error = %v, want ErrMalformedOptionOutput", err)
+		t.Fatalf("Hooks() decode error = %v, want ErrMalformedOptionOutput", err)
 	}
 }
 
-func TestGlobalHookScopesCaptureBulkReadStrictness(t *testing.T) {
+func TestGlobalHookScopesReportBulkReadFailures(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		run  func(Server) (error, error)
+		run  func(Server) error
 	}{
 		{
 			name: "session",
-			run: func(server Server) (error, error) {
-				lenient := server.GlobalSessionScope()
-				strict := server.WithStrictErrors().GlobalSessionScope()
-				_, lenientErr := lenient.Hooks(context.Background())
-				_, strictErr := strict.Hooks(context.Background())
-				return lenientErr, strictErr
+			run: func(server Server) error {
+				_, err := server.GlobalSessionScope().Hooks(context.Background())
+				return err
 			},
 		},
 		{
 			name: "window",
-			run: func(server Server) (error, error) {
-				lenient := server.GlobalWindowScope()
-				strict := server.WithStrictErrors().GlobalWindowScope()
-				_, lenientErr := lenient.Hooks(context.Background())
-				_, strictErr := strict.Hooks(context.Background())
-				return lenientErr, strictErr
+			run: func(server Server) error {
+				_, err := server.GlobalWindowScope().Hooks(context.Background())
+				return err
 			},
 		},
 	}
@@ -814,16 +801,13 @@ func TestGlobalHookScopesCaptureBulkReadStrictness(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			failed := versionResponse{result: tmuxcmd.Result{
-				Stderr: []string{"invalid option: private"}, ExitCode: 1,
-			}}
-			runner := &versionQueueRunner{responses: []versionResponse{failed, failed}}
-			lenientErr, strictErr := test.run(serverWithRunner(runner))
-			if lenientErr != nil {
-				t.Fatalf("lenient Hooks() error = %v", lenientErr)
-			}
-			if !errors.Is(strictErr, ErrInvalidOption) {
-				t.Fatalf("strict Hooks() error = %v, want ErrInvalidOption", strictErr)
+			runner := &versionQueueRunner{responses: []versionResponse{{
+				result: tmuxcmd.Result{
+					Stderr: []string{"invalid option: private"}, ExitCode: 1,
+				},
+			}}}
+			if err := test.run(serverWithRunner(runner)); !errors.Is(err, ErrInvalidOption) {
+				t.Fatalf("Hooks() error = %v, want ErrInvalidOption", err)
 			}
 		})
 	}

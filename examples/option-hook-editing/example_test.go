@@ -24,7 +24,7 @@ func TestOptionHookEditing(t *testing.T) {
 	defer cancel()
 
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t).WithStrictErrors())
+		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
 	// A hook set and then read back through the typed accessor. "false" here

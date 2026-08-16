@@ -160,8 +160,7 @@ func (s Server) livePointWithTargetValidation(
 			return formatValues{}, Version{}, snapshotServerIdentity{}, err
 		}
 	}
-	strict := s.WithStrictErrors()
-	identity, _, err := strict.probeSnapshotIdentity(ctx)
+	identity, err := s.probeSnapshotIdentity(ctx)
 	if err != nil {
 		return formatValues{}, Version{}, snapshotServerIdentity{}, err
 	}
@@ -180,7 +179,7 @@ func (s Server) livePointWithTargetValidation(
 	if targeted {
 		extra = append(extra, "-t", identifier)
 	}
-	rows, _, err := strict.snapshotListing(ctx, command, extra, identity.version)
+	rows, err := s.snapshotListing(ctx, command, extra, identity.version)
 	if err != nil {
 		if targeted && targetNotFoundCommand(err) {
 			return formatValues{}, Version{}, snapshotServerIdentity{}, s.liveLookupAbsence(
@@ -207,7 +206,7 @@ func (s Server) livePointWithTargetValidation(
 		}
 		return formatValues{}, Version{}, snapshotServerIdentity{}, err
 	}
-	closing, _, err := strict.probeClosingIdentity(ctx, identity)
+	closing, err := s.probeClosingIdentity(ctx, identity)
 	if err != nil {
 		return formatValues{}, Version{}, snapshotServerIdentity{}, err
 	}
@@ -224,16 +223,19 @@ func (s Server) liveLookupAbsence(
 	identifier string,
 	listingErr error,
 ) error {
-	probe := s
-	probe.strictErrors = false
-	closing, normalized, err := probe.probeClosingIdentity(ctx, opening)
+	closing, err := s.probeClosingIdentity(ctx, opening)
 	if err != nil {
-		if listingErr != nil && !contextError(err) {
-			return errors.Join(listingErr, err)
+		if contextError(err) {
+			return err
 		}
-		return err
+		// The closing probe only guards against a second tmux server having
+		// answered the listing that proved this absence. A probe that cannot
+		// run at all rules that out rather than leaving it open, because a
+		// server that has gone did not replace the one that answered, so the
+		// absence stands and the probe's own failure adds nothing to report.
+		return liveLookupError(object, identifier, 0)
 	}
-	if !normalized && !sameSnapshotIdentity(opening, closing) {
+	if !sameSnapshotIdentity(opening, closing) {
 		changeErr := snapshotIdentityChangeError(closing)
 		if listingErr != nil {
 			return errors.Join(listingErr, changeErr)

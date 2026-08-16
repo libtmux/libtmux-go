@@ -181,7 +181,7 @@ func TestReadOnlyOperationsPreserveContextCancellation(t *testing.T) {
 			t.Run(operation.name+"/"+contextCase.name, func(t *testing.T) {
 				ctx, want := contextCase.new(t)
 				runner := &contextBoundRunner{}
-				err := operation.call(serverWithRunner(runner).WithStrictErrors(), ctx)
+				err := operation.call(serverWithRunner(runner), ctx)
 				if !errors.Is(err, want) {
 					t.Fatalf("error = %v, want errors.Is(_, %v)", err, want)
 				}

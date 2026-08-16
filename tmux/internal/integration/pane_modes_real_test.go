@@ -38,7 +38,7 @@ import (
 //
 //libtmux:real-tmux
 func TestPaneModesAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -111,7 +111,7 @@ func TestPaneModesAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestCopyModeCancelTakesPrecedenceAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -154,7 +154,7 @@ func TestCopyModeCancelTakesPrecedenceAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestCopyModeCancelWithStaleSourceLeavesModeActiveAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -211,7 +211,7 @@ func TestCopyModeUsesLinkedReceiverAndSourcePaneAgainstRealTmux(t *testing.T) {
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

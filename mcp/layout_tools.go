@@ -247,7 +247,7 @@ func (t *tools) selectPane(
 	_ *mcp.CallToolRequest,
 	input selectPaneInput,
 ) (*mcp.CallToolResult, selectPaneOutput, error) {
-	pane, err := t.strict().Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, selectPaneOutput{}, err
 	}
@@ -295,7 +295,7 @@ func (t *tools) swapPane(
 	if input.PaneID == input.WithPaneID {
 		return nil, swapPaneOutput{}, fmt.Errorf("a pane cannot be swapped with itself")
 	}
-	server := t.strict()
+	server := t.target
 	pane, err := server.Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, swapPaneOutput{}, err
@@ -404,7 +404,7 @@ func (t *tools) moveWindow(
 	if strings.TrimSpace(input.WindowID) == "" {
 		return nil, moveWindowOutput{}, fmt.Errorf("windowId is required")
 	}
-	window, err := t.strict().Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, moveWindowOutput{}, err
 	}

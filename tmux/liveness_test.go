@@ -99,7 +99,7 @@ func TestServerSessionsReportsAnUnresolvableBinaryInBothModes(t *testing.T) {
 			{name: "lenient", server: tmux.NewServer(tmux.ServerOptions{Binary: binary})},
 			{
 				name:   "strict",
-				server: tmux.NewServer(tmux.ServerOptions{Binary: binary}).WithStrictErrors(),
+				server: tmux.NewServer(tmux.ServerOptions{Binary: binary}),
 			},
 		} {
 			sessions, err := mode.server.Sessions(context.Background())
@@ -115,20 +115,70 @@ func TestServerSessionsReportsAnUnresolvableBinaryInBothModes(t *testing.T) {
 	}
 }
 
-// TestServerSessionsNormalizesAnUnreachableServerInLenientMode pins the other
-// side of that boundary. A server that is not running is ordinary runtime
-// state, so the lenient default still reports it as an empty collection.
-func TestServerSessionsNormalizesAnUnreachableServerInLenientMode(t *testing.T) {
-	server := tmux.NewServer(tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "absent.sock"),
-	})
+// TestServerSessionsReportsEveryUnusableSocket is the gate on list accessors
+// never answering a failure with an empty collection.
+//
+// Three of these four sockets are a misconfiguration rather than a server
+// holding nothing, and none of them can be told apart from an empty server by
+// its result alone. Answering any of them with no sessions would send a program
+// that builds an environment when it finds none on to build a second one beside
+// the environment it was given a wrong path to.
+//
+// [tmux.ErrNoServer] classifies all four, because tmux reaches no server in all
+// four and does not say which kind of nothing it found. The classification is
+// safe to act on because creating what was not found reports tmux's own refusal
+// rather than succeeding somewhere unintended, which the final case proves.
+func TestServerSessionsReportsEveryUnusableSocket(t *testing.T) {
+	directory := t.TempDir()
 
-	sessions, err := server.Sessions(context.Background())
-	if err != nil || sessions == nil || len(sessions) != 0 {
-		t.Fatalf("lenient Sessions() = (%#v, %v), want nonnil empty result", sessions, err)
+	regular := filepath.Join(directory, "regular-file")
+	if err := os.WriteFile(regular, []byte("not a socket"), 0o600); err != nil {
+		t.Fatalf("write regular file: %v", err)
 	}
-	if _, err := server.WithStrictErrors().Sessions(context.Background()); err == nil {
-		t.Fatal("strict Sessions() error = nil, want a command failure")
+	unreadable := filepath.Join(directory, "unreadable")
+	if err := os.WriteFile(unreadable, []byte("not a socket"), 0o000); err != nil {
+		t.Fatalf("write unreadable file: %v", err)
+	}
+	subdirectory := filepath.Join(directory, "directory")
+	if err := os.Mkdir(subdirectory, 0o755); err != nil {
+		t.Fatalf("make directory: %v", err)
+	}
+
+	for _, test := range []struct {
+		name       string
+		socketPath string
+	}{
+		{name: "absent socket", socketPath: filepath.Join(directory, "absent.sock")},
+		{name: "regular file", socketPath: regular},
+		{name: "unreadable file", socketPath: unreadable},
+		{name: "directory", socketPath: subdirectory},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := tmux.NewServer(tmux.ServerOptions{SocketPath: test.socketPath})
+
+			sessions, err := server.Sessions(context.Background())
+			if err == nil {
+				t.Fatalf("Sessions() = (%#v, nil), want a reported failure", sessions)
+			}
+			if sessions != nil {
+				t.Fatalf("Sessions() = %#v, want no sessions beside an error", sessions)
+			}
+			if !errors.Is(err, tmux.ErrNoServer) {
+				t.Fatalf("Sessions() error = %v, want ErrNoServer", err)
+			}
+			if alive, err := server.IsAlive(context.Background()); alive || err != nil {
+				t.Fatalf("IsAlive() = (%t, %v), want (false, nil)", alive, err)
+			}
+		})
+	}
+
+	// Acting on ErrNoServer is only safe if creating what was not found still
+	// fails on a socket that exists and cannot be used.
+	unusable := tmux.NewServer(tmux.ServerOptions{SocketPath: unreadable})
+	session, err := unusable.NewSession(context.Background(), tmux.NewSessionRequest{Name: "probe"})
+	if err == nil {
+		_ = unusable.Kill(context.Background())
+		t.Fatalf("NewSession() on an unreadable socket = (%#v, nil), want tmux's refusal", session)
 	}
 }
 

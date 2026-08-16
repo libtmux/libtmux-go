@@ -24,7 +24,7 @@ func TestEnvironment(t *testing.T) {
 	defer cancel()
 
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t).WithStrictErrors())
+		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
 	// "ready" is the value set into the session environment and read back out;

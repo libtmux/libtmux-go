@@ -30,7 +30,7 @@ import (
 //
 //libtmux:real-tmux
 func TestOptionRuntimePreservesAllRealScopesAndValueStates(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
 	session, window, pane := onlyRealOptionHierarchy(t, snapshot)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -261,7 +261,7 @@ func TestOptionRuntimePreservesAllRealScopesAndValueStates(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestTypedArrayOptionReplacementPreservesRealState(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
 	session, window, pane := onlyRealOptionHierarchy(t, snapshot)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -386,7 +386,7 @@ func TestTypedArrayOptionReplacementPreservesRealState(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestTypedArrayOptionReplacementReportsRealPartialFailure(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	realBinary, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Fatal(err)
@@ -409,7 +409,7 @@ func TestTypedArrayOptionReplacementReportsRealPartialFailure(t *testing.T) {
 		SocketPath:         server.SocketPath(),
 		ConfigFile:         server.ConfigFile(),
 		ProcessEnvironment: os.Environ(),
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	values := mustSparseStrings(t,
@@ -448,7 +448,7 @@ func mustSparseStrings(t *testing.T, entries ...tmux.SparseEntry[string]) tmux.S
 //
 //libtmux:real-tmux
 func TestHookRuntimePreservesAllRealScopesAndPartialBulkSemantics(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
 	session, window, pane := onlyRealOptionHierarchy(t, snapshot)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -600,7 +600,7 @@ func TestSetHooksRejectsOverflowWithoutClearingRealHook(t *testing.T) {
 	if strconv.IntSize < 64 {
 		t.Skip("an index above MaxInt32 is not representable by int")
 	}
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
 	session, _, _ := onlyRealOptionHierarchy(t, snapshot)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -662,7 +662,7 @@ func onlyRealOptionHierarchy(t *testing.T, snapshot tmux.Snapshot) (tmux.Session
 //
 //libtmux:real-tmux
 func TestOptionTargetSentinelSeparatesAMissingWindowFromABadName(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

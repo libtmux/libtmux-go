@@ -43,7 +43,7 @@ import (
 )
 
 func compileWorkflow(ctx context.Context, t *testing.T, server tmux.Server) error {
-	strict := server.WithStrictErrors()
+	strict := server
 	sessions, err := strict.Sessions(ctx)
 	if err != nil {
 		return err

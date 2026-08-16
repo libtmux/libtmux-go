@@ -25,7 +25,7 @@ func testServer(t *testing.T) (tmux.Server, context.Context) {
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	server := tmux.NewServer(tmux.ServerOptions{SocketPath: socket}).WithStrictErrors()
+	server := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -776,7 +776,7 @@ func TestAFirstWindowMayAskForTheIndexItAlreadyHas(t *testing.T) {
 			server := tmux.NewServer(tmux.ServerOptions{
 				SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 				ConfigFile: configuration,
-			}).WithStrictErrors()
+			})
 			t.Cleanup(func() {
 				killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer killCancel()

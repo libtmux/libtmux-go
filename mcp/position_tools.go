@@ -65,7 +65,7 @@ func (t *tools) findPaneByPosition(
 			"direction %q is not above, below, left, or right", input.Direction)
 	}
 
-	server := t.strict()
+	server := t.target
 	origin, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {
 		return nil, findPaneByPositionOutput{}, err

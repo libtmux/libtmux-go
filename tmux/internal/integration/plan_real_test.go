@@ -23,7 +23,7 @@ import (
 func TestPlanTargetsWhatItHasNotCreatedYet(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -224,7 +224,7 @@ func TestPlanStopsAtTheFirstFailure(t *testing.T) {
 func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -283,7 +283,7 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	plan := tmux.NewPlan()
 	session := plan.NewSession(tmux.NewSessionRequest{
@@ -355,7 +355,7 @@ func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
 func TestPlanRecordsTheWiderSurface(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -426,7 +426,7 @@ func TestPlanRecordsTheWiderSurface(t *testing.T) {
 func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -477,7 +477,7 @@ func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
 func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -693,7 +693,7 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 	// up carrying in index order.
 	swapWith := func(planner tmux.Planner) []string {
 		t.Helper()
-		server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+		server := tmuxtest.NewServer(ctx, t)
 		sessions, err := server.Sessions(ctx)
 		if err != nil || len(sessions) == 0 {
 			t.Fatalf("Sessions() = (%d, %v)", len(sessions), err)

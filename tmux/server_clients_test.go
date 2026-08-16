@@ -283,34 +283,29 @@ func TestServerAccessRequiresTmux33(t *testing.T) {
 	assertRequestArguments(t, requests[0], []string{"-V"})
 }
 
-func TestServerAccessListVersionProbeFollowsListPolicy(t *testing.T) {
+// TestServerAccessListReportsVersionProbeFailures proves the version probe a
+// listing depends on reports its failure rather than answering with an empty
+// list, which reads as a server granting nobody access.
+func TestServerAccessListReportsVersionProbeFailures(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name         string
 		response     versionResponse
-		strict       bool
-		wantEmpty    bool
 		wantAnyError bool
 		wantError    error
 	}{
 		{
-			name:      "lenient transport failure",
-			response:  versionResponse{err: errors.New("version transport failed")},
-			wantEmpty: true,
+			name:         "transport failure",
+			response:     versionResponse{err: errors.New("version transport failed")},
+			wantAnyError: true,
 		},
 		{
-			name: "lenient completed failure",
+			name: "completed failure",
 			response: versionResponse{result: tmuxcmd.Result{
 				Stderr: []string{"version command failed"}, ExitCode: 1,
 			}},
-			wantEmpty: true,
-		},
-		{
-			name:         "strict transport failure",
-			response:     versionResponse{err: errors.New("version transport failed")},
-			strict:       true,
-			wantAnyError: true,
+			wantError: ErrVersionQuery,
 		},
 		{
 			name:      "context failure",
@@ -338,19 +333,14 @@ func TestServerAccessListVersionProbeFollowsListPolicy(t *testing.T) {
 			t.Parallel()
 
 			runner := &versionQueueRunner{responses: []versionResponse{test.response}}
-			server := serverWithRunner(runner)
-			if test.strict {
-				server = server.WithStrictErrors()
-			}
-			output, err := server.ServerAccess(
+			output, err := serverWithRunner(runner).ServerAccess(
 				context.Background(),
 				ServerAccessRequest{List: true},
 			)
+			if output != nil {
+				t.Fatalf("ServerAccess(list) = %#v, want no output beside an error", output)
+			}
 			switch {
-			case test.wantEmpty:
-				if err != nil || output == nil || len(output) != 0 {
-					t.Fatalf("ServerAccess(list) = (%#v, %v), want nonnil empty", output, err)
-				}
 			case test.wantAnyError:
 				if err == nil {
 					t.Fatal("ServerAccess(list) error = nil")
@@ -527,37 +517,27 @@ func TestServerAccessCapturesUserBeforeVersionProbe(t *testing.T) {
 	})
 }
 
-func TestServerAccessListCommandFollowsLenientAndStrictPolicies(t *testing.T) {
+func TestServerAccessListReportsCommandFailure(t *testing.T) {
 	t.Parallel()
 
-	failedResult := tmuxcmd.Result{
-		Stdout:   []string{"partial"},
-		Stderr:   []string{"failure"},
-		ExitCode: 1,
-	}
-	lenientRunner := &versionQueueRunner{responses: []versionResponse{
+	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}}},
-		{result: failedResult},
+		{result: tmuxcmd.Result{
+			Stdout:   []string{"partial"},
+			Stderr:   []string{"failure"},
+			ExitCode: 1,
+		}},
 	}}
-	output, err := serverWithRunner(lenientRunner).ServerAccess(
-		context.Background(),
-		ServerAccessRequest{List: true},
-	)
-	if err != nil || output == nil || len(output) != 0 {
-		t.Fatalf("lenient ServerAccess(list) = (%#v, %v), want nonnil empty", output, err)
-	}
-
-	strictRunner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}}},
-		{result: failedResult},
-	}}
-	_, err = serverWithRunner(strictRunner).WithStrictErrors().ServerAccess(
+	output, err := serverWithRunner(runner).ServerAccess(
 		context.Background(),
 		ServerAccessRequest{List: true},
 	)
 	var commandError *CommandError
 	if !errors.As(err, &commandError) || commandError.Subcommand != "server-access" {
-		t.Fatalf("strict ServerAccess(list) error = %#v, want CommandError", err)
+		t.Fatalf("ServerAccess(list) error = %#v, want a server-access CommandError", err)
+	}
+	if output != nil {
+		t.Fatalf("ServerAccess(list) = %#v, want no entries beside an error", output)
 	}
 }
 

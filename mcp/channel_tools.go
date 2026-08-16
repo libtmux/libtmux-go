@@ -61,7 +61,7 @@ func (t *tools) waitForChannel(
 
 	// A wait that blocks inside tmux holds a pooled connection for as long as
 	// it blocks, which would leave nothing to carry the command that ends it.
-	server := t.strict()
+	server := t.target
 	waiter := server.WithEngine(server.SubprocessEngine())
 	if err := waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: channel}); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
@@ -82,7 +82,7 @@ func (t *tools) signalChannel(
 	if err != nil {
 		return nil, signalChannelOutput{}, err
 	}
-	if err := t.strict().WaitFor(ctx, tmux.WaitForRequest{
+	if err := t.target.WaitFor(ctx, tmux.WaitForRequest{
 		Channel: channel,
 		Mode:    tmux.WaitForModeSignal,
 	}); err != nil {

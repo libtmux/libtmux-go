@@ -40,7 +40,7 @@ func (t *tools) createWindow(
 	_ *mcp.CallToolRequest,
 	input createWindowInput,
 ) (*mcp.CallToolResult, createWindowOutput, error) {
-	server := t.strict()
+	server := t.target
 	session, err := t.resolveSession(ctx, input.SessionName)
 	if err != nil {
 		return nil, createWindowOutput{}, err
@@ -96,7 +96,7 @@ func (t *tools) createSession(
 	_ *mcp.CallToolRequest,
 	input createSessionInput,
 ) (*mcp.CallToolResult, createSessionOutput, error) {
-	session, err := t.strict().NewSession(ctx, tmux.NewSessionRequest{
+	session, err := t.target.NewSession(ctx, tmux.NewSessionRequest{
 		Name:           input.Name,
 		Command:        input.Command,
 		StartDirectory: input.StartDirectory,

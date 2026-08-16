@@ -364,7 +364,7 @@ func TestSendKeysIgnoresCompletedFailuresButSurfacesTransportErrors(t *testing.T
 			{result: tmuxcmd.Result{Stderr: []string{"send failed"}, ExitCode: 1}},
 			{result: tmuxcmd.Result{Stderr: []string{"enter failed"}, ExitCode: 1}},
 		}}
-		err := paneWithExactTestTarget(serverWithRunner(runner).WithStrictErrors()).SendKeys(
+		err := paneWithExactTestTarget(serverWithRunner(runner)).SendKeys(
 			context.Background(), SendKeysRequest{Command: &command},
 		)
 		if err != nil {
@@ -403,7 +403,7 @@ func TestEnterAndClearUseSendKeysRawSemantics(t *testing.T) {
 		runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
 			Stderr: []string{"ignored"}, ExitCode: 1,
 		}}}}
-		err := paneWithExactTestTarget(serverWithRunner(runner).WithStrictErrors()).Enter(
+		err := paneWithExactTestTarget(serverWithRunner(runner)).Enter(
 			context.Background(),
 		)
 		if err != nil {
@@ -421,7 +421,7 @@ func TestEnterAndClearUseSendKeysRawSemantics(t *testing.T) {
 			{result: tmuxcmd.Result{Stderr: []string{"ignored"}, ExitCode: 1}},
 			{result: tmuxcmd.Result{Stderr: []string{"ignored"}, ExitCode: 1}},
 		}}
-		err := paneWithExactTestTarget(serverWithRunner(runner).WithStrictErrors()).Clear(
+		err := paneWithExactTestTarget(serverWithRunner(runner)).Clear(
 			context.Background(),
 		)
 		if err != nil {
@@ -602,7 +602,7 @@ func TestResetUsesOneTrustedTwoTargetCommandList(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
 		Stderr: []string{"ignored"}, ExitCode: 1,
 	}}}}
-	err := paneWithExactTestTarget(serverWithRunner(runner).WithStrictErrors()).Reset(
+	err := paneWithExactTestTarget(serverWithRunner(runner)).Reset(
 		context.Background(),
 	)
 	if err != nil {

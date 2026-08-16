@@ -24,7 +24,7 @@ func TestQuickstart(t *testing.T) {
 	defer cancel()
 
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t).WithStrictErrors())
+		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
 	// The example is only finished when the pane it built has echoed back what

@@ -24,7 +24,7 @@ func TestSnapshotBrowser(t *testing.T) {
 	defer cancel()
 
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t).WithStrictErrors())
+		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
 	// One snapshot is walked down all three levels. Asserting a line from each

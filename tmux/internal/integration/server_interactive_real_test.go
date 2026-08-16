@@ -45,7 +45,7 @@ import (
 //
 //libtmux:real-tmux
 func TestBackgroundPromptsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -129,7 +129,7 @@ func TestBackgroundPromptsAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestStartServerAndHeadlessMenuAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

@@ -383,8 +383,8 @@ type Engine interface {
 }
 ```
 
-`Server.WithEngine(Engine) Server` selects one, as an immutable handle copy
-alongside `WithStrictErrors`. Selection is a method rather than a
+`Server.WithEngine(Engine) Server` selects one, as an immutable handle copy.
+Selection is a method rather than a
 `ServerOptions` field because the control-mode engine cannot exist before its
 server does: `OpenControl` needs a materialized session to attach to.
 `ControlClient.Engine()` adapts a live client, and `Server.SubprocessEngine()`
@@ -460,26 +460,55 @@ copy only immutable handle fields. Representative signatures are:
 ```go
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error)
 func (s Server) Sessions(ctx context.Context) ([]Session, error)
-func (s Server) WithStrictErrors() Server
+func (s Server) IsAlive(ctx context.Context) (bool, error)
 func (f PaneFilter) Predicate() (func(*Pane) bool, error)
 ```
 
 ## List error policy
 
-List-shaped accessors standardize the repository's default-empty rule: tmux
-command and transport failures return a non-nil empty slice and nil error.
-Caller cancellation and deadlines remain visible as context errors. This is a
-deliberate normalization where individual Python accessors currently differ and
-is recorded per accessor in the parity manifest. `IsAlive` and `RaiseIfDead`
-distinguish an empty server from an unreachable one.
+A list-shaped accessor returns a failure rather than an empty collection. There
+is no switch: an empty result means tmux answered and had nothing to report.
+Invalid arguments, context errors, decode failures, unsupported schema, and
+violated snapshot invariants remain errors of their own.
 
-Leniency applies only to tmux command exits and transport failures. Invalid
-arguments, context errors, decode failures, unsupported schema, and violated
-snapshot invariants always return errors.
+The rejected alternative was Python's, where a failed accessor yields an empty
+result. Its cost is not that a caller is misinformed but that it cannot tell: a
+socket path with a typo, a socket this process may not read, and a path that is
+not a socket all produce the same empty answer as a server holding nothing. The
+pattern that consumes it is ordinary — create the environment when none is
+found — and under leniency a wrong socket path makes it build a second
+environment beside the one it was pointed away from.
 
-`WithStrictErrors` returns an immutable handle copy. The same list methods on
-that copy surface command and transport failures, and derived objects retain the
-policy. No mutex or mutable cache is copied.
+Leniency also could not be narrowed to the safe case. Every lenient branch
+caught any nonzero exit or transport failure without classifying it, so
+inverting the default would have kept the same undifferentiated catch behind a
+switch rather than removing it.
+
+`ErrNoServer` classifies the one failure a caller routinely acts on. A tmux
+server holding no sessions exits, so an absent server and an empty one are the
+same state, and a program that starts what it does not find needs to recognize
+it. It classifies rather than replaces: the error is returned either way, so a
+socket that cannot be used is never mistaken for one with nothing on it.
+
+It does not separate an absent server from an unreachable one, because tmux
+does not. `client.c` treats `ECONNREFUSED` and `ENOENT` alike, prints a
+constant message only for the first, and renders every other errno through
+`strerror`, whose text follows the process locale. Matching that text would
+make the classification locale-dependent, which is a worse contract than
+declining to draw the line. Acting on the sentinel stays safe because creating
+what was not found reports tmux's own refusal.
+
+The policy decision a caller does want belongs to the caller. The MCP server
+answers "what panes are there" on an unstarted server with none, because a
+client orienting itself before starting anything is its ordinary opening move;
+it says so in one place rather than inheriting it from the library.
+
+`IsAlive` draws the same line: only `ErrNoServer` reports false without an
+error, so a probe cannot report a server as absent when the socket is merely
+unusable. `Server.Kill` depends on that — it confirms a kill by observing the
+daemon, and a probe that merely failed no longer reads as one that proved
+death.
+
 
 ## Filters and queries
 

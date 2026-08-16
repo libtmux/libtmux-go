@@ -251,8 +251,8 @@ func (s Server) GlobalWindowScope() GlobalWindowScope {
 }
 
 // Options returns a freshly decoded, caller-owned view of known server options,
-// including inherited values. List and transport failures yield zero option
-// values unless [Server.WithStrictErrors] is enabled; context errors propagate.
+// including inherited values. A read or transport failure is returned rather
+// than answered with zero values; context errors propagate.
 // Each returned accessor names the setter that writes it, so
 // [ServerOptionValues.BufferLimit] pairs with [Server.SetBufferLimit].
 func (s Server) Options(ctx context.Context) (ServerOptionValues, error) {
@@ -271,8 +271,8 @@ func (s Server) Options(ctx context.Context) (ServerOptionValues, error) {
 }
 
 // Options returns a freshly decoded, caller-owned view of known global session
-// options, including defaults. List failures are lenient unless the originating
-// [Server] had [Server.WithStrictErrors] enabled; context errors propagate.
+// options, including defaults. A read failure is returned rather than answered
+// with zero values; context errors propagate.
 // Each returned accessor names the setter that writes it, so
 // [SessionOptionValues.Status] pairs with [GlobalSessionScope.SetStatus].
 func (s GlobalSessionScope) Options(ctx context.Context) (SessionOptionValues, error) {
@@ -291,8 +291,8 @@ func (s GlobalSessionScope) Options(ctx context.Context) (SessionOptionValues, e
 }
 
 // Options returns a freshly decoded, caller-owned view of known global window
-// options, including defaults. List failures are lenient unless the originating
-// [Server] had [Server.WithStrictErrors] enabled; context errors propagate.
+// options, including defaults. A read failure is returned rather than answered
+// with zero values; context errors propagate.
 // Each returned accessor names the setter that writes it, so
 // [WindowOptionValues.MainPaneWidth] pairs with
 // [GlobalWindowScope.SetMainPaneWidth].
@@ -312,8 +312,8 @@ func (s GlobalWindowScope) Options(ctx context.Context) (WindowOptionValues, err
 }
 
 // Options returns a freshly decoded, caller-owned view of known options at this
-// stable session target, including inherited values. List failures are lenient
-// unless [Server.WithStrictErrors] is enabled; context errors propagate.
+// stable session target, including inherited values. A read failure is returned
+// rather than answered with zero values; context errors propagate.
 // Each returned accessor names the setter that writes it, so
 // [SessionOptionValues.Mouse] pairs with [Session.SetMouse].
 func (s Session) Options(ctx context.Context) (SessionOptionValues, error) {
@@ -337,8 +337,8 @@ func (s Session) Options(ctx context.Context) (SessionOptionValues, error) {
 
 // Options returns a freshly decoded, caller-owned view of known options at this
 // exact window target, including inherited values. The receiver's exact linked
-// session context controls tmux format evaluation. List failures are lenient
-// unless [Server.WithStrictErrors] is enabled.
+// session context controls tmux format evaluation. A read failure is returned
+// rather than answered with zero values.
 // Each returned accessor names the setter that writes it, so
 // [WindowOptionValues.MainPaneWidth] pairs with [Window.SetMainPaneWidth].
 func (w Window) Options(ctx context.Context) (WindowOptionValues, error) {
@@ -362,8 +362,8 @@ func (w Window) Options(ctx context.Context) (WindowOptionValues, error) {
 
 // Options returns a freshly decoded, caller-owned view of known options at this
 // exact pane target, including inherited values. The receiver's exact linked
-// session context controls tmux format evaluation. List failures are lenient
-// unless [Server.WithStrictErrors] is enabled.
+// session context controls tmux format evaluation. A read failure is returned
+// rather than answered with zero values.
 // Each returned accessor names the setter that writes it, so
 // [PaneOptionValues.WindowStyle] pairs with [Pane.SetWindowStyle].
 func (p Pane) Options(ctx context.Context) (PaneOptionValues, error) {
@@ -395,8 +395,7 @@ func (s Server) RawOption(ctx context.Context, name string) (string, bool, error
 }
 
 // RawOption returns one exact global session-option value. A
-// successful string is caller-owned; ok reports presence and failures are not
-// normalized by [Server.WithStrictErrors].
+// successful string is caller-owned, and ok reports presence.
 // An unindexed empty array is indistinguishable from an empty scalar; use
 // Options for typed array presence.
 func (s GlobalSessionScope) RawOption(
@@ -407,8 +406,7 @@ func (s GlobalSessionScope) RawOption(
 }
 
 // RawOption returns one exact global window-option value. A
-// successful string is caller-owned; ok reports presence and failures are not
-// normalized by [Server.WithStrictErrors].
+// successful string is caller-owned, and ok reports presence.
 // An unindexed empty array is indistinguishable from an empty scalar; use
 // Options for typed array presence.
 func (s GlobalWindowScope) RawOption(
@@ -810,16 +808,10 @@ func readTypedOptionValues(
 	}
 	result, raw, err := server.literalCmdWithRaw(ctx, arguments...)
 	if err != nil {
-		if server.strictErrors || isContextOperationError(ctx, err) {
-			return nil, err
-		}
-		return make([]decodedOptionValue, 0), nil
+		return nil, err
 	}
 	if result.ExitCode != 0 || len(result.Stderr) != 0 {
-		if server.strictErrors {
-			return nil, newOptionError("show-options", "", result)
-		}
-		return make([]decodedOptionValue, 0), nil
+		return nil, newOptionError("show-options", "", result)
 	}
 	var version *Version
 	if optionOutputRequiresVersion(raw, definitions, generatedScope) {
@@ -828,10 +820,7 @@ func readTypedOptionValues(
 			if isContextOperationError(ctx, versionErr) {
 				return nil, versionErr
 			}
-			lenient, classified := classifyOptionVersionBoundaryError(versionErr)
-			if !server.strictErrors && lenient {
-				return make([]decodedOptionValue, 0), nil
-			}
+			_, classified := classifyOptionVersionBoundaryError(versionErr)
 			return nil, classified
 		}
 		version = &current

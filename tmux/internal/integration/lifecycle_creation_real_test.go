@@ -32,7 +32,7 @@ import (
 //
 //libtmux:real-tmux
 func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	version, err := server.Version(ctx)
@@ -138,7 +138,7 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -274,7 +274,7 @@ func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

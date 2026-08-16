@@ -167,7 +167,7 @@ func (s Session) resolveLive(ctx context.Context) (Session, error) {
 	); err != nil {
 		return Session{}, err
 	}
-	snapshot, err := s.server.WithStrictErrors().Snapshot(ctx)
+	snapshot, err := s.server.Snapshot(ctx)
 	if err != nil {
 		return Session{}, err
 	}
@@ -179,7 +179,7 @@ func (w Window) resolveLive(ctx context.Context) (Window, error) {
 	if err != nil {
 		return Window{}, err
 	}
-	snapshot, err := w.server.WithStrictErrors().Snapshot(ctx)
+	snapshot, err := w.server.Snapshot(ctx)
 	if err != nil {
 		return Window{}, err
 	}
@@ -200,7 +200,7 @@ func (p Pane) resolveLive(ctx context.Context) (Pane, error) {
 	if err != nil {
 		return Pane{}, err
 	}
-	snapshot, err := p.server.WithStrictErrors().Snapshot(ctx)
+	snapshot, err := p.server.Snapshot(ctx)
 	if err != nil {
 		return Pane{}, err
 	}

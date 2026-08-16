@@ -63,9 +63,8 @@ type ControlPoolRequest struct {
 // handle retires the last of those. The returned Server is the first handle the
 // program holds, so no record can predate its engine.
 //
-// The returned handle is an ordinary immutable [Server]: it copies freely,
-// [Server.WithStrictErrors] keeps the transport, and every session, window, and
-// pane derived from it carries the transport too. The lifetime lives in the
+// The returned handle is an ordinary immutable [Server]: it copies freely, and
+// every session, window, and pane derived from it carries the transport too. The lifetime lives in the
 // second return value rather than in a Close method on the handle, because a
 // handle is embedded in every record it produces and copied into every one of
 // them, so no copy could own the shutdown of the others.
@@ -143,8 +142,8 @@ func closeControlClients(clients []*ControlClient) error {
 // shutdown: a [Server] is copied into every record it produces, so shutdown
 // cannot belong to it. Close the pool when the program is done with the tmux
 // server; commands issued afterwards report [ErrControlClosed] as transport
-// failures, which lenient collection reads normalize exactly as they normalize
-// a tmux server that is not running.
+// failures, which reach the caller rather than reading as a tmux server holding
+// nothing.
 //
 // More than one connection is worth owning only for concurrent callers, since
 // a single connection carries one tmux command at a time. A pool hands each

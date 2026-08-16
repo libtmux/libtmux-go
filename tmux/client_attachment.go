@@ -44,7 +44,7 @@ func (c Client) ResolveAttachment(ctx context.Context) (ClientAttachment, error)
 	); err != nil {
 		return ClientAttachment{}, err
 	}
-	snapshot, err := c.server.WithStrictErrors().Snapshot(ctx)
+	snapshot, err := c.server.Snapshot(ctx)
 	if err != nil {
 		return ClientAttachment{}, err
 	}

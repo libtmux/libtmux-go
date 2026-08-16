@@ -198,14 +198,14 @@ func TestEnvironmentReadFailuresRedactResults(t *testing.T) {
 		{
 			name: "show",
 			read: func(server Server) error {
-				_, err := server.WithStrictErrors().ShowEnvironment(context.Background())
+				_, err := server.ShowEnvironment(context.Background())
 				return err
 			},
 		},
 		{
 			name: "get",
 			read: func(server Server) error {
-				_, _, err := server.WithStrictErrors().GetEnvironment(
+				_, _, err := server.GetEnvironment(
 					context.Background(),
 					"TOKEN",
 				)
@@ -397,16 +397,13 @@ func TestEnvironmentReadErrorPolicy(t *testing.T) {
 
 		runner := &versionQueueRunner{responses: []versionResponse{
 			{result: tmuxcmd.Result{Stderr: []string{"no server running"}, ExitCode: 1}},
-			{result: tmuxcmd.Result{Stderr: []string{"no server running"}, ExitCode: 1}},
 		}}
-		server := serverWithRunner(runner)
-		values, err := server.ShowEnvironment(context.Background())
-		if err != nil || values == nil || len(values) != 0 {
-			t.Fatalf("lenient ShowEnvironment() = (%#v, %v), want nonnil empty map", values, err)
-		}
-		_, err = server.WithStrictErrors().ShowEnvironment(context.Background())
+		values, err := serverWithRunner(runner).ShowEnvironment(context.Background())
 		if !errors.Is(err, ErrCommand) {
-			t.Fatalf("strict ShowEnvironment() error = %v, want ErrCommand", err)
+			t.Fatalf("ShowEnvironment() error = %v, want ErrCommand", err)
+		}
+		if values != nil {
+			t.Fatalf("ShowEnvironment() = %#v, want no values beside an error", values)
 		}
 	})
 
@@ -415,14 +412,11 @@ func TestEnvironmentReadErrorPolicy(t *testing.T) {
 
 		runner := &versionQueueRunner{responses: []versionResponse{
 			{result: tmuxcmd.Result{Stderr: []string{"unknown variable: NAME"}, ExitCode: 1}},
-			{result: tmuxcmd.Result{Stderr: []string{"unknown variable: NAME"}, ExitCode: 1}},
 		}}
-		server := serverWithRunner(runner)
-		for _, handle := range []Server{server, server.WithStrictErrors()} {
-			value, ok, err := handle.GetEnvironment(context.Background(), "NAME")
-			if err != nil || ok || value != (EnvironmentValue{}) {
-				t.Fatalf("GetEnvironment(missing) = (%#v, %t, %v), want zero, false, nil", value, ok, err)
-			}
+		// A name tmux does not hold is absence, which the ok result carries.
+		value, ok, err := serverWithRunner(runner).GetEnvironment(context.Background(), "NAME")
+		if err != nil || ok || value != (EnvironmentValue{}) {
+			t.Fatalf("GetEnvironment(missing) = (%#v, %t, %v), want zero, false, nil", value, ok, err)
 		}
 	})
 
@@ -431,14 +425,12 @@ func TestEnvironmentReadErrorPolicy(t *testing.T) {
 
 		runner := &versionQueueRunner{responses: []versionResponse{
 			{result: tmuxcmd.Result{Stderr: []string{"no server running"}, ExitCode: 1}},
-			{result: tmuxcmd.Result{Stderr: []string{"no server running"}, ExitCode: 1}},
 		}}
-		server := serverWithRunner(runner)
-		if _, ok, err := server.GetEnvironment(context.Background(), "NAME"); err != nil || ok {
-			t.Fatalf("lenient GetEnvironment() = (%t, %v), want false, nil", ok, err)
-		}
-		if _, _, err := server.WithStrictErrors().GetEnvironment(context.Background(), "NAME"); !errors.Is(err, ErrCommand) {
-			t.Fatalf("strict GetEnvironment() error = %v, want ErrCommand", err)
+		// A failure is not absence: only tmux naming the variable as unknown
+		// answers false, so a server that could not be read stays an error.
+		_, ok, err := serverWithRunner(runner).GetEnvironment(context.Background(), "NAME")
+		if !errors.Is(err, ErrCommand) || ok {
+			t.Fatalf("GetEnvironment() = (%t, %v), want ErrCommand", ok, err)
 		}
 	})
 

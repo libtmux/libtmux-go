@@ -125,7 +125,7 @@ func (t *tools) runCommand(
 	if err != nil {
 		return nil, runCommandOutput{}, err
 	}
-	server := t.strict()
+	server := t.target
 	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {
 		return nil, runCommandOutput{}, err
@@ -421,7 +421,7 @@ func (t *tools) waitForText(
 		return nil, waitForTextOutput{}, err
 	}
 
-	server := t.strict()
+	server := t.target
 	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {
 		return nil, waitForTextOutput{}, err

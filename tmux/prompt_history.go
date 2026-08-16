@@ -34,8 +34,8 @@ type PromptHistoryRequest struct {
 
 // ShowPromptHistory returns an owned snapshot of tmux prompt-history lines.
 // It requires tmux 3.3 or later and returns [VersionTooLowError] below that
-// floor. Tmux command and transport failures follow the server's lenient list
-// policy unless [Server.WithStrictErrors] is enabled.
+// floor. A tmux command or transport failure is returned rather than answered
+// with no history.
 func (s Server) ShowPromptHistory(
 	ctx context.Context,
 	request PromptHistoryRequest,
@@ -46,7 +46,7 @@ func (s Server) ShowPromptHistory(
 	}
 	current, err := s.Version(ctx)
 	if err != nil {
-		return normalizeServerListVersionFailure(ctx, s, err)
+		return nil, err
 	}
 	if !current.AtLeast(promptHistoryVersion33) {
 		return nil, &VersionTooLowError{Current: current, Minimum: promptHistoryVersion33}

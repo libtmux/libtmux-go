@@ -132,14 +132,14 @@
 // [Server.ShowBufferBytes] provide byte-preserving high-level output. These
 // bytes are tmux's output after tmux interprets pane terminal contents.
 // Higher-level operations return classified errors such as [CommandError].
-// Hierarchy collection reads are lenient by default and normalize completed
-// command and transport failures to empty collections;
-// [Server.WithStrictErrors] preserves those failures. Context, decode,
-// server-identity, malformed successful version-output, and executable
-// resolution failures are never normalized. A configured binary that cannot be
-// resolved is caller configuration rather than server state, so it is reported
-// in both modes as an os/exec.Error recoverable with errors.As; a tmux server
-// that is merely not running remains an empty collection. Check sentinels with
+// Hierarchy collection reads answer a failure with the failure: a completed
+// command or transport failure is returned rather than reported as no rows, so
+// an empty collection means the server held nothing. A caller that starts what
+// it does not find recognizes an absent server with [ErrNoServer] rather than
+// by finding no rows, which a misconfigured socket would produce just as
+// readily. A configured binary that cannot be resolved is caller configuration
+// rather than server state, and is reported as an os/exec.Error recoverable
+// with errors.As. Check sentinels with
 // errors.Is and concrete error values with errors.As.
 //
 // Absence is not an error. A read that can legitimately find nothing reports
@@ -459,14 +459,11 @@
 // writes to the same target and option. The receiver's UnsetOption method
 // restores inheritance or the global default. Typed option values report
 // explicit empty bases and inherited origin.
-// Bulk Options and Hooks reads also use collection leniency: transport,
-// completed-command, and applicable version-probe transport or command
-// failures return zero value collections unless [Server.WithStrictErrors] is
-// enabled. Context, decode, and malformed or invalid successful version output
-// remain errors. Successfully decoded explicit empty values remain present.
-// RawOption and RawHook do not use bulk leniency: a quiet missing name reports
-// absent, while transport and command failures are returned. Mutations return
-// failures regardless of the strict-error setting.
+// Bulk Options and Hooks reads follow the same rule: a transport,
+// completed-command, or version-probe failure is returned rather than answered
+// with zero values, so a decoded empty value means tmux reported one.
+// RawOption and RawHook report a quiet missing name as absent through their ok
+// result, which is where absence belongs, and return every failure.
 // [WarningHandler] receives compatibility warnings synchronously and may be
 // called concurrently by server operations.
 //

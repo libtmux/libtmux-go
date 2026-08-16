@@ -32,7 +32,7 @@ import (
 //
 //libtmux:real-tmux
 func TestWindowPaneSelectionAndRotationAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -146,7 +146,7 @@ func TestWindowPaneSelectionAndRotationAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestPaneTopologyAndLinkedContextAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

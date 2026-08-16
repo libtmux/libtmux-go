@@ -56,8 +56,8 @@ type DetachAllClientsRequest struct {
 
 // ServerAccess changes or lists the server access-control entries. It requires
 // tmux 3.3 and returns [VersionTooLowError] below that floor. List returns an
-// owned snapshot and is lenient on completed or transport failures unless
-// [Server.WithStrictErrors] is enabled; mutation completed stderr is an error.
+// owned snapshot, and reports a completed or transport failure rather than
+// answering with no entries; mutation completed stderr is an error.
 func (s Server) ServerAccess(
 	ctx context.Context,
 	request ServerAccessRequest,
@@ -106,9 +106,6 @@ func (s Server) ServerAccess(
 
 	current, err := s.Version(ctx)
 	if err != nil {
-		if request.List {
-			return normalizeServerListVersionFailure(ctx, s, err)
-		}
 		return nil, err
 	}
 	if !current.AtLeast(serverClientsVersion33) {

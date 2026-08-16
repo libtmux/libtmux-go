@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -28,7 +29,7 @@ func connect(t *testing.T) (*sdk.ClientSession, tmux.Server, context.Context) {
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
-		_ = target.WithStrictErrors().Kill(killCtx)
+		_ = target.Kill(killCtx)
 	})
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
@@ -276,7 +277,7 @@ func TestKillSessionRequiresAnExactName(t *testing.T) {
 	// That tool is lenient by contract, so a momentarily unreachable tmux
 	// returns no panes, which this test would otherwise report as a safety
 	// guard having failed.
-	sessions, err := target.WithStrictErrors().Sessions(ctx)
+	sessions, err := target.Sessions(ctx)
 	if err != nil {
 		t.Fatalf("list sessions: %v", err)
 	}
@@ -318,7 +319,7 @@ func TestKillSessionRefusesAnEmptyName(t *testing.T) {
 	// lenient by contract, so a momentarily unreachable tmux answers with
 	// nothing, which this would otherwise report as a safety guard having let
 	// a session be destroyed.
-	sessions, err := target.WithStrictErrors().Sessions(ctx)
+	sessions, err := target.Sessions(ctx)
 	if err != nil {
 		t.Fatalf("list sessions: %v", err)
 	}
@@ -351,7 +352,7 @@ func TestConnectPutsToolsOnAControlTransport(t *testing.T) {
 	target := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -405,12 +406,11 @@ func TestConnectLeavesAnEmptyServerAlone(t *testing.T) {
 		_ = pool.Close()
 		t.Fatal("connecting to a server with no session must not open a pool")
 	}
+	// Connect must not have started the server it declined to connect to, so
+	// the socket still has nothing on it.
 	sessions, err := target.Sessions(ctx)
-	if err != nil {
-		t.Fatalf("sessions: %v", err)
-	}
-	if len(sessions) != 0 {
-		t.Fatalf("connecting created %d sessions, want 0", len(sessions))
+	if !errors.Is(err, tmux.ErrNoServer) {
+		t.Fatalf("sessions after declining to connect: (%#v, %v), want ErrNoServer", sessions, err)
 	}
 }
 
@@ -425,7 +425,7 @@ func TestConnectLeavesAChosenTransportAlone(t *testing.T) {
 
 	target := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -887,7 +887,7 @@ func TestIsCallerHasThreeAnswers(t *testing.T) {
 		// The socket is only knowable once tmux is running, and the server works
 		// out its own pane the first time something asks rather than at startup,
 		// so naming it here still reaches the listing below.
-		socket, err := target.WithStrictErrors().Cmd(
+		socket, err := target.Cmd(
 			ctx, "display-message", "-p", "#{socket_path}")
 		if err != nil || len(socket.Stdout) == 0 {
 			t.Fatalf("read the socket path: %v", err)
@@ -1476,7 +1476,7 @@ func TestNoNotificationsBeforeTheClientIsInitialized(t *testing.T) {
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
-		_ = target.WithStrictErrors().Kill(killCtx)
+		_ = target.Kill(killCtx)
 	})
 
 	client, server := sdk.NewInMemoryTransports()
@@ -1739,7 +1739,7 @@ func TestSuppressHistoryKeepsACommandOutOfHistory(t *testing.T) {
 			watched := tmux.NewServer(tmux.ServerOptions{
 				SocketPath: target.SocketPath(),
 				Runner:     counting,
-			}).WithStrictErrors()
+			})
 			pane, err := watched.Pane(ctx, tmux.PaneID(panes[0]))
 			if err != nil {
 				t.Fatalf("pane: %v", err)
@@ -1961,7 +1961,7 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 
 	target := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

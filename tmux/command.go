@@ -19,6 +19,38 @@ var ErrUnknownColor = errors.New("tmux: unknown color mode")
 // errors.Is for [CommandError].
 var ErrCommand = errors.New("tmux: command failed")
 
+// ErrNoServer identifies a command tmux refused before running it, because it
+// reached no server on the configured socket. It is matched by errors.Is for
+// [CommandError], alongside [ErrCommand].
+//
+// It exists because a tmux server holding no sessions exits, so "nothing is
+// running yet" is ordinary state rather than a fault, and a program that starts
+// what it does not find needs to recognize it:
+//
+//	sessions, err := server.Sessions(ctx)
+//	switch {
+//	case errors.Is(err, tmux.ErrNoServer):
+//		// nothing is running yet
+//	case err != nil:
+//		return err
+//	}
+//
+// It classifies an error and never replaces one. A list that cannot be read
+// reports the failure either way, so a socket that is unreadable, is not a
+// socket, or holds a server this process may not reach is never answered with
+// an empty collection.
+//
+// It does not separate an absent server from one that is present and
+// unreachable, because tmux does not either: client.c treats ECONNREFUSED and
+// ENOENT alike, prints a constant message only for the first, and renders every
+// other errno through strerror, whose text follows the process locale. Matching
+// that text would make the classification locale-dependent, which is worse than
+// declining to draw the line. Acting on this sentinel stays safe regardless: a
+// caller that creates what it did not find gets tmux's own refusal, naming the
+// socket and the reason, rather than a session somewhere unintended. A caller
+// that needs the distinction should inspect the socket itself.
+var ErrNoServer = errors.New("tmux: no server reached")
+
 // ColorMode selects a tmux color-capability override for [ServerOptions].
 type ColorMode int
 
@@ -189,6 +221,7 @@ type CommandError struct {
 	Result CommandResult
 
 	targetNotFound bool
+	noServer       bool
 }
 
 // Error implements error.
@@ -205,11 +238,18 @@ func (e *CommandError) Unwrap() error {
 	return ErrCommand
 }
 
+// Is reports [ErrNoServer] for a failure tmux produced before any command ran,
+// because no server answered on the configured socket.
+func (e *CommandError) Is(target error) bool {
+	return target == ErrNoServer && e.noServer
+}
+
 func newCommandError(subcommand string, result CommandResult) *CommandError {
 	return &CommandError{
 		Subcommand:     subcommand,
 		Result:         cloneCommandResult(result),
 		targetNotFound: commandTargetNotFound(result.Stderr),
+		noServer:       commandServerUnreachable(result.Stderr),
 	}
 }
 
@@ -221,6 +261,7 @@ func newRedactedCommandError(subcommand string, result CommandResult) *CommandEr
 		Subcommand:     subcommand,
 		Result:         CommandResult{ExitCode: result.ExitCode},
 		targetNotFound: commandTargetNotFound(result.Stderr),
+		noServer:       commandServerUnreachable(result.Stderr),
 	}
 }
 

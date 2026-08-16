@@ -27,7 +27,7 @@ import (
 //
 //libtmux:real-tmux
 func TestServerAccessListAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -110,7 +110,7 @@ func TestServerAccessListAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -156,7 +156,7 @@ func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestDetachClientsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	work := clientAdminSessionNamed(ctx, t, server, "work")
@@ -225,7 +225,7 @@ func TestLockAndSuspendOnlyIsolatedControlClients(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+			server := tmuxtest.NewServer(context.Background(), t)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			session := clientAdminSessionNamed(ctx, t, server, "work")

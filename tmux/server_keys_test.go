@@ -283,35 +283,30 @@ func TestListKeysCapturesPointerValuesBeforeVersionProbe(t *testing.T) {
 	})
 }
 
-func TestListKeysFormatVersionProbeFollowsListPolicy(t *testing.T) {
+// TestListKeysFormatReportsVersionProbeFailures proves the version probe that
+// selects the -F flag reports its failure rather than answering with an empty
+// list, which reads as a key table holding no bindings.
+func TestListKeysFormatReportsVersionProbeFailures(t *testing.T) {
 	t.Parallel()
 
 	format := "#{key_string}"
 	tests := []struct {
 		name         string
 		response     versionResponse
-		strict       bool
-		wantEmpty    bool
 		wantAnyError bool
 		wantError    error
 	}{
 		{
-			name:      "lenient transport failure",
-			response:  versionResponse{err: errors.New("version transport failed")},
-			wantEmpty: true,
+			name:         "transport failure",
+			response:     versionResponse{err: errors.New("version transport failed")},
+			wantAnyError: true,
 		},
 		{
-			name: "lenient completed failure",
+			name: "completed failure",
 			response: versionResponse{result: tmuxcmd.Result{
 				Stderr: []string{"version command failed"}, ExitCode: 1,
 			}},
-			wantEmpty: true,
-		},
-		{
-			name:         "strict transport failure",
-			response:     versionResponse{err: errors.New("version transport failed")},
-			strict:       true,
-			wantAnyError: true,
+			wantError: ErrVersionQuery,
 		},
 		{
 			name:      "context failure",
@@ -339,21 +334,16 @@ func TestListKeysFormatVersionProbeFollowsListPolicy(t *testing.T) {
 			t.Parallel()
 
 			runner := &versionQueueRunner{responses: []versionResponse{test.response}}
-			server := serverWithRunner(runner)
-			if test.strict {
-				server = server.WithStrictErrors()
-			}
-			output, err := server.ListKeys(
+			output, err := serverWithRunner(runner).ListKeys(
 				context.Background(),
 				ListKeysRequest{Format: &format},
 			)
-			if test.wantEmpty {
-				if err != nil || output == nil || len(output) != 0 {
-					t.Fatalf("ListKeys() = (%#v, %v), want lenient nonnil empty", output, err)
-				}
-			} else if test.wantAnyError {
+			if output != nil {
+				t.Fatalf("ListKeys() = %#v, want no keys beside an error", output)
+			}
+			if test.wantAnyError {
 				if err == nil {
-					t.Fatal("ListKeys() error = nil, want strict transport error")
+					t.Fatal("ListKeys() error = nil, want transport error")
 				}
 			} else if !errors.Is(err, test.wantError) {
 				t.Fatalf("ListKeys() error = %v, want %v", err, test.wantError)
@@ -431,7 +421,9 @@ func TestServerKeyRequestsValidateBeforeExecution(t *testing.T) {
 func TestShowMessagesZeroTargetOmitsClientFlag(t *testing.T) {
 	t.Parallel()
 
-	runner := &versionQueueRunner{}
+	runner := &versionQueueRunner{responses: []versionResponse{{
+		result: tmuxcmd.Result{Stdout: []string{"a message"}},
+	}}}
 	_, err := serverWithRunner(runner).ShowMessages(
 		context.Background(),
 		ShowMessagesRequest{},
@@ -489,33 +481,30 @@ func TestServerKeyMethodsKeepExitOnlyFailureAsData(t *testing.T) {
 	}
 }
 
-func TestServerListingsFollowLenientAndStrictPolicies(t *testing.T) {
+// TestServerListingsReportFailures proves a failed listing reaches the caller
+// rather than becoming an empty result, and discards the partial stdout tmux
+// wrote before failing.
+func TestServerListingsReportFailures(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range serverListingOperations() {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			failedResult := tmuxcmd.Result{
-				Stdout:   []string{"partial"},
-				Stderr:   []string{"failure"},
-				ExitCode: 1,
-			}
-			lenientRunner := &versionQueueRunner{responses: []versionResponse{{
-				result: failedResult,
+			runner := &versionQueueRunner{responses: []versionResponse{{
+				result: tmuxcmd.Result{
+					Stdout:   []string{"partial"},
+					Stderr:   []string{"failure"},
+					ExitCode: 1,
+				},
 			}}}
-			output, err := test.operation(serverWithRunner(lenientRunner))
-			if err != nil || output == nil || len(output) != 0 {
-				t.Fatalf("lenient operation = (%#v, %v), want nonnil empty", output, err)
-			}
-
-			strictRunner := &versionQueueRunner{responses: []versionResponse{{
-				result: failedResult,
-			}}}
-			_, err = test.operation(serverWithRunner(strictRunner).WithStrictErrors())
+			output, err := test.operation(serverWithRunner(runner))
 			var commandError *CommandError
 			if !errors.As(err, &commandError) || commandError.Subcommand != test.subcommand {
-				t.Fatalf("strict operation error = %#v, want %s CommandError", err, test.subcommand)
+				t.Fatalf("operation error = %#v, want %s CommandError", err, test.subcommand)
+			}
+			if output != nil {
+				t.Fatalf("operation = %#v, want no rows beside an error", output)
 			}
 		})
 	}

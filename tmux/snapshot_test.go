@@ -449,7 +449,7 @@ func TestServerSnapshotUsesVersionedFramedListings(t *testing.T) {
 	})
 }
 
-func TestServerSnapshotNormalizesListFailureUnlessStrict(t *testing.T) {
+func TestServerSnapshotReportsListFailure(t *testing.T) {
 	t.Parallel()
 
 	version := mustParseVersion(t, "3.7")
@@ -461,22 +461,14 @@ func TestServerSnapshotNormalizesListFailureUnlessStrict(t *testing.T) {
 		{result: identity},
 		{result: tmuxcmd.Result{Stderr: []string{"no server"}, ExitCode: 1}},
 		{result: identity},
-		{result: identity},
-		{result: tmuxcmd.Result{Stderr: []string{"no server"}, ExitCode: 1}},
 	}}
-	server := serverWithRunner(runner)
 
-	snapshot, err := server.Snapshot(context.Background())
-	if err != nil {
-		t.Fatalf("lenient Snapshot() error = %v", err)
+	snapshot, err := serverWithRunner(runner).Snapshot(context.Background())
+	if !errors.Is(err, ErrCommand) {
+		t.Fatalf("Snapshot() error = %v, want ErrCommand", err)
 	}
 	if snapshot.Sessions() == nil || len(snapshot.Sessions()) != 0 {
-		t.Fatalf("lenient Snapshot().Sessions() = %#v, want non-nil empty", snapshot.Sessions())
-	}
-
-	_, err = server.WithStrictErrors().Snapshot(context.Background())
-	if !errors.Is(err, ErrCommand) {
-		t.Fatalf("strict Snapshot() error = %v, want ErrCommand", err)
+		t.Fatalf("failed Snapshot() = %#v, want the zero snapshot", snapshot.Sessions())
 	}
 }
 
@@ -544,19 +536,14 @@ func TestSnapshotIdentityAcceptsModernOpenBSDVersion(t *testing.T) {
 	}
 }
 
-func TestServerSnapshotNormalizesVersionProbeFailure(t *testing.T) {
+func TestServerSnapshotReportsVersionProbeFailure(t *testing.T) {
 	t.Parallel()
 
 	runner := &versionQueueRunner{responses: []versionResponse{{
 		result: tmuxcmd.Result{Stderr: []string{"probe failed"}, ExitCode: 1},
 	}}}
-	server := serverWithRunner(runner)
-	snapshot, err := server.Snapshot(context.Background())
-	if err != nil {
-		t.Fatalf("Snapshot() error = %v", err)
-	}
-	if snapshot.Sessions() == nil || len(snapshot.Sessions()) != 0 {
-		t.Fatalf("Snapshot().Sessions() = %#v, want non-nil empty", snapshot.Sessions())
+	if _, err := serverWithRunner(runner).Snapshot(context.Background()); !errors.Is(err, ErrCommand) {
+		t.Fatalf("Snapshot() error = %v, want ErrCommand", err)
 	}
 }
 
@@ -665,14 +652,18 @@ func TestStrictServerSnapshotReportsRestartAndListingFailure(t *testing.T) {
 		{result: tmuxcmd.Result{Stderr: []string{"listing failed"}, ExitCode: 1}},
 		{result: closing},
 	}}
-	server := serverWithRunner(runner).WithStrictErrors()
+	server := serverWithRunner(runner)
 	_, err := server.Snapshot(context.Background())
 	if !errors.Is(err, ErrCommand) || !errors.Is(err, ErrMalformedSnapshot) {
 		t.Fatalf("Snapshot() error = %v, want ErrCommand and ErrMalformedSnapshot", err)
 	}
 }
 
-func TestLenientSnapshotClearsVersionWhenServerDisappearsAfterListingFailure(t *testing.T) {
+// TestSnapshotReportsListingFailureWhenServerDisappears keeps the listing
+// failure as the reported one when the closing identity probe cannot run
+// either. A server that has gone is the likeliest reason the listing failed, so
+// the probe's own failure adds nothing the caller can act on.
+func TestSnapshotReportsListingFailureWhenServerDisappears(t *testing.T) {
 	t.Parallel()
 
 	version := mustParseVersion(t, "3.7")
@@ -685,13 +676,16 @@ func TestLenientSnapshotClearsVersionWhenServerDisappearsAfterListingFailure(t *
 		{result: tmuxcmd.Result{Stderr: []string{"listing failed"}, ExitCode: 1}},
 		{result: tmuxcmd.Result{Stderr: []string{"no server"}, ExitCode: 1}},
 	}}
-	server := serverWithRunner(runner)
-	snapshot, err := server.Snapshot(context.Background())
-	if err != nil {
-		t.Fatalf("Snapshot() error = %v", err)
+
+	snapshot, err := serverWithRunner(runner).Snapshot(context.Background())
+	if !errors.Is(err, ErrCommand) {
+		t.Fatalf("Snapshot() error = %v, want ErrCommand", err)
+	}
+	if got := err.Error(); !strings.Contains(got, "listing failed") {
+		t.Fatalf("Snapshot() error = %q, want the listing failure", got)
 	}
 	if got := snapshot.Version().String(); got != "" {
-		t.Fatalf("Snapshot().Version() = %q, want empty after server disappearance", got)
+		t.Fatalf("failed Snapshot().Version() = %q, want the zero snapshot", got)
 	}
 }
 

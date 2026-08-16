@@ -36,7 +36,7 @@ var equivalenceFormats = []string{
 func TestControlEngineMaterializesTheSameStateAsProcesses(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -106,7 +106,7 @@ func TestControlEngineMaterializesTheSameStateAsProcesses(t *testing.T) {
 func TestTransportsAgreeOnLiteralValues(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -172,7 +172,7 @@ func TestTransportsAgreeOnLiteralValues(t *testing.T) {
 func TestTransportsAgreeOnCommandLists(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {
@@ -295,7 +295,7 @@ func TestCommandListStopsAtFirstFailure(t *testing.T) {
 func TestControlEngineReadsOptionsIdentically(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) == 0 {

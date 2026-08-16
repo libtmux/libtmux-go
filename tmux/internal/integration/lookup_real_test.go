@@ -19,7 +19,7 @@ import (
 //
 //libtmux:real-tmux
 func TestLiveWindowAndPaneResolutionUsesTmuxCanonicalWinlink(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	initial := mustRealSnapshot(t, server)
 	shared := initial.Windows()[0]
 	sharedPane := shared.Panes()[0]
@@ -92,7 +92,7 @@ func TestLiveWindowAndPaneResolutionUsesTmuxCanonicalWinlink(t *testing.T) {
 //
 // libtmux:real-tmux
 func TestLiveRelationshipResolversAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	initial := mustRealSnapshot(t, server)
 	wantSession := initial.Sessions()[0]
 	wantWindow, ok := wantSession.ActiveWindow()

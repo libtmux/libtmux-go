@@ -2,7 +2,6 @@ package tmux
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 )
@@ -197,10 +196,10 @@ func (s Server) LoadBuffer(ctx context.Context, request LoadBufferRequest) error
 	return requireServerCommandNoStderr("load-buffer", result, err)
 }
 
-// ListBuffers returns an owned snapshot of live tmux buffer rows. Command and
-// transport failures return a nonnil empty slice unless [Server.WithStrictErrors]
-// is enabled; context cancellation still returns its context error. The result
-// is not a live collection.
+// ListBuffers returns an owned snapshot of live tmux buffer rows. A command or
+// transport failure is returned rather than answered with no rows; context
+// cancellation still returns its context error. The result is not a live
+// collection.
 func (s Server) ListBuffers(
 	ctx context.Context,
 	request ListBuffersRequest,
@@ -284,20 +283,10 @@ func runServerListCommandWithError(
 ) ([]string, error) {
 	result, err := server.literalCmd(ctx, arguments...)
 	if err != nil {
-		if server.strictErrors || isContextOperationError(ctx, err) {
-			return nil, err
-		}
-		var transportError *commandTransportError
-		if errors.As(err, &transportError) {
-			return make([]string, 0), nil
-		}
 		return nil, err
 	}
 	if result.ExitCode != 0 || len(result.Stderr) != 0 {
-		if server.strictErrors {
-			return nil, newError(arguments[0], result)
-		}
-		return make([]string, 0), nil
+		return nil, newError(arguments[0], result)
 	}
 	return slices.Clone(result.Stdout), nil
 }

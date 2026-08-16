@@ -47,7 +47,7 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

@@ -196,15 +196,11 @@ type tools struct {
 	callerOnce sync.Once
 }
 
-// strict returns the configured server with mutations and point lookups set to
-// report failures rather than normalize them.
-func (t *tools) strict() tmux.Server { return t.target.WithStrictErrors() }
-
 // socketPath asks tmux where its socket is, so a pane's server can be compared
 // with the one this process was told it belongs to. An unreachable server
 // reports nothing, which makes every caller answer false rather than true.
 func (t *tools) socketPath(ctx context.Context) string {
-	result, err := t.strict().Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	result, err := t.target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || len(result.Stdout) == 0 {
 		return ""
 	}

@@ -17,7 +17,7 @@ import (
 //
 //libtmux:real-tmux
 func TestClientResolveAttachmentTracksSwitchAndDetachAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

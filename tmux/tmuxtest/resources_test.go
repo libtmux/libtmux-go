@@ -136,7 +136,7 @@ func sessionIDs(t *testing.T, server tmux.Server) map[tmux.SessionID]bool {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil {
 		t.Fatalf("Sessions() error = %v", err)
 	}
@@ -151,7 +151,7 @@ func windowIDs(t *testing.T, server tmux.Server) []tmux.WindowID {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	windows, err := server.WithStrictErrors().Windows(ctx)
+	windows, err := server.Windows(ctx)
 	if err != nil {
 		t.Fatalf("Windows() error = %v", err)
 	}

@@ -187,7 +187,7 @@ func sessionHasWindowName(
 	session tmux.Session,
 	name string,
 ) (bool, error) {
-	windows, err := session.Server().WithStrictErrors().Windows(ctx)
+	windows, err := session.Server().Windows(ctx)
 	if err != nil {
 		return false, err
 	}

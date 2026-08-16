@@ -17,7 +17,7 @@ import (
 
 //libtmux:real-tmux
 func TestShowBufferBytesPreservesRealTmuxData(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -69,7 +69,7 @@ func TestShowBufferBytesPreservesRealTmuxData(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestServerBuffersAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -152,7 +152,7 @@ func TestServerBuffersAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestServerBuffersPreserveTerminalSemicolonsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -191,7 +191,7 @@ func TestServerBuffersPreserveTerminalSemicolonsAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestServerBufferPathsPreserveLexicalSymlinkComponentsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

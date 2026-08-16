@@ -27985,7 +27985,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestServerHierarchyListsShareLenientAndStrictPolicy"
+          "test": "tmux.TestServerHierarchyListsReportFailures"
         },
         {
           "kind": "real-tmux",
@@ -31584,7 +31584,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestServerHierarchyListsShareLenientAndStrictPolicy"
+          "test": "tmux.TestServerHierarchyListsReportFailures"
         },
         {
           "kind": "real-tmux",
@@ -32585,7 +32585,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestServerHierarchyListsShareLenientAndStrictPolicy"
+          "test": "tmux.TestServerHierarchyListsReportFailures"
         },
         {
           "kind": "real-tmux",
@@ -33461,7 +33461,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestServerHierarchyListsShareLenientAndStrictPolicy"
+          "test": "tmux.TestServerHierarchyListsReportFailures"
         },
         {
           "kind": "real-tmux",

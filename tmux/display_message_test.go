@@ -397,7 +397,7 @@ func TestDisplayMessageCompletedStderrIsConcreteSynchronousWarning(t *testing.T)
 	runner := &displayQueueRunner{responses: []displayResponse{{result: tmuxcmd.Result{
 		Stdout: sourceStdout, Stderr: sourceStderr, ExitCode: 1,
 	}}}}
-	server := displayServerWithRunner(runner).WithStrictErrors()
+	server := displayServerWithRunner(runner)
 	var got Warning
 	server.connectionState().options.WarningHandler = func(warning Warning) {
 		if runner.callCount() != 1 {

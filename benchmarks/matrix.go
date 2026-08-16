@@ -148,7 +148,7 @@ func newHarness(ctx context.Context) (*harness, error) {
 		ConfigFile:         config,
 		Runner:             processes.runner(),
 		ProcessEnvironment: cleanEnvironment(),
-	}).WithStrictErrors()
+	})
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "bench"})
 	if err != nil {

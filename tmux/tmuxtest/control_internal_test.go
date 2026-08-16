@@ -466,7 +466,7 @@ func onlyInternalControlSession(t *testing.T, server tmux.Server) tmux.Session {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
 	defer cancel()
-	sessions, err := server.WithStrictErrors().Sessions(ctx)
+	sessions, err := server.Sessions(ctx)
 	if err != nil {
 		t.Fatalf("Sessions() error = %v", err)
 	}

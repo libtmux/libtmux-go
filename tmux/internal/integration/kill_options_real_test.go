@@ -21,7 +21,7 @@ import (
 //
 //libtmux:real-tmux
 func TestKillOthersAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -87,7 +87,7 @@ func killOptionsWindow(snapshot tmux.Snapshot, sessionID tmux.SessionID, windowI
 //
 //libtmux:real-tmux
 func TestSessionKillGroupCompatibilityAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -131,7 +131,7 @@ func TestSessionKillGroupCompatibilityAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestSessionKillAllExceptAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -161,7 +161,7 @@ func TestSessionKillAllExceptAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -259,7 +259,7 @@ func killOptionsActivityFlag(t *testing.T, session tmux.Session, windowID tmux.W
 //
 //libtmux:real-tmux
 func TestTargetedSessionAndWindowKillsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -322,7 +322,7 @@ func killWindowName(name string) *string { return &name }
 
 //libtmux:real-tmux
 func TestWindowKillOthersUsesLinkedReceiverSessionAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 

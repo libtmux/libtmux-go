@@ -22,7 +22,7 @@ import (
 //
 //libtmux:real-tmux
 func TestFromEnvDiscoversRealPaneAndContainingHierarchy(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
 	wantPane := snapshot.Panes()[0]
 	env := map[string]string{
@@ -65,7 +65,7 @@ func TestFromEnvDiscoversRealPaneAndContainingHierarchy(t *testing.T) {
 
 //libtmux:real-tmux
 func TestPaneFromEnvReportsMissingPaneOnLiveServer(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	result := mustRealCommand(t, server, "split-window", "-d", "-P", "-F", "#{pane_id}")
 	if len(result.Stdout) != 1 {
 		t.Fatalf("split-window stdout = %#v, want pane id", result.Stdout)

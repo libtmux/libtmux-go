@@ -576,7 +576,7 @@ func TestASubscriberIsToldWhenAPaneChanges(t *testing.T) {
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
-		_ = target.WithStrictErrors().Kill(killCtx)
+		_ = target.Kill(killCtx)
 	})
 
 	updated := make(chan string, 16)
@@ -747,7 +747,7 @@ func TestBuffersAreThisServersOwn(t *testing.T) {
 	workspace(ctx, t, session, "session_name: buffers\nwindows:\n  - panes:\n      - {}\n")
 
 	// A buffer this server did not create, standing in for a person's copy.
-	if err := target.WithStrictErrors().SetBuffer(ctx, tmux.SetBufferRequest{
+	if err := target.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: "a private copy",
 		Name: stringPointer("someones-own"),
 	}); err != nil {
@@ -1033,7 +1033,7 @@ func TestTheServerFindsItsOwnPaneWithoutTheEnvironment(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket}).WithStrictErrors()
+	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

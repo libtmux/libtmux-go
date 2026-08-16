@@ -30,7 +30,7 @@ func TestPaneCaptureHasLineRequiresExactLine(t *testing.T) {
 
 //libtmux:real-tmux
 func TestSendKeysLiteralCaptureWorkflowAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -115,7 +115,7 @@ func TestPaneInputAndHistoryAgainstRealTmux(t *testing.T) {
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

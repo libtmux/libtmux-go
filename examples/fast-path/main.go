@@ -73,7 +73,7 @@ func (c *counter) total() int {
 func run(ctx context.Context, options tmux.ServerOptions) error {
 	processes := &counter{}
 	options.Runner = processes.runner()
-	server := tmux.NewServer(options).WithStrictErrors()
+	server := tmux.NewServer(options)
 	defer func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

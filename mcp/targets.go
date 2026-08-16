@@ -23,7 +23,7 @@ import (
 
 // resolveSession finds the session a call names, or the only one there is.
 func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, error) {
-	sessions, err := t.strict().Sessions(ctx)
+	sessions, err := t.target.Sessions(ctx)
 	if err != nil {
 		return tmux.Session{}, err
 	}
@@ -54,7 +54,7 @@ func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, 
 // which is what "this window" means to someone looking at a terminal.
 func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux.Window, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		return t.strict().Window(ctx, tmux.WindowID(wanted))
+		return t.target.Window(ctx, tmux.WindowID(wanted))
 	}
 	session, err := t.resolveSession(ctx, sessionName)
 	if err != nil {
@@ -70,7 +70,7 @@ func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux
 // it would otherwise spend a list_panes call to name.
 func (t *tools) resolvePane(ctx context.Context, id, sessionName string) (tmux.Pane, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		return t.strict().Pane(ctx, tmux.PaneID(wanted))
+		return t.target.Pane(ctx, tmux.PaneID(wanted))
 	}
 	window, err := t.resolveWindow(ctx, "", sessionName)
 	if err != nil {

@@ -175,7 +175,7 @@ func (t *tools) searchPanes(
 		request.Start = tmux.CaptureBoundary
 	}
 
-	server := t.strict()
+	server := t.target
 	socket := t.socketPath(ctx)
 	caller := t.callerIdentityFor(ctx)
 	matched := make([]paneMatch, 0)

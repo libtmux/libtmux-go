@@ -221,7 +221,7 @@ func TestResizeReturnsReceiverWhenRefreshFails(t *testing.T) {
 		{err: context.Canceled},
 	}}
 	receiver := Window{
-		server:      serverWithRunner(runner).WithStrictErrors(),
+		server:      serverWithRunner(runner),
 		sessionID:   "$7",
 		windowID:    "@8",
 		windowIndex: 2,

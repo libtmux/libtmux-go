@@ -378,9 +378,9 @@ func TestSnapshotIdentityUsesProbedOpenBSDCapabilities(t *testing.T) {
 	}}
 	server := serverWithRunner(runner)
 
-	identity, normalized, err := server.probeSnapshotIdentity(context.Background())
-	if err != nil || normalized {
-		t.Fatalf("probeSnapshotIdentity() = (%#v, %t, %v)", identity, normalized, err)
+	identity, err := server.probeSnapshotIdentity(context.Background())
+	if err != nil {
+		t.Fatalf("probeSnapshotIdentity() = (%#v, %v)", identity, err)
 	}
 	want := mustParseVersion(t, "3.5")
 	if identity.version.String() != "openbsd-7.8" || identity.version.Compare(want) != 0 {

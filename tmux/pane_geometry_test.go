@@ -239,7 +239,7 @@ func TestResizePaneReturnsReceiverWhenRefreshFails(t *testing.T) {
 		{err: context.Canceled},
 	}}
 	receiver := Pane{
-		server:      serverWithRunner(runner).WithStrictErrors(),
+		server:      serverWithRunner(runner),
 		sessionID:   "$7",
 		windowID:    "@8",
 		windowIndex: 2,

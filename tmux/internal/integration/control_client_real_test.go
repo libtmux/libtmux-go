@@ -18,7 +18,7 @@ import (
 
 //libtmux:real-tmux
 func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -130,7 +130,7 @@ func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testin
 
 //libtmux:real-tmux
 func TestControlClientPreservesCommandArgumentBytesAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
@@ -171,7 +171,7 @@ func TestControlClientPreservesCommandArgumentBytesAgainstRealTmux(t *testing.T)
 
 //libtmux:real-tmux
 func TestControlClientPreservesExitNotificationAfterWait(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
@@ -212,7 +212,7 @@ func TestControlClientPreservesExitNotificationAfterWait(t *testing.T) {
 
 //libtmux:real-tmux
 func TestControlClientDemultiplexesPaneOutputAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)

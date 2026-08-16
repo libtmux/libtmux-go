@@ -14,7 +14,7 @@ import (
 func TestCreationMutationExampleAgainstRealTmux(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "project", WindowName: "editor",
@@ -76,7 +76,7 @@ func TestCreationMutationExampleAgainstRealTmux(t *testing.T) {
 func TestPaneFilterPredicateExampleAgainstRealTmux(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {
@@ -126,7 +126,7 @@ func TestPaneFilterPredicateExampleAgainstRealTmux(t *testing.T) {
 func TestDocumentedBlockingWorkflowsAgainstRealTmux(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmuxtest.NewServer(ctx, t).WithStrictErrors()
+	server := tmuxtest.NewServer(ctx, t)
 
 	result, err := server.Cmd(ctx, "display-message", "-p", "#{session_name}")
 	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 || result.Stdout[0] != "work" {
@@ -193,7 +193,7 @@ func TestDocumentedBlockingWorkflowsAgainstRealTmux(t *testing.T) {
 	}
 
 	lazy := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
-	_, err = lazy.WithStrictErrors().Sessions(ctx)
+	_, err = lazy.Sessions(ctx)
 	var commandError *tmux.CommandError
 	if !errors.As(err, &commandError) {
 		t.Fatalf("strict Sessions() error = %v, want *CommandError", err)

@@ -23,7 +23,7 @@ import (
 //
 //libtmux:real-tmux
 func TestLifecycleOperationsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -127,7 +127,7 @@ func TestLifecycleOperationsAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	version, err := server.Version(ctx)
@@ -316,7 +316,7 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	realBinary, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Fatal(err)
@@ -337,7 +337,7 @@ func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 		Binary:     proxyPath,
 		SocketPath: server.SocketPath(),
 		ConfigFile: server.ConfigFile(),
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -457,7 +457,7 @@ func TestStartKeepsAnEmptyServerOnlyThroughTheConfigFile(t *testing.T) {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		ConfigFile: configuration,
-	}).WithStrictErrors()
+	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

@@ -68,7 +68,7 @@ func run() error {
 			mutex.Unlock()
 			return tmux.SubprocessRunner().Run(ctx, request)
 		}),
-	}).WithStrictErrors()
+	})
 	defer func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

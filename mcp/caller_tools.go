@@ -79,7 +79,7 @@ func (t *tools) callerFromProcessTree(ctx context.Context) callerIdentity {
 	}
 	// One listing rather than a lookup per ancestor: the panes are few and the
 	// ancestors are fewer, and this runs once for the life of the process.
-	result, err := t.strict().Cmd(ctx, "list-panes", "-a", "-F", "#{pane_pid}|#{pane_id}")
+	result, err := t.target.Cmd(ctx, "list-panes", "-a", "-F", "#{pane_pid}|#{pane_id}")
 	if err != nil || result.ExitCode != 0 {
 		return callerIdentity{}
 	}

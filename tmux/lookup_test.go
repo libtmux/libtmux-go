@@ -107,7 +107,7 @@ func TestServerPointLookupsUseScopedFramedListings(t *testing.T) {
 				}},
 				liveIdentityResponse(version),
 			}}
-			server := serverWithRunner(runner).WithStrictErrors()
+			server := serverWithRunner(runner)
 
 			id, format, producingServer, err := test.lookup(server)
 			if err != nil {
@@ -897,7 +897,7 @@ func TestModelRefreshReturnsNewLiveValue(t *testing.T) {
 				}},
 				liveIdentityResponse(version),
 			}}
-			server := serverWithRunner(runner).WithStrictErrors()
+			server := serverWithRunner(runner)
 
 			id, name, producingServer, receiverUnchanged, err := test.refresh(server)
 			if err != nil {

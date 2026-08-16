@@ -205,7 +205,7 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
-		_ = target.WithStrictErrors().Kill(killCtx)
+		_ = target.Kill(killCtx)
 	})
 
 	updated := make(chan string, 16)

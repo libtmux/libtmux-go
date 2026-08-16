@@ -49,7 +49,7 @@ func TestControlClientOpensWithoutAUTF8Locale(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		ProcessEnvironment: stripped,
 		InitialSession:     &initial,
-	}).WithStrictErrors()
+	})
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {

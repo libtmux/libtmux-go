@@ -1,8 +1,38 @@
 # Python parity contract
 
-Feature parity means that every supported public Python behavior has either a
+Feature parity means that every supported public Python capability has either a
 Go equivalent or an explicit language-level translation. Completion is proved
 from a committed symbol manifest and behavior tests, not from file presence.
+
+## What parity covers, and what it does not
+
+Parity is a claim about reach: anything the Python library can ask tmux to do
+can be asked here. It is not a claim about what happens when the answer does not
+arrive.
+
+Failure semantics are Go's to decide, because the two languages do not have the
+same options. Python signals a degraded result with `warnings.warn`, which
+prints to stderr and is seen. Go's equivalent is a return value the caller must
+be given a reason to read, and translating an ignored path branch by branch
+turns a visible degradation into a silent one — the same code, a worse library.
+
+Where the two disagree, this package answers a question it could not answer with
+the reason it could not, and records the divergence in DESIGN.md:
+
+- A read that fails returns the failure. Nothing reports a failure as an empty
+  collection, a zero option value, or a record whose relations went missing,
+  because none of those can be told from the same answer honestly arrived at.
+- A request tmux cannot carry fails. A flag dropped because the running tmux is
+  too old changes what the caller asked for, so it is refused unless the caller
+  chose degradation.
+- Absence keeps its own channel. A missing environment variable, an unmatched
+  point lookup, and a server that is not running are ordinary states, reported
+  through a comma-ok result or a sentinel rather than an error a caller has to
+  parse — or worse, an empty value it cannot detect.
+
+A manifest entry may record a Python behavior as translated on these grounds.
+It may not record one as preserved when preserving it would make a failure
+indistinguishable from a result.
 
 ## Translation map
 
@@ -120,8 +150,9 @@ in the manifest, not promises embedded in user documentation.
 
 ## Semantic invariants
 
-- List accessors are empty on tmux failures by default; strict errors are opt-in,
-  and each Python behavior difference is named in the manifest.
+- List accessors return a tmux command or transport failure rather than an
+  empty collection, so an empty result means the server held nothing.
+  `ErrNoServer` classifies a server that was not reached.
 - Context cancellation is never mistaken for an empty server.
 - Session, window, and pane targets retain explicit parent relationships.
 - Linked windows may appear more than once and keep distinct winlink state.

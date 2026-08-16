@@ -80,7 +80,7 @@ func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},
-	}).WithStrictErrors()
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -237,7 +237,7 @@ func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestPromptHistoryVersionGateAndTypesAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -312,7 +312,7 @@ func TestPromptHistoryVersionGateAndTypesAgainstRealTmux(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestPromptHistoryFailurePolicyAgainstRealTmux(t *testing.T) {
+func TestPromptHistoryReportsAbsentServerAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -333,14 +333,15 @@ func TestPromptHistoryFailurePolicyAgainstRealTmux(t *testing.T) {
 		t.Fatalf("kill-server = (%#v, %v), want clean completion", result, err)
 	}
 
+	// The server this handle names has just been killed, so a read of its
+	// prompt history reports that rather than answering with no history, which
+	// a running server holding none would produce just as readily.
 	lines, err := server.ShowPromptHistory(ctx, tmux.PromptHistoryRequest{})
-	if err != nil || lines == nil || len(lines) != 0 {
-		t.Fatalf("lenient ShowPromptHistory() = (%#v, %v), want nonnil empty", lines, err)
+	if !errors.Is(err, tmux.ErrNoServer) {
+		t.Fatalf("ShowPromptHistory() error = %v, want ErrNoServer", err)
 	}
-	if _, err := server.WithStrictErrors().ShowPromptHistory(
-		ctx, tmux.PromptHistoryRequest{},
-	); !errors.Is(err, tmux.ErrCommand) {
-		t.Fatalf("strict ShowPromptHistory() error = %v, want ErrCommand", err)
+	if lines != nil {
+		t.Fatalf("ShowPromptHistory() = %#v, want no history beside an error", lines)
 	}
 	if err := server.ClearPromptHistory(ctx, tmux.PromptHistoryRequest{}); !errors.Is(err, tmux.ErrCommand) {
 		t.Fatalf("ClearPromptHistory() error = %v, want ErrCommand", err)

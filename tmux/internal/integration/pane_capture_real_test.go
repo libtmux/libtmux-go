@@ -16,7 +16,7 @@ import (
 
 //libtmux:real-tmux
 func TestCaptureBytesPreservesRealTmuxFraming(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -75,7 +75,7 @@ func TestCaptureBytesPreservesRealTmuxFraming(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestPaneCaptureAgainstRealTmux(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -269,7 +269,7 @@ func requireCaptureCommandSuccess(
 //
 //libtmux:real-tmux
 func TestCaptureShowsTheShellEchoBeforeTheOutput(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t).WithStrictErrors()
+	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

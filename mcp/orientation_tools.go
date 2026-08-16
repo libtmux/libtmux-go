@@ -2,10 +2,29 @@ package mcp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// orientationSnapshot reads the server for the tools that answer "what is
+// there", and reports a server that is not running as one holding nothing.
+//
+// The tmux module declines to make that call, because it cannot tell an absent
+// server from a socket path a program got wrong, and answering either with an
+// empty result would hide the second. Here the call is answerable: a client
+// asking what panes exist before starting anything is the ordinary opening
+// move, and failing it would make every session begin with an error. A socket
+// this server cannot use still fails, because [tmux.ErrNoServer] classifies
+// only what tmux refused before running the command.
+func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, error) {
+	snapshot, err := t.target.Snapshot(ctx)
+	if errors.Is(err, tmux.ErrNoServer) {
+		return tmux.Snapshot{}, nil
+	}
+	return snapshot, err
+}
 
 // listPanesInput takes no arguments; every pane on the configured server is
 // listed.
@@ -27,9 +46,9 @@ func (t *tools) listPanes(
 ) (*mcp.CallToolResult, listPanesOutput, error) {
 	// One snapshot rather than a listing per pane, so session and window names
 	// come from the same observation as the panes themselves.
-	// An empty list rather than no list: a client reading .panes.length on an
-	// unreachable server should see zero, not fail on a missing field.
-	snapshot, err := t.target.Snapshot(ctx)
+	// An empty list rather than no list: a client reading .panes.length on a
+	// server holding nothing should see zero, not fail on a missing field.
+	snapshot, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listPanesOutput{Panes: []paneSummary{}}, err
 	}
@@ -65,7 +84,7 @@ func (t *tools) listWindows(
 	_ *mcp.CallToolRequest,
 	_ listWindowsInput,
 ) (*mcp.CallToolResult, listWindowsOutput, error) {
-	snapshot, err := t.target.Snapshot(ctx)
+	snapshot, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listWindowsOutput{}, err
 	}
@@ -91,7 +110,7 @@ func (t *tools) listSessions(
 	_ *mcp.CallToolRequest,
 	_ listSessionsInput,
 ) (*mcp.CallToolResult, listSessionsOutput, error) {
-	snapshot, err := t.target.Snapshot(ctx)
+	snapshot, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listSessionsOutput{}, err
 	}
@@ -123,7 +142,7 @@ func (t *tools) selectWindow(
 	_ *mcp.CallToolRequest,
 	input selectWindowInput,
 ) (*mcp.CallToolResult, selectWindowOutput, error) {
-	window, err := t.strict().Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, selectWindowOutput{}, err
 	}
