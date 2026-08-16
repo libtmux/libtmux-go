@@ -1,15 +1,81 @@
 package integration
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
 
 // modules are every module in this repository, by directory.
 var modules = []string{".", "examples", "workspace", "mcp", "benchmarks"}
+
+// advertisedVersion matches a released version wherever this repository names
+// one. tmux's own versions, such as 3.2a, are not of this shape.
+var advertisedVersion = regexp.MustCompile(`v\d+\.\d+\.\d+[-0-9A-Za-z.]*`)
+
+// ownRequirement matches a require directive naming a module of this
+// repository, capturing the version a consumer would resolve.
+var ownRequirement = regexp.MustCompile(
+	`(github\.com/libtmux/libtmux-go(?:/[a-z]+)?) (v\d\S*)`,
+)
+
+// TestEveryAdvertisedVersionAgrees gates the release surface against drift.
+//
+// A version is written down in two unrelated places: the commands the README
+// tells a reader to run, and the require directives deciding what a consumer of
+// a module resolves. A release that bumps one and not the other leaves either a
+// README installing a version nobody published, or a module requiring one --
+// and a require is not a local concern, because the replace directive beside it
+// is read only here.
+func TestEveryAdvertisedVersionAgrees(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	sources := map[string][]string{}
+	record := func(version, where string) {
+		sources[version] = append(sources[version], where)
+	}
+
+	readme, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range advertisedVersion.FindAllString(string(readme), -1) {
+		record(version, "README.md")
+	}
+
+	for _, module := range modules {
+		path := filepath.Join(root, module, "go.mod")
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range ownRequirement.FindAllStringSubmatch(string(content), -1) {
+			record(match[2], module+"/go.mod requires "+match[1])
+		}
+	}
+
+	if len(sources) == 0 {
+		t.Fatal("no version found in the README or any go.mod, so this gate proves nothing")
+	}
+	if len(sources) == 1 {
+		return
+	}
+	versions := slices.Sorted(maps.Keys(sources))
+	report := make([]string, 0, len(versions))
+	for _, version := range versions {
+		places := sources[version]
+		slices.Sort(places)
+		report = append(report, version+": "+strings.Join(places, ", "))
+	}
+	t.Fatalf("this repository advertises %d versions, want one:\n%s",
+		len(versions), strings.Join(report, "\n"))
+}
 
 // TestEveryModuleResolvesWithoutAWorkspace gates the difference between a
 // repository that works and one that only works here.
