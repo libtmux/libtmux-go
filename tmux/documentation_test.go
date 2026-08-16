@@ -84,10 +84,8 @@ var examplesWithoutOutput = map[string]string{
 
 	"ExampleGlobalSessionScope_SetHook": "pending conversion",
 	"ExamplePaneFilter_Predicate":       "pending conversion",
-	"ExamplePane_CaptureBytes":          "pending conversion",
 
 	"ExampleServer_Cmd":                   "pending conversion",
-	"ExampleServer_OpenControl":           "pending conversion",
 	"ExampleServer_Sessions":              "pending conversion",
 	"ExampleServer_ShowBufferBytes":       "pending conversion",
 	"ExampleServer_Snapshot":              "pending conversion",

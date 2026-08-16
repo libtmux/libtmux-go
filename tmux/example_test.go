@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmuxq"
@@ -140,22 +141,36 @@ func ExamplePane_SendKeys() {
 }
 
 func ExamplePane_CaptureBytes() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-capture-bytes",
+	})
+	defer killExampleServer(server)
 
-	panes, err := server.Panes(ctx)
-	if err != nil || len(panes) == 0 {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
+	if err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
-	output, err := panes[0].CaptureBytes(ctx, tmux.CapturePaneRequest{
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", err)
+		return
+	}
+
+	// CaptureBytes returns what the pane holds without decoding it, which is
+	// what a pane drawing anything but text has to be read with.
+	output, err := pane.CaptureBytes(ctx, tmux.CapturePaneRequest{
 		Start: tmux.CaptureBoundary,
 		End:   tmux.CaptureBoundary,
 	})
 	if err != nil {
+		fmt.Println("capture:", err)
 		return
 	}
-	fmt.Printf("%x\n", output)
+	fmt.Println(utf8.Valid(output))
+	// Output: true
 }
 
 func ExampleServer_Sessions() {
@@ -198,33 +213,57 @@ func ExampleServer_Cmd() {
 }
 
 func ExampleServer_OpenControl() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-open-control",
+	})
+	defer killExampleServer(server)
 
-	sessions, err := server.Sessions(ctx)
-	if err != nil || len(sessions) == 0 {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
+	if err != nil {
+		fmt.Println("create session:", err)
 		return
 	}
-	client, err := server.OpenControl(ctx, sessions[0])
+	client, err := server.OpenControl(ctx, session)
 	if err != nil {
+		fmt.Println("open control:", err)
 		return
 	}
 	defer func() {
-		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second)
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer closeCancel()
 		_ = client.CloseContext(closeCtx)
 	}()
 
 	result, err := client.Cmd(ctx, "display-message", "-p", "ready")
 	if err != nil || result.Failed {
+		fmt.Println("command over the control client:", err)
 		return
 	}
+
+	// A control frame carries its payload bytes, line feed included, rather
+	// than a decoded string: the frame is what tmux sent.
+	fmt.Printf("%q\n", result.RawStdout)
+
+	// Reconnect replaces the client with one on a new attachment. The old one
+	// is spent, so the result is what later commands go through.
 	reconnected, err := client.Reconnect(ctx)
 	if err != nil {
+		fmt.Println("reconnect:", err)
 		return
 	}
 	client = reconnected
+
+	result, err = client.Cmd(ctx, "display-message", "-p", "still here")
+	if err != nil {
+		fmt.Println("command after reconnecting:", err)
+		return
+	}
+	fmt.Printf("%q\n", result.RawStdout)
+	// Output:
+	// "ready\n"
+	// "still here\n"
 }
 
 func ExampleServer_ShowBufferBytes() {
