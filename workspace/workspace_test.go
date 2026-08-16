@@ -12,26 +12,24 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	"github.com/libtmux/libtmux-go/workspace"
 )
 
-// testServer returns a server on a socket unique to the test, and kills it when
-// the test ends. The workspace module cannot use the tmux module's tmuxtest
-// package, because tmuxtest lives in the tmux module and this module depends on
-// that module rather than the other way round.
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
+
+// testServer returns a harness-owned server and the context its test uses.
+//
+// It is a bare server rather than one carrying a session: a workspace builds
+// what it needs, and a session it did not create is state its assertions would
+// have to account for.
 func testServer(t *testing.T) (tmux.Server, context.Context) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-
-	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	server := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
-	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer killCancel()
-		_ = server.Kill(killCtx)
-	})
-	return server, ctx
+	return tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{}), ctx
 }
 
 func TestParseAcceptsTmuxpShorthandAndLongForm(t *testing.T) {
