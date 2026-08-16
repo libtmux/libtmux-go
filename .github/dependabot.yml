@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # No go.work, so each module resolves its own dependencies and has to be
+  # named here.
+  - package-ecosystem: "gomod"
+    directories:
+      - "/"
+      - "/benchmarks"
+      - "/examples"
+      - "/mcp"
+      - "/workspace"
+    schedule:
+      interval: "weekly"
+    groups:
+      go:
+        patterns: ["*"]
+    # The trailing space stops Dependabot appending a colon.
+    commit-message:
+      prefix: "go(deps) "
+    # Time enough for a compromised release to be reported.
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(deps) "
+    cooldown:
+      default-days: 7
