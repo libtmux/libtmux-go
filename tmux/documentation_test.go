@@ -233,6 +233,10 @@ func exampleTestFiles(t *testing.T, root string) []string {
 
 const tmuxModulePath = "github.com/libtmux/libtmux-go/tmux"
 
+// coreModulePath is the module holding the tmux package, which is the directory
+// above it rather than its own.
+const coreModulePath = "github.com/libtmux/libtmux-go"
+
 var removedReceiverMethods = map[string]map[string]bool{
 	"Session": {
 		"SessionName": true, "SessionAttached": true, "SessionWindows": true,
@@ -693,11 +697,29 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 // paths naming sibling packages and examples are rooted.
 func documentationModuleRoot(t *testing.T) string {
 	t.Helper()
-	output, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
-	if err != nil {
-		t.Fatalf("locate the module root: %v", err)
+	return moduleRootFrom(t, documentationPackageDir(t))
+}
+
+// moduleRootFrom walks up from directory to the core module's go.mod.
+//
+// It reads the tree rather than asking the go command, because go list reports
+// every module of a workspace and answers differently depending on where and
+// how it is run, while the directory holding this repository's go.mod is a
+// fixed distance above any test in it either way.
+func moduleRootFrom(t *testing.T, directory string) string {
+	t.Helper()
+
+	for current := directory; ; {
+		content, err := os.ReadFile(filepath.Join(current, "go.mod"))
+		if err == nil && strings.Contains(string(content), "module "+coreModulePath+"\n") {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			t.Fatalf("no go.mod declaring %s above %s", coreModulePath, directory)
+		}
+		current = parent
 	}
-	return strings.TrimSpace(string(output))
 }
 
 // documentationPackageDir is the directory this package's own source lives in.

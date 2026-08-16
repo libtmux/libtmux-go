@@ -1,11 +1,19 @@
 package tmux
 
 import (
-	"os/exec"
+	"os"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"testing"
 )
+
+// callerFile is this file's own path, which locates the module root beside it.
+func callerFile() (uintptr, string, bool) {
+	pc, filename, _, ok := runtime.Caller(0)
+	return pc, filename, ok
+}
 
 // libtmux:parity libtmux#export:__version__
 // libtmux:parity libtmux.__about__.__version__
@@ -86,12 +94,24 @@ func TestPackageVersionMatchesCurrentBuildInfo(t *testing.T) {
 }
 
 // declaredModulePath is the module path in go.mod, which is what Go build
-// metadata reports for this package's module.
+// metadata reports for this package's module. It reads the file rather than
+// asking the go command, which reports every module of a workspace.
 func declaredModulePath(t *testing.T) string {
 	t.Helper()
-	output, err := exec.Command("go", "list", "-m", "-f", "{{.Path}}").Output()
-	if err != nil {
-		t.Fatalf("read the declared module path: %v", err)
+
+	_, filename, ok := callerFile()
+	if !ok {
+		t.Fatal("resolve this test's own path")
 	}
-	return strings.TrimSpace(string(output))
+	content, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(filename)), "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		if declared, found := strings.CutPrefix(strings.TrimSpace(line), "module "); found {
+			return declared
+		}
+	}
+	t.Fatal("go.mod declares no module path")
+	return ""
 }

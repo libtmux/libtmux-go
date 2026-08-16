@@ -6,17 +6,37 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 )
 
+// tmuxModulePath is the core module, named so that a helper resolving the
+// repository root picks it rather than whichever module a workspace lists
+// first.
+const tmuxModulePath = "github.com/libtmux/libtmux-go"
+
 // modules are every module in this repository, by directory.
 var modules = []string{".", "examples", "workspace", "mcp", "benchmarks"}
 
-// advertisedVersion matches a released version wherever this repository names
-// one. tmux's own versions, such as 3.2a, are not of this shape.
-var advertisedVersion = regexp.MustCompile(`v\d+\.\d+\.\d+[-0-9A-Za-z.]*`)
+// publishedModules maps a module of this repository that is tagged and
+// consumed to the directory holding it. examples and benchmarks are neither.
+var publishedModules = map[string]string{
+	"github.com/libtmux/libtmux-go":           ".",
+	"github.com/libtmux/libtmux-go/workspace": "workspace",
+	"github.com/libtmux/libtmux-go/mcp":       "mcp",
+}
+
+// readmeInstall matches a package path the README tells a reader to fetch at a
+// version, such as a go get or go install line.
+var readmeInstall = regexp.MustCompile(
+	`(github\.com/libtmux/libtmux-go[a-zA-Z0-9./_-]*)@(v\d[0-9A-Za-z.-]*)`,
+)
+
+// readmeTag matches a tag the README names for a module of its own, which is
+// how a multi-module repository spells a version that is not the core's.
+var readmeTag = regexp.MustCompile("`(workspace|mcp)/(v\\d[0-9A-Za-z.-]*)`")
 
 // ownRequirement matches a require directive naming a module of this
 // repository, capturing the version a consumer would resolve.
@@ -26,55 +46,84 @@ var ownRequirement = regexp.MustCompile(
 
 // TestEveryAdvertisedVersionAgrees gates the release surface against drift.
 //
-// A version is written down in two unrelated places: the commands the README
-// tells a reader to run, and the require directives deciding what a consumer of
-// a module resolves. A release that bumps one and not the other leaves either a
-// README installing a version nobody published, or a module requiring one --
-// and a require is not a local concern, because the replace directive beside it
-// is read only here.
+// A module's version is written down in two unrelated places: the commands the
+// README tells a reader to run, and the require directives deciding what a
+// consumer resolves. Modules are tagged per directory and their versions move
+// independently, so the invariant is per module rather than one version across
+// the repository -- and a require is not a local concern, because a replace
+// directive beside it is read only here.
 func TestEveryAdvertisedVersionAgrees(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	sources := map[string][]string{}
-	record := func(version, where string) {
-		sources[version] = append(sources[version], where)
+	sources := map[string]map[string][]string{}
+	record := func(module, version, where string) {
+		if sources[module] == nil {
+			sources[module] = map[string][]string{}
+		}
+		sources[module][version] = append(sources[module][version], where)
 	}
 
 	readme, err := os.ReadFile(filepath.Join(root, "README.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, version := range advertisedVersion.FindAllString(string(readme), -1) {
-		record(version, "README.md")
+	for _, match := range readmeInstall.FindAllStringSubmatch(string(readme), -1) {
+		module, ok := longestModulePrefix(match[1])
+		if !ok {
+			t.Errorf("README fetches %s, which is in no module of this repository", match[1])
+			continue
+		}
+		record(module, match[2], "README.md fetches "+match[1])
+	}
+	for _, match := range readmeTag.FindAllStringSubmatch(string(readme), -1) {
+		record("github.com/libtmux/libtmux-go/"+match[1], match[2],
+			"README.md names the tag "+match[1]+"/"+match[2])
 	}
 
 	for _, module := range modules {
-		path := filepath.Join(root, module, "go.mod")
-		content, err := os.ReadFile(path)
+		content, err := os.ReadFile(filepath.Join(root, module, "go.mod"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, match := range ownRequirement.FindAllStringSubmatch(string(content), -1) {
-			record(match[2], module+"/go.mod requires "+match[1])
+			record(match[1], match[2], module+"/go.mod requires it")
 		}
 	}
 
-	if len(sources) == 0 {
-		t.Fatal("no version found in the README or any go.mod, so this gate proves nothing")
+	for module := range publishedModules {
+		versions := sources[module]
+		if len(versions) == 0 {
+			t.Errorf("%s is published but no version of it is written down anywhere", module)
+			continue
+		}
+		if len(versions) == 1 {
+			continue
+		}
+		report := make([]string, 0, len(versions))
+		for _, version := range slices.Sorted(maps.Keys(versions)) {
+			places := versions[version]
+			slices.Sort(places)
+			report = append(report, "  "+version+": "+strings.Join(places, ", "))
+		}
+		t.Errorf("%s is advertised at %d versions, want one:\n%s",
+			module, len(versions), strings.Join(report, "\n"))
 	}
-	if len(sources) == 1 {
-		return
+}
+
+// longestModulePrefix returns the published module containing a package path.
+// The longest match wins, since every module here sits under the core's path.
+func longestModulePrefix(packagePath string) (string, bool) {
+	best := ""
+	for module := range publishedModules {
+		if packagePath != module && !strings.HasPrefix(packagePath, module+"/") {
+			continue
+		}
+		if len(module) > len(best) {
+			best = module
+		}
 	}
-	versions := slices.Sorted(maps.Keys(sources))
-	report := make([]string, 0, len(versions))
-	for _, version := range versions {
-		places := sources[version]
-		slices.Sort(places)
-		report = append(report, version+": "+strings.Join(places, ", "))
-	}
-	t.Fatalf("this repository advertises %d versions, want one:\n%s",
-		len(versions), strings.Join(report, "\n"))
+	return best, best != ""
 }
 
 // TestEveryModuleResolvesWithoutAWorkspace gates the difference between a
@@ -153,9 +202,32 @@ func TestTheServerInstallsFromItsOwnModule(t *testing.T) {
 // also the directory the other modules sit beside.
 func repositoryRoot(t *testing.T) string {
 	t.Helper()
-	output, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
-	if err != nil {
-		t.Fatalf("locate the module root: %v", err)
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve this test's own path")
 	}
-	return strings.TrimSpace(string(output))
+	return moduleRootFrom(t, filepath.Dir(filename))
+}
+
+// moduleRootFrom walks up from directory to the core module's go.mod.
+//
+// It reads the tree rather than asking the go command, because go list reports
+// every module of a workspace and answers differently depending on where and
+// how it is run, while the directory holding this repository's go.mod is a
+// fixed distance above any test in it either way.
+func moduleRootFrom(t *testing.T, directory string) string {
+	t.Helper()
+
+	for current := directory; ; {
+		content, err := os.ReadFile(filepath.Join(current, "go.mod"))
+		if err == nil && strings.Contains(string(content), "module "+tmuxModulePath+"\n") {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			t.Fatalf("no go.mod declaring %s above %s", tmuxModulePath, directory)
+		}
+		current = parent
+	}
 }

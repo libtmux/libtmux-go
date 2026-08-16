@@ -31,6 +31,11 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/libtmux/libtmux-go => ../
+// This module ships a command, and go install rejects a module whose go.mod
+// carries a replace directive. Local development resolves the modules beside
+// it through go.work instead.
 
-replace github.com/libtmux/libtmux-go/workspace => ../workspace
+// v0.0.1-alpha.1 carried those replace directives, so
+// go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.1
+// refuses to build.
+retract v0.0.1-alpha.1

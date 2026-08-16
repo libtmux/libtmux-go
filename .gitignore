@@ -15,7 +15,6 @@ coverage.html
 
 # Go workspace files, which stitch this module to a checkout of something else
 # on one machine and mean nothing anywhere else.
-go.work
 go.work.sum
 
 # Editor and OS noise.

@@ -152,7 +152,7 @@ func writeDownstreamFile(t *testing.T, path string, contents string) {
 // go command reports it. Deriving it from a test's own directory only works
 // while the test sits in the module root, which these no longer do.
 func findModuleRoot() (string, error) {
-	output, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
+	output, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", tmuxModulePath).Output()
 	if err != nil {
 		return "", fmt.Errorf("locate the tmux module: %w", err)
 	}

@@ -23,7 +23,7 @@ $ go get github.com/libtmux/libtmux-go/tmux@v0.0.1-alpha.1
 ```
 
 Modules are tagged per directory, so the consumers carry their own versions:
-`mcp/v0.0.1-alpha.1`, `workspace/v0.0.1-alpha.1`.
+`mcp/v0.0.1-alpha.2`, `workspace/v0.0.1-alpha.1`.
 
 **Contents** — [Quick start](#quick-start) · [Querying](#what-querying-looks-like)
 · [Choosing a mode](#choosing-a-mode) · [Watching tmux](#watching-tmux) ·
@@ -216,7 +216,7 @@ none of them:
 one tmux server: create panes, send keys, read output, wait for text.
 
 ```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.1
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@v0.0.1-alpha.2
 ```
 
 See [`mcp/README.md`](mcp/README.md) for client configuration, and

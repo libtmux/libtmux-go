@@ -16,7 +16,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	pathpkg "path"
 	"path/filepath"
 	"regexp"
@@ -1818,11 +1817,7 @@ func decodeParityManifest(data []byte) (parityManifest, error) {
 // every package in the module, and this package is not the module root.
 func parityModuleRoot(t *testing.T) string {
 	t.Helper()
-	output, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
-	if err != nil {
-		t.Fatalf("locate the module root: %v", err)
-	}
-	return strings.TrimSpace(string(output))
+	return documentationModuleRoot(t)
 }
 
 func indexParityGoSymbols(root string) (paritySymbolIndex, error) {
