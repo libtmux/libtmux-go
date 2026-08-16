@@ -168,6 +168,7 @@ func (e subprocessEngine) String() string { return "subprocess" }
 // which this package does not normalize back into tmux's process stdout.
 func (s Server) withoutEngine() Server {
 	s.engine = nil
+	s.engineless = true
 	return s
 }
 
@@ -209,6 +210,7 @@ type engineDecliner interface {
 // commandEngine returns the engine that will carry kind, or nil for a process.
 func (s Server) commandEngine(kind CommandKind) Engine {
 	if s.engine == nil {
+		s.warnIfPoolUnused(kind)
 		return nil
 	}
 	if !s.engine.Supports(kind) {

@@ -117,6 +117,7 @@ func (s Server) OpenControlPool(
 		drained: make(chan struct{}),
 		live:    count,
 	}
+	s.connectionState().coordination().pools.Add(1)
 	connected := s.WithEngine(pool.Engine())
 	// The session is handed back on the connected handle rather than as it
 	// arrived. A caller writing "server, session, pool, err := ..." shadows the
@@ -217,7 +218,10 @@ func (p *ControlPool) Close() error {
 }
 
 func (p *ControlPool) stop() {
-	p.stopOnce.Do(func() { close(p.stopped) })
+	p.stopOnce.Do(func() {
+		close(p.stopped)
+		p.session.server.connectionState().coordination().pools.Add(-1)
+	})
 }
 
 // run carries one tmux command on a connection no other command is using.

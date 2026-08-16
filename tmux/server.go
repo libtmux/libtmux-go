@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
@@ -71,19 +72,54 @@ type ServerOptions struct {
 type Server struct {
 	state  *serverState
 	engine Engine
+	// engineless records that this handle gave up its engine deliberately, so
+	// that a command it sends through a tmux process is expected rather than
+	// the cost of a record that predates the connection.
+	engineless bool
 }
 
 type serverState struct {
 	options ServerOptions
 	runner  commandRunner
+	shared  *serverShared
+}
+
+// serverShared is coordination that belongs to the tmux server a handle
+// addresses rather than to the handle's own configuration, so a derived handle
+// keeps it rather than starting over.
+//
+// [Server.NewSession] is why this is separate. It runs its commands on a handle
+// whose environment has TMUX removed, so that a program started inside a pane
+// does not create a session against the server it happens to be running in,
+// and the session it returns keeps that handle. Those are different options and
+// so a different serverState, but the same tmux: re-probing its version costs a
+// process for an answer already held, and a control pool opened on one of the
+// two handles is a connection the other could be using.
+type serverShared struct {
 	version versionCache
+	// pools counts the control pools open on this tmux server. A record
+	// materialized before a pool keeps the handle it was made on and pays for a
+	// process per command; this is how that handle can tell.
+	pools atomic.Int64
+}
+
+// defaultServerShared backs a state built without one, which is a zero [Server]
+// and the states tests construct directly.
+var defaultServerShared = &serverShared{}
+
+// coordination returns the state's shared coordination, never nil.
+func (s *serverState) coordination() *serverShared {
+	if s.shared == nil {
+		return defaultServerShared
+	}
+	return s.shared
 }
 
 type commandRunner interface {
 	Run(context.Context, tmuxcmd.Request) (tmuxcmd.Result, error)
 }
 
-var defaultServerState = &serverState{runner: tmuxcmd.Runner{}}
+var defaultServerState = &serverState{runner: tmuxcmd.Runner{}, shared: defaultServerShared}
 
 // NewServer returns a configured server handle without executing tmux. Empty
 // socket selectors retain tmux's default configuration.
@@ -92,6 +128,7 @@ func NewServer(options ServerOptions) Server {
 	return Server{state: &serverState{
 		options: options,
 		runner:  configuredCommandRunner(options.Runner),
+		shared:  &serverShared{},
 	}}
 }
 

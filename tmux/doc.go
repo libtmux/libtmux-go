@@ -260,6 +260,14 @@
 // whether a request naming a capability the running tmux lacks is refused or
 // carried out without it. Its default refuses.
 //
+// A record keeps the handle it was materialized on, so one obtained before a
+// pool was opened keeps starting a tmux process for every command. Its results
+// are unchanged and only its cost differs, so this is reported through
+// [WarningHandler] as a [WarningControlPoolUnused] rather than refused.
+// [Session.WithServer] and its counterparts move a record onto the connected
+// handle in one line, and the session [Server.OpenControlPool] hands back is
+// already on it.
+//
 // Concurrency is a size rather than a transport. [ControlPoolRequest] takes a
 // number of connections and a caller's own goroutines decide what runs at once;
 // each connection carries one tmux command at a time, so N is the number that

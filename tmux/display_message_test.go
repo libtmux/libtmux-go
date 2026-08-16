@@ -702,6 +702,7 @@ func (r *displayQueueRunner) recordedRequests() []tmuxcmd.Request {
 
 func displayServerWithRunner(runner commandRunner) Server {
 	return Server{state: &serverState{
+		shared:  &serverShared{},
 		runner:  runner,
 		options: ServerOptions{Unsupported: DegradeUnsupported},
 	}}

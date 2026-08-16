@@ -435,6 +435,25 @@ type Engine interface {
 }
 ```
 
+A record materialized before a connection keeps the handle it was made on and
+pays for a tmux process per command. Measured: three reads on a stale record
+cost nine processes and on the same record moved with `WithServer`, none. That
+is reported as a `WarningControlPoolUnused`, completing `WarningControlPoolClosed`
+which reported the same symptom for a pool that had been closed; covering one
+and not the other left the commoner case to be measured rather than told. It
+warns rather than refuses because the results are unchanged and only the cost
+differs.
+
+Reporting it needs the pool count to be reachable from the handle that is
+paying, which is why `serverState` separates the handle's configuration from
+the tmux server's coordination. `NewSession` runs on a handle with TMUX removed
+from its environment, so a program started inside a pane does not create a
+session against the server it is running in, and the session it returns keeps
+that handle. Those are different options and so a different `serverState`, but
+the same tmux: sharing the coordination also stops each created session
+re-probing a version the creating handle already held, which was one tmux
+process per session.
+
 `Server.WithEngine(Engine) Server` selects one, as an immutable handle copy.
 Selection is a method rather than a
 `ServerOptions` field because the control-mode engine cannot exist before its

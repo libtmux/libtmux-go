@@ -556,6 +556,7 @@ func TestServerSnapshotNeverNormalizesOptionValidation(t *testing.T) {
 		result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}, ExitCode: 0},
 	}}}
 	server := Server{state: &serverState{
+		shared:  &serverShared{},
 		options: ServerOptions{Colors: ColorMode(16)},
 		runner:  runner,
 	}}

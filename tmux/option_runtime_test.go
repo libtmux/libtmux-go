@@ -16,7 +16,7 @@ func TestGlobalScopeFactoriesReturnConcreteCapturedHandles(t *testing.T) {
 
 	sessionFactory := Server.GlobalSessionScope
 	windowFactory := Server.GlobalWindowScope
-	server := Server{state: &serverState{}}
+	server := Server{state: &serverState{shared: &serverShared{}}}
 
 	sessionScope := sessionFactory(server)
 	if sessionScope.server != server {

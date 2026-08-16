@@ -65,6 +65,12 @@ const (
 	// because the control pool carrying it had been closed. The command ran
 	// and its result is unchanged; only its cost is.
 	WarningControlPoolClosed
+	// WarningControlPoolUnused reports a command that started a tmux process
+	// while a control pool was open on the same configuration, which happens
+	// when the record issuing it was materialized before the pool existed and
+	// so kept the handle it was made on. The command ran and its result is
+	// unchanged; only its cost is.
+	WarningControlPoolUnused
 )
 
 // Warning describes one nonfatal compatibility decision delivered to a
@@ -119,6 +125,38 @@ func newControlPoolClosedWarning(kind CommandKind) Warning {
 		Message: "control pool is closed: " + kind.String() +
 			" started a tmux process instead",
 	}
+}
+
+func newControlPoolUnusedWarning() Warning {
+	return Warning{
+		Kind: WarningControlPoolUnused,
+		Message: "a control pool is open on this server, but this command " +
+			"started a tmux process: the record issuing it predates the pool; " +
+			"move it with WithServer",
+	}
+}
+
+// warnIfPoolUnused reports a command paying for a tmux process while a
+// connection that could have carried it is open.
+//
+// It completes [WarningControlPoolClosed], which reports the same symptom for a
+// pool that has been closed. Both are the cost of a record holding a handle
+// other than the one the caller meant, and reporting only one of them left the
+// commoner case -- a record materialized before the pool -- to be measured
+// rather than told.
+//
+// Only [CommandServer] is worth reporting. A process command needs its own
+// process whatever is open, and a handle that gave up its engine on purpose,
+// for a read whose result is tmux's exact stdout bytes, is not paying for
+// anything it did not choose.
+func (s Server) warnIfPoolUnused(kind CommandKind) {
+	if kind != CommandServer || s.engineless {
+		return
+	}
+	if s.connectionState().coordination().pools.Load() == 0 {
+		return
+	}
+	s.warn(newControlPoolUnusedWarning())
 }
 
 func newCommandStderrWarning(subcommand string, stderr []string) Warning {

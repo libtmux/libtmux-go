@@ -174,7 +174,7 @@ func (s Server) RequireVersion(ctx context.Context, minimum Version) error {
 }
 
 func (s Server) loadVersion(ctx context.Context, refresh bool) (Version, error) {
-	cache := &s.connectionState().version
+	cache := &s.connectionState().coordination().version
 	for {
 		cache.mu.Lock()
 		if !refresh && cache.valid {

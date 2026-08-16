@@ -1346,6 +1346,10 @@ func newSessionCommandServer(server Server) Server {
 		state: &serverState{
 			options: options,
 			runner:  state.runner,
+			// Different options, the same tmux: the version it reports and the
+			// pools open on it are properties of the server, not of whether
+			// TMUX was removed from the environment reaching it.
+			shared: state.coordination(),
 		},
 		engine: server.engine,
 	}

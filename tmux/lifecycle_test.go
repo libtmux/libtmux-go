@@ -1303,6 +1303,7 @@ func TestNewSessionScrubsTMUXFromExplicitEnvironment(t *testing.T) {
 		Stderr: []string{"stop after environment capture"}, ExitCode: 7,
 	}}}}
 	server := Server{state: &serverState{
+		shared:  &serverShared{},
 		options: ServerOptions{ProcessEnvironment: []string{"TMUX=/tmp/foreign,123,0", "KEEP=value"}},
 		runner:  runner,
 	}}

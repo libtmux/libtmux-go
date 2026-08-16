@@ -25,6 +25,7 @@ func TestServerVersionCachesSuccessfulProbe(t *testing.T) {
 		result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}, ExitCode: 0},
 	}}}
 	server := Server{state: &serverState{
+		shared:  &serverShared{},
 		options: ServerOptions{SocketPath: "/ignored/socket", ConfigFile: "/ignored/config"},
 		runner:  runner,
 	}}
@@ -319,6 +320,7 @@ func TestServerVersionProbesOpenBSDCapabilities(t *testing.T) {
 		}, ExitCode: 0}},
 	}}
 	server := Server{state: &serverState{
+		shared: &serverShared{},
 		options: ServerOptions{
 			Binary:             "configured-tmux",
 			SocketPath:         "/ignored/socket",
@@ -636,7 +638,7 @@ func (r *blockingVersionRunner) Run(context.Context, tmuxcmd.Request) (tmuxcmd.R
 }
 
 func serverWithRunner(runner commandRunner) Server {
-	return Server{state: &serverState{runner: runner}}
+	return Server{state: &serverState{shared: &serverShared{}, runner: runner}}
 }
 
 // degradingServerWithRunner is serverWithRunner with the policy that omits a
@@ -645,6 +647,7 @@ func serverWithRunner(runner commandRunner) Server {
 // TestUnsupportedFeaturesAreRefusedByDefault covers that.
 func degradingServerWithRunner(runner commandRunner) Server {
 	return Server{state: &serverState{
+		shared:  &serverShared{},
 		runner:  runner,
 		options: ServerOptions{Unsupported: DegradeUnsupported},
 	}}
