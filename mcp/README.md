@@ -231,16 +231,41 @@ install` is none of them, so the entry points at this repository instead.
 
 The name is `io.github.libtmux/libtmux-mcp`, which the registry ties to the
 GitHub organisation of the same name, and the `mcp-name:` comment at the top of
-this file is the marker it looks for. Publishing needs that organisation's
-credentials:
+this file is the marker it looks for.
+
+The publisher is a Go program, so the toolchain this repository already needs
+builds it. It installs as `publisher`, though its own help calls it
+`mcp-publisher`:
 
 ```console
-$ mcp-publisher login github
+$ go install github.com/modelcontextprotocol/registry/cmd/publisher@latest
+```
+
+Homebrew ships it under the second name, as does the release tarball the
+[registry quickstart] links:
+
+```console
+$ brew install mcp-publisher
+```
+
+Checking the entry against the live registry needs no credentials, and is worth
+doing before a release rather than after:
+
+```console
+$ publisher validate
+```
+
+Publishing needs the organisation's:
+
+```console
+$ publisher login github
 ```
 
 ```console
-$ mcp-publisher publish
+$ publisher publish
 ```
+
+[registry quickstart]: https://modelcontextprotocol.io/registry/quickstart
 
 [MCP registry]: https://registry.modelcontextprotocol.io/
 
