@@ -27,9 +27,9 @@ type ConfirmBeforeRequest struct {
 	Command string
 	// Prompt replaces tmux's prompt when nonnil.
 	Prompt *string
-	// ConfirmKey selects the affirmative key; tmux before 3.4 warns and omits it.
+	// ConfirmKey selects the affirmative key; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	ConfirmKey *string
-	// DefaultYes selects yes by default; tmux before 3.4 warns and omits it.
+	// DefaultYes selects yes by default; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	DefaultYes bool
 	// TargetClient selects the stable client that displays the prompt.
 	TargetClient ClientName
@@ -59,11 +59,11 @@ type CommandPromptRequest struct {
 	Type PromptType
 	// ExpandFormat expands formats in the prompt result.
 	ExpandFormat bool
-	// Literal disables key-name parsing; tmux before 3.6 warns and omits it.
+	// Literal disables key-name parsing; tmux before 3.6 refuses it; see UnsupportedPolicy.
 	Literal bool
-	// BackspaceExit exits on backspace; tmux before 3.7 warns and omits it.
+	// BackspaceExit exits on backspace; tmux before 3.7 refuses it; see UnsupportedPolicy.
 	BackspaceExit bool
-	// NoFreeze leaves the pane unfrozen; tmux before 3.7 warns and omits it.
+	// NoFreeze leaves the pane unfrozen; tmux before 3.7 refuses it; see UnsupportedPolicy.
 	NoFreeze bool
 }
 
@@ -98,17 +98,17 @@ type DisplayMenuRequest struct {
 	X *string
 	// Y is tmux's vertical position expression.
 	Y *string
-	// StartingChoice selects the initial item; tmux before 3.4 warns and omits it.
+	// StartingChoice selects the initial item; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	StartingChoice *string
-	// BorderLines selects border glyphs; tmux before 3.4 warns and omits it.
+	// BorderLines selects border glyphs; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	BorderLines *string
-	// Style selects menu style; tmux before 3.4 warns and omits it.
+	// Style selects menu style; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	Style *string
-	// BorderStyle selects border style; tmux before 3.4 warns and omits it.
+	// BorderStyle selects border style; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	BorderStyle *string
-	// SelectedStyle selects highlighted-item style; tmux before 3.4 warns and omits it.
+	// SelectedStyle selects highlighted-item style; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	SelectedStyle *string
-	// Mouse enables mouse selection; tmux before 3.5 warns and omits it.
+	// Mouse enables mouse selection; tmux before 3.5 refuses it; see UnsupportedPolicy.
 	Mouse bool
 	// StayOpen keeps the menu visible after selecting an item.
 	StayOpen bool
@@ -246,19 +246,19 @@ func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest)
 	if values.hasKey {
 		if current.AtLeast(serverInteractiveVersion34) {
 			arguments = append(arguments, "-c", values.confirmKey)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"confirm-before", "confirm_key", current, serverInteractiveVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"confirm-before", "confirm_key", current, serverInteractiveVersion34,
+		); err != nil {
+			return err
 		}
 	}
 	if values.defaultYes {
 		if current.AtLeast(serverInteractiveVersion34) {
 			arguments = append(arguments, "-y")
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"confirm-before", "default_yes", current, serverInteractiveVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"confirm-before", "default_yes", current, serverInteractiveVersion34,
+		); err != nil {
+			return err
 		}
 	}
 	if values.hasClient {
@@ -307,28 +307,28 @@ func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest)
 	if values.literal {
 		if current.AtLeast(serverInteractiveVersion36) {
 			arguments = append(arguments, "-l")
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"command-prompt", "literal", current, serverInteractiveVersion36,
-			))
+		} else if err := s.unsupportedFeature(
+			"command-prompt", "literal", current, serverInteractiveVersion36,
+		); err != nil {
+			return err
 		}
 	}
 	if values.backspaceExit {
 		if current.AtLeast(serverInteractiveVersion37) {
 			arguments = append(arguments, "-e")
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"command-prompt", "bspace_exit", current, serverInteractiveVersion37,
-			))
+		} else if err := s.unsupportedFeature(
+			"command-prompt", "bspace_exit", current, serverInteractiveVersion37,
+		); err != nil {
+			return err
 		}
 	}
 	if values.noFreeze {
 		if current.AtLeast(serverInteractiveVersion37) {
 			arguments = append(arguments, "-C")
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"command-prompt", "no_freeze", current, serverInteractiveVersion37,
-			))
+		} else if err := s.unsupportedFeature(
+			"command-prompt", "no_freeze", current, serverInteractiveVersion37,
+		); err != nil {
+			return err
 		}
 	}
 	if values.hasPrompt {
@@ -390,55 +390,55 @@ func (s Server) DisplayMenu(ctx context.Context, request DisplayMenuRequest) err
 	if values.hasChoice {
 		if current.AtLeast(serverInteractiveVersion34) {
 			arguments = append(arguments, "-C", values.startingChoice)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"display-menu", "starting_choice", current, serverInteractiveVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"display-menu", "starting_choice", current, serverInteractiveVersion34,
+		); err != nil {
+			return err
 		}
 	}
 	if values.hasBorderLines {
 		if current.AtLeast(serverInteractiveVersion34) {
 			arguments = append(arguments, "-b", values.borderLines)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"display-menu", "border_lines", current, serverInteractiveVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"display-menu", "border_lines", current, serverInteractiveVersion34,
+		); err != nil {
+			return err
 		}
 	}
 	if values.hasStyle {
 		if current.AtLeast(serverInteractiveVersion34) {
 			arguments = append(arguments, "-s", values.style)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"display-menu", "style", current, serverInteractiveVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"display-menu", "style", current, serverInteractiveVersion34,
+		); err != nil {
+			return err
 		}
 	}
 	if values.hasBorderStyle {
 		if current.AtLeast(serverInteractiveVersion34) {
 			arguments = append(arguments, "-S", values.borderStyle)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"display-menu", "border_style", current, serverInteractiveVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"display-menu", "border_style", current, serverInteractiveVersion34,
+		); err != nil {
+			return err
 		}
 	}
 	if values.hasSelected {
 		if current.AtLeast(serverInteractiveVersion34) {
 			arguments = append(arguments, "-H", values.selectedStyle)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"display-menu", "selected_style", current, serverInteractiveVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"display-menu", "selected_style", current, serverInteractiveVersion34,
+		); err != nil {
+			return err
 		}
 	}
 	if values.mouse {
 		if current.AtLeast(serverInteractiveVersion35) {
 			arguments = append(arguments, "-M")
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"display-menu", "mouse", current, serverInteractiveVersion35,
-			))
+		} else if err := s.unsupportedFeature(
+			"display-menu", "mouse", current, serverInteractiveVersion35,
+		); err != nil {
+			return err
 		}
 	}
 	if values.stayOpen {

@@ -69,11 +69,11 @@ type RunShellRequest struct {
 	AsTmuxCommand bool
 	// TargetPane selects a stable pane target; its zero value leaves target selection to tmux.
 	TargetPane PaneID
-	// StartDirectory selects the job directory; nil omits it and tmux before 3.4 warns and omits it.
+	// StartDirectory selects the job directory; nil omits it and tmux before 3.4 refuses it; see UnsupportedPolicy.
 	StartDirectory *string
-	// ShowStderr requests job stderr; tmux before 3.6 warns and omits it.
+	// ShowStderr requests job stderr; tmux before 3.6 refuses it; see UnsupportedPolicy.
 	ShowStderr bool
-	// Args are extra job arguments copied before tmux runs; tmux before 3.7 warns and omits them.
+	// Args are extra job arguments copied before tmux runs; tmux before 3.7 refuses it; see UnsupportedPolicy.
 	Args []string
 }
 
@@ -185,38 +185,38 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 	if request.StartDirectory != nil {
 		if current.AtLeast(serverExecVersion34) {
 			arguments = append(arguments, "-c", *request.StartDirectory)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"run-shell",
-				"start_directory",
-				current,
-				serverExecVersion34,
-			))
+		} else if err := s.unsupportedFeature(
+			"run-shell",
+			"start_directory",
+			current,
+			serverExecVersion34,
+		); err != nil {
+			return nil, err
 		}
 	}
 	if request.ShowStderr {
 		if current.AtLeast(serverExecVersion36) {
 			arguments = append(arguments, "-E")
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"run-shell",
-				"show_stderr",
-				current,
-				serverExecVersion36,
-			))
+		} else if err := s.unsupportedFeature(
+			"run-shell",
+			"show_stderr",
+			current,
+			serverExecVersion36,
+		); err != nil {
+			return nil, err
 		}
 	}
 	arguments = append(arguments, request.Command)
 	if len(extraArguments) != 0 {
 		if current.AtLeast(serverExecVersion37) {
 			arguments = append(arguments, extraArguments...)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"run-shell",
-				"args",
-				current,
-				serverExecVersion37,
-			))
+		} else if err := s.unsupportedFeature(
+			"run-shell",
+			"args",
+			current,
+			serverExecVersion37,
+		); err != nil {
+			return nil, err
 		}
 	}
 

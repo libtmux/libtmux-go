@@ -56,21 +56,31 @@ func TestBindListAndUnbindKeyAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A format needs tmux 3.7. Below it the listing is refused rather than
+	// returned in tmux's own shape, which is not the shape the caller asked
+	// for and which nothing in the result would distinguish.
 	format := "#{key_string}\t#{key_note}\t#{key_repeat}\t#{key_command}"
-	lines, err := server.ListKeys(ctx, tmux.ListKeysRequest{
-		KeyTable: &keyTable,
-		Format:   &format,
-	})
-	if err != nil {
-		t.Fatalf("ListKeys() error = %v", err)
-	}
-	if version.AtLeast(version37) {
+	formatted := tmux.ListKeysRequest{KeyTable: &keyTable, Format: &format}
+	if !version.AtLeast(version37) {
+		if _, err := server.ListKeys(ctx, formatted); !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("ListKeys(Format) on tmux %s error = %v, want ErrVersionTooLow", version, err)
+		}
+		lines, err := server.ListKeys(ctx, tmux.ListKeysRequest{KeyTable: &keyTable})
+		if err != nil {
+			t.Fatalf("ListKeys() error = %v", err)
+		}
+		if !containsAllLine(lines, "F12", "phase6-bound") {
+			t.Fatalf("ListKeys() = %#v, want legacy F12 binding", lines)
+		}
+	} else {
+		lines, err := server.ListKeys(ctx, formatted)
+		if err != nil {
+			t.Fatalf("ListKeys() error = %v", err)
+		}
 		want := "F12\tlibtmux-go-phase6\t1\t" + command
 		if !slices.Contains(lines, want) {
 			t.Fatalf("ListKeys() = %#v, want %q", lines, want)
 		}
-	} else if !containsAllLine(lines, "F12", "phase6-bound") {
-		t.Fatalf("ListKeys() = %#v, want legacy F12 binding", lines)
 	}
 
 	key := "F12"
@@ -80,7 +90,7 @@ func TestBindListAndUnbindKeyAgainstRealTmux(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UnbindKey() error = %v", err)
 	}
-	lines, err = server.ListKeys(ctx, tmux.ListKeysRequest{KeyTable: &keyTable})
+	lines, err := server.ListKeys(ctx, tmux.ListKeysRequest{KeyTable: &keyTable})
 	if err != nil {
 		t.Fatalf("ListKeys() after unbind error = %v", err)
 	}

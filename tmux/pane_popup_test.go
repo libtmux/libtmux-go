@@ -105,7 +105,7 @@ func TestDisplayPopupWarnsAndOmitsUnsupportedFields(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := serverWithRunner(runner)
+	server := degradingServerWithRunner(runner)
 	server.connectionState().options.WarningHandler = func(warning Warning) {
 		warnings = append(warnings, warning)
 	}

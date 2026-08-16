@@ -121,10 +121,29 @@ func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
 	}
 	control := tmuxtest.NewControlMode(context.Background(), t, server, work)
 	target := control.ClientName()
-	if err := server.RefreshClient(ctx, tmux.RefreshClientRequest{
+
+	// RequestClipboard needs tmux 3.7. Below it the refresh is refused rather
+	// than run without the flag, so the rest of this test refreshes with a
+	// request this tmux can carry.
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	version37, err := tmux.ParseVersion("3.7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refresh := tmux.RefreshClientRequest{
 		TargetClient:     target,
 		RequestClipboard: true,
-	}); err != nil {
+	}
+	if !version.AtLeast(version37) {
+		if err := server.RefreshClient(ctx, refresh); !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("RefreshClient(RequestClipboard) on tmux %s error = %v, want ErrVersionTooLow", version, err)
+		}
+		refresh.RequestClipboard = false
+	}
+	if err := server.RefreshClient(ctx, refresh); err != nil {
 		t.Fatalf("RefreshClient() error = %v", err)
 	}
 

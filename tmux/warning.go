@@ -2,8 +2,54 @@ package tmux
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
+
+// UnsupportedPolicy selects what a request does when it needs an optional tmux
+// capability the running server does not have — a flag added in a later tmux
+// than the one answering.
+//
+// The default refuses, because dropping a flag changes what the command does.
+// A split asked to leave a pane empty otherwise starts a shell in it, a
+// run-shell asked for arguments runs without them, and a kill-session asked for
+// a session group takes one session instead of the group. Each returns success
+// while doing something the caller did not ask for.
+//
+// Choosing degradation is how a program stays portable across the supported
+// tmux range when the capability is cosmetic and its absence is acceptable:
+//
+//	server := tmux.NewServer(tmux.ServerOptions{
+//		Unsupported:    tmux.DegradeUnsupported,
+//		WarningHandler: func(w tmux.Warning) { log.Printf("tmux: %s", w) },
+//	})
+//
+// Set [ServerOptions.WarningHandler] alongside it. Degradation with no handler
+// is the silence this setting exists to make deliberate.
+type UnsupportedPolicy uint8
+
+const (
+	// FailUnsupported refuses a request naming a capability the running tmux
+	// does not have, with a VersionTooLowError naming the subcommand and the
+	// capability. It is the zero value.
+	FailUnsupported UnsupportedPolicy = iota
+	// DegradeUnsupported omits the capability, runs the reduced command, and
+	// reports the decision to ServerOptions.WarningHandler as a
+	// WarningUnsupportedFeature.
+	DegradeUnsupported
+)
+
+// String implements fmt.Stringer.
+func (p UnsupportedPolicy) String() string {
+	switch p {
+	case FailUnsupported:
+		return "fail"
+	case DegradeUnsupported:
+		return "degrade"
+	default:
+		return "UnsupportedPolicy(" + strconv.Itoa(int(p)) + ")"
+	}
+}
 
 // WarningKind identifies one closed class of nonfatal library warning.
 type WarningKind uint8
@@ -83,6 +129,31 @@ func newCommandStderrWarning(subcommand string, stderr []string) Warning {
 	}
 }
 
+// unsupportedFeature reports what a request should do about an optional tmux
+// capability the running server does not have. It returns an error under
+// [FailUnsupported], and under [DegradeUnsupported] it reports the decision to
+// [WarningHandler] and returns nil so the caller runs the reduced command.
+//
+// The caller keeps the branch that decides which flag to omit, because only it
+// knows which one this is.
+func (s Server) unsupportedFeature(
+	subcommand string,
+	feature string,
+	current Version,
+	required Version,
+) error {
+	if s.connectionState().options.Unsupported == FailUnsupported {
+		return &VersionTooLowError{
+			Current:    current,
+			Minimum:    required,
+			Subcommand: subcommand,
+			Feature:    feature,
+		}
+	}
+	s.warn(newUnsupportedFeatureWarning(subcommand, feature, current, required))
+	return nil
+}
+
 func newUnsupportedFeatureWarning(
 	subcommand string,
 	feature string,
@@ -103,4 +174,49 @@ func newUnsupportedFeatureWarning(
 			current,
 		),
 	}
+}
+
+// reportUnsupported applies the server's [UnsupportedPolicy] to the warnings an
+// argv renderer produced.
+//
+// The renderers that gate on the tmux version perform no I/O, so a [Plan] can
+// render one without a server. They report a dropped capability rather than
+// deciding what to do about it, and this is where that decision is made.
+func (s Server) reportUnsupported(warnings []Warning) error {
+	for _, warning := range warnings {
+		if warning.Kind != WarningUnsupportedFeature {
+			s.warn(warning)
+			continue
+		}
+		if err := s.unsupportedFeature(
+			warning.Subcommand,
+			warning.Feature,
+			warning.CurrentVersion,
+			warning.RequiredVersion,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reportUnsupported applies the run's policy to the warnings one step's argv
+// renderer produced. It mirrors the [Server] method so that a step refuses
+// exactly what the same request refuses when issued directly.
+func (p *Plan) reportUnsupported(warnings []Warning) error {
+	if p.unsupported == DegradeUnsupported {
+		return nil
+	}
+	for _, warning := range warnings {
+		if warning.Kind != WarningUnsupportedFeature {
+			continue
+		}
+		return &VersionTooLowError{
+			Current:    warning.CurrentVersion,
+			Minimum:    warning.RequiredVersion,
+			Subcommand: warning.Subcommand,
+			Feature:    warning.Feature,
+		}
+	}
+	return nil
 }

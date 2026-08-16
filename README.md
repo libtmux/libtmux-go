@@ -122,6 +122,12 @@ one line to turn on, one to take back, and independent of the others:
 | chained | `NewPlan` then `Run` | no records back | builds and layouts |
 | streaming | `Notifications` | a connection | watching what a pane does |
 
+Each row changes how a command reaches tmux and none changes what it means,
+which is the property the benchmark table gates on. One switch is deliberately
+not a row, because it does change meaning: `ServerOptions.Unsupported` decides
+whether a request naming a flag the running tmux does not have is refused —
+the default — or carried out without it and reported to a warning handler.
+
 A control connection carries commands without starting a process for each. It is
 a tmux client while open — it appears in `list-clients` and counts toward
 `session_attached` — which is why it is chosen rather than automatic:

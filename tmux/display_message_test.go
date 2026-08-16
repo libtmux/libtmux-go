@@ -701,7 +701,10 @@ func (r *displayQueueRunner) recordedRequests() []tmuxcmd.Request {
 }
 
 func displayServerWithRunner(runner commandRunner) Server {
-	return Server{state: &serverState{runner: runner}}
+	return Server{state: &serverState{
+		runner:  runner,
+		options: ServerOptions{Unsupported: DegradeUnsupported},
+	}}
 }
 
 func assertDisplayArguments(t *testing.T, request tmuxcmd.Request, want []string) {

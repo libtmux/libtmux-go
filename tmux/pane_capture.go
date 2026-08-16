@@ -273,6 +273,7 @@ func (p Pane) capturePane(
 	}
 
 	arguments := make([]string, 0, 22)
+	var err error
 	arguments = append(arguments, "capture-pane")
 	if toBuffer {
 		arguments = append(arguments, "-b", buffer)
@@ -297,7 +298,7 @@ func (p Pane) capturePane(
 	if request.PreserveTrailing {
 		arguments = append(arguments, "-N")
 	}
-	arguments = p.appendCaptureFeature(
+	arguments, err = p.appendCaptureFeature(
 		arguments,
 		request.TrimTrailing,
 		"-T",
@@ -305,13 +306,16 @@ func (p Pane) capturePane(
 		current,
 		captureVersion34,
 	)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
 	if request.AlternateScreen {
 		arguments = append(arguments, "-a")
 	}
 	if request.Quiet {
 		arguments = append(arguments, "-q")
 	}
-	arguments = p.appendCaptureFeature(
+	arguments, err = p.appendCaptureFeature(
 		arguments,
 		request.ModeScreen,
 		"-M",
@@ -319,10 +323,13 @@ func (p Pane) capturePane(
 		current,
 		captureVersion36,
 	)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
 	if request.Pending {
 		arguments = append(arguments, "-P")
 	}
-	arguments = p.appendCaptureFeature(
+	arguments, err = p.appendCaptureFeature(
 		arguments,
 		request.Hyperlinks,
 		"-H",
@@ -330,7 +337,10 @@ func (p Pane) capturePane(
 		current,
 		captureVersion37,
 	)
-	arguments = p.appendCaptureFeature(
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
+	arguments, err = p.appendCaptureFeature(
 		arguments,
 		request.LineNumbers,
 		"-L",
@@ -338,7 +348,10 @@ func (p Pane) capturePane(
 		current,
 		captureVersion37,
 	)
-	arguments = p.appendCaptureFeature(
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
+	arguments, err = p.appendCaptureFeature(
 		arguments,
 		request.LineFlags,
 		"-F",
@@ -346,6 +359,9 @@ func (p Pane) capturePane(
 		current,
 		captureVersion37,
 	)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
 	if !toBuffer {
 		// A printed capture is arbitrary pane content on tmux's stdout, and
 		// control mode does not escape a command's output the way it escapes
@@ -388,18 +404,15 @@ func (p Pane) appendCaptureFeature(
 	feature string,
 	current Version,
 	required Version,
-) []string {
+) ([]string, error) {
 	if !requested {
-		return arguments
+		return arguments, nil
 	}
 	if current.AtLeast(required) {
-		return append(arguments, flag)
+		return append(arguments, flag), nil
 	}
-	p.server.warn(newUnsupportedFeatureWarning(
-		"capture-pane",
-		feature,
-		current,
-		required,
-	))
-	return arguments
+	if err := p.server.unsupportedFeature("capture-pane", feature, current, required); err != nil {
+		return nil, err
+	}
+	return arguments, nil
 }

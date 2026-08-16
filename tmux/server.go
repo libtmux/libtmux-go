@@ -38,6 +38,10 @@ type ServerOptions struct {
 	// caller-provided variables, subject to additions required by Go or the
 	// target platform. NewServer clones the slice.
 	ProcessEnvironment []string
+	// Unsupported selects what happens when a request needs an optional tmux
+	// capability the running server does not have. The zero value refuses the
+	// request; see UnsupportedPolicy.
+	Unsupported UnsupportedPolicy
 	// WarningHandler receives nonfatal compatibility warnings. Nil discards
 	// warnings. See WarningHandler for delivery and concurrency semantics.
 	WarningHandler WarningHandler

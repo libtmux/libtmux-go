@@ -717,8 +717,8 @@ func splitPane(
 	if err != nil {
 		return Pane{}, err
 	}
-	for _, warning := range warnings {
-		server.warn(warning)
+	if err := server.reportUnsupported(warnings); err != nil {
+		return Pane{}, err
 	}
 	result, err := server.literalCmd(ctx, arguments...)
 	return splitPaneResult(ctx, server, sessionID, windowID, windowIndex, result, err)
@@ -1054,10 +1054,10 @@ func (s Session) KillWith(ctx context.Context, request SessionKillRequest) error
 		}
 		if current.AtLeast(required) {
 			arguments = append(arguments, "-g")
-		} else {
-			s.server.warn(newUnsupportedFeatureWarning(
-				"kill-session", "group", current, required,
-			))
+		} else if err := s.server.unsupportedFeature(
+			"kill-session", "group", current, required,
+		); err != nil {
+			return err
 		}
 	}
 	result, err := s.literalCmd(ctx, arguments...)

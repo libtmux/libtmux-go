@@ -70,20 +70,40 @@ func newVersionQueryError(result CommandResult, reason string) *VersionQueryErro
 // VersionTooLowError reports the installed and required tmux feature levels.
 // It matches [ErrVersionTooLow] through errors.Is; callers can recover its
 // fields with errors.As.
+//
+// Subcommand and Feature are set when one optional capability within a command
+// was refused rather than the command itself, which is what
+// [UnsupportedPolicy] governs.
 type VersionTooLowError struct {
 	// Current is the installed tmux feature level.
 	Current Version
 	// Minimum is the requested minimum feature level.
 	Minimum Version
+	// Subcommand names the tmux subcommand whose optional capability was
+	// refused. Empty when the command itself is below its floor.
+	Subcommand string
+	// Feature names the refused optional capability. Empty when the command
+	// itself is below its floor.
+	Feature string
 }
 
 // Error implements error.
 func (e *VersionTooLowError) Error() string {
+	if e.Feature == "" {
+		return fmt.Sprintf(
+			"%v: installed %s, require %s or newer",
+			ErrVersionTooLow,
+			e.Current,
+			e.Minimum,
+		)
+	}
 	return fmt.Sprintf(
-		"%v: installed %s, require %s or newer",
+		"%v: %s: %s requires %s or newer, installed %s",
 		ErrVersionTooLow,
-		e.Current,
+		e.Subcommand,
+		e.Feature,
 		e.Minimum,
+		e.Current,
 	)
 }
 

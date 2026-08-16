@@ -41,7 +41,7 @@ type UnbindKeyRequest struct {
 type ListKeysRequest struct {
 	// KeyTable limits output to one key table.
 	KeyTable *string
-	// Format selects output format; tmux before 3.7 warns and omits it.
+	// Format selects output format; tmux before 3.7 refuses it; see UnsupportedPolicy.
 	Format *string
 }
 
@@ -169,13 +169,13 @@ func (s Server) ListKeys(
 		}
 		if current.AtLeast(serverKeysVersion37) {
 			arguments = append(arguments, "-F", format)
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"list-keys",
-				"format",
-				current,
-				serverKeysVersion37,
-			))
+		} else if err := s.unsupportedFeature(
+			"list-keys",
+			"format",
+			current,
+			serverKeysVersion37,
+		); err != nil {
+			return nil, err
 		}
 	}
 	return runServerListCommand(ctx, s, arguments)

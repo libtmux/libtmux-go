@@ -86,8 +86,8 @@ func (p Pane) SendKeys(ctx context.Context, request SendKeysRequest) error {
 	if err != nil {
 		return err
 	}
-	for _, warning := range warnings {
-		p.server.warn(warning)
+	if err := p.server.reportUnsupported(warnings); err != nil {
+		return err
 	}
 	if _, err := p.server.literalCmd(ctx, arguments...); err != nil {
 		return err
@@ -287,8 +287,8 @@ func (p Pane) ClearHistory(ctx context.Context, request ClearHistoryRequest) err
 	if err != nil {
 		return err
 	}
-	for _, warning := range warnings {
-		p.server.warn(warning)
+	if err := p.server.reportUnsupported(warnings); err != nil {
+		return err
 	}
 	result, err := p.server.literalCmd(ctx, arguments...)
 	return requireRedactedServerCommandNoStderr("clear-history", result, err)

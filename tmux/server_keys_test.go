@@ -217,7 +217,7 @@ func TestListKeysWarnsAndOmitsFormatBefore37(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}}},
 		{result: tmuxcmd.Result{Stdout: []string{"bind-key -T root F12"}}},
 	}}
-	server := serverWithRunner(runner)
+	server := degradingServerWithRunner(runner)
 	server.connectionState().options.WarningHandler = func(warning Warning) {
 		warnings = append(warnings, warning)
 	}

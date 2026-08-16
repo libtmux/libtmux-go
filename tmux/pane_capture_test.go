@@ -561,8 +561,15 @@ func (r *captureQueueRunner) recordedRequests() []tmuxcmd.Request {
 	return slices.Clone(r.requests)
 }
 
+// newCaptureTestPane builds a pane on a server that omits a capability the
+// running tmux lacks. Capture's gated flags are what the warning path is
+// exercised through; the default refuses, which
+// TestUnsupportedFeaturesAreRefusedByDefault covers.
 func newCaptureTestPane(runner commandRunner, handler WarningHandler) Pane {
-	server := NewServer(ServerOptions{WarningHandler: handler})
+	server := NewServer(ServerOptions{
+		Unsupported:    DegradeUnsupported,
+		WarningHandler: handler,
+	})
 	server.state.runner = runner
 	return Pane{server: server, sessionID: "$5", windowID: "@6", paneID: "%7"}
 }

@@ -104,20 +104,6 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("LoadBuffer() error = %v", err)
 	}
-	warnings = nil
-	if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
-		BufferName:  &bufferName,
-		DeleteAfter: true,
-		NoVis:       true,
-	}); err != nil {
-		t.Fatalf("PasteBuffer() error = %v", err)
-	}
-	if got := strings.TrimSpace(waitForProcessFile(ctx, t, pasteOutput)); got != "00" {
-		t.Fatalf("raw pasted byte = %q, want 00", got)
-	}
-	if _, err := server.ShowBuffer(ctx, &bufferName); !errors.Is(err, tmux.ErrCommand) {
-		t.Fatalf("ShowBuffer(deleted) error = %v, want ErrCommand", err)
-	}
 	version, err := server.Version(ctx)
 	if err != nil {
 		t.Fatalf("Version() error = %v", err)
@@ -126,13 +112,33 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantWarning := !version.AtLeast(version37)
-	if (len(warnings) == 1) != wantWarning {
-		t.Fatalf("PasteBuffer() warnings = %#v, want warning %t on %s", warnings, wantWarning, version)
+
+	// NoVis needs tmux 3.7. Below it the paste is refused rather than run
+	// without the flag, so the raw-byte assertion that follows uses a request
+	// this tmux can carry.
+	paste := tmux.PasteBufferRequest{
+		BufferName:  &bufferName,
+		DeleteAfter: true,
+		NoVis:       true,
 	}
-	if wantWarning && (warnings[0].Kind != tmux.WarningUnsupportedFeature ||
-		warnings[0].Subcommand != "paste-buffer" || warnings[0].Feature != "no_vis") {
-		t.Fatalf("PasteBuffer() warning = %#v", warnings[0])
+	if !version.AtLeast(version37) {
+		if err := pane.PasteBuffer(ctx, paste); !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("PasteBuffer(NoVis) on tmux %s error = %v, want ErrVersionTooLow", version, err)
+		}
+		paste.NoVis = false
+	}
+	warnings = nil
+	if err := pane.PasteBuffer(ctx, paste); err != nil {
+		t.Fatalf("PasteBuffer() error = %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("PasteBuffer() warnings = %#v, want none", warnings)
+	}
+	if got := strings.TrimSpace(waitForProcessFile(ctx, t, pasteOutput)); got != "00" {
+		t.Fatalf("raw pasted byte = %q, want 00", got)
+	}
+	if _, err := server.ShowBuffer(ctx, &bufferName); !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("ShowBuffer(deleted) error = %v, want ErrCommand", err)
 	}
 
 	betaWindow = processWindowView(ctx, t, server, beta.ID(), betaWindow.ID())

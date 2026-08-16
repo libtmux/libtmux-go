@@ -109,19 +109,31 @@ func TestSessionKillGroupCompatibilityAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Below the floor the request is refused rather than carried out without
+	// -g, which would take the base session alone while the caller asked for
+	// the group. Nothing is killed, so both sessions are still there.
+	if !version.AtLeast(minimum) {
+		err := base.KillWith(ctx, tmux.SessionKillRequest{Group: true})
+		if !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("KillWith(Group) on tmux %s error = %v, want ErrVersionTooLow", version, err)
+		}
+		if _, err := server.Session(ctx, base.ID()); err != nil {
+			t.Fatalf("base session after a refused group kill: %v", err)
+		}
+		if _, err := server.Session(ctx, peerID); err != nil {
+			t.Fatalf("grouped peer after a refused group kill: %v", err)
+		}
+		return
+	}
+
 	if err := base.KillWith(ctx, tmux.SessionKillRequest{Group: true}); err != nil {
 		t.Fatalf("KillWith(Group) error = %v", err)
 	}
 	if _, err := server.Session(ctx, base.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
 		t.Fatalf("base lookup error = %v, want ErrSnapshotNotFound", err)
 	}
-	_, peerErr := server.Session(ctx, peerID)
-	if version.AtLeast(minimum) {
-		if !errors.Is(peerErr, tmux.ErrSnapshotNotFound) {
-			t.Fatalf("grouped peer lookup error = %v, want ErrSnapshotNotFound", peerErr)
-		}
-	} else if peerErr != nil {
-		t.Fatalf("grouped peer should survive omitted -g on tmux %s: %v", version, peerErr)
+	if _, err := server.Session(ctx, peerID); !errors.Is(err, tmux.ErrSnapshotNotFound) {
+		t.Fatalf("grouped peer lookup error = %v, want ErrSnapshotNotFound", err)
 	}
 }
 

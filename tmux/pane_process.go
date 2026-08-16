@@ -169,10 +169,10 @@ func (p Pane) PasteBuffer(ctx context.Context, request PasteBufferRequest) error
 		}
 		if version.AtLeast(serverExecVersion37) {
 			noVis = true
-		} else {
-			p.server.warn(newUnsupportedFeatureWarning(
-				"paste-buffer", "no_vis", version, serverExecVersion37,
-			))
+		} else if err := p.server.unsupportedFeature(
+			"paste-buffer", "no_vis", version, serverExecVersion37,
+		); err != nil {
+			return err
 		}
 	}
 

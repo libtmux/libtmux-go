@@ -188,7 +188,7 @@ func TestPasteBufferVersionGatesNoVis(t *testing.T) {
 			}
 			responses = append(responses, versionResponse{result: tmuxcmd.Result{}})
 			runner := &versionQueueRunner{responses: responses}
-			server := serverWithRunner(runner)
+			server := degradingServerWithRunner(runner)
 			server.connectionState().options.WarningHandler = func(warning Warning) {
 				warnings = append(warnings, warning)
 			}
@@ -245,7 +245,7 @@ func TestPasteBufferSnapshotsPointerValuesBeforeVersionProbe(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	pane := Pane{
-		server: serverWithRunner(runner), sessionID: "$7", windowID: "@8", paneID: "%9",
+		server: degradingServerWithRunner(runner), sessionID: "$7", windowID: "@8", paneID: "%9",
 	}
 	done := make(chan error, 1)
 	go func() {

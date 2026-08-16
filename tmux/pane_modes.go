@@ -161,10 +161,10 @@ func (p Pane) CopyMode(ctx context.Context, request CopyModeRequest) error {
 	if request.PageDown {
 		if current.AtLeast(paneModesVersion35) {
 			arguments = append(arguments, "-d")
-		} else {
-			p.server.warn(newUnsupportedFeatureWarning(
-				"copy-mode", "page_down", current, paneModesVersion35,
-			))
+		} else if err := p.server.unsupportedFeature(
+			"copy-mode", "page_down", current, paneModesVersion35,
+		); err != nil {
+			return err
 		}
 	}
 	if sourcePane != "" {

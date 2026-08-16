@@ -239,6 +239,12 @@
 // the connection, which is the cheapest of them and still means exactly what
 // the others mean.
 //
+// Every switch above changes how a command reaches tmux and none changes what
+// it means, which is what makes them safe to flip. One switch is not in the
+// table because it does change meaning: [ServerOptions.Unsupported] chooses
+// whether a request naming a capability the running tmux lacks is refused or
+// carried out without it. Its default refuses.
+//
 // Concurrency is a size rather than a transport. [ControlPoolRequest] takes a
 // number of connections and a caller's own goroutines decide what runs at once;
 // each connection carries one tmux command at a time, so N is the number that
@@ -506,8 +512,10 @@
 //
 // tmux 3.2a is the minimum supported version. A configured socket name or path
 // selects a particular tmux server; absent selectors use tmux's default socket.
-// Version-gated optional behavior is reported through [WarningHandler] where
-// the owning request documents it.
+// A request naming a flag the running tmux does not have is refused, naming
+// the capability and both versions. [ServerOptions.Unsupported] chooses the
+// behavior that omits the flag and reports it to [WarningHandler] instead; see
+// [UnsupportedPolicy] for why refusing is the default.
 package tmux
 
 // The root is the repository rather than this package, because the markdown

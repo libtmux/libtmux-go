@@ -340,15 +340,38 @@ decoded stdout lines, exact stdout bytes, decoded stderr lines, and exit status.
 - decoded `Stdout` preserves the line-oriented compatibility API, while
   `RawStdout` preserves tmux's emitted bytes including delimiters and trailing
   newlines;
-- high-level operations preserve their Python behavior branch by branch: most
-  failures become `CommandError`, while documented warning or ignore paths stay
-  warnings or ignored results.
+- a failed high-level operation becomes a `CommandError`.
 
-`ServerOptions.WarningHandler` receives concrete warning values for Python
-warning-equivalent behavior, including unsupported flags that are omitted and
-stderr that Python exposes as a warning. The default handler is silent. A
-configured `log/slog` logger may receive structured diagnostics, but library
-code never installs handlers or logs environment values.
+## Unsupported capabilities
+
+A request naming a flag the running tmux does not have is refused, with a
+`VersionTooLowError` carrying the subcommand and the capability alongside both
+versions. `ServerOptions.Unsupported` chooses the other behavior, which omits
+the flag, runs the reduced command, and reports it to
+`ServerOptions.WarningHandler`.
+
+Refusing is the default because dropping a flag changes what the command does
+and says nothing about it. A split asked to leave a pane empty starts a shell
+in it; on tmux 3.6 raw `split-window -E` creates no pane at all, so degrading
+delivers a running process the caller asked not to have. `run-shell` asked for
+arguments runs without them, and `kill-session` asked for a session group takes
+one session instead of the group. Each returned success.
+
+Python signals the same decision with `warnings.warn`, which prints to stderr
+and is therefore seen. Go's nearest equivalent is a handler that is nil until a
+caller installs one, so translating the behavior directly turned a visible
+degradation into a silent one. The switch keeps the behavior available and
+makes choosing it deliberate.
+
+A `Plan` applies the policy of the server it runs on, so a recorded step
+refuses exactly what the same request refuses when issued directly.
+`Plan.Preview` renders without a server and so refuses, which is what a preview
+that exists to catch what tmux would reject is for.
+
+`ServerOptions.WarningHandler` receives concrete warning values. The default
+handler is silent. A configured `log/slog` logger may receive structured
+diagnostics, but library code never installs handlers or logs environment
+values.
 
 `CommandError` implements `error` and is discoverable with `errors.As`.
 Library-created high-level errors retain an owned copy of the completed

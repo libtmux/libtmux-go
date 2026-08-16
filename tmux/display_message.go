@@ -27,7 +27,7 @@ type DisplayMessageRequest struct {
 	AllFormats bool
 	// Verbose requests verbose tmux output.
 	Verbose bool
-	// NoExpand disables format expansion; tmux before 3.4 warns and omits it.
+	// NoExpand disables format expansion; tmux before 3.4 refuses it; see UnsupportedPolicy.
 	NoExpand bool
 	// TargetClient selects the stable client receiving the display; zero omits -c.
 	TargetClient ClientName
@@ -42,7 +42,7 @@ type DisplayMessageRequest struct {
 type PaneDisplayMessageRequest struct {
 	// DisplayMessageRequest supplies the shared display options.
 	DisplayMessageRequest
-	// UpdatePane updates pane state; tmux before 3.6 warns and omits it.
+	// UpdatePane updates pane state; tmux before 3.6 refuses it; see UnsupportedPolicy.
 	UpdatePane bool
 }
 
@@ -199,13 +199,13 @@ func runDisplayMessage(
 	if request.noExpand {
 		if current.AtLeast(displayMessageVersion34) {
 			arguments = append(arguments, "-l")
-		} else {
-			server.warn(newUnsupportedFeatureWarning(
-				"display-message",
-				"no_expand",
-				current,
-				displayMessageVersion34,
-			))
+		} else if err := server.unsupportedFeature(
+			"display-message",
+			"no_expand",
+			current,
+			displayMessageVersion34,
+		); err != nil {
+			return nil, err
 		}
 	}
 	if request.notify {
@@ -214,13 +214,13 @@ func runDisplayMessage(
 	if updatePane {
 		if current.AtLeast(displayMessageVersion36) {
 			arguments = append(arguments, "-C")
-		} else {
-			server.warn(newUnsupportedFeatureWarning(
-				"display-message",
-				"update_pane",
-				current,
-				displayMessageVersion36,
-			))
+		} else if err := server.unsupportedFeature(
+			"display-message",
+			"update_pane",
+			current,
+			displayMessageVersion36,
+		); err != nil {
+			return nil, err
 		}
 	}
 	if request.hasClient {

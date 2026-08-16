@@ -166,8 +166,14 @@ func (p Pane) DisplayPopup(ctx context.Context, request DisplayPopupRequest) err
 	if values.startDirectory != nil {
 		arguments = append(arguments, "-d", *values.startDirectory)
 	}
-	arguments = appendPopupVersion33Arguments(p.server, arguments, values, current)
-	arguments = appendPopupVersion36Arguments(p.server, arguments, values, current)
+	arguments, err = appendPopupVersion33Arguments(p.server, arguments, values, current)
+	if err != nil {
+		return err
+	}
+	arguments, err = appendPopupVersion36Arguments(p.server, arguments, values, current)
+	if err != nil {
+		return err
+	}
 	if values.command != nil {
 		arguments = append(arguments, *values.command)
 	}
@@ -276,7 +282,7 @@ func appendPopupVersion33Arguments(
 	arguments []string,
 	values displayPopupValues,
 	current Version,
-) []string {
+) ([]string, error) {
 	for _, field := range []struct {
 		feature string
 		flag    string
@@ -292,10 +298,10 @@ func appendPopupVersion33Arguments(
 		}
 		if current.AtLeast(panePopupVersion33) {
 			arguments = append(arguments, field.flag, *field.value)
-		} else {
-			server.warn(newUnsupportedFeatureWarning(
-				"display-popup", field.feature, current, panePopupVersion33,
-			))
+		} else if err := server.unsupportedFeature(
+			"display-popup", field.feature, current, panePopupVersion33,
+		); err != nil {
+			return nil, err
 		}
 	}
 	if len(values.environment) != 0 {
@@ -303,22 +309,22 @@ func appendPopupVersion33Arguments(
 			for _, variable := range values.environment {
 				arguments = append(arguments, "-e"+variable)
 			}
-		} else {
-			server.warn(newUnsupportedFeatureWarning(
-				"display-popup", "environment", current, panePopupVersion33,
-			))
+		} else if err := server.unsupportedFeature(
+			"display-popup", "environment", current, panePopupVersion33,
+		); err != nil {
+			return nil, err
 		}
 	}
 	if values.noBorder {
 		if current.AtLeast(panePopupVersion33) {
 			arguments = append(arguments, "-B")
-		} else {
-			server.warn(newUnsupportedFeatureWarning(
-				"display-popup", "no_border", current, panePopupVersion33,
-			))
+		} else if err := server.unsupportedFeature(
+			"display-popup", "no_border", current, panePopupVersion33,
+		); err != nil {
+			return nil, err
 		}
 	}
-	return arguments
+	return arguments, nil
 }
 
 func appendPopupVersion36Arguments(
@@ -326,24 +332,24 @@ func appendPopupVersion36Arguments(
 	arguments []string,
 	values displayPopupValues,
 	current Version,
-) []string {
+) ([]string, error) {
 	if values.closeOnAnyKey {
 		if current.AtLeast(panePopupVersion36) {
 			arguments = append(arguments, "-k")
-		} else {
-			server.warn(newUnsupportedFeatureWarning(
-				"display-popup", "close_on_any_key", current, panePopupVersion36,
-			))
+		} else if err := server.unsupportedFeature(
+			"display-popup", "close_on_any_key", current, panePopupVersion36,
+		); err != nil {
+			return nil, err
 		}
 	}
 	if values.noKeys {
 		if current.AtLeast(panePopupVersion36) {
 			arguments = append(arguments, "-N")
-		} else {
-			server.warn(newUnsupportedFeatureWarning(
-				"display-popup", "no_keys", current, panePopupVersion36,
-			))
+		} else if err := server.unsupportedFeature(
+			"display-popup", "no_keys", current, panePopupVersion36,
+		); err != nil {
+			return nil, err
 		}
 	}
-	return arguments
+	return arguments, nil
 }

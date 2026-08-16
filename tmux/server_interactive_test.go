@@ -202,7 +202,7 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 		runner := &versionQueueRunner{responses: []versionResponse{{
 			result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}},
 		}}}
-		err := serverWithRunner(runner).ConfirmBefore(
+		err := degradingServerWithRunner(runner).ConfirmBefore(
 			context.Background(), ConfirmBeforeRequest{Command: "display-message no"},
 		)
 		var tooLow *VersionTooLowError
@@ -221,7 +221,7 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
 			{result: tmuxcmd.Result{}},
 		}}
-		server := serverWithRunner(runner)
+		server := degradingServerWithRunner(runner)
 		server.connectionState().options.WarningHandler = func(warning Warning) {
 			warnings = append(warnings, warning)
 		}
@@ -244,7 +244,7 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
 			{result: tmuxcmd.Result{}},
 		}}
-		server := serverWithRunner(runner)
+		server := degradingServerWithRunner(runner)
 		server.connectionState().options.WarningHandler = func(warning Warning) {
 			warnings = append(warnings, warning)
 		}
@@ -276,7 +276,7 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
 			{result: tmuxcmd.Result{}},
 		}}
-		server := serverWithRunner(runner)
+		server := degradingServerWithRunner(runner)
 		server.connectionState().options.WarningHandler = func(warning Warning) {
 			warnings = append(warnings, warning)
 		}

@@ -97,7 +97,7 @@ func TestCopyModeWarnsAndOmitsPageDownBefore35(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.4"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := serverWithRunner(runner)
+	server := degradingServerWithRunner(runner)
 	server.connectionState().options.WarningHandler = func(warning Warning) {
 		warnings = append(warnings, warning)
 	}

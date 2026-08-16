@@ -31,7 +31,7 @@ type ServerAccessRequest struct {
 type RefreshClientRequest struct {
 	// TargetClient selects a stable client; zero selects tmux's current client.
 	TargetClient ClientName
-	// RequestClipboard requests clipboard data; tmux before 3.7 warns and omits it.
+	// RequestClipboard requests clipboard data; tmux before 3.7 refuses it; see UnsupportedPolicy.
 	RequestClipboard bool
 }
 
@@ -162,13 +162,13 @@ func (s Server) RefreshClient(ctx context.Context, request RefreshClientRequest)
 		}
 		if current.AtLeast(serverClientsVersion37) {
 			requestClipboard = true
-		} else {
-			s.warn(newUnsupportedFeatureWarning(
-				"refresh-client",
-				"request_clipboard",
-				current,
-				serverClientsVersion37,
-			))
+		} else if err := s.unsupportedFeature(
+			"refresh-client",
+			"request_clipboard",
+			current,
+			serverClientsVersion37,
+		); err != nil {
+			return err
 		}
 	}
 	arguments := []string{"refresh-client"}

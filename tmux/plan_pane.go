@@ -25,8 +25,14 @@ func (p *Plan) SplitPane(target Ref, request SplitPaneRequest) Ref {
 		marks:        request.Attach,
 		needsVersion: splitPaneRequiresVersion(request),
 		build: func(resolved, _ string, version Version) ([]string, error) {
-			arguments, _, err := splitPaneArguments(resolved, request, version)
-			return arguments, err
+			arguments, warnings, err := splitPaneArguments(resolved, request, version)
+			if err != nil {
+				return nil, err
+			}
+			if err := p.reportUnsupported(warnings); err != nil {
+				return nil, err
+			}
+			return arguments, nil
 		},
 	})
 }

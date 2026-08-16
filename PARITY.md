@@ -75,7 +75,10 @@ indistinguishable from a result.
 - Python exceptions become concrete errors supporting `errors.Is` or
   `errors.As`. Raw command nonzero exits remain result data.
 - Python warnings become concrete values delivered to an optional warning
-  handler; default behavior remains non-fatal and silent.
+  handler. A warning that reports a request being carried out differently from
+  how it was written is an error instead, because Python's warning is seen on
+  stderr and a nil Go handler is not; `UnsupportedPolicy` restores the
+  Python-shaped behavior for a caller who wants it.
 - Python magic methods become named Go methods or ordinary value semantics.
 - Python `lower_snake_case` names become Go exported names under one
   module-wide convention, implemented once in `internal/goname` and shared by

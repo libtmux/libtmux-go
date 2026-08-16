@@ -149,6 +149,11 @@ func (o Op) chainable() bool { return !o.captures && !o.creates }
 // sharing it.
 type Plan struct {
 	ops []Op
+	// unsupported is the policy the run applies to a step naming a capability
+	// the running tmux does not have. [Plan.RunWith] sets it from the server it
+	// was given; [Plan.Preview] leaves the zero value, so a preview refuses
+	// what a default server would refuse, which is what a preview is for.
+	unsupported UnsupportedPolicy
 }
 
 // NewPlan returns an empty [Plan].
@@ -587,6 +592,7 @@ func (p *Plan) RunWith(
 	server Server,
 	planner Planner,
 ) (PlanResult, error) {
+	p.unsupported = server.connectionState().options.Unsupported
 	results := make([]OpResult, len(p.ops))
 	for index, op := range p.ops {
 		results[index] = OpResult{Command: op.name, Status: OpSkipped}

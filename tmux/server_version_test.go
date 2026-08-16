@@ -638,3 +638,14 @@ func (r *blockingVersionRunner) Run(context.Context, tmuxcmd.Request) (tmuxcmd.R
 func serverWithRunner(runner commandRunner) Server {
 	return Server{state: &serverState{runner: runner}}
 }
+
+// degradingServerWithRunner is serverWithRunner with the policy that omits a
+// capability the running tmux lacks instead of refusing the request. It is what
+// the tests covering that path use; the default refuses, and
+// TestUnsupportedFeaturesAreRefusedByDefault covers that.
+func degradingServerWithRunner(runner commandRunner) Server {
+	return Server{state: &serverState{
+		runner:  runner,
+		options: ServerOptions{Unsupported: DegradeUnsupported},
+	}}
+}

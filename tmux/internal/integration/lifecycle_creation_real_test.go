@@ -298,12 +298,38 @@ func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
 	if len(panes) != 1 {
 		t.Fatalf("linked panes = %d, want 1", len(panes))
 	}
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	minimum, err := tmux.ParseVersion("3.7")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A split naming a pane style, and one asking for an empty pane, need tmux
+	// 3.7. Below it the request is refused rather than carried out without
+	// them, which would put a shell in the pane the caller asked to leave
+	// empty. Both refusals are checked here; the linked-context assertions
+	// below them need a split that ran.
 	style := "bg=blue"
-	created, err := panes[0].Split(ctx, tmux.SplitPaneRequest{
+	styled := tmux.SplitPaneRequest{
 		Direction: tmux.PaneDirectionRight,
 		Command:   "sleep 30",
 		Style:     &style,
-	})
+	}
+	if !version.AtLeast(minimum) {
+		if _, err := panes[0].Split(ctx, styled); !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("Pane.Split(Style) on tmux %s error = %v, want ErrVersionTooLow", version, err)
+		}
+		_, err := linked.SplitPane(ctx, tmux.SplitPaneRequest{Empty: true})
+		if !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("Window.SplitPane(Empty) on tmux %s error = %v, want ErrVersionTooLow", version, err)
+		}
+		return
+	}
+
+	created, err := panes[0].Split(ctx, styled)
 	if err != nil {
 		t.Fatalf("Pane.Split() error = %v", err)
 	}
@@ -318,14 +344,6 @@ func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Window.SplitPane(Empty) = %#v, want linked guest context", empty)
 	}
 
-	version, err := server.Version(ctx)
-	if err != nil {
-		t.Fatalf("Version() error = %v", err)
-	}
-	minimum, err := tmux.ParseVersion("3.7")
-	if err != nil {
-		t.Fatal(err)
-	}
 	floating, err := linked.NewPane(ctx, tmux.NewPaneRequest{
 		Width: tmux.Ptr(20), Height: tmux.Ptr(6), Command: "sleep 30",
 	})

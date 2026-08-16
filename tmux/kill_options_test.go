@@ -160,7 +160,7 @@ func TestSessionKillGroupWarnsAndOmitsBefore37(t *testing.T) {
 		{result: tmuxcmd.Result{}},
 	}}
 	warnings := make([]Warning, 0, 1)
-	server := serverWithRunner(runner)
+	server := degradingServerWithRunner(runner)
 	server.state.options.WarningHandler = func(warning Warning) {
 		warnings = append(warnings, warning)
 	}
