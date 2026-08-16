@@ -42,6 +42,57 @@ type paneSummary struct {
 	IsCaller *bool `json:"isCaller"`
 }
 
+// paneStatus is what a supervising caller would otherwise learn by calling
+// get_pane_info once per pane.
+//
+// It is what makes a listing answer "which of these needs my attention"
+// without reading any pane's contents: a caller checking eight panes across
+// turns pays one call and a few dozen bytes each, rather than a capture each.
+//
+// It hangs off the listing rather than off paneSummary, so that the four other
+// tools reporting a pane do not advertise a field they never fill in. A shared
+// shape is worth having because a pane looks the same wherever it is read; a
+// field that is always absent in most of those places is the opposite of that.
+type paneStatus struct {
+	// Dead reports whether the pane's process has exited.
+	Dead bool `json:"dead"`
+	// ExitStatus is that process's status, reported only once it has exited.
+	ExitStatus *int `json:"exitStatus,omitempty"`
+	// Path is the pane's working directory.
+	Path string `json:"path,omitempty"`
+	// Title is the pane's title, which a program may set.
+	Title string `json:"title,omitempty"`
+	// HistoryLines is how many lines of scrollback the pane holds. Compared
+	// against a previous reading it says whether the pane wrote anything,
+	// which is the cheapest change test there is.
+	HistoryLines int `json:"historyLines"`
+	// InMode reports that the pane is in a tmux mode, such as copy mode,
+	// where keys sent to it are read by tmux and never reach the program.
+	InMode bool `json:"inMode"`
+}
+
+// readPaneStatus reads the state a full listing reports. Every value comes
+// from the snapshot already taken, so it costs no further tmux command.
+func readPaneStatus(pane tmux.Pane) *paneStatus {
+	formats := pane.Formats()
+	dead, _ := formats.PaneDead()
+	path, _ := formats.PaneCurrentPath()
+	title, _ := formats.PaneTitle()
+	history, _ := formats.HistorySize()
+	mode, _ := formats.PaneInMode()
+	status := paneStatus{
+		Dead:         dead,
+		Path:         path,
+		Title:        title,
+		HistoryLines: history,
+		InMode:       mode != 0,
+	}
+	if exit, ok := formats.PaneDeadStatus(); ok && dead {
+		status.ExitStatus = &exit
+	}
+	return &status
+}
+
 // windowSummary describes one window.
 type windowSummary struct {
 	// ID is the stable tmux window identifier, such as @1.

@@ -1590,3 +1590,180 @@ func TestAHandleFromAnotherRunSaysSo(t *testing.T) {
 			result.Content)
 	}
 }
+
+// listing is the shape the three list tools answer with, as a client reads it.
+type listing struct {
+	Total int `json:"total"`
+	Panes []struct {
+		ID       string `json:"id"`
+		Session  string `json:"session"`
+		WindowID string `json:"windowId"`
+		Status   *struct {
+			Dead         bool   `json:"dead"`
+			Path         string `json:"path"`
+			HistoryLines int    `json:"historyLines"`
+		} `json:"status"`
+	} `json:"panes"`
+}
+
+// TestAFilteredListingReturnsOnlyWhatMatched covers the reason the criteria
+// exist: the whole server is the answer to a question nobody asks, and a
+// caller pays for it in context it cannot get back.
+//
+//libtmux:real-tmux
+func TestAFilteredListingReturnsOnlyWhatMatched(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: filtering\nwindows:\n"+
+		"  - window_name: one\n    panes:\n      - {}\n      - {}\n"+
+		"  - window_name: two\n    panes:\n      - {}\n")
+
+	var everything listing
+	call(ctx, t, session, "list_panes", map[string]any{}, &everything)
+	if everything.Total != 3 || len(everything.Panes) != 3 {
+		t.Fatalf("an unfiltered listing gave %d of %d, want 3 of 3",
+			len(everything.Panes), everything.Total)
+	}
+
+	var narrowed listing
+	call(ctx, t, session, "list_panes", map[string]any{
+		"windowId": everything.Panes[2].WindowID,
+	}, &narrowed)
+	if len(narrowed.Panes) != 1 {
+		t.Errorf("filtering to one window gave %d panes, want 1", len(narrowed.Panes))
+	}
+	if narrowed.Total != 3 {
+		t.Errorf("total = %d, want the 3 the filter selected from", narrowed.Total)
+	}
+}
+
+// TestAFullListingCarriesStateWithoutASecondCall covers what makes supervising
+// several panes cheap: the state is in the snapshot already taken, so asking
+// for it costs no further tmux command and no capture.
+//
+//libtmux:real-tmux
+func TestAFullListingCarriesStateWithoutASecondCall(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: stateful\nwindows:\n  - panes:\n      - {}\n")
+
+	var standard listing
+	call(ctx, t, session, "list_panes", map[string]any{}, &standard)
+	if len(standard.Panes) != 1 || standard.Panes[0].Status != nil {
+		t.Fatalf("a standard listing carried status: %+v", standard.Panes)
+	}
+
+	var full listing
+	call(ctx, t, session, "list_panes", map[string]any{"detail": "full"}, &full)
+	if len(full.Panes) != 1 || full.Panes[0].Status == nil {
+		t.Fatalf("a full listing carried no status: %+v", full.Panes)
+	}
+	if full.Panes[0].Status.Path == "" {
+		t.Error("a full listing reported no working directory")
+	}
+	if full.Panes[0].Status.Dead {
+		t.Error("a live pane was reported dead")
+	}
+}
+
+// TestAnUnknownDetailIsRefused covers the choice not to fall back: a caller
+// that asked for more and silently got less would read the absent fields as
+// absent state.
+//
+//libtmux:real-tmux
+func TestAnUnknownDetailIsRefused(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: unknowable\nwindows:\n  - panes:\n      - {}\n")
+
+	result := call(ctx, t, session, "list_panes", map[string]any{"detail": "verbose"}, nil)
+	if !result.IsError {
+		t.Fatal("an unknown detail level was accepted")
+	}
+}
+
+// TestPathUnderDoesNotMatchASiblingPrefix covers the trap a plain prefix test
+// falls into: /tmp/work starts with /tmp/wo, and a caller filtering for one
+// would silently be handed the other.
+//
+//libtmux:real-tmux
+func TestPathUnderDoesNotMatchASiblingPrefix(t *testing.T) {
+	session, _, ctx := connect(t)
+	root := t.TempDir()
+	shortPath := filepath.Join(root, "wo")
+	longPath := filepath.Join(root, "work")
+	for _, directory := range []string{shortPath, longPath} {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	workspace(ctx, t, session, "session_name: paths\nwindows:\n  - panes:\n      - {}\n      - {}\n")
+
+	var everything listing
+	call(ctx, t, session, "list_panes", map[string]any{}, &everything)
+	// send rather than run_command: run_command runs in a subshell, so a cd
+	// inside it changes that subshell's directory and never the pane's. The
+	// round trip afterwards is what proves the shell has finished the cd.
+	send(ctx, t, session, everything.Panes[0].ID, "cd "+shortPath)
+	send(ctx, t, session, everything.Panes[1].ID, "cd "+longPath)
+	run(ctx, t, session, everything.Panes[0].ID, "true")
+	run(ctx, t, session, everything.Panes[1].ID, "true")
+
+	var under listing
+	call(ctx, t, session, "list_panes", map[string]any{"pathUnder": shortPath}, &under)
+	if len(under.Panes) != 1 {
+		t.Fatalf("filtering under %s matched %d panes, want only the one in it",
+			shortPath, len(under.Panes))
+	}
+	if under.Panes[0].ID != everything.Panes[0].ID {
+		t.Errorf("matched %s, want %s", under.Panes[0].ID, everything.Panes[0].ID)
+	}
+}
+
+// TestWindowsAndSessionsNarrowToo covers the two listings that are easy to
+// leave behind: a caller that can filter panes and not the things holding them
+// still reads the whole server to find one window.
+//
+//libtmux:real-tmux
+func TestWindowsAndSessionsNarrowToo(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: narrowing\nwindows:\n"+
+		"  - window_name: alpha\n    panes:\n      - {}\n"+
+		"  - window_name: beta\n    panes:\n      - {}\n")
+	workspace(ctx, t, session, "session_name: elsewhere\nwindows:\n"+
+		"  - window_name: gamma\n    panes:\n      - {}\n")
+
+	type windows struct {
+		Total   int `json:"total"`
+		Windows []struct {
+			Name    string `json:"name"`
+			Session string `json:"session"`
+		} `json:"windows"`
+	}
+	var byName windows
+	call(ctx, t, session, "list_windows", map[string]any{"name": "alph"}, &byName)
+	if len(byName.Windows) != 1 || byName.Windows[0].Name != "alpha" {
+		t.Errorf("filtering windows by name gave %+v", byName.Windows)
+	}
+	if byName.Total < 3 {
+		t.Errorf("total = %d, want every window it selected from", byName.Total)
+	}
+
+	var bySession windows
+	call(ctx, t, session, "list_windows", map[string]any{"sessionName": "narrowing"}, &bySession)
+	if len(bySession.Windows) != 2 {
+		t.Errorf("filtering windows to one session gave %d, want 2", len(bySession.Windows))
+	}
+
+	type sessions struct {
+		Total    int `json:"total"`
+		Sessions []struct {
+			Name string `json:"name"`
+		} `json:"sessions"`
+	}
+	var named sessions
+	call(ctx, t, session, "list_sessions", map[string]any{"name": "elsew"}, &named)
+	if len(named.Sessions) != 1 || named.Sessions[0].Name != "elsewhere" {
+		t.Errorf("filtering sessions by name gave %+v", named.Sessions)
+	}
+	if named.Total < 2 {
+		t.Errorf("total = %d, want every session it selected from", named.Total)
+	}
+}

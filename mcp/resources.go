@@ -120,17 +120,11 @@ func (t *tools) readSessionWindows(
 	ctx context.Context,
 	uri, name string,
 ) (*mcp.ReadResourceResult, error) {
-	_, windows, err := t.listWindows(ctx, nil, listWindowsInput{})
+	_, windows, err := t.listWindows(ctx, nil, listWindowsInput{SessionName: name})
 	if err != nil {
 		return nil, err
 	}
-	matching := make([]windowSummary, 0, len(windows.Windows))
-	for _, window := range windows.Windows {
-		if window.Session == name {
-			matching = append(matching, window)
-		}
-	}
-	return jsonResource(uri, listWindowsOutput{Windows: matching})
+	return jsonResource(uri, windows)
 }
 
 func (t *tools) readWindowPanes(
@@ -145,11 +139,11 @@ func (t *tools) readWindowPanes(
 	if err != nil {
 		return nil, err
 	}
-	summaries := make([]paneSummary, 0, len(panes))
+	summaries := make([]listedPane, 0, len(panes))
 	for _, pane := range panes {
-		summaries = append(summaries, t.summarize(ctx, pane))
+		summaries = append(summaries, listedPane{paneSummary: t.summarize(ctx, pane)})
 	}
-	return jsonResource(uri, listPanesOutput{Panes: summaries})
+	return jsonResource(uri, listPanesOutput{Panes: summaries, Total: len(panes)})
 }
 
 func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
