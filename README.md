@@ -285,6 +285,9 @@ command usually leads to its method without a lookup.
 | [`DESIGN.md`](DESIGN.md) | The conventions this package holds itself to, and the bakeoffs behind them |
 | [`PARITY.md`](PARITY.md) | How the surface is checked against the Python libtmux |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
+| [`CHANGELOG.md`](CHANGELOG.md) | What each release changed |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | The gates a change has to pass |
+| [`SECURITY.md`](SECURITY.md) | What this software executes, and how to report a hole in it |
 | [`AGENTS.md`](AGENTS.md) | Working on this repository |
 | [`examples/`](examples/) | Runnable programs for each of the above |
 
