@@ -139,6 +139,11 @@ func WaitForScreen(
 // once it is ready, so the first thing a test sends is the first thing to
 // arrive.
 //
+// It waits for the shell to draw anything at all, which is a prompt on every
+// shell that has one, rather than for a particular prompt: a pane on a server
+// without [ServerOptions.FixedShell] shows whatever the person running the
+// tests has configured, and this has to work there too.
+//
 // It reads the pane rather than typing at it. A wait that probes by sending
 // keys leaves every probe it sent on the screen, and the screen is what every
 // other assertion here is about.
@@ -147,12 +152,7 @@ func WaitForScreen(
 func WaitForShellReady(ctx context.Context, t testing.TB, pane tmux.Pane) {
 	t.Helper()
 	WaitForScreen(ctx, t, pane, "a shell prompt", func(screen []string) bool {
-		for _, line := range screen {
-			if strings.Contains(line, strings.TrimSpace(ShellPrompt)) {
-				return true
-			}
-		}
-		return false
+		return len(screen) > 0
 	})
 }
 
@@ -188,12 +188,20 @@ func Type(ctx context.Context, t testing.TB, pane tmux.Pane, command string) {
 // session, and then the server with it, and a test asserting on what it left
 // behind would race that teardown.
 //
-// Setup failures call [testing.TB.Fatal]. Use [NewServerWithOptions] and the
-// resource helpers when a test needs more than one pane, a particular tmux
-// binary, or a configuration of its own.
+// Its panes run a POSIX shell with no start-up files and the fixed
+// [ShellPrompt], so what a pane shows does not depend on whose machine ran the
+// test. Setup failures call [testing.TB.Fatal]. Use [NewServerWithOptions],
+// with [ServerOptions.FixedShell] for the same panes, when a test needs more
+// than one pane, a particular tmux binary, or a configuration of its own.
 func RunInPane(ctx context.Context, t testing.TB, command string) tmux.Pane {
 	t.Helper()
-	server := NewServer(ctx, t)
+	initialSession := tmux.NewSessionRequest{}
+	server := NewServerWithOptions(ctx, t, ServerOptions{
+		// A test reading a pane needs the pane to show the same thing on every
+		// machine, which is what FixedShell is for.
+		FixedShell:     true,
+		InitialSession: &initialSession,
+	})
 	session := NewSession(ctx, t, server, tmux.NewSessionRequest{})
 	pane, ok, err := session.ResolveActivePane(ctx)
 	if err != nil {

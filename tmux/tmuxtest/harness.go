@@ -34,9 +34,10 @@
 // [WaitForLine] matches a whole line, [WaitForScreen] takes a condition of your
 // own, and [Screen] reads the pane without waiting.
 //
-// Every pane runs a POSIX shell with no start-up files and the fixed
-// [ShellPrompt], so a pane shows the same thing on every machine rather than
-// whatever prompt the person running the tests has configured.
+// [RunInPane] gives its panes a POSIX shell with no start-up files and the
+// fixed [ShellPrompt], so a pane shows the same thing on every machine rather
+// than whatever prompt the person running the tests has configured. Ask for it
+// on a server you build yourself with [ServerOptions.FixedShell].
 //
 // # Testing tmux itself
 //
@@ -138,6 +139,18 @@ type ServerOptions struct {
 	// InitialSession starts the daemon with this copied request. Nil returns a
 	// lazy bare server; a later tmux command may start it.
 	InitialSession *tmux.NewSessionRequest
+	// FixedShell gives every pane a POSIX shell with no start-up files and the
+	// prompt ShellPrompt, instead of the login shell tmux would otherwise run.
+	//
+	// Set it for a test that reads what a pane shows. Without it a pane opens
+	// on whatever the person running the tests has configured, so a screen
+	// carries their prompt, their colours, and on some systems the system
+	// message of the day, and an assertion about it passes or fails by machine.
+	//
+	// It is off by default because it changes what tmux spawns, which a test
+	// about process behaviour rather than screen content may be measuring.
+	// RunInPane sets it.
+	FixedShell bool
 }
 
 // ShellPrompt is the prompt every harness pane draws.
@@ -161,7 +174,14 @@ const (
 	// prompt above. tmux still runs an explicit command given to split-window
 	// or new-window in preference to this, so a test that wants its own program
 	// in a pane is unaffected.
-	harnessIsolationConfig = "set -g default-shell /bin/sh\n" +
+	harnessIsolationConfig = ""
+	// fixedShellConfig is what [ServerOptions.FixedShell] adds.
+	//
+	// default-command is what makes the shell predictable: without it tmux runs
+	// the shell as a login shell, which reads /etc/profile and prints whatever
+	// that system has to say. With it, sh reads no start-up files at all, since
+	// ENV is cleared, and draws ShellPrompt.
+	fixedShellConfig = "set -g default-shell /bin/sh\n" +
 		"set -g default-command \"ENV= PS1='" + ShellPrompt + "' /bin/sh -i\"\n"
 	maxSocketPathBytes  = 103
 	cleanupTimeout      = 3 * time.Second
@@ -423,6 +443,9 @@ func newServerWithOptions(
 		configFile = filepath.Join(tempDir, "tmux.conf")
 		config := make([]byte, 0, len(harnessIsolationConfig)+len(options.Config))
 		config = append(config, harnessIsolationConfig...)
+		if options.FixedShell {
+			config = append(config, fixedShellConfig...)
+		}
 		config = append(config, options.Config...)
 		if err := os.WriteFile(configFile, config, 0o600); err != nil {
 			_ = os.RemoveAll(tempDir)

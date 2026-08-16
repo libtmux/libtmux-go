@@ -55,9 +55,10 @@ the pane showed 3 line(s):
 `Screen` reads the pane without waiting. All of them read the visible screen
 rather than the scrollback, so what they search is what a failure prints.
 
-Every pane runs a POSIX shell with no start-up files and the prompt
+`RunInPane` gives its panes a POSIX shell with no start-up files and the prompt
 `tmuxtest$ `, so a pane shows the same thing on every machine rather than
-whatever prompt the person running the tests has configured.
+whatever prompt the person running the tests has configured. Ask for it on a
+server you build yourself with `ServerOptions.FixedShell`.
 
 ## Testing tmux itself
 
