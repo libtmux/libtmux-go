@@ -25,11 +25,11 @@ jobs:
       # checkout without tags skips it rather than failing. fetch-tags alone
       # does not do it: it drops --no-tags from a depth-1 fetch, and no tag
       # points at the one commit that fetches, so none arrive.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: ${{ matrix.module }}/go.mod
@@ -52,7 +52,7 @@ jobs:
           go vet ./...
           go test -race -count=1 -coverpkg=./... -coverprofile=coverage.out ./...
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.module }}
           path: ${{ matrix.module }}/coverage.out
@@ -64,9 +64,9 @@ jobs:
   generated:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: go.mod
@@ -88,9 +88,9 @@ jobs:
       matrix:
         module: [".", "examples", "workspace", "mcp", "benchmarks"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: ${{ matrix.module }}/go.mod
@@ -123,9 +123,9 @@ jobs:
   benchmarks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: benchmarks/go.mod
@@ -157,16 +157,16 @@ jobs:
       matrix:
         tmux-version: ['3.2a', '3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b']
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: go.mod
 
       - name: Cache the tmux build for ${{ matrix.tmux-version }}
         id: tmux-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/tmux-builds/tmux-${{ matrix.tmux-version }}
           key: tmux-${{ matrix.tmux-version }}
