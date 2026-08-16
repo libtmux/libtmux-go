@@ -22,7 +22,23 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if isPTYHelperProcess(os.Args[1:]) {
+		os.Exit(m.Run())
+	}
 	os.Exit(tmuxtest.Main(m))
+}
+
+// isPTYHelperProcess reports whether this process is a child spawned onto a
+// pseudo-terminal by a test below. Such a child re-enters TestMain and is
+// killed before it could remove a suite root, and needs none of the lifecycle:
+// the helpers touch only their own streams.
+func isPTYHelperProcess(arguments []string) bool {
+	for _, argument := range arguments {
+		if strings.HasPrefix(argument, "-test.run=^TestPTYProcess") {
+			return true
+		}
+	}
+	return false
 }
 
 func TestMainShortensBothTemporaryRoots(t *testing.T) {

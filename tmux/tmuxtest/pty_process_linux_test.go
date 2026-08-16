@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -188,6 +190,49 @@ func TestPTYProcessWriteHonorsContextWhileChildDoesNotRead(t *testing.T) {
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("Write() cancellation took %s, want at most 1s", elapsed)
 	}
+}
+
+// TestAPTYHelperLeavesNoSuiteRoot fails on a temporary root a helper child left
+// behind. Nothing else does: the test that spawned it passes either way, so the
+// directories accumulate unnoticed.
+func TestAPTYHelperLeavesNoSuiteRoot(t *testing.T) {
+	before := suiteRoots(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	process := tmuxtest.StartPTYProcess(
+		ctx,
+		t,
+		os.Args[0],
+		[]string{"-test.run=^TestPTYProcessCloseHelper$"},
+		append(os.Environ(), "LIBTMUX_PTY_CLOSE_HELPER=1"),
+	)
+	if err := process.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	for _, root := range suiteRoots(t) {
+		if !slices.Contains(before, root) {
+			t.Fatalf("a helper child left the suite root %s behind",
+				filepath.Base(root))
+		}
+	}
+}
+
+// suiteRoots returns the harness roots on disk, named rather than counted
+// because another suite may be running beside this one. TMPDIR is this suite's
+// own root, so its parent is where the harness creates them.
+func suiteRoots(t *testing.T) []string {
+	t.Helper()
+
+	roots, err := filepath.Glob(filepath.Join(filepath.Dir(os.Getenv("TMPDIR")), "ltg-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) == 0 {
+		t.Fatal("no suite root found, so this test could not observe a leak")
+	}
+	return roots
 }
 
 func TestPTYProcessCloseHelper(_ *testing.T) {
