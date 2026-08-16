@@ -1958,3 +1958,76 @@ func TestStyledCaptureKeepsColour(t *testing.T) {
 		t.Errorf("a styled capture carried no colour: %q", joined)
 	}
 }
+
+// TestRecipesAreOffAsAToolUnlessAsked covers the cost of saying anything in a
+// tool list. The recipes are already offered as prompts, and a server that
+// also advertises them as a tool is describing the same four things twice to
+// every client, whether or not that client can read prompts.
+//
+//libtmux:real-tmux
+func TestRecipesAreOffAsAToolUnlessAsked(t *testing.T) {
+	t.Run("off by default", func(t *testing.T) {
+		session, _, ctx := connect(t)
+		listed, err := session.ListTools(ctx, nil)
+		if err != nil {
+			t.Fatalf("list tools: %v", err)
+		}
+		for _, tool := range listed.Tools {
+			if tool.Name == "get_recipe" {
+				t.Error("the recipe tool was advertised without being asked for")
+			}
+		}
+	})
+
+	t.Run("on when the operator asks", func(t *testing.T) {
+		t.Setenv(tmuxmcp.RecipeToolEnvironmentVariable, "1")
+		session, _, ctx := connect(t)
+
+		var recipe struct {
+			Name    string `json:"name"`
+			Summary string `json:"summary"`
+			Steps   string `json:"steps"`
+		}
+		result := call(ctx, t, session, "get_recipe", map[string]any{
+			"name": "recover_pane", "argument": "%3",
+		}, &recipe)
+		if result.IsError {
+			t.Fatalf("get_recipe: %#v", result.Content)
+		}
+		if !strings.Contains(recipe.Steps, "%3") {
+			t.Errorf("the recipe did not mention the pane it was asked about: %q", recipe.Steps)
+		}
+		if !strings.Contains(recipe.Steps, "copy mode") {
+			t.Errorf("the recipe was missing its own advice: %q", recipe.Steps)
+		}
+
+		// The same text a client reading prompts would get, because a client
+		// that cannot read prompts must not be told something different.
+		prompt, err := session.GetPrompt(ctx, &sdk.GetPromptParams{
+			Name: "recover_pane", Arguments: map[string]string{"pane": "%3"},
+		})
+		if err != nil {
+			t.Fatalf("get prompt: %v", err)
+		}
+		text, ok := prompt.Messages[0].Content.(*sdk.TextContent)
+		if !ok {
+			t.Fatalf("the prompt carried %T", prompt.Messages[0].Content)
+		}
+		if text.Text != recipe.Steps {
+			t.Error("the recipe tool and the prompt disagree about the same job")
+		}
+	})
+
+	t.Run("an unknown recipe names the ones there are", func(t *testing.T) {
+		t.Setenv(tmuxmcp.RecipeToolEnvironmentVariable, "1")
+		session, _, ctx := connect(t)
+		result := call(ctx, t, session, "get_recipe", map[string]any{"name": "make_coffee"}, nil)
+		if !result.IsError {
+			t.Fatal("an unknown recipe was accepted")
+		}
+		text, ok := result.Content[0].(*sdk.TextContent)
+		if !ok || !strings.Contains(text.Text, "diagnose_pane") {
+			t.Errorf("the refusal did not say what may be asked for: %#v", result.Content)
+		}
+	})
+}

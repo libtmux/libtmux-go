@@ -83,6 +83,7 @@ var toolGroups = []func(*mcp.Server, *tools){
 	addServerTools,
 	addBufferTools,
 	addSettingsTools,
+	addRecipeTools,
 	addBatchTools,
 }
 
