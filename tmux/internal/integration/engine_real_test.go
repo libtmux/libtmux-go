@@ -667,6 +667,10 @@ func TestARecordOutlivesThePoolThatCarriedIt(t *testing.T) {
 	server := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
+		// This test covers the reduced command and the warning that
+		// reports it. Refusing is the default; see
+		// tmux.TestUnsupportedFeaturesAreRefusedByDefault.
+		Unsupported: tmux.DegradeUnsupported,
 		WarningHandler: func(warning tmux.Warning) {
 			mutex.Lock()
 			warnings = append(warnings, warning)

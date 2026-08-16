@@ -44,6 +44,10 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 		SocketPath:         baseServer.SocketPath(),
 		ConfigFile:         baseServer.ConfigFile(),
 		ProcessEnvironment: baseServer.ProcessEnvironment(),
+		// This test covers the reduced command and the warning that
+		// reports it. Refusing is the default; see
+		// tmux.TestUnsupportedFeaturesAreRefusedByDefault.
+		Unsupported: tmux.DegradeUnsupported,
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},
@@ -113,26 +117,23 @@ func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// NoVis needs tmux 3.7. Below it the paste is refused rather than run
-	// without the flag, so the raw-byte assertion that follows uses a request
-	// this tmux can carry.
-	paste := tmux.PasteBufferRequest{
+	// NoVis needs tmux 3.7. This server omits what it cannot carry, so below
+	// the floor the paste runs without the flag and says so.
+	warnings = nil
+	if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
 		BufferName:  &bufferName,
 		DeleteAfter: true,
 		NoVis:       true,
-	}
-	if !version.AtLeast(version37) {
-		if err := pane.PasteBuffer(ctx, paste); !errors.Is(err, tmux.ErrVersionTooLow) {
-			t.Fatalf("PasteBuffer(NoVis) on tmux %s error = %v, want ErrVersionTooLow", version, err)
-		}
-		paste.NoVis = false
-	}
-	warnings = nil
-	if err := pane.PasteBuffer(ctx, paste); err != nil {
+	}); err != nil {
 		t.Fatalf("PasteBuffer() error = %v", err)
 	}
-	if len(warnings) != 0 {
-		t.Fatalf("PasteBuffer() warnings = %#v, want none", warnings)
+	wantWarning := !version.AtLeast(version37)
+	if (len(warnings) == 1) != wantWarning {
+		t.Fatalf("PasteBuffer() warnings = %#v, want warning %t on %s", warnings, wantWarning, version)
+	}
+	if wantWarning && (warnings[0].Kind != tmux.WarningUnsupportedFeature ||
+		warnings[0].Subcommand != "paste-buffer" || warnings[0].Feature != "no_vis") {
+		t.Fatalf("PasteBuffer() warning = %#v", warnings[0])
 	}
 	if got := strings.TrimSpace(waitForProcessFile(ctx, t, pasteOutput)); got != "00" {
 		t.Fatalf("raw pasted byte = %q, want 00", got)
