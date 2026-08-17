@@ -1972,6 +1972,10 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
+	// MCP deprecated logging in protocol version 2026-07-28 and keeps it
+	// working for at least twelve months. The server still sends it, so this
+	// still checks it.
+	//nolint:staticcheck // SA1019: deprecated with a twelve-month window.
 	logged := make(chan *sdk.LoggingMessageParams, 8)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
@@ -1990,6 +1994,7 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 		t.Fatalf("connect client: %v", err)
 	}
 	t.Cleanup(func() { _ = session.Close() })
+	//nolint:staticcheck // SA1019: deprecated with a twelve-month window.
 	if err := session.SetLoggingLevel(ctx, &sdk.SetLoggingLevelParams{Level: "info"}); err != nil {
 		t.Fatalf("set logging level: %v", err)
 	}
