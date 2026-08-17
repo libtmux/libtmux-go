@@ -10,6 +10,7 @@
 //	mcp-swap use-local --dry-run
 //	mcp-swap use-local --mode build
 //	mcp-swap use-local --mode released --ref v0.1.0
+//	mcp-swap use-local --client claude
 //	mcp-swap revert
 //
 // --mode chooses which build the clients are pointed at. "dev" runs the
@@ -18,6 +19,11 @@
 // plain exec. "installed" points at whatever libtmux-mcp is on PATH. "released"
 // runs a published version out of the module cache, which is the one mode that
 // does not involve this checkout at all.
+//
+// --client narrows the swap to the clients named, given more than once or as
+// one comma-separated list. Without it every client is written, which is the
+// right default when they all run the same server; naming one is for a machine
+// where they do not.
 //
 // Before writing anything, the chosen build is started once and asked to
 // complete an MCP handshake. A build error, a missing binary, or a version the
@@ -88,10 +94,12 @@ const preflightTimeout = 180 * time.Second
 
 // client is one agent CLI's global configuration.
 //
-// Every CLI here is written, not only the ones keeping JSON. Swapping some of
-// them is worse than swapping none: the entry has one name across all of them,
-// so a partial swap leaves two different servers answering to it and nothing
-// saying which client got which.
+// Every CLI here is written by default, not only the ones keeping JSON: the
+// entry has one name across all of them, so swapping some by accident leaves
+// two different servers answering to it and nothing saying which client got
+// which. --client narrows it on purpose, which is what a machine running one
+// implementation in some clients and another elsewhere needs in order to try a
+// build in one of them without disturbing the rest.
 type client struct {
 	name string
 	path string
@@ -124,7 +132,7 @@ func main() {
 		fmt.Fprintf(os.Stderr,
 			"usage: mcp-swap status|use-local|revert [--dry-run]"+
 				" [--mode dev|build|installed|released] [--ref VERSION]"+
-				" [--no-preflight]\n\n")
+				" [--client NAME] [--no-preflight]\n\n")
 		flag.PrintDefaults()
 	}
 	chosen, err := parseArguments(os.Args[1:])
@@ -154,6 +162,8 @@ type options struct {
 	mode        buildMode
 	ref         string
 	noPreflight bool
+	// only narrows the swap to the clients named, empty meaning all of them.
+	only []string
 }
 
 func parseArguments(arguments []string) (options, error) {
@@ -173,6 +183,8 @@ func parseArguments(arguments []string) (options, error) {
 				}
 			case "--ref":
 				chosen.ref = argument
+			case "--client":
+				chosen.only = append(chosen.only, argument)
 			}
 			expecting = ""
 			continue
@@ -186,7 +198,7 @@ func parseArguments(arguments []string) (options, error) {
 			chosen.dryRun = true
 		case "--no-preflight", "-no-preflight":
 			chosen.noPreflight = true
-		case "--mode", "-mode", "--ref", "-ref":
+		case "--mode", "-mode", "--ref", "-ref", "--client", "-client":
 			// Both spellings, because a person who finds one form does not
 			// work reaches for the other rather than for the usage line.
 			expecting = "--" + strings.TrimLeft(argument, "-")
@@ -234,6 +246,9 @@ func assign(chosen *options, flagName, value string) error {
 	case "--ref":
 		chosen.ref = value
 		return nil
+	case "--client":
+		chosen.only = append(chosen.only, value)
+		return nil
 	}
 	return fmt.Errorf("%s takes no value", flagName)
 }
@@ -244,11 +259,16 @@ func run(chosen options) error {
 		return err
 	}
 
+	clients, err := selected(knownClients(home), chosen.only)
+	if err != nil {
+		return err
+	}
+
 	switch chosen.command {
 	case "status":
-		return report(knownClients(home))
+		return report(clients)
 	case "revert":
-		return revert(knownClients(home), chosen.dryRun)
+		return revert(clients, chosen.dryRun)
 	case "use-local":
 		// Only the modes that run this checkout need to find it. A released
 		// or installed swap is about a build that exists elsewhere, and
@@ -271,10 +291,55 @@ func run(chosen options) error {
 				return fmt.Errorf("preflight failed, nothing written: %s", reason)
 			}
 		}
-		return useLocal(knownClients(home), entry, chosen.dryRun)
+		return useLocal(clients, entry, chosen.dryRun)
 	default:
 		return fmt.Errorf("%q is not a command", chosen.command)
 	}
+}
+
+// selected narrows the clients to the ones named, keeping the declared order so
+// what is written reads the same however the names were given.
+//
+// An unknown name is refused rather than skipped, because a typo would
+// otherwise report success having written nothing.
+func selected(clients []client, only []string) ([]client, error) {
+	if len(only) == 0 {
+		return clients, nil
+	}
+	known := map[string]bool{}
+	for _, c := range clients {
+		known[c.name] = true
+	}
+	wanted := map[string]bool{}
+	for _, name := range only {
+		for _, part := range strings.Split(name, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if !known[part] {
+				return nil, fmt.Errorf("%q is not a client this knows: %s",
+					part, strings.Join(clientNames(clients), ", "))
+			}
+			wanted[part] = true
+		}
+	}
+	chosen := make([]client, 0, len(wanted))
+	for _, c := range clients {
+		if wanted[c.name] {
+			chosen = append(chosen, c)
+		}
+	}
+	return chosen, nil
+}
+
+// clientNames lists what --client accepts, for a refusal that says so.
+func clientNames(clients []client) []string {
+	names := make([]string, 0, len(clients))
+	for _, c := range clients {
+		names = append(names, c.name)
+	}
+	return names
 }
 
 // buildEntry produces the config entry for the chosen mode.

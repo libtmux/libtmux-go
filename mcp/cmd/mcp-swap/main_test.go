@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -48,6 +49,16 @@ func TestParseArgumentsReadsCommandsAndFlagsInAnyOrder(t *testing.T) {
 			[]string{"use-local", "-mode", "build", "-no-preflight"},
 			options{command: "use-local", mode: modeBuild, noPreflight: true},
 		},
+		{
+			"clients named one at a time",
+			[]string{"use-local", "--client", "claude", "--client", "codex"},
+			options{command: "use-local", mode: modeDev, only: []string{"claude", "codex"}},
+		},
+		{
+			"clients joined by equals",
+			[]string{"revert", "--client=claude"},
+			options{command: "revert", mode: modeDev, only: []string{"claude"}},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -55,7 +66,7 @@ func TestParseArgumentsReadsCommandsAndFlagsInAnyOrder(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseArguments(%q) error = %v", test.arguments, err)
 			}
-			if got != test.want {
+			if !reflect.DeepEqual(got, test.want) {
 				t.Errorf("parseArguments(%q) = %+v, want %+v", test.arguments, got, test.want)
 			}
 		})
@@ -194,5 +205,36 @@ func TestPreflightReportsACommandThatCannotLaunch(t *testing.T) {
 	}
 	if reason := preflight(entry); !strings.Contains(reason, "could not launch") {
 		t.Errorf("preflight said %q, want it to name the launch failure", reason)
+	}
+}
+
+// TestSelectedNarrowsToTheClientsNamed covers trying a build in one client on a
+// machine where the others deliberately run a different server.
+func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
+	t.Parallel()
+	all := knownClients("/home/someone")
+
+	everything, err := selected(all, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(everything) != len(all) {
+		t.Errorf("naming nothing chose %d clients, want all %d", len(everything), len(all))
+	}
+
+	some, err := selected(all, []string{"codex,claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Declared order, not the order they were named, so what is written reads
+	// the same however the request was spelled.
+	if len(some) != 2 || some[0].name != "claude" || some[1].name != "codex" {
+		t.Errorf("selected = %v, want claude then codex", clientNames(some))
+	}
+
+	// A typo that quietly wrote nothing would report success having done
+	// nothing, which is the failure this refusal exists to prevent.
+	if _, err := selected(all, []string{"clod"}); err == nil {
+		t.Error("an unknown client was accepted")
 	}
 }
