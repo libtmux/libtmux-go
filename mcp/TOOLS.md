@@ -87,7 +87,7 @@ read a listing does not spend a call on one.
 | `list_sessions` | Sessions with their window count and attached clients; narrow with `name` or `attached` |
 | `list_windows` | Windows with their session, name, index, pane count, and active flag; narrow with `sessionName`, `name`, or `active` |
 | `list_panes` | Panes with their session, window, index, current command, active flag, and position; narrow with `sessionName`, `windowId`, `command`, `pathUnder`, `dead`, or `active`, and add per-pane state with `detail: full` |
-| `list_servers` | Every tmux socket on this machine, with the addressed one marked |
+| `list_servers` | The tmux servers running on this machine, with the addressed one marked; `includeDead` adds the socket files tmux left behind |
 | `get_server_info` | Which socket these tools address, who is attached to it, whether this server runs in one of its panes, and tmux's own message log with `includeMessages` |
 | `get_session_info` | One session's windows, working directory, and creation time |
 | `get_window_info` | One window's size, layout string, and panes |
@@ -247,6 +247,17 @@ ends and records its status. It also returns what the command printed, read from
 marks the wrapper records inside the pane, so a caller does not have to guess
 where in the scrollback its command began.
 
+What comes back is the command's own output and nothing else. Rows the terminal
+wrapped are rejoined, so one line printed is one entry however narrow the pane
+is, and the row the shell draws its prompt into is left out. When the output
+cannot be read at all, `outputUnavailable` says why, which is what separates a
+command that printed nothing from a pane that could not be reached.
+
+Your command is written to a file and sourced, never typed. A shell's line
+editor acts on what arrives as keys, so a command carrying a tab would ask it to
+complete a filename and a command carrying `C-c` would be acted on rather than
+run. Nothing you send crosses that line editor, whatever it contains.
+
 A command that outlasts its wait leaves the pane holding it, and every later
 `run_command` there times out too; send `C-c` with `send_keys` to get the pane
 back.
@@ -317,7 +328,15 @@ that would have ended something halfway through is refused whole rather than run
 up to that point. A batch dispatches through the same table registration builds,
 so a tool the safety level withheld is not reachable by naming it in a list. The
 batch tools are not themselves batchable: nesting one inside another buries
-which call failed.
+which call failed, and a batch asked to do it says so rather than claiming the
+tool does not exist.
+
+All three stop at the first failure. `results` holds one entry per call
+attempted, ending with the one that failed and its error; `completed` counts the
+ones before it; and `skipped` names the calls that never ran, in order. That
+last one matters most for the mutating and destructive batches: tmux has no
+transaction, so what already ran stays, and knowing what did *not* run is how a
+caller decides what to do next.
 
 ## Recipes
 
@@ -437,7 +456,7 @@ pane's contents are read, so nothing is paid for output already seen.
 **Situation.** A `run_command` timed out. Every later one in that pane times out
 too.
 
-**Discover.** `get_pane_info`. Look at `currentCommand` and `inMode`.
+**Discover.** `get_pane_info`. Look at `currentCommand`, `inMode`, and `dead`.
 
 **Decide.** A shell in `currentCommand` means the command is still going and you
 were impatient. Anything else means the pane is busy and read your command as
@@ -446,6 +465,10 @@ saw your keys at all.
 
 **Act.** For a busy pane, `send_keys` with `C-c`. For copy mode,
 `exit_copy_mode`. Then re-run.
+
+A pane whose program has exited reads no keys at all, so it never reaches this
+situation: `run_command` refuses it outright and names `respawn_pane`, rather
+than waiting out a timeout it cannot win.
 
 **The non-obvious part.** A pane left holding a command poisons every later
 `run_command` there, and the symptom — a timeout — looks identical to a slow

@@ -11,6 +11,54 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### mcp
 
+`run_command` returns what the command actually printed. Three things could make
+the reply disagree with the command. A tab anywhere in a command reached the
+shell's line editor as a request to complete a filename, so a different command
+ran and reported success; commands are now written to a file and sourced, and
+nothing a caller sends crosses that line editor. A detached run returned the
+shell's next prompt as a line of output, because the row the closing mark points
+at was read whether or not the command's last line ended there; the cursor's
+column is now recorded beside its row and settles that. Output was read one
+entry per screen row, so a line longer than the pane arrived split — wrapped
+rows are rejoined. The pane also stays readable: what it shows is one short
+line rather than the whole wrapper echoed across the screen.
+
+`run_command` refuses a pane whose program has exited, naming `respawn_pane`,
+instead of waiting out its timeout on a pane that reads no keys and then
+reporting the exited shell as though it were busy.
+
+When output cannot be read, `outputUnavailable` says why. A caller could not
+previously tell a command that printed nothing from a pane it failed to read.
+
+`list_servers` reports the servers that are running. tmux leaves a socket file
+behind when a server exits, so the directory only grows: on a machine that has
+run test suites this was hundreds of entries, nearly all of them dead, and the
+running servers were the hardest thing to find in the reply. `includeDead`
+brings them back, `name` and `maxServers` narrow further, and `total` and
+`skipped` say what was left out.
+
+The batch tools name the calls they skipped. All three stop at the first
+failure, and `skipped` now lists what never ran — which the mutating and
+destructive batches need, since tmux has no transaction and what already ran
+stays. A batch asked to call a batch says that it cannot be called from inside
+one, rather than that the server does not serve it.
+
+`send_keys` describes its `command` argument, which carries the warning that
+tmux key names are read there, so `C-c` interrupts and `Escape` is a key.
+`exit_copy_mode` no longer advertises `scrollUp`, which it shared with entering
+copy mode and never read. `list_panes` reports `panes` as an array when nothing
+matches, as `list_sessions` and `list_windows` already did.
+
+`show_buffer` says which buffer it looked for and that only buffers this server
+staged can be read, rather than reporting that a tmux command exited non-zero.
+
+The `capture_since` cursor is half the size. It carries a fingerprint per row
+and travels in every reply, so for a mostly blank screen it cost more than
+sending that screen would have.
+
+`mcp-swap` takes `--client`, so a build can be tried in one agent while the
+others keep whatever they run.
+
 The registry entry is named for the language rather than the project, since
 every server under this namespace drives tmux and the namespace already says
 whose it is.
@@ -18,6 +66,12 @@ whose it is.
 Documentation no longer names a version to install. Two READMEs had told a
 reader to fetch `v0.0.1-alpha.1` for the whole life of `v0.0.1-alpha.4`, and
 that version is retracted, so the command they gave refused to run.
+
+### workspace
+
+A rejection that has no line to point at no longer claims "line 0". An empty or
+unparseable document reported a line that cannot exist, sending a reader looking
+there when the parser's own message named the real one.
 
 ## mcp/v0.0.1-alpha.4
 

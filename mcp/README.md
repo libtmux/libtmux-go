@@ -390,9 +390,17 @@ $ go run ./cmd/mcp-swap use-local
 $ go run ./cmd/mcp-swap revert
 ```
 
+To try a build in one agent while the others keep whatever they run, name it:
+
+```console
+$ go run ./cmd/mcp-swap use-local \
+    --client claude \
+    --mode build
+```
+
 It points the agent CLIs on this machine at a build of this server and puts
-them back. It writes only the `tmux` entry, only in global config, and it
-writes every client it knows:
+them back. It writes only the `tmux` entry, only in global config, and without
+`--client` it writes every client it knows:
 
 | Client | Config | Format |
 | --- | --- | --- |

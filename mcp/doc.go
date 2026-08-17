@@ -31,6 +31,12 @@
 // its output, and both cost one call where reading the pane until it looks
 // right costs a round trip per look.
 //
+// A command reaches its pane as a file the shell is told to source, rather than
+// as keystrokes. A line editor acts on what arrives as keys, so a tab in a
+// command would ask it to complete a filename; nothing a caller sends crosses
+// it. What comes back is the command's own output, with rows the terminal
+// wrapped rejoined and the shell's next prompt left out.
+//
 // Observing repeatedly is capture_since, which returns what a pane wrote after
 // a cursor a previous call handed out. Reading a pane every turn otherwise
 // costs the whole screen every turn, most of it already read.
