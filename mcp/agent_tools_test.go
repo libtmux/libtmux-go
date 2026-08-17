@@ -2050,9 +2050,13 @@ func TestRunCommandKeepsATabInItsCommand(t *testing.T) {
 	workspace(ctx, t, session, "session_name: tabbed\nwindows:\n  - panes:\n      - {}\n")
 	pane := firstPane(ctx, t, session)
 
+	// The shell counts the bytes it received rather than printing them. A
+	// terminal renders a tab by moving to the next tab stop, and whether the
+	// captured row holds a tab or the spaces it painted differs by tmux
+	// version; how many bytes reached the shell does not.
 	var ran ranCommand
 	result := call(ctx, t, session, "run_command", map[string]any{
-		"paneId": pane, "command": "printf '[%s]\\n' 'a\tb'", "timeoutSeconds": 30,
+		"paneId": pane, "command": "printf '%s' 'a\tb' | wc -c", "timeoutSeconds": 30,
 	}, &ran)
 	if result.IsError {
 		t.Fatalf("run_command failed: %#v", result.Content)
@@ -2060,8 +2064,10 @@ func TestRunCommandKeepsATabInItsCommand(t *testing.T) {
 	if ran.TimedOut {
 		t.Fatal("a command carrying a tab wedged the pane")
 	}
-	if len(ran.Output) != 1 || ran.Output[0] != "[a\tb]" {
-		t.Errorf("output = %q, want one line [a\\tb]", ran.Output)
+	if len(ran.Output) != 1 || strings.TrimSpace(ran.Output[0]) != "3" {
+		t.Errorf("output = %q, want one line reading 3, so the shell was given "+
+			"a, a tab, and b rather than whatever a completion inserted",
+			ran.Output)
 	}
 }
 

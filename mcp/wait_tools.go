@@ -496,6 +496,14 @@ func attachCommandOutput(
 		output.OutputUnavailable = err.Error()
 		return
 	}
+	// Rejoining preserves the spaces a row is padded with, and tmux only trims
+	// them itself from 3.4. Trimming here rather than leaving it to tmux is
+	// what makes one command's output read the same on every supported
+	// version. Nothing is lost: a terminal grid pads every row to its width, so
+	// a space at the end of a row is the grid's rather than the command's.
+	for index, line := range lines {
+		lines[index] = strings.TrimRight(line, " ")
+	}
 	kept, report := limits.apply(lines)
 	output.Output = kept
 	output.truncation = report
