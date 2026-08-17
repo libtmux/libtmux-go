@@ -2031,3 +2031,154 @@ func TestRecipesAreOffAsAToolUnlessAsked(t *testing.T) {
 		}
 	})
 }
+
+// ranCommand is what the run_command and get_job assertions below read back.
+type ranCommand struct {
+	ExitStatus *int     `json:"exitStatus"`
+	TimedOut   bool     `json:"timedOut"`
+	Output     []string `json:"output"`
+	JobID      string   `json:"jobId"`
+}
+
+// TestRunCommandKeepsATabInItsCommand covers a command carrying a character the
+// shell's line editor acts on. A tab at a prompt asks for completion, so a
+// command delivered as keystrokes ran as whatever the completion inserted.
+//
+//libtmux:real-tmux
+func TestRunCommandKeepsATabInItsCommand(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: tabbed\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var ran ranCommand
+	result := call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "printf '[%s]\\n' 'a\tb'", "timeoutSeconds": 30,
+	}, &ran)
+	if result.IsError {
+		t.Fatalf("run_command failed: %#v", result.Content)
+	}
+	if ran.TimedOut {
+		t.Fatal("a command carrying a tab wedged the pane")
+	}
+	if len(ran.Output) != 1 || ran.Output[0] != "[a\tb]" {
+		t.Errorf("output = %q, want one line [a\\tb]", ran.Output)
+	}
+}
+
+// TestDetachedRunCommandReportsOnlyTheCommandsOutput covers the row the shell
+// redraws its prompt into. Reading the closing mark's row inclusively picked
+// that prompt up whenever the read lost the race against the redraw.
+//
+//libtmux:real-tmux
+func TestDetachedRunCommandReportsOnlyTheCommandsOutput(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: detached\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var started ranCommand
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "echo ONLY-THIS", "detach": true,
+	}, &started)
+	if started.JobID == "" {
+		t.Fatal("a detached run returned no handle")
+	}
+
+	// Collect only once the shell has certainly drawn its prompt into the row
+	// below the output, which is the case a detached run is for. Reading the
+	// closing mark's row inclusively returns that prompt as command output.
+	time.Sleep(time.Second)
+
+	var collected ranCommand
+	result := call(ctx, t, session, "get_job", map[string]any{
+		"jobId": started.JobID, "timeoutSeconds": 30,
+	}, &collected)
+	if result.IsError {
+		t.Fatalf("get_job failed: %#v", result.Content)
+	}
+	if len(collected.Output) != 1 || collected.Output[0] != "ONLY-THIS" {
+		t.Errorf("output = %q, want exactly [ONLY-THIS] with no prompt", collected.Output)
+	}
+}
+
+// TestRunCommandRejoinsOutputTheTerminalWrapped covers a line longer than the
+// pane. A capture returns it as one row per screen line, so a caller parsing
+// the reply saw one line of output arrive as several.
+//
+//libtmux:real-tmux
+func TestRunCommandRejoinsOutputTheTerminalWrapped(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: wrapped\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+	call(ctx, t, session, "resize_window", map[string]any{
+		"sessionName": "wrapped", "width": 40, "height": 24,
+	}, nil)
+
+	var ran ranCommand
+	result := call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "printf 'W%.0s' $(seq 1 100); echo", "timeoutSeconds": 30,
+	}, &ran)
+	if result.IsError {
+		t.Fatalf("run_command failed: %#v", result.Content)
+	}
+	if len(ran.Output) != 1 || len(ran.Output[0]) != 100 {
+		t.Errorf("output = %d lines of %v, want one line of 100 characters",
+			len(ran.Output), lineLengths(ran.Output))
+	}
+}
+
+// lineLengths reports each line's length, for a failure message that says how
+// the output was split rather than printing a hundred identical characters.
+func lineLengths(lines []string) []int {
+	lengths := make([]int, 0, len(lines))
+	for _, line := range lines {
+		lengths = append(lengths, len(line))
+	}
+	return lengths
+}
+
+// TestRunCommandRefusesAPaneWhoseShellHasExited covers a pane that can never
+// answer. Keys sent to it reach nothing, so the wait ran to its deadline and
+// then named the exited shell as what was still running.
+//
+//libtmux:real-tmux
+func TestRunCommandRefusesAPaneWhoseShellHasExited(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: exited\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	call(ctx, t, session, "set_option", map[string]any{
+		"scope": "pane", "paneId": pane, "name": "remain-on-exit", "value": "on",
+	}, nil)
+	call(ctx, t, session, "send_keys", map[string]any{"paneId": pane, "command": "exit"}, nil)
+	waitForDeadPane(ctx, t, session, pane)
+
+	began := time.Now()
+	result := call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "echo into-the-void", "timeoutSeconds": 20,
+	}, nil)
+	if !result.IsError {
+		t.Fatal("running a command in a pane whose shell has exited was accepted")
+	}
+	if waited := time.Since(began); waited > 10*time.Second {
+		t.Errorf("refusing a dead pane took %s, so it waited rather than checked", waited)
+	}
+}
+
+// waitForDeadPane blocks until tmux reports the pane's process has exited,
+// which happens a moment after the shell is told to leave.
+func waitForDeadPane(
+	ctx context.Context, t *testing.T, session *sdk.ClientSession, pane string,
+) {
+	t.Helper()
+	for attempt := 0; attempt < 100; attempt++ {
+		var info struct {
+			Dead bool `json:"dead"`
+		}
+		call(ctx, t, session, "get_pane_info", map[string]any{"paneId": pane}, &info)
+		if info.Dead {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the pane's shell never exited")
+}

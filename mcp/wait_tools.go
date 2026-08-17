@@ -146,8 +146,15 @@ type runCommandOutput struct {
 	Running string `json:"running,omitempty"`
 	// Output is what the pane showed while the command ran, read from where
 	// the pane stood when it was sent. It is the command's output as a person
-	// would see it, so it includes whatever the program painted.
+	// would see it, so it includes whatever the program painted. Lines the
+	// terminal wrapped are rejoined, so one line the command printed is one
+	// entry here however wide the pane is.
 	Output []string `json:"output,omitempty"`
+	// OutputUnavailable says why Output is missing, and is absent when the
+	// command simply printed nothing. The status is the answer either way, so
+	// failing to read the pane does not fail the call, but a caller branching
+	// on empty output needs to know which of the two it has.
+	OutputUnavailable string `json:"outputUnavailable,omitempty"`
 	// EffectiveTimeoutSeconds is the wait this call actually ran, which is
 	// what timeoutSeconds asked for unless the server's ceiling was lower. It
 	// is absent from a detached run, which waited for nothing.
@@ -253,6 +260,15 @@ func (t *tools) startCommand(
 		return nil, err
 	}
 
+	// A pane whose process has exited reads no keys, so the wrapper would never
+	// run and the wait would reach its deadline having done nothing. Saying so
+	// now costs one lookup and saves the caller the whole timeout.
+	if dead, _ := pane.Formats().PaneDead(); dead {
+		return nil, fmt.Errorf(
+			"pane %s has no process: its program exited, so it reads no keys. "+
+				"respawn_pane restarts it", pane.ID())
+	}
+
 	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil {
 		return nil, err
@@ -287,6 +303,12 @@ func (t *tools) startCommand(
 	// occupied, and an interactive shell redraws it as it goes, so the echo
 	// cannot be recognised and removed afterwards either.
 	//
+	// The column is recorded with the row because it says whether the command's
+	// last line ended. A cursor resting at column zero means the output ended
+	// with a newline and the closing row belongs to whatever comes next, which
+	// is the shell's own prompt; a cursor further along means that row holds the
+	// tail of the output itself.
+	//
 	// Both writes are redirected to files, so nothing about this appears in
 	// the pane. A marker printed into the pane would work as well and would be
 	// visible to whoever is looking at it.
@@ -296,13 +318,13 @@ func (t *tools) startCommand(
 	// the status recording and the signal with it and leave the wait hanging
 	// until its deadline.
 	mark := fmt.Sprintf(
-		"%s -S %s display-message -p -t %s '#{history_size} #{cursor_y}'",
+		"%s -S %s display-message -p -t %s '#{history_size} #{cursor_y} #{cursor_x}'",
 		shellQuote(runCommandBinary),
 		shellQuote(socket.Stdout[0]),
 		shellQuote(pane.ID().String()),
 	)
 	script := fmt.Sprintf(
-		"%s > %s; ( %s ); printf %%s $? > %s; %s > %s; %s -S %s wait-for -S %s",
+		"%s > %s; ( %s ); printf %%s $? > %s; %s > %s; %s -S %s wait-for -S %s\n",
 		mark,
 		shellQuote(openedPath),
 		input.Command,
@@ -313,8 +335,23 @@ func (t *tools) startCommand(
 		shellQuote(socket.Stdout[0]),
 		shellQuote(channel),
 	)
+
+	// The script is sourced from a file rather than typed. A shell's line
+	// editor reads what arrives as keys, so a command carrying a tab asked it
+	// to complete a filename and ran as whatever that inserted, and one
+	// carrying C-c or C-d was acted on rather than run. Only this path is
+	// typed, and this package chose every character in it.
+	//
+	// It also keeps the pane readable: what a person sees is one short line
+	// rather than the whole wrapper echoed across the screen.
+	scriptPath := filepath.Join(directory, "script")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		_ = os.RemoveAll(directory)
+		return nil, err
+	}
+	sourceScript := ". " + shellQuote(scriptPath)
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-		Command:         &script,
+		Command:         &sourceScript,
 		SuppressHistory: input.SuppressHistory,
 	}); err != nil {
 		_ = os.RemoveAll(directory)
@@ -408,7 +445,10 @@ func (t *tools) awaitCommand(
 // and a client that got a status with no output is better served than one
 // whose call failed because the pane went away after its command finished. A
 // command that timed out never wrote its closing mark, so it is read to the
-// bottom of the screen instead, which is as much as there is to know.
+// bottom of the screen instead, which is as much as there is to know. Why the
+// output is missing is reported rather than swallowed, because a caller
+// otherwise cannot tell a command that printed nothing from one whose output
+// could not be read.
 func attachCommandOutput(
 	ctx context.Context,
 	pane tmux.Pane,
@@ -416,56 +456,80 @@ func attachCommandOutput(
 	limits bounds,
 	output *runCommandOutput,
 ) {
-	opened, err := readMarkedRow(openedPath)
+	opened, err := readMark(openedPath)
 	if err != nil {
+		output.OutputUnavailable = err.Error()
 		return
 	}
 	now, err := readPaneState(ctx, pane)
 	if err != nil {
+		output.OutputUnavailable = err.Error()
 		return
 	}
 	// The marks are absolute positions in tmux's grid; a capture addresses
 	// rows relative to the top of the screen, and tmux renumbers every row
 	// when it trims the oldest.
-	request := tmux.CapturePaneRequest{Start: tmux.CaptureLine(opened - now.historySize)}
-	if closed, err := readMarkedRow(closedPath); err == nil {
-		request.End = tmux.CaptureLine(closed - now.historySize)
+	//
+	// Wrapped rows are rejoined, so a line longer than the pane arrives as the
+	// one line the command printed rather than as one entry per screen row.
+	request := tmux.CapturePaneRequest{
+		Start:       tmux.CaptureLine(opened.row - now.historySize),
+		JoinWrapped: true,
+	}
+	// The closing row belongs to the output only when the cursor stopped part
+	// way along it. A cursor at column zero means the last line ended, so that
+	// row holds whatever the shell drew next, and reading it returns a prompt
+	// as though the command had printed one.
+	if closed, err := readMark(closedPath); err == nil {
+		end := closed.row
+		if closed.column == 0 {
+			end--
+		}
+		if end < opened.row {
+			output.Output = nil
+			return
+		}
+		request.End = tmux.CaptureLine(end - now.historySize)
 	}
 	lines, err := pane.Capture(ctx, request)
 	if err != nil {
+		output.OutputUnavailable = err.Error()
 		return
-	}
-	// A command whose output ended in a newline leaves the cursor on the row
-	// below it, which is blank.
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
 	}
 	kept, report := limits.apply(lines)
 	output.Output = kept
 	output.truncation = report
 }
 
-// readMarkedRow reads one position the wrapper recorded, as tmux printed it:
-// a history size and a cursor row, whose sum is a position that does not move
-// when tmux renumbers the grid.
-func readMarkedRow(path string) (int, error) {
+// mark is where the pane's cursor stood when the wrapper recorded it.
+type mark struct {
+	// row is an absolute position in tmux's grid, being the history size plus
+	// the cursor's row, which does not move when tmux renumbers the grid.
+	row int
+	// column is the cursor's column. Zero means the line before it ended.
+	column int
+}
+
+// readMark reads one position the wrapper recorded, as tmux printed it: a
+// history size, a cursor row, and a cursor column.
+func readMark(path string) (mark, error) {
 	recorded, err := os.ReadFile(path)
 	if err != nil {
-		return 0, err
+		return mark{}, err
 	}
-	history, cursor, found := strings.Cut(strings.TrimSpace(string(recorded)), " ")
-	if !found {
-		return 0, fmt.Errorf("unreadable pane position %q", recorded)
+	fields := strings.Fields(string(recorded))
+	if len(fields) != 3 {
+		return mark{}, fmt.Errorf("unreadable pane position %q", recorded)
 	}
-	top, err := strconv.Atoi(history)
-	if err != nil {
-		return 0, fmt.Errorf("unreadable pane position %q", recorded)
+	numbers := make([]int, 0, len(fields))
+	for _, field := range fields {
+		number, err := strconv.Atoi(field)
+		if err != nil {
+			return mark{}, fmt.Errorf("unreadable pane position %q", recorded)
+		}
+		numbers = append(numbers, number)
 	}
-	row, err := strconv.Atoi(cursor)
-	if err != nil {
-		return 0, fmt.Errorf("unreadable pane position %q", recorded)
-	}
-	return top + row, nil
+	return mark{row: numbers[0] + numbers[1], column: numbers[2]}, nil
 }
 
 // shellQuote wraps a value so a POSIX shell reads it as one word, which the
