@@ -172,8 +172,21 @@ func summarizeClients(clients []tmux.Client) []attachedClient {
 	return summaries
 }
 
-// listServersInput takes no arguments.
-type listServersInput struct{}
+// listServersInput narrows the socket directory to the servers worth reporting.
+//
+// It has criteria because that directory is append-only in practice: tmux
+// leaves a socket file behind when a server exits, and a machine that has run
+// test suites accumulates hundreds. Reporting all of them by default made the
+// one useful answer — which servers are running — the hardest to find in the
+// reply, and cost a caller its context to say nothing.
+type listServersInput struct {
+	// Name keeps servers whose socket name contains this text.
+	Name string `json:"name,omitempty" jsonschema:"keep servers whose name contains this text, ignoring case"`
+	// IncludeDead adds the socket files no server is listening on.
+	IncludeDead bool `json:"includeDead,omitempty" jsonschema:"include socket files with no server running, which tmux leaves behind when a server exits"`
+	// MaxServers caps how many are reported.
+	MaxServers int `json:"maxServers,omitempty" jsonschema:"how many servers to report at most; the target is always kept"`
+}
 
 // serverSummary is one tmux server found on this machine.
 type serverSummary struct {
@@ -195,8 +208,15 @@ type serverSummary struct {
 
 // listServersOutput reports the tmux servers found.
 type listServersOutput struct {
-	// Servers are the tmux sockets found, the target first.
-	Servers []serverSummary `json:"servers,omitempty"`
+	// Servers are the tmux sockets found, the target first. Always an array,
+	// so a client can count it without checking that the field is there.
+	Servers []serverSummary `json:"servers"`
+	// Total is how many sockets the directory held before the criteria were
+	// applied, so a caller can see what it selected from.
+	Total int `json:"total"`
+	// Skipped is how many sockets the criteria left out. A reply that quietly
+	// dropped most of a directory would read as a machine with few servers.
+	Skipped int `json:"skipped,omitempty"`
 	// SearchedIn is the directory that was looked in, so a client that
 	// expected a server and did not find one can tell whether it was looking
 	// in the right place.
@@ -218,7 +238,7 @@ type listServersOutput struct {
 func (t *tools) listServers(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
-	_ listServersInput,
+	input listServersInput,
 ) (*mcp.CallToolResult, listServersOutput, error) {
 	directory := socketDirectory()
 	output := listServersOutput{SearchedIn: directory, Servers: []serverSummary{}}
@@ -237,11 +257,16 @@ func (t *tools) listServers(
 		if entry.IsDir() {
 			continue
 		}
+		output.Total++
 		path := filepath.Join(directory, entry.Name())
 		summary := serverSummary{
 			SocketPath: path,
 			Name:       entry.Name(),
 			IsTarget:   target != "" && resolvePath(path) == resolvePath(target),
+		}
+		if input.Name != "" && !containsFold(summary.Name, input.Name) {
+			output.Skipped++
+			continue
 		}
 		// Each is probed on its own handle. Asking through the configured one
 		// would be the retargeting this tool exists not to do.
@@ -251,6 +276,12 @@ func (t *tools) listServers(
 			if sessions, err := probe.Sessions(ctx); err == nil {
 				summary.Sessions = len(sessions)
 			}
+		}
+		// The server these tools address is always reported, so a caller can
+		// find itself in the reply whatever else it asked for.
+		if !summary.Alive && !summary.IsTarget && !input.IncludeDead {
+			output.Skipped++
+			continue
 		}
 		output.Servers = append(output.Servers, summary)
 	}
@@ -274,6 +305,12 @@ func (t *tools) listServers(
 		}
 		return output.Servers[i].Name < output.Servers[j].Name
 	})
+	// Capped after sorting, so what a cap keeps is the target and the servers
+	// nearest it by name rather than whichever the directory listed first.
+	if input.MaxServers > 0 && len(output.Servers) > input.MaxServers {
+		output.Skipped += len(output.Servers) - input.MaxServers
+		output.Servers = output.Servers[:input.MaxServers]
+	}
 	return nil, output, nil
 }
 
@@ -362,9 +399,12 @@ func addServerTools(server *mcp.Server, t *tools) {
 	register(server, t, &mcp.Tool{
 		Name:        "list_servers",
 		Annotations: readOnly("List tmux Servers"),
-		Description: "Every tmux socket on this machine, with the one these " +
-			"tools address marked. Discovery only: no tool here can be pointed " +
-			"at another one, which is decided when this server is started.",
+		Description: "The tmux servers running on this machine, with the one " +
+			"these tools address marked. tmux leaves a socket file behind when " +
+			"a server exits, so the ones nothing is listening on are left out " +
+			"unless includeDead asks for them. Discovery only: no tool here can " +
+			"be pointed at another one, which is decided when this server is " +
+			"started.",
 	}, t.listServers)
 	register(server, t, &mcp.Tool{
 		Name:        "display_message",

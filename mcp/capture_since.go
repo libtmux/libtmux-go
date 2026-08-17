@@ -586,10 +586,12 @@ func dropSeenRows(rows []string, cursor captureCursor) []string {
 // numbers move: tmux renumbers the whole grid when it trims the oldest row.
 func lineHash(line string) string {
 	sum := sha256.Sum256([]byte(line))
-	// Half the digest. It is compared against rows of one pane's screen, where
-	// this is far past the point of an accidental collision, and the cursor
-	// travels in every reply.
-	return hex.EncodeToString(sum[:16])
+	// Eight bytes of the digest, because the cursor travels in every reply and
+	// carries one of these per row: a full digest made a cursor for a screen of
+	// mostly blank rows cost more than sending that screen would have. These
+	// are compared against the rows of one pane, so even a pane holding a
+	// million rows is nowhere near an accidental collision.
+	return hex.EncodeToString(sum[:8])
 }
 
 // encodeCursor renders a cursor as one opaque string.

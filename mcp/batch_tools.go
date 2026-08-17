@@ -64,6 +64,11 @@ type batchOutput struct {
 	// failure, so this is also how many ran without one; the call that failed
 	// is the next entry in Results, with its error.
 	Completed int `json:"completed"`
+	// Skipped names the tools after the failure, in order, which never ran. A
+	// caller of the mutating batch has to know which of its changes were not
+	// made, and counting the difference between the calls it sent and the
+	// results it got back is not something a reply should ask of it.
+	Skipped []string `json:"skipped"`
 }
 
 // callReadOnlyToolsBatch runs several reading tools in one request.
@@ -125,6 +130,11 @@ func (t *tools) runBatch(
 	for _, call := range input.Calls {
 		known, served := t.dispatchers[call.Tool]
 		if !served {
+			if _, advertised := t.unbatchable[call.Tool]; advertised {
+				return nil, batchOutput{}, fmt.Errorf(
+					"%q cannot be called from inside a batch, so this batch ran "+
+						"nothing; list its calls here instead", call.Tool)
+			}
 			return nil, batchOutput{}, fmt.Errorf(
 				"%q is not a tool this server serves, so this batch ran nothing", call.Tool)
 		}
@@ -163,6 +173,14 @@ func (t *tools) runBatch(
 		}
 		output.Results = append(output.Results, batchResult{Tool: call.Tool, Result: decoded})
 		output.Completed++
+	}
+
+	// One result is appended per call attempted, so whatever is left is what
+	// the stop skipped.
+	skipped := input.Calls[len(output.Results):]
+	output.Skipped = make([]string, 0, len(skipped))
+	for _, call := range skipped {
+		output.Skipped = append(output.Skipped, call.Tool)
 	}
 	return nil, output, nil
 }
@@ -221,7 +239,8 @@ func addBatchTools(server *mcp.Server, t *tools) {
 		Annotations: readOnly("Batch of Reading Tools"),
 		Description: "Run several reading tools in one request, in order. " +
 			"Refuses the whole batch if any call would change tmux, so a batch " +
-			"believed to be read-only never alters a session.",
+			"believed to be read-only never alters a session. Stops at the first " +
+			"failure, and names the calls it skipped.",
 	}, t.callReadOnlyToolsBatch)
 	register(server, t, &mcp.Tool{
 		Name:        "call_mutating_tools_batch",
@@ -229,13 +248,14 @@ func addBatchTools(server *mcp.Server, t *tools) {
 		Description: "Run several tools in one request, in order, including ones " +
 			"that change tmux. Laying out a window is a split, a resize, and a " +
 			"command per pane; this makes it one call. Stops at the first " +
-			"failure, and what already ran stays, because tmux has no transaction.",
+			"failure, and what already ran stays, because tmux has no " +
+			"transaction; the reply names the calls it skipped.",
 	}, t.callMutatingToolsBatch)
 	register(server, t, &mcp.Tool{
 		Name:        "call_destructive_tools_batch",
 		Annotations: destructive("Batch of Ending Tools"),
 		Description: "Run several tools in one request, in order, including the " +
 			"ones that end something. Stops at the first failure, and nothing it " +
-			"already ended comes back.",
+			"already ended comes back; the reply names the calls it skipped.",
 	}, t.callDestructiveToolsBatch)
 }

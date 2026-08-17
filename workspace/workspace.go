@@ -378,9 +378,17 @@ func validLayout(layout string) bool {
 // nested returns err unchanged when it already carries ErrInvalidWorkspace,
 // so a failure deep in a document reports one sentinel prefix rather than one
 // per nesting level.
+//
+// A failure with no node to point at says nothing rather than "line 0", which
+// is the convention windowPosition follows: a reader given a line number that
+// cannot be a line looks for the mistake there, and the parser's own message
+// usually names the real one.
 func nested(line int, err error) error {
 	if errors.Is(err, ErrInvalidWorkspace) {
 		return err
+	}
+	if line <= 0 {
+		return fmt.Errorf("%w: %w", ErrInvalidWorkspace, err)
 	}
 	return fmt.Errorf("%w: line %d: %w", ErrInvalidWorkspace, line, err)
 }

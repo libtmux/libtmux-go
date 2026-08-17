@@ -176,8 +176,20 @@ func (t *tools) pasteText(
 	return nil, output, nil
 }
 
-// copyModeInput puts a pane into or out of copy mode.
-type copyModeInput struct {
+// exitCopyModeInput returns a pane to passing keys to the program in it.
+//
+// Entering and leaving take separate types even though leaving needs nothing
+// extra, because sharing one put scrollUp in the schema of a tool that cannot
+// act on it, and a client reading the schema had no way to know that.
+type exitCopyModeInput struct {
+	// PaneID is the tmux pane id. Empty uses the active pane.
+	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
+	// SessionName picks the session when PaneID is empty.
+	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to use when paneId is empty"`
+}
+
+// enterCopyModeInput puts a pane into copy mode.
+type enterCopyModeInput struct {
 	// PaneID is the tmux pane id. Empty uses the active pane.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
 	// SessionName picks the session when PaneID is empty.
@@ -206,7 +218,7 @@ type copyModeOutput struct {
 func (t *tools) enterCopyMode(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
-	input copyModeInput,
+	input enterCopyModeInput,
 ) (*mcp.CallToolResult, copyModeOutput, error) {
 	// Guarded like a write, because it is one from the person's side: copy
 	// mode takes their keystrokes away from their shell. exit_copy_mode is
@@ -226,7 +238,7 @@ func (t *tools) enterCopyMode(
 func (t *tools) exitCopyMode(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
-	input copyModeInput,
+	input exitCopyModeInput,
 ) (*mcp.CallToolResult, copyModeOutput, error) {
 	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {
@@ -278,7 +290,7 @@ type sendKeysInput struct {
 	// "Escape" is a key rather than those letters. That is also the way back
 	// from a pane left holding a command by a run_command that timed out,
 	// which would otherwise time out every later command sent to it.
-	Command string `json:"command"`
+	Command string `json:"command" jsonschema:"what to type, read as tmux key names: \"C-c\" interrupts the pane and \"Escape\" is a key rather than those letters; use paste_text for text to take literally"`
 }
 
 // sendKeysOutput reports what was sent.

@@ -898,3 +898,24 @@ func TestMissingDirectoriesReportsWhatTmuxWouldIgnore(t *testing.T) {
 		t.Errorf("a workspace whose directories exist reported %v", none)
 	}
 }
+
+// TestAFailureWithNoLineDoesNotClaimLineZero covers a document the parser
+// rejected before it reached a node. A reader told "line 0" looks for the
+// mistake at a line that cannot exist, when the parser's own message names the
+// real one.
+func TestAFailureWithNoLineDoesNotClaimLineZero(t *testing.T) {
+	for name, document := range map[string]string{
+		"empty":     "",
+		"not a map": "[unclosed\n  windows: nonsense: : :\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := workspace.Parse([]byte(document))
+			if err == nil {
+				t.Fatal("the document was accepted")
+			}
+			if strings.Contains(err.Error(), "line 0") {
+				t.Errorf("the rejection claims a line that cannot exist: %v", err)
+			}
+		})
+	}
+}

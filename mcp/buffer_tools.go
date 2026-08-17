@@ -115,7 +115,13 @@ func (t *tools) showBuffer(
 	}
 	contents, err := t.target.ShowBuffer(ctx, &name)
 	if err != nil {
-		return nil, showBufferOutput{}, err
+		// tmux says only that show-buffer failed, which reads as a broken tool
+		// rather than a buffer that is not there. Naming what was looked for
+		// also shows the prefix, which is why a person's own buffer name does
+		// not resolve here.
+		return nil, showBufferOutput{}, fmt.Errorf(
+			"no buffer named %q: only buffers staged by this server can be read, "+
+				"and load_buffer returns the name to use: %w", name, err)
 	}
 	kept, report := limits.apply(strings.Split(contents, "\n"))
 	return textResult(kept), showBufferOutput{

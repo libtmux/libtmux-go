@@ -89,12 +89,16 @@ type listedPane struct {
 	Status *paneStatus `json:"status,omitempty"`
 }
 
-// listPanesOutput carries the pane list. Panes is omitempty because the MCP
-// SDK validates structured output against its generated schema even when a
-// tool reports failure, and a nil slice is not an array.
+// listPanesOutput carries the pane list.
+//
+// Panes is always an array, including when nothing matched, so a client can
+// count what it got without first checking that the field is there. Every
+// return below sets it for that reason: the MCP SDK validates structured
+// output against its generated schema even when a tool reports failure, and a
+// nil slice is not an array.
 type listPanesOutput struct {
 	// Panes are the panes that matched.
-	Panes []listedPane `json:"panes,omitempty"`
+	Panes []listedPane `json:"panes"`
 	// Total is how many panes the server held before the criteria were
 	// applied, so a caller can see what its filter selected from.
 	Total int `json:"total"`
@@ -112,8 +116,6 @@ func (t *tools) listPanes(
 	}
 	// One snapshot rather than a listing per pane, so session and window names
 	// come from the same observation as the panes themselves.
-	// An empty list rather than no list: a client reading .panes.length on a
-	// server holding nothing should see zero, not fail on a missing field.
 	snapshot, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listPanesOutput{Panes: []listedPane{}}, err

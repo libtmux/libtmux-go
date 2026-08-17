@@ -2021,3 +2021,226 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 		t.Fatal("a client that asked for logs heard nothing about a timeout")
 	}
 }
+
+// advertisedSchema is a tool's input schema as a client receives it, decoded
+// far enough to ask what each argument is called and what it says about itself.
+type advertisedSchema struct {
+	Properties map[string]struct {
+		Description string `json:"description"`
+	} `json:"properties"`
+}
+
+// schemaOf decodes one tool's advertised input schema.
+func schemaOf(t *testing.T, tool *sdk.Tool) advertisedSchema {
+	t.Helper()
+	encoded, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatalf("%s: marshal input schema: %v", tool.Name, err)
+	}
+	var schema advertisedSchema
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		t.Fatalf("%s: decode input schema: %v", tool.Name, err)
+	}
+	return schema
+}
+
+// TestEveryArgumentSaysWhatItIs is a structural gate on the surface a client
+// reads. An argument with no description is invisible to anything choosing
+// tools from the schema alone, which is how an agent chooses them.
+func TestEveryArgumentSaysWhatItIs(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+
+	tools, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools.Tools {
+		for name, property := range schemaOf(t, tool).Properties {
+			if strings.TrimSpace(property.Description) == "" {
+				t.Errorf("%s: argument %q has no description", tool.Name, name)
+			}
+		}
+	}
+}
+
+// TestNoToolOffersAnArgumentItIgnores covers arguments that reached a schema by
+// sharing a Go type with another tool. A client cannot tell such an argument
+// from one that works, so it asks for behaviour it will not get.
+func TestNoToolOffersAnArgumentItIgnores(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+
+	tools, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ignored := map[string]string{
+		"exit_copy_mode": "scrollUp",
+	}
+	for _, tool := range tools.Tools {
+		unwanted, watched := ignored[tool.Name]
+		if !watched {
+			continue
+		}
+		if _, offered := schemaOf(t, tool).Properties[unwanted]; offered {
+			t.Errorf("%s offers %q, which it does not read", tool.Name, unwanted)
+		}
+	}
+}
+
+// TestAListWithNoMatchesIsStillAList covers the shape a client parses. A
+// collection that disappears when it is empty makes every caller check whether
+// the field is there before it can count what matched, and the three listing
+// tools disagreed about it.
+//
+//libtmux:real-tmux
+func TestAListWithNoMatchesIsStillAList(t *testing.T) {
+	session, _, ctx := connect(t)
+
+	for _, listing := range []struct {
+		tool       string
+		arguments  map[string]any
+		collection string
+	}{
+		{"list_panes", map[string]any{"command": "no-such-command-xyz"}, "panes"},
+		{"list_sessions", map[string]any{"name": "no-such-session-xyz"}, "sessions"},
+		{"list_windows", map[string]any{"name": "no-such-window-xyz"}, "windows"},
+	} {
+		t.Run(listing.tool, func(t *testing.T) {
+			result := call(ctx, t, session, listing.tool, listing.arguments, nil)
+			if result.IsError {
+				t.Fatalf("%s failed: %#v", listing.tool, result.Content)
+			}
+			encoded, err := json.Marshal(result.StructuredContent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var reply map[string]json.RawMessage
+			if err := json.Unmarshal(encoded, &reply); err != nil {
+				t.Fatal(err)
+			}
+			found, present := reply[listing.collection]
+			if !present {
+				t.Fatalf("%s left out %q entirely: %s",
+					listing.tool, listing.collection, encoded)
+			}
+			if string(found) != "[]" {
+				t.Errorf("%s reported %s = %s, want []",
+					listing.tool, listing.collection, found)
+			}
+		})
+	}
+}
+
+// TestABatchNamesTheCallsItSkipped covers what a caller of the mutating batch
+// needs after a failure: which of its changes were never made. Counting the
+// difference between the calls sent and the results returned is not something
+// a reply should ask of a client.
+//
+//libtmux:real-tmux
+func TestABatchNamesTheCallsItSkipped(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: batched\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var batch struct {
+		Completed int      `json:"completed"`
+		Skipped   []string `json:"skipped"`
+		Results   []struct {
+			Tool  string `json:"tool"`
+			Error string `json:"error"`
+		} `json:"results"`
+	}
+	result := call(ctx, t, session, "call_mutating_tools_batch", map[string]any{
+		"calls": []map[string]any{
+			{"tool": "set_pane_title", "arguments": map[string]any{"paneId": pane, "title": "ran"}},
+			{"tool": "set_pane_title", "arguments": map[string]any{"paneId": "%999", "title": "fails"}},
+			{"tool": "set_pane_title", "arguments": map[string]any{"paneId": pane, "title": "skipped"}},
+			{"tool": "select_pane", "arguments": map[string]any{"paneId": pane}},
+		},
+	}, &batch)
+	if result.IsError {
+		t.Fatalf("the batch itself failed: %#v", result.Content)
+	}
+	if batch.Completed != 1 || len(batch.Results) != 2 {
+		t.Fatalf("completed = %d with %d results, want 1 and 2",
+			batch.Completed, len(batch.Results))
+	}
+	want := []string{"set_pane_title", "select_pane"}
+	if !slices.Equal(batch.Skipped, want) {
+		t.Errorf("skipped = %q, want %q", batch.Skipped, want)
+	}
+}
+
+// TestABatchSaysWhyItCannotBatchABatch covers a refusal that used to deny the
+// existence of a tool the client can see in the listing.
+//
+//libtmux:real-tmux
+func TestABatchSaysWhyItCannotBatchABatch(t *testing.T) {
+	session, _, ctx := connect(t)
+
+	result := call(ctx, t, session, "call_readonly_tools_batch", map[string]any{
+		"calls": []map[string]any{
+			{"tool": "call_readonly_tools_batch", "arguments": map[string]any{}},
+		},
+	}, nil)
+	if !result.IsError {
+		t.Fatal("a batch inside a batch was accepted")
+	}
+	text, ok := result.Content[0].(*sdk.TextContent)
+	if !ok {
+		t.Fatalf("the refusal carried %T", result.Content[0])
+	}
+	if strings.Contains(text.Text, "is not a tool this server serves") {
+		t.Errorf("the refusal denies a tool that is advertised: %s", text.Text)
+	}
+	if !strings.Contains(text.Text, "cannot be called from inside a batch") {
+		t.Errorf("the refusal does not say why: %s", text.Text)
+	}
+}
+
+// TestListServersLeavesOutSocketsNothingIsListeningOn covers a reply whose size
+// was set by how many test suites the machine had ever run. tmux leaves a
+// socket file behind when a server exits, so the directory only grows, and a
+// listing that reported all of them buried the running ones.
+//
+//libtmux:real-tmux
+func TestListServersLeavesOutSocketsNothingIsListeningOn(t *testing.T) {
+	session, _, ctx := connect(t)
+
+	var listed struct {
+		Servers []struct {
+			Name     string `json:"name"`
+			Alive    bool   `json:"alive"`
+			IsTarget bool   `json:"isTarget"`
+		} `json:"servers"`
+		Total   int `json:"total"`
+		Skipped int `json:"skipped"`
+	}
+	result := call(ctx, t, session, "list_servers", map[string]any{}, &listed)
+	if result.IsError {
+		t.Fatalf("list_servers failed: %#v", result.Content)
+	}
+	for _, found := range listed.Servers {
+		if !found.Alive && !found.IsTarget {
+			t.Errorf("socket %q has no server and is not the target, so it should "+
+				"have been left out", found.Name)
+		}
+	}
+	if listed.Total < len(listed.Servers) {
+		t.Errorf("total = %d with %d reported, want total to count them all",
+			listed.Total, len(listed.Servers))
+	}
+
+	// A cap is reported rather than applied quietly, so a caller can tell a
+	// machine with one server from a reply that stopped after one.
+	var capped struct {
+		Servers []struct{} `json:"servers"`
+		Skipped int        `json:"skipped"`
+	}
+	call(ctx, t, session, "list_servers", map[string]any{"maxServers": 1}, &capped)
+	if len(capped.Servers) > 1 {
+		t.Errorf("maxServers 1 returned %d servers", len(capped.Servers))
+	}
+}

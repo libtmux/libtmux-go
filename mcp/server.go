@@ -52,6 +52,10 @@ func register[In, Out any](
 	}
 	mcp.AddTool(server, tool, handler)
 	if !t.batchable {
+		// Advertised, but not reachable from inside a batch. Remembering which
+		// tools those are is what lets a batch say so, rather than telling a
+		// client that a tool it can see listed does not exist.
+		t.unbatchable[tool.Name] = struct{}{}
 		return
 	}
 	t.dispatchers[tool.Name] = dispatcher{
@@ -105,6 +109,7 @@ func newServer(target tmux.Server) (*mcp.Server, *tools) {
 		target:      target,
 		level:       level,
 		dispatchers: map[string]dispatcher{},
+		unbatchable: map[string]struct{}{},
 		batchable:   true,
 		jobs:        newJobs(),
 	}
@@ -203,6 +208,9 @@ type tools struct {
 	// dispatchers is how a batch reaches each advertised tool, filled in by
 	// register as the tools are advertised.
 	dispatchers map[string]dispatcher
+	// unbatchable names the tools this server advertises but does not put in
+	// that table, so a batch asked for one can say which it is.
+	unbatchable map[string]struct{}
 	// batchable records whether a tool being registered belongs in that table.
 	// The batch tools themselves do not: nesting one inside another buries
 	// which call failed.
