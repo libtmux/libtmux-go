@@ -16,6 +16,11 @@ import (
 //
 // The SDK sends nothing until a client sets a level, so this costs a client
 // that did not ask for logs precisely nothing.
+//
+// MCP deprecated logging in protocol version 2026-07-28, keeping it working for
+// at least twelve months. It stays until clients stop reading it: a client that
+// sets a level today still hears why a wait ended with nothing, and dropping
+// that quietly is worse than outliving the deprecation by a release.
 func logToClient(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -27,9 +32,10 @@ func logToClient(
 		// line is not worth failing the call it describes.
 		return
 	}
+	//nolint:staticcheck // SA1019: deprecated with a twelve-month window; see above.
 	_ = request.Session.Log(ctx, &mcp.LoggingMessageParams{
 		Logger: "libtmux",
-		Level:  mcp.LoggingLevel(level),
+		Level:  mcp.LoggingLevel(level), //nolint:staticcheck // SA1019: as above.
 		Data:   data,
 	})
 }
