@@ -1114,34 +1114,44 @@ var taskIndexLink = regexp.MustCompile(`\[([A-Z]\w*(?:\.\w+)?)\]`)
 func taskIndexSymbols(t *testing.T) []string {
 	t.Helper()
 
+	// One file at a time rather than the whole directory: ParseDir does not
+	// consider build tags and is deprecated for it, and a file names its own
+	// package, which is all the grouping this needs.
 	fileSet := token.NewFileSet()
-	packages, err := parser.ParseDir(fileSet, documentationPackageDir(t), nil, parser.ParseComments)
+	directory := documentationPackageDir(t)
+	entries, err := os.ReadDir(directory)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, parsed := range packages {
-		if name != "tmux" {
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
 			continue
 		}
-		for _, file := range parsed.Files {
-			if file.Doc == nil || !strings.Contains(file.Doc.Text(), taskIndexHeading) {
-				continue
-			}
-			text := file.Doc.Text()
-			start := strings.Index(text, taskIndexHeading) + len(taskIndexHeading)
-			rest := text[start:]
-			if end := strings.Index(rest, "\n# "); end >= 0 {
-				rest = rest[:end]
-			}
-			var symbols []string
-			for _, match := range taskIndexLink.FindAllStringSubmatch(rest, -1) {
-				if !slices.Contains(symbols, match[1]) {
-					symbols = append(symbols, match[1])
-				}
-			}
-			slices.Sort(symbols)
-			return symbols
+		file, err := parser.ParseFile(
+			fileSet, filepath.Join(directory, entry.Name()), nil, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
 		}
+		if file.Name.Name != "tmux" {
+			continue
+		}
+		if file.Doc == nil || !strings.Contains(file.Doc.Text(), taskIndexHeading) {
+			continue
+		}
+		text := file.Doc.Text()
+		start := strings.Index(text, taskIndexHeading) + len(taskIndexHeading)
+		rest := text[start:]
+		if end := strings.Index(rest, "\n# "); end >= 0 {
+			rest = rest[:end]
+		}
+		var symbols []string
+		for _, match := range taskIndexLink.FindAllStringSubmatch(rest, -1) {
+			if !slices.Contains(symbols, match[1]) {
+				symbols = append(symbols, match[1])
+			}
+		}
+		slices.Sort(symbols)
+		return symbols
 	}
 	t.Fatalf("no package doc contains a %q section", taskIndexHeading)
 	return nil
@@ -1164,22 +1174,32 @@ func TestTaskIndexEntryPointsCarryRunnableExamples(t *testing.T) {
 		t.Fatal("the task index names no symbols")
 	}
 
+	// One file at a time rather than the whole directory: ParseDir does not
+	// consider build tags and is deprecated for it, and the names of example
+	// functions are all this needs.
 	fileSet := token.NewFileSet()
-	packages, err := parser.ParseDir(fileSet, documentationPackageDir(t), nil, parser.ParseComments)
+	directory := documentationPackageDir(t)
+	entries, err := os.ReadDir(directory)
 	if err != nil {
 		t.Fatal(err)
 	}
 	examples := map[string]bool{}
-	for _, parsed := range packages {
-		for _, file := range parsed.Files {
-			for _, declaration := range file.Decls {
-				function, isFunction := declaration.(*ast.FuncDecl)
-				if !isFunction || function.Recv != nil {
-					continue
-				}
-				if name, found := strings.CutPrefix(function.Name.Name, "Example"); found {
-					examples[strings.ReplaceAll(name, "_", ".")] = true
-				}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		file, err := parser.ParseFile(
+			fileSet, filepath.Join(directory, entry.Name()), nil, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range file.Decls {
+			function, isFunction := declaration.(*ast.FuncDecl)
+			if !isFunction || function.Recv != nil {
+				continue
+			}
+			if name, found := strings.CutPrefix(function.Name.Name, "Example"); found {
+				examples[strings.ReplaceAll(name, "_", ".")] = true
 			}
 		}
 	}

@@ -20,15 +20,23 @@ func TestExportedWorkflowCompilesFromDownstreamModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The downstream module declares whatever the module under test declares.
+	// Naming a version here instead means a bump to the real go.mod leaves this
+	// one behind, and the toolchain then refuses the build for a reason that
+	// has nothing to do with what the test is checking.
+	goDirective, err := moduleGoDirective(moduleRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
 	directory := t.TempDir()
 	module := fmt.Sprintf(`module example.invalid/libtmux-smoke
 
-go 1.23.0
+go %s
 
 require github.com/libtmux/libtmux-go v0.0.0
 
 replace github.com/libtmux/libtmux-go => %q
-`, moduleRoot)
+`, goDirective, moduleRoot)
 	writeDownstreamFile(t, filepath.Join(directory, "go.mod"), module)
 	writeDownstreamFile(t, filepath.Join(directory, "workflow_test.go"), `package smoke
 
@@ -161,4 +169,19 @@ func findModuleRoot() (string, error) {
 		return "", errors.New("the go command reported no directory for the tmux module")
 	}
 	return root, nil
+}
+
+// moduleGoDirective reports the language version the module at root declares,
+// so a downstream module built against it can declare the same one.
+func moduleGoDirective(root string) (string, error) {
+	contents, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(contents), "\n") {
+		if version, found := strings.CutPrefix(strings.TrimSpace(line), "go "); found {
+			return strings.TrimSpace(version), nil
+		}
+	}
+	return "", fmt.Errorf("%s/go.mod declares no go version", root)
 }
