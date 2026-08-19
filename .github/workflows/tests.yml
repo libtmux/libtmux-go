@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         module: [".", "examples", "workspace", "mcp", "benchmarks"]
-        go-version: ["1.25", "1.26", "1.27"]
+        go-version: ["1.26", "1.27"]
     steps:
       # Whole history, because a test checks that the version the mcp module
       # reports from a source build has not fallen behind the releases, and a

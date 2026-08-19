@@ -108,12 +108,13 @@ rather than trusting that it is.
 
 ### The language floor, and what enforces it
 
-The floor tracks upstream's support window, so it moves. Four places state it
-and all four have to agree: the `go` directive in each module's `go.mod`,
-`run.go` in `.golangci.yml`, the version matrix in the tests workflow, and the
-claim README.md makes. `go build` will not catch a disagreement — the `go`
-directive does not gate standard library APIs. `go vet` does, reporting
-`X requires goN.M or later`, which is why vet runs ahead of the tests in CI.
+The floor tracks upstream's support window, so it moves. Five places state it
+and all five have to agree: the `go` directive in each module's `go.mod`, the
+one in `go.work`, `run.go` in `.golangci.yml`, the version matrix in the tests
+workflow, and the claim README.md makes. `go build` will not catch a
+disagreement — the `go` directive does not gate standard library APIs. `go vet`
+does, reporting `X requires goN.M or later`, which is why vet runs ahead of the
+tests in CI.
 
 Raising the floor unlocks syntax. `golangci-lint` reports what is available at
 the version `run.go` names, so the modernize linter finds it once the floor
