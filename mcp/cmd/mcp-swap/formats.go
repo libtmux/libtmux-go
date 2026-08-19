@@ -149,7 +149,7 @@ func tomlPreserved(text []byte, table string) map[string]any {
 		return nil
 	}
 	kept := map[string]any{}
-	for _, line := range strings.Split(string(text[start:end]), "\n") {
+	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
 			// A sub-table header; its keys are the environment, read
@@ -184,7 +184,7 @@ func tomlEnvironment(text []byte, table string) map[string]any {
 	}
 	environment := map[string]any{}
 	inEnvironment := false
-	for _, line := range strings.Split(string(text[start:end]), "\n") {
+	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
 			inEnvironment = trimmed == "["+table+".env]"
@@ -273,7 +273,7 @@ func readTOMLEntry(text []byte, table string) (map[string]any, bool) {
 		return nil, false
 	}
 	entry := map[string]any{}
-	for _, line := range strings.Split(string(text[start:end]), "\n") {
+	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
 		trimmed := strings.TrimSpace(line)
 		name, value, ok := strings.Cut(trimmed, "=")
 		if !ok {

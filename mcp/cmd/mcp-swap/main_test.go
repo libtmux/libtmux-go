@@ -174,7 +174,7 @@ func TestModulePathMatchesTheModuleThisWasBuiltFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := ""
-	for _, line := range strings.Split(string(contents), "\n") {
+	for line := range strings.SplitSeq(string(contents), "\n") {
 		if after, found := strings.CutPrefix(strings.TrimSpace(line), "module "); found {
 			want = strings.TrimSpace(after)
 			break

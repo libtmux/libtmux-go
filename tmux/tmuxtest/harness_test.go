@@ -199,7 +199,7 @@ func TestHarnessSetupAndCleanupFailuresAreRedacted(t *testing.T) {
 				}
 			}
 			if arguments, readErr := os.ReadFile(recordPath); readErr == nil {
-				for _, argument := range strings.Fields(string(arguments)) {
+				for argument := range strings.FieldsSeq(string(arguments)) {
 					if filepath.IsAbs(argument) && strings.Contains(text, argument) {
 						t.Fatalf("failure output exposed tmux argument %q\n%s", argument, text)
 					}

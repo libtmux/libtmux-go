@@ -2119,7 +2119,7 @@ func parityGoModulePath(root string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read Go module path: %w", err)
 	}
-	for _, line := range strings.Split(string(contents), "\n") {
+	for line := range strings.SplitSeq(string(contents), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) == 2 && fields[0] == "module" {
 			return strings.Trim(fields[1], "\"`"), nil
@@ -3829,7 +3829,7 @@ func parityPrivatePythonEntry(entry parityEntry) bool {
 	if strings.HasPrefix(entry.Kind, "private-") {
 		return true
 	}
-	for _, component := range strings.Split(filepath.ToSlash(entry.Source), "/") {
+	for component := range strings.SplitSeq(filepath.ToSlash(entry.Source), "/") {
 		name := strings.TrimSuffix(component, filepath.Ext(component))
 		if parityPrivatePythonName(name) {
 			return true

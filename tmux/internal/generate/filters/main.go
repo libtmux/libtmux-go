@@ -530,7 +530,7 @@ func tmuxPackageDirectoryFrom(startDirectory string) (string, error) {
 }
 
 func goModulePath(contents []byte) string {
-	for _, line := range strings.Split(string(contents), "\n") {
+	for line := range strings.SplitSeq(string(contents), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) >= 2 && fields[0] == "module" {
 			return fields[1]
