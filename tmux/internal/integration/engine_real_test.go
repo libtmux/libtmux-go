@@ -615,16 +615,14 @@ func TestControlPoolServesConcurrentCallersWithoutProcesses(t *testing.T) {
 	var group sync.WaitGroup
 	failures := make(chan error, 4)
 	for worker := range 4 {
-		group.Add(1)
-		go func() {
-			defer group.Done()
+		group.Go(func() {
 			for range 10 {
 				if _, err := live.SearchWindows(ctx, nil); err != nil {
 					failures <- fmt.Errorf("worker %d: %w", worker, err)
 					return
 				}
 			}
-		}()
+		})
 	}
 	group.Wait()
 	close(failures)

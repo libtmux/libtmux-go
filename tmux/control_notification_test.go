@@ -253,17 +253,15 @@ func TestControlNotificationOwnsArgumentsAndSupportsConcurrentReads(t *testing.T
 
 	const readers = 32
 	var wait sync.WaitGroup
-	wait.Add(readers)
 	for range readers {
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			if notification.Kind() != ControlNotificationSessionRenamed {
 				t.Errorf("Kind() = %q", notification.Kind())
 			}
 			if got := notification.Arguments(); !slices.Equal(got, []string{"$7", "original name"}) {
 				t.Errorf("Arguments() = %#v", got)
 			}
-		}()
+		})
 	}
 	wait.Wait()
 }
