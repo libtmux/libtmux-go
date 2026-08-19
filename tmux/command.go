@@ -202,8 +202,7 @@ func (e *commandTransportError) Unwrap() error { return e.err }
 // turn a short listing into a confident empty one. That is the single worst
 // answer available, so it is refused here.
 func commandTransportFailure(err error) error {
-	var executableError *exec.Error
-	if errors.As(err, &executableError) {
+	if _, ok := errors.AsType[*exec.Error](err); ok {
 		return err
 	}
 	if errors.Is(err, exec.ErrWaitDelay) {

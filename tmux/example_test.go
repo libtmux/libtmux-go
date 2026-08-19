@@ -476,8 +476,7 @@ func ExampleErrNoServer() {
 		case err != nil:
 			// Anything else means the question could not be answered: a socket
 			// that cannot be read, a path that is not a socket, a tmux too old.
-			var commandError *tmux.CommandError
-			if errors.As(err, &commandError) {
+			if commandError, ok := errors.AsType[*tmux.CommandError](err); ok {
 				fmt.Println(commandError.Subcommand, commandError.Result.ExitCode)
 			}
 		default:

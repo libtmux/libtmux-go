@@ -243,8 +243,7 @@ func harnessFailure(operation string, cause error) error {
 		status = "invalid state"
 		classification = errInvalidHarnessState
 	default:
-		var exitError *exec.ExitError
-		if errors.As(cause, &exitError) {
+		if _, ok := errors.AsType[*exec.ExitError](cause); ok {
 			status = "process exited"
 			classification = errHarnessProcessExited
 		}

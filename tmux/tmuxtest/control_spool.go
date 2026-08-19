@@ -144,8 +144,7 @@ func sanitizeControlSpoolError(operation string, err error) error {
 	if err == nil {
 		return nil
 	}
-	var pathErr *os.PathError
-	if errors.As(err, &pathErr) {
+	if pathErr, ok := errors.AsType[*os.PathError](err); ok {
 		err = pathErr.Err
 	}
 	return fmt.Errorf("%s: %w", operation, err)

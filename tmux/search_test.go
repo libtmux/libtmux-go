@@ -440,8 +440,7 @@ func TestRawSearchListFailureIsReported(t *testing.T) {
 	}}
 
 	values, err := serverWithRunner(runner).SearchSessions(context.Background(), nil)
-	var commandError *CommandError
-	if !errors.As(err, &commandError) {
+	if _, ok := errors.AsType[*CommandError](err); !ok {
 		t.Fatalf("SearchSessions() error = %v, want CommandError", err)
 	}
 	if values != nil {
