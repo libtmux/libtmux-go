@@ -292,6 +292,20 @@ var failureGuidance = struct {
 // real sessions in.
 var suiteEnvironment = []string{"TMPDIR", "GOTMPDIR", "TMUX_TMPDIR"}
 
+// SuiteRootTagVariable names the environment variable that tags a suite's
+// temporary root. go test runs packages in parallel and every suite among them
+// creates a root beside the others, so a test spawning a child suite sets this
+// to tell its child's root from theirs.
+const SuiteRootTagVariable = "LIBTMUX_SUITE_ROOT_TAG"
+
+// suiteRootPrefix is the prefix a suite's temporary root is created under.
+func suiteRootPrefix() string {
+	if tag := os.Getenv(SuiteRootTagVariable); tag != "" {
+		return "ltg-" + tag + "-"
+	}
+	return "ltg-"
+}
+
 // Main runs the one-call package lifecycle for tmuxtest. It prepares short
 // temporary paths, redirects [suiteEnvironment] into them, runs m, cleans
 // registered servers, restores the environment, and returns the final status.
@@ -305,7 +319,7 @@ func Main(m *testing.M) int {
 }
 
 func runSuite(run func() int) int {
-	root, err := os.MkdirTemp(shortTempBase(), "ltg-")
+	root, err := os.MkdirTemp(shortTempBase(), suiteRootPrefix())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, harnessFailure("create short temporary root", err))
 		return 2
