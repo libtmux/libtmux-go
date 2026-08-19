@@ -106,6 +106,22 @@ $ go test -race -count=1 ./...
 Generated code is checked in. Regenerate it and confirm the tree is unchanged
 rather than trusting that it is.
 
+### The language floor, and what enforces it
+
+The floor tracks upstream's support window, so it moves. Four places state it
+and all four have to agree: the `go` directive in each module's `go.mod`,
+`run.go` in `.golangci.yml`, the version matrix in the tests workflow, and the
+claim README.md makes. `go build` will not catch a disagreement — the `go`
+directive does not gate standard library APIs. `go vet` does, reporting
+`X requires goN.M or later`, which is why vet runs ahead of the tests in CI.
+
+Raising the floor unlocks syntax. `golangci-lint` reports what is available at
+the version `run.go` names, so the modernize linter finds it once the floor
+moves. Prefer that to `go fix` for finding the work: a whole-package
+`go fix ./...` silently drops fixes that conflict within a package, reports
+nothing on a second pass, and so reads as converged while leaving rewrites
+behind. Applying one analyzer at a time with `go fix -<analyzer>` does not.
+
 One tmux is not enough. The commands above run against whichever tmux is on
 `PATH`; version-specific breakage is real and has shipped before, so run the
 supported releases before anything ships. A directory of tmux builds with

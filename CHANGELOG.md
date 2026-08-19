@@ -9,6 +9,22 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### All modules
+
+The Go floor is 1.25, raised from 1.23. It now tracks upstream's support
+window — Go supports a release until two newer ones exist — rather than a
+version chosen once, so expect it to move as releases age out.
+
+This is a hard requirement, not a suggestion. A consumer on an older Go sees
+`module ... requires go >= 1.25.0` and cannot build; `go get` will upgrade the
+toolchain and rewrite the consumer's own `go` directive to match, which passes
+the same floor on to anything that imports them. A toolchain pinned with
+`GOTOOLCHAIN=local`, as distribution packages and air-gapped builds often do,
+has no upgrade path but the toolchain itself.
+
+Nothing about the API changed. The syntax the floor unlocks was taken across
+the tree, and `golangci-lint` now gates it so the older forms cannot return.
+
 ### mcp
 
 `run_command` returns what the command actually printed. Three things could make
