@@ -3,6 +3,7 @@ package mcp
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -156,7 +157,7 @@ func (t *tools) searchPanes(
 	input searchPanesInput,
 ) (*mcp.CallToolResult, searchPanesOutput, error) {
 	if strings.TrimSpace(input.Text) == "" {
-		return nil, searchPanesOutput{}, fmt.Errorf("text is required")
+		return nil, searchPanesOutput{}, errors.New("text is required")
 	}
 	matcher, err := compileMatcher(input.Text, input.Regex, input.MatchCase)
 	if err != nil {

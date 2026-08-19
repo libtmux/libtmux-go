@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -125,7 +126,7 @@ func (t *tools) runBatch(
 	tier SafetyLevel,
 ) (*mcp.CallToolResult, batchOutput, error) {
 	if len(input.Calls) == 0 {
-		return nil, batchOutput{}, fmt.Errorf("a batch needs at least one call")
+		return nil, batchOutput{}, errors.New("a batch needs at least one call")
 	}
 	for _, call := range input.Calls {
 		known, served := t.dispatchers[call.Tool]

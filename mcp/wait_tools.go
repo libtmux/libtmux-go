@@ -251,7 +251,7 @@ func (t *tools) startCommand(
 	input runCommandInput,
 ) (*job, error) {
 	if strings.TrimSpace(input.Command) == "" {
-		return nil, fmt.Errorf("command is required")
+		return nil, errors.New("command is required")
 	}
 	server := t.target
 	pane, err := t.resolvePaneToWrite(
@@ -274,7 +274,7 @@ func (t *tools) startCommand(
 		return nil, err
 	}
 	if len(socket.Stdout) == 0 || socket.Stdout[0] == "" {
-		return nil, fmt.Errorf("tmux did not report its socket path")
+		return nil, errors.New("tmux did not report its socket path")
 	}
 
 	directory, err := os.MkdirTemp("", "libtmux-mcp-run")
@@ -838,7 +838,7 @@ func compileNamedMatchers(patterns []string, asRegex, matchCase bool) ([]namedMa
 	matchers := make([]namedMatcher, 0, len(patterns))
 	for _, pattern := range patterns {
 		if strings.TrimSpace(pattern) == "" {
-			return nil, fmt.Errorf("a pattern must not be empty")
+			return nil, errors.New("a pattern must not be empty")
 		}
 		match, err := compileWaitMatcher(pattern, asRegex, matchCase)
 		if err != nil {

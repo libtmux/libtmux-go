@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -368,7 +369,7 @@ func (t *tools) displayMessage(
 	input displayMessageInput,
 ) (*mcp.CallToolResult, displayMessageOutput, error) {
 	if strings.TrimSpace(input.Format) == "" {
-		return nil, displayMessageOutput{}, fmt.Errorf("format is required")
+		return nil, displayMessageOutput{}, errors.New("format is required")
 	}
 	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -71,7 +72,7 @@ func (t *tools) showOption(
 	input showOptionInput,
 ) (*mcp.CallToolResult, showOptionOutput, error) {
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, showOptionOutput{}, fmt.Errorf("name is required")
+		return nil, showOptionOutput{}, errors.New("name is required")
 	}
 	scope, err := resolveScope(input.Scope)
 	if err != nil {
@@ -151,7 +152,7 @@ func (t *tools) setOption(
 	input setOptionInput,
 ) (*mcp.CallToolResult, setOptionOutput, error) {
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, setOptionOutput{}, fmt.Errorf("name is required")
+		return nil, setOptionOutput{}, errors.New("name is required")
 	}
 	scope, err := resolveScope(input.Scope)
 	if err != nil {
@@ -318,7 +319,7 @@ func (t *tools) setEnvironment(
 	input setEnvironmentInput,
 ) (*mcp.CallToolResult, setEnvironmentOutput, error) {
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, setEnvironmentOutput{}, fmt.Errorf("name is required")
+		return nil, setEnvironmentOutput{}, errors.New("name is required")
 	}
 	session, err := t.resolveSession(ctx, input.SessionName)
 	if err != nil {

@@ -99,7 +99,7 @@ func (t *tools) signalChannel(
 func validChannel(name string) (string, error) {
 	channel := strings.TrimSpace(name)
 	if channel == "" {
-		return "", fmt.Errorf("channel is required")
+		return "", errors.New("channel is required")
 	}
 	if strings.HasPrefix(channel, "-") {
 		return "", fmt.Errorf("channel %q must not begin with a dash", name)

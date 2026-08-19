@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -39,7 +40,7 @@ func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, 
 	}
 	switch len(sessions) {
 	case 0:
-		return tmux.Session{}, fmt.Errorf("the tmux server has no sessions")
+		return tmux.Session{}, errors.New("the tmux server has no sessions")
 	case 1:
 		return sessions[0], nil
 	default:

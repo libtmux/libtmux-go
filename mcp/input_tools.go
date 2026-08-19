@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -56,7 +57,7 @@ func (t *tools) sendKeysBatch(
 	input sendKeysBatchInput,
 ) (*mcp.CallToolResult, sendKeysBatchOutput, error) {
 	if len(input.Keys) == 0 {
-		return nil, sendKeysBatchOutput{}, fmt.Errorf("keys is required")
+		return nil, sendKeysBatchOutput{}, errors.New("keys is required")
 	}
 	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
 	if err != nil {
@@ -129,7 +130,7 @@ func (t *tools) pasteText(
 	input pasteTextInput,
 ) (*mcp.CallToolResult, pasteTextOutput, error) {
 	if input.Text == "" {
-		return nil, pasteTextOutput{}, fmt.Errorf("text is required")
+		return nil, pasteTextOutput{}, errors.New("text is required")
 	}
 	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting text")
 	if err != nil {
@@ -257,7 +258,7 @@ func (t *tools) sendKeys(
 	input sendKeysInput,
 ) (*mcp.CallToolResult, sendKeysOutput, error) {
 	if strings.TrimSpace(input.Command) == "" {
-		return nil, sendKeysOutput{}, fmt.Errorf("command is required")
+		return nil, sendKeysOutput{}, errors.New("command is required")
 	}
 	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
 	if err != nil {

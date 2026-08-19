@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -213,10 +214,10 @@ func (t *tools) resizePane(
 	input resizePaneInput,
 ) (*mcp.CallToolResult, resizePaneOutput, error) {
 	if input.Width < 0 || input.Height < 0 {
-		return nil, resizePaneOutput{}, fmt.Errorf("a size must not be negative")
+		return nil, resizePaneOutput{}, errors.New("a size must not be negative")
 	}
 	if input.Width == 0 && input.Height == 0 && !input.Zoom {
-		return nil, resizePaneOutput{}, fmt.Errorf("width, height, or zoom is required")
+		return nil, resizePaneOutput{}, errors.New("width, height, or zoom is required")
 	}
 
 	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
@@ -292,7 +293,7 @@ func (t *tools) selectLayout(
 ) (*mcp.CallToolResult, selectLayoutOutput, error) {
 	layout := strings.TrimSpace(input.Layout)
 	if layout == "" && !input.Spread {
-		return nil, selectLayoutOutput{}, fmt.Errorf("layout or spread is required")
+		return nil, selectLayoutOutput{}, errors.New("layout or spread is required")
 	}
 	if layout != "" && !layoutPresets[layout] && !layoutString.MatchString(layout) {
 		return nil, selectLayoutOutput{}, fmt.Errorf(
@@ -389,10 +390,10 @@ func (t *tools) swapPane(
 	input swapPaneInput,
 ) (*mcp.CallToolResult, swapPaneOutput, error) {
 	if strings.TrimSpace(input.PaneID) == "" || strings.TrimSpace(input.WithPaneID) == "" {
-		return nil, swapPaneOutput{}, fmt.Errorf("paneId and withPaneId are both required")
+		return nil, swapPaneOutput{}, errors.New("paneId and withPaneId are both required")
 	}
 	if input.PaneID == input.WithPaneID {
-		return nil, swapPaneOutput{}, fmt.Errorf("a pane cannot be swapped with itself")
+		return nil, swapPaneOutput{}, errors.New("a pane cannot be swapped with itself")
 	}
 	server := t.target
 	pane, err := server.Pane(ctx, tmux.PaneID(input.PaneID))
@@ -446,10 +447,10 @@ func (t *tools) resizeWindow(
 	input resizeWindowInput,
 ) (*mcp.CallToolResult, resizeWindowOutput, error) {
 	if input.Width < 0 || input.Height < 0 {
-		return nil, resizeWindowOutput{}, fmt.Errorf("a size must not be negative")
+		return nil, resizeWindowOutput{}, errors.New("a size must not be negative")
 	}
 	if input.Width == 0 && input.Height == 0 {
-		return nil, resizeWindowOutput{}, fmt.Errorf("width or height is required")
+		return nil, resizeWindowOutput{}, errors.New("width or height is required")
 	}
 	window, err := t.resolveWindow(ctx, input.WindowID, input.SessionName)
 	if err != nil {
@@ -501,7 +502,7 @@ func (t *tools) moveWindow(
 	input moveWindowInput,
 ) (*mcp.CallToolResult, moveWindowOutput, error) {
 	if strings.TrimSpace(input.WindowID) == "" {
-		return nil, moveWindowOutput{}, fmt.Errorf("windowId is required")
+		return nil, moveWindowOutput{}, errors.New("windowId is required")
 	}
 	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {

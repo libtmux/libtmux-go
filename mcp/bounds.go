@@ -1,7 +1,7 @@
 package mcp
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -67,7 +67,7 @@ type bounds struct {
 // the unbounded reply the one a caller gets by accident.
 func resolveBounds(maxLines, maxBytes int) (bounds, error) {
 	if maxLines < 0 || maxBytes < 0 {
-		return bounds{}, fmt.Errorf("maxLines and maxBytes must not be negative")
+		return bounds{}, errors.New("maxLines and maxBytes must not be negative")
 	}
 	resolved := bounds{lines: maxLines, bytes: maxBytes}
 	if resolved.lines == 0 {

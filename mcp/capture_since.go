@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -633,7 +634,7 @@ func encodeCursor(paneID string, state paneState, read paneRead) string {
 func decodeCursor(value string) (captureCursor, error) {
 	rest, found := strings.CutPrefix(value, cursorPrefix)
 	if !found {
-		return captureCursor{}, fmt.Errorf("that is not a cursor this server issued")
+		return captureCursor{}, errors.New("that is not a cursor this server issued")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(rest)
 	if err != nil {
@@ -649,7 +650,7 @@ func decodeCursor(value string) (captureCursor, error) {
 			cursor.Version, cursorVersion)
 	}
 	if cursor.PaneID == "" {
-		return captureCursor{}, fmt.Errorf("the cursor names no pane")
+		return captureCursor{}, errors.New("the cursor names no pane")
 	}
 	return cursor, nil
 }
