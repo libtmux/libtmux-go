@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -603,10 +603,5 @@ func stripTrailingCommas(blanked []byte) []byte {
 // sortedKeys returns a map's keys in a stable order, so a rewritten entry does
 // not change shape between runs for no reason.
 func sortedKeys(values map[string]any) []string {
-	names := make([]string, 0, len(values))
-	for name := range values {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(values))
 }

@@ -2,7 +2,8 @@ package tmux
 
 import (
 	"context"
-	"sort"
+	"maps"
+	"slices"
 )
 
 var (
@@ -252,11 +253,7 @@ func captureDisplayPopupRequest(request DisplayPopupRequest) (displayPopupValues
 		}
 	}
 
-	keys := make([]string, 0, len(request.Environment))
-	for key := range request.Environment {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(request.Environment))
 	values.environment = make([]string, 0, len(keys))
 	for _, key := range keys {
 		if err := validateEnvironmentName(key); err != nil {

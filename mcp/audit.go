@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -192,10 +193,5 @@ func digest(value string) map[string]any {
 // auditedIdentifierNames lists what is logged in the clear, for the test that
 // keeps this honest as tools are added.
 func auditedIdentifierNames() []string {
-	names := make([]string, 0, len(auditIdentifiers))
-	for name := range auditIdentifiers {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(auditIdentifiers))
 }

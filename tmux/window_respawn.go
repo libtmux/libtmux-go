@@ -2,7 +2,8 @@ package tmux
 
 import (
 	"context"
-	"sort"
+	"maps"
+	"slices"
 )
 
 // RespawnRequest configures restarting a window's or pane's process on tmux
@@ -89,11 +90,7 @@ func respawnRequestArguments(subcommand string, request RespawnRequest) ([]strin
 		}
 	}
 
-	keys := make([]string, 0, len(request.Environment))
-	for key := range request.Environment {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(request.Environment))
 	for _, key := range keys {
 		if err := validateEnvironmentName(key); err != nil {
 			return nil, err

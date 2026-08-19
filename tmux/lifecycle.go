@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -1283,11 +1282,7 @@ func splitPaneStylingRequested(request SplitPaneRequest) bool {
 }
 
 func lifecycleEnvironmentArguments(environment map[string]string) ([]string, error) {
-	keys := make([]string, 0, len(environment))
-	for key := range environment {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(environment))
 	arguments := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if err := validateEnvironmentName(key); err != nil {
