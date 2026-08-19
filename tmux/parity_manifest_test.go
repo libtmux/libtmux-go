@@ -2107,12 +2107,7 @@ func parityPackageAlias(directory, declaredName string, external bool) string {
 }
 
 func parityInternalPackage(directory string) bool {
-	for _, component := range strings.Split(directory, "/") {
-		if component == "internal" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(directory, "/"), "internal")
 }
 
 func parityGoModulePath(root string) (string, error) {
@@ -3844,12 +3839,7 @@ func parityPrivatePythonEntry(entry parityEntry) bool {
 		}
 	}
 	baseID, _, _ := strings.Cut(entry.ID, "#")
-	for _, component := range strings.Split(baseID, ".") {
-		if parityPrivatePythonName(component) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(strings.Split(baseID, "."), parityPrivatePythonName)
 }
 
 func parityPrivatePythonName(name string) bool {

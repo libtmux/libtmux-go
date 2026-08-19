@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -1808,12 +1809,7 @@ func operatorJSONSuffix(operator string) string {
 }
 
 func fieldHasOperator(field fieldSpec, wanted string) bool {
-	for _, operator := range field.Operators {
-		if operator == wanted {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(field.Operators, wanted)
 }
 
 func specHasOperator(spec filterSpec, wanted string) bool {

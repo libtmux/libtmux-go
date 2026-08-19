@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -82,12 +83,7 @@ func WaitForLine(ctx context.Context, t testing.TB, pane tmux.Pane, line string)
 	t.Helper()
 	WaitForScreen(ctx, t, pane, fmt.Sprintf("the line %q", line),
 		func(screen []string) bool {
-			for _, candidate := range screen {
-				if candidate == line {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(screen, line)
 		})
 }
 

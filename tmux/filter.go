@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -111,10 +112,8 @@ func splitFilterLookup(lookup string) ([]string, string, error) {
 		return nil, "", invalidFilter("lookup path must not be empty")
 	}
 	path := strings.Split(lookup, "__")
-	for _, segment := range path {
-		if segment == "" {
-			return nil, "", invalidFilter("lookup path contains an empty segment")
-		}
+	if slices.Contains(path, "") {
+		return nil, "", invalidFilter("lookup path contains an empty segment")
 	}
 
 	operator := "exact"
@@ -190,12 +189,7 @@ func filterExactInPossible[T comparable](exact *T, values []T) bool {
 	if exact == nil || values == nil {
 		return true
 	}
-	for _, value := range values {
-		if value == *exact {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, *exact)
 }
 
 func filterPointersEqual[T comparable](left, right *T) bool {
@@ -296,12 +290,7 @@ func filterIntCriteriaPossible(
 		return true
 	}
 	if values != nil {
-		for _, value := range values {
-			if allowed(value) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(values, allowed)
 	}
 
 	lower, lowerSet, lowerStrict := 0, false, false
