@@ -849,8 +849,8 @@ func replaceSuiteEnvironment(root string) (func() error, error) {
 	restores := make([]func() error, 0, len(suiteEnvironment))
 	restore := func() error {
 		var first error
-		for index := len(restores) - 1; index >= 0; index-- {
-			if err := restores[index](); err != nil && first == nil {
+		for _, undo := range slices.Backward(restores) {
+			if err := undo(); err != nil && first == nil {
 				first = err
 			}
 		}
