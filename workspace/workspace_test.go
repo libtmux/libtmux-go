@@ -581,11 +581,12 @@ func TestBuildLeavesAChosenTransportAlone(t *testing.T) {
 // so a layout that reads correctly in the file comes out scrambled.
 func TestPanesLandInTheOrderTheFileListsThem(t *testing.T) {
 	server, ctx := testServer(t)
-	document := "session_name: order\nwindows:\n  - window_name: w\n    panes:\n"
+	var document strings.Builder
+	document.WriteString("session_name: order\nwindows:\n  - window_name: w\n    panes:\n")
 	for _, marker := range []string{"A", "B", "C", "D"} {
-		document += "      - shell: sh -c 'printf " + marker + "; sleep 60'\n"
+		document.WriteString("      - shell: sh -c 'printf " + marker + "; sleep 60'\n")
 	}
-	described, err := workspace.Parse([]byte(document))
+	described, err := workspace.Parse([]byte(document.String()))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

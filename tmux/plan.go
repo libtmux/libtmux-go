@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -543,7 +544,7 @@ func (s OpStatus) String() string {
 	case OpSkipped:
 		return "skipped"
 	default:
-		return "OpStatus(" + fmt.Sprint(uint8(s)) + ")"
+		return "OpStatus(" + strconv.Itoa(int(s)) + ")"
 	}
 }
 

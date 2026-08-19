@@ -5,7 +5,6 @@ package integration
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -26,7 +25,7 @@ func TestFromEnvDiscoversRealPaneAndContainingHierarchy(t *testing.T) {
 	snapshot := mustRealSnapshot(t, server)
 	wantPane := snapshot.Panes()[0]
 	env := map[string]string{
-		"TMUX":      fmt.Sprintf("%s,stale-pid,999", server.SocketPath()),
+		"TMUX":      server.SocketPath() + ",stale-pid,999",
 		"TMUX_PANE": wantPane.ID().String(),
 	}
 
@@ -71,7 +70,7 @@ func TestPaneFromEnvReportsMissingPaneOnLiveServer(t *testing.T) {
 		t.Fatalf("split-window stdout = %#v, want pane id", result.Stdout)
 	}
 	env := map[string]string{
-		"TMUX":      fmt.Sprintf("%s,1,0", server.SocketPath()),
+		"TMUX":      server.SocketPath() + ",1,0",
 		"TMUX_PANE": result.Stdout[0],
 	}
 	mustRealCommand(t, server, "kill-pane", "-t", result.Stdout[0])
