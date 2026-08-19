@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -2180,12 +2181,8 @@ func newParityFingerprintScope(
 
 func (s parityFingerprintScope) withRenames(renamed map[string]string) parityFingerprintScope {
 	merged := make(map[string]string, len(s.renames)+len(renamed))
-	for name, replacement := range s.renames {
-		merged[name] = replacement
-	}
-	for name, replacement := range renamed {
-		merged[name] = replacement
-	}
+	maps.Copy(merged, s.renames)
+	maps.Copy(merged, renamed)
 	s.renames = merged
 	return s
 }

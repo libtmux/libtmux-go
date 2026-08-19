@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -777,9 +778,7 @@ func snapshotRowValues(version Version, overrides map[string]string) map[string]
 		"start_time":  "456",
 		"socket_path": "/tmp/libtmux-test.sock",
 	}
-	for name, value := range overrides {
-		values[name] = value
-	}
+	maps.Copy(values, overrides)
 	return values
 }
 

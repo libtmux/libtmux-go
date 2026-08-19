@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"strings"
 	"sync"
 	"testing"
@@ -233,8 +234,6 @@ func copyStringMap(value map[string]string) map[string]string {
 		return nil
 	}
 	result := make(map[string]string, len(value))
-	for key, item := range value {
-		result[key] = item
-	}
+	maps.Copy(result, value)
 	return result
 }

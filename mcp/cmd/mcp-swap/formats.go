@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 )
@@ -109,9 +110,7 @@ func tomlTableSpan(text []byte, table string) (start int, end int, found bool) {
 // of the same name, since it describes the swap being made now.
 func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	merged := map[string]any{}
-	for name, value := range fresh {
-		merged[name] = value
-	}
+	maps.Copy(merged, fresh)
 	for name, value := range existing {
 		switch name {
 		case "command", "args", "type":
@@ -129,16 +128,12 @@ func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	environment := map[string]any{}
 	for _, name := range []string{"env", "environment"} {
 		if previous, ok := existing[name].(map[string]any); ok {
-			for key, value := range previous {
-				environment[key] = value
-			}
+			maps.Copy(environment, previous)
 		}
 	}
 	for _, name := range []string{"env", "environment"} {
 		if incoming, ok := fresh[name].(map[string]any); ok {
-			for key, value := range incoming {
-				environment[key] = value
-			}
+			maps.Copy(environment, incoming)
 			if len(environment) > 0 {
 				merged[name] = environment
 			}
