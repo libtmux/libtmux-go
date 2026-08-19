@@ -16,22 +16,27 @@ linters:
     - errname
     - errorlint
     - exhaustive
+    - exptostd
     - fatcontext
     - gocheckcompilerdirectives
     - gocritic
     - gomoddirectives
     - goprintffuncname
+    - intrange
     - iotamixing
     - makezero
     - misspell
+    - modernize
     - nilerr
     - nilnesserr
     - nolintlint
+    - perfsprint
     - predeclared
     - reassign
     - recvcheck
     - revive
     - unconvert
+    - usestdlibvars
     - usetesting
     - wastedassign
   settings:
