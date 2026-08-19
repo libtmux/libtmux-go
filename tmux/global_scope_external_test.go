@@ -86,7 +86,7 @@ func TestServerLegacyGlobalScopeMethodsAreRemoved(t *testing.T) {
 		t.Fatalf("legacy global Server method set has %d entries, want 24", len(legacy))
 	}
 
-	serverType := reflect.TypeOf((*tmux.Server)(nil))
+	serverType := reflect.TypeFor[*tmux.Server]()
 	for name := range legacy {
 		if _, found := serverType.MethodByName(name); found {
 			t.Errorf("legacy Server.%s remains", name)

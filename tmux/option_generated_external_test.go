@@ -276,11 +276,11 @@ func TestTypedOptionSettersExcludeWrongScopesAndAliases(t *testing.T) {
 func TestSetArrayResultExposesOnlyConfirmedProgress(t *testing.T) {
 	t.Parallel()
 
-	typeOf := reflect.TypeOf(tmux.SetArrayResult{})
+	typeOf := reflect.TypeFor[tmux.SetArrayResult]()
 	if typeOf.NumField() != 2 || typeOf.Field(0).Name != "Replaced" ||
 		typeOf.Field(0).Type.Kind() != reflect.Bool ||
 		typeOf.Field(1).Name != "AppliedIndices" ||
-		typeOf.Field(1).Type != reflect.TypeOf([]int{}) {
+		typeOf.Field(1).Type != reflect.TypeFor[[]int]() {
 		t.Fatalf("SetArrayResult fields = %#v, want bool Replaced and []int AppliedIndices", reflect.VisibleFields(typeOf))
 	}
 }
@@ -288,7 +288,7 @@ func TestSetArrayResultExposesOnlyConfirmedProgress(t *testing.T) {
 func TestOptionValueErrorExposesOnlySafeOptionName(t *testing.T) {
 	t.Parallel()
 
-	typeOf := reflect.TypeOf(tmux.OptionValueError{})
+	typeOf := reflect.TypeFor[tmux.OptionValueError]()
 	if typeOf.NumField() != 1 || typeOf.Field(0).Name != "Name" ||
 		typeOf.Field(0).Type.Kind() != reflect.String {
 		t.Fatalf("OptionValueError fields = %#v, want only string Name", reflect.VisibleFields(typeOf))
