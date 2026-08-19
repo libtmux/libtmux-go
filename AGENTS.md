@@ -116,12 +116,18 @@ disagreement — the `go` directive does not gate standard library APIs. `go vet
 does, reporting `X requires goN.M or later`, which is why vet runs ahead of the
 tests in CI.
 
-Raising the floor unlocks syntax. `golangci-lint` reports what is available at
-the version `run.go` names, so the modernize linter finds it once the floor
-moves. Prefer that to `go fix` for finding the work: a whole-package
-`go fix ./...` silently drops fixes that conflict within a package, reports
-nothing on a second pass, and so reads as converged while leaving rewrites
-behind. Applying one analyzer at a time with `go fix -<analyzer>` does not.
+Raising the floor unlocks syntax, and two tools find it. Neither alone is
+enough.
+
+`golangci-lint`'s modernize linter reports what is available at the version
+`run.go` names, and gates it, so the older forms cannot come back. It does not
+carry every analyzer `go fix` has — `errorsastype` is one it lacks — so a clean
+lint run is not proof there is nothing left.
+
+`go fix` has the full set, but a whole-package `go fix ./...` silently drops
+fixes that conflict within a package and then reports nothing on a second pass,
+so it reads as converged while leaving rewrites behind. Applying one analyzer
+at a time with `go fix -<analyzer>` does not.
 
 One tmux is not enough. The commands above run against whichever tmux is on
 `PATH`; version-specific breakage is real and has shipped before, so run the

@@ -27,6 +27,12 @@ the tree, and `golangci-lint` now gates it so the older forms cannot return.
 
 ### mcp
 
+The server names the signal that ended it. A client tearing the transport down
+sends SIGTERM, and the exit line reported the cancellation that produced rather
+than the signal itself, so an ordinary disconnect read as `context canceled` —
+the mechanism, not the reason, and impossible to tell from a fault. It now
+reads `terminated signal received`, or `interrupt signal received` for SIGINT.
+
 `run_command` returns what the command actually printed. Three things could make
 the reply disagree with the command. A tab anywhere in a command reached the
 shell's line editor as a request to complete a filename, so a different command
