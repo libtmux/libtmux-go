@@ -751,7 +751,7 @@ func TestBuffersAreThisServersOwn(t *testing.T) {
 	// A buffer this server did not create, standing in for a person's copy.
 	if err := target.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: "a private copy",
-		Name: stringPointer("someones-own"),
+		Name: new("someones-own"),
 	}); err != nil {
 		t.Fatalf("stage a foreign buffer: %v", err)
 	}
@@ -791,7 +791,7 @@ func TestBuffersAreThisServersOwn(t *testing.T) {
 
 // stringPointer is the address of a value, which several tmux requests take to
 // tell an absent field from an empty one.
-func stringPointer(value string) *string { return &value }
+//
 
 // TestTheInstructionsNameTheToolsTheyRecommend guards the text a client reads
 // before it calls anything. A recommendation for a tool that is not advertised

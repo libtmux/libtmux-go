@@ -82,7 +82,7 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 	}
 	windowMarker := t.TempDir() + "/window-environment"
 	created, err := windows[0].NewWindow(ctx, tmux.NewWindowRequest{
-		Name:        newWindowName("phase6-after"),
+		Name:        new("phase6-after"),
 		Direction:   tmux.NewWindowDirectionAfter,
 		Environment: map[string]string{"PHASE6_ENV": "window-value"},
 		Command:     "printf '%s' \"$PHASE6_ENV\" > " + strconv.Quote(windowMarker) + "; sleep 30",
@@ -113,7 +113,7 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 		}
 
 		replacement, err := windows[0].NewWindow(ctx, tmux.NewWindowRequest{
-			Name:         newWindowName("phase6-replacement"),
+			Name:         new("phase6-replacement"),
 			KillExisting: true,
 			Command:      "sleep 30",
 		})

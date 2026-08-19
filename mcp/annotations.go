@@ -16,8 +16,8 @@ func readOnly(title string) *mcp.ToolAnnotations {
 		Title:           title,
 		ReadOnlyHint:    true,
 		IdempotentHint:  true,
-		DestructiveHint: boolPtr(false),
-		OpenWorldHint:   boolPtr(false),
+		DestructiveHint: new(false),
+		OpenWorldHint:   new(false),
 	}
 }
 
@@ -28,8 +28,8 @@ func mutating(title string) *mcp.ToolAnnotations {
 		Title:           title,
 		ReadOnlyHint:    false,
 		IdempotentHint:  false,
-		DestructiveHint: boolPtr(false),
-		OpenWorldHint:   boolPtr(false),
+		DestructiveHint: new(false),
+		OpenWorldHint:   new(false),
 	}
 }
 
@@ -40,9 +40,7 @@ func destructive(title string) *mcp.ToolAnnotations {
 		Title:           title,
 		ReadOnlyHint:    false,
 		IdempotentHint:  false,
-		DestructiveHint: boolPtr(true),
-		OpenWorldHint:   boolPtr(false),
+		DestructiveHint: new(true),
+		OpenWorldHint:   new(false),
 	}
 }
-
-func boolPtr(value bool) *bool { return &value }
