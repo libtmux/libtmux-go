@@ -588,7 +588,7 @@ func readJSONC(text []byte) (map[string]any, error) {
 func stripTrailingCommas(blanked []byte) []byte {
 	out := make([]byte, len(blanked))
 	copy(out, blanked)
-	for index := 0; index < len(out); index++ {
+	for index := range out {
 		if out[index] != ',' {
 			continue
 		}

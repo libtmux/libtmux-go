@@ -257,7 +257,7 @@ func (t *tools) readSince(
 // read is repeated until they agree.
 func readVisible(ctx context.Context, pane tmux.Pane, expectPID int) (paneRead, error) {
 	var last paneState
-	for attempt := 0; attempt < stableReadAttempts; attempt++ {
+	for range stableReadAttempts {
 		before, err := readPaneState(ctx, pane)
 		if err != nil {
 			return paneRead{}, err
@@ -306,7 +306,7 @@ func readVisible(ctx context.Context, pane tmux.Pane, expectPID int) (paneRead, 
 
 // readDelta reads the rows written since a cursor.
 func readDelta(ctx context.Context, pane tmux.Pane, cursor captureCursor) (paneRead, error) {
-	for attempt := 0; attempt < stableReadAttempts; attempt++ {
+	for range stableReadAttempts {
 		before, err := readPaneState(ctx, pane)
 		if err != nil {
 			return paneRead{}, err

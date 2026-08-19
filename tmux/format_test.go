@@ -655,7 +655,7 @@ func quotedFormatRecord(values []string) []byte {
 		if index != 0 {
 			encoded = append(encoded, '|')
 		}
-		for valueIndex := 0; valueIndex < len(value); valueIndex++ {
+		for valueIndex := range len(value) {
 			if strings.IndexByte(shellEscaped, value[valueIndex]) >= 0 {
 				encoded = append(encoded, '\\')
 			}

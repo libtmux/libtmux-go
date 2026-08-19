@@ -213,7 +213,7 @@ func encodeControlCommand(arguments []string, commandList bool) (string, error) 
 			continue
 		}
 		quoted := false
-		for offset := 0; offset < len(argument); offset++ {
+		for offset := range len(argument) {
 			value := argument[offset]
 			if value >= 0x20 && value <= 0x7e && value != '\'' {
 				if !quoted {

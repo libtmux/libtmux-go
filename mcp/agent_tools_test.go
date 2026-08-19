@@ -2176,7 +2176,7 @@ func waitForDeadPane(
 	ctx context.Context, t *testing.T, session *sdk.ClientSession, pane string,
 ) {
 	t.Helper()
-	for attempt := 0; attempt < 100; attempt++ {
+	for range 100 {
 		var info struct {
 			Dead bool `json:"dead"`
 		}

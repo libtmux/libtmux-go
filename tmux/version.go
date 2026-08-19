@@ -173,7 +173,7 @@ func (v Version) Compare(other Version) int {
 func (v Version) CompareRelease(other Version) int {
 	left := legacyVersionKey(v.raw)
 	right := legacyVersionKey(other.raw)
-	for index := 0; index < min(len(left), len(right)); index++ {
+	for index := range min(len(left), len(right)) {
 		if left[index] < right[index] {
 			return -1
 		}
