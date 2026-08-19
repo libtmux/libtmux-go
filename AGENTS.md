@@ -176,10 +176,11 @@ control characters in format output, a tab separator came back as an
 underscore, and the tmux module's client-registration poll never matched.
 Testing with an inherited shell environment hides that entire class of bug.
 
-**`libtmux-mcp: context canceled` is not a fault.** It is the server handling
-the SIGTERM it gets when a client tears the transport down, including when the
-Inspector's own 15-second connect timeout fires. Treat it as the symptom of a
-client giving up, not as the cause.
+**`libtmux-mcp: terminated signal received` is not a fault.** It is the server
+handling the SIGTERM it gets when a client tears the transport down, including
+when the Inspector's own 15-second connect timeout fires. Treat it as the
+symptom of a client giving up, not as the cause. It used to read `context
+canceled`, which named the mechanism and left the reason to be guessed at.
 
 **Ports do not matter in `--cli` mode.** The CLI builds a `StdioClientTransport`
 and spawns the command directly, binding nothing. `CLIENT_PORT` and
