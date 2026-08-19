@@ -23,7 +23,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -150,8 +150,8 @@ func reportTools(target tmux.Server) error {
 	if err != nil {
 		return err
 	}
-	sort.Slice(listed.Tools, func(i, j int) bool {
-		return listed.Tools[i].Name < listed.Tools[j].Name
+	slices.SortFunc(listed.Tools, func(a, b *sdk.Tool) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 	level := os.Getenv(tmuxmcp.SafetyEnvironmentVariable)
 	if level == "" {

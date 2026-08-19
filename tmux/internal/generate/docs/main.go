@@ -35,7 +35,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -226,7 +226,7 @@ func findMarkdown(root string) ([]string, error) {
 		}
 		return nil
 	})
-	sort.Strings(documents)
+	slices.Sort(documents)
 	return documents, err
 }
 

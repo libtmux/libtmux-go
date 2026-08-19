@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -279,8 +279,8 @@ func (t *tools) showEnvironment(
 			Name: key, Value: value.Value, Removed: value.Removed,
 		})
 	}
-	sort.Slice(output.Variables, func(i, j int) bool {
-		return output.Variables[i].Name < output.Variables[j].Name
+	slices.SortFunc(output.Variables, func(a, b environmentEntry) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 	return nil, output, nil
 }
@@ -442,8 +442,8 @@ func (t *tools) showHooks(
 		}
 		output.Hooks = append(output.Hooks, hook{Name: name, Command: command})
 	}
-	sort.Slice(output.Hooks, func(i, j int) bool {
-		return output.Hooks[i].Name < output.Hooks[j].Name
+	slices.SortFunc(output.Hooks, func(a, b hook) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 	return nil, output, nil
 }

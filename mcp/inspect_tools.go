@@ -1,10 +1,11 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -454,8 +455,8 @@ func (t *tools) getSessionInfo(
 		}
 		output.Windows = append(output.Windows, summarizeWindow(window, len(panes)))
 	}
-	sort.Slice(output.Windows, func(i, j int) bool {
-		return output.Windows[i].Index < output.Windows[j].Index
+	slices.SortFunc(output.Windows, func(a, b windowSummary) int {
+		return cmp.Compare(a.Index, b.Index)
 	})
 	return nil, output, nil
 }

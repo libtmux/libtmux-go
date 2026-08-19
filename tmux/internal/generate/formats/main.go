@@ -12,7 +12,7 @@ import (
 	"io"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -239,9 +239,9 @@ func generateFormats(spec formatSpec) ([]byte, error) {
 	if err := validateFormatSpec(spec); err != nil {
 		return nil, err
 	}
-	fields := append([]fieldSpec(nil), spec.Fields...)
-	sort.Slice(fields, func(i, j int) bool {
-		return fields[i].Name < fields[j].Name
+	fields := slices.Clone(spec.Fields)
+	slices.SortFunc(fields, func(a, b fieldSpec) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 
 	var output bytes.Buffer
