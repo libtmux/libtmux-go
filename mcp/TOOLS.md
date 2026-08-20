@@ -580,3 +580,1098 @@ tmux: command failed: kill-session exited 1: can't find session: no-such-session
 
 [tmux module]: ../tmux/
 [Go MCP SDK]: https://github.com/modelcontextprotocol/go-sdk
+## Every tool
+
+The entry for each tool, rendered from its own schema. The sections above say
+when to reach for what; this says exactly what each one takes and returns.
+
+<!-- toolsref -->
+
+58 tools. Generated from the schemas by `go generate ./...`; edit the tools, not this.
+
+### `build_workspace`
+
+Create a session from a tmuxp-style YAML workspace document: windows, panes, layouts, and the command each pane runs, in one call.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `document` **required** | string | a tmuxp-style YAML workspace document |
+
+| Returns | Type |
+| --- | --- |
+| `sessionId` **required** | string |
+| `sessionName` **required** | string |
+
+### `call_destructive_tools_batch`
+
+Run several tools in one request, in order, including the ones that end something.
+
+**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `calls` **required** | array | the calls to run, in order |
+
+| Returns | Type |
+| --- | --- |
+| `completed` **required** | integer |
+| `results` **required** | array |
+| `skipped` **required** | array |
+
+### `call_mutating_tools_batch`
+
+Run several tools in one request, in order, including ones that change tmux.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `calls` **required** | array | the calls to run, in order |
+
+| Returns | Type |
+| --- | --- |
+| `completed` **required** | integer |
+| `results` **required** | array |
+| `skipped` **required** | array |
+
+### `call_readonly_tools_batch`
+
+Run several reading tools in one request, in order.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `calls` **required** | array | the calls to run, in order |
+
+| Returns | Type |
+| --- | --- |
+| `completed` **required** | integer |
+| `results` **required** | array |
+| `skipped` **required** | array |
+
+### `capture_pane`
+
+Read what one pane holds: its visible screen, or its scrollback too with includeHistory.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `endLine` | integer | last row to read, on the same scale as startLine |
+| `includeHistory` | boolean | read scrollback as well as the visible screen |
+| `joinWrapped` | boolean | rejoin lines the terminal wrapped |
+| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
+| `maxLines` | integer | how many lines to return at most, keeping the last ones |
+| `paneId` | string | a tmux pane id such as %1; empty reads the active pane |
+| `sessionName` | string | which session's active pane to read when paneId is empty |
+| `startLine` | integer | first row to read; 0 is the top of the screen and negatives are history |
+| `styles` | boolean | keep colour and attribute escape sequences, for a program that says pass or fail in colour rather than in words |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `truncated` **required** | boolean |
+| `lines` | array |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+
+### `capture_since`
+
+Read only what a pane wrote since the cursor a previous call returned, and get a cursor for next time.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `cursor` | string | the cursor a previous capture_since returned; empty starts a new reading |
+| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
+| `maxLines` | integer | how many lines to return at most, keeping the last ones |
+| `paneId` | string | the tmux pane id to read; the cursor already names it |
+| `sessionName` | string | which session's active pane to read when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `cursor` **required** | string |
+| `lines` **required** | array |
+| `linesMissed` **required** | boolean |
+| `paneId` **required** | string |
+| `truncated` **required** | boolean |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+
+### `clear_pane`
+
+Clear a pane's screen, and its scrollback when asked.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `history` | boolean | also discard the pane's scrollback |
+| `paneId` | string | the tmux pane id to clear; empty clears the active pane |
+| `sessionName` | string | which session's active pane to clear when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `historyCleared` **required** | boolean |
+| `paneId` **required** | string |
+
+### `create_session`
+
+Start one detached session and return its id and name.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` | string | a command for the first window to run instead of a shell |
+| `name` | string | the new session's name |
+| `startDirectory` | string | the session's working directory |
+
+| Returns | Type |
+| --- | --- |
+| `sessionId` **required** | string |
+| `sessionName` **required** | string |
+
+### `create_window`
+
+Add one window to a session and return its id and the id of the pane tmux made with it.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` | string | a command for the window to run instead of a shell |
+| `name` | string | the new window's name |
+| `sessionName` | string | the exact session name to add the window to |
+| `startDirectory` | string | the window's working directory |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `windowId` **required** | string |
+
+### `delete_buffer`
+
+Remove a buffer this server staged.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the buffer to remove, as load_buffer returned it |
+
+| Returns | Type |
+| --- | --- |
+| `deleted` **required** | string |
+
+### `display_message`
+
+Ask tmux to expand one of its format strings, such as #{pane_current_path} or #{window_flags}.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `format` **required** | string | a tmux format string, such as #{pane_current_path} |
+| `paneId` | string | the pane the format is about; empty uses the active pane |
+| `sessionName` | string | which session's active pane to evaluate against when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `value` **required** | string |
+
+### `enter_copy_mode`
+
+Put a pane into tmux's copy mode, where keys scroll and select rather than reaching the program in the pane.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `paneId` | string | the tmux pane id; empty uses the active pane |
+| `scrollUp` | boolean | enter one page above the bottom |
+| `sessionName` | string | which session's active pane to use when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `inCopyMode` **required** | boolean |
+| `paneId` **required** | string |
+
+### `exit_copy_mode`
+
+Return a pane from copy mode to passing keys to the program running in it.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `paneId` | string | the tmux pane id; empty uses the active pane |
+| `sessionName` | string | which session's active pane to use when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `inCopyMode` **required** | boolean |
+| `paneId` **required** | string |
+
+### `find_pane_by_position`
+
+Report the pane bordering one side of another: above, below, left, or right.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `direction` **required** | string | the side to look toward: above, below, left, or right |
+| `paneId` | string | the tmux pane id to look from; empty looks from the active pane |
+| `sessionName` | string | which session's active pane to look from when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `found` **required** | boolean |
+| `geometry` **required** | object |
+| `paneId` **required** | string |
+
+### `get_job`
+
+Collect a command started with run_command and detach.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `jobId` **required** | string | the handle a detached run_command returned |
+| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
+| `maxLines` | integer | how many lines of output to return at most, keeping the last ones |
+| `timeoutSeconds` | integer | wait up to this long for the command to finish; zero reports whether it has and returns at once |
+
+| Returns | Type |
+| --- | --- |
+| `command` **required** | string |
+| `elapsedSeconds` **required** | number |
+| `finished` **required** | boolean |
+| `jobId` **required** | string |
+| `paneId` **required** | string |
+| `truncated` **required** | boolean |
+| `effectiveTimeoutSeconds` | integer |
+| `exitStatus` | integer |
+| `output` | array |
+| `running` | string |
+| `timeoutClamped` | boolean |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+
+### `get_pane_info`
+
+One pane's state without its contents: what it runs, its process id, whether that process has exited and with what status, how much scrollback there is, and whether the pane is in a mode that will eat the keys you send it.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `paneId` | string | the tmux pane id to describe; empty describes the active pane |
+| `sessionName` | string | which session's active pane to describe when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `dead` **required** | boolean |
+| `historyLimit` **required** | integer |
+| `historyLines` **required** | integer |
+| `inMode` **required** | boolean |
+| `pane` **required** | object |
+| `path` **required** | string |
+| `pid` **required** | integer |
+| `title` **required** | string |
+| `zoomed` **required** | boolean |
+| `exitStatus` | integer |
+
+### `get_server_info`
+
+Which tmux socket these tools address, its version, how much it holds, and whether this MCP server is itself running in one of its panes.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `includeMessages` | boolean | add tmux's own server message log, which records what tmux refused and why |
+
+| Returns | Type |
+| --- | --- |
+| `alive` **required** | boolean |
+| `clients` **required** | integer |
+| `insideThisServer` **required** | boolean |
+| `panes` **required** | integer |
+| `safetyLevel` **required** | string |
+| `sessions` **required** | integer |
+| `socketPath` **required** | string |
+| `version` **required** | string |
+| `windows` **required** | integer |
+| `attachedClients` | array |
+| `callerPaneId` | string |
+| `messages` | array |
+
+### `get_session_info`
+
+One session's windows, working directory, and when it was created.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `sessionName` | string | the exact session name; empty uses the only session |
+
+| Returns | Type |
+| --- | --- |
+| `activeWindowId` **required** | string |
+| `created` **required** | string |
+| `path` **required** | string |
+| `session` **required** | object |
+| `windows` **required** | array |
+
+### `get_window_info`
+
+One window's size, layout string, and panes.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `sessionName` | string | which session's current window to describe when windowId is empty |
+| `windowId` | string | the tmux window id to describe; empty describes the current window |
+
+| Returns | Type |
+| --- | --- |
+| `height` **required** | integer |
+| `layout` **required** | string |
+| `panes` **required** | array |
+| `width` **required** | integer |
+| `window` **required** | object |
+| `zoomed` **required** | boolean |
+
+### `kill_pane`
+
+End one pane and the program running in it.
+
+**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `paneId` **required** | string | the tmux pane id to kill, such as %1 |
+
+| Returns | Type |
+| --- | --- |
+| `killed` **required** | string |
+| `windowEnded` **required** | boolean |
+
+### `kill_server`
+
+End the whole tmux server: every session, every window, every program.
+
+**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `confirm` **required** | boolean | must be true; this ends every session on the server |
+
+| Returns | Type |
+| --- | --- |
+| `sessionsKilled` **required** | integer |
+
+### `kill_session`
+
+End one session by its exact name, and every window and program in it.
+
+**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `sessionName` **required** | string | the exact name of the session to kill |
+
+| Returns | Type |
+| --- | --- |
+| `killed` **required** | string |
+
+### `kill_window`
+
+End one window and its panes.
+
+**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `windowId` **required** | string | the tmux window id to kill, such as @1 |
+
+| Returns | Type |
+| --- | --- |
+| `killed` **required** | string |
+| `sessionEnded` **required** | boolean |
+
+### `list_panes`
+
+List tmux panes with their session, window, index, and current command.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `active` | boolean | keep only active panes, or only inactive ones |
+| `command` | string | keep panes whose current command contains this text, ignoring case |
+| `dead` | boolean | keep only panes whose process has exited, or only those still running |
+| `detail` | string | how much to report per pane: standard, or full to add exit status, path, title, and history size |
+| `pathUnder` | string | keep panes whose working directory is at or below this path |
+| `sessionName` | string | list only this session's panes |
+| `windowId` | string | list only this window's panes, such as @1 |
+
+| Returns | Type |
+| --- | --- |
+| `panes` **required** | array |
+| `total` **required** | integer |
+
+### `list_servers`
+
+The tmux servers running on this machine, with the one these tools address marked.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `includeDead` | boolean | include socket files with no server running, which tmux leaves behind when a server exits |
+| `maxServers` | integer | how many servers to report at most; the target is always kept |
+| `name` | string | keep servers whose name contains this text, ignoring case |
+
+| Returns | Type |
+| --- | --- |
+| `searchedIn` **required** | string |
+| `servers` **required** | array |
+| `total` **required** | integer |
+| `skipped` | integer |
+| `unreachableNote` | string |
+
+### `list_sessions`
+
+Sessions with their name, window count, and how many clients are attached.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `attached` | boolean | keep only sessions a client is attached to, or only those nobody is watching |
+| `name` | string | keep sessions whose name contains this text, ignoring case |
+
+| Returns | Type |
+| --- | --- |
+| `sessions` **required** | array |
+| `total` **required** | integer |
+
+### `list_windows`
+
+Windows with their session, name, index, pane count, and whether each is its session's current one.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `active` | boolean | keep only current windows, or only the others |
+| `name` | string | keep windows whose name contains this text, ignoring case |
+| `sessionName` | string | list only this session's windows |
+
+| Returns | Type |
+| --- | --- |
+| `total` **required** | integer |
+| `windows` **required** | array |
+
+### `load_buffer`
+
+Put text into a named tmux buffer, ready to paste into a pane once or several times.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `text` **required** | string | the text to store in the buffer |
+| `name` | string | a name for the buffer; empty makes one up |
+
+| Returns | Type |
+| --- | --- |
+| `bytes` **required** | integer |
+| `name` **required** | string |
+
+### `move_pane`
+
+Move a pane into another window, or break it out into a window of its own by naming no destination.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `paneId` **required** | string | the tmux pane id to move, such as %1 |
+| `direction` | string | where the moved pane goes in the destination: below, above, right, or left |
+| `focus` | boolean | make the pane active where it lands, moving what a person sees |
+| `name` | string | the new window's name when breaking the pane out |
+| `percentage` | integer | the moved pane's share of the destination window, 1 to 100 |
+| `toWindowId` | string | the window to move the pane into, such as @2; empty breaks it out into a new window |
+
+| Returns | Type |
+| --- | --- |
+| `brokenOut` **required** | boolean |
+| `paneId` **required** | string |
+| `windowId` **required** | string |
+
+### `move_window`
+
+Move a window to another index, or into another session.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `windowId` **required** | string | the tmux window id to move |
+| `index` | integer | the index to move it to; omit to use the next free one |
+| `sessionName` | string | the session to move it to; empty keeps it in its own |
+
+| Returns | Type |
+| --- | --- |
+| `index` **required** | integer |
+| `session` **required** | string |
+| `windowId` **required** | string |
+
+### `paste_buffer`
+
+Deliver a staged buffer into a pane as text, with no tmux key names read.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the buffer to paste, as load_buffer returned it |
+| `delete` | boolean | remove the buffer once it has been pasted |
+| `paneId` | string | the tmux pane id to paste into; empty uses the active pane |
+| `sessionName` | string | which session's active pane to paste into when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `name` **required** | string |
+| `paneId` **required** | string |
+
+### `paste_text`
+
+Deliver text into a pane exactly, with no tmux key names read.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `text` **required** | string | the text to deliver, taken literally |
+| `bracket` | boolean | mark the text as pasted so an editor does not auto-indent it; on by default |
+| `enter` | boolean | press Enter after the text |
+| `paneId` | string | the tmux pane id to paste into; empty uses the active pane |
+| `sessionName` | string | which session's active pane to paste into when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `bytes` **required** | integer |
+| `paneId` **required** | string |
+
+### `pipe_pane`
+
+Send everything a pane writes to a shell command as well as to the screen, such as "cat >> /tmp/build.log".
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` | string | a shell command to write the pane's output to, such as cat >> /tmp/build.log; empty stops piping |
+| `paneId` | string | the tmux pane id to pipe; empty uses the active pane |
+| `sessionName` | string | which session's active pane to pipe when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `piping` **required** | boolean |
+
+### `rename_session`
+
+Give a session a name a person will recognise.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the new session name |
+| `sessionName` | string | the exact session to rename; empty uses the only session |
+
+| Returns | Type |
+| --- | --- |
+| `name` **required** | string |
+| `sessionId` **required** | string |
+
+### `rename_window`
+
+Name a window, which also stops tmux renaming it after whatever is running in it.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the new window name |
+| `sessionName` | string | which session's current window to rename when windowId is empty |
+| `windowId` | string | the tmux window id to rename; empty uses the current window |
+
+| Returns | Type |
+| --- | --- |
+| `name` **required** | string |
+| `windowId` **required** | string |
+
+### `resize_pane`
+
+Set one pane's width or height in cells, or toggle it between its layout size and the whole window.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `height` | integer | the pane's new height in cells |
+| `paneId` | string | the tmux pane id to resize; empty resizes the active pane |
+| `sessionName` | string | which session's active pane to resize when paneId is empty |
+| `width` | integer | the pane's new width in cells |
+| `zoom` | boolean | toggle the pane between its size and the whole window |
+
+| Returns | Type |
+| --- | --- |
+| `height` **required** | integer |
+| `width` **required** | integer |
+
+### `resize_window`
+
+Set a window's size in cells.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `height` | integer | the window's new height in cells |
+| `sessionName` | string | which session's current window to resize when windowId is empty |
+| `width` | integer | the window's new width in cells |
+| `windowId` | string | the tmux window id to resize; empty uses the current window |
+
+| Returns | Type |
+| --- | --- |
+| `height` **required** | integer |
+| `width` **required** | integer |
+| `windowId` **required** | string |
+
+### `respawn_pane`
+
+Restart what a pane runs, keeping the pane and its place in the layout.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` | string | a command to run instead; empty restarts what the pane ran before |
+| `kill` | boolean | end a program that is still running first |
+| `paneId` | string | the tmux pane id to restart; empty uses the active pane |
+| `sessionName` | string | which session's active pane to restart when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+
+### `run_command`
+
+Run a shell command in one pane, wait for it to finish, and return its exit status and its output.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` **required** | string | the shell command to run |
+| `detach` | boolean | return a jobId at once instead of waiting; collect it later with get_job |
+| `maxBytes` | integer | how many bytes of output to return at most, keeping the last lines |
+| `maxLines` | integer | how many lines of output to return at most, keeping the last ones |
+| `paneId` | string | the tmux pane id to run the command in; empty uses the active pane |
+| `sessionName` | string | which session's active pane to run in when paneId is empty |
+| `suppressHistory` | boolean | keep the command out of the shell's history by prefixing a space |
+| `timeoutSeconds` | integer | how long to wait before giving up |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `timedOut` **required** | boolean |
+| `truncated` **required** | boolean |
+| `detached` | boolean |
+| `effectiveTimeoutSeconds` | integer |
+| `exitStatus` | integer |
+| `jobId` | string |
+| `output` | array |
+| `outputUnavailable` | string |
+| `running` | string |
+| `timeoutClamped` | boolean |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+
+### `search_panes`
+
+Find which panes show some text, and what they showed.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `text` **required** | string | text to look for in each pane's contents |
+| `includeHistory` | boolean | search scrollback as well as the visible screens |
+| `matchCase` | boolean | require the capitalisation to match |
+| `maxMatchesPerPane` | integer | how many matching lines to report per pane |
+| `maxPanes` | integer | how many matching panes to report at most |
+| `regex` | boolean | read text as a regular expression |
+| `sessionName` | string | search only this session's panes |
+
+| Returns | Type |
+| --- | --- |
+| `panes` **required** | array |
+| `morePanes` | integer |
+
+### `select_layout`
+
+Arrange a window's panes with one of tmux's presets (even-horizontal, even-vertical, main-horizontal, main-vertical, tiled), spread them evenly, or restore a layout string read from get_window_info.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `layout` | string | even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, or a layout string from get_window_info |
+| `sessionName` | string | which session's current window to arrange when windowId is empty |
+| `spread` | boolean | give every pane an equal share of the space |
+| `windowId` | string | the tmux window id to arrange; empty uses the current window |
+
+| Returns | Type |
+| --- | --- |
+| `layout` **required** | string |
+| `windowId` **required** | string |
+
+### `select_pane`
+
+Make one pane its window's active pane, which is where a person's keystrokes go.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `paneId` **required** | string | the tmux pane id to make active |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+
+### `select_window`
+
+Make one window its session's current window, which is what puts a person in front of a window this client created.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `windowId` **required** | string | the tmux window id to make current |
+
+| Returns | Type |
+| --- | --- |
+| `windowId` **required** | string |
+
+### `send_keys`
+
+Type into one pane and press Enter.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` **required** | string | what to type, read as tmux key names: "C-c" interrupts the pane and "Escape" is a key rather than those letters; use paste_text for text to take literally |
+| `paneId` | string | a tmux pane id such as %1; empty types into the active pane |
+| `sessionName` | string | which session's active pane to type into when paneId is empty |
+| `suppressHistory` | boolean | keep the command out of the shell's history by prefixing a space |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `sent` **required** | string |
+
+### `send_keys_batch`
+
+Send several tmux key names to a pane in order, with no Enter appended.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `keys` **required** | array | tmux key names to send in order, such as ["C-c", "q", "Enter"] |
+| `literal` | boolean | send the keys as characters rather than as tmux key names |
+| `paneId` | string | the tmux pane id to send to; empty uses the active pane |
+| `sessionName` | string | which session's active pane to send to when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `sent` **required** | integer |
+
+### `set_environment`
+
+Set or remove a variable for processes a session starts from now on.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the variable to set |
+| `sessionName` | string | the session to write; empty uses the only session |
+| `unset` | boolean | remove the variable instead of setting it |
+| `value` | string | the value to set |
+
+| Returns | Type |
+| --- | --- |
+| `name` **required** | string |
+| `sessionName` **required** | string |
+| `unset` **required** | boolean |
+
+### `set_option`
+
+Set one tmux option.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the tmux option name, such as history-limit |
+| `value` **required** | string | the value to set |
+| `paneId` | string | the pane to set the option on |
+| `scope` | string | server, session, window, or pane; empty sets at pane scope |
+| `sessionName` | string | the session to set the option on |
+| `windowId` | string | the window to set the option on |
+
+| Returns | Type |
+| --- | --- |
+| `name` **required** | string |
+| `scope` **required** | string |
+| `value` **required** | string |
+
+### `set_pane_title`
+
+Set the title tmux draws on a pane's border, which is how to label which pane is which in a layout someone else will read.
+
+Changes tmux to a state. Repeating it is safe.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `title` **required** | string | the new pane title |
+| `paneId` | string | the tmux pane id to title; empty uses the active pane |
+| `sessionName` | string | which session's active pane to title when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `title` **required** | string |
+
+### `show_buffer`
+
+Read back a buffer this server staged.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the buffer to read, as load_buffer returned it |
+| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
+| `maxLines` | integer | how many lines to return at most, keeping the last ones |
+
+| Returns | Type |
+| --- | --- |
+| `name` **required** | string |
+| `truncated` **required** | boolean |
+| `lines` | array |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+
+### `show_environment`
+
+What new processes in a session will inherit.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` | string | one variable to read; empty reads all of them |
+| `sessionName` | string | the session to read; empty uses the only session |
+
+| Returns | Type |
+| --- | --- |
+| `sessionName` **required** | string |
+| `variables` | array |
+
+### `show_hooks`
+
+The commands tmux will run on its own at a given scope.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` | string | report only this hook, such as pane-died; empty reports every hook in force |
+| `paneId` | string | the pane to read hooks on |
+| `scope` | string | server, session, window, or pane; empty reads at pane scope |
+| `sessionName` | string | the session to read hooks on |
+| `windowId` | string | the window to read hooks on |
+
+| Returns | Type |
+| --- | --- |
+| `scope` **required** | string |
+| `hooks` | array |
+
+### `show_option`
+
+Read one tmux option at server, session, window, or pane scope.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `name` **required** | string | the tmux option name, such as history-limit |
+| `paneId` | string | the pane to read the option on |
+| `scope` | string | server, session, window, or pane; empty reads at pane scope |
+| `sessionName` | string | the session to read the option on |
+| `windowId` | string | the window to read the option on |
+
+| Returns | Type |
+| --- | --- |
+| `name` **required** | string |
+| `scope` **required** | string |
+| `set` **required** | boolean |
+| `value` **required** | string |
+
+### `signal_channel`
+
+Signal a tmux wait-for channel, releasing whoever waits on it.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `channel` **required** | string | the tmux wait-for channel to signal |
+
+| Returns | Type |
+| --- | --- |
+| `channel` **required** | string |
+
+### `snapshot_pane`
+
+One pane's contents together with what it is, where it sits, and whether its process has exited.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `includeHistory` | boolean | read scrollback as well as the visible screen |
+| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
+| `maxLines` | integer | how many lines to return at most, keeping the last ones |
+| `paneId` | string | the tmux pane id to describe; empty describes the active pane |
+| `sessionName` | string | which session's active pane to describe when paneId is empty |
+
+| Returns | Type |
+| --- | --- |
+| `dead` **required** | boolean |
+| `lines` **required** | array |
+| `pane` **required** | object |
+| `truncated` **required** | boolean |
+| `exitStatus` | integer |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+
+### `split_window`
+
+Divide one pane in two, placing the new one below, above, to the right of, or to the left of it, and return the new pane's id.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` | string | a command for the new pane to run instead of a shell |
+| `direction` | string | where the new pane goes: below, above, right, or left |
+| `paneId` | string | the tmux pane id to split; empty splits the active pane |
+| `percentage` | integer | the new pane's share of the space, 1 to 100 |
+| `sessionName` | string | which session's active pane to split when paneId is empty |
+| `startDirectory` | string | the new pane's working directory |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+
+### `swap_pane`
+
+Exchange two panes' positions.
+
+Changes tmux by a step. Repeating it compounds.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `paneId` **required** | string | one of the two panes to exchange |
+| `withPaneId` **required** | string | the other pane to exchange it with |
+| `keepFocus` | boolean | leave the active pane where it was |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `withPaneId` **required** | string |
+
+### `wait_for_channel`
+
+Wait until something signals a tmux wait-for channel.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `channel` **required** | string | the tmux wait-for channel to wait on |
+| `timeoutSeconds` | integer | how long to wait before giving up |
+
+| Returns | Type |
+| --- | --- |
+| `signalled` **required** | boolean |
+
+### `wait_for_text`
+
+Wait until a pane writes one of several patterns, reading what the pane produces rather than its screen.
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `idleSeconds` | integer | end the wait once the pane has written nothing for this many seconds |
+| `matchCase` | boolean | require the capitalisation to match |
+| `maxBytes` | integer | how many bytes of output to return at most, keeping the last lines |
+| `maxLines` | integer | how many lines of output to return at most, keeping the last ones |
+| `paneId` | string | the tmux pane id to watch; empty watches the active pane |
+| `patterns` | array | any one of these ends the wait; empty waits for any output |
+| `regex` | boolean | read the patterns as regular expressions |
+| `sessionName` | string | which session's active pane to watch when paneId is empty |
+| `sinceEntry` | boolean | ignore what the pane already shows and match only new output |
+| `stop` | array | markers of failure that end the wait early, such as "error:" |
+| `timeoutSeconds` | integer | how long to wait before giving up |
+
+| Returns | Type |
+| --- | --- |
+| `effectiveTimeoutSeconds` **required** | integer |
+| `elapsedSeconds` **required** | number |
+| `found` **required** | boolean |
+| `matchedAtEntry` **required** | boolean |
+| `outcome` **required** | string |
+| `paneId` **required** | string |
+| `truncated` **required** | boolean |
+| `lines` | array |
+| `matched` | string |
+| `timeoutClamped` | boolean |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+
+<!-- toolsref:end -->

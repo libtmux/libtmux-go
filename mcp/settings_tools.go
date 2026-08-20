@@ -79,6 +79,9 @@ func (t *tools) showOption(
 	if err != nil {
 		return nil, showOptionOutput{}, err
 	}
+	if err := scopeUses(scope, input.PaneID, input.WindowID); err != nil {
+		return nil, showOptionOutput{}, err
+	}
 	output := showOptionOutput{Name: input.Name, Scope: scope}
 
 	var value string
@@ -159,6 +162,9 @@ func (t *tools) setOption(
 	if err != nil {
 		return nil, setOptionOutput{}, err
 	}
+	if err := scopeUses(scope, input.PaneID, input.WindowID); err != nil {
+		return nil, setOptionOutput{}, err
+	}
 	output := setOptionOutput{Name: input.Name, Scope: scope, Value: input.Value}
 
 	switch scope {
@@ -187,6 +193,35 @@ func (t *tools) setOption(
 		return nil, output, err
 	}
 	return nil, output, nil
+}
+
+// scopeUses reports whether a scope reads the target a caller named, so an
+// argument the scope cannot use is refused rather than discarded.
+//
+// A caller who means a pane and writes session gets a session-wide answer, and
+// nothing in the reply says the pane they named was thrown away. Refusing is
+// the same choice resolving a target makes: refused rather than guessed.
+func scopeUses(scope, paneID, windowID string) error {
+	switch scope {
+	case scopePane:
+		return nil
+	case scopeWindow:
+		if strings.TrimSpace(paneID) != "" {
+			return fmt.Errorf("paneId is not read at %s scope; use scope pane, "+
+				"or drop paneId", scope)
+		}
+		return nil
+	default:
+		for name, value := range map[string]string{
+			"paneId": paneID, "windowId": windowID,
+		} {
+			if strings.TrimSpace(value) != "" {
+				return fmt.Errorf("%s is not read at %s scope; name the scope "+
+					"that reads it, or drop %s", name, scope, name)
+			}
+		}
+		return nil
+	}
 }
 
 // resolveScope reads the scope a settings call named.
@@ -434,6 +469,9 @@ func (t *tools) showHooks(
 ) (*mcp.CallToolResult, showHooksOutput, error) {
 	scope, err := resolveScope(input.Scope)
 	if err != nil {
+		return nil, showHooksOutput{}, err
+	}
+	if err := scopeUses(scope, input.PaneID, input.WindowID); err != nil {
 		return nil, showHooksOutput{}, err
 	}
 	output := showHooksOutput{Scope: scope}

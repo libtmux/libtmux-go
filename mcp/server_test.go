@@ -2450,3 +2450,133 @@ func TestListServersLeavesOutSocketsNothingIsListeningOn(t *testing.T) {
 		t.Errorf("maxServers 1 returned %d servers", len(capped.Servers))
 	}
 }
+
+// TestANamedTargetThatIsGoneNamesTheCallThatFindsOne covers the difference
+// between an error a model can read and one it can act on.
+//
+// tmux answers with what it looked for, which names the mechanism and leaves
+// the way out to be guessed. The listing is always the right next move, so the
+// refusal says so.
+//
+// This is about a tool that resolves a target. The listing tools take the same
+// argument names as filters, where selecting nothing is an answer rather than
+// a failure, and they are deliberately not here.
+//
+//libtmux:real-tmux
+func TestANamedTargetThatIsGoneNamesTheCallThatFindsOne(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: named\nwindows:\n  - panes:\n      - {}\n")
+
+	for _, testCase := range []struct {
+		tool, argument, value, wants string
+	}{
+		{"capture_pane", "paneId", "%99999", "list_panes"},
+		{"get_pane_info", "paneId", "%99999", "list_panes"},
+		{"get_window_info", "windowId", "@99999", "list_windows"},
+		{"get_session_info", "sessionName", "no-such-session", "list_sessions"},
+		{"send_keys", "paneId", "%99999", "list_panes"},
+	} {
+		t.Run(testCase.tool+"/"+testCase.argument, func(t *testing.T) {
+			arguments := map[string]any{testCase.argument: testCase.value}
+			if testCase.tool == "send_keys" {
+				arguments["command"] = "true"
+			}
+			result := call(ctx, t, session, testCase.tool, arguments, nil)
+			if !result.IsError {
+				t.Fatalf("a target that does not exist was accepted")
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, testCase.wants) {
+				t.Errorf("the refusal does not name %s: %q", testCase.wants, said)
+			}
+			if strings.Contains(said, "snapshot object") {
+				t.Errorf("the refusal is tmux's wording, not this server's: %q", said)
+			}
+		})
+	}
+}
+
+// TestASettingsScopeRefusesATargetItCannotRead covers an argument thrown away
+// without a word.
+//
+// A caller who means a pane and writes session gets a session-wide answer, and
+// nothing in the reply says the pane they named was discarded — so a mistake
+// in one field reads as a successful call about something else.
+//
+//libtmux:real-tmux
+func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: scoped\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	for _, testCase := range []struct {
+		name      string
+		tool      string
+		arguments map[string]any
+		refused   bool
+	}{
+		{
+			"a pane at session scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "session", "paneId": pane},
+			true,
+		},
+		{
+			"a window at server scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "server", "windowId": "@0"},
+			true,
+		},
+		{
+			"a pane at window scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "window", "paneId": pane},
+			true,
+		},
+		{
+			"setting one too", "set_option",
+			map[string]any{
+				"name": "history-limit", "value": "5000",
+				"scope": "session", "paneId": pane,
+			},
+			true,
+		},
+		{
+			"hooks too", "show_hooks",
+			map[string]any{"scope": "session", "paneId": pane},
+			true,
+		},
+		{
+			"a pane at pane scope is the point", "show_option",
+			map[string]any{"name": "history-limit", "scope": "pane", "paneId": pane},
+			false,
+		},
+		{
+			"naming no target is fine", "show_option",
+			map[string]any{"name": "history-limit", "scope": "session"},
+			false,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := call(ctx, t, session, testCase.tool, testCase.arguments, nil)
+			if result.IsError != testCase.refused {
+				t.Fatalf("isError = %v, want %v: %#v",
+					result.IsError, testCase.refused, result.Content)
+			}
+			if !testCase.refused {
+				return
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, "not read at") {
+				t.Errorf("the refusal does not say the argument is unread: %q", said)
+			}
+		})
+	}
+}
