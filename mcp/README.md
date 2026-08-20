@@ -23,9 +23,7 @@ runtime dependency; speaking MCP needs one, so this lives in its own module and
 
 ## Installing it
 
-**Requirements:** Go 1.25+, and `tmux` on `$PATH`. The tmux module itself still
-builds with Go 1.23; the MCP SDK this server speaks through is what raises the
-floor here.
+**Requirements:** Go 1.26+, and `tmux` on `$PATH`.
 
 ```console
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest

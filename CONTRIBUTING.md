@@ -6,7 +6,7 @@ and is the authority when the two disagree.
 
 ## Getting set up
 
-You need Go 1.23 or newer and tmux 3.2a or newer on `PATH`. Nothing else — the
+You need Go 1.26 or newer and tmux 3.2a or newer on `PATH`. Nothing else — the
 core module has no runtime dependencies.
 
 Give tmux a socket directory of its own before running anything. Sibling

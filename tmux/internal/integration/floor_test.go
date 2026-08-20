@@ -23,8 +23,9 @@ var lintGoVersion = regexp.MustCompile(`(?m)^\s+go:\s*"?(\d+\.\d+)"?\s*$`)
 // YAML flow sequence of quoted versions.
 var workflowGoVersions = regexp.MustCompile(`(?m)^\s+go-version:\s*\[([^\]]+)\]`)
 
-// readmeFloor matches the language requirement the README states to a reader.
-var readmeFloor = regexp.MustCompile(`\bGo (\d+\.\d+)\+`)
+// documentedFloor matches a language version stated to a reader, in any of the
+// ways the documentation states one.
+var documentedFloor = regexp.MustCompile(`\bGo (\d+\.\d+)(?:\+|\b)`)
 
 // TestEveryStatementOfTheLanguageFloorAgrees gates a version that several files
 // carry and nothing derives.
@@ -65,7 +66,6 @@ func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 	}
 	state("go.work", goDirective)
 	state(".golangci.yml", lintGoVersion)
-	state("README.md", readmeFloor)
 	state(".github/workflows/tests.yml", workflowGoVersions)
 
 	// The workflow names a range, and only its oldest entry claims anything
@@ -88,4 +88,54 @@ func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 				name, stated[name], floor)
 		}
 	}
+
+	// Every markdown file, rather than the ones remembered as stating it. The
+	// gate that read only the README missed three that told a reader to install
+	// Go 1.23, which the modules had left three raises behind.
+	for _, document := range markdownFiles(t, root) {
+		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(document)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range documentedFloor.FindAllSubmatch(content, -1) {
+			if version := string(match[1]); version != floor {
+				t.Errorf("%s names Go %s and the floor is Go %s; a reader "+
+					"following it installs a toolchain this does not build on",
+					document, version, floor)
+			}
+		}
+	}
+}
+
+// markdownFiles reports every markdown file in the repository, except the
+// changelog. Naming an older release is what a changelog is for, and an entry
+// describing one is a record rather than an instruction.
+func markdownFiles(t *testing.T, root string) []string {
+	t.Helper()
+
+	var found []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".md" || entry.Name() == "CHANGELOG.md" {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		found = append(found, filepath.ToSlash(relative))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
 }
