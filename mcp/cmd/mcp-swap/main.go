@@ -31,9 +31,10 @@
 // surfaces later as a server that will not start, separately, in each client.
 //
 // It writes only global configuration, only the one server entry, and only
-// after copying the file beside itself with a timestamp. Swapping something
-// already swapped keeps the first backup, so revert always lands on what was
-// there before any of this.
+// after copying the file beside itself. Swapping something already swapped
+// keeps the first backup, so revert lands on what was there before any of it,
+// and revert removes the backup so the next swap starts from the file as it is
+// then.
 package main
 
 import (
@@ -564,6 +565,14 @@ func revert(clients []client, dryRun bool) error {
 			return fmt.Errorf("%s: %w", c.name, err)
 		}
 		if err := os.WriteFile(c.path, contents, 0o600); err != nil {
+			return fmt.Errorf("%s: %w", c.name, err)
+		}
+		// Removed, so the next swap takes a backup of what is there then. A
+		// kept one is stale the moment the file is edited afterwards, and
+		// writeBesideBackup declines to replace an existing backup -- so
+		// leaving it means a later revert restores a version from before the
+		// edit and discards it.
+		if err := os.Remove(backup); err != nil {
 			return fmt.Errorf("%s: %w", c.name, err)
 		}
 		fmt.Printf("%-12s restored from %s\n", c.name, filepath.Base(backup))

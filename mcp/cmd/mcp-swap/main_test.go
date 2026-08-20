@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -236,5 +237,63 @@ func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	// nothing, which is the failure this refusal exists to prevent.
 	if _, err := selected(all, []string{"clod"}); err == nil {
 		t.Error("an unknown client was accepted")
+	}
+}
+
+// TestASecondSwapBacksUpWhatIsThereBySecondTime covers the file this tool is
+// most able to damage: someone else's global agent configuration.
+//
+// A backup is written only when none exists, which is what makes swapping an
+// already-swapped client still revert to the original. Left in place after a
+// revert, that same rule turns into data loss: the file is edited, swapped
+// again, and the revert restores the copy from before the edit.
+func TestASecondSwapBacksUpWhatIsThereBySecondTime(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	target := client{name: "probe", path: filepath.Join(directory, "config.json")}
+	const original = `{"one":1}`
+	const edited = `{"one":1,"added":"after the revert"}`
+	if err := os.WriteFile(target.path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	swap := func(from string) {
+		t.Helper()
+		if err := writeBesideBackup(target, []byte(from), []byte(`{"swapped":true}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func() string {
+		t.Helper()
+		contents, err := os.ReadFile(target.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(contents)
+	}
+
+	swap(original)
+	if err := revert([]client{target}, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); got != original {
+		t.Fatalf("after the first revert the file is %s, want %s", got, original)
+	}
+	if _, err := os.Stat(backupPath(target)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("revert left %s behind, and the next swap will not replace it",
+			filepath.Base(backupPath(target)))
+	}
+
+	if err := os.WriteFile(target.path, []byte(edited), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	swap(edited)
+	if err := revert([]client{target}, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); got != edited {
+		t.Fatalf("the second revert restored %s and discarded the edit; want %s",
+			got, edited)
 	}
 }
