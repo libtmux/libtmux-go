@@ -262,7 +262,7 @@ func addBufferTools(server *mcp.Server, t *tools) {
 	}, t.showBuffer)
 	register(server, t, &mcp.Tool{
 		Name:        "delete_buffer",
-		Annotations: mutating("Delete a tmux Buffer"),
+		Annotations: settling("Delete a tmux Buffer"),
 		Description: "Remove a buffer this server staged.",
 	}, t.deleteBuffer)
 }

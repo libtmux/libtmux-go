@@ -552,13 +552,13 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 	}, t.resizePane)
 	register(server, t, &mcp.Tool{
 		Name:        "select_pane",
-		Annotations: mutating("Select a tmux Pane"),
+		Annotations: settling("Select a tmux Pane"),
 		Description: "Make one pane its window's active pane, which is where a " +
 			"person's keystrokes go.",
 	}, t.selectPane)
 	register(server, t, &mcp.Tool{
 		Name:        "select_layout",
-		Annotations: mutating("Arrange a Window's Panes"),
+		Annotations: settling("Arrange a Window's Panes"),
 		Description: "Arrange a window's panes with one of tmux's presets " +
 			"(even-horizontal, even-vertical, main-horizontal, main-vertical, " +
 			"tiled), spread them evenly, or restore a layout string read from " +
@@ -587,7 +587,7 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 	}, t.resizeWindow)
 	register(server, t, &mcp.Tool{
 		Name:        "move_window",
-		Annotations: mutating("Move a tmux Window"),
+		Annotations: settling("Move a tmux Window"),
 		Description: "Move a window to another index, or into another session. " +
 			"It keeps its id.",
 	}, t.moveWindow)

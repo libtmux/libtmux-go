@@ -1581,6 +1581,72 @@ func TestToolDescriptionsCarryNoSchemaSyntax(t *testing.T) {
 	}
 }
 
+// TestEveryChangingToolSaysWhetherRepeatingItCompounds covers the hint a
+// client needs after a timeout: a call that may or may not have landed can be
+// retried only when repeating it cannot compound. A tool added without
+// deciding lands in neither list and fails here rather than defaulting to the
+// cautious answer silently.
+//
+//libtmux:real-tmux
+func TestEveryChangingToolSaysWhetherRepeatingItCompounds(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Changing tmux to a state: doing it twice leaves the same state.
+	settles := map[string]bool{
+		"clear_pane": true, "delete_buffer": true, "exit_copy_mode": true,
+		"move_window": true, "rename_session": true, "rename_window": true,
+		"select_layout": true, "select_pane": true, "select_window": true,
+		"set_environment": true, "set_option": true, "set_pane_title": true,
+	}
+	// Changing tmux by a step, or by one that reverses: splitting twice makes
+	// two panes, swapping twice puts them back, zooming twice unzooms.
+	compounds := map[string]bool{
+		"build_workspace": true, "call_destructive_tools_batch": true,
+		"call_mutating_tools_batch": true, "create_session": true,
+		"create_window": true, "enter_copy_mode": true, "kill_pane": true,
+		"kill_server": true, "kill_session": true, "kill_window": true,
+		"load_buffer": true, "move_pane": true, "paste_buffer": true,
+		"paste_text": true, "pipe_pane": true, "resize_pane": true,
+		"resize_window": true, "respawn_pane": true, "run_command": true,
+		"send_keys": true, "send_keys_batch": true, "signal_channel": true,
+		"split_window": true, "swap_pane": true,
+	}
+
+	for _, tool := range listed.Tools {
+		annotations := tool.Annotations
+		if annotations == nil {
+			t.Errorf("%s carries no annotations at all", tool.Name)
+			continue
+		}
+		if annotations.ReadOnlyHint {
+			if !annotations.IdempotentHint {
+				t.Errorf("%s only reads, so repeating it cannot compound", tool.Name)
+			}
+			continue
+		}
+		switch {
+		case settles[tool.Name]:
+			if !annotations.IdempotentHint {
+				t.Errorf("%s sets a state, so it should say repeating it is safe",
+					tool.Name)
+			}
+		case compounds[tool.Name]:
+			if annotations.IdempotentHint {
+				t.Errorf("%s compounds, so it must not say repeating it is safe",
+					tool.Name)
+			}
+		default:
+			t.Errorf("%s is a changing tool in neither list: decide whether "+
+				"repeating it compounds and add it to one", tool.Name)
+		}
+	}
+}
+
 // TestSafetyLevelWithholdsTools covers the guarantee a level makes: a tool
 // above it is never advertised, so no prompt reaches it, and a batch cannot
 // reach around the level that hid it.

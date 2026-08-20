@@ -149,6 +149,10 @@ type runCommandOutput struct {
 	// would see it, so it includes whatever the program painted. Lines the
 	// terminal wrapped are rejoined, so one line the command printed is one
 	// entry here however wide the pane is.
+	//
+	// tmux before 3.6 left a tab in the grid as the spaces it moved the cursor
+	// over, so a tab in the output arrives as spaces there and cannot be
+	// recovered.
 	Output []string `json:"output,omitempty"`
 	// OutputUnavailable says why Output is missing, and is absent when the
 	// command simply printed nothing. The status is the answer either way, so

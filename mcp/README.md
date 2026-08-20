@@ -70,7 +70,7 @@ startup, and a client cannot change it afterwards:
 
 | Flag | Meaning |
 | --- | --- |
-| `-socket-name` | tmux socket name; empty uses tmux's default socket |
+| `-socket-name` | tmux socket name; empty uses `LIBTMUX_SOCKET`, then tmux's default socket |
 | `-socket-path` | explicit socket path; overrides `-socket-name` |
 | `-binary` | tmux executable; empty resolves `tmux` through `PATH` |
 
@@ -94,7 +94,7 @@ $ libtmux-mcp -doctor -socket-name my-application
 ```
 libtmux-mcp doctor
   tmux:    3.7b
-  socket:  /tmp/tmux-1000/my-application
+  socket:  /tmp/tmux-1000/my-application (from -socket-name)
   holds:   1 sessions, 1 windows, 1 panes, 0 clients attached
   safety:  mutating
   caller:  pane %1 of this very server — acting on it acts on
@@ -214,6 +214,7 @@ so.
 | Variable | Does |
 | --- | --- |
 | `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
+| `LIBTMUX_SOCKET` | names the tmux socket when no `-socket-name` or `-socket-path` says; a flag wins |
 | `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
 | `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
 | `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |

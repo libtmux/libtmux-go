@@ -1,8 +1,10 @@
 // Command libtmux-mcp serves one tmux server to Model Context Protocol clients
 // over stdin and stdout.
 //
-// The tmux server is chosen by flags at startup and cannot be changed by a
-// client, so a client reaches only the socket the operator selected.
+// The tmux server is chosen at startup and cannot be changed by a client, so a
+// client reaches only the socket the operator selected. A flag says which;
+// LIBTMUX_SOCKET names the default when no flag does, which is how the Python
+// server is configured, so one entry serves both.
 //
 //	libtmux-mcp -socket-name my-application
 //
@@ -35,7 +37,7 @@ import (
 )
 
 func main() {
-	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default socket")
+	socketName := flag.String("socket-name", "", "tmux socket name; empty uses LIBTMUX_SOCKET, then tmux's default socket")
 	socketPath := flag.String("socket-path", "", "explicit tmux socket path; overrides -socket-name")
 	binary := flag.String("binary", "", "tmux executable; empty resolves tmux through PATH")
 	version := flag.Bool("version", false, "print the version and exit")
@@ -43,13 +45,15 @@ func main() {
 	doctor := flag.Bool("doctor", false, "report what this server can see and exit")
 	flag.Parse()
 
+	resolvedSocket, socketFrom := resolveSocket(*socketName, *socketPath)
+
 	if *version {
 		fmt.Println("libtmux-mcp", tmuxmcp.Version)
 		return
 	}
 
 	target := tmux.NewServer(tmux.ServerOptions{
-		SocketName: *socketName,
+		SocketName: resolvedSocket,
 		SocketPath: *socketPath,
 		Binary:     *binary,
 	})
@@ -59,7 +63,7 @@ func main() {
 	case *tools:
 		err = reportTools(target)
 	case *doctor:
-		err = reportDoctor(target)
+		err = reportDoctor(target, socketFrom)
 	default:
 		err = serve(target)
 	}
@@ -195,7 +199,7 @@ func reportTools(target tmux.Server) error {
 
 // reportDoctor says what this server can see, which is the first thing to
 // establish when a client says it cannot start or reaches the wrong tmux.
-func reportDoctor(target tmux.Server) error {
+func reportDoctor(target tmux.Server, socketOrigin string) error {
 	ctx, session, done, err := inspect(target)
 	if err != nil {
 		return err
@@ -220,7 +224,7 @@ func reportDoctor(target tmux.Server) error {
 
 	fmt.Println("libtmux-mcp doctor")
 	fmt.Printf("  tmux:    %s\n", orUnknown(info.Version))
-	fmt.Printf("  socket:  %s\n", orUnknown(info.SocketPath))
+	fmt.Printf("  socket:  %s (from %s)\n", orUnknown(info.SocketPath), socketOrigin)
 	if info.Alive {
 		fmt.Printf("  holds:   %d sessions, %d windows, %d panes, %d clients attached\n",
 			info.Sessions, info.Windows, info.Panes, info.Clients)
@@ -306,4 +310,24 @@ func orUnknown(value string) string {
 		return "unknown"
 	}
 	return value
+}
+
+// resolveSocket reports the socket name to use and where it came from.
+//
+// A socket named in the environment is the default. An operator who wrote a
+// configuration for the Python server, which reads this variable, would
+// otherwise reach whatever sits on tmux's default socket with nothing said
+// about it. A flag still wins: typing one is being more specific than the
+// environment, and only the operator sets either -- a client cannot.
+func resolveSocket(name, path string) (resolved, origin string) {
+	switch {
+	case path != "":
+		return name, "-socket-path"
+	case name != "":
+		return name, "-socket-name"
+	}
+	if named := strings.TrimSpace(os.Getenv(tmuxmcp.SocketEnvironmentVariable)); named != "" {
+		return named, tmuxmcp.SocketEnvironmentVariable
+	}
+	return "", "tmux's default"
 }

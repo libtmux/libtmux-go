@@ -470,7 +470,7 @@ func addSettingsTools(server *mcp.Server, t *tools) {
 	}, t.showOption)
 	register(server, t, &mcp.Tool{
 		Name:        "set_option",
-		Annotations: mutating("Set a tmux Option"),
+		Annotations: settling("Set a tmux Option"),
 		Description: "Set one tmux option. Pane scope by default, which affects " +
 			"that pane and nothing else; server scope changes every session the " +
 			"person has open.",
@@ -484,7 +484,7 @@ func addSettingsTools(server *mcp.Server, t *tools) {
 	}, t.showEnvironment)
 	register(server, t, &mcp.Tool{
 		Name:        "set_environment",
-		Annotations: mutating("Set a Session's Environment"),
+		Annotations: settling("Set a Session's Environment"),
 		Description: "Set or remove a variable for processes a session starts " +
 			"from now on. It changes nothing already running.",
 	}, t.setEnvironment)

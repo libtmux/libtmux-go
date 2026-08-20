@@ -397,19 +397,19 @@ func addLifecycleTools(server *mcp.Server, t *tools) {
 	}, t.respawnPane)
 	register(server, t, &mcp.Tool{
 		Name:        "rename_session",
-		Annotations: mutating("Rename a tmux Session"),
+		Annotations: settling("Rename a tmux Session"),
 		Description: "Give a session a name a person will recognise. Its id does " +
 			"not change.",
 	}, t.renameSession)
 	register(server, t, &mcp.Tool{
 		Name:        "rename_window",
-		Annotations: mutating("Rename a tmux Window"),
+		Annotations: settling("Rename a tmux Window"),
 		Description: "Name a window, which also stops tmux renaming it after " +
 			"whatever is running in it.",
 	}, t.renameWindow)
 	register(server, t, &mcp.Tool{
 		Name:        "set_pane_title",
-		Annotations: mutating("Title a tmux Pane"),
+		Annotations: settling("Title a tmux Pane"),
 		Description: "Set the title tmux draws on a pane's border, which is how " +
 			"to label which pane is which in a layout someone else will read.",
 	}, t.setPaneTitle)

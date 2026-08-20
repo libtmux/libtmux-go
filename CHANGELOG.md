@@ -42,6 +42,18 @@ subscribed with that exact string. Nothing distinguished the silence from a pane
 that never wrote. Both spellings now arrive, each in the spelling its subscriber
 used, and the spellings of one pane share a coalescing interval.
 
+`LIBTMUX_SOCKET` names the tmux socket when no flag does. The Python server
+reads it, so a configuration written for that one reached whatever sat on tmux's
+default socket here, with nothing said about it. A flag still wins, only an
+operator sets either, and `-doctor` now names which of the two was taken.
+
+Every changing tool says whether repeating it is safe. There was one annotation
+for all of them, so renaming a window read as being as risky to retry as
+splitting a pane; a client uses that hint to decide whether a call it never saw
+the answer to can be retried. The twelve that set a state rather than take a
+step now say so, and the ones with a reversing argument -- zoom toggles, a
+copy-mode scroll goes further -- deliberately do not.
+
 A batched write to the caller's own pane asks first, as a direct one already
 did. The three batch tools discarded the request they were called with, so the
 guard had no session to put the question to and let the write through: the same

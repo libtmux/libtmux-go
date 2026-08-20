@@ -679,7 +679,7 @@ func addCaptureTools(server *mcp.Server, t *tools) {
 	}, t.captureSince)
 	register(server, t, &mcp.Tool{
 		Name:        "clear_pane",
-		Annotations: mutating("Clear a tmux Pane"),
+		Annotations: settling("Clear a tmux Pane"),
 		Description: "Clear a pane's screen, and its scrollback when asked. " +
 			"Clearing what has already been read keeps later captures small.",
 	}, t.clearPane)

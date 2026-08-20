@@ -79,3 +79,30 @@ func TestFirstSentenceStopsAtTheFirstSentence(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveSocketPrefersAFlagOverTheEnvironment covers the two ways an
+// operator names a socket. The variable is what the Python server reads, so a
+// configuration written for it reaches the tmux it names rather than whatever
+// sits on the default socket; a flag is the more specific statement and wins.
+func TestResolveSocketPrefersAFlagOverTheEnvironment(t *testing.T) {
+	for _, testCase := range []struct {
+		name, flagName, flagPath, environment, want, origin string
+	}{
+		{"nothing at all", "", "", "", "", "tmux's default"},
+		{"the variable alone", "", "", "named", "named", "LIBTMUX_SOCKET"},
+		{"a name beats it", "flagged", "", "named", "flagged", "-socket-name"},
+		{"a path beats it", "", "/tmp/s", "named", "", "-socket-path"},
+		{"blank is not a name", "", "", "   ", "", "tmux's default"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("LIBTMUX_SOCKET", testCase.environment)
+			resolved, origin := resolveSocket(testCase.flagName, testCase.flagPath)
+			if resolved != testCase.want {
+				t.Errorf("socket = %q, want %q", resolved, testCase.want)
+			}
+			if origin != testCase.origin {
+				t.Errorf("origin = %q, want %q", origin, testCase.origin)
+			}
+		})
+	}
+}

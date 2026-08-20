@@ -22,12 +22,31 @@ func readOnly(title string) *mcp.ToolAnnotations {
 }
 
 // mutating describes a tool that changes tmux without ending anything a caller
-// would miss. These are not idempotent: splitting twice makes two panes.
+// would miss, and that accumulates: splitting twice makes two panes.
 func mutating(title string) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{
 		Title:           title,
 		ReadOnlyHint:    false,
 		IdempotentHint:  false,
+		DestructiveHint: new(false),
+		OpenWorldHint:   new(false),
+	}
+}
+
+// settling describes a tool that changes tmux to a state rather than by a
+// step: renaming a window twice leaves one window with the second name.
+//
+// The distinction is what a client needs after a timeout. A call that may or
+// may not have landed can be retried when repeating it cannot compound, and a
+// client with no hint has to treat every change as though it might. Only tools
+// whose every argument lands in the same state qualify — resize_pane takes a
+// zoom that toggles and enter_copy_mode takes a scroll that goes further each
+// time, so neither is one of these.
+func settling(title string) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{
+		Title:           title,
+		ReadOnlyHint:    false,
+		IdempotentHint:  true,
 		DestructiveHint: new(false),
 		OpenWorldHint:   new(false),
 	}

@@ -364,7 +364,7 @@ func addOrientationTools(server *mcp.Server, t *tools) {
 	}, t.listSessions)
 	register(server, t, &mcp.Tool{
 		Name:        "select_window",
-		Annotations: mutating("Select a tmux Window"),
+		Annotations: settling("Select a tmux Window"),
 		Description: "Make one window its session's current window, which is what " +
 			"puts a person in front of a window this client created.",
 	}, t.selectWindow)

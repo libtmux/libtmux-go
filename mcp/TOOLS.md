@@ -247,6 +247,15 @@ ends and records its status. It also returns what the command printed, read from
 marks the wrapper records inside the pane, so a caller does not have to guess
 where in the scrollback its command began.
 
+What the command printed is read back off the pane, so it is what tmux can
+still see there. A tab is the one character that survives this only on newer
+tmux: before 3.6 a tab moved the cursor and left spaces in the grid, and
+`capture-pane` had nothing to reconstruct it from, so `printf 'a\tb'` is
+reported as `a` and `b` separated by spaces. tmux 3.6 preserves tabs for
+capture, and the same command is reported with its tab from there on. Nothing
+in this server can recover it on the older releases; a command whose output is
+parsed by column should be given a separator of its own.
+
 What comes back is the command's own output and nothing else. Rows the terminal
 wrapped are rejoined, so one line printed is one entry however narrow the pane
 is, and the row the shell draws its prompt into is left out. When the output

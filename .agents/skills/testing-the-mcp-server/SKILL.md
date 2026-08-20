@@ -19,19 +19,23 @@ would actually send, and survive cancelling it mid-flight. Those failures live
 in the gap between the in-memory transport the Go tests use and a real process
 speaking JSON-RPC over a pipe.
 
-## The socket is a flag here, not an environment variable
+## One socket, chosen once
 
-The Python server reads `LIBTMUX_SOCKET` and takes `socket_name` on every
-targeted tool. This one does neither. An operator picks the socket once, at
-launch, and a client reaches only that socket:
+The Python server takes `socket_name` on every targeted tool, so a client picks
+the tmux per call. This one does not: an operator picks the socket at launch
+and a client reaches only that socket.
 
 ```console
 $ libtmux-mcp -socket-name mcp-target
 ```
 
-Setting `LIBTMUX_SOCKET` on this server does nothing at all. A harness that
-exports it and expects isolation will silently drive the default socket
-instead — which, on a machine running a real session, is somebody's work.
+`LIBTMUX_SOCKET` names it when no flag does, matching the Python server, so one
+configuration serves both. A flag wins over the variable. Ask the server which
+it took rather than assuming — `-doctor` names the origin:
+
+```console
+$ libtmux-mcp -doctor
+```
 
 ## Three tmux servers, never one
 

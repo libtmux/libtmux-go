@@ -30,6 +30,11 @@ const (
 // the Python server so an operator configuring both writes one thing.
 const SafetyEnvironmentVariable = "LIBTMUX_SAFETY"
 
+// SocketEnvironmentVariable names the variable that selects the tmux socket
+// when no flag does, matching the Python server for the same reason. A flag
+// wins over it, and only an operator sets either.
+const SocketEnvironmentVariable = "LIBTMUX_SOCKET"
+
 // safetyFromEnvironment reads the level an operator asked for.
 //
 // An unreadable value selects the lowest level rather than failing. Refusing

@@ -338,7 +338,7 @@ func addInputTools(server *mcp.Server, t *tools) {
 	}, t.enterCopyMode)
 	register(server, t, &mcp.Tool{
 		Name:        "exit_copy_mode",
-		Annotations: mutating("Leave Copy Mode"),
+		Annotations: settling("Leave Copy Mode"),
 		Description: "Return a pane from copy mode to passing keys to the " +
 			"program running in it.",
 	}, t.exitCopyMode)
