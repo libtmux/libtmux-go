@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -198,20 +199,13 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 	if !ok || len(relatedPanes(t, alertWindow)) != 1 {
 		t.Fatalf("alert window panes = %#v, want one pane", relatedPanes(t, alertWindow))
 	}
-	activityCommand := "printf clear-alerts-activity"
-	if err := relatedPanes(t, alertWindow)[0].SendKeys(ctx, tmux.SendKeysRequest{Command: &activityCommand}); err != nil {
-		t.Fatalf("SendKeys(activity) error = %v", err)
-	}
-	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
-		window, err := server.Window(ctx, alertWindowID)
-		if err != nil {
-			return false, err
-		}
-		activity, present := window.ActivityFlag()
-		return present && activity, nil
-	}); err != nil {
-		t.Fatalf("wait for activity alert: %v", err)
-	}
+	// Every byte the pane writes raises the alert again, including the ones it
+	// writes after this clears it, so the pane has to be finished rather than
+	// merely started. Waiting for the flag is not enough on its own: the echo
+	// of the typed keys raises it before the command has run at all.
+	alertPane := relatedPanes(t, alertWindow)[0]
+	tmuxtest.TypeAndWait(ctx, t, alertPane, "printf clear-alerts-activity")
+	waitUntilPaneIsQuiet(ctx, t, alertPane)
 	beforeSnapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		t.Fatalf("Snapshot() before ClearAlerts error = %v", err)
@@ -248,6 +242,36 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 	}
 	if activity := killOptionsActivityFlag(t, after, alertWindowID); activity {
 		t.Fatal("activity flag after ClearAlerts = true, want false")
+	}
+}
+
+// waitUntilPaneIsQuiet blocks until a pane has stopped writing.
+//
+// A command being over is not the same as its pane being still: the shell draws
+// its next prompt afterwards, and that is more output. Anything asserting on
+// what a pane's output did to tmux -- an alert, a hook, a monitored flag --
+// races that prompt unless it waits for the pane to settle first.
+func waitUntilPaneIsQuiet(ctx context.Context, t *testing.T, pane tmux.Pane) {
+	t.Helper()
+
+	// Three intervals of no change, rather than one: a pane between two writes
+	// looks identical to a pane that has finished.
+	const stillEnough = 3
+	previous, unchanged := "", 0
+	if err := tmuxtest.WaitFor(ctx, 50*time.Millisecond, func(ctx context.Context) (bool, error) {
+		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
+		if err != nil {
+			return false, err
+		}
+		current := strings.Join(lines, "\n")
+		if current == previous {
+			unchanged++
+		} else {
+			previous, unchanged = current, 0
+		}
+		return unchanged >= stillEnough, nil
+	}); err != nil {
+		t.Fatalf("wait for pane %s to stop writing: %v", pane.ID(), err)
 	}
 }
 
