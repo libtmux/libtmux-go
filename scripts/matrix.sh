@@ -44,9 +44,11 @@ export TMUX_TMPDIR=${TMUX_TMPDIR:-/tmp/libtmux-go-matrix}
 mkdir -p "$TMUX_TMPDIR"
 unset TMUX TMUX_PANE
 
-# Each module is resolved the way a consumer resolves it. A workspace would
-# hide a module whose own go.mod cannot resolve what it imports.
-export GOWORK=off
+# The workspace stays on. This sweep asks what each tmux release does to the
+# code in this tree, and mcp carries no replace directive, so GOWORK=off would
+# aim every one of its runs at the core release its require names instead.
+# Resolving without a workspace is TestEveryModuleResolvesWithoutAWorkspace's
+# question, and it does not vary by tmux version.
 
 versions=()
 if [[ -n ${LIBTMUX_MATRIX_VERSIONS:-} ]]; then

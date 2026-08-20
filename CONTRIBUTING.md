@@ -32,8 +32,12 @@ Then the others, each from its own directory:
 $ for module in examples workspace mcp benchmarks; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
 ```
 
-Run them with `GOWORK=off`, which is how a consumer resolves them. A workspace
-makes a module that cannot resolve on its own look healthy.
+Run them with the workspace on, which is the only way they see the working
+tree. `mcp` carries no `replace` directive — `go install` refuses a module that
+does — so `GOWORK=off` swaps this repository's core for whatever release its
+`require` names. Whether each module resolves without a workspace is its own
+gate, `TestEveryModuleResolvesWithoutAWorkspace`, rather than a setting draped
+over every run.
 
 Generated code is checked in. Regenerate it and confirm the tree is unchanged
 rather than trusting that it is:

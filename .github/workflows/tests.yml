@@ -28,11 +28,12 @@ jobs:
         module: [".", "examples", "workspace", "mcp", "benchmarks"]
         go-version: ["1.26", "1.27"]
     steps:
-      # Whole history, because a test checks that the version the mcp module
-      # reports from a source build has not fallen behind the releases, and a
-      # checkout without tags skips it rather than failing. fetch-tags alone
-      # does not do it: it drops --no-tags from a depth-1 fetch, and no tag
-      # points at the one commit that fetches, so none arrive.
+      # Whole history, because the gates on staleness compare what is written
+      # down against the tags -- the version a source build reports, and the
+      # version every go.mod requires -- and a checkout without tags skips them
+      # rather than failing. fetch-tags alone does not do it: it drops --no-tags
+      # from a depth-1 fetch, and no tag points at the one commit that fetches,
+      # so none arrive.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -52,10 +53,17 @@ jobs:
       # package under test. The tests that exercise the core live in
       # internal/integration, so counting only the package under test would
       # report the core as uncovered by the tests that cover it.
+      #
+      # The workspace stays on. GOWORK=off answers whether a module resolves
+      # for a stranger, which is a real question and is why
+      # TestEveryModuleResolvesWithoutAWorkspace asks it -- but it cannot also
+      # answer whether this tree works, because mcp carries no replace
+      # directive and so resolves the core from the proxy. Asking one run both
+      # questions is how nineteen commits of core reached the mcp job as a
+      # release nobody had built against it.
       - name: Test ${{ matrix.module }}
         working-directory: ${{ matrix.module }}
         env:
-          GOWORK: off
           # The floor is only tested if the go command cannot leave it. Left to
           # its default, a go.mod requiring more than the matrix version makes
           # the go command fetch that newer toolchain and pass, so the oldest
@@ -209,5 +217,5 @@ jobs:
           mkdir -p "$TMUX_TMPDIR"
           for module in . examples workspace mcp benchmarks; do
             echo "--- $module ---"
-            (cd "$module" && GOWORK=off go test -count=1 ./...)
+            (cd "$module" && go test -count=1 ./...)
           done

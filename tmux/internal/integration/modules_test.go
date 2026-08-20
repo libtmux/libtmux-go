@@ -1,13 +1,11 @@
 package integration
 
 import (
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -40,55 +38,75 @@ var ownRequirement = regexp.MustCompile(
 	`(github\.com/libtmux/libtmux-go(?:/[a-z]+)?) (v\d\S*)`,
 )
 
-// TestEveryAdvertisedVersionAgrees gates the release surface against drift.
+// TestEveryRequirementNamesTheNewestRelease gates a pin against the tag list
+// rather than against the other pins.
 //
-// Every module here that another one requires must be required at one version.
-// Modules are tagged per directory and their versions move independently, so
-// the invariant is per module rather than one version across the repository --
-// and a require is not a local concern, because a replace directive beside it
-// is read only here.
+// The gate this replaces compared the require directives with each other, which
+// a uniformly stale set satisfies and did: all four named v0.0.1-alpha.1 for the
+// whole life of v0.0.1-alpha.2. That is invisible in three of them, where a
+// replace directive beside the require sends the go command next door instead.
+// It is not invisible in mcp, which carries no replace, so its require is the
+// one the go command resolves -- and it resolved a release the working tree had
+// left nineteen commits behind.
 //
-// Documentation is no longer a source of versions; see
+// Being behind is the only failure available. A require cannot name a release
+// that does not exist yet, so unlike the version a build reports there is no
+// legal state ahead of the tags.
+//
+// Documentation is not a source of versions; see
 // TestNoDocumentationPinsAModuleVersion for why it must not be one.
-func TestEveryAdvertisedVersionAgrees(t *testing.T) {
+func TestEveryRequirementNamesTheNewestRelease(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	sources := map[string]map[string][]string{}
-	record := func(module, version, where string) {
-		if sources[module] == nil {
-			sources[module] = map[string][]string{}
-		}
-		sources[module][version] = append(sources[module][version], where)
-	}
-
 	for _, module := range modules {
 		content, err := os.ReadFile(filepath.Join(root, module, "go.mod"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, match := range ownRequirement.FindAllStringSubmatch(string(content), -1) {
-			record(match[1], match[2], module+"/go.mod requires it")
+			required, pinned := match[1], match[2]
+			directory, ok := publishedModules[required]
+			if !ok {
+				continue
+			}
+			newest, tagged := newestRelease(t, root, directory)
+			if !tagged {
+				// A checkout without tags cannot answer this. CI fetches them
+				// for exactly that reason; an export from a tarball never will.
+				continue
+			}
+			if pinned != newest {
+				t.Errorf("%s/go.mod requires %s %s, and %s is released; "+
+					"a require is what a consumer resolves, so raise it",
+					module, required, pinned, newest)
+			}
 		}
 	}
+}
 
-	for module := range publishedModules {
-		versions := sources[module]
-		// A module nothing here requires is constrained by nothing here. Its
-		// version lives in its tag, which is the one place that cannot drift
-		// from itself.
-		if len(versions) <= 1 {
-			continue
-		}
-		report := make([]string, 0, len(versions))
-		for _, version := range slices.Sorted(maps.Keys(versions)) {
-			places := versions[version]
-			slices.Sort(places)
-			report = append(report, "  "+version+": "+strings.Join(places, ", "))
-		}
-		t.Errorf("%s is advertised at %d versions, want one:\n%s",
-			module, len(versions), strings.Join(report, "\n"))
+// newestRelease reports a module's newest release tag, and whether the checkout
+// has any. Tags carry the directory as a prefix, which is how a module that is
+// not at the repository root is versioned, and the prefix is not part of the
+// version a require names.
+func newestRelease(t *testing.T, root, directory string) (string, bool) {
+	t.Helper()
+
+	prefix := ""
+	if directory != "." {
+		prefix = directory + "/"
 	}
+	list := exec.Command("git", "tag", "--list", prefix+"v*", "--sort=-v:refname")
+	list.Dir = root
+	found, err := list.Output()
+	if err != nil {
+		return "", false
+	}
+	newest, _, _ := strings.Cut(strings.TrimSpace(string(found)), "\n")
+	if newest == "" {
+		return "", false
+	}
+	return strings.TrimPrefix(newest, prefix), true
 }
 
 // longestModulePrefix returns the published module containing a package path.

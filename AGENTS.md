@@ -57,11 +57,26 @@ Then each of the other modules, from its own directory:
 $ for module in examples workspace mcp benchmarks; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
 ```
 
-Run them with `GOWORK=off`, which is how a consumer resolves them. A workspace
-makes a module that cannot resolve on its own look healthy:
+Run them with the workspace on, which is the only way they see the working
+tree. `mcp` carries no `replace` directive — `go install` refuses a module that
+does — so `GOWORK=off` swaps this repository's core for whatever release its
+`require` names, and the tests then pass or fail on code nobody is editing.
+
+`GOWORK=off` still answers a real question, just not that one: whether a module
+resolves for someone who has no workspace. `TestEveryModuleResolvesWithoutAWorkspace`
+asks it per module, so no gate has to be run twice to cover it:
 
 ```console
-$ GOWORK=off go test ./...
+$ go test ./tmux/internal/integration/ -run TestEveryModuleResolvesWithoutAWorkspace
+```
+
+A `require` naming a module of this repository is a copy of a tag, so it is
+checked against the tag list rather than against the other copies. Four of them
+agreeing on one stale version is the failure that check exists for, and it is
+the failure that happened:
+
+```console
+$ go test ./tmux/internal/integration/ -run TestEveryRequirementNamesTheNewestRelease
 ```
 
 Coverage has to name the core module rather than defaulting to the package under
