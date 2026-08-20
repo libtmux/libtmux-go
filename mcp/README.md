@@ -208,7 +208,7 @@ so.
 | --- | --- |
 | `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
 | `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
-| `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the four recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
+| `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
 | `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |
 
 The names match the Python server, so an operator running both writes one

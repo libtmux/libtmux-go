@@ -12,7 +12,7 @@ For installing the server and pointing a client at it, see
 
 ## Prompts
 
-Four, invoked by name from a client's own menu:
+Invoked by name from a client's own menu:
 
 | Prompt | Is |
 | --- | --- |
@@ -29,10 +29,10 @@ per tool would be a second, worse tool list. `set_up_workspace` and
 the server cannot carry out.
 
 Most of what this server knows about which tool to use, and in what order, is
-in these four. A client that does not implement the prompts protocol shows a
+in these prompts. A client that does not implement the prompts protocol shows a
 model none of it — so `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1` also offers them as one
-`get_recipe` tool, whose own description names all four. It is off by default,
-because a server that offers both describes the same four things twice, and the
+`get_recipe` tool, whose own description names them all. It is off by default,
+because a server that offers both describes the same things twice, and the
 tool list is the expensive place to say anything.
 
 ## Resources
@@ -193,8 +193,8 @@ around.
 
 A listing used to answer with the whole server, which is the answer to a
 question nobody asks: a caller wants the pane running the dev server, not the
-forty around it, and pays for the difference in context it cannot get back. All
-three listing tools take criteria, combined with AND, and every reply reports
+forty around it, and pays for the difference in context it cannot get back. The
+listings of sessions, windows, and panes take criteria, combined with AND, and every reply reports
 the `total` it selected from — so a caller can tell a filter that matched one
 pane from a server that only has one.
 
