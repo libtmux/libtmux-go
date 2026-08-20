@@ -27,6 +27,10 @@ var documentedFloorOnly = regexp.MustCompile(
 	`(?:tmux|version)\s+(\d+\.\d+[a-z]?)\s+or\s+(?:newer|later)`,
 )
 
+// benchmarkSection matches the heading BENCHMARKS.md gives one tmux release's
+// measurements.
+var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?)\s*$`)
+
 // TestTheSupportedTmuxRangeIsTheOneTested gates a promise against the thing
 // that keeps it.
 //
@@ -77,6 +81,32 @@ func TestTheSupportedTmuxRangeIsTheOneTested(t *testing.T) {
 				t.Errorf("%s asks for tmux %s or newer and the oldest one "+
 					"tested is %s", document, match[1], oldest)
 			}
+		}
+	}
+
+	// The benchmarks record one table per release, and a release added to the
+	// matrix without one leaves the table set claiming to cover a range it does
+	// not.
+	recorded, err := os.ReadFile(filepath.Join(root, "BENCHMARKS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var measured []string
+	for _, match := range benchmarkSection.FindAllStringSubmatch(string(recorded), -1) {
+		measured = append(measured, match[1])
+	}
+	for _, version := range tested {
+		if !slices.Contains(measured, version.String()) {
+			t.Errorf("the workflow runs tmux %s and BENCHMARKS.md records no "+
+				"table for it", version)
+		}
+	}
+	for _, version := range measured {
+		if !slices.ContainsFunc(tested, func(run tmux.Version) bool {
+			return run.String() == version
+		}) {
+			t.Errorf("BENCHMARKS.md records tmux %s and the workflow runs no "+
+				"such release", version)
 		}
 	}
 }
