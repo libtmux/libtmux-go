@@ -213,13 +213,33 @@ func bufferName(requested string) (string, error) {
 	if name == "" {
 		return bufferPrefix + strconv.FormatInt(bufferSequence.Add(1), 10), nil
 	}
-	if strings.ContainsAny(name, " \t\n") {
-		return "", fmt.Errorf("buffer name %q must not contain whitespace", requested)
+	if err := usableBufferName(requested, name); err != nil {
+		return "", err
 	}
 	if strings.HasPrefix(name, bufferPrefix) {
 		return name, nil
 	}
 	return bufferPrefix + name, nil
+}
+
+// usableBufferName refuses what tmux would not hand back unchanged.
+//
+// From 3.7 tmux cleans a name for display before storing it and doubles a
+// backslash doing so, while lookup does not repeat the cleaning. The buffer
+// then answers to a spelling the caller was never told, so the handle these
+// tools return would address nothing. Below 3.7 the same name round-trips,
+// which is why it is refused rather than left to the tmux underneath.
+func usableBufferName(requested, name string) error {
+	if strings.ContainsAny(name, " \t\n") {
+		return fmt.Errorf("buffer name %q must not contain whitespace", requested)
+	}
+	if strings.Contains(name, `\`) {
+		return fmt.Errorf(
+			"buffer name %q must not contain a backslash: tmux 3.7 stores it "+
+				"doubled and looks it up undoubled, so the name would not "+
+				"reach the buffer", requested)
+	}
+	return nil
 }
 
 // ownBufferName refuses a name this server did not create.
@@ -233,8 +253,8 @@ func ownBufferName(requested string) (string, error) {
 		// it thinks of the buffer, and refuse anything else.
 		name = bufferPrefix + name
 	}
-	if strings.ContainsAny(name, " \t\n") {
-		return "", fmt.Errorf("buffer name %q must not contain whitespace", requested)
+	if err := usableBufferName(requested, name); err != nil {
+		return "", err
 	}
 	return name, nil
 }

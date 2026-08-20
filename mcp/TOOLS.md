@@ -1355,13 +1355,13 @@ Reads only. Repeating it changes nothing.
 
 ### `select_layout`
 
-Arrange a window's panes with one of tmux's presets (even-horizontal, even-vertical, main-horizontal, main-vertical, tiled), spread them evenly, or restore a layout string read from get_window_info.
+Arrange a window's panes with one of tmux's presets (even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, and the mirrored pair from tmux 3.5), spread them evenly, or restore a layout string read from get_window_info.
 
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `layout` | string | even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, or a layout string from get_window_info |
+| `layout` | string | even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, main-horizontal-mirrored or main-vertical-mirrored from tmux 3.5, or a layout string from get_window_info |
 | `sessionName` | string | which session's current window to arrange when windowId is empty |
 | `spread` | boolean | give every pane an equal share of the space |
 | `windowId` | string | the tmux window id to arrange; empty uses the current window |

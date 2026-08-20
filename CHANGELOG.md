@@ -27,6 +27,22 @@ the tree, and `golangci-lint` now gates it so the older forms cannot return.
 
 ### tmux
 
+`FormatValues.SessionActive` reports tmux's `session_active`, which says whether
+a session is the asking client's current one. tmux added it at 3.6 and the
+format catalog did not carry it, so it could not be read typed. The catalog is
+checked against tmux's own inventory, but that inventory only lists what has a
+value in the asking context and no client was attached, so every client-context
+variable was outside what the check could see. It now holds a control-mode
+client while it reads, which needs no terminal.
+
+`SelectLayout` accepts `main-horizontal-mirrored` and `main-vertical-mirrored`
+on tmux 3.5 or newer, and refuses them below with the version it found. tmux
+added the pair at 3.5 and the preset list never grew, so five supported
+releases were denied an arrangement they have. The list is strict for a reason
+that has not changed — tmux 3.3a exits on a name it does not know and takes
+every session on the socket with it — so the pair is gated by version rather
+than simply added, and a [Plan] renders it under the same gate.
+
 `HasSession` with `Pattern` false answers for the name itself, and `NewSession`
 with `KillExisting` kills the session it found rather than re-resolving the
 name. tmux's exact-match marker suppresses only the last two rungs of its
@@ -72,6 +88,17 @@ creates a root beside the others, so a test that spawns a child suite could not
 tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
+
+`select_layout` offers the mirrored presets on tmux 3.5 or newer, matching the
+tmux module.
+
+`load_buffer` refuses a name holding a backslash, naming the reason. tmux 3.7
+cleans a buffer name for display before storing it and doubles a backslash
+doing so, while lookup does not repeat the cleaning, so the buffer answered to a
+spelling the caller was never told: the handle `load_buffer` returned reached
+nothing, and the buffer could be neither read nor deleted through it. Below 3.7
+the same name round-trips, which is why it is refused rather than left to the
+tmux underneath.
 
 A subscription is told about the pane it named. Every tool hands a pane back as
 `%1`, so a client watching one subscribes to `tmux://panes/%1/content` — which

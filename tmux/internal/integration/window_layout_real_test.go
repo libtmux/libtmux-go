@@ -42,8 +42,7 @@ func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {
 
 	for _, layout := range []string{
 		"no-such-layout",
-		"main-vertical-mirrored", // a real name, but not on every version
-		"zzzz,80x24,0,0,0",       // checksum-shaped, but not hexadecimal
+		"zzzz,80x24,0,0,0", // checksum-shaped, but not hexadecimal
 		"garbage,,,",
 	} {
 		t.Run(layout, func(t *testing.T) {
@@ -65,6 +64,39 @@ func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {
 			}
 		})
 	}
+
+	// A real name tmux learned partway through the range is refused for a
+	// different reason, and the reason has to be the one a caller can act on:
+	// waiting for a newer tmux, not correcting a typo.
+	t.Run("main-vertical-mirrored", func(t *testing.T) {
+		version, err := server.Version(ctx)
+		if err != nil {
+			t.Fatalf("Version() error = %v", err)
+		}
+		mirrored, err := tmux.ParseVersion("3.5")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = window.SelectLayout(ctx, tmux.SelectLayoutRequest{
+			Layout: "main-vertical-mirrored",
+		})
+		switch {
+		case version.AtLeast(mirrored) && err != nil:
+			t.Errorf("SelectLayout(main-vertical-mirrored) on tmux %s error = %v, "+
+				"want it applied", version, err)
+		case !version.AtLeast(mirrored) && !errors.Is(err, tmux.ErrVersionTooLow):
+			t.Errorf("SelectLayout(main-vertical-mirrored) on tmux %s error = %v, "+
+				"want ErrVersionTooLow", version, err)
+		}
+		// Either way, nothing may have reached a tmux that would exit on it.
+		alive, err := server.IsAlive(ctx)
+		if err != nil || !alive {
+			t.Fatalf("the tmux server did not survive: (%t, %v)", alive, err)
+		}
+		if _, err := bystander.Refresh(ctx); err != nil {
+			t.Fatalf("an unrelated session did not survive: %v", err)
+		}
+	})
 
 	// What tmux does accept still works, including its own layout string.
 	if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: "tiled"}); err != nil {

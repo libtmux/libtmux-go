@@ -792,6 +792,12 @@
       "kind": "int"
     },
     {
+      "name": "session_active",
+      "scope": "session",
+      "since": "3.6",
+      "kind": "bool"
+    },
+    {
       "name": "session_activity",
       "scope": "session",
       "since": "3.2a",

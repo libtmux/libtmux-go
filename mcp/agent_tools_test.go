@@ -851,6 +851,48 @@ func TestBuffersAreThisServersOwn(t *testing.T) {
 	}
 }
 
+// TestALoadedBufferIsReachableByTheNameItAnswersWith covers a handle that stops
+// addressing the thing it names.
+//
+// tmux 3.7 cleans a buffer name for display before storing it, and doubles a
+// backslash doing so, while lookup does not repeat the cleaning. A name holding
+// one is therefore stored under a spelling the caller was never told, so the
+// buffer could be neither read nor deleted through the handle load_buffer
+// returned. Below 3.7 the same call round-trips, which is the whole problem: one
+// name meant two things depending on the tmux underneath.
+//
+//libtmux:real-tmux
+func TestALoadedBufferIsReachableByTheNameItAnswersWith(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: handles\nwindows:\n  - panes:\n      - {}\n")
+
+	for _, name := range []string{`a\b`, `\`, `back\\slash`} {
+		var staged struct {
+			Name string `json:"name"`
+		}
+		result := call(ctx, t, session, "load_buffer", map[string]any{
+			"text": "payload", "name": name,
+		}, &staged)
+		if !result.IsError {
+			// Accepting it is only sound if the handle works, so hold it to that.
+			read := call(ctx, t, session, "show_buffer", map[string]any{
+				"name": staged.Name,
+			}, nil)
+			if read.IsError {
+				t.Errorf("load_buffer(%q) answered with %q, which show_buffer cannot "+
+					"reach: %#v", name, staged.Name, read.Content)
+			}
+			call(ctx, t, session, "delete_buffer", map[string]any{"name": staged.Name}, nil)
+			continue
+		}
+		if text, ok := result.Content[0].(*sdk.TextContent); ok &&
+			!strings.Contains(text.Text, `\`) {
+			t.Errorf("load_buffer(%q) was refused without naming the character: %s",
+				name, text.Text)
+		}
+	}
+}
+
 // stringPointer is the address of a value, which several tmux requests take to
 // tell an absent field from an empty one.
 //

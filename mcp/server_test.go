@@ -757,6 +757,69 @@ func TestSelectLayoutRefusesTwoAlternativesItself(t *testing.T) {
 	}
 }
 
+// TestEveryPresetThisTmuxArrangesIsOffered covers an allowlist that stopped
+// keeping up with tmux.
+//
+// A name tmux does not know is not merely refused: 3.3a dies of it and takes
+// every session on the socket, which is why the names are checked before they
+// are sent. The cost of that is a list that has to grow when tmux's does, and
+// the mirrored presets arrived at 3.5 without it.
+//
+// The mirrored pair is checked against the running version rather than by
+// sending an unknown name to find out, because finding out is what ends a 3.3a
+// server. Where the tool does offer one, tmux is made to apply it, so the
+// boundary is not taken on trust.
+//
+//libtmux:real-tmux
+func TestEveryPresetThisTmuxArrangesIsOffered(t *testing.T) {
+	session, target, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: presets\nwindows:\n  - panes:\n      - {}\n      - {}\n",
+	}, nil)
+
+	version, err := target.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	mirrored, err := tmux.ParseVersion("3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for preset, since := range map[string]bool{
+		"even-horizontal":          true,
+		"even-vertical":            true,
+		"main-horizontal":          true,
+		"main-vertical":            true,
+		"tiled":                    true,
+		"main-horizontal-mirrored": version.AtLeast(mirrored),
+		"main-vertical-mirrored":   version.AtLeast(mirrored),
+	} {
+		result := call(ctx, t, session, "select_layout",
+			map[string]any{"layout": preset}, nil)
+		if result.IsError == since {
+			t.Errorf("select_layout %q on tmux %s: refused = %t, want %t",
+				preset, version, result.IsError, !since)
+			continue
+		}
+		if !since {
+			continue
+		}
+		// Offering it is only right if tmux arranges it, so read back what the
+		// window ended up with rather than trusting the call's own success.
+		var window struct {
+			Layout string `json:"layout"`
+		}
+		if info := call(ctx, t, session, "get_window_info",
+			map[string]any{}, &window); info.IsError {
+			t.Fatalf("get_window_info: %#v", info.Content)
+		}
+		if window.Layout == "" {
+			t.Errorf("after select_layout %q the window reports no layout", preset)
+		}
+	}
+}
+
 // TestFindPaneByPositionReadsTheLayout covers the question an index cannot
 // answer. A pane's index is the order it was made in, so a client with only
 // indexes cannot say which pane is above another.
@@ -1752,6 +1815,39 @@ func TestResourcesAddressTheHierarchy(t *testing.T) {
 	panes := paneIDs(ctx, t, session)
 	if len(panes) == 0 {
 		t.Fatal("no panes")
+	}
+
+	// Which spellings a URI takes, pinned rather than assumed. Every tool hands
+	// a pane back as %1, so a client composing a URI from one is the likely
+	// path, and a read and a subscription of the same string must not disagree
+	// about whether it is a URI at all.
+	bare := strings.TrimPrefix(panes[0], "%")
+	for _, spelling := range []struct {
+		uri      string
+		readable bool
+		why      string
+	}{
+		{"tmux://panes/" + bare + "/content", true, "the form the templates and completions give"},
+		{"tmux://panes/%25" + bare + "/content", true, "the sigil, percent-encoded"},
+		{
+			"tmux://panes/%" + bare + "/content", false,
+			"the sigil raw, which no URI can carry: % begins an escape",
+		},
+	} {
+		_, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: spelling.uri})
+		if (err == nil) != spelling.readable {
+			t.Errorf("read %s (%s): error = %v, want readable = %t",
+				spelling.uri, spelling.why, err, spelling.readable)
+		}
+		// Subscription is routed by the string itself rather than by template,
+		// so it takes the raw sigil too and must keep doing so: a client that
+		// subscribed and got silence is the defect that bought this.
+		if err := session.Subscribe(ctx, &sdk.SubscribeParams{URI: spelling.uri}); err != nil {
+			t.Errorf("subscribe %s (%s): %v", spelling.uri, spelling.why, err)
+		}
+		if err := session.Unsubscribe(ctx, &sdk.UnsubscribeParams{URI: spelling.uri}); err != nil {
+			t.Errorf("unsubscribe %s: %v", spelling.uri, err)
+		}
 	}
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {

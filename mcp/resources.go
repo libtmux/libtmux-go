@@ -26,7 +26,14 @@ import (
 // and a percent sign begins an escape in a URI, so tmux://panes/%0/content is
 // not a URI a client can parse at all. The sigil is redundant inside a path
 // already saying panes, and requiring %250 instead would be correct and
-// unusable. Both forms are accepted on the way in.
+// unusable.
+//
+// A read takes the bare form or the encoded one. It cannot take the raw sigil:
+// a template is matched by a regexp built from it, and a percent that is not
+// followed by two hex digits matches no template, so the SDK answers before
+// this package is reached. A subscription takes all three, because it is routed
+// by the string itself — and it has to, since every tool hands a pane back as
+// %1 and a client that subscribed with one got silence.
 const (
 	resourceSessions       = "tmux://sessions"
 	templateSessionWindows = "tmux://sessions/{session}/windows"

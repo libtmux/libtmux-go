@@ -248,7 +248,7 @@ type selectLayoutInput struct {
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's current window to arrange when windowId is empty"`
 	// Layout is one of tmux's presets, or a layout string read from
 	// get_window_info. Empty with Spread set redistributes the space instead.
-	Layout string `json:"layout,omitempty" jsonschema:"even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, or a layout string from get_window_info"`
+	Layout string `json:"layout,omitempty" jsonschema:"even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, main-horizontal-mirrored or main-vertical-mirrored from tmux 3.5, or a layout string from get_window_info"`
 	// Spread gives every pane an equal share without changing the arrangement.
 	Spread bool `json:"spread,omitempty" jsonschema:"give every pane an equal share of the space"`
 }
@@ -274,6 +274,11 @@ var layoutPresets = map[string]bool{
 	"main-horizontal": true,
 	"main-vertical":   true,
 	"tiled":           true,
+	// tmux added these at 3.5. They are passed on rather than gated here,
+	// because the tmux module refuses them below that with the version it
+	// found, which is the answer a client can act on.
+	"main-horizontal-mirrored": true,
+	"main-vertical-mirrored":   true,
 }
 
 // layoutString matches tmux's own description of an arrangement, which
@@ -561,7 +566,8 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 		Annotations: settling("Arrange a Window's Panes"),
 		Description: "Arrange a window's panes with one of tmux's presets " +
 			"(even-horizontal, even-vertical, main-horizontal, main-vertical, " +
-			"tiled), spread them evenly, or restore a layout string read from " +
+			"tiled, and the mirrored pair from tmux 3.5), spread them evenly, " +
+			"or restore a layout string read from " +
 			"get_window_info.",
 	}, t.selectLayout)
 	register(server, t, &mcp.Tool{
