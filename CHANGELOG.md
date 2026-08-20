@@ -88,6 +88,19 @@ sending that screen would have.
 `mcp-swap` takes `--client`, so a build can be tried in one agent while the
 others keep whatever they run.
 
+`mcp-swap revert` no longer discards a configuration edited after a previous
+revert. A backup is written only when none exists, which is what lets a second
+swap still revert to the original; leaving that backup in place afterwards
+turned the same rule into data loss, because a later revert restored the copy
+from before the edit. It is removed once it has been used, so the next swap
+copies the file as it is then.
+
+The server this module builds is built against the current core. `mcp/go.mod`
+required `v0.0.1-alpha.1` for the whole life of `v0.0.1-alpha.2`, and it is the
+one module here with no `replace` directive, so that requirement is what a
+`go install` resolves and what its own CI compiled — nineteen core commits
+behind, including both Go floor raises.
+
 The registry entry is named for the language rather than the project, since
 every server under this namespace drives tmux and the namespace already says
 whose it is.
