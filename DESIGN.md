@@ -6,9 +6,12 @@ This document defines the architecture of the Go module.
 
 - The module path is `github.com/libtmux/libtmux-go`; its root package
   name is `tmux`.
-- The language baseline is Go 1.23. No runtime dependency is accepted without a
-  measured need and a focused bakeoff; the initial implementation is standard
-  library only.
+- The language baseline is Go 1.26, and tracks upstream's support window rather
+  than a version chosen once: Go supports a release until two newer ones exist,
+  so the floor is the oldest release still receiving fixes. Raising it is
+  routine, and the syntax it unlocks is taken rather than left on the table. No
+  runtime dependency is accepted without a measured need and a focused bakeoff;
+  the implementation is standard library only.
 - The tmux floor remains 3.2a. Format fields and command flags retain the same
   version gates as the Python library.
 - Operations that may wait for or execute tmux take `context.Context` first.

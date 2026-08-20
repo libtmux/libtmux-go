@@ -186,7 +186,7 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 	}
 	alertWindowID := alertWindowIDValue
 	current := tmuxtest.NewWindow(ctx, t, session, tmux.NewWindowRequest{
-		Name: killWindowName("current"), Attach: true,
+		Name: new("current"), Attach: true,
 	})
 	mustRealCommand(t, server, "set-option", "-t", session.ID().String(), "activity-action", "other")
 	mustRealCommand(t, server, "set-window-option", "-t", alertWindowID.String(), "monitor-activity", "on")
@@ -299,10 +299,10 @@ func TestTargetedSessionAndWindowKillsAgainstRealTmux(t *testing.T) {
 		ctx, t, session, tmux.NewWindowRequest{Index: &index},
 	)
 	stringTarget := tmuxtest.NewWindow(
-		ctx, t, session, tmux.NewWindowRequest{Name: killWindowName("string-target")},
+		ctx, t, session, tmux.NewWindowRequest{Name: new("string-target")},
 	)
 	keep := tmuxtest.NewWindow(
-		ctx, t, session, tmux.NewWindowRequest{Name: killWindowName("survivor")},
+		ctx, t, session, tmux.NewWindowRequest{Name: new("survivor")},
 	)
 
 	if err := session.KillWindow(ctx, tmux.KillWindowRequest{Index: &index}); err != nil {
@@ -331,8 +331,6 @@ func TestTargetedSessionAndWindowKillsAgainstRealTmux(t *testing.T) {
 	}
 }
 
-func killWindowName(name string) *string { return &name }
-
 //libtmux:real-tmux
 func TestWindowKillOthersUsesLinkedReceiverSessionAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
@@ -343,10 +341,10 @@ func TestWindowKillOthersUsesLinkedReceiverSessionAgainstRealTmux(t *testing.T) 
 		ctx, t, server, tmux.NewSessionRequest{Name: "kill-linked-alpha"},
 	)
 	shared := tmuxtest.NewWindow(
-		ctx, t, alpha, tmux.NewWindowRequest{Name: killWindowName("shared")},
+		ctx, t, alpha, tmux.NewWindowRequest{Name: new("shared")},
 	)
 	alphaExtra := tmuxtest.NewWindow(
-		ctx, t, alpha, tmux.NewWindowRequest{Name: killWindowName("alpha-extra")},
+		ctx, t, alpha, tmux.NewWindowRequest{Name: new("alpha-extra")},
 	)
 	beta := tmuxtest.NewSession(
 		ctx, t, server, tmux.NewSessionRequest{Name: "kill-linked-beta"},

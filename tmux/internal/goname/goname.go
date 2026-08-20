@@ -82,7 +82,7 @@ var compounds = map[string]string{
 // casing passes through its non-initialism words unchanged.
 func Exported(name string) string {
 	var exported strings.Builder
-	for _, word := range strings.Split(name, "_") {
+	for word := range strings.SplitSeq(name, "_") {
 		switch {
 		case word == "":
 			continue

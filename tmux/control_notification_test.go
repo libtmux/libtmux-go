@@ -253,17 +253,27 @@ func TestControlNotificationOwnsArgumentsAndSupportsConcurrentReads(t *testing.T
 
 	const readers = 32
 	var wait sync.WaitGroup
-	wait.Add(readers)
 	for range readers {
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			if notification.Kind() != ControlNotificationSessionRenamed {
 				t.Errorf("Kind() = %q", notification.Kind())
 			}
 			if got := notification.Arguments(); !slices.Equal(got, []string{"$7", "original name"}) {
 				t.Errorf("Arguments() = %#v", got)
 			}
-		}()
+		})
 	}
 	wait.Wait()
+}
+
+// The colon tail is the only parse path that splits, so it is the one that
+// shows what the argument scan costs per notification.
+func BenchmarkParseControlNotificationColonTail(b *testing.B) {
+	line := []byte(`%extended-output %4 18 future-a future-b future-c future-d : value : stays \134`)
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := ParseControlNotification(line); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

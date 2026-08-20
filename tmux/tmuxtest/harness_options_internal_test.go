@@ -221,20 +221,16 @@ func assertSafeReachableErrors(t *testing.T, root error, forbidden []string) {
 		}
 	}
 
-	var pathError *os.PathError
-	if errors.As(root, &pathError) {
+	if pathError, ok := errors.AsType[*os.PathError](root); ok {
 		t.Fatalf("reachable error retained *os.PathError: %#v", pathError)
 	}
-	var executableError *exec.Error
-	if errors.As(root, &executableError) {
+	if executableError, ok := errors.AsType[*exec.Error](root); ok {
 		t.Fatalf("reachable error retained *exec.Error: %#v", executableError)
 	}
-	var exitError *exec.ExitError
-	if errors.As(root, &exitError) {
+	if exitError, ok := errors.AsType[*exec.ExitError](root); ok {
 		t.Fatalf("reachable error retained *exec.ExitError: %#v", exitError)
 	}
-	var commandError *tmux.CommandError
-	if errors.As(root, &commandError) {
+	if commandError, ok := errors.AsType[*tmux.CommandError](root); ok {
 		t.Fatalf("reachable error retained *tmux.CommandError: %#v", commandError)
 	}
 }

@@ -160,7 +160,7 @@ func TestPaneTopologyAndLinkedContextAgainstRealTmux(t *testing.T) {
 		t.Fatalf("SplitPane(source) error = %v", err)
 	}
 	destinationWindow, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("destination"),
+		Name: new("destination"),
 	})
 	if err != nil {
 		t.Fatalf("NewWindow(destination) error = %v", err)
@@ -219,7 +219,7 @@ func TestPaneTopologyAndLinkedContextAgainstRealTmux(t *testing.T) {
 	}
 
 	swapTarget, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("swap-target"),
+		Name: new("swap-target"),
 	})
 	if err != nil {
 		t.Fatalf("NewWindow(swap target) error = %v", err)

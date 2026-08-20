@@ -306,7 +306,7 @@ func appendColonControlNotificationTail(
 		if futureArguments[0] != ' ' {
 			return nil, malformedControlNotification(position, "argument delimiter is missing")
 		}
-		for _, argument := range strings.Split(futureArguments[1:], " ") {
+		for argument := range strings.SplitSeq(futureArguments[1:], " ") {
 			if argument == "" {
 				return nil, malformedControlNotification(position, "future argument is empty")
 			}

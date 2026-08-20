@@ -154,8 +154,7 @@ func unixHelperProcessState(t *testing.T, mode string) *os.ProcessState {
 			t.Fatalf("helper %s error = %v", mode, err)
 		}
 	} else {
-		var exitError *exec.ExitError
-		if !errors.As(err, &exitError) {
+		if _, ok := errors.AsType[*exec.ExitError](err); !ok {
 			t.Fatalf("helper %s error = %v, want *exec.ExitError", mode, err)
 		}
 	}

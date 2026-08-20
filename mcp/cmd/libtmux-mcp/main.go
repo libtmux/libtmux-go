@@ -23,7 +23,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -79,12 +79,30 @@ func serve(target tmux.Server) error {
 	// binary does not exist. An unreachable server is not an error here: tmux
 	// starts one on demand.
 	if _, err := target.Version(ctx); err != nil {
-		return fmt.Errorf("resolve tmux: %w", err)
+		return fmt.Errorf("resolve tmux: %w", endedBy(ctx, err))
 	}
 	if err := tmuxmcp.Run(ctx, target); err != nil && !isClientHangup(err) {
-		return err
+		return endedBy(ctx, err)
 	}
 	return nil
+}
+
+// endedBy replaces a context cancellation with the signal that caused it.
+// A client tearing the transport down sends one, and "context canceled" names
+// the mechanism rather than the reason, which reads as a fault in the server.
+//
+// The cause is compared by identity rather than with errors.Is because a
+// signal's cause wraps context.Canceled, so errors.Is holds for both it and a
+// plain cancellation and cannot tell them apart.
+func endedBy(ctx context.Context, err error) error {
+	if !errors.Is(err, context.Canceled) {
+		return err
+	}
+	cause := context.Cause(ctx)
+	if cause == nil || cause == context.Canceled { //nolint:errorlint // identity is the distinction
+		return err
+	}
+	return cause
 }
 
 // codeServerClosing is the JSON-RPC code the SDK reports when the connection
@@ -150,8 +168,8 @@ func reportTools(target tmux.Server) error {
 	if err != nil {
 		return err
 	}
-	sort.Slice(listed.Tools, func(i, j int) bool {
-		return listed.Tools[i].Name < listed.Tools[j].Name
+	slices.SortFunc(listed.Tools, func(a, b *sdk.Tool) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 	level := os.Getenv(tmuxmcp.SafetyEnvironmentVariable)
 	if level == "" {

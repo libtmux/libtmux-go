@@ -829,12 +829,10 @@ func readTypedOptionValues(
 }
 
 func classifyOptionVersionBoundaryError(err error) (bool, error) {
-	var transport *versionTransportError
-	if errors.As(err, &transport) {
+	if _, ok := errors.AsType[*versionTransportError](err); ok {
 		return true, err
 	}
-	var query *VersionQueryError
-	if errors.As(err, &query) {
+	if query, ok := errors.AsType[*VersionQueryError](err); ok {
 		if query.failedCommand() {
 			return true, err
 		}

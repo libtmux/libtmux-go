@@ -344,8 +344,7 @@ func TestEnvironmentNamesValidateBeforeExecution(t *testing.T) {
 			if !errors.Is(err, ErrInvalidEnvironmentName) {
 				t.Fatalf("environment operation error = %v, want ErrInvalidEnvironmentName", err)
 			}
-			var nameError *EnvironmentNameError
-			if !errors.As(err, &nameError) {
+			if _, ok := errors.AsType[*EnvironmentNameError](err); !ok {
 				t.Fatalf("environment operation error type = %T, want *EnvironmentNameError", err)
 			}
 			if runner.callCount() != 0 {

@@ -46,7 +46,7 @@ func TestLifecycleOperationsAgainstRealTmux(t *testing.T) {
 		t.Fatalf("renamed session name = %q, want phase5-renamed", name)
 	}
 
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: newWindowName("second")})
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("second")})
 	if err != nil {
 		t.Fatalf("Session.NewWindow() error = %v", err)
 	}
@@ -172,7 +172,7 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 
 	index := 7
 	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-		Name:           newWindowName("indexed"),
+		Name:           new("indexed"),
 		Index:          &index,
 		StartDirectory: startDirectory,
 		Command:        "sleep 30",
@@ -191,7 +191,7 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 	}
 
 	selected, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-		Name:    newWindowName("selected"),
+		Name:    new("selected"),
 		Attach:  true,
 		Command: "sleep 30",
 	})
@@ -215,7 +215,7 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 	} {
 		t.Run("split "+test.name, func(t *testing.T) {
 			window, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-				Name:    newWindowName("split-" + test.name),
+				Name:    new("split-" + test.name),
 				Command: "sleep 30",
 			})
 			if err != nil {
@@ -252,7 +252,7 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 			t.Skip("split-window -p is broken in tmux 3.4")
 		}
 		percentageWindow, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-			Name:    newWindowName("split-percentage"),
+			Name:    new("split-percentage"),
 			Attach:  true,
 			Command: "sleep 30",
 		})
@@ -296,7 +296,7 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 				t.Skip("split-window -p is broken in tmux 3.4")
 			}
 			window, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-				Name:    newWindowName("split-" + test.name),
+				Name:    new("split-" + test.name),
 				Command: "sleep 30",
 			})
 			if err != nil {
@@ -409,8 +409,6 @@ func requiredRealPaneID(
 	}
 	return paneID
 }
-
-func newWindowName(value string) *string { return &value }
 
 func realFormatInt(t *testing.T, accessor func() (int, bool)) int {
 	t.Helper()

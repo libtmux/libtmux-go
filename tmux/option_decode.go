@@ -464,7 +464,7 @@ func optionOutputRequiresVersion(
 			versioned[definition.name] = struct{}{}
 		}
 	}
-	for _, line := range bytes.Split(raw, []byte{'\n'}) {
+	for line := range bytes.SplitSeq(raw, []byte{'\n'}) {
 		keyBytes, _, _ := bytes.Cut(line, []byte{' '})
 		key := parseDecodedOptionKey(string(keyBytes))
 		if _, ok := versioned[key.base]; ok {

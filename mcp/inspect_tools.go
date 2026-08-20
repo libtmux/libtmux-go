@@ -1,10 +1,12 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -155,7 +157,7 @@ func (t *tools) searchPanes(
 	input searchPanesInput,
 ) (*mcp.CallToolResult, searchPanesOutput, error) {
 	if strings.TrimSpace(input.Text) == "" {
-		return nil, searchPanesOutput{}, fmt.Errorf("text is required")
+		return nil, searchPanesOutput{}, errors.New("text is required")
 	}
 	matcher, err := compileMatcher(input.Text, input.Regex, input.MatchCase)
 	if err != nil {
@@ -454,8 +456,8 @@ func (t *tools) getSessionInfo(
 		}
 		output.Windows = append(output.Windows, summarizeWindow(window, len(panes)))
 	}
-	sort.Slice(output.Windows, func(i, j int) bool {
-		return output.Windows[i].Index < output.Windows[j].Index
+	slices.SortFunc(output.Windows, func(a, b windowSummary) int {
+		return cmp.Compare(a.Index, b.Index)
 	})
 	return nil, output, nil
 }

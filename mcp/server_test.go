@@ -190,10 +190,8 @@ func TestSendKeysReachesThePane(t *testing.T) {
 			Lines []string `json:"lines"`
 		}
 		call(ctx, t, session, "capture_pane", map[string]any{"paneId": paneID}, &captured)
-		for _, line := range captured.Lines {
-			if line == "mcp ready" {
-				return
-			}
+		if slices.Contains(captured.Lines, "mcp ready") {
+			return
 		}
 		select {
 		case <-ctx.Done():

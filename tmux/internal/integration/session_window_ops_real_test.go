@@ -28,13 +28,13 @@ func TestSessionWindowNavigationAgainstRealTmux(t *testing.T) {
 	session := snapshot.Sessions()[0]
 	first := relatedWindows(t, session)[0]
 	second, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("nav-second"), Attach: true,
+		Name: new("nav-second"), Attach: true,
 	})
 	if err != nil {
 		t.Fatalf("NewWindow(second) error = %v", err)
 	}
 	third, err := session.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("nav-third"), Attach: true,
+		Name: new("nav-third"), Attach: true,
 	})
 	if err != nil {
 		t.Fatalf("NewWindow(third) error = %v", err)
@@ -410,13 +410,13 @@ func TestWindowHighLevelOperationsUseReceiverWinlinkAgainstRealTmux(t *testing.T
 		t.Fatalf("canonical session = %s, want one linked session", canonical.SessionID())
 	}
 	receiverBase, err := receiverSession.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("typed-window-receiver-base"), Attach: true,
+		Name: new("typed-window-receiver-base"), Attach: true,
 	})
 	if err != nil {
 		t.Fatalf("receiver NewWindow() error = %v", err)
 	}
 	canonicalBase, err := canonicalSession.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("typed-window-canonical-base"), Attach: true,
+		Name: new("typed-window-canonical-base"), Attach: true,
 	})
 	if err != nil {
 		t.Fatalf("canonical NewWindow() error = %v", err)
@@ -728,7 +728,7 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Unlink(sole link) error = %v, want ErrCommand", err)
 	}
 
-	moving, err := sourceSession.NewWindow(ctx, tmux.NewWindowRequest{Name: newWindowName("moving")})
+	moving, err := sourceSession.NewWindow(ctx, tmux.NewWindowRequest{Name: new("moving")})
 	if err != nil {
 		t.Fatalf("NewWindow(moving) error = %v", err)
 	}
@@ -755,13 +755,13 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 
 	victimIndex := 15
 	victim, err := sourceSession.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("move-victim"), Index: &victimIndex,
+		Name: new("move-victim"), Index: &victimIndex,
 	})
 	if err != nil {
 		t.Fatalf("NewWindow(victim) error = %v", err)
 	}
 	killer, err := sourceSession.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("move-killer"),
+		Name: new("move-killer"),
 	})
 	if err != nil {
 		t.Fatalf("NewWindow(killer) error = %v", err)
@@ -782,7 +782,7 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 
 	highIndex := 30
 	high, err := sourceSession.NewWindow(ctx, tmux.NewWindowRequest{
-		Name: newWindowName("renumber"), Index: &highIndex,
+		Name: new("renumber"), Index: &highIndex,
 	})
 	if err != nil {
 		t.Fatalf("NewWindow(renumber) error = %v", err)

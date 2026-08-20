@@ -1,6 +1,13 @@
 name: tests
 
-on: [push, pull_request]
+# A branch with an open pull request would otherwise run this twice per push,
+# once for each event, and the two runs compete for the same runners while
+# driving real tmux servers. That contention is what makes the timing-sensitive
+# tests fail on one of the pair and pass on the other.
+on:
+  push:
+    branches: [master]
+  pull_request:
 
 # Every job below names its modules one at a time. `go test ./...` stops at a
 # module boundary, so the consumer modules and the benchmarks are invisible to
@@ -19,6 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         module: [".", "examples", "workspace", "mcp", "benchmarks"]
+        go-version: ["1.26", "1.27"]
     steps:
       # Whole history, because a test checks that the version the mcp module
       # reports from a source build has not fallen behind the releases, and a
@@ -31,7 +39,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: ${{ matrix.go-version }}
           cache-dependency-path: ${{ matrix.module }}/go.mod
 
       - name: Install tmux
@@ -48,6 +56,11 @@ jobs:
         working-directory: ${{ matrix.module }}
         env:
           GOWORK: off
+          # The floor is only tested if the go command cannot leave it. Left to
+          # its default, a go.mod requiring more than the matrix version makes
+          # the go command fetch that newer toolchain and pass, so the oldest
+          # entry would prove nothing.
+          GOTOOLCHAIN: local
         run: |
           go vet ./...
           go test -race -count=1 -coverpkg=./... -coverprofile=coverage.out ./...

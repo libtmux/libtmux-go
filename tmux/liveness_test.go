@@ -103,8 +103,7 @@ func TestServerSessionsReportsAnUnresolvableBinaryInBothModes(t *testing.T) {
 			},
 		} {
 			sessions, err := mode.server.Sessions(context.Background())
-			var executableError *exec.Error
-			if !errors.As(err, &executableError) {
+			if _, ok := errors.AsType[*exec.Error](err); !ok {
 				t.Errorf("%s Sessions() with %q error = %v, want an *exec.Error",
 					mode.name, binary, err)
 			}

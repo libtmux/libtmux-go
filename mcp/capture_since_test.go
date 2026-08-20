@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -183,12 +184,7 @@ func firstLine(lines []string) string {
 
 // containsWord matches a marker as a whole token, so b-1 does not match b-10.
 func containsWord(haystack, marker string) bool {
-	for _, field := range strings.Fields(haystack) {
-		if field == marker {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(haystack), marker)
 }
 
 // TestASubscriberThatArrivedFirstIsStillTold covers the ordinary case a

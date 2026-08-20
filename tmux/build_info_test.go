@@ -107,7 +107,7 @@ func declaredModulePath(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("read go.mod: %v", err)
 	}
-	for _, line := range strings.Split(string(content), "\n") {
+	for line := range strings.SplitSeq(string(content), "\n") {
 		if declared, found := strings.CutPrefix(strings.TrimSpace(line), "module "); found {
 			return declared
 		}

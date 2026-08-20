@@ -12,8 +12,9 @@ option and hook as a typed accessor, and errors classified by what tmux actually
 refused.
 
 - **No runtime dependencies.** The core module imports only the standard library.
-- **Go 1.23+**, tmux **3.2a through 3.7b**, checked against every release in that
-  range on each change.
+- **Go 1.26+**, tmux **3.2a through 3.7b**, checked against every release in that
+  range on each change. The Go floor tracks upstream's support window, which
+  covers the two most recent releases.
 - **Records never refresh behind you.** A `Session` you hold is what tmux said
   when you asked, not a live handle that changes underneath.
 

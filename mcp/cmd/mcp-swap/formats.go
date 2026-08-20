@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -109,9 +110,7 @@ func tomlTableSpan(text []byte, table string) (start int, end int, found bool) {
 // of the same name, since it describes the swap being made now.
 func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	merged := map[string]any{}
-	for name, value := range fresh {
-		merged[name] = value
-	}
+	maps.Copy(merged, fresh)
 	for name, value := range existing {
 		switch name {
 		case "command", "args", "type":
@@ -129,16 +128,12 @@ func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	environment := map[string]any{}
 	for _, name := range []string{"env", "environment"} {
 		if previous, ok := existing[name].(map[string]any); ok {
-			for key, value := range previous {
-				environment[key] = value
-			}
+			maps.Copy(environment, previous)
 		}
 	}
 	for _, name := range []string{"env", "environment"} {
 		if incoming, ok := fresh[name].(map[string]any); ok {
-			for key, value := range incoming {
-				environment[key] = value
-			}
+			maps.Copy(environment, incoming)
 			if len(environment) > 0 {
 				merged[name] = environment
 			}
@@ -154,7 +149,7 @@ func tomlPreserved(text []byte, table string) map[string]any {
 		return nil
 	}
 	kept := map[string]any{}
-	for _, line := range strings.Split(string(text[start:end]), "\n") {
+	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
 			// A sub-table header; its keys are the environment, read
@@ -189,7 +184,7 @@ func tomlEnvironment(text []byte, table string) map[string]any {
 	}
 	environment := map[string]any{}
 	inEnvironment := false
-	for _, line := range strings.Split(string(text[start:end]), "\n") {
+	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
 			inEnvironment = trimmed == "["+table+".env]"
@@ -278,7 +273,7 @@ func readTOMLEntry(text []byte, table string) (map[string]any, bool) {
 		return nil, false
 	}
 	entry := map[string]any{}
-	for _, line := range strings.Split(string(text[start:end]), "\n") {
+	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
 		trimmed := strings.TrimSpace(line)
 		name, value, ok := strings.Cut(trimmed, "=")
 		if !ok {
@@ -593,7 +588,7 @@ func readJSONC(text []byte) (map[string]any, error) {
 func stripTrailingCommas(blanked []byte) []byte {
 	out := make([]byte, len(blanked))
 	copy(out, blanked)
-	for index := 0; index < len(out); index++ {
+	for index := range out {
 		if out[index] != ',' {
 			continue
 		}
@@ -608,10 +603,5 @@ func stripTrailingCommas(blanked []byte) []byte {
 // sortedKeys returns a map's keys in a stable order, so a rewritten entry does
 // not change shape between runs for no reason.
 func sortedKeys(values map[string]any) []string {
-	names := make([]string, 0, len(values))
-	for name := range values {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(values))
 }

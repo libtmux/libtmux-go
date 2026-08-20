@@ -39,9 +39,9 @@ func TestRequestTargetAndFilterTypesCompile(_ *testing.T) {
 func TestMigratedRequestFieldsHaveExactTypesAndNoObsoleteHelpers(t *testing.T) {
 	t.Parallel()
 
-	intType := reflect.TypeOf(int(0))
-	clientNameType := reflect.TypeOf(tmux.ClientName(""))
-	paneIDType := reflect.TypeOf(tmux.PaneID(""))
+	intType := reflect.TypeFor[int]()
+	clientNameType := reflect.TypeFor[tmux.ClientName]()
+	paneIDType := reflect.TypeFor[tmux.PaneID]()
 	valueFields := []requestFieldType{
 		{tmux.NewSessionRequest{}, "Width", intType},
 		{tmux.NewSessionRequest{}, "Height", intType},
@@ -67,10 +67,10 @@ func TestMigratedRequestFieldsHaveExactTypesAndNoObsoleteHelpers(t *testing.T) {
 		assertRequestFieldType(t, field)
 	}
 	for _, field := range []requestFieldType{
-		{tmux.UnbindKeyRequest{}, "Key", reflect.TypeOf((*string)(nil))},
-		{tmux.ServerAccessRequest{}, "Allow", reflect.TypeOf((*string)(nil))},
-		{tmux.ServerAccessRequest{}, "Deny", reflect.TypeOf((*string)(nil))},
-		{tmux.PipePaneRequest{}, "Command", reflect.TypeOf((*string)(nil))},
+		{tmux.UnbindKeyRequest{}, "Key", reflect.TypeFor[*string]()},
+		{tmux.ServerAccessRequest{}, "Allow", reflect.TypeFor[*string]()},
+		{tmux.ServerAccessRequest{}, "Deny", reflect.TypeFor[*string]()},
+		{tmux.PipePaneRequest{}, "Command", reflect.TypeFor[*string]()},
 	} {
 		assertRequestFieldType(t, field)
 	}

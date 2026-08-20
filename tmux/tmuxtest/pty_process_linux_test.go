@@ -10,7 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -196,7 +196,13 @@ func TestPTYProcessWriteHonorsContextWhileChildDoesNotRead(t *testing.T) {
 // behind. Nothing else does: the test that spawned it passes either way, so the
 // directories accumulate unnoticed.
 func TestAPTYHelperLeavesNoSuiteRoot(t *testing.T) {
-	before := suiteRoots(t)
+	// A helper child skips the suite lifecycle, so the root it must not leave
+	// behind is one it would only create if that guard regressed. The tag is
+	// what separates such a root from the ones sibling test binaries create:
+	// go test runs packages in parallel and every suite among them makes one,
+	// so merely being new is not enough to blame this child for it.
+	tag := "ptyclose" + strconv.Itoa(os.Getpid())
+	pattern := filepath.Join(filepath.Dir(os.Getenv("TMPDIR")), "ltg-"+tag+"-*")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -205,34 +211,23 @@ func TestAPTYHelperLeavesNoSuiteRoot(t *testing.T) {
 		t,
 		os.Args[0],
 		[]string{"-test.run=^TestPTYProcessCloseHelper$"},
-		append(os.Environ(), "LIBTMUX_PTY_CLOSE_HELPER=1"),
+		append(os.Environ(),
+			"LIBTMUX_PTY_CLOSE_HELPER=1",
+			tmuxtest.SuiteRootTagVariable+"="+tag,
+		),
 	)
 	if err := process.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
 
-	for _, root := range suiteRoots(t) {
-		if !slices.Contains(before, root) {
-			t.Fatalf("a helper child left the suite root %s behind",
-				filepath.Base(root))
-		}
-	}
-}
-
-// suiteRoots returns the harness roots on disk, named rather than counted
-// because another suite may be running beside this one. TMPDIR is this suite's
-// own root, so its parent is where the harness creates them.
-func suiteRoots(t *testing.T) []string {
-	t.Helper()
-
-	roots, err := filepath.Glob(filepath.Join(filepath.Dir(os.Getenv("TMPDIR")), "ltg-*"))
+	left, err := filepath.Glob(pattern)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(roots) == 0 {
-		t.Fatal("no suite root found, so this test could not observe a leak")
+	if len(left) != 0 {
+		t.Fatalf("a helper child left the suite root %s behind",
+			filepath.Base(left[0]))
 	}
-	return roots
 }
 
 func TestPTYProcessCloseHelper(_ *testing.T) {

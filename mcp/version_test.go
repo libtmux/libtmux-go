@@ -58,7 +58,7 @@ func releaseTags(t *testing.T) []string {
 		return nil
 	}
 	var tags []string
-	for _, line := range strings.Split(strings.TrimSpace(string(found)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(found)), "\n") {
 		if trimmed := strings.TrimPrefix(strings.TrimSpace(line), prefix); trimmed != "" {
 			tags = append(tags, trimmed)
 		}

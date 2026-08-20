@@ -41,9 +41,7 @@ func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
 	errors := make(chan error, workers)
 	var group sync.WaitGroup
 	for worker := range workers {
-		group.Add(1)
-		go func() {
-			defer group.Done()
+		group.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), perCommand)
 			defer cancel()
 			want := strconv.Itoa(worker)
@@ -61,7 +59,7 @@ func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
 			if len(result.Stdout) != 1 || result.Stdout[0] != want {
 				errors <- fmt.Errorf("concurrent command returned %#v, want stdout %q", result, want)
 			}
-		}()
+		})
 	}
 	group.Wait()
 	close(errors)
@@ -77,9 +75,7 @@ func TestSnapshotSupportsConcurrentReadAndFreshSliceMutation(t *testing.T) {
 	const workers = 24
 	var group sync.WaitGroup
 	for range workers {
-		group.Add(1)
-		go func() {
-			defer group.Done()
+		group.Go(func() {
 			for range 100 {
 				sessions := snapshot.Sessions()
 				windows := snapshot.Windows()
@@ -105,7 +101,7 @@ func TestSnapshotSupportsConcurrentReadAndFreshSliceMutation(t *testing.T) {
 				}
 				_, _ = client.AttachedPane()
 			}
-		}()
+		})
 	}
 	group.Wait()
 	if got := snapshot.Sessions()[0].sessionID; got != "$0" {

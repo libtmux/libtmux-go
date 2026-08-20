@@ -106,6 +106,29 @@ $ go test -race -count=1 ./...
 Generated code is checked in. Regenerate it and confirm the tree is unchanged
 rather than trusting that it is.
 
+### The language floor, and what enforces it
+
+The floor tracks upstream's support window, so it moves. Five places state it
+and all five have to agree: the `go` directive in each module's `go.mod`, the
+one in `go.work`, `run.go` in `.golangci.yml`, the version matrix in the tests
+workflow, and the claim README.md makes. `go build` will not catch a
+disagreement — the `go` directive does not gate standard library APIs. `go vet`
+does, reporting `X requires goN.M or later`, which is why vet runs ahead of the
+tests in CI.
+
+Raising the floor unlocks syntax, and two tools find it. Neither alone is
+enough.
+
+`golangci-lint`'s modernize linter reports what is available at the version
+`run.go` names, and gates it, so the older forms cannot come back. It does not
+carry every analyzer `go fix` has — `errorsastype` is one it lacks — so a clean
+lint run is not proof there is nothing left.
+
+`go fix` has the full set, but a whole-package `go fix ./...` silently drops
+fixes that conflict within a package and then reports nothing on a second pass,
+so it reads as converged while leaving rewrites behind. Applying one analyzer
+at a time with `go fix -<analyzer>` does not.
+
 One tmux is not enough. The commands above run against whichever tmux is on
 `PATH`; version-specific breakage is real and has shipped before, so run the
 supported releases before anything ships. A directory of tmux builds with
@@ -159,10 +182,11 @@ control characters in format output, a tab separator came back as an
 underscore, and the tmux module's client-registration poll never matched.
 Testing with an inherited shell environment hides that entire class of bug.
 
-**`libtmux-mcp: context canceled` is not a fault.** It is the server handling
-the SIGTERM it gets when a client tears the transport down, including when the
-Inspector's own 15-second connect timeout fires. Treat it as the symptom of a
-client giving up, not as the cause.
+**`libtmux-mcp: terminated signal received` is not a fault.** It is the server
+handling the SIGTERM it gets when a client tears the transport down, including
+when the Inspector's own 15-second connect timeout fires. Treat it as the
+symptom of a client giving up, not as the cause. It used to read `context
+canceled`, which named the mechanism and left the reason to be guessed at.
 
 **Ports do not matter in `--cli` mode.** The CLI builds a `StdioClientTransport`
 and spawns the command directly, binding nothing. `CLIENT_PORT` and

@@ -1,7 +1,7 @@
 package tmux
 
 import (
-	"fmt"
+	"strconv"
 	"testing"
 )
 
@@ -119,13 +119,13 @@ func TestPythonAliasPropertiesUseCanonicalModelValues(t *testing.T) {
 		{model: "Session", name: "name", got: sessionName, ok: sessionNameOK, want: "work"},
 		{model: "Window", name: "id", got: window.ID().String(), ok: true, want: "@8"},
 		{model: "Window", name: "name", got: windowName, ok: windowNameOK, want: "editor"},
-		{model: "Window", name: "index", got: fmt.Sprint(window.Index()), ok: true, want: "3"},
-		{model: "Window", name: "height", got: fmt.Sprint(windowHeight), ok: windowHeightOK, want: "24"},
-		{model: "Window", name: "width", got: fmt.Sprint(windowWidth), ok: windowWidthOK, want: "80"},
+		{model: "Window", name: "index", got: strconv.Itoa(window.Index()), ok: true, want: "3"},
+		{model: "Window", name: "height", got: strconv.Itoa(windowHeight), ok: windowHeightOK, want: "24"},
+		{model: "Window", name: "width", got: strconv.Itoa(windowWidth), ok: windowWidthOK, want: "80"},
 		{model: "Pane", name: "id", got: pane.ID().String(), ok: true, want: "%9"},
-		{model: "Pane", name: "index", got: fmt.Sprint(pane.Index()), ok: true, want: "2"},
-		{model: "Pane", name: "height", got: fmt.Sprint(paneHeight), ok: paneHeightOK, want: "12"},
-		{model: "Pane", name: "width", got: fmt.Sprint(paneWidth), ok: paneWidthOK, want: "40"},
+		{model: "Pane", name: "index", got: strconv.Itoa(pane.Index()), ok: true, want: "2"},
+		{model: "Pane", name: "height", got: strconv.Itoa(paneHeight), ok: paneHeightOK, want: "12"},
+		{model: "Pane", name: "width", got: strconv.Itoa(paneWidth), ok: paneWidthOK, want: "40"},
 		{model: "Pane", name: "title", got: paneTitle, ok: paneTitleOK, want: "shell"},
 	}
 	for _, value := range values {

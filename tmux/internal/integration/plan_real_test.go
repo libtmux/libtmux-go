@@ -828,8 +828,7 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
 				countingPlanner{dispatches: malformed.dispatches},
 			)
-			var refused *tmux.PlanError
-			if !errors.As(err, &refused) {
+			if _, ok := errors.AsType[*tmux.PlanError](err); !ok {
 				t.Fatalf("RunWith() error = %v, want a plan error", err)
 			}
 			for index, op := range result.Ops {
@@ -896,8 +895,7 @@ func TestPlanRefusesAMarkedGroupItCannotReportSeparately(t *testing.T) {
 				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
 				markingPlanner{ops: ops},
 			)
-			var problem *tmux.PlanError
-			if !errors.As(err, &problem) {
+			if _, ok := errors.AsType[*tmux.PlanError](err); !ok {
 				t.Fatalf("RunWith() error = %v, want a plan error", err)
 			}
 			if result.Ops[1].Status != tmux.OpSkipped {

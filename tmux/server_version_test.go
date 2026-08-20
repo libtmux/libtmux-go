@@ -145,8 +145,7 @@ func TestServerVersionWaiterRetriesAfterOwnerCancellation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("version owner did not start")
 	}
-	waiterContext, cancelWaiter := context.WithCancel(context.Background())
-	defer cancelWaiter()
+	waiterContext := t.Context()
 	observedWaiterContext := &doneObservedContext{
 		Context:  waiterContext,
 		observed: make(chan struct{}),

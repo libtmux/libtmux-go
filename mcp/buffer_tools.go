@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -60,7 +61,7 @@ func (t *tools) loadBuffer(
 	input loadBufferInput,
 ) (*mcp.CallToolResult, bufferRef, error) {
 	if input.Text == "" {
-		return nil, bufferRef{}, fmt.Errorf("text is required")
+		return nil, bufferRef{}, errors.New("text is required")
 	}
 	name, err := bufferName(input.Name)
 	if err != nil {
@@ -225,7 +226,7 @@ func bufferName(requested string) (string, error) {
 func ownBufferName(requested string) (string, error) {
 	name := strings.TrimSpace(requested)
 	if name == "" {
-		return "", fmt.Errorf("name is required")
+		return "", errors.New("name is required")
 	}
 	if !strings.HasPrefix(name, bufferPrefix) {
 		// Accept the short form a client passed to load_buffer, which is how

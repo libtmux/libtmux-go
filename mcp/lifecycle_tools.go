@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -46,7 +46,7 @@ func (t *tools) killSession(
 	// reads it as "the current session", so it would destroy a session nobody
 	// named.
 	if strings.TrimSpace(input.SessionName) == "" {
-		return nil, killSessionOutput{}, fmt.Errorf("sessionName is required")
+		return nil, killSessionOutput{}, errors.New("sessionName is required")
 	}
 	// tmux resolves a bare target by prefix and pattern, so "alph" kills
 	// "alpha". The "=" prefix anchors it to an exact name, which is what this
@@ -85,7 +85,7 @@ func (t *tools) killWindow(
 	input killWindowInput,
 ) (*mcp.CallToolResult, killWindowOutput, error) {
 	if strings.TrimSpace(input.WindowID) == "" {
-		return nil, killWindowOutput{}, fmt.Errorf("windowId is required")
+		return nil, killWindowOutput{}, errors.New("windowId is required")
 	}
 	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
@@ -126,7 +126,7 @@ func (t *tools) killPane(
 	input killPaneInput,
 ) (*mcp.CallToolResult, killPaneOutput, error) {
 	if strings.TrimSpace(input.PaneID) == "" {
-		return nil, killPaneOutput{}, fmt.Errorf("paneId is required")
+		return nil, killPaneOutput{}, errors.New("paneId is required")
 	}
 	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
@@ -176,8 +176,7 @@ func (t *tools) killServer(
 	input killServerInput,
 ) (*mcp.CallToolResult, killServerOutput, error) {
 	if !input.Confirm {
-		return nil, killServerOutput{}, fmt.Errorf(
-			"confirm must be true: this ends every session on the tmux server")
+		return nil, killServerOutput{}, errors.New("confirm must be true: this ends every session on the tmux server")
 	}
 	// Counted before rather than after, because after there is nothing to ask.
 	sessions, _ := t.target.Sessions(ctx)
@@ -265,7 +264,7 @@ func (t *tools) renameSession(
 	input renameSessionInput,
 ) (*mcp.CallToolResult, renameSessionOutput, error) {
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, renameSessionOutput{}, fmt.Errorf("name is required")
+		return nil, renameSessionOutput{}, errors.New("name is required")
 	}
 	session, err := t.resolveSession(ctx, input.SessionName)
 	if err != nil {
@@ -308,7 +307,7 @@ func (t *tools) renameWindow(
 	input renameWindowInput,
 ) (*mcp.CallToolResult, renameWindowOutput, error) {
 	if strings.TrimSpace(input.Name) == "" {
-		return nil, renameWindowOutput{}, fmt.Errorf("name is required")
+		return nil, renameWindowOutput{}, errors.New("name is required")
 	}
 	window, err := t.resolveWindow(ctx, input.WindowID, input.SessionName)
 	if err != nil {

@@ -155,9 +155,7 @@ func TestControlRecordSpoolSupportsConcurrentProducerConsumer(t *testing.T) {
 
 	wants := [][]byte{[]byte("one"), []byte("two"), []byte("three")}
 	var wait sync.WaitGroup
-	wait.Add(1)
-	go func() {
-		defer wait.Done()
+	wait.Go(func() {
 		for _, want := range wants {
 			if err := spool.append(want); err != nil {
 				t.Errorf("append() error = %v", err)
@@ -165,7 +163,7 @@ func TestControlRecordSpoolSupportsConcurrentProducerConsumer(t *testing.T) {
 			}
 		}
 		spool.finish(nil)
-	}()
+	})
 	for index, want := range wants {
 		got, err := spool.next(context.Background())
 		if err != nil || !slices.Equal(got, want) {

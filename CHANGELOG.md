@@ -9,7 +9,36 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### All modules
+
+The Go floor is 1.26, raised from 1.23. It now tracks upstream's support
+window — Go supports a release until two newer ones exist — rather than a
+version chosen once, so expect it to move as releases age out.
+
+This is a hard requirement, not a suggestion. A consumer on an older Go sees
+`module ... requires go >= 1.26.0` and cannot build; `go get` will upgrade the
+toolchain and rewrite the consumer's own `go` directive to match, which passes
+the same floor on to anything that imports them. A toolchain pinned with
+`GOTOOLCHAIN=local`, as distribution packages and air-gapped builds often do,
+has no upgrade path but the toolchain itself.
+
+Nothing about the API changed. The syntax the floor unlocks was taken across
+the tree, and `golangci-lint` now gates it so the older forms cannot return.
+
+### tmux/tmuxtest
+
+`SuiteRootTagVariable` names the environment variable that tags a suite's
+temporary root. go test runs packages in parallel and every suite among them
+creates a root beside the others, so a test that spawns a child suite could not
+tell its child's root from a sibling binary's. Setting it separates them.
+
 ### mcp
+
+The server names the signal that ended it. A client tearing the transport down
+sends SIGTERM, and the exit line reported the cancellation that produced rather
+than the signal itself, so an ordinary disconnect read as `context canceled` —
+the mechanism, not the reason, and impossible to tell from a fault. It now
+reads `terminated signal received`, or `interrupt signal received` for SIGINT.
 
 `run_command` returns what the command actually printed. Three things could make
 the reply disagree with the command. A tab anywhere in a command reached the

@@ -178,7 +178,7 @@ func moduleGoDirective(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(contents), "\n") {
+	for line := range strings.SplitSeq(string(contents), "\n") {
 		if version, found := strings.CutPrefix(strings.TrimSpace(line), "go "); found {
 			return strings.TrimSpace(version), nil
 		}

@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -2107,12 +2108,7 @@ func parityPackageAlias(directory, declaredName string, external bool) string {
 }
 
 func parityInternalPackage(directory string) bool {
-	for _, component := range strings.Split(directory, "/") {
-		if component == "internal" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(directory, "/"), "internal")
 }
 
 func parityGoModulePath(root string) (string, error) {
@@ -2123,7 +2119,7 @@ func parityGoModulePath(root string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read Go module path: %w", err)
 	}
-	for _, line := range strings.Split(string(contents), "\n") {
+	for line := range strings.SplitSeq(string(contents), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) == 2 && fields[0] == "module" {
 			return strings.Trim(fields[1], "\"`"), nil
@@ -2185,12 +2181,8 @@ func newParityFingerprintScope(
 
 func (s parityFingerprintScope) withRenames(renamed map[string]string) parityFingerprintScope {
 	merged := make(map[string]string, len(s.renames)+len(renamed))
-	for name, replacement := range s.renames {
-		merged[name] = replacement
-	}
-	for name, replacement := range renamed {
-		merged[name] = replacement
-	}
+	maps.Copy(merged, s.renames)
+	maps.Copy(merged, renamed)
 	s.renames = merged
 	return s
 }
@@ -3837,19 +3829,14 @@ func parityPrivatePythonEntry(entry parityEntry) bool {
 	if strings.HasPrefix(entry.Kind, "private-") {
 		return true
 	}
-	for _, component := range strings.Split(filepath.ToSlash(entry.Source), "/") {
+	for component := range strings.SplitSeq(filepath.ToSlash(entry.Source), "/") {
 		name := strings.TrimSuffix(component, filepath.Ext(component))
 		if parityPrivatePythonName(name) {
 			return true
 		}
 	}
 	baseID, _, _ := strings.Cut(entry.ID, "#")
-	for _, component := range strings.Split(baseID, ".") {
-		if parityPrivatePythonName(component) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(strings.Split(baseID, "."), parityPrivatePythonName)
 }
 
 func parityPrivatePythonName(name string) bool {

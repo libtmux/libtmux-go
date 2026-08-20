@@ -312,7 +312,7 @@ func selected(clients []client, only []string) ([]client, error) {
 	}
 	wanted := map[string]bool{}
 	for _, name := range only {
-		for _, part := range strings.Split(name, ",") {
+		for part := range strings.SplitSeq(name, ",") {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				continue

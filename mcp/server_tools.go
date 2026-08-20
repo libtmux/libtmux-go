@@ -2,10 +2,11 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -299,11 +300,14 @@ func (t *tools) listServers(
 		}
 	}
 
-	sort.SliceStable(output.Servers, func(i, j int) bool {
-		if output.Servers[i].IsTarget != output.Servers[j].IsTarget {
-			return output.Servers[i].IsTarget
+	slices.SortStableFunc(output.Servers, func(a, b serverSummary) int {
+		if a.IsTarget != b.IsTarget {
+			if a.IsTarget {
+				return -1
+			}
+			return 1
 		}
-		return output.Servers[i].Name < output.Servers[j].Name
+		return strings.Compare(a.Name, b.Name)
 	})
 	// Capped after sorting, so what a cap keeps is the target and the servers
 	// nearest it by name rather than whichever the directory listed first.
@@ -365,7 +369,7 @@ func (t *tools) displayMessage(
 	input displayMessageInput,
 ) (*mcp.CallToolResult, displayMessageOutput, error) {
 	if strings.TrimSpace(input.Format) == "" {
-		return nil, displayMessageOutput{}, fmt.Errorf("format is required")
+		return nil, displayMessageOutput{}, errors.New("format is required")
 	}
 	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {
