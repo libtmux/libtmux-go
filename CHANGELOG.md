@@ -25,6 +25,13 @@ has no upgrade path but the toolchain itself.
 Nothing about the API changed. The syntax the floor unlocks was taken across
 the tree, and `golangci-lint` now gates it so the older forms cannot return.
 
+### tmux/tmuxtest
+
+`SuiteRootTagVariable` names the environment variable that tags a suite's
+temporary root. go test runs packages in parallel and every suite among them
+creates a root beside the others, so a test that spawns a child suite could not
+tell its child's root from a sibling binary's. Setting it separates them.
+
 ### mcp
 
 The server names the signal that ended it. A client tearing the transport down
