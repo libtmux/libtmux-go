@@ -71,11 +71,15 @@ func exampleWorkflowSources(t *testing.T) []string {
 
 // examplesWithoutOutput names the Example functions that compile without
 // running, and says why each one does. An entry is a claim that the example
-// cannot assert anything stable, which is why there are three of them.
+// cannot assert anything stable.
+//
+// Keyed by file as well as name. This gate walks every module in the
+// repository, and Example names are not unique across them -- a bare name would
+// exempt any future namesake in another package along with the one meant.
 var examplesWithoutOutput = map[string]string{
-	"ExampleRunInPane":     "takes a testing.TB an Example cannot supply",
-	"ExampleWaitForScreen": "takes a testing.TB an Example cannot supply",
-	"ExampleRun":           "serves stdio until its client disconnects",
+	"tmux/tmuxtest/example_test.go: ExampleRunInPane":     "takes a testing.TB an Example cannot supply",
+	"tmux/tmuxtest/example_test.go: ExampleWaitForScreen": "takes a testing.TB an Example cannot supply",
+	"mcp/example_test.go: ExampleRun":                     "serves stdio until its client disconnects",
 }
 
 // TestEveryExampleRuns gates the difference between an example that is checked
@@ -111,10 +115,11 @@ func TestEveryExampleRuns(t *testing.T) {
 			if example.Output != "" || example.EmptyOutput {
 				continue
 			}
-			if _, allowed := examplesWithoutOutput[name]; allowed {
+			where := filepath.ToSlash(relative) + ": " + name
+			if _, allowed := examplesWithoutOutput[where]; allowed {
 				continue
 			}
-			unchecked = append(unchecked, filepath.ToSlash(relative)+": "+name)
+			unchecked = append(unchecked, where)
 		}
 	}
 	slices.Sort(unchecked)
