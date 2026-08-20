@@ -240,6 +240,64 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	}
 }
 
+// TestASubscriptionWritingThePaneSigilIsStillTold covers the spelling a client
+// reaches for first.
+//
+// A pane arrives from every tool as %1, so a client addressing it as a resource
+// writes tmux://panes/%1/content. Reading accepts that; subscribing accepted it
+// too and then never delivered, because updates are addressed by the sigil-less
+// form alone. Nothing distinguished that from a pane which never wrote.
+//
+//libtmux:real-tmux
+func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	t.Cleanup(cancel)
+
+	socket := filepath.Join(t.TempDir(), "tmux.sock")
+	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+
+	updated := make(chan string, 16)
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "sigil"}, &sdk.ClientOptions{
+		ResourceUpdatedHandler: func(_ context.Context, request *sdk.ResourceUpdatedNotificationRequest) {
+			updated <- request.Params.URI
+		},
+	})
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	workspace(ctx, t, session, "session_name: sigil\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	// The form a client copies out of a tool result, sigil and all.
+	if err := session.Subscribe(ctx, &sdk.SubscribeParams{
+		URI: "tmux://panes/" + pane + "/content",
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	send(ctx, t, session, pane, "echo SIGIL-OUTPUT")
+
+	select {
+	case <-updated:
+	case <-time.After(30 * time.Second):
+		t.Fatalf("a subscription to tmux://panes/%s/content was never told", pane)
+	}
+}
+
 // TestTheBackstopRefusesAnOversizedReply covers the cap that exists for the
 // tool that forgets to bound itself.
 //

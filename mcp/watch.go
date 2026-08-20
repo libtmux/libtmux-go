@@ -48,9 +48,13 @@ type watchers struct {
 	target tmux.Server
 
 	mutex sync.Mutex
-	// subscribed counts subscribers per URI, because MCP subscribes per client
-	// session and several may watch the same pane.
+	// subscribed counts subscribers per canonical URI, because MCP subscribes
+	// per client session and several may watch the same pane.
 	subscribed map[string]int
+	// spelled holds, per canonical URI, the spellings clients actually sent.
+	// The SDK routes an update by the string a session subscribed with, so a
+	// pane watched as %1 has to be told as %1.
+	spelled map[string]map[string]int
 	// notified is when each URI last had an update sent, which is what
 	// coalescing is measured against.
 	notified map[string]time.Time
@@ -64,6 +68,7 @@ func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
 		server:     server,
 		target:     target,
 		subscribed: map[string]int{},
+		spelled:    map[string]map[string]int{},
 		notified:   map[string]time.Time{},
 	}
 }
@@ -74,35 +79,70 @@ func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
 // "subscribed, but nothing will ever arrive", and refusing would make a client
 // that subscribed to everything it listed fail on the parts that are static.
 func (t *tools) subscribe(_ context.Context, request *mcp.SubscribeRequest) error {
-	t.watchers.add(request.Params.URI)
+	uri := request.Params.URI
+	t.watchers.add(watchedURI(uri), uri)
 	return nil
 }
 
 // unsubscribe drops a client's interest and stops watching when none is left.
 func (t *tools) unsubscribe(_ context.Context, request *mcp.UnsubscribeRequest) error {
-	t.watchers.remove(request.Params.URI)
+	uri := request.Params.URI
+	t.watchers.remove(watchedURI(uri), uri)
 	return nil
 }
 
-// add records one subscriber.
-func (w *watchers) add(uri string) {
+// watchedURI rewrites a pane's content URI into the one spelling updates are
+// addressed by.
+//
+// Reading accepts a pane as %1, as %251, or bare, so subscribing has to as
+// well: a subscription is looked up by exact string, and the two spellings a
+// client is most likely to send are the ones a tool result hands it. Without
+// this a subscriber is registered under a key nothing ever notifies, is told
+// the subscription succeeded, and cannot tell the silence from a quiet pane.
+//
+// Anything else is left alone, including a URI nothing watches.
+func watchedURI(uri string) string {
+	const prefix, suffix = "tmux://panes/", "/content"
+	if !strings.HasPrefix(uri, prefix) || !strings.HasSuffix(uri, suffix) {
+		return uri
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(uri, prefix), suffix)
+	return paneContentURI(decodeSegment(id))
+}
+
+// add records one subscriber, under the canonical URI and the spelling it sent.
+func (w *watchers) add(canonical, spelling string) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
-	w.subscribed[uri]++
+	w.subscribed[canonical]++
+	if w.spelled[canonical] == nil {
+		w.spelled[canonical] = map[string]int{}
+	}
+	w.spelled[canonical][spelling]++
 	if w.stop == nil {
 		w.start()
 	}
 }
 
 // remove drops one subscriber.
-func (w *watchers) remove(uri string) {
+func (w *watchers) remove(canonical, spelling string) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
-	if w.subscribed[uri] > 1 {
-		w.subscribed[uri]--
+	if spellings := w.spelled[canonical]; spellings != nil {
+		if spellings[spelling] > 1 {
+			spellings[spelling]--
+		} else {
+			delete(spellings, spelling)
+		}
+		if len(spellings) == 0 {
+			delete(w.spelled, canonical)
+		}
+	}
+	if w.subscribed[canonical] > 1 {
+		w.subscribed[canonical]--
 		return
 	}
-	delete(w.subscribed, uri)
+	delete(w.subscribed, canonical)
 	if len(w.subscribed) == 0 && w.stop != nil {
 		w.stop()
 		w.stop = nil
@@ -242,17 +282,29 @@ func (w *watchers) notify(ctx context.Context, uri string) {
 	w.mutex.Lock()
 	watched := w.subscribed[uri] > 0
 	recent := time.Since(w.notified[uri]) < watchNotifyInterval
+	var spellings []string
 	if watched && !recent {
 		w.notified[uri] = time.Now()
+		for spelling := range w.spelled[uri] {
+			spellings = append(spellings, spelling)
+		}
 	}
 	w.mutex.Unlock()
 	if !watched || recent {
 		return
 	}
-	// The SDK delivers to the sessions that subscribed to this URI and to
-	// nobody else, so a failure here is one client's transport rather than
-	// this watcher's business.
-	_ = w.server.ResourceUpdated(ctx, &mcp.ResourceUpdatedNotificationParams{URI: uri})
+	// One update per spelling in use, because the SDK routes by the string a
+	// session subscribed with and delivers to nobody else. Coalescing is
+	// measured against the canonical URI, so the spellings of one pane share
+	// an interval rather than each getting their own.
+	//
+	// A failure here is one client's transport rather than this watcher's
+	// business.
+	for _, spelling := range spellings {
+		_ = w.server.ResourceUpdated(ctx, &mcp.ResourceUpdatedNotificationParams{
+			URI: spelling,
+		})
+	}
 }
 
 // paneContentURI is the URI a pane's contents are addressed by, built the same

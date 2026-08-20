@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -102,18 +103,36 @@ func (t *tools) readTemplated(
 	switch {
 	case strings.HasPrefix(uri, "tmux://sessions/") && strings.HasSuffix(uri, "/windows"):
 		name := strings.TrimSuffix(strings.TrimPrefix(uri, "tmux://sessions/"), "/windows")
-		return t.readSessionWindows(ctx, uri, name)
+		return t.readSessionWindows(ctx, uri, decodeSegment(name))
 	case strings.HasPrefix(uri, "tmux://windows/") && strings.HasSuffix(uri, "/panes"):
 		id := strings.TrimSuffix(strings.TrimPrefix(uri, "tmux://windows/"), "/panes")
-		return t.readWindowPanes(ctx, uri, withSigil(id, "@"))
+		return t.readWindowPanes(ctx, uri, withSigil(decodeSegment(id), "@"))
 	case strings.HasPrefix(uri, "tmux://panes/") && strings.HasSuffix(uri, "/content"):
 		id := strings.TrimSuffix(strings.TrimPrefix(uri, "tmux://panes/"), "/content")
-		return t.readPaneContent(ctx, uri, withSigil(id, "%"))
+		return t.readPaneContent(ctx, uri, withSigil(decodeSegment(id), "%"))
 	case strings.HasPrefix(uri, "tmux://panes/"):
-		return t.readPane(ctx, uri, withSigil(strings.TrimPrefix(uri, "tmux://panes/"), "%"))
+		id := decodeSegment(strings.TrimPrefix(uri, "tmux://panes/"))
+		return t.readPane(ctx, uri, withSigil(id, "%"))
 	default:
 		return nil, fmt.Errorf("%q is not a tmux resource this server serves", uri)
 	}
+}
+
+// decodeSegment turns one path segment back into the text it stands for.
+//
+// A tmux name is not restricted to what a URI may carry: a session called
+// "spaced name" has no spelling but "spaced%20name", and %25 is how a client
+// writes the sigil in %0. Comparing the still-encoded string against tmux's
+// answer never matches, so such an object is unaddressable without this.
+//
+// A segment that will not decode is used as it was given, which is what a
+// name containing a bare percent sign arrives as.
+func decodeSegment(segment string) string {
+	decoded, err := url.PathUnescape(segment)
+	if err != nil {
+		return segment
+	}
+	return decoded
 }
 
 func (t *tools) readSessionWindows(

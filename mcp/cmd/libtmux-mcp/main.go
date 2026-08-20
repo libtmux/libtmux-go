@@ -171,9 +171,12 @@ func reportTools(target tmux.Server) error {
 	slices.SortFunc(listed.Tools, func(a, b *sdk.Tool) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	level := os.Getenv(tmuxmcp.SafetyEnvironmentVariable)
-	if level == "" {
-		level = "mutating (default)"
+	level := string(tmuxmcp.ResolvedSafetyLevel())
+	switch asked := os.Getenv(tmuxmcp.SafetyEnvironmentVariable); {
+	case asked == "":
+		level += " (default)"
+	case !strings.EqualFold(strings.TrimSpace(asked), level):
+		level += fmt.Sprintf(" (%s is not a level, so the lowest was taken)", asked)
 	}
 	fmt.Printf("%d tools at safety level %s\n\n", len(listed.Tools), level)
 	for _, tool := range listed.Tools {

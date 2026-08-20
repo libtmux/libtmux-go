@@ -713,6 +713,50 @@ func TestResizePaneSetsTheSizeTmuxSettlesOn(t *testing.T) {
 	}
 }
 
+// TestSelectLayoutRefusesTwoAlternativesItself covers a pair tmux rejects. The
+// schema can hold both, so the tool has to say which of its own arguments
+// conflict — otherwise tmux's parser answers, naming modes this tool does not
+// offer.
+//
+//libtmux:real-tmux
+func TestSelectLayoutRefusesTwoAlternativesItself(t *testing.T) {
+	session, _, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: layouts\nwindows:\n  - panes:\n      - {}\n      - {}\n",
+	}, nil)
+
+	result := call(ctx, t, session, "select_layout", map[string]any{
+		"layout": "tiled", "spread": true,
+	}, nil)
+	if !result.IsError {
+		t.Fatal("a layout and a spread together were accepted")
+	}
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	for _, leaked := range []string{"mutually exclusive", "invalid server command"} {
+		if strings.Contains(said, leaked) {
+			t.Errorf("the refusal is tmux's parser talking, not this tool: %q", said)
+		}
+	}
+	if !strings.Contains(said, "alternatives") {
+		t.Errorf("the refusal does not say the two are alternatives: %q", said)
+	}
+
+	// Each on its own still works.
+	for _, arguments := range []map[string]any{
+		{"layout": "tiled"},
+		{"spread": true},
+	} {
+		if result := call(ctx, t, session, "select_layout", arguments, nil); result.IsError {
+			t.Errorf("select_layout %v was refused: %#v", arguments, result.Content)
+		}
+	}
+}
+
 // TestFindPaneByPositionReadsTheLayout covers the question an index cannot
 // answer. A pane's index is the order it was made in, so a client with only
 // indexes cannot say which pane is above another.
@@ -1552,6 +1596,9 @@ func TestSafetyLevelWithholdsTools(t *testing.T) {
 		{"readonly", false, false, true},
 		{"", false, true, false},
 		{"destructive", true, true, false},
+		// A level nobody meant to write is the one case where guessing wrong
+		// hands out more than was asked for, so it reads as the lowest.
+		{"readonyl", false, false, true},
 	} {
 		t.Run("level "+testCase.level, func(t *testing.T) {
 			t.Setenv("LIBTMUX_SAFETY", testCase.level)
@@ -1674,6 +1721,45 @@ func TestResourcesAddressTheHierarchy(t *testing.T) {
 		URI: "tmux://nonsense/1",
 	}); err == nil {
 		t.Error("an unknown resource URI was accepted")
+	}
+}
+
+// TestResourceURIsArePercentDecoded covers the promise the URI comment makes:
+// both the bare form and the percent-encoded sigil form address one object. A
+// name needing an escape has no other spelling, so without decoding it cannot
+// be addressed as a resource at all.
+//
+//libtmux:real-tmux
+func TestResourceURIsArePercentDecoded(t *testing.T) {
+	session, _, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: spaced name\nwindows:\n  - window_name: only\n" +
+			"    panes:\n      - shell: sleep 300\n",
+	}, nil)
+
+	// A session whose name needs an escape has exactly one legal spelling.
+	read, err := session.ReadResource(ctx, &sdk.ReadResourceParams{
+		URI: "tmux://sessions/spaced%20name/windows",
+	})
+	if err != nil {
+		t.Fatalf("read windows of an escaped session name: %v", err)
+	}
+	if len(read.Contents) == 0 || !strings.Contains(read.Contents[0].Text, "only") {
+		t.Errorf("an escaped session name selects no windows: %+v", read.Contents)
+	}
+
+	// %25 is how a client encodes the sigil tmux prints, so %250 is pane %0.
+	panes := paneIDs(ctx, t, session)
+	if len(panes) == 0 {
+		t.Fatal("no panes")
+	}
+	encoded := "tmux://panes/%25" + strings.TrimPrefix(panes[0], "%")
+	read, err = session.ReadResource(ctx, &sdk.ReadResourceParams{URI: encoded})
+	if err != nil {
+		t.Fatalf("read %s: %v", encoded, err)
+	}
+	if len(read.Contents) == 0 || !strings.Contains(read.Contents[0].Text, panes[0]) {
+		t.Errorf("%s does not describe pane %s: %+v", encoded, panes[0], read.Contents)
 	}
 }
 
@@ -1898,7 +1984,9 @@ func TestCompletionsOfferValuesThatExist(t *testing.T) {
 		t.Errorf("a prefix matching nothing offered %v", got.Completion.Values)
 	}
 
-	// A prompt argument completes the same way.
+	// A prompt argument is answered in the dialect the tools speak, because
+	// what fills it is read back by a model and passed to paneId. Offering the
+	// URI form there hands the model an id every tool rejects.
 	got, err = session.Complete(ctx, &sdk.CompleteParams{
 		Ref:      &sdk.CompleteReference{Type: "ref/prompt", Name: "diagnose_pane"},
 		Argument: sdk.CompleteParamsArgument{Name: "pane", Value: ""},
@@ -1907,7 +1995,61 @@ func TestCompletionsOfferValuesThatExist(t *testing.T) {
 		t.Fatalf("complete a prompt argument: %v", err)
 	}
 	if len(got.Completion.Values) == 0 {
-		t.Error("a prompt argument offered nothing")
+		t.Fatal("a prompt argument offered nothing")
+	}
+	for _, value := range got.Completion.Values {
+		if !strings.HasPrefix(value, "%") {
+			t.Errorf("offered %q to a prompt, which no tool accepts as a pane", value)
+		}
+	}
+
+	// Whatever is offered for a prompt has to be usable as a pane id, which is
+	// the whole claim: hand it straight to a tool.
+	if len(got.Completion.Values) > 0 {
+		result := call(ctx, t, session, "get_pane_info", map[string]any{
+			"paneId": got.Completion.Values[0],
+		}, nil)
+		if result.IsError {
+			t.Errorf("a completed prompt value is not a pane a tool will take: %#v",
+				result.Content)
+		}
+	}
+}
+
+// TestCompletionsEscapeWhatAUriMustCarry covers a name a URI cannot hold as it
+// stands: a completion for a template slot is pasted into a path, so it has to
+// arrive already escaped or the URI it builds does not parse.
+//
+//libtmux:real-tmux
+func TestCompletionsEscapeWhatAUriMustCarry(t *testing.T) {
+	session, _, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: spaced name\nwindows:\n  - window_name: only\n" +
+			"    panes:\n      - {}\n",
+	}, nil)
+
+	got, err := session.Complete(ctx, &sdk.CompleteParams{
+		Ref: &sdk.CompleteReference{
+			Type: "ref/resource", URI: "tmux://sessions/{session}/windows",
+		},
+		Argument: sdk.CompleteParamsArgument{Name: "session", Value: "spaced"},
+	})
+	if err != nil {
+		t.Fatalf("complete a session: %v", err)
+	}
+	if !slices.Contains(got.Completion.Values, "spaced%20name") {
+		t.Fatalf("offered %v, want the name escaped for a path", got.Completion.Values)
+	}
+
+	// The value a client was handed has to build a URI that reads.
+	read, err := session.ReadResource(ctx, &sdk.ReadResourceParams{
+		URI: "tmux://sessions/" + got.Completion.Values[0] + "/windows",
+	})
+	if err != nil {
+		t.Fatalf("read the URI a completion built: %v", err)
+	}
+	if len(read.Contents) == 0 || !strings.Contains(read.Contents[0].Text, "only") {
+		t.Errorf("the URI a completion built selects no windows: %+v", read.Contents)
 	}
 }
 

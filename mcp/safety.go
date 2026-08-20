@@ -32,19 +32,38 @@ const SafetyEnvironmentVariable = "LIBTMUX_SAFETY"
 
 // safetyFromEnvironment reads the level an operator asked for.
 //
-// An unreadable value selects the default rather than failing: a server that
-// refuses to start over a misspelled variable is worse than one that runs at
-// the level it would have run at anyway, and the level it chose is reported in
-// the instructions where a client sees it.
+// An unreadable value selects the lowest level rather than failing. Refusing
+// to start over a misspelled variable is worse than running, but the direction
+// to fall back in is a separate question: someone who wrote LIBTMUX_SAFETY at
+// all was bounding what a model may do, and a typo in that variable must not
+// widen the bound. Only an absent variable means "no preference", and only
+// that selects the default. Python's server resolves the same input the same
+// way.
 func safetyFromEnvironment() SafetyLevel {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(SafetyEnvironmentVariable))) {
+	raw, set := os.LookupEnv(SafetyEnvironmentVariable)
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if !set || trimmed == "" {
+		return SafetyMutating
+	}
+	switch trimmed {
 	case string(SafetyReadOnly):
 		return SafetyReadOnly
+	case string(SafetyMutating):
+		return SafetyMutating
 	case string(SafetyDestructive):
 		return SafetyDestructive
 	default:
-		return SafetyMutating
+		return SafetyReadOnly
 	}
+}
+
+// ResolvedSafetyLevel reports the level a server started now would run at.
+//
+// A tool that prints the variable instead names a level the server may not be
+// running, which is exactly wrong for a value that is rejected rather than
+// obeyed.
+func ResolvedSafetyLevel() SafetyLevel {
+	return safetyFromEnvironment()
 }
 
 // permits reports whether a tool with these annotations may be advertised.

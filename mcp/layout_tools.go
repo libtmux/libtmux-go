@@ -295,6 +295,13 @@ func (t *tools) selectLayout(
 	if layout == "" && !input.Spread {
 		return nil, selectLayoutOutput{}, errors.New("layout or spread is required")
 	}
+	// tmux refuses the pair. Saying so here keeps its parser's wording, which
+	// names modes this tool does not offer, from reaching a client.
+	if layout != "" && input.Spread {
+		return nil, selectLayoutOutput{}, errors.New(
+			"layout and spread are alternatives: spread evens the panes already " +
+				"in the window, a layout replaces the arrangement")
+	}
 	if layout != "" && !layoutPresets[layout] && !layoutString.MatchString(layout) {
 		return nil, selectLayoutOutput{}, fmt.Errorf(
 			"%q is neither a tmux layout preset nor a layout string from get_window_info",
