@@ -42,6 +42,15 @@ subscribed with that exact string. Nothing distinguished the silence from a pane
 that never wrote. Both spellings now arrive, each in the spelling its subscriber
 used, and the spellings of one pane share a coalescing interval.
 
+One frame that will not parse no longer ends the server. MCP frames a stdio
+connection with newlines and forbids a newline inside a message, so a bad frame
+is one line and the next is a fresh one -- but the SDK decodes the stream
+rather than the line, and a syntax error left its decoder with nothing to
+resync on and was returned up through the read loop, exiting the process. A
+client bug or a stray write to the pipe took every tmux tool the conversation
+had with it. Lines that do not parse are now dropped before the decoder sees
+them, which is what keeps it in sync, and each drop is reported on stderr.
+
 `wait_for_text` says when `sinceEntry` ignored a match that was already there.
 A caller cannot start a program and wait for it in one request, so a fast
 program has already printed by the time the wait begins; `sinceEntry` then

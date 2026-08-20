@@ -155,7 +155,7 @@ func Run(ctx context.Context, target tmux.Server) error {
 	// process owns. Collecting it removes that directory; a server that stops
 	// while some are uncollected removes the rest here.
 	defer tools.jobs.close()
-	return server.Run(ctx, handshakeOrderedTransport{inner: &mcp.StdioTransport{}})
+	return server.Run(ctx, handshakeOrderedTransport{inner: stdio()})
 }
 
 // Connect puts the server on a control-mode transport when it can, so a client

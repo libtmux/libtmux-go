@@ -170,6 +170,26 @@ that is 585 bytes against 152, and `capture_pane` wins on both counts. It earns
 its place on a wide pane holding full lines, read repeatedly -- which is what it
 is for, and is worth knowing is not every pane.
 
+## What waiting and watching cost
+
+The claims this server makes about not spending a caller's turn, measured
+rather than asserted. Reproduce with `scripts/` or the probe in the testing
+skill; these were taken on the machine named above, against tmux 3.7b.
+
+| Question | Measured |
+| --- | --- |
+| Does a long wait block anything else? | a `list_sessions` costs **3.0ms** on a quiet server and **5.7ms** with eight 20-second waits in flight |
+| How fast does a pane change reach a subscriber? | **23ms** median from the write to the `notifications/resources/updated` |
+| Is a burst coalesced? | 500 lines written in 2.0s produced **1 notification**, not 500 |
+| What do twenty more subscribers cost? | **no additional control-mode client**: one connection serves them all, and it closes when the last subscriber goes |
+| Can a call in flight be taken back? | `notifications/cancelled` is answered in **1ms** median, 2ms worst |
+| How many calls can be in flight at once? | **64 fired, 64 answered in 0.21s**, every id matched |
+
+The first row is the one to keep an eye on. These tools await throughout, so a
+wait holds no connection and blocks no other call; if that number ever starts
+tracking the number of waits open, something has started blocking that did not
+before.
+
 ## Reading it
 
 **The answer column is the point.** It is identical in every row, on every
