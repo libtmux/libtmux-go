@@ -150,7 +150,7 @@ func (t *tools) readWindowPanes(
 	ctx context.Context,
 	uri, id string,
 ) (*mcp.ReadResourceResult, error) {
-	window, err := t.target.Window(ctx, tmux.WindowID(id))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (t *tools) readWindowPanes(
 }
 
 func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
-	pane, err := t.target.Pane(ctx, tmux.PaneID(id))
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(id))
 	if err != nil {
 		return nil, err
 	}

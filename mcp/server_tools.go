@@ -107,10 +107,10 @@ func (t *tools) getServerInfo(
 		SafetyLevel:  string(t.level),
 		CallerPaneID: caller.paneID,
 	}
-	if version, err := t.target.Version(ctx); err == nil {
+	if version, err := t.tmux().Version(ctx); err == nil {
 		output.Version = version.String()
 	}
-	alive, err := t.target.IsAlive(ctx)
+	alive, err := t.tmux().IsAlive(ctx)
 	// A server that cannot be asked whether it is alive is not, which is the
 	// answer a client wants rather than an error about the asking.
 	output.Alive = err == nil && alive
@@ -125,7 +125,7 @@ func (t *tools) getServerInfo(
 
 	// One snapshot answers all of these. A snapshot per question would let the
 	// counts disagree with each other and would cost a listing each.
-	if snapshot, err := t.target.Snapshot(ctx); err == nil {
+	if snapshot, err := t.tmux().Snapshot(ctx); err == nil {
 		output.Sessions = len(snapshot.Sessions())
 		output.Windows = len(snapshot.Windows())
 		output.Panes = len(snapshot.Panes())
@@ -134,7 +134,7 @@ func (t *tools) getServerInfo(
 		output.AttachedClients = summarizeClients(clients)
 	}
 	if input.IncludeMessages {
-		if messages, err := t.target.ShowMessages(ctx, tmux.ShowMessagesRequest{}); err == nil {
+		if messages, err := t.tmux().ShowMessages(ctx, tmux.ShowMessagesRequest{}); err == nil {
 			output.Messages = boundMessages(messages)
 		}
 	}

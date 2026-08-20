@@ -105,7 +105,7 @@ func (t *tools) movePane(
 		return nil, movePaneOutput{}, fmt.Errorf(
 			"percentage %d is not between 1 and 100", input.Percentage)
 	}
-	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, movePaneOutput{}, err
 	}
@@ -125,7 +125,7 @@ func (t *tools) movePane(
 		}, nil
 	}
 
-	destination, err := t.target.Window(ctx, tmux.WindowID(input.ToWindowID))
+	destination, err := t.tmux().Window(ctx, tmux.WindowID(input.ToWindowID))
 	if err != nil {
 		return nil, movePaneOutput{}, err
 	}
@@ -354,7 +354,7 @@ func (t *tools) selectPane(
 	_ *mcp.CallToolRequest,
 	input selectPaneInput,
 ) (*mcp.CallToolResult, selectPaneOutput, error) {
-	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, selectPaneOutput{}, err
 	}
@@ -402,7 +402,7 @@ func (t *tools) swapPane(
 	if input.PaneID == input.WithPaneID {
 		return nil, swapPaneOutput{}, errors.New("a pane cannot be swapped with itself")
 	}
-	server := t.target
+	server := t.tmux()
 	pane, err := server.Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, swapPaneOutput{}, err
@@ -511,7 +511,7 @@ func (t *tools) moveWindow(
 	if strings.TrimSpace(input.WindowID) == "" {
 		return nil, moveWindowOutput{}, errors.New("windowId is required")
 	}
-	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, moveWindowOutput{}, err
 	}

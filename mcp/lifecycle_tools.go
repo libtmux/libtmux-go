@@ -51,7 +51,7 @@ func (t *tools) killSession(
 	// tmux resolves a bare target by prefix and pattern, so "alph" kills
 	// "alpha". The "=" prefix anchors it to an exact name, which is what this
 	// tool documents and what a model expects when it repeats a name it read.
-	if err := t.target.KillSession(ctx, "="+input.SessionName); err != nil {
+	if err := t.tmux().KillSession(ctx, "="+input.SessionName); err != nil {
 		return nil, killSessionOutput{}, err
 	}
 	return nil, killSessionOutput{Killed: input.SessionName}, nil
@@ -87,7 +87,7 @@ func (t *tools) killWindow(
 	if strings.TrimSpace(input.WindowID) == "" {
 		return nil, killWindowOutput{}, errors.New("windowId is required")
 	}
-	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, killWindowOutput{}, err
 	}
@@ -98,7 +98,7 @@ func (t *tools) killWindow(
 	output := killWindowOutput{Killed: input.WindowID}
 	// A session that is gone cannot be looked up, which is the answer rather
 	// than a failure.
-	if _, err := t.target.Session(ctx, sessionID); err != nil {
+	if _, err := t.tmux().Session(ctx, sessionID); err != nil {
 		output.SessionEnded = true
 	}
 	return nil, output, nil
@@ -128,7 +128,7 @@ func (t *tools) killPane(
 	if strings.TrimSpace(input.PaneID) == "" {
 		return nil, killPaneOutput{}, errors.New("paneId is required")
 	}
-	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, killPaneOutput{}, err
 	}
@@ -142,7 +142,7 @@ func (t *tools) killPane(
 		return nil, killPaneOutput{}, err
 	}
 	output := killPaneOutput{Killed: input.PaneID}
-	if _, err := t.target.Window(ctx, windowID); err != nil {
+	if _, err := t.tmux().Window(ctx, windowID); err != nil {
 		output.WindowEnded = true
 	}
 	return nil, output, nil
@@ -179,8 +179,8 @@ func (t *tools) killServer(
 		return nil, killServerOutput{}, errors.New("confirm must be true: this ends every session on the tmux server")
 	}
 	// Counted before rather than after, because after there is nothing to ask.
-	sessions, _ := t.target.Sessions(ctx)
-	if err := t.target.Kill(ctx); err != nil {
+	sessions, _ := t.tmux().Sessions(ctx)
+	if err := t.tmux().Kill(ctx); err != nil {
 		return nil, killServerOutput{}, err
 	}
 	return nil, killServerOutput{SessionsKilled: len(sessions)}, nil

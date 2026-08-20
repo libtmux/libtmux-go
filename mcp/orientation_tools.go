@@ -22,7 +22,7 @@ import (
 // this server cannot use still fails, because [tmux.ErrNoServer] classifies
 // only what tmux refused before running the command.
 func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, error) {
-	snapshot, err := t.target.Snapshot(ctx)
+	snapshot, err := t.tmux().Snapshot(ctx)
 	if errors.Is(err, tmux.ErrNoServer) {
 		return tmux.Snapshot{}, nil
 	}
@@ -322,7 +322,7 @@ func (t *tools) selectWindow(
 	_ *mcp.CallToolRequest,
 	input selectWindowInput,
 ) (*mcp.CallToolResult, selectWindowOutput, error) {
-	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, selectWindowOutput{}, err
 	}

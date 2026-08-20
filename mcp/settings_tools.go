@@ -88,7 +88,7 @@ func (t *tools) showOption(
 	var set bool
 	switch scope {
 	case scopeServer:
-		value, set, err = t.target.RawOption(ctx, input.Name)
+		value, set, err = t.tmux().RawOption(ctx, input.Name)
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -169,7 +169,7 @@ func (t *tools) setOption(
 
 	switch scope {
 	case scopeServer:
-		err = t.target.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+		err = t.tmux().SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -318,7 +318,7 @@ func (t *tools) showEnvironment(
 		}
 		scope := environmentScopeSession
 		if !ok {
-			if value, ok, err = t.target.GetEnvironment(ctx, wanted); err != nil {
+			if value, ok, err = t.tmux().GetEnvironment(ctx, wanted); err != nil {
 				return nil, output, err
 			}
 			scope = environmentScopeServer
@@ -335,7 +335,7 @@ func (t *tools) showEnvironment(
 	// The server's layer first, then the session's over the top of it, which is
 	// the order tmux resolves them in for a new process.
 	merged := map[string]environmentEntry{}
-	serverWide, err := t.target.ShowEnvironment(ctx)
+	serverWide, err := t.tmux().ShowEnvironment(ctx)
 	if err != nil {
 		return nil, output, err
 	}
@@ -504,7 +504,7 @@ func (t *tools) showHooks(
 		arguments = append(arguments, "-p", "-t", pane.ID().String())
 	}
 
-	result, err := t.target.Cmd(ctx, arguments...)
+	result, err := t.tmux().Cmd(ctx, arguments...)
 	if err != nil {
 		return nil, output, err
 	}

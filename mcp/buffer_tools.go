@@ -67,7 +67,7 @@ func (t *tools) loadBuffer(
 	if err != nil {
 		return nil, bufferRef{}, err
 	}
-	if err := t.target.SetBuffer(ctx, tmux.SetBufferRequest{
+	if err := t.tmux().SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
 		Name: &name,
 	}); err != nil {
@@ -114,7 +114,7 @@ func (t *tools) showBuffer(
 	if err != nil {
 		return nil, showBufferOutput{}, err
 	}
-	contents, err := t.target.ShowBuffer(ctx, &name)
+	contents, err := t.tmux().ShowBuffer(ctx, &name)
 	if err != nil {
 		// tmux says only that show-buffer failed, which reads as a broken tool
 		// rather than a buffer that is not there. Naming what was looked for
@@ -196,7 +196,7 @@ func (t *tools) deleteBuffer(
 	if err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
-	if err := t.target.DeleteBuffer(ctx, &name); err != nil {
+	if err := t.tmux().DeleteBuffer(ctx, &name); err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
 	return nil, deleteBufferOutput{Deleted: name}, nil

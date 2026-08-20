@@ -3,8 +3,10 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -50,6 +52,7 @@ func register[In, Out any](
 	if !t.level.permits(tool.Annotations) {
 		return
 	}
+	handler = recovering(t, handler)
 	mcp.AddTool(server, tool, handler)
 	if !t.batchable {
 		// Advertised, but not reachable from inside a batch. Remembering which
@@ -110,13 +113,13 @@ func NewServer(target tmux.Server) *mcp.Server {
 func newServer(target tmux.Server) (*mcp.Server, *tools) {
 	level := safetyFromEnvironment()
 	tools := &tools{
-		target:      target,
 		level:       level,
 		dispatchers: map[string]dispatcher{},
 		unbatchable: map[string]struct{}{},
 		batchable:   true,
 		jobs:        newJobs(),
 	}
+	tools.reaching.Store(&target)
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "libtmux",
 		Version: Version,
@@ -206,7 +209,11 @@ func Connect(ctx context.Context, target tmux.Server) (tmux.Server, *tmux.Contro
 const connectTimeout = 5 * time.Second
 
 type tools struct {
-	target   tmux.Server
+	// reaching holds the tmux server every tool goes through. It is a pointer
+	// that is replaced rather than a value that is written, because a pooled
+	// control connection is retired from whichever call first finds it dead
+	// while others are in flight.
+	reaching atomic.Pointer[tmux.Server]
 	level    SafetyLevel
 	watchers *watchers
 	// dispatchers is how a batch reaches each advertised tool, filled in by
@@ -228,11 +235,56 @@ type tools struct {
 	jobs *jobs
 }
 
+// tmux is the server tools reach through now, which is not always the one
+// this process started with.
+func (t *tools) tmux() tmux.Server { return *t.reaching.Load() }
+
+// retirePool drops a pooled control connection that has died.
+//
+// The pool is an optimisation: before it existed every command spawned a
+// process, and that is what this falls back to. tmux going away and coming
+// back is an ordinary thing for a person to do, and it used to cost every tool
+// for the life of this process -- each call answering "control client is
+// closed" because nothing reopened what died with the old server.
+func (t *tools) retirePool() {
+	current := t.tmux()
+	if current.Engine() == nil {
+		return
+	}
+	plain := current.WithEngine(current.SubprocessEngine())
+	t.reaching.Store(&plain)
+}
+
+// recovering retires a pooled connection that has died, so the calls after
+// this one work again.
+//
+// The failed call is not run a second time. A wait opens a control connection
+// of its own and reports the same error when it ends, so this cannot tell a
+// dead pool from a connection that did its job -- and retrying the second kind
+// runs a wait that already finished for the whole of its timeout again. One
+// call reporting the restart is the honest cost of not knowing which it was.
+func recovering[In, Out any](
+	t *tools,
+	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
+) func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error) {
+	return func(
+		ctx context.Context,
+		request *mcp.CallToolRequest,
+		input In,
+	) (*mcp.CallToolResult, Out, error) {
+		result, output, err := handler(ctx, request, input)
+		if err != nil && errors.Is(err, tmux.ErrControlClosed) {
+			t.retirePool()
+		}
+		return result, output, err
+	}
+}
+
 // socketPath asks tmux where its socket is, so a pane's server can be compared
 // with the one this process was told it belongs to. An unreachable server
 // reports nothing, which makes every caller answer false rather than true.
 func (t *tools) socketPath(ctx context.Context) string {
-	result, err := t.target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	result, err := t.tmux().Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || len(result.Stdout) == 0 {
 		return ""
 	}

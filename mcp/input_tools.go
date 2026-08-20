@@ -138,7 +138,7 @@ func (t *tools) pasteText(
 	}
 	output := pasteTextOutput{PaneID: pane.ID().String()}
 
-	server := t.target
+	server := t.tmux()
 	name := "libtmux-mcp-paste-" + strconv.FormatInt(pasteSequence.Add(1), 10)
 	if err := server.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,

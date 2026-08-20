@@ -2318,3 +2318,98 @@ func TestRunCommandSaysWhyThereIsNoOutput(t *testing.T) {
 		t.Errorf("the reason names no way out: %q", ran.OutputUnavailable)
 	}
 }
+
+// TestToolsKeepWorkingAfterTmuxRestarts covers a tmux server that goes away
+// and comes back, which is an ordinary thing for a person to do.
+//
+// The control connection is opened once at startup and every command goes
+// through it. When tmux dies the connection dies with it, and nothing reopened
+// it: every later call failed with "control client is closed" for the life of
+// the process, so restarting tmux meant restarting every agent attached to it.
+// The connection is an optimisation, and the behaviour without it is spawning
+// a process per command, so losing it should cost speed rather than function.
+//
+//libtmux:real-tmux
+func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	t.Cleanup(cancel)
+	// A socket of its own, not the shared harness's: this test kills the tmux
+	// server it is using, and the harness owns the cleanup of the one it made.
+	socket := filepath.Join(t.TempDir(), "tmux.sock")
+	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+	// A pool attaches to a session, so there has to be one before it opens.
+	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "before", Width: 80, Height: 24,
+	}); err != nil {
+		t.Fatalf("start the first session: %v", err)
+	}
+
+	// Through the pooled control connection, which is what Run serves over and
+	// what connect() in these tests does not build. The in-memory path having
+	// no pool is why this went unnoticed: the failure needs the connection
+	// that only the real server opens.
+	connected, pool := tmuxmcp.Connect(ctx, target)
+	if pool == nil {
+		t.Skip("no control pool on this tmux; the failure needs one")
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(connected).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "restart"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	if result := call(ctx, t, session, "list_panes", map[string]any{}, nil); result.IsError {
+		t.Fatalf("list_panes before the restart: %#v", result.Content)
+	}
+
+	if err := target.Kill(ctx); err != nil {
+		t.Fatalf("kill the tmux server: %v", err)
+	}
+	// Bring one back on the same socket, as a person restarting tmux would.
+	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "after", Width: 80, Height: 24,
+	}); err != nil {
+		t.Fatalf("start a replacement tmux server: %v", err)
+	}
+
+	// The call that finds the connection dead reports it: a wait opens one of
+	// its own and ends with the same error, so a retry here cannot tell the
+	// two apart. What must not happen is every later call failing too.
+	call(ctx, t, session, "list_panes", map[string]any{}, nil)
+
+	var listed struct {
+		Panes []struct {
+			ID string `json:"id"`
+		} `json:"panes"`
+	}
+	result := call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	if result.IsError {
+		t.Fatalf("list_panes stayed broken after the restart: %#v", result.Content)
+	}
+	if len(listed.Panes) == 0 {
+		t.Error("the replacement server's pane was not reported")
+	}
+
+	// And the server's own account of itself has to agree that tmux is up.
+	var info struct {
+		Alive bool `json:"alive"`
+	}
+	call(ctx, t, session, "get_server_info", map[string]any{}, &info)
+	if !info.Alive {
+		t.Error("get_server_info reports the tmux server dead after it came back")
+	}
+}

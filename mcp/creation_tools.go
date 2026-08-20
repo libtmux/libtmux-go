@@ -40,7 +40,7 @@ func (t *tools) createWindow(
 	_ *mcp.CallToolRequest,
 	input createWindowInput,
 ) (*mcp.CallToolResult, createWindowOutput, error) {
-	server := t.target
+	server := t.tmux()
 	session, err := t.resolveSession(ctx, input.SessionName)
 	if err != nil {
 		return nil, createWindowOutput{}, err
@@ -96,7 +96,7 @@ func (t *tools) createSession(
 	_ *mcp.CallToolRequest,
 	input createSessionInput,
 ) (*mcp.CallToolResult, createSessionOutput, error) {
-	session, err := t.target.NewSession(ctx, tmux.NewSessionRequest{
+	session, err := t.tmux().NewSession(ctx, tmux.NewSessionRequest{
 		Name:           input.Name,
 		Command:        input.Command,
 		StartDirectory: input.StartDirectory,
@@ -134,7 +134,7 @@ func (t *tools) buildWorkspace(
 	if err != nil {
 		return nil, buildWorkspaceOutput{}, err
 	}
-	session, err := workspace.Build(ctx, t.target, described)
+	session, err := workspace.Build(ctx, t.tmux(), described)
 	if err != nil {
 		// Build is not atomic, so report the partial session rather than
 		// dropping the identifier a caller needs in order to clean up. Without

@@ -42,6 +42,18 @@ subscribed with that exact string. Nothing distinguished the silence from a pane
 that never wrote. Both spellings now arrive, each in the spelling its subscriber
 used, and the spellings of one pane share a coalescing interval.
 
+Tools keep working after tmux restarts. The control connection is opened once
+at startup and every command goes through it; when tmux went away the
+connection died with it and nothing reopened one, so every later call answered
+`control client is closed` for the life of the process and `get_server_info`
+reported a running tmux as dead. Restarting tmux meant restarting every agent
+attached to it. A call that finds the connection dead now retires it, so the calls after it
+run on a plain one -- which is what this did before the pool existed, costing a
+process per command rather than the tool. The call that finds it still reports
+the restart: a wait opens a control connection of its own and ends with the
+same error, so nothing here can tell a dead pool from a connection that did its
+job.
+
 One frame that will not parse no longer ends the server. MCP frames a stdio
 connection with newlines and forbids a newline inside a message, so a bad frame
 is one line and the next is a fresh one -- but the SDK decodes the stream

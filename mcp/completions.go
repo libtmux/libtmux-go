@@ -142,6 +142,7 @@ func forPath(name string, forURI bool) string {
 func completionFor(target tmux.Server) func(
 	context.Context, *mcp.CompleteRequest,
 ) (*mcp.CompleteResult, error) {
-	completing := &tools{target: target}
+	completing := &tools{}
+	completing.reaching.Store(&target)
 	return completing.complete
 }

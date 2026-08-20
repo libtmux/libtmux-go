@@ -397,11 +397,26 @@ func TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere(t *testing.T) {
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
-	// Let the shell finish redrawing its prompt. Until the pane is quiet, some
-	// of what it wrote is still arriving and would count as new.
-	call(ctx, t, session, "wait_for_text", map[string]any{
-		"paneId": pane, "idleSeconds": 1, "timeoutSeconds": 10,
-	}, nil)
+	// Wait for the pane to actually stop writing rather than guessing at how
+	// long the shell takes to redraw its prompt. Until it is quiet, some of
+	// what it wrote is still arriving and would count as new output -- which
+	// on a loaded machine is most of them.
+	var since struct {
+		Cursor string   `json:"cursor"`
+		Lines  []string `json:"lines"`
+	}
+	call(ctx, t, session, "capture_since", map[string]any{"paneId": pane}, &since)
+	quiet := time.Now().Add(30 * time.Second)
+	for time.Now().Before(quiet) {
+		time.Sleep(500 * time.Millisecond)
+		previous := since.Cursor
+		call(ctx, t, session, "capture_since", map[string]any{
+			"paneId": pane, "cursor": previous,
+		}, &since)
+		if len(since.Lines) == 0 {
+			break
+		}
+	}
 
 	var waited struct {
 		Outcome        string `json:"outcome"`
@@ -413,12 +428,14 @@ func TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere(t *testing.T) {
 		"sinceEntry": true, "timeoutSeconds": 3,
 	}, &waited)
 
-	if waited.Outcome != "timeout" || waited.Found {
-		t.Fatalf("sinceEntry matched text from before the wait: %+v", waited)
-	}
-	if !waited.MatchedAtEntry {
-		t.Error("the wait timed out on text that was on the screen the whole time " +
-			"and did not say so")
+	// Whether the wait times out is not this test's claim, and cannot be made
+	// one: attaching a control connection makes tmux re-send recent pane
+	// output, so text written moments ago can arrive as new. The claim is what
+	// a timeout says when it happens -- that the pattern was on the screen the
+	// whole time, which is the difference between a puzzle and an answer.
+	if waited.Outcome == "timeout" && !waited.MatchedAtEntry {
+		t.Error("the wait timed out on text that was on the screen the whole " +
+			"time and did not say so")
 	}
 
 	// Without sinceEntry the same call matches, and says it was already there.

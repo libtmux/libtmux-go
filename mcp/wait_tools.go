@@ -226,12 +226,12 @@ func (t *tools) runCommand(
 	}
 	defer func() { _ = os.RemoveAll(started.directory) }()
 
-	pane, err := t.target.Pane(ctx, started.paneID)
+	pane, err := t.tmux().Pane(ctx, started.paneID)
 	if err != nil {
 		return nil, output, err
 	}
 	return t.awaitCommand(ctx, request, awaiting{
-		server:     t.target,
+		server:     t.tmux(),
 		pane:       pane,
 		channel:    started.channel,
 		statusPath: started.statusAt,
@@ -257,7 +257,7 @@ func (t *tools) startCommand(
 	if strings.TrimSpace(input.Command) == "" {
 		return nil, errors.New("command is required")
 	}
-	server := t.target
+	server := t.tmux()
 	pane, err := t.resolvePaneToWrite(
 		ctx, request, input.PaneID, input.SessionName, "running a command")
 	if err != nil {
@@ -701,7 +701,7 @@ func (t *tools) waitForText(
 		return nil, waitForTextOutput{}, err
 	}
 
-	server := t.target
+	server := t.tmux()
 	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {
 		return nil, waitForTextOutput{}, err
