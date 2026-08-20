@@ -700,7 +700,7 @@ func send(ctx context.Context, t *testing.T, session *sdk.ClientSession, pane, c
 //
 //libtmux:real-tmux
 func TestTheEnvironmentIsWhatANewPaneWouldGet(t *testing.T) {
-	session, _, ctx := connect(t)
+	session, target, ctx := connect(t)
 	workspace(ctx, t, session, "session_name: environ\nwindows:\n  - panes:\n      - {}\n")
 
 	result := call(ctx, t, session, "set_environment", map[string]any{
@@ -736,6 +736,68 @@ func TestTheEnvironmentIsWhatANewPaneWouldGet(t *testing.T) {
 	}, &gone)
 	if len(gone.Variables) != 0 {
 		t.Errorf("an unset variable was still reported: %+v", gone.Variables)
+	}
+
+	// tmux keeps two layers and a new pane inherits both, the session's
+	// overriding the server's. Reading only one of them answers a question
+	// nobody asked: PATH lives in the server's, so a caller asking what a pane
+	// will get was told it gets no PATH.
+	if _, err := target.Cmd(ctx, "set-environment", "-g",
+		"LIBTMUX_MCP_GLOBAL", "from-the-server"); err != nil {
+		t.Fatalf("set a server-wide variable: %v", err)
+	}
+	if _, err := target.Cmd(ctx, "set-environment", "-g",
+		"LIBTMUX_MCP_BOTH", "from-the-server"); err != nil {
+		t.Fatalf("set a server-wide variable: %v", err)
+	}
+	call(ctx, t, session, "set_environment", map[string]any{
+		"name": "LIBTMUX_MCP_BOTH", "value": "from-the-session",
+	}, nil)
+
+	var inherited struct {
+		Variables []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+			Scope string `json:"scope"`
+		} `json:"variables"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{
+		"name": "LIBTMUX_MCP_GLOBAL",
+	}, &inherited)
+	if len(inherited.Variables) != 1 ||
+		inherited.Variables[0].Value != "from-the-server" {
+		t.Errorf("a variable a new pane inherits from the server was not "+
+			"reported: %+v", inherited.Variables)
+	} else if inherited.Variables[0].Scope != "server" {
+		t.Errorf("scope = %q, want server", inherited.Variables[0].Scope)
+	}
+
+	// The session's value is the one a pane gets, so it is the one reported.
+	call(ctx, t, session, "show_environment", map[string]any{
+		"name": "LIBTMUX_MCP_BOTH",
+	}, &inherited)
+	if len(inherited.Variables) != 1 ||
+		inherited.Variables[0].Value != "from-the-session" {
+		t.Errorf("the session's value does not override the server's: %+v",
+			inherited.Variables)
+	} else if inherited.Variables[0].Scope != "session" {
+		t.Errorf("scope = %q, want session", inherited.Variables[0].Scope)
+	}
+
+	// Listing everything covers both layers too.
+	var all struct {
+		Variables []struct {
+			Name string `json:"name"`
+		} `json:"variables"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{}, &all)
+	named := map[string]bool{}
+	for _, variable := range all.Variables {
+		named[variable.Name] = true
+	}
+	if !named["LIBTMUX_MCP_GLOBAL"] {
+		t.Errorf("listing everything omits what the server holds: %d variables",
+			len(all.Variables))
 	}
 }
 
@@ -2215,4 +2277,44 @@ func waitForDeadPane(
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("the pane's shell never exited")
+}
+
+// TestRunCommandSaysWhyThereIsNoOutput covers the reply a caller cannot act on.
+//
+// A pane running something that is not a shell takes the keys as that
+// program's input, so the wrapper never runs and never writes its opening
+// mark. Reporting the failed open names a path inside this server and hands
+// the reader a filesystem error for a tmux problem.
+//
+//libtmux:real-tmux
+func TestRunCommandSaysWhyThereIsNoOutput(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session,
+		"session_name: busy\nwindows:\n  - panes:\n      - shell: sleep 300\n")
+	pane := firstPane(ctx, t, session)
+
+	var ran struct {
+		OutputUnavailable string `json:"outputUnavailable"`
+		TimedOut          bool   `json:"timedOut"`
+		Running           string `json:"running"`
+	}
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "echo never-runs", "timeoutSeconds": 3,
+	}, &ran)
+
+	if ran.OutputUnavailable == "" {
+		t.Fatal("a pane that never ran the command reported no reason")
+	}
+	if strings.Contains(ran.OutputUnavailable, "/tmp/") ||
+		strings.Contains(ran.OutputUnavailable, "no such file") {
+		t.Errorf("the reason is this server's own bookkeeping, not the cause: %q",
+			ran.OutputUnavailable)
+	}
+	if !strings.Contains(ran.OutputUnavailable, "never ran") {
+		t.Errorf("the reason does not say the command never ran: %q",
+			ran.OutputUnavailable)
+	}
+	if !strings.Contains(ran.OutputUnavailable, "respawn_pane") {
+		t.Errorf("the reason names no way out: %q", ran.OutputUnavailable)
+	}
 }

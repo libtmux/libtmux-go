@@ -26,20 +26,30 @@ isolates a run, and using it leaves the person's own configuration alone.
 Driving a build of this server registered as `tmuxlab`, against an isolated
 socket holding two panes:
 
-- **claude** — `status: connected`, 53 tools listed, and a model-driven call of
-  `list_panes` followed by `set_pane_title`; the isolated socket showed the
-  title afterwards. Full proof.
-- **cursor** — returned the pane ids from a real tool call. Full proof.
-- **grok** — `mcp doctor`: command found, server started, handshake OK at
-  protocol 2025-11-25, 53 tools discovered.
-- **codex** — server registered and enabled, config parsed. The model call hit
-  `401 Unauthorized`.
-- **gemini** — `IneligibleTierError`: no longer an eligible client for
-  individual accounts.
-- **agy** — timed out with no output.
-- **opencode** — the local install was missing its postinstall step.
+Six of the seven call a tool for real. The seventh connects.
 
-Every failure above is a condition on the client side. None was the server.
+- **claude** — `status: connected`, 53 tools, a model-driven `list_panes` then
+  `set_pane_title`; the socket showed the title afterwards.
+- **cursor** — returned the pane ids from a real tool call.
+- **codex** — `mcp: tmux/list_panes (completed)`, then the ids.
+- **grok** — the ids, and `mcp doctor` reports handshake OK at protocol
+  2025-11-25 with 53 tools.
+- **antigravity** — returned the ids.
+- **opencode** — called `tmux_list_panes` and returned the ids.
+- **gemini** — `mcp list` reports the server **Connected**; the model call is
+  refused by `IneligibleTierError`, a vendor block on individual accounts that
+  points at Antigravity, which does work. This is as far as the client goes.
+
+Nothing here failed on the server.
+
+**Two of these looked like server faults and were not**, which is the reason
+this file exists. codex returned `401 Unauthorized` and agy timed out to
+nothing — both while running under a throwaway config home, which relocates
+configuration and leaves the credential behind. Run against the real config,
+written by `mcp-swap`, both call tools on the first try. opencode's failure was
+a third of the same kind: an install missing its `postinstall.mjs`, fixed by
+running it. Isolate config when you can, but when a client dies, reach for its
+own status command before writing anything down about the server.
 
 ## The traps
 

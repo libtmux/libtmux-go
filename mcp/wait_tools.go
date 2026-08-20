@@ -462,7 +462,7 @@ func attachCommandOutput(
 ) {
 	opened, err := readMark(openedPath)
 	if err != nil {
-		output.OutputUnavailable = err.Error()
+		output.OutputUnavailable = markMissing(ctx, pane, err)
 		return
 	}
 	now, err := readPaneState(ctx, pane)
@@ -524,6 +524,30 @@ type mark struct {
 
 // readMark reads one position the wrapper recorded, as tmux printed it: a
 // history size, a cursor row, and a cursor column.
+// markMissing explains an absent opening mark, which is the ordinary way this
+// fails and the one a caller can act on.
+//
+// The wrapper writes that mark as its first act, so its absence means the pane
+// never ran the wrapper: the keys went to whatever the pane is running as that
+// program's input. Reporting the failed open names a path inside this server
+// and leaves the reader with a filesystem error for a tmux problem.
+func markMissing(ctx context.Context, pane tmux.Pane, err error) string {
+	if !errors.Is(err, os.ErrNotExist) {
+		return err.Error()
+	}
+	running := ""
+	if fresh, freshErr := pane.Refresh(ctx); freshErr == nil {
+		running, _ = fresh.Formats().PaneCurrentCommand()
+	}
+	if running == "" {
+		return "the pane never ran the command: it went to whatever the pane " +
+			"is running as that program's input rather than to a shell"
+	}
+	return fmt.Sprintf("the pane never ran the command: it is running %s, "+
+		"which took the text as its own input rather than running it; "+
+		"respawn_pane gives the pane a shell again", running)
+}
+
 func readMark(path string) (mark, error) {
 	recorded, err := os.ReadFile(path)
 	if err != nil {
@@ -619,9 +643,13 @@ type waitForTextOutput struct {
 	// Matched is the pattern that ended the wait, whether it came from
 	// Patterns or from Stop.
 	Matched string `json:"matched,omitempty"`
-	// MatchedAtEntry reports that the match was already on the screen when the
+	// MatchedAtEntry reports that a match was already on the screen when the
 	// wait began rather than written during it. A client that cares whether
 	// something just happened, as opposed to having happened, checks this.
+	//
+	// True beside a timeout is the answer to the puzzle it otherwise poses:
+	// sinceEntry ignored text that was there all along, and the same call
+	// without it would have matched at once.
 	MatchedAtEntry bool `json:"matchedAtEntry"`
 	// Lines are what the pane wrote while waiting, or what it already showed
 	// when the match was there on entry.
@@ -692,14 +720,25 @@ func (t *tools) waitForText(
 	// the time the wait begins the announcement it is waiting for may already
 	// have been made, and a wait that only watched the stream would miss it
 	// and time out while the text sat on the screen.
-	if !input.SinceEntry && (len(patterns) > 0 || len(stops) > 0) {
+	//
+	// The screen is read even when sinceEntry says to ignore it, because a
+	// caller that asked to ignore it still needs to be told when that is why
+	// the wait found nothing. A timeout on text that sat on the screen
+	// throughout otherwise reads as a pattern that does not work.
+	presentAtEntry := false
+	if len(patterns) > 0 || len(stops) > 0 {
 		if lines, captureErr := pane.Capture(ctx, tmux.CapturePaneRequest{}); captureErr == nil {
 			shown := strings.Join(lines, "\n")
-			if name, hit := firstMatch(stops, shown); hit {
-				return finishWait(&output, outcomeStopped, name, true, lines, limits, started)
-			}
-			if name, hit := firstMatch(patterns, shown); hit {
-				return finishWait(&output, outcomeMatched, name, true, lines, limits, started)
+			stopName, stopped := firstMatch(stops, shown)
+			patternName, matchedNow := firstMatch(patterns, shown)
+			presentAtEntry = stopped || matchedNow
+			if !input.SinceEntry {
+				if stopped {
+					return finishWait(&output, outcomeStopped, stopName, true, lines, limits, started)
+				}
+				if matchedNow {
+					return finishWait(&output, outcomeMatched, patternName, true, lines, limits, started)
+				}
 			}
 		}
 	}
@@ -735,7 +774,7 @@ func (t *tools) waitForText(
 			"seconds":  int(timeout.Seconds()),
 		})
 	}
-	return finishWait(&output, outcome, matched, false, splitWritten(written), limits, started)
+	return finishWait(&output, outcome, matched, presentAtEntry, splitWritten(written), limits, started)
 }
 
 // watchPane reads a pane's output until something matches or the wait ends.

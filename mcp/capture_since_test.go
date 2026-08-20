@@ -365,3 +365,68 @@ func TestEveryTextToolBoundsItself(t *testing.T) {
 		t.Errorf("only %d tools were checked; the shape this looks for has moved", checked)
 	}
 }
+
+// TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere covers the timeout that
+// looks like a broken pattern.
+//
+// A caller cannot start a program and wait for it in one request, so a fast
+// program has already printed by the time the wait begins. sinceEntry then
+// correctly refuses to match it and the wait runs to its deadline — reporting
+// only that nothing was found, which reads as a pattern that does not work and
+// sends the reader looking for the fault in their regular expression. The
+// server knows the text was there and has to say so.
+//
+//libtmux:real-tmux
+func TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: entry\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	// Print it, and let it land before the wait starts.
+	send(ctx, t, session, pane, "echo ALREADY-PRINTED")
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		var shown struct {
+			Lines []string `json:"lines"`
+		}
+		call(ctx, t, session, "capture_pane", map[string]any{"paneId": pane}, &shown)
+		if slices.ContainsFunc(shown.Lines, func(line string) bool {
+			return strings.Contains(line, "ALREADY-PRINTED")
+		}) {
+			break
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	// Let the shell finish redrawing its prompt. Until the pane is quiet, some
+	// of what it wrote is still arriving and would count as new.
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "idleSeconds": 1, "timeoutSeconds": 10,
+	}, nil)
+
+	var waited struct {
+		Outcome        string `json:"outcome"`
+		Found          bool   `json:"found"`
+		MatchedAtEntry bool   `json:"matchedAtEntry"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{"ALREADY-PRINTED"},
+		"sinceEntry": true, "timeoutSeconds": 3,
+	}, &waited)
+
+	if waited.Outcome != "timeout" || waited.Found {
+		t.Fatalf("sinceEntry matched text from before the wait: %+v", waited)
+	}
+	if !waited.MatchedAtEntry {
+		t.Error("the wait timed out on text that was on the screen the whole time " +
+			"and did not say so")
+	}
+
+	// Without sinceEntry the same call matches, and says it was already there.
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{"ALREADY-PRINTED"},
+		"timeoutSeconds": 3,
+	}, &waited)
+	if !waited.Found || !waited.MatchedAtEntry {
+		t.Errorf("without sinceEntry the match on entry was not reported: %+v", waited)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -225,7 +226,19 @@ type environmentEntry struct {
 	// rather than set it, which is a thing tmux can be told to do and which no
 	// value alone expresses.
 	Removed bool `json:"removed,omitempty"`
+	// Scope is the layer this value came from: "session" when the session sets
+	// it, "server" when it comes from the server-wide environment. A caller
+	// changing one needs to know which, because set_environment writes the
+	// session's, which shadows the server's for that session alone.
+	Scope string `json:"scope"`
 }
+
+// The layers tmux resolves an inherited variable through, named in a reply so
+// a caller knows which one it is looking at.
+const (
+	environmentScopeServer  = "server"
+	environmentScopeSession = "session"
+)
 
 // showEnvironmentOutput carries a session's environment.
 type showEnvironmentOutput struct {
@@ -242,9 +255,15 @@ type showEnvironmentOutput struct {
 // process began. A client debugging why a command cannot find something reads
 // this to learn what the next pane would get.
 //
-// Values are reported as tmux holds them. A session environment is a place
-// people put credentials, so the caller is receiving whatever is there;
-// reading one variable by name rather than all of them is the narrower ask.
+// tmux keeps two layers and a pane inherits both, the session's overriding the
+// server's, so both are read and merged. Reading only the session's answered a
+// question nobody asked: PATH lives in the server's environment, so a caller
+// asking what a pane would get was told it gets no PATH at all. Each entry
+// says which layer it came from.
+//
+// Values are reported as tmux holds them. An environment is a place people put
+// credentials, so the caller is receiving whatever is there; reading one
+// variable by name rather than all of them is the narrower ask.
 func (t *tools) showEnvironment(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -262,24 +281,46 @@ func (t *tools) showEnvironment(
 		if err != nil {
 			return nil, output, err
 		}
+		scope := environmentScopeSession
+		if !ok {
+			if value, ok, err = t.target.GetEnvironment(ctx, wanted); err != nil {
+				return nil, output, err
+			}
+			scope = environmentScopeServer
+		}
 		if ok {
 			output.Variables = []environmentEntry{{
 				Name: wanted, Value: value.Value, Removed: value.Removed,
+				Scope: scope,
 			}}
 		}
 		return nil, output, nil
 	}
 
-	variables, err := session.ShowEnvironment(ctx)
+	// The server's layer first, then the session's over the top of it, which is
+	// the order tmux resolves them in for a new process.
+	merged := map[string]environmentEntry{}
+	serverWide, err := t.target.ShowEnvironment(ctx)
 	if err != nil {
 		return nil, output, err
 	}
-	output.Variables = make([]environmentEntry, 0, len(variables))
-	for key, value := range variables {
-		output.Variables = append(output.Variables, environmentEntry{
+	for key, value := range serverWide {
+		merged[key] = environmentEntry{
 			Name: key, Value: value.Value, Removed: value.Removed,
-		})
+			Scope: environmentScopeServer,
+		}
 	}
+	sessionWide, err := session.ShowEnvironment(ctx)
+	if err != nil {
+		return nil, output, err
+	}
+	for key, value := range sessionWide {
+		merged[key] = environmentEntry{
+			Name: key, Value: value.Value, Removed: value.Removed,
+			Scope: environmentScopeSession,
+		}
+	}
+	output.Variables = slices.Collect(maps.Values(merged))
 	slices.SortFunc(output.Variables, func(a, b environmentEntry) int {
 		return strings.Compare(a.Name, b.Name)
 	})

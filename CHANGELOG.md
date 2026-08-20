@@ -42,6 +42,26 @@ subscribed with that exact string. Nothing distinguished the silence from a pane
 that never wrote. Both spellings now arrive, each in the spelling its subscriber
 used, and the spellings of one pane share a coalescing interval.
 
+`wait_for_text` says when `sinceEntry` ignored a match that was already there.
+A caller cannot start a program and wait for it in one request, so a fast
+program has already printed by the time the wait begins; `sinceEntry` then
+refuses that text and the wait runs to its deadline, reporting only that
+nothing was found. `matchedAtEntry` is now set beside the timeout, which says
+the same call without `sinceEntry` would have matched at once.
+
+`show_environment` reports both layers a pane inherits. tmux keeps a
+server-wide environment and a per-session one and hands a new process both,
+the session's overriding the server's; only the session's was read, so asking
+for `PATH` reported nothing while a pane made a moment later had one. Each
+entry now names the layer it came from.
+
+`run_command` says why there is no output. A pane running something that is not
+a shell takes the keys as that program's input, so the wrapper never runs;
+`outputUnavailable` carried the failed open of this server's own mark file,
+naming a temporary path and reading as a filesystem fault. It now says the pane
+never ran the command, what it is running instead, and that `respawn_pane`
+gives it a shell again.
+
 `LIBTMUX_SOCKET` names the tmux socket when no flag does. The Python server
 reads it, so a configuration written for that one reached whatever sat on tmux's
 default socket here, with nothing said about it. A flag still wins, only an
