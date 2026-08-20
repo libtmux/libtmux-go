@@ -1,6 +1,13 @@
 name: tests
 
-on: [push, pull_request]
+# A branch with an open pull request would otherwise run this twice per push,
+# once for each event, and the two runs compete for the same runners while
+# driving real tmux servers. That contention is what makes the timing-sensitive
+# tests fail on one of the pair and pass on the other.
+on:
+  push:
+    branches: [master]
+  pull_request:
 
 # Every job below names its modules one at a time. `go test ./...` stops at a
 # module boundary, so the consumer modules and the benchmarks are invisible to
