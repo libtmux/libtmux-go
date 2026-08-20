@@ -24,8 +24,9 @@ var lintGoVersion = regexp.MustCompile(`(?m)^\s+go:\s*"?(\d+\.\d+)"?\s*$`)
 var workflowGoVersions = regexp.MustCompile(`(?m)^\s+go-version:\s*\[([^\]]+)\]`)
 
 // documentedFloor matches a language version stated to a reader, in any of the
-// ways the documentation states one.
-var documentedFloor = regexp.MustCompile(`\bGo (\d+\.\d+)(?:\+|\b)`)
+// ways the documentation states one. Whitespace rather than a space, because
+// prose wraps and a requirement split across two lines is still a requirement.
+var documentedFloor = regexp.MustCompile(`\bGo\s+(\d+\.\d+)(?:\+|\b)`)
 
 // TestEveryStatementOfTheLanguageFloorAgrees gates a version that several files
 // carry and nothing derives.
