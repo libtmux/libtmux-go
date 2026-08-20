@@ -12,7 +12,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-func TestHasSessionUsesExactTargetsUnlessPatternMatchingIsRequested(t *testing.T) {
+func TestHasSessionAnswersForTheNameUnlessPatternMatchingIsRequested(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -23,11 +23,43 @@ func TestHasSessionUsesExactTargetsUnlessPatternMatchingIsRequested(t *testing.T
 		wantArgs []string
 	}{
 		{
-			name:     "exact match",
+			name:     "the name is carried by a session",
 			request:  HasSessionRequest{Target: "work"},
-			result:   tmuxcmd.Result{ExitCode: 0},
+			result:   tmuxcmd.Result{Stdout: []string{"$0 work"}},
 			want:     true,
-			wantArgs: []string{"has-session", "-t", "=work"},
+			wantArgs: []string{"list-sessions", "-F", "#{session_id} #{session_name}"},
+		},
+		{
+			name:     "no session carries the name",
+			request:  HasSessionRequest{Target: "missing"},
+			result:   tmuxcmd.Result{Stdout: []string{"$0 work"}},
+			want:     false,
+			wantArgs: []string{"list-sessions", "-F", "#{session_id} #{session_name}"},
+		},
+		{
+			// A name holding a space is one row, so the split has to be at the
+			// first space and not the last.
+			name:     "the name holds a space",
+			request:  HasSessionRequest{Target: "two words"},
+			result:   tmuxcmd.Result{Stdout: []string{"$4 two words"}},
+			want:     true,
+			wantArgs: []string{"list-sessions", "-F", "#{session_id} #{session_name}"},
+		},
+		{
+			// tmux resolves an identifier before any name, and its exact-match
+			// marker does not stop it, so asking the name has to not ask tmux.
+			name:     "a name that looks like another session's identifier",
+			request:  HasSessionRequest{Target: "$0"},
+			result:   tmuxcmd.Result{Stdout: []string{"$0 work"}},
+			want:     false,
+			wantArgs: []string{"list-sessions", "-F", "#{session_id} #{session_name}"},
+		},
+		{
+			name:     "no server holds a session by any name",
+			request:  HasSessionRequest{Target: "work"},
+			result:   tmuxcmd.Result{Stderr: []string{"no server running on /tmp/x"}, ExitCode: 1},
+			want:     false,
+			wantArgs: []string{"list-sessions", "-F", "#{session_id} #{session_name}"},
 		},
 		{
 			name:     "tmux pattern",
@@ -37,18 +69,11 @@ func TestHasSessionUsesExactTargetsUnlessPatternMatchingIsRequested(t *testing.T
 			wantArgs: []string{"has-session", "-t", "wo*"},
 		},
 		{
-			name:     "terminal separator target",
-			request:  HasSessionRequest{Target: "work;"},
-			result:   tmuxcmd.Result{ExitCode: 0},
-			want:     true,
-			wantArgs: []string{"has-session", "-t", `=work\;`},
-		},
-		{
-			name:     "completed miss",
-			request:  HasSessionRequest{Target: "missing"},
+			name:     "a pattern miss stays a miss",
+			request:  HasSessionRequest{Target: "wo*", Pattern: true},
 			result:   tmuxcmd.Result{Stderr: []string{"can't find session"}, ExitCode: 1},
 			want:     false,
-			wantArgs: []string{"has-session", "-t", "=missing"},
+			wantArgs: []string{"has-session", "-t", "wo*"},
 		},
 	}
 
@@ -289,7 +314,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	height := 43
 	runner := &versionQueueRunner{responses: append(
 		[]versionResponse{
-			{result: tmuxcmd.Result{Stderr: []string{"missing"}, ExitCode: 1}},
+			{result: tmuxcmd.Result{Stdout: []string{"$3 other"}, ExitCode: 0}},
 			{result: tmuxcmd.Result{Stdout: []string{"$7"}, ExitCode: 0}},
 		},
 		lifecycleLookupResponses(t, version, "list-sessions", map[string]string{
@@ -321,7 +346,9 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	}
 
 	requests := runner.recordedRequests()
-	assertRequestArguments(t, requests[0], []string{"has-session", "-t", "=alpha"})
+	assertRequestArguments(t, requests[0], []string{
+		"list-sessions", "-F", "#{session_id} #{session_name}",
+	})
 	assertRequestArguments(t, requests[1], []string{
 		"new-session", "-P", "-F#{session_id}", "-salpha", "-d",
 		"-c", "/work dir", "-n", "editor", "-x", "132", "-y", "43",
@@ -378,7 +405,7 @@ func TestNewSessionRejectsDuplicateOrKillsItWhenRequested(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{{
-			result: tmuxcmd.Result{ExitCode: 0},
+			result: tmuxcmd.Result{Stdout: []string{"$2 alpha"}},
 		}}}
 		_, err := serverWithRunner(runner).NewSession(
 			context.Background(),
@@ -388,7 +415,7 @@ func TestNewSessionRejectsDuplicateOrKillsItWhenRequested(t *testing.T) {
 			t.Fatalf("NewSession() error = %v, want ErrSessionExists", err)
 		}
 		if calls := runner.callCount(); calls != 1 {
-			t.Fatalf("runner calls = %d, want one has-session call", calls)
+			t.Fatalf("runner calls = %d, want one listing call", calls)
 		}
 	})
 
@@ -398,7 +425,7 @@ func TestNewSessionRejectsDuplicateOrKillsItWhenRequested(t *testing.T) {
 		version := mustParseVersion(t, "3.7")
 		runner := &versionQueueRunner{responses: append(
 			[]versionResponse{
-				{result: tmuxcmd.Result{ExitCode: 0}},
+				{result: tmuxcmd.Result{Stdout: []string{"$2 alpha"}}},
 				{result: tmuxcmd.Result{ExitCode: 0}},
 				{result: tmuxcmd.Result{Stdout: []string{"$7"}, ExitCode: 0}},
 			},
@@ -415,7 +442,8 @@ func TestNewSessionRejectsDuplicateOrKillsItWhenRequested(t *testing.T) {
 			t.Fatalf("NewSession() error = %v", err)
 		}
 		requests := runner.recordedRequests()
-		assertRequestArguments(t, requests[1], []string{"kill-session", "-t", "alpha"})
+		// The identifier the listing found, not the name that found it.
+		assertRequestArguments(t, requests[1], []string{"kill-session", "-t", "$2"})
 		assertRequestArguments(t, requests[2], []string{
 			"new-session", "-P", "-F#{session_id}", "-salpha", "-d",
 		})
@@ -1324,7 +1352,7 @@ func TestNewSessionUsesOneScrubbedHandleAcrossTheLifecycle(t *testing.T) {
 	version := mustParseVersion(t, "3.7")
 	runner := &versionQueueRunner{responses: append(
 		[]versionResponse{
-			{result: tmuxcmd.Result{ExitCode: 0}},
+			{result: tmuxcmd.Result{Stdout: []string{"$3 alpha"}, ExitCode: 0}},
 			{result: tmuxcmd.Result{ExitCode: 0}},
 			{result: tmuxcmd.Result{Stdout: []string{"$7"}, ExitCode: 0}},
 		},

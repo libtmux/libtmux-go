@@ -168,6 +168,24 @@ anchor has been trimmed away the reply is the current screen with `linesMissed`
 set, which says the client's record of the pane has a gap in it rather than
 implying it is whole.
 
+### How large an argument can be
+
+What a caller sends has a ceiling, and where it sits depends on how this server
+is reaching tmux at the time.
+
+tmux's own client packs a command into one frame of 16,384 bytes, so roughly
+16.3 kB of arguments is all it carries; past that tmux answers `command too
+long`. A control connection does not go through that frame, so while this
+server holds one -- which is the ordinary case -- a much larger value goes
+through. When it has fallen back to running a tmux process per command, which
+happens after the tmux server it was talking to restarts, the frame limit
+applies again and a very large `value`, `title`, `format` or `name` is refused.
+
+Nothing here needs a 16 kB argument, so this matters mainly as an explanation
+for a call that worked earlier in a session and stops working after a restart.
+Pane text is unaffected: `load_buffer` and `paste_text` do not pass their
+content as a command argument.
+
 ### Bounded replies
 
 Every tool that returns pane text keeps the last lines within a bound and

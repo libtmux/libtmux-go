@@ -145,6 +145,10 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 // client status message, leaving stdout empty; this method preserves that
 // upstream and Python behavior. Development tmux has corrected the issue.
 // A list failure is returned rather than answered with no rows.
+//
+// It answers on a socket holding no server, unlike every other list here,
+// because tmux runs list-keys against a server it starts for the purpose. That
+// server holds no sessions and exits at once, leaving its socket file behind.
 func (s Server) ListKeys(
 	ctx context.Context,
 	request ListKeysRequest,
@@ -183,7 +187,8 @@ func (s Server) ListKeys(
 }
 
 // ListCommands returns an owned snapshot of raw tmux command-description lines.
-// A list failure is returned rather than answered with no rows.
+// A list failure is returned rather than answered with no rows. Like
+// [Server.ListKeys], it answers on a socket holding no server.
 func (s Server) ListCommands(
 	ctx context.Context,
 	request ListCommandsRequest,

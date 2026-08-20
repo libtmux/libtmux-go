@@ -89,6 +89,12 @@ func TestParseRejectsMisspelledAndIncompleteWorkspaces(t *testing.T) {
 		"unknown window field":    "session_name: s\nwindows: [{nope: 1, panes: [echo hi]}]\n",
 		"unknown pane field":      "session_name: s\nwindows: [{panes: [{nope: 1, shell_command: echo hi}]}]\n",
 		"unknown command field":   "session_name: s\nwindows: [{panes: [{shell_command: [{cmd: hi, nope: 1}]}]}]\n",
+		// tmux refuses the second claim on an index, and its refusal is that
+		// new-window exited non-zero -- naming neither the index nor which
+		// window lost. Two windows claiming one place is a document mistake.
+		"window_index claimed twice": "session_name: s\n" +
+			"windows: [{window_index: 5, panes: [echo hi]}, " +
+			"{window_index: 5, panes: [echo hi]}]\n",
 	} {
 		if _, err := workspace.Parse([]byte(document)); !errors.Is(err, workspace.ErrInvalidWorkspace) {
 			t.Errorf("%s: Parse() error = %v, want ErrInvalidWorkspace", name, err)

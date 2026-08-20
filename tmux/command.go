@@ -21,8 +21,9 @@ var ErrCommand = errors.New("tmux: command failed")
 
 // ErrNoServer identifies a command that no tmux server answered: either tmux
 // refused it before running it, because it reached no server on the configured
-// socket, or the server it reached went away before answering. It is matched by
-// errors.Is for [CommandError], alongside [ErrCommand].
+// socket or would not use the directory that socket lives in, or the server it
+// reached went away before answering. It is matched by errors.Is for
+// [CommandError], alongside [ErrCommand].
 //
 // It exists because a tmux server holding no sessions exits, so "nothing is
 // running yet" is ordinary state rather than a fault, and a program that starts
@@ -271,19 +272,38 @@ func newRedactedCommandError(subcommand string, result CommandResult) *CommandEr
 
 // commandServerUnreachablePrefixes are what tmux prints when no server carried
 // the command: the first two from client.c when it cannot reach one, the third
-// from server.c when it cannot create the socket for one. All three are
+// from server.c when it cannot create the socket for one, and the rest from
+// make_label in tmux.c when it cannot settle on a socket path to try. All are
 // produced before a command runs, so they carry the caller's own socket path
 // and an errno string and never an option value, an environment value, or
-// buffer contents. All three are unchanged across every supported version from
-// 3.2a through 3.7b.
+// buffer contents.
 //
-// The third is why the exit code alone is not enough: tmux exits 0 after
-// failing to create a socket, so without its message the failure reads as a
-// command that succeeded.
+// The socket-path failures are why the older wording is not enough on its own.
+// tmux 3.2a reported all of them as "error creating"; 3.3a split them into the
+// messages here, so matching only 3.2a's wording classified one situation two
+// ways depending on which tmux was installed. A directory tmux considers
+// unsafe is the reachable one: it needs mode 0700, and a filesystem that does
+// not keep Unix permissions gives it something else.
+//
+// The third prefix is also why the exit code alone is not enough: tmux exits 0
+// after failing to create a socket, so without its message the failure reads as
+// a command that succeeded.
 var commandServerUnreachablePrefixes = [...]string{
 	"no server running on ",
 	"error connecting to ",
 	"error creating ",
+	"couldn't create directory ",
+	"couldn't read directory ",
+	"no suitable socket path",
+}
+
+// commandServerUnreachableSuffixes are the two socket-path failures that put
+// the path first, so a prefix cannot anchor them. Both end in a constant, and
+// anchoring at the end is what keeps the words out of the class when tmux uses
+// them for something a caller can act on.
+var commandServerUnreachableSuffixes = [...]string{
+	" is not a directory",
+	" has unsafe permissions",
 }
 
 // commandFixedRefusals are tmux diagnostics built from a constant string with
@@ -320,6 +340,11 @@ func commandServerUnreachable(stderr []string) bool {
 	for _, line := range stderr {
 		for _, prefix := range commandServerUnreachablePrefixes {
 			if strings.HasPrefix(line, prefix) {
+				return true
+			}
+		}
+		for _, suffix := range commandServerUnreachableSuffixes {
+			if strings.HasSuffix(line, suffix) {
 				return true
 			}
 		}

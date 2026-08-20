@@ -25,6 +25,45 @@ has no upgrade path but the toolchain itself.
 Nothing about the API changed. The syntax the floor unlocks was taken across
 the tree, and `golangci-lint` now gates it so the older forms cannot return.
 
+### tmux
+
+`HasSession` with `Pattern` false answers for the name itself, and `NewSession`
+with `KillExisting` kills the session it found rather than re-resolving the
+name. tmux's exact-match marker suppresses only the last two rungs of its
+lookup ladder: `=$0` still resolves the identifier and `=/dev/pts/3` still
+resolves the client attached at that tty, so both reported a session nothing was
+named. Creating a session named after another session's identifier therefore
+destroyed that other session — and when it was the last one, the server with it.
+The exact question is now answered against the session list, and the replacement
+is killed by identifier. `Pattern` true still reaches tmux's full target syntax,
+so nothing that worked is gone.
+
+`RefreshClientRequest.RequestClipboard` needs tmux 3.4, lowered from 3.7, so it
+now works on 3.4, 3.5, 3.6 and their point releases instead of being refused
+there. tmux has carried `refresh-client -l` since before the supported range;
+what 3.4 changed is that sending it stops ending the server. 3.2a ends it for
+any client and 3.3a for a client with a terminal, which is why the flag is still
+withheld below 3.4 rather than gated on the kind of client a caller targets.
+
+A socket directory tmux will not use is classified as `ErrNoServer` rather than
+as an unrecognised command failure. tmux keeps its sockets in
+`$TMUX_TMPDIR/tmux-<uid>` and refuses that directory if anyone outside the
+owner's group can reach it — the case a filesystem that does not keep Unix
+permissions leaves you in. tmux 3.2a reported the refusal as `error creating`,
+which was recognised; 3.3a split it into three other messages, which were not,
+so the same misconfiguration answered "no server" on one supported release and
+failed opaquely on the seven others. The reason tmux gave is still carried on
+the error either way, because an absent socket and a directory that needs a
+`chmod` need different things from the caller.
+
+A session name carrying a control character, a DEL, or malformed UTF-8 is
+refused, naming the reason. tmux only started rejecting these at 3.7; before
+that it accepted them and stored the name visibility-encoded, so a bell arrived
+as a backslash and an `a` and the session ended up under a name nobody asked
+for. Refusing makes one name mean one thing on every supported release, which
+is why the target delimiters are refused rather than left to a tmux that would
+rewrite them.
+
 ### tmux/tmuxtest
 
 `SuiteRootTagVariable` names the environment variable that tags a suite's
@@ -202,6 +241,11 @@ reader to fetch `v0.0.1-alpha.1` for the whole life of `v0.0.1-alpha.4`, and
 that version is retracted, so the command they gave refused to run.
 
 ### workspace
+
+Two windows claiming one `window_index` is refused by the document check,
+with the line and both windows named. tmux refuses the second claim itself, but
+its refusal is that `new-window` exited non-zero -- naming neither the index nor
+which window lost, and describing an unnamed window as `""`.
 
 A rejection that has no line to point at no longer claims "line 0". An empty or
 unparseable document reported a line that cannot exist, sending a reader looking
