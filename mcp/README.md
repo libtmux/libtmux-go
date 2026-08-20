@@ -183,6 +183,10 @@ had before. This is a guard rail rather than a boundary: a caller with
 that cannot be asked would break them all to enforce something that was never
 enforceable.
 
+A write reached through a batch asks in the same way a direct one does. The
+question goes to the client that sent the batch, and declining fails that call
+and stops the batch there.
+
 ## Limiting what a client can do
 
 `LIBTMUX_SAFETY` bounds the tools this server advertises:
@@ -192,6 +196,11 @@ enforceable.
 | `readonly` | only the tools that read tmux |
 | `mutating` | those plus the ones that change it, and is the default |
 | `destructive` | those plus the ones that end something: `kill_pane`, `kill_window`, `kill_session`, `kill_server` |
+
+An unset or empty variable takes the default. A value naming no level takes
+`readonly`, because setting the variable at all is asking for a bound and a
+typo in it must not widen one; `-tools` reports the level in force rather than
+the string that was rejected.
 
 A tool above the level is never advertised, so no prompt reaches it, and a
 batch cannot reach around the level either. The active level is stated in the

@@ -42,6 +42,13 @@ subscribed with that exact string. Nothing distinguished the silence from a pane
 that never wrote. Both spellings now arrive, each in the spelling its subscriber
 used, and the spellings of one pane share a coalescing interval.
 
+A batched write to the caller's own pane asks first, as a direct one already
+did. The three batch tools discarded the request they were called with, so the
+guard had no session to put the question to and let the write through: the same
+client, declining the same `send_keys` to the same pane, had it refused directly
+and delivered inside a batch, with no prompt shown. The safety tier was already
+enforced through a batch; this guard was not.
+
 A resource URI is decoded before it is used. A tmux name is not limited to what
 a URI may carry, so a session called `my session` has no spelling but
 `my%20session`, and a pane copied from a tool result encodes as `%250`. Both

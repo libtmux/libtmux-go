@@ -29,8 +29,11 @@ type dispatcher struct {
 	// may call it from. A tool that says it is destructive is governed by
 	// having said so, here as well as at registration.
 	annotations *mcp.ToolAnnotations
-	// call runs the tool with arguments a client supplied.
-	call func(context.Context, json.RawMessage) (any, error)
+	// call runs the tool with arguments a client supplied. The originating
+	// request travels with it, because a guard that asks the person needs the
+	// session to ask on -- a batched write to the caller's own pane is the
+	// same write as a direct one.
+	call func(context.Context, *mcp.CallToolRequest, json.RawMessage) (any, error)
 }
 
 // batchCall is one tool call inside a batch.
@@ -79,10 +82,10 @@ type batchOutput struct {
 // worse than a batch that did nothing. The check happens before anything runs.
 func (t *tools) callReadOnlyToolsBatch(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input batchInput,
 ) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, input, SafetyReadOnly)
+	return t.runBatch(ctx, request, input, SafetyReadOnly)
 }
 
 // callMutatingToolsBatch runs several tools in one request, including ones
@@ -93,10 +96,10 @@ func (t *tools) callReadOnlyToolsBatch(
 // anything.
 func (t *tools) callMutatingToolsBatch(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input batchInput,
 ) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, input, SafetyMutating)
+	return t.runBatch(ctx, request, input, SafetyMutating)
 }
 
 // callDestructiveToolsBatch runs several tools in one request, including the
@@ -107,10 +110,10 @@ func (t *tools) callMutatingToolsBatch(
 // time races tmux's own teardown of the window when the last one goes.
 func (t *tools) callDestructiveToolsBatch(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input batchInput,
 ) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, input, SafetyDestructive)
+	return t.runBatch(ctx, request, input, SafetyDestructive)
 }
 
 // runBatch performs the calls in order, stopping at the first failure.
@@ -122,6 +125,7 @@ func (t *tools) callDestructiveToolsBatch(
 // panes were gone.
 func (t *tools) runBatch(
 	ctx context.Context,
+	request *mcp.CallToolRequest,
 	input batchInput,
 	tier SafetyLevel,
 ) (*mcp.CallToolResult, batchOutput, error) {
@@ -154,7 +158,7 @@ func (t *tools) runBatch(
 			})
 			break
 		}
-		value, err := t.dispatchers[call.Tool].call(ctx, encodedArguments)
+		value, err := t.dispatchers[call.Tool].call(ctx, request, encodedArguments)
 		if err != nil {
 			output.Results = append(output.Results, batchResult{
 				Tool: call.Tool, Error: err.Error(),
@@ -190,6 +194,7 @@ func (t *tools) runBatch(
 // tool-level failure as an error so the batch stops where the call did.
 func batched[In, Out any](
 	ctx context.Context,
+	request *mcp.CallToolRequest,
 	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
 	arguments json.RawMessage,
 ) (any, error) {
@@ -206,7 +211,7 @@ func batched[In, Out any](
 			return nil, fmt.Errorf("arguments are not what this tool takes: %w", err)
 		}
 	}
-	result, output, err := handler(ctx, nil, input)
+	result, output, err := handler(ctx, request, input)
 	if err != nil {
 		return nil, err
 	}

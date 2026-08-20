@@ -69,8 +69,9 @@ func (t *tools) confirmCallerWrite(
 	pane tmux.Pane,
 	action string,
 ) error {
-	// A call made from a batch has no request of its own, so there is no
-	// session to put the question to.
+	// A batch carries the request it was called with down to each of its
+	// calls, so a batched write is asked about like any other. Without a
+	// session there is nobody to put the question to.
 	if request == nil || request.Session == nil {
 		return nil
 	}

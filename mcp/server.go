@@ -60,8 +60,12 @@ func register[In, Out any](
 	}
 	t.dispatchers[tool.Name] = dispatcher{
 		annotations: tool.Annotations,
-		call: func(ctx context.Context, arguments json.RawMessage) (any, error) {
-			return batched(ctx, handler, arguments)
+		call: func(
+			ctx context.Context,
+			request *mcp.CallToolRequest,
+			arguments json.RawMessage,
+		) (any, error) {
+			return batched(ctx, request, handler, arguments)
 		},
 	}
 }

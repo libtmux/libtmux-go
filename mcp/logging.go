@@ -23,8 +23,7 @@ func logToClient(
 	data map[string]any,
 ) {
 	if request == nil || request.Session == nil {
-		// A call made from a batch has no request of its own. Losing a log
-		// line is not worth failing the call it describes.
+		// Losing a log line is not worth failing the call it describes.
 		return
 	}
 	_ = request.Session.Log(ctx, &mcp.LoggingMessageParams{

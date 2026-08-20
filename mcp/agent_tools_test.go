@@ -1214,6 +1214,34 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 		}
 	})
 
+	t.Run("a batch is asked about too", func(t *testing.T) {
+		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "decline" })
+		var out struct {
+			Completed int `json:"completed"`
+			Results   []struct {
+				Tool  string `json:"tool"`
+				Error string `json:"error"`
+			} `json:"results"`
+		}
+		call(ctx, t, session, "call_mutating_tools_batch", map[string]any{
+			"calls": []map[string]any{{
+				"tool": "send_keys",
+				"arguments": map[string]any{
+					"paneId": ownPane, "command": "echo into-my-own-terminal",
+				},
+			}},
+		}, &out)
+		if out.Completed != 0 {
+			t.Error("a batch typed into the caller pane a direct call was refused")
+		}
+		if len(out.Results) == 0 || !strings.Contains(out.Results[0].Error, "declined") {
+			t.Errorf("the batch does not report the decline: %+v", out.Results)
+		}
+		if *asked != 1 {
+			t.Errorf("the person was asked %d times for a batched write, want once", *asked)
+		}
+	})
+
 	t.Run("another pane is not asked about", func(t *testing.T) {
 		t.Setenv("TMUX_PANE", ownPane)
 		t.Setenv("TMUX", "")
