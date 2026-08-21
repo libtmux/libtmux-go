@@ -2561,11 +2561,29 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	// soon as a connection is carrying notifications, and only runs out the
 	// bound when none arrives.
 	subscribeTook := time.Since(subscribeStarted)
-	// No sleep: subscribing does not answer until the watch is carrying
-	// notifications, so a write straight after it is seen.
-	call(ctx, t, watching, "send_keys", map[string]any{
-		"paneId": pane, "command": "echo watched-after-restart",
-	}, nil)
+	// run_command rather than send_keys, because this has to know the pane
+	// actually wrote. Keys are handed to whatever is reading the pane, and a
+	// shell that has only just been restarted is not reading yet -- they were
+	// swallowed, the pane stayed at its prompt, and the silence read as a
+	// watch that had not attached. run_command waits for the command it typed
+	// to finish, so reaching the assertion means there was something to be
+	// told about.
+	write := func() *sdk.CallToolResult {
+		return call(ctx, t, watching, "run_command", map[string]any{
+			"paneId": pane, "command": "echo watched-after-restart", "timeoutSeconds": 20,
+		}, nil)
+	}
+	// The pool retires a connection the restart killed on the call that finds
+	// it, and deliberately does not run that call again -- so the first tool
+	// call through this handle reports the restart. Retrying is what a client
+	// does, and what the fix above promises will then work.
+	written := write()
+	if written.IsError {
+		written = write()
+	}
+	if written.IsError {
+		t.Fatalf("run_command after the restart, twice: %s", resultText(written))
+	}
 	select {
 	case <-updated:
 	case <-time.After(20 * time.Second):
