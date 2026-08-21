@@ -499,7 +499,7 @@ func attachCommandOutput(
 		if closed.column == 0 {
 			end--
 		}
-		if closed.row < opened.row || closed.erased(opened) {
+		if closed.row < opened.row || closed.moved(opened) {
 			// The grid was renumbered while the command ran, which is what
 			// erasing the scrollback does: ESC[3J drops the history and every
 			// absolute row moves with it, so the opening mark addresses
@@ -508,7 +508,11 @@ func attachCommandOutput(
 			// mark, so the read starts at the top rather than returning
 			// nothing. clear, tput clear and reset all emit ESC[3J, which makes
 			// this the ordinary case rather than a curiosity.
-			output.LinesMissed = true
+			// Only when the shift destroyed scrollback rather than moving
+			// it. Clearing the screen puts what was displayed into the
+			// history, where this still reads it, so nothing went missing and
+			// saying so would be a warning about an intact reply.
+			output.LinesMissed = closed.erased(opened) || closed.row < opened.row
 			request.Start = tmux.CaptureLine(-now.historySize)
 			if end < 0 {
 				output.Output = nil
@@ -549,6 +553,30 @@ func attachCommandOutput(
 	output.truncation = report
 }
 
+// moved reports the grid shifting under the marks, so the rows they name no
+// longer hold what they measured.
+//
+// A mark is history_size plus cursor_y added together, which is stable while a
+// pane only scrolls: a row leaving the screen for the scrollback adds one to
+// the first and takes one from the second. Anything that moves rows between
+// the two WITHOUT the cursor advancing breaks that, and the sum hides it by
+// construction. Erasing the scrollback does it downward; clearing the screen
+// does it upward, pushing what was displayed into the history and homing the
+// cursor. Both leave the sum where it was, which reads as a command that
+// printed nothing.
+//
+// The size has to be unchanged for the count to mean anything. tmux rewraps the
+// scrollback when a pane's width changes and moves rows between the screen and
+// the history when its height does, so the count moves on its own: measured 78
+// to 42 growing a pane from 24 rows to 60, and 162 to 42 widening one holding
+// wrapped lines, while short lines at the same widths did not move at all.
+func (f mark) moved(opened mark) bool {
+	if f.width != opened.width || f.height != opened.height {
+		return false
+	}
+	return f.historySize != opened.historySize && f.row <= opened.row
+}
+
 // erased reports that scrollback went missing between the two marks.
 //
 // A row comparison alone cannot see it. Erasing one line of history while the
@@ -565,10 +593,7 @@ func attachCommandOutput(
 // a terminal or closing a split does either mid-command without touching
 // anything.
 func (f mark) erased(opened mark) bool {
-	if f.width != opened.width || f.height != opened.height {
-		return false
-	}
-	return f.historySize < opened.historySize
+	return f.moved(opened) && f.historySize < opened.historySize
 }
 
 // afterTheWrapperEcho drops what stood above the command's own output.
@@ -583,31 +608,77 @@ func (f mark) erased(opened mark) bool {
 // A long prompt wraps it, and an erase drops the flag that would otherwise let
 // tmux rejoin the pieces, so the directory name appears in no single line.
 func afterTheWrapperEcho(lines []string, echo string) []string {
+	// Compared without spaces. A wrapped row that breaks on one of the echo's
+	// own spaces loses it to the padding trim, which cannot tell a space the
+	// grid added from a space the shell wrote.
+	compacted := make([]string, len(lines))
 	joined := strings.Builder{}
 	ends := make([]int, len(lines))
 	for i, line := range lines {
-		joined.WriteString(line)
+		compacted[i] = withoutSpaces(line)
+		joined.WriteString(compacted[i])
 		ends[i] = joined.Len()
 	}
-	// The last of them, because an interactive shell draws the line it read and
-	// then draws it again under the prompt, so the echo appears twice and the
-	// command's output follows the second one. Taking the first leaves the
-	// redraw behind as output.
-	at := strings.LastIndex(joined.String(), echo)
-	if at < 0 {
-		// A shell that did not echo leaves nothing to find, and the lines are
-		// the caller's best answer rather than something to discard.
-		return lines
-	}
-	// Through the row the echo ENDS on, which is not the row it starts on once
-	// it has wrapped, and not the row the directory ends on either: the rest of
-	// the path and its closing quote would stay behind as a line of their own.
-	for i, end := range ends {
-		if end >= at+len(echo) {
-			return lines[i+1:]
+	wanted := withoutSpaces(echo)
+	last := -1
+	if at := strings.LastIndex(joined.String(), wanted); at >= 0 {
+		for i, end := range ends {
+			if end >= at+len(wanted) {
+				last = i
+				break
+			}
 		}
 	}
-	return nil
+	// Then past any later remnant of the same line, and over the whole grid
+	// when no complete draw was found at all.
+	//
+	// An interactive shell draws the line it read and redraws it under the
+	// prompt, and that second draw can be cut short: its start overwritten, the
+	// prompt row left without its marker, and only the tail of the path
+	// surviving as a row of its own. Sometimes neither draw survives whole --
+	// the first gone, the second's start overwritten -- and then there is no
+	// anchor to find, which used to mean the reply carried the prompt and the
+	// PREVIOUS command's output as its own.
+	//
+	// A remnant is a row that is WHOLLY a tail of the echo, not merely a row
+	// ending in one. The wrapper's file is always named the same, so the echo's
+	// last characters are the same on every call this server makes, and a row
+	// that merely ends in them is something a command printed: rm and git both
+	// quote a filename that way, and a name ending in "cript" is all it takes.
+	// A row the redraw left behind is a piece of the line itself, so the whole
+	// row matches.
+	for i := last + 1; i < len(lines); i++ {
+		row := compacted[i]
+		if len(row) >= echoRemnant && strings.HasSuffix(wanted, row) {
+			last = i
+		}
+	}
+	if last < 0 {
+		// Nothing of the line reached the grid, which is what a shell that did
+		// not echo looks like. The lines are the caller's best answer rather
+		// than something to discard.
+		return lines
+	}
+	// The blank rows between the echo and the output are the grid's, not the
+	// command's: this only runs when the echo was found, which means the rows
+	// were picked from somewhere other than where the command started writing.
+	// A command whose own output opens with a blank line keeps it, because a
+	// healthy read never sees the echo.
+	rest := lines[last+1:]
+	for len(rest) > 0 && rest[0] == "" {
+		rest = rest[1:]
+	}
+	return rest
+}
+
+// echoRemnant is how much of the echo's tail a row has to be before it reads as
+// the wreckage of a redraw rather than as output. The shortest observed one was
+// six characters, closing quote included.
+const echoRemnant = 6
+
+// withoutSpaces is the form rows and the echo are compared in.
+func withoutSpaces(text string) string {
+	return strings.ReplaceAll(text, " ", "")
 }
 
 // sourceScriptFor rebuilds the line the wrapper typed into the pane, so what is

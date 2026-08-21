@@ -100,6 +100,50 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`run_command` finds the end of a redrawn prompt line even when no whole copy of
+it reached the grid. It looked for the line it had typed and, not finding one,
+returned every row it had read -- the prompt, its fragments, and the PREVIOUS
+command's output, all as this command's. Two grids produce that: one where the
+first draw is gone and the second's opening row was overwritten, and one where
+the opening row is there but corrupted, carrying a doubled character the shell
+never wrote. What survives both is the line's tail, so the tail is what the
+reply now starts after, whether or not a whole copy was found.
+
+`run_command` drops the whole of a redrawn prompt line, not just a complete one.
+An interactive shell draws the line it read and redraws it beneath the prompt,
+and that second draw can be cut short: its start overwritten, the prompt row
+left without its marker, and only the tail of the path surviving as a row of its
+own. Stopping at the last complete draw returned that wreckage as the command's
+first output line -- a prompt fragment and an orphaned path tail, which a caller
+has no way to tell from output. Any later row that is wholly a tail of that
+line is now taken with it -- wholly, because the wrapper's file is always named
+the same, so a row that merely ends the way the echo ends is something the
+command printed.
+
+Neither this nor the cleared-screen fix above is covered by a test, and the
+version matrix says nothing about either. The pane's width decides how many rows
+the prompt occupies, which decides whether the marks cancel and where a redraw
+breaks, and the same width passes and fails across runs -- so no fixed width
+reaches them. Reproducing the redraw at all needs a shell that redraws its
+prompt rather than the plain one a harness can pin, which is a developer's
+environment and not something to build into a test. What holds this path is a
+hand sweep across widths with the pane captured beside every reply.
+
+`run_command` no longer answers with nothing when the command cleared the
+screen. Its marks are `history_size` plus `cursor_y` added together, a sum that
+holds steady while a pane only scrolls, because a row leaving the screen for the
+scrollback adds one to the first and takes one from the second. Clearing the
+screen moves rows the same way without the cursor advancing, so the sum came
+back identical and the reply said the command printed nothing while its output
+sat on the screen. Whether it happened depended on the pane's width, which
+decides how many rows the prompt occupies and so whether the two changes cancel
+exactly: at 41 columns against a two-row prompt they did, at 38 and 44 they did
+not. Any shift of rows between screen and scrollback that leaves the cursor
+where it was is now recognised, in both directions. The reply reports lines
+missed only when the shift destroyed scrollback rather than moving it, because a
+screen clear puts what was displayed into the history, where this still reads
+it.
+
 `wait_for_text` says why it waited out its deadline when `sinceEntry` ignored a
 match that was already on the pane. The reply carried both halves already --
 `matchedAtEntry` true beside a timeout -- and left the caller to reason from
@@ -124,13 +168,17 @@ attached to that session scrolls a corpse by hand and no capture does it for
 them. `paste_text` against a dead pane also stops surfacing tmux's
 "paste-buffer exited 1", which named a command the caller never invoked.
 
-`run_command` no longer hands back its own sourcing line as output. Recovering
-from an erase means reading from the top of the grid, and the top of an erased
-grid holds the prompt and the line that sourced the wrapper, so the reply began
-with text the command never printed. The whole reason to prefer this over
-`send_keys` and a capture is that the shell's echo cannot be mistaken for the
-result, and a contaminated reply is worse than an empty one: silence is
-obviously wrong and gets retried, a plausible first line gets believed.
+`run_command` no longer hands back its own sourcing line as output. The rows
+its marks pick out can begin above the command's own output whenever the grid
+moved under them -- reading from the top of the grid to recover an erase is one
+way, and marks that no longer locate what they measured is another -- and what
+sits above is the prompt and the line that sourced the wrapper. The whole reason
+to prefer this over `send_keys` and a capture is that the shell's echo cannot be
+mistaken for the result, and a contaminated reply is worse than an empty one:
+silence is obviously wrong and gets retried, a plausible first line gets
+believed. An interactive shell draws that line twice, once plainly and once
+redrawn beneath the prompt, so what the reply starts after is the last of
+them.
 
 `run_command` no longer answers with nothing when the command erased the
 scrollback. It locates output by a mark taken on either side, each of them
