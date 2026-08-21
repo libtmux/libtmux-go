@@ -37,6 +37,10 @@ import (
 // a notification storm, short enough to feel immediate.
 const watchNotifyInterval = 250 * time.Millisecond
 
+// watchReadyWait bounds how long a subscription waits for the watch to be
+// carrying notifications before it answers anyway.
+const watchReadyWait = 10 * time.Second
+
 // watchRetryInterval is how long to wait before trying the tmux connection
 // again. A subscriber that arrived before the session it wants waits about
 // this long once, rather than forever.
@@ -55,6 +59,11 @@ type watchers struct {
 	// The SDK routes an update by the string a session subscribed with, so a
 	// pane watched as %1 has to be told as %1.
 	spelled map[string]map[string]int
+	// ready is closed once a control connection is open, and replaced whenever
+	// the set of them is rebuilt. A subscriber waits on the one taken before
+	// its own rebuild, so it waits for a connection that will carry its pane
+	// rather than one that predates the subscription.
+	ready chan struct{}
 	// notified is when each URI last had an update sent, which is what
 	// coalescing is measured against.
 	notified map[string]time.Time
@@ -75,6 +84,7 @@ func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
 		subscribed: map[string]int{},
 		spelled:    map[string]map[string]int{},
 		notified:   map[string]time.Time{},
+		ready:      make(chan struct{}),
 	}
 }
 
@@ -83,9 +93,25 @@ func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
 // An unwatchable URI is accepted rather than refused. MCP has no way to say
 // "subscribed, but nothing will ever arrive", and refusing would make a client
 // that subscribed to everything it listed fail on the parts that are static.
-func (t *tools) subscribe(_ context.Context, request *mcp.SubscribeRequest) error {
+func (t *tools) subscribe(ctx context.Context, request *mcp.SubscribeRequest) error {
 	uri := request.Params.URI
-	t.watchers.add(watchedURI(uri), uri)
+	ready := t.watchers.add(watchedURI(uri), uri)
+	// A subscription that returns before anything is watching loses whatever
+	// the pane writes next, and a pane that writes once never mentions it
+	// again -- so a client that subscribes and immediately acts is told
+	// nothing, however long it then waits. Waiting here is what makes the
+	// reply mean what a caller reads it to mean.
+	//
+	// Bounded, because the connection may be impossible for now: a socket with
+	// no session yet has nothing to attach to, and the watcher retries for as
+	// long as anyone is subscribed. Returning after the bound keeps that case
+	// working as it did rather than failing a subscription that will start
+	// reporting shortly.
+	select {
+	case <-ready:
+	case <-ctx.Done():
+	case <-time.After(watchReadyWait):
+	}
 	return nil
 }
 
@@ -115,8 +141,9 @@ func watchedURI(uri string) string {
 	return paneContentURI(decodeSegment(id))
 }
 
-// add records one subscriber, under the canonical URI and the spelling it sent.
-func (w *watchers) add(canonical, spelling string) {
+// add records one subscriber, under the canonical URI and the spelling it sent,
+// and returns the readiness to wait on before the caller acts on the pane.
+func (w *watchers) add(canonical, spelling string) <-chan struct{} {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	w.subscribed[canonical]++
@@ -129,8 +156,24 @@ func (w *watchers) add(canonical, spelling string) {
 		w.start()
 	case w.subscribed[canonical] == 1 && w.rebuild != nil:
 		// The first subscriber for this URI, so the session holding it may not
-		// be one of the sessions currently attached to.
+		// be one of the sessions currently attached to. The connections are
+		// rebuilt, and the readiness with them, because the one that is open
+		// now is not the one this subscriber needs.
+		w.ready = make(chan struct{})
 		w.rebuild()
+	}
+	return w.ready
+}
+
+// attached reports that a control connection is carrying notifications, which
+// releases anyone waiting to act on a pane they have just subscribed to.
+func (w *watchers) attached() {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	select {
+	case <-w.ready:
+	default:
+		close(w.ready)
 	}
 }
 
@@ -312,6 +355,7 @@ func (w *watchers) followSession(
 		return
 	}
 	defer func() { _ = control.Close() }()
+	w.attached()
 
 	for {
 		notification, err := control.NextNotification(ctx)

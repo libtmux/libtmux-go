@@ -2556,8 +2556,8 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	if err := watching.Subscribe(ctx, &sdk.SubscribeParams{URI: uri}); err != nil {
 		t.Fatalf("subscribe after the restart: %v", err)
 	}
-	// The watcher connects on its own schedule, so give it one before writing.
-	time.Sleep(2 * time.Second)
+	// No sleep: subscribing does not answer until the watch is carrying
+	// notifications, so a write straight after it is seen.
 	call(ctx, t, watching, "send_keys", map[string]any{
 		"paneId": pane, "command": "echo watched-after-restart",
 	}, nil)
