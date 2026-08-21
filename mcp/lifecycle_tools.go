@@ -204,6 +204,11 @@ type respawnPaneInput struct {
 type respawnPaneOutput struct {
 	// PaneID is the pane that was restarted, which keeps its id.
 	PaneID string `json:"paneId"`
+	// Gone reports that the pane was reaped before it could be read back,
+	// which is what a command that exits leaves behind: tmux takes the pane
+	// with the process, and the window too when it held nothing else. The
+	// respawn itself ran; there is simply no pane left to describe.
+	Gone bool `json:"gone,omitempty"`
 }
 
 // respawnPane restarts what a pane runs, in the pane it already has.
@@ -243,6 +248,14 @@ func (t *tools) respawnPane(
 	}
 	respawned, err := pane.Respawn(ctx, respawn)
 	if err != nil {
+		// Reading the pane back is the last thing a respawn does, and a
+		// command that exits can be gone before that read lands -- reliably so
+		// on a machine slower than the one this was written on. The respawn
+		// ran; reporting it as a failure would say the opposite of what
+		// happened.
+		if errors.Is(err, tmux.ErrSnapshotNotFound) {
+			return nil, respawnPaneOutput{PaneID: pane.ID().String(), Gone: true}, nil
+		}
 		return nil, respawnPaneOutput{}, err
 	}
 	return nil, respawnPaneOutput{PaneID: respawned.ID().String()}, nil

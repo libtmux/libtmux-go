@@ -2966,8 +2966,7 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 		t.Fatalf("create_session: %s", resultText(result))
 	}
 	var doomedWindow struct {
-		PaneID   string `json:"paneId"`
-		WindowID string `json:"windowId"`
+		PaneID string `json:"paneId"`
 	}
 	if result := call(ctx, t, session, "create_window", map[string]any{
 		"sessionName": "reaped", "name": "doomed", "command": "sleep 300",
@@ -2976,48 +2975,19 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 	}
 	doomed := doomedWindow.PaneID
 
-	// What the server can see of its own making, logged because this failed
-	// where it could not be reproduced and the reply named a pane the snapshot
-	// did not hold.
-	var seen struct {
-		Panes []struct {
-			ID     string `json:"id"`
-			Window string `json:"window"`
-			Status struct {
-				Dead bool `json:"dead"`
-			} `json:"status"`
-		} `json:"panes"`
-		Total int `json:"total"`
+	// The reply may already say the pane went: reading it back is the last
+	// thing a respawn does, and a command that exits can beat that read.
+	var restarted struct {
+		PaneID string `json:"paneId"`
+		Gone   bool   `json:"gone"`
 	}
-	call(ctx, t, session, "list_panes", map[string]any{"detail": "full"}, &seen)
-	t.Logf("created pane %q in window %q; server holds %d panes: %+v",
-		doomed, doomedWindow.WindowID, seen.Total, seen.Panes)
-	// The same lookup respawn_pane makes, so a failure names which of the two
-	// roads to a pane disagrees with the other.
-	if info := call(ctx, t, session, "get_pane_info", map[string]any{
-		"paneId": doomed,
-	}, nil); info.IsError {
-		t.Logf("get_pane_info on %s also fails: %s", doomed, resultText(info))
-	} else {
-		t.Logf("get_pane_info on %s succeeds", doomed)
-	}
-	var inWindow struct {
-		Panes []struct {
-			ID string `json:"id"`
-		} `json:"panes"`
-	}
-	if listed := call(ctx, t, session, "list_panes", map[string]any{
-		"windowId": doomedWindow.WindowID,
-	}, &inWindow); listed.IsError {
-		t.Logf("list_panes by window %s fails: %s", doomedWindow.WindowID, resultText(listed))
-	} else {
-		t.Logf("list_panes by window %s: %+v", doomedWindow.WindowID, inWindow.Panes)
-	}
-
 	if result := call(ctx, t, session, "respawn_pane", map[string]any{
 		"paneId": doomed, "command": "true", "kill": true,
-	}, nil); result.IsError {
+	}, &restarted); result.IsError {
 		t.Fatalf("respawn_pane on %s: %s", doomed, resultText(result))
+	}
+	if restarted.PaneID != doomed {
+		t.Errorf("respawn_pane answered for %q, want %q", restarted.PaneID, doomed)
 	}
 
 	// Reaping waits on the child's exit reaching tmux, so this polls rather
