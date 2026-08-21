@@ -2966,7 +2966,8 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 		t.Fatalf("create_session: %s", resultText(result))
 	}
 	var doomedWindow struct {
-		PaneID string `json:"paneId"`
+		PaneID   string `json:"paneId"`
+		WindowID string `json:"windowId"`
 	}
 	if result := call(ctx, t, session, "create_window", map[string]any{
 		"sessionName": "reaped", "name": "doomed", "command": "sleep 300",
@@ -2989,7 +2990,29 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 		Total int `json:"total"`
 	}
 	call(ctx, t, session, "list_panes", map[string]any{"detail": "full"}, &seen)
-	t.Logf("created %q; server holds %d panes: %+v", doomed, seen.Total, seen.Panes)
+	t.Logf("created pane %q in window %q; server holds %d panes: %+v",
+		doomed, doomedWindow.WindowID, seen.Total, seen.Panes)
+	// The same lookup respawn_pane makes, so a failure names which of the two
+	// roads to a pane disagrees with the other.
+	if info := call(ctx, t, session, "get_pane_info", map[string]any{
+		"paneId": doomed,
+	}, nil); info.IsError {
+		t.Logf("get_pane_info on %s also fails: %s", doomed, resultText(info))
+	} else {
+		t.Logf("get_pane_info on %s succeeds", doomed)
+	}
+	var inWindow struct {
+		Panes []struct {
+			ID string `json:"id"`
+		} `json:"panes"`
+	}
+	if listed := call(ctx, t, session, "list_panes", map[string]any{
+		"windowId": doomedWindow.WindowID,
+	}, &inWindow); listed.IsError {
+		t.Logf("list_panes by window %s fails: %s", doomedWindow.WindowID, resultText(listed))
+	} else {
+		t.Logf("list_panes by window %s: %+v", doomedWindow.WindowID, inWindow.Panes)
+	}
 
 	if result := call(ctx, t, session, "respawn_pane", map[string]any{
 		"paneId": doomed, "command": "true", "kill": true,
