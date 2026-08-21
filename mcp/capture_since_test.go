@@ -298,6 +298,133 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 	}
 }
 
+// TestAPaneIsWatchedWhicheverSessionHoldsIt covers the session a subscriber
+// happens to be interested in.
+//
+// tmux reports a pane's output only to a client attached to that pane's
+// session. Watching held one connection, to the first session, so a pane in
+// any other was subscribed to and never reported — silence indistinguishable
+// from a pane that never wrote, for anyone with more than one session, which
+// is most people.
+//
+//libtmux:real-tmux
+func TestAPaneIsWatchedWhicheverSessionHoldsIt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	t.Cleanup(cancel)
+
+	socket := filepath.Join(t.TempDir(), "tmux.sock")
+	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+
+	updated := make(chan string, 16)
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "sessions"}, &sdk.ClientOptions{
+		ResourceUpdatedHandler: func(_ context.Context, request *sdk.ResourceUpdatedNotificationRequest) {
+			updated <- request.Params.URI
+		},
+	})
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	// Two sessions, and the pane of interest is not in the first.
+	workspace(ctx, t, session, "session_name: first\nwindows:\n  - panes:\n      - {}\n")
+	workspace(ctx, t, session, "session_name: second\nwindows:\n  - panes:\n      - {}\n")
+
+	var listed struct {
+		Panes []struct {
+			ID      string `json:"id"`
+			Session string `json:"session"`
+		} `json:"panes"`
+	}
+	call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	wanted := ""
+	for _, pane := range listed.Panes {
+		if pane.Session == "second" {
+			wanted = pane.ID
+		}
+	}
+	if wanted == "" {
+		t.Fatalf("no pane in the second session: %+v", listed.Panes)
+	}
+
+	if err := session.Subscribe(ctx, &sdk.SubscribeParams{
+		URI: "tmux://panes/" + strings.TrimPrefix(wanted, "%") + "/content",
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	// The watcher chooses its connections when a subscription arrives, so give
+	// it one before writing.
+	time.Sleep(2 * time.Second)
+	send(ctx, t, session, wanted, "echo SECOND-SESSION-OUTPUT")
+
+	awaitURI(ctx, t, updated, "tmux://panes/"+strings.TrimPrefix(wanted, "%")+"/content",
+		"a pane in the second session was watched and never reported")
+
+	// A session made after the connections were chosen. Nothing tmux reports
+	// says the set is now wrong, because tmux said what it had to say when the
+	// session appeared and nothing was watching in it yet. The subscription
+	// itself is the event.
+	workspace(ctx, t, session, "session_name: third\nwindows:\n  - panes:\n      - {}\n")
+	// Let the connections settle first. Creating the session makes tmux report
+	// the sessions changed, which rebuilds them, and a subscription arriving
+	// inside that window would be picked up by luck rather than by the thing
+	// under test.
+	time.Sleep(3 * time.Second)
+	listed.Panes = nil
+	call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	late := ""
+	for _, pane := range listed.Panes {
+		if pane.Session == "third" {
+			late = pane.ID
+		}
+	}
+	if late == "" {
+		t.Fatalf("no pane in the third session: %+v", listed.Panes)
+	}
+	if err := session.Subscribe(ctx, &sdk.SubscribeParams{
+		URI: "tmux://panes/" + strings.TrimPrefix(late, "%") + "/content",
+	}); err != nil {
+		t.Fatalf("subscribe to the later session: %v", err)
+	}
+	time.Sleep(3 * time.Second)
+	send(ctx, t, session, late, "echo THIRD-SESSION-OUTPUT")
+
+	awaitURI(ctx, t, updated, "tmux://panes/"+strings.TrimPrefix(late, "%")+"/content",
+		"a pane in a session made after the subscription was never reported")
+}
+
+// awaitURI waits for an update about one resource, ignoring updates about
+// others. A shared channel makes a later wait pass on an earlier notification,
+// which is how a check for the second thing quietly stops checking anything.
+func awaitURI(ctx context.Context, t *testing.T, updated <-chan string, want, complaint string) {
+	t.Helper()
+	deadline := time.After(30 * time.Second)
+	for {
+		select {
+		case got := <-updated:
+			if got == want {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("%s (waiting for %s)", complaint, want)
+		case <-ctx.Done():
+			t.Fatalf("%s: %v", complaint, ctx.Err())
+		}
+	}
+}
+
 // TestTheBackstopRefusesAnOversizedReply covers the cap that exists for the
 // tool that forgets to bound itself.
 //

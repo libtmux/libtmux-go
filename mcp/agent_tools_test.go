@@ -2454,4 +2454,45 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	if !info.Alive {
 		t.Error("get_server_info reports the tmux server dead after it came back")
 	}
+
+	// Watching has to come back too. It holds a connection of its own and
+	// retries when one drops, but it was reaching tmux through the handle it
+	// was built with, and the pool inside that handle is the one the restart
+	// killed. A subscription made afterwards was accepted and never delivered,
+	// which is the same silence as having no watcher at all.
+	pane := listed.Panes[0].ID
+	uri := "tmux://panes/" + strings.TrimPrefix(pane, "%") + "/content"
+	updated := make(chan string, 8)
+	watchClient := sdk.NewClient(&sdk.Implementation{Name: "restart-watch"}, &sdk.ClientOptions{
+		ResourceUpdatedHandler: func(_ context.Context, r *sdk.ResourceUpdatedNotificationRequest) {
+			select {
+			case updated <- r.Params.URI:
+			default:
+			}
+		},
+	})
+	watchTransport, watchServer := sdk.NewInMemoryTransports()
+	watchSession, err := tmuxmcp.NewServer(connected).Connect(ctx, watchServer, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watchSession.Close() })
+	watching, err := watchClient.Connect(ctx, watchTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watching.Close() })
+	if err := watching.Subscribe(ctx, &sdk.SubscribeParams{URI: uri}); err != nil {
+		t.Fatalf("subscribe after the restart: %v", err)
+	}
+	// The watcher connects on its own schedule, so give it one before writing.
+	time.Sleep(2 * time.Second)
+	call(ctx, t, watching, "send_keys", map[string]any{
+		"paneId": pane, "command": "echo watched-after-restart",
+	}, nil)
+	select {
+	case <-updated:
+	case <-time.After(20 * time.Second):
+		t.Error("a pane written after the restart told no subscriber")
+	}
 }

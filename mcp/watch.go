@@ -60,6 +60,11 @@ type watchers struct {
 	notified map[string]time.Time
 	// stop ends the connection when the last subscriber goes.
 	stop func()
+	// rebuild reopens the set of connections. A subscription can name a pane
+	// in a session nothing is attached to, and tmux has no reason to report
+	// anything about it, so the arrival of the subscription is the only thing
+	// that can say the set is now wrong.
+	rebuild func()
 }
 
 // newWatchers builds the watcher set for one MCP server.
@@ -119,8 +124,13 @@ func (w *watchers) add(canonical, spelling string) {
 		w.spelled[canonical] = map[string]int{}
 	}
 	w.spelled[canonical][spelling]++
-	if w.stop == nil {
+	switch {
+	case w.stop == nil:
 		w.start()
+	case w.subscribed[canonical] == 1 && w.rebuild != nil:
+		// The first subscriber for this URI, so the session holding it may not
+		// be one of the sessions currently attached to.
+		w.rebuild()
 	}
 }
 
@@ -191,15 +201,113 @@ func (w *watchers) forget() {
 // follow holds one tmux connection and dispatches what it reports, returning
 // when that connection ends for any reason.
 func (w *watchers) follow(ctx context.Context) {
-	sessions, err := w.target.Sessions(ctx)
+	// Connections of its own rather than the pooled one, because these are
+	// held open for as long as anything is subscribed and the pool is for
+	// commands that return.
+	//
+	// The sessions are looked up over that same plain connection. The pool
+	// belongs to a tmux server that may have died since this handle was made,
+	// and a lookup through a dead one fails every retry forever, which left a
+	// subscriber taken on and never told anything.
+	plain := w.target.WithEngine(w.target.SubprocessEngine())
+	sessions, err := w.attending(ctx, plain)
 	if err != nil || len(sessions) == 0 {
 		return
 	}
-	// A connection of its own rather than the pooled one, because this holds
-	// it open for as long as anything is subscribed and the pool is for
-	// commands that return.
-	control, err := w.target.WithEngine(w.target.SubprocessEngine()).
-		OpenControl(ctx, sessions[0])
+
+	// One connection per session, because tmux reports a pane's output only to
+	// a client attached to that pane's session. Watching one session's panes
+	// and silently missing every other session's is the same failure as not
+	// watching at all, and it is the ordinary case: most people have more than
+	// one session.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	w.mutex.Lock()
+	w.rebuild = cancel
+	w.mutex.Unlock()
+	defer func() {
+		w.mutex.Lock()
+		w.rebuild = nil
+		w.mutex.Unlock()
+	}()
+
+	var attending sync.WaitGroup
+	for _, session := range sessions {
+		attending.Add(1)
+		go func() {
+			defer attending.Done()
+			// One connection ending rebuilds the whole set. That is how a
+			// session created later gets a connection, and how one that went
+			// away stops being waited on.
+			defer cancel()
+			w.followSession(ctx, plain, session)
+		}()
+	}
+	attending.Wait()
+}
+
+// attending chooses the sessions to hold a connection to: those owning a
+// watched pane, and otherwise the first one.
+//
+// A connection per session would cost a tmux client for every session on the
+// machine to watch one pane. The fallback keeps the structural resources --
+// the session and window listings -- reported when only those are subscribed,
+// since tmux sends those to any attached client.
+func (w *watchers) attending(ctx context.Context, server tmux.Server) ([]tmux.Session, error) {
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) == 0 {
+		return nil, err
+	}
+	wanted := w.watchedPanes()
+	if len(wanted) == 0 {
+		return sessions[:1], nil
+	}
+	// Which session owns a watched pane cannot be guessed, and attaching to
+	// the wrong one delivers nothing, so this waits for the next attempt
+	// rather than settling for a connection that would stay silent.
+	panes, err := server.Panes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	owning := map[tmux.SessionID]struct{}{}
+	for _, pane := range panes {
+		if _, ok := wanted[pane.ID().String()]; ok {
+			owning[pane.SessionID()] = struct{}{}
+		}
+	}
+	if len(owning) == 0 {
+		return sessions[:1], nil
+	}
+	chosen := make([]tmux.Session, 0, len(owning))
+	for _, session := range sessions {
+		if _, ok := owning[session.ID()]; ok {
+			chosen = append(chosen, session)
+		}
+	}
+	return chosen, nil
+}
+
+// watchedPanes is the set of pane ids subscribers are waiting on.
+func (w *watchers) watchedPanes() map[string]struct{} {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	panes := map[string]struct{}{}
+	for uri := range w.subscribed {
+		if id, ok := paneOfContentURI(uri); ok {
+			panes[id] = struct{}{}
+		}
+	}
+	return panes
+}
+
+// followSession holds one session's connection and dispatches what it reports,
+// returning when that connection ends for any reason.
+func (w *watchers) followSession(
+	ctx context.Context,
+	server tmux.Server,
+	session tmux.Session,
+) {
+	control, err := server.OpenControl(ctx, session)
 	if err != nil {
 		return
 	}
@@ -208,6 +316,12 @@ func (w *watchers) follow(ctx context.Context) {
 	for {
 		notification, err := control.NextNotification(ctx)
 		if err != nil {
+			return
+		}
+		// The set of sessions has changed, so the set of connections has to be
+		// rebuilt: a pane watched in a session made a moment ago has nothing
+		// attached to it yet.
+		if notification.Kind() == tmux.ControlNotificationSessionsChanged {
 			return
 		}
 		for _, uri := range w.affected(notification) {
@@ -312,4 +426,13 @@ func (w *watchers) notify(ctx context.Context, uri string) {
 // character in a URI.
 func paneContentURI(paneID string) string {
 	return "tmux://panes/" + strings.TrimPrefix(paneID, "%") + "/content"
+}
+
+// paneOfContentURI reads a pane id back out of its canonical content URI.
+func paneOfContentURI(uri string) (string, bool) {
+	const prefix, suffix = "tmux://panes/", "/content"
+	if !strings.HasPrefix(uri, prefix) || !strings.HasSuffix(uri, suffix) {
+		return "", false
+	}
+	return "%" + strings.TrimSuffix(strings.TrimPrefix(uri, prefix), suffix), true
 }

@@ -181,7 +181,8 @@ skill; these were taken on the machine named above, against tmux 3.7b.
 | Does a long wait block anything else? | a `list_sessions` costs **3.0ms** on a quiet server and **5.7ms** with eight 20-second waits in flight |
 | How fast does a pane change reach a subscriber? | **23ms** median from the write to the `notifications/resources/updated` |
 | Is a burst coalesced? | 500 lines written in 2.0s produced **1 notification**, not 500 |
-| What do twenty more subscribers cost? | **no additional control-mode client**: one connection serves them all, and it closes when the last subscriber goes |
+| What do twenty more subscribers cost? | **no additional control-mode client** while they watch panes of one session: one connection serves them all, and it closes when the last subscriber goes |
+| What does watching across sessions cost? | **one control-mode client per session holding a watched pane**, however many panes that is: tmux reports a pane's output only to a client attached to its session. Six sessions with a watched pane each cost six; four panes in one session cost one |
 | Can a call in flight be taken back? | `notifications/cancelled` is answered in **1ms** median, 2ms worst |
 | How many calls can be in flight at once? | **64 fired, 64 answered in 0.21s**, every id matched |
 
