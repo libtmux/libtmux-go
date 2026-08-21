@@ -248,7 +248,7 @@ type showEnvironmentInput struct {
 	// SessionName is the session to read. Empty reads the only one.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read; empty uses the only session"`
 	// Name reads one variable, with its value. Empty lists the names only.
-	Name string `json:"name,omitempty" jsonschema:"one variable to read, with its value; empty lists every variable's name without values"`
+	Name string `json:"name,omitempty" jsonschema:"one variable to read, with its value; empty lists every name with its scope and no values. Several values at once: put several of these in call_readonly_tools_batch"`
 	// MaxLines and MaxBytes bound the listing, whose size belongs to the
 	// environment rather than to the request.
 	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many variables to return at most"`
@@ -323,7 +323,11 @@ type showEnvironmentOutput struct {
 //
 // The names are the answer to most of what this is asked. Which variables a
 // pane will inherit, whether one is set at all, and which layer it comes from
-// are all in a listing; the value matters for the few a caller then names.
+// are all in a listing; the value matters for the few a caller then names. The
+// scope is what makes that work -- provenance is the one thing a name cannot
+// be reasoned back to, and it is what "does the session override the server"
+// turns on -- and several named reads go in one call_readonly_tools_batch, so
+// wanting a handful of values costs one round trip rather than one each.
 func (t *tools) showEnvironment(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,

@@ -38,7 +38,13 @@ type capturePaneInput struct {
 	// output of a program is unaffected. Byte-identical to capture-pane -J,
 	// which is the point: the seam is tmux's and reproducing it is what keeps
 	// a caller's reading of a pane the same as tmux's own.
-	JoinWrapped bool `json:"joinWrapped,omitempty" jsonschema:"rejoin lines the terminal wrapped, as tmux does it; a multi-row shell prompt can be joined to the line after it"`
+	//
+	// For the output of a command the caller ran, run_command is the better
+	// road and wrapping never arises: it collects between two marks rather
+	// than reading rows, so a long line comes back as the one line the command
+	// printed. This is for a pane the caller did not author, where the seam
+	// comes with the territory.
+	JoinWrapped bool `json:"joinWrapped,omitempty" jsonschema:"rejoin lines the terminal wrapped, as tmux does it; a multi-row shell prompt can be joined to the line after it, so prefer run_command for output you ran yourself"`
 	// Styles keeps the terminal's colour and attribute sequences, which a
 	// capture otherwise strips. In a program that reports its state by colour
 	// rather than in words, the colour is the state: a red FAILED and a green

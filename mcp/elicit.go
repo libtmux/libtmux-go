@@ -95,16 +95,26 @@ func (t *tools) confirmCallerWrite(
 		},
 	})
 	if err != nil {
-		// A client that cannot be asked keeps the behaviour it had before.
-		// Reporting this as a failure would break every client without the
-		// capability in order to enforce a guard rail they never had.
+		// A client that cannot be asked is refused rather than waved through.
+		// Letting it through made the guard advisory exactly where it matters
+		// most: the client least able to warn its person is the one that types
+		// into their terminal unannounced, which is what happened -- a session
+		// identifying its own server ran a command against the caller pane and
+		// put the text in its user's prompt box. Writing to the terminal the
+		// conversation is happening in is almost always a mistake, and naming
+		// another pane is the whole of the way out.
 		logToClient(ctx, request, "debug", map[string]any{
-			"event": "caller-pane write not confirmed",
+			"event": "caller-pane write refused, nobody to ask",
 			"pane":  identifier,
 			"why":   err.Error(),
 		})
-		//nolint:nilerr // a client that cannot be asked is not a failed write.
-		return nil
+		return fmt.Errorf(
+			"%s is the pane this server is running in, so %s there types into "+
+				"the terminal you are talking to it through. This client cannot "+
+				"be asked to allow it, so it is refused: name another pane, make "+
+				"one with split_window or create_session, or list_panes to find "+
+				"one where isCaller is false",
+			identifier, action)
 	}
 	if result.Action != "accept" {
 		return fmt.Errorf(callerWriteGuard, identifier, action)

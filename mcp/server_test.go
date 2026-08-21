@@ -2921,6 +2921,158 @@ func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 	}
 }
 
+// TestACommandThatExitsTakesThePaneAndItsWindow covers the gap between what
+// respawn_pane promises and what a caller gets.
+//
+// Keeping the pane and its place in the layout holds while the command runs.
+// A command that exits leaves tmux nothing to keep, and remain-on-exit is the
+// only thing that holds the pane open, so the description has to name it.
+//
+//libtmux:real-tmux
+func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
+	session, _, ctx := connect(t)
+	// Two windows, so losing one leaves the session and the server standing
+	// while the rest of this runs.
+	workspace(ctx, t, session, "session_name: reaped\nwindows:\n"+
+		"  - panes:\n      - {}\n  - panes:\n      - {}\n")
+	panes := paneIDs(ctx, t, session)
+	if len(panes) != 2 {
+		t.Fatalf("want two panes to work with, got %v", panes)
+	}
+	doomed := panes[1]
+
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": doomed, "command": "true", "kill": true,
+	}, nil); result.IsError {
+		t.Fatalf("respawn_pane: %#v", result.Content)
+	}
+
+	// Reaping waits on the child's exit reaching tmux, so this polls rather
+	// than looking once and calling the answer settled.
+	deadline := time.Now().Add(10 * time.Second)
+	for slices.Contains(paneIDs(ctx, t, session), doomed) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s outlived a command that exited", doomed)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// And the way to keep it, which is what the description now points at.
+	var made struct {
+		PaneID   string `json:"paneId"`
+		WindowID string `json:"windowId"`
+	}
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "reaped", "name": "held",
+	}, &made); result.IsError {
+		t.Fatalf("create_window: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "set_option", map[string]any{
+		"name": "remain-on-exit", "value": "on",
+		"scope": "window", "windowId": made.WindowID,
+	}, nil); result.IsError {
+		t.Fatalf("set_option: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": made.PaneID, "command": "true", "kill": true,
+	}, nil); result.IsError {
+		t.Fatalf("respawn_pane: %#v", result.Content)
+	}
+
+	// The pane stays, so what this waits for is the process ending rather than
+	// the pane going.
+	deadline = time.Now().Add(10 * time.Second)
+	for {
+		var listed struct {
+			Panes []struct {
+				ID     string `json:"id"`
+				Status struct {
+					Dead bool `json:"dead"`
+				} `json:"status"`
+			} `json:"panes"`
+		}
+		call(ctx, t, session, "list_panes", map[string]any{
+			"sessionName": "reaped", "detail": "full",
+		}, &listed)
+		found := false
+		for _, pane := range listed.Panes {
+			if pane.ID != made.PaneID {
+				continue
+			}
+			found = true
+			if pane.Status.Dead {
+				return
+			}
+		}
+		if !found {
+			t.Fatalf("%s was reaped though remain-on-exit was set", made.PaneID)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never reported its command as finished", made.PaneID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestAFilteredListingSaysHowManyItLeftOut covers a total a client reads as a
+// remainder.
+//
+// total counts what was there before the criteria ran, so a shorter list under
+// a larger total is what a filter excluded. Every tool here that returns pane
+// text does shorten its reply and says so, which makes "ask again for the
+// rest" the available and wrong reading. list_servers has always answered this
+// with skipped; the listings a client reaches for first did not.
+//
+//libtmux:real-tmux
+func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: counted\nwindows:\n"+
+		"  - panes:\n      - {}\n  - panes:\n      - {}\n")
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "counted", "name": "singled-out",
+	}, nil); result.IsError {
+		t.Fatalf("create_window: %#v", result.Content)
+	}
+
+	var listed struct {
+		Windows []struct {
+			Name string `json:"name"`
+		} `json:"windows"`
+		Total   int `json:"total"`
+		Skipped int `json:"skipped"`
+	}
+	call(ctx, t, session, "list_windows", map[string]any{"name": "singled-out"}, &listed)
+	if len(listed.Windows) != 1 {
+		t.Fatalf("the filter did not select one window: %#v", listed.Windows)
+	}
+	if listed.Total <= len(listed.Windows) {
+		t.Fatalf("nothing was filtered out, so this proves nothing: total %d",
+			listed.Total)
+	}
+	if listed.Total != len(listed.Windows)+listed.Skipped {
+		t.Errorf("total %d does not reconcile: %d listed, %d skipped",
+			listed.Total, len(listed.Windows), listed.Skipped)
+	}
+
+	// An unfiltered listing left nothing out, and says so by omitting the
+	// field rather than by a zero a caller has to tell apart from a filter
+	// that happened to exclude none. A pointer is what distinguishes the two,
+	// because an absent key leaves a plain int at whatever it already held.
+	var unfiltered struct {
+		Windows []struct{} `json:"windows"`
+		Total   int        `json:"total"`
+		Skipped *int       `json:"skipped"`
+	}
+	call(ctx, t, session, "list_windows", map[string]any{}, &unfiltered)
+	if unfiltered.Skipped != nil {
+		t.Errorf("an unfiltered listing reported %d skipped", *unfiltered.Skipped)
+	}
+	if unfiltered.Total != len(unfiltered.Windows) {
+		t.Errorf("an unfiltered listing dropped %d of %d",
+			unfiltered.Total-len(unfiltered.Windows), unfiltered.Total)
+	}
+}
+
 // TestTheEnvironmentListingWithholdsValues covers a reply that put every
 // credential on a developer's machine into a model's context.
 //

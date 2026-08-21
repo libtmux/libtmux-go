@@ -680,7 +680,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- | --- |
 | `endLine` | integer | last row to read, on the same scale as startLine |
 | `includeHistory` | boolean | read scrollback as well as the visible screen |
-| `joinWrapped` | boolean | rejoin lines the terminal wrapped, as tmux does it; a multi-row shell prompt can be joined to the line after it |
+| `joinWrapped` | boolean | rejoin lines the terminal wrapped, as tmux does it; a multi-row shell prompt can be joined to the line after it, so prefer run_command for output you ran yourself |
 | `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
 | `maxLines` | integer | how many lines to return at most, keeping the last ones |
 | `paneId` | string | a tmux pane id such as %1; empty reads the active pane |
@@ -1530,7 +1530,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- | --- |
 | `maxBytes` | integer | how many bytes of listing to return at most |
 | `maxLines` | integer | how many variables to return at most |
-| `name` | string | one variable to read, with its value; empty lists every variable's name without values |
+| `name` | string | one variable to read, with its value; empty lists every name with its scope and no values. Several values at once: put several of these in call_readonly_tools_batch |
 | `sessionName` | string | the session to read; empty uses the only session |
 
 | Returns | Type |

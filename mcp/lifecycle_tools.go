@@ -414,7 +414,10 @@ func addLifecycleTools(server *mcp.Server, t *tools) {
 		Annotations: mutating("Restart a Pane's Program"),
 		Description: "Restart what a pane runs, keeping the pane and its place " +
 			"in the layout. Use it on a pane whose program exited rather than " +
-			"killing the pane and splitting a new one.",
+			"killing the pane and splitting a new one. A command that exits " +
+			"takes the pane with it, and the window if it was the last one: " +
+			"set remain-on-exit on the window first to keep it as a dead pane " +
+			"list_panes can report.",
 	}, t.respawnPane)
 	register(server, t, &mcp.Tool{
 		Name:        "rename_session",

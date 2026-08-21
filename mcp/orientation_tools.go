@@ -102,6 +102,10 @@ type listPanesOutput struct {
 	// Total is how many panes the server held before the criteria were
 	// applied, so a caller can see what its filter selected from.
 	Total int `json:"total"`
+	// Skipped is how many the criteria left out. Without it a caller
+	// reads a shorter list against a larger total as a reply that was
+	// shortened, which is what the tools returning pane text do.
+	Skipped int `json:"skipped,omitempty"`
 }
 
 // listPanes reports the panes matching a caller's criteria.
@@ -139,7 +143,10 @@ func (t *tools) listPanes(
 		}
 		summaries = append(summaries, listed)
 	}
-	return nil, listPanesOutput{Panes: summaries, Total: len(panes)}, nil
+	return nil, listPanesOutput{
+		Panes: summaries, Total: len(panes),
+		Skipped: len(panes) - len(summaries),
+	}, nil
 }
 
 // keeps reports whether one pane satisfies every criterion given. Criteria
@@ -221,6 +228,10 @@ type listWindowsOutput struct {
 	// Total is how many windows the server held before the criteria were
 	// applied.
 	Total int `json:"total"`
+	// Skipped is how many the criteria left out. Without it a caller
+	// reads a shorter list against a larger total as a reply that was
+	// shortened, which is what the tools returning pane text do.
+	Skipped int `json:"skipped,omitempty"`
 }
 
 // listWindows reports the windows matching a caller's criteria.
@@ -254,7 +265,10 @@ func (t *tools) listWindows(
 		}
 		summaries = append(summaries, summary)
 	}
-	return nil, listWindowsOutput{Windows: summaries, Total: len(windows)}, nil
+	return nil, listWindowsOutput{
+		Windows: summaries, Total: len(windows),
+		Skipped: len(windows) - len(summaries),
+	}, nil
 }
 
 // listSessionsInput narrows which sessions are listed. Every field is optional.
@@ -273,6 +287,10 @@ type listSessionsOutput struct {
 	// Total is how many sessions the server held before the criteria were
 	// applied.
 	Total int `json:"total"`
+	// Skipped is how many the criteria left out. Without it a caller
+	// reads a shorter list against a larger total as a reply that was
+	// shortened, which is what the tools returning pane text do.
+	Skipped int `json:"skipped,omitempty"`
 }
 
 // listSessions reports the sessions matching a caller's criteria.
@@ -298,7 +316,10 @@ func (t *tools) listSessions(
 		}
 		summaries = append(summaries, summary)
 	}
-	return nil, listSessionsOutput{Sessions: summaries, Total: len(sessions)}, nil
+	return nil, listSessionsOutput{
+		Sessions: summaries, Total: len(sessions),
+		Skipped: len(sessions) - len(summaries),
+	}, nil
 }
 
 // selectWindowInput chooses the window a session shows.

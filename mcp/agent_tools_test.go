@@ -1305,6 +1305,51 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 		}
 	})
 
+	t.Run("a client that cannot be asked is refused", func(t *testing.T) {
+		// Elicitation is optional, and letting the write through when nobody
+		// can be asked makes the guard advisory: the client least able to warn
+		// its person is the one that types into their terminal unannounced. It
+		// happened -- a peer session identifying its own server ran a command
+		// against the caller pane and put the text in its user's prompt box.
+		t.Setenv("TMUX_PANE", ownPane)
+		t.Setenv("TMUX", "")
+		session, target, ctx := connect(t)
+		workspace(ctx, t, session, "session_name: unasked\nwindows:\n  - panes:\n      - {}\n")
+		socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+		if err != nil || len(socket.Stdout) == 0 {
+			t.Fatalf("read the socket path: %v", err)
+		}
+		t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+		for _, tool := range []string{"send_keys", "run_command"} {
+			arguments := map[string]any{"paneId": ownPane, "command": "echo into-my-own-terminal"}
+			if tool == "run_command" {
+				arguments["timeoutSeconds"] = 5
+			}
+			result := call(ctx, t, session, tool, arguments, nil)
+			if !result.IsError {
+				t.Errorf("%s reached the caller pane with nobody able to be asked", tool)
+				continue
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, ownPane) {
+				t.Errorf("the %s refusal does not name the pane: %q", tool, said)
+			}
+			// The caller whose only pane is this one has nowhere to be sent,
+			// so making a pane is named beside finding one.
+			for _, way := range []string{"split_window", "create_session", "isCaller"} {
+				if !strings.Contains(said, way) {
+					t.Errorf("the %s refusal does not offer %s: %q", tool, way, said)
+				}
+			}
+		}
+	})
+
 	t.Run("accepting lets it through", func(t *testing.T) {
 		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "accept" })
 		result := call(ctx, t, session, "send_keys", map[string]any{
@@ -1381,13 +1426,39 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 		}
 	})
 
-	t.Run("a client that cannot be asked keeps working", func(t *testing.T) {
+	t.Run("a client that cannot be asked is still stopped", func(t *testing.T) {
+		// This reverses what this test asserted before. Letting the write
+		// through when nobody could be asked was chosen so a client without
+		// elicitation kept the behaviour it had; what that bought in practice
+		// was a guard that is absent from the clients most likely to need it.
+		// Writing to somebody's own terminal unannounced is the harm, and it
+		// does not become acceptable because their client cannot show a prompt.
 		session, ctx, _ := arrange(t, nil)
 		result := call(ctx, t, session, "send_keys", map[string]any{
 			"paneId": ownPane, "command": "true",
 		}, nil)
-		if result.IsError {
-			t.Errorf("a client without elicitation was blocked: %#v", result.Content)
+		if !result.IsError {
+			t.Error("a client that cannot be asked typed into the caller pane")
+		}
+
+		// Every other pane is unaffected, which is what keeps this a guard on
+		// one pane rather than a restriction on the tool.
+		var listed struct {
+			Panes []struct {
+				ID       string `json:"id"`
+				IsCaller *bool  `json:"isCaller"`
+			} `json:"panes"`
+		}
+		call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+		for _, pane := range listed.Panes {
+			if pane.IsCaller != nil && *pane.IsCaller {
+				continue
+			}
+			if result := call(ctx, t, session, "send_keys", map[string]any{
+				"paneId": pane.ID, "command": "true",
+			}, nil); result.IsError {
+				t.Errorf("writing to %s was refused: %#v", pane.ID, result.Content)
+			}
 		}
 	})
 }

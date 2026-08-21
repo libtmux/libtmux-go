@@ -275,7 +275,8 @@ func addBufferTools(server *mcp.Server, t *tools) {
 		Name:        "paste_buffer",
 		Annotations: mutating("Paste a tmux Buffer"),
 		Description: "Deliver a staged buffer into a pane as text, with no tmux " +
-			"key names read.",
+			"key names read. The name load_buffer returned reaches the buffer, " +
+			"and so does the short one passed to it.",
 	}, t.pasteBuffer)
 	register(server, t, &mcp.Tool{
 		Name:        "show_buffer",

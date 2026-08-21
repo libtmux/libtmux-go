@@ -100,6 +100,59 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`list_panes`, `list_windows` and `list_sessions` report `skipped`, the count
+their criteria left out. Each already reported `total`, which counts what the
+server held before the criteria ran, so a filtered call answered with a short
+list under a larger number and nothing to reconcile them. Every tool here that
+returns pane text does shorten its reply and says so, which left "the reply was
+truncated, ask again for the rest" as the available and wrong reading of a
+filtered listing. `list_servers` has always carried the field; these now match
+it.
+
+`respawn_pane` says what a command that exits costs. Keeping the pane and its
+place in the layout holds while the command runs; a command that exits leaves
+tmux nothing to keep, so the pane goes and its window with it. Setting
+`remain-on-exit` on the window first holds it open as a dead pane, which is
+where `list_panes` reports the exit status. The behaviour is tmux's and
+unchanged — the description no longer promises the half of it that is not true.
+
+A write to the pane this server runs in is refused when the client cannot be
+asked about it, rather than allowed. The guard asks the person first, and
+letting the write through when there was nobody to ask made it advisory in the
+clients least able to warn anyone — which is where it matters: a session
+identifying its own server ran a command against the caller pane and put the
+text in its user's prompt box. Every other pane is unaffected, and the refusal
+names the ways on: another pane, a new one, or the listing that says which is
+which.
+
+`show_environment` lists names without values. An environment is where people
+keep credentials, and a no-argument call returned every value — on the machine
+this was found on, eleven live API tokens, straight into a model's context and
+unrecallable. Naming a variable still returns its value, and each entry keeps
+its scope, which is the one thing a name cannot be reasoned back to. Several
+values at once are one `call_readonly_tools_batch`. The listing also takes
+`maxLines` and `maxBytes` like every other reply here.
+
+`show_hooks` and `get_server_info` return an empty array rather than omitting
+the key. A scope with no hooks answered `{"scope":"server"}` and nothing else,
+so a consumer had to test for a missing key instead of iterating an empty list;
+the same applied to the attached clients. The text fields elsewhere keep their
+absence, because `run_command` uses a missing `output` to distinguish a command
+that printed nothing from one whose output could not be read.
+
+`resize_pane` reports the pane it resized. `paneId` is optional and resolves the
+active pane, so a caller that left it out was told a width and a height with
+nothing saying whose.
+
+`joinWrapped` says what it does and does not do, and points at the better road.
+In a narrow pane with a shell prompt of several rows it can join the prompt's
+last row to the command typed after it and orphan that command's wrapped tail —
+which reads as a defect here and is tmux's: it is tmux that decides which rows
+were wrapped, and `capture-pane -J` produces the identical output. For output of
+a command the caller ran, `run_command` collects between two marks and never
+reads rows, so wrapping does not arise; `joinWrapped` is for a pane the caller
+did not author.
+
 `build_workspace` says what a partial build left behind. Building is not atomic
 and cannot be, because tmux has no transaction, so a document that fails part
 way leaves the session and the panes made before the failure. The reply named
