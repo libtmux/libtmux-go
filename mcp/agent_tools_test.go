@@ -2553,9 +2553,14 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = watching.Close() })
+	subscribeStarted := time.Now()
 	if err := watching.Subscribe(ctx, &sdk.SubscribeParams{URI: uri}); err != nil {
 		t.Fatalf("subscribe after the restart: %v", err)
 	}
+	// How long that took says whether the watch ever attached: it answers as
+	// soon as a connection is carrying notifications, and only runs out the
+	// bound when none arrives.
+	subscribeTook := time.Since(subscribeStarted)
 	// No sleep: subscribing does not answer until the watch is carrying
 	// notifications, so a write straight after it is seen.
 	call(ctx, t, watching, "send_keys", map[string]any{
@@ -2564,7 +2569,13 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	select {
 	case <-updated:
 	case <-time.After(20 * time.Second):
-		t.Error("a pane written after the restart told no subscriber")
+		var shown struct {
+			Lines []string `json:"lines"`
+		}
+		captured := call(ctx, t, watching, "capture_pane", map[string]any{"paneId": pane}, &shown)
+		t.Errorf("a pane written after the restart told no subscriber; "+
+			"subscribe took %s, the pane shows error=%t lines=%q",
+			subscribeTook.Round(time.Millisecond), captured.IsError, shown.Lines)
 	}
 }
 
