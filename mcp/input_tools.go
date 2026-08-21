@@ -59,11 +59,8 @@ func (t *tools) sendKeysBatch(
 	if len(input.Keys) == 0 {
 		return nil, sendKeysBatchOutput{}, errors.New("keys is required")
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
+	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "sending keys", "send_keys_batch")
 	if err != nil {
-		return nil, sendKeysBatchOutput{}, err
-	}
-	if err := refuseAPaneInAMode(pane, "send_keys_batch"); err != nil {
 		return nil, sendKeysBatchOutput{}, err
 	}
 	for index, key := range input.Keys {
@@ -135,11 +132,8 @@ func (t *tools) pasteText(
 	if input.Text == "" {
 		return nil, pasteTextOutput{}, errors.New("text is required")
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting text")
+	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "pasting text", "paste_text")
 	if err != nil {
-		return nil, pasteTextOutput{}, err
-	}
-	if err := refuseAPaneInAMode(pane, "paste_text"); err != nil {
 		return nil, pasteTextOutput{}, err
 	}
 	output := pasteTextOutput{PaneID: pane.ID().String()}
@@ -252,8 +246,19 @@ func (t *tools) enterCopyMode(
 // than control clients in particular, which is what makes refusing here a whole
 // fix -- another client doing it, or a person doing it at a keyboard, costs
 // this connection nothing.
-func refuseAPaneInAMode(pane tmux.Pane, tool string) error {
-	mode, ok := pane.Formats().PaneInMode()
+func refuseAPaneThatCannotRead(pane tmux.Pane, tool string) error {
+	formats := pane.Formats()
+	// Before the mode, because a pane can be dead and in a mode at once -- a
+	// corpse is scrollable -- and having no process is the more fundamental of
+	// the two: leaving the mode would not give the keys anywhere to go.
+	if dead, _ := formats.PaneDead(); dead {
+		return fmt.Errorf(
+			"pane %s has no process: its program exited, so it reads no keys and "+
+				"%s reaches nothing. respawn_pane restarts it, and capture_pane "+
+				"with includeHistory still reads what it printed",
+			pane.ID(), tool)
+	}
+	mode, ok := formats.PaneInMode()
 	if !ok || mode == 0 {
 		return nil
 	}
@@ -290,11 +295,8 @@ func (t *tools) sendKeys(
 	if strings.TrimSpace(input.Command) == "" {
 		return nil, sendKeysOutput{}, errors.New("command is required")
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
+	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "sending keys", "send_keys")
 	if err != nil {
-		return nil, sendKeysOutput{}, err
-	}
-	if err := refuseAPaneInAMode(pane, "send_keys"); err != nil {
 		return nil, sendKeysOutput{}, err
 	}
 	command := input.Command

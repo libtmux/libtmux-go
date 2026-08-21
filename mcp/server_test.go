@@ -27,10 +27,23 @@ func TestMain(m *testing.M) {
 // returns a connected client session. Both are torn down with the test.
 func connect(t *testing.T) (*sdk.ClientSession, tmux.Server, context.Context) {
 	t.Helper()
+	return connectWith(t, tmuxtest.ServerOptions{})
+}
+
+// connectWith is connect against a server the test configures.
+//
+// FixedShell is the one worth knowing about: it gives every pane /bin/sh and a
+// one-character prompt, so a test about where the cursor sits measures the code
+// rather than whoever's shell configuration the suite inherited.
+func connectWith(
+	t *testing.T,
+	options tmuxtest.ServerOptions,
+) (*sdk.ClientSession, tmux.Server, context.Context) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	target := tmuxtest.NewServerWithOptions(ctx, t, options)
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)

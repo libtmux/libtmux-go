@@ -2639,6 +2639,284 @@ func TestTypingIntoAPaneInAModeIsRefused(t *testing.T) {
 	}
 }
 
+// runInPane runs one command and returns its output, failing the test if the
+// command did not finish.
+func runInPane(
+	ctx context.Context,
+	t *testing.T,
+	session *sdk.ClientSession,
+	pane, command string,
+) []string {
+	t.Helper()
+	var reply struct {
+		Output     []string `json:"output"`
+		ExitStatus *int     `json:"exitStatus"`
+	}
+	result := call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": command, "timeoutSeconds": 10,
+	}, &reply)
+	if result.IsError {
+		t.Fatalf("run_command %q: %#v", command, result.Content)
+	}
+	if reply.ExitStatus == nil {
+		t.Fatalf("run_command %q recorded no exit status", command)
+	}
+	return reply.Output
+}
+
+// TestAnEraseAfterAScreenClearStillReturnsTheOutput covers a command whose
+// output came back as nothing at all.
+//
+// A mark is one number, history_size plus cursor_y. Erasing the scrollback
+// drops a line of history while the cursor moves down one, so the sum is the
+// same on both sides of the command and the erase leaves no trace in it. The
+// reply then said the command printed nothing. Clearing the screen first is
+// what lines the two up, which puts this one `clear` away from ordinary.
+//
+//libtmux:real-tmux
+func TestAnEraseAfterAScreenClearStillReturnsTheOutput(t *testing.T) {
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: summed\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	// The screen clear is the precondition rather than scene-setting: without
+	// it the two marks differ and the erase is visible in them.
+	runInPane(ctx, t, session, pane, `printf '\033[2J\033[H'; echo KEPT`)
+
+	output := runInPane(ctx, t, session, pane, `printf '\033[3J'; echo SURVIVES`)
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "SURVIVES")
+	}) {
+		t.Errorf("the command printed after erasing the scrollback and the "+
+			"reply holds none of it: %q", output)
+	}
+}
+
+// TestRecoveredOutputHoldsNoWrapperEcho covers the shell's echo of this
+// server's own command arriving as though the command had printed it.
+//
+// Recovering from an erase means reading from the top of the grid, and the top
+// of an erased grid holds the prompt and the line that sourced the wrapper.
+// run_command exists so a caller never has to tell those from output, and a
+// contaminated reply is worse than a silent one: silence is obviously wrong
+// and gets retried, a plausible first line gets believed.
+//
+//libtmux:real-tmux
+func TestRecoveredOutputHoldsNoWrapperEcho(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: echoed\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	runInPane(ctx, t, session, pane, `printf '\033[2J\033[H'; echo KEPT`)
+	output := runInPane(ctx, t, session, pane, `printf '\033[3J'; echo SURVIVES`)
+
+	// Without this the check below passes on a reply that recovered nothing,
+	// which is the defect this recovery exists to fix.
+	if len(output) == 0 {
+		t.Fatal("nothing was recovered, so holding no echo proves nothing")
+	}
+	for _, line := range output {
+		if strings.Contains(line, "libtmux-mcp-run") {
+			t.Errorf("the reply holds this server's own sourcing line: %q", output)
+		}
+	}
+}
+
+// TestEveryDeliveryRefusesAPaneWithNoProcess covers four tools reporting
+// success for keys that reached nothing.
+//
+// run_command refused a dead pane and named respawn_pane. Its neighbours did
+// not look, so send_keys answered {"sent": "..."} and send_keys_batch answered
+// {"sent": 1} for keystrokes delivered to a pane with no process to read them.
+// An agent reads that as delivered and waits for output that cannot come.
+//
+// The guard was applied by hand at the one tool that remembered it, which is
+// the thing resolvePaneToDeliver exists to stop.
+//
+//libtmux:real-tmux
+func TestEveryDeliveryRefusesAPaneWithNoProcess(t *testing.T) {
+	session, _, ctx := connect(t)
+	pane := deadPaneHeldOpen(ctx, t, session, "corpse")
+
+	if result := call(ctx, t, session, "load_buffer", map[string]any{
+		"text": "x", "name": "corpse",
+	}, nil); result.IsError {
+		t.Fatalf("load_buffer: %#v", result.Content)
+	}
+
+	for _, delivery := range []struct {
+		tool      string
+		arguments map[string]any
+	}{
+		{"send_keys", map[string]any{"paneId": pane, "command": "echo LEAK"}},
+		{"send_keys_batch", map[string]any{"paneId": pane, "keys": []string{"a"}}},
+		{"paste_text", map[string]any{"paneId": pane, "text": "LEAK"}},
+		{"paste_buffer", map[string]any{"paneId": pane, "name": "corpse"}},
+		{"run_command", map[string]any{"paneId": pane, "command": "echo LEAK", "timeoutSeconds": 5}},
+	} {
+		t.Run(delivery.tool, func(t *testing.T) {
+			result := call(ctx, t, session, delivery.tool, delivery.arguments, nil)
+			if !result.IsError {
+				t.Fatalf("%s reported success against a pane with no process", delivery.tool)
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, "respawn_pane") {
+				t.Errorf("the refusal does not name the way out: %q", said)
+			}
+			if strings.Contains(said, "exited 1") {
+				t.Errorf("the refusal is tmux's exit code rather than a reason: %q", said)
+			}
+		})
+	}
+}
+
+// TestADeadPaneIsStillReadableAndRestartable is the other half: the guard must
+// not reach the tools whose point is a pane that has stopped.
+//
+// A person attached to the session scrolls a corpse by hand, which no capture
+// does for them, so entering a mode has to keep working. Clearing and
+// respawning one are reasonable for their own reasons.
+//
+//libtmux:real-tmux
+func TestADeadPaneIsStillReadableAndRestartable(t *testing.T) {
+	session, _, ctx := connect(t)
+	pane := deadPaneHeldOpen(ctx, t, session, "readable")
+
+	for _, allowed := range []struct {
+		tool      string
+		arguments map[string]any
+	}{
+		{"enter_copy_mode", map[string]any{"paneId": pane}},
+		{"exit_copy_mode", map[string]any{"paneId": pane}},
+		{"clear_pane", map[string]any{"paneId": pane}},
+		{"respawn_pane", map[string]any{"paneId": pane, "command": "sleep 60"}},
+	} {
+		if result := call(ctx, t, session, allowed.tool, allowed.arguments, nil); result.IsError {
+			t.Errorf("%s was refused on a dead pane: %#v", allowed.tool, result.Content)
+		}
+	}
+}
+
+// deadPaneHeldOpen makes a pane whose process has exited and which tmux keeps.
+func deadPaneHeldOpen(
+	ctx context.Context,
+	t *testing.T,
+	session *sdk.ClientSession,
+	name string,
+) string {
+	t.Helper()
+	var made struct {
+		PaneID   string `json:"paneId"`
+		WindowID string `json:"windowId"`
+	}
+	if result := call(ctx, t, session, "create_session", map[string]any{
+		"name": name, "command": "sleep 300",
+	}, nil); result.IsError {
+		t.Fatalf("create_session: %#v", result.Content)
+	}
+	// A second window, so the pane going does not take the session with it
+	// while the assertions are still running.
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": name, "name": "held", "command": "sleep 300",
+	}, &made); result.IsError {
+		t.Fatalf("create_window: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "set_option", map[string]any{
+		"name": "remain-on-exit", "value": "on",
+		"scope": "window", "windowId": made.WindowID,
+	}, nil); result.IsError {
+		t.Fatalf("set_option: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": made.PaneID, "command": "true", "kill": true,
+	}, nil); result.IsError {
+		t.Fatalf("respawn_pane: %#v", result.Content)
+	}
+	// The pane stays; what this waits for is the process ending.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var listed struct {
+			Panes []struct {
+				ID     string `json:"id"`
+				Status struct {
+					Dead bool `json:"dead"`
+				} `json:"status"`
+			} `json:"panes"`
+		}
+		call(ctx, t, session, "list_panes", map[string]any{
+			"sessionName": name, "detail": "full",
+		}, &listed)
+		for _, pane := range listed.Panes {
+			if pane.ID == made.PaneID && pane.Status.Dead {
+				return made.PaneID
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never reported its command as finished", made.PaneID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestAWaitThatIgnoredWhatWasAlreadyThereSaysSo covers the one reply here that
+// reads as a hang.
+//
+// sinceEntry asks for text written during the wait, so text that was already on
+// the pane is deliberately ignored and the deadline runs out. Both facts are on
+// the wire -- matchedAtEntry true beside a timeout -- and a caller has to
+// reason from the pair to the cause. The explanation existed only in a Go doc
+// comment on the field, which is not a place a client reads.
+//
+//libtmux:real-tmux
+func TestAWaitThatIgnoredWhatWasAlreadyThereSaysSo(t *testing.T) {
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: already\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	runInPane(ctx, t, session, pane, "echo ALREADY-THERE")
+
+	var reply struct {
+		Outcome        string `json:"outcome"`
+		MatchedAtEntry bool   `json:"matchedAtEntry"`
+		EntryNote      string `json:"entryNote"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{"ALREADY-THERE"},
+		"sinceEntry": true, "timeoutSeconds": 2,
+	}, &reply)
+
+	// The precondition, not the finding: without both of these the note has
+	// nothing to explain and this asserts against the wrong reply.
+	if reply.Outcome != "timeout" || !reply.MatchedAtEntry {
+		t.Fatalf("want a timeout with a match at entry, got outcome %q matchedAtEntry %t",
+			reply.Outcome, reply.MatchedAtEntry)
+	}
+	if !strings.Contains(reply.EntryNote, "sinceEntry") {
+		t.Errorf("the reply does not say why it waited out its deadline: %q",
+			reply.EntryNote)
+	}
+
+	// And it stays off the replies that are not puzzling.
+	var plain struct {
+		Outcome   string `json:"outcome"`
+		EntryNote string `json:"entryNote"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{"ALREADY-THERE"}, "timeoutSeconds": 2,
+	}, &plain)
+	if plain.Outcome != "matched" {
+		t.Fatalf("want a match without sinceEntry, got %q", plain.Outcome)
+	}
+	if plain.EntryNote != "" {
+		t.Errorf("a reply that matched carries a note anyway: %q", plain.EntryNote)
+	}
+}
+
 // TestClearingTheScrollbackSaysTheOutputIsGone covers a command whose output
 // vanished with no sign that anything was lost.
 //
@@ -2687,6 +2965,13 @@ func TestClearingTheScrollbackSaysTheOutputIsGone(t *testing.T) {
 		t.Errorf("erasing the screen lost the output: %q", output)
 	}
 
+	// The pad is the precondition, not decoration: an erase with no scrollback
+	// to erase renumbers nothing, and the step above left none. Without it this
+	// asserts against a grid that never moved, which is how it came to pass on
+	// one tmux and fail on another.
+	pad := "for i in $(seq 1 40); do echo pad$i; done"
+	run(pad)
+
 	// Erasing the scrollback renumbers the grid under the marks. What the
 	// command printed afterwards is still on the screen and still has to come
 	// back, and the reply has to say that anything before it is gone.
@@ -2705,10 +2990,14 @@ func TestClearingTheScrollbackSaysTheOutputIsGone(t *testing.T) {
 	}
 
 	// clear is the ordinary way to reach it, and the reason this matters:
-	// "clear; make test" reported success and returned silence.
-	output, missed, status = run("clear; echo AFTERCLEAR")
-	if status != 0 || !missed {
-		t.Errorf("clear: status %d, linesMissed %t", status, missed)
+	// "clear; make test" reported success and returned silence. Returning the
+	// output is the contract; whether the erase also renumbers far enough to be
+	// reported is not, because tmux releases differ on it and the command's own
+	// output was never lost either way.
+	run(pad)
+	output, _, status = run("clear; echo AFTERCLEAR")
+	if status != 0 {
+		t.Errorf("clear: status %d, want the command's own", status)
 	}
 	if !slices.ContainsFunc(output, func(line string) bool {
 		return strings.Contains(line, "AFTERCLEAR")

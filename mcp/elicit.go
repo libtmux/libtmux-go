@@ -62,6 +62,38 @@ func (t *tools) resolvePaneToWrite(
 	return pane, nil
 }
 
+// resolvePaneToDeliver resolves the pane a keystroke is aimed at and refuses
+// one that cannot read it.
+//
+// Tools that type call this instead of resolvePaneToWrite, for the same reason
+// write tools call that instead of resolvePane: a tool added later is guarded
+// by the way it finds its target rather than by remembering to ask. Delivering
+// a tool is what it means to be one of these, so the set cannot be listed
+// wrongly or fall out of date.
+//
+// The tool names itself rather than being read off the request, because a
+// batched call carries the batch's name and a refusal has to say which of its
+// calls stopped it.
+//
+// Tools that change a pane without typing into it keep resolvePaneToWrite. A
+// dead pane is a reasonable target for clearing, for respawning, and for
+// entering a mode: a person attached to that session scrolls a corpse by hand,
+// which no capture does for them.
+func (t *tools) resolvePaneToDeliver(
+	ctx context.Context,
+	request *mcp.CallToolRequest,
+	id, sessionName, action, tool string,
+) (tmux.Pane, error) {
+	pane, err := t.resolvePaneToWrite(ctx, request, id, sessionName, action)
+	if err != nil {
+		return tmux.Pane{}, err
+	}
+	if err := refuseAPaneThatCannotRead(pane, tool); err != nil {
+		return tmux.Pane{}, err
+	}
+	return pane, nil
+}
+
 // confirmCallerWrite asks the person before a write lands in the caller pane.
 func (t *tools) confirmCallerWrite(
 	ctx context.Context,

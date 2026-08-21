@@ -160,10 +160,8 @@ func (t *tools) pasteBuffer(
 	if err != nil {
 		return nil, pasteBufferOutput{}, err
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting a buffer")
-	if err == nil {
-		err = refuseAPaneInAMode(pane, "paste_buffer")
-	}
+	pane, err := t.resolvePaneToDeliver(
+		ctx, request, input.PaneID, input.SessionName, "pasting a buffer", "paste_buffer")
 	if err != nil {
 		return nil, pasteBufferOutput{}, err
 	}

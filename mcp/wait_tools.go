@@ -264,26 +264,15 @@ func (t *tools) startCommand(
 		return nil, errors.New("command is required")
 	}
 	server := t.tmux()
-	pane, err := t.resolvePaneToWrite(
-		ctx, request, input.PaneID, input.SessionName, "running a command")
+	// Resolved for delivery, which refuses a pane that cannot read the keys
+	// before the pane is asked to do anything. Either refusal saves this tool
+	// the whole timeoutSeconds the caller set: a mode reads the command as key
+	// bindings, one of which takes a pending key and never answers the sending
+	// client, and a pane with no process never runs the wrapper at all.
+	pane, err := t.resolvePaneToDeliver(
+		ctx, request, input.PaneID, input.SessionName, "running a command", "run_command")
 	if err != nil {
 		return nil, err
-	}
-	// Before the pane is asked to do anything. A mode reads the command as key
-	// bindings, and one of them takes a pending key and never gives the sending
-	// client its reply -- so this does not merely fail, it hangs past the
-	// timeoutSeconds the caller set and takes the connection with it.
-	if err := refuseAPaneInAMode(pane, "run_command"); err != nil {
-		return nil, err
-	}
-
-	// A pane whose process has exited reads no keys, so the wrapper would never
-	// run and the wait would reach its deadline having done nothing. Saying so
-	// now costs one lookup and saves the caller the whole timeout.
-	if dead, _ := pane.Formats().PaneDead(); dead {
-		return nil, fmt.Errorf(
-			"pane %s has no process: its program exited, so it reads no keys. "+
-				"respawn_pane restarts it", pane.ID())
 	}
 
 	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
@@ -335,7 +324,8 @@ func (t *tools) startCommand(
 	// the status recording and the signal with it and leave the wait hanging
 	// until its deadline.
 	mark := fmt.Sprintf(
-		"%s -S %s display-message -p -t %s '#{history_size} #{cursor_y} #{cursor_x}'",
+		"%s -S %s display-message -p -t %s "+
+			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
 		shellQuote(runCommandBinary),
 		shellQuote(socket.Stdout[0]),
 		shellQuote(pane.ID().String()),
@@ -509,7 +499,7 @@ func attachCommandOutput(
 		if closed.column == 0 {
 			end--
 		}
-		if closed.row < opened.row {
+		if closed.row < opened.row || closed.erased(opened) {
 			// The grid was renumbered while the command ran, which is what
 			// erasing the scrollback does: ESC[3J drops the history and every
 			// absolute row moves with it, so the opening mark addresses
@@ -548,13 +538,95 @@ func attachCommandOutput(
 	for index, line := range lines {
 		lines[index] = strings.TrimRight(line, " ")
 	}
+	// On every path, not only the recovery one. The rows the marks pick out can
+	// begin above the command's own output whenever the grid moved under them,
+	// and the echo is never something a command printed, so its presence is the
+	// signal rather than which branch got here. After the trim, because a row's
+	// padding would otherwise land in the middle of the text being looked for.
+	lines = afterTheWrapperEcho(lines, sourceScriptFor(openedPath))
 	kept, report := limits.apply(lines)
 	output.Output = kept
 	output.truncation = report
 }
 
+// erased reports that scrollback went missing between the two marks.
+//
+// A row comparison alone cannot see it. Erasing one line of history while the
+// cursor moves down one leaves the sum that makes up a row unchanged, which
+// reads as a command that printed nothing and returns silence for one that
+// printed. The history count says plainly what the sum hides.
+//
+// It says it only at an unchanged size. Both dimensions are checked and
+// neither is redundant, because they move the count by different means: width
+// rewraps the scrollback, so it moves nothing unless lines were long enough to
+// wrap, while height moves rows between the screen and the history whatever
+// they hold. Measured at 80 columns, widening to 220 left 100 short lines at
+// 78, and growing from 24 rows to 60 took the same 78 to 42. A person widening
+// a terminal or closing a split does either mid-command without touching
+// anything.
+func (f mark) erased(opened mark) bool {
+	if f.width != opened.width || f.height != opened.height {
+		return false
+	}
+	return f.historySize < opened.historySize
+}
+
+// afterTheWrapperEcho drops what stood above the command's own output.
+//
+// Recovering from an erase means reading from the top of the grid, and the top
+// of an erased grid holds the prompt and the line that sourced the wrapper.
+// run_command exists so a caller never has to tell those from output, and a
+// contaminated reply is worse than an empty one: silence is obviously wrong
+// and gets retried, a plausible first line gets believed.
+//
+// The echo is matched across the joined lines rather than within one of them.
+// A long prompt wraps it, and an erase drops the flag that would otherwise let
+// tmux rejoin the pieces, so the directory name appears in no single line.
+func afterTheWrapperEcho(lines []string, echo string) []string {
+	joined := strings.Builder{}
+	ends := make([]int, len(lines))
+	for i, line := range lines {
+		joined.WriteString(line)
+		ends[i] = joined.Len()
+	}
+	// The last of them, because an interactive shell draws the line it read and
+	// then draws it again under the prompt, so the echo appears twice and the
+	// command's output follows the second one. Taking the first leaves the
+	// redraw behind as output.
+	at := strings.LastIndex(joined.String(), echo)
+	if at < 0 {
+		// A shell that did not echo leaves nothing to find, and the lines are
+		// the caller's best answer rather than something to discard.
+		return lines
+	}
+	// Through the row the echo ENDS on, which is not the row it starts on once
+	// it has wrapped, and not the row the directory ends on either: the rest of
+	// the path and its closing quote would stay behind as a line of their own.
+	for i, end := range ends {
+		if end >= at+len(echo) {
+			return lines[i+1:]
+		}
+	}
+	return nil
+}
+
+// sourceScriptFor rebuilds the line the wrapper typed into the pane, so what is
+// looked for in the grid is what was sent rather than a second spelling of it.
+func sourceScriptFor(openedPath string) string {
+	return ". " + shellQuote(filepath.Join(filepath.Dir(openedPath), "script"))
+}
+
 // mark is where the pane's cursor stood when the wrapper recorded it.
 type mark struct {
+	// historySize is how much scrollback stood above the screen, kept apart
+	// from the row because an erase can drop a line of history while the
+	// cursor moves down one: the sum is unchanged and the erase invisible.
+	historySize int
+	// width and height are the pane's size, which says whether historySize is
+	// comparable at all. tmux rewraps the scrollback when a pane changes
+	// width and moves rows between it and the screen when the height changes,
+	// so the count moves on its own with nothing erased.
+	width, height int
 	// row is an absolute position in tmux's grid, being the history size plus
 	// the cursor's row, which does not move when tmux renumbers the grid.
 	row int
@@ -594,7 +666,7 @@ func readMark(path string) (mark, error) {
 		return mark{}, err
 	}
 	fields := strings.Fields(string(recorded))
-	if len(fields) != 3 {
+	if len(fields) != 5 {
 		return mark{}, fmt.Errorf("unreadable pane position %q", recorded)
 	}
 	numbers := make([]int, 0, len(fields))
@@ -605,7 +677,13 @@ func readMark(path string) (mark, error) {
 		}
 		numbers = append(numbers, number)
 	}
-	return mark{row: numbers[0] + numbers[1], column: numbers[2]}, nil
+	return mark{
+		historySize: numbers[0],
+		row:         numbers[0] + numbers[1],
+		column:      numbers[2],
+		width:       numbers[3],
+		height:      numbers[4],
+	}, nil
 }
 
 // shellQuote wraps a value so a POSIX shell reads it as one word, which the
@@ -686,11 +764,13 @@ type waitForTextOutput struct {
 	// MatchedAtEntry reports that a match was already on the screen when the
 	// wait began rather than written during it. A client that cares whether
 	// something just happened, as opposed to having happened, checks this.
-	//
-	// True beside a timeout is the answer to the puzzle it otherwise poses:
-	// sinceEntry ignored text that was there all along, and the same call
-	// without it would have matched at once.
 	MatchedAtEntry bool `json:"matchedAtEntry"`
+	// EntryNote says what happened when a wait ran its whole deadline with the
+	// text it was waiting for already on the pane. That pairing is the one
+	// shape here that reads as a hang, and a client cannot be expected to
+	// reason it out from two other fields: sinceEntry ignored what was already
+	// there, and the same call without it would have returned at once.
+	EntryNote string `json:"entryNote,omitempty"`
 	// Lines are what the pane wrote while waiting, or what it already showed
 	// when the match was there on entry.
 	Lines []string `json:"lines,omitempty"`
@@ -891,6 +971,14 @@ func finishWait(
 	output.Found = outcome == outcomeMatched
 	output.Matched = matched
 	output.MatchedAtEntry = atEntry
+	// Only on the pairing that puzzles, so a note that appears on every wait is
+	// not a note anybody reads.
+	if atEntry && outcome == outcomeTimeout {
+		output.EntryNote = "the text was already on the pane when this wait " +
+			"began, and sinceEntry ignored it, so the deadline ran out waiting " +
+			"for it to be written again. The same call without sinceEntry " +
+			"returns at once."
+	}
 	output.Lines = kept
 	output.truncation = report
 	output.ElapsedSeconds = time.Since(started).Seconds()

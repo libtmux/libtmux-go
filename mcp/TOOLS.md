@@ -1054,6 +1054,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- |
 | `panes` **required** | array |
 | `total` **required** | integer |
+| `skipped` | integer |
 
 ### `list_servers`
 
@@ -1090,6 +1091,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- |
 | `sessions` **required** | array |
 | `total` **required** | integer |
+| `skipped` | integer |
 
 ### `list_windows`
 
@@ -1107,6 +1109,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- |
 | `total` **required** | integer |
 | `windows` **required** | array |
+| `skipped` | integer |
 
 ### `load_buffer`
 
@@ -1700,6 +1703,7 @@ Reads only. Repeating it changes nothing.
 | `outcome` **required** | string |
 | `paneId` **required** | string |
 | `truncated` **required** | boolean |
+| `entryNote` | string |
 | `lines` | array |
 | `matched` | string |
 | `timeoutClamped` | boolean |

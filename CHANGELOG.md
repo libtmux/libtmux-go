@@ -100,6 +100,51 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`wait_for_text` says why it waited out its deadline when `sinceEntry` ignored a
+match that was already on the pane. The reply carried both halves already --
+`matchedAtEntry` true beside a timeout -- and left the caller to reason from
+the pair to the cause, which is the one shape here that reads as a hang rather
+than as an answer. It now carries `entryNote` saying the text was there before
+the wait began and that the same call without `sinceEntry` returns at once. The
+note appears only on that pairing.
+
+Typing into a pane whose program has exited is refused rather than reported as
+sent. `send_keys` answered with the keys it had sent and `send_keys_batch` with
+a count, for keystrokes delivered to a pane with no process to read them, and
+an agent reading that waits for output which cannot come. `run_command` had
+always refused and named `respawn_pane`; the check lived inside it rather than
+on the path its neighbours share, so the other four never looked.
+
+Delivery tools now obtain their pane through a resolver that asks the whole
+question -- in a mode, or no process -- so a tool added later is guarded by the
+way it finds its target rather than by remembering. Tools that change a pane
+without typing into it are unaffected, and deliberately: a dead pane is a
+reasonable thing to clear, to respawn, and to enter a mode on, because a person
+attached to that session scrolls a corpse by hand and no capture does it for
+them. `paste_text` against a dead pane also stops surfacing tmux's
+"paste-buffer exited 1", which named a command the caller never invoked.
+
+`run_command` no longer hands back its own sourcing line as output. Recovering
+from an erase means reading from the top of the grid, and the top of an erased
+grid holds the prompt and the line that sourced the wrapper, so the reply began
+with text the command never printed. The whole reason to prefer this over
+`send_keys` and a capture is that the shell's echo cannot be mistaken for the
+result, and a contaminated reply is worse than an empty one: silence is
+obviously wrong and gets retried, a plausible first line gets believed.
+
+`run_command` no longer answers with nothing when the command erased the
+scrollback. It locates output by a mark taken on either side, each of them
+`history_size` plus `cursor_y` added into one number. An erase drops a line of
+history while the cursor moves down one, so the two changes cancel and the sum
+is identical across a command that wiped the grid -- which read as a command
+that printed nothing. Clearing the screen first is what lines them up, so
+`clear` twice, or a screen-clearing program followed by anything that erases,
+was enough. The count is now compared on its own, and only at an unchanged pane
+size: tmux rewraps the scrollback when a pane's width changes and moves rows
+between screen and history when its height does, so the count falls on a resize
+with nothing erased. This stops a resize being read as an erase; it does not
+make the row arithmetic reliable across one.
+
 `list_panes`, `list_windows` and `list_sessions` report `skipped`, the count
 their criteria left out. Each already reported `total`, which counts what the
 server held before the criteria ran, so a filtered call answered with a short
