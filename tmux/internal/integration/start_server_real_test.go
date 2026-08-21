@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,19 +45,31 @@ func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
 		t.Fatalf("IsAlive() = (%t, %v), want (false, nil) before anything runs", alive, err)
 	}
 
-	keys, err := server.ListKeys(ctx, tmux.ListKeysRequest{})
-	if err != nil {
-		t.Fatalf("ListKeys() = %v, want the bindings of a server tmux starts", err)
+	// Each of these starts a server that then exits again at once, having no
+	// sessions to hold it open. A call landing while the last one is on its
+	// way out is answered "server exited unexpectedly", which is the previous
+	// server's teardown rather than this call failing to start its own, so it
+	// is worth asking a second time before believing it.
+	retrying := func(what string, call func() (int, error)) int {
+		rows, err := call()
+		if err != nil && strings.Contains(err.Error(), "server exited unexpectedly") {
+			rows, err = call()
+		}
+		if err != nil {
+			t.Fatalf("%s() = %v", what, err)
+		}
+		return rows
 	}
-	if len(keys) == 0 {
+	if rows := retrying("ListKeys", func() (int, error) {
+		keys, err := server.ListKeys(ctx, tmux.ListKeysRequest{})
+		return len(keys), err
+	}); rows == 0 {
 		t.Error("ListKeys() returned no rows")
 	}
-
-	commands, err := server.ListCommands(ctx, tmux.ListCommandsRequest{})
-	if err != nil {
-		t.Fatalf("ListCommands() = %v", err)
-	}
-	if len(commands) == 0 {
+	if rows := retrying("ListCommands", func() (int, error) {
+		commands, err := server.ListCommands(ctx, tmux.ListCommandsRequest{})
+		return len(commands), err
+	}); rows == 0 {
 		t.Error("ListCommands() returned no rows")
 	}
 
