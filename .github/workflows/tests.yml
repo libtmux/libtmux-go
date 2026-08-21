@@ -134,9 +134,11 @@ jobs:
       # .golangci.yml at the root, so leaving it on checks the same file five
       # times and takes five chances that golangci-lint.run is slow. It has
       # already spent one of them.
+      # Must be built with a Go at least as new as the one set up above:
+      # golangci-lint typechecks against the toolchain's own export data.
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.11.4
+          version: v2.13.1
           working-directory: ${{ matrix.module }}
           verify: false
 
