@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/workspace"
@@ -143,9 +144,19 @@ func (t *tools) buildWorkspace(
 		if session.ID() == "" {
 			return nil, buildWorkspaceOutput{}, err
 		}
-		return toolFailure(err), buildWorkspaceOutput{
-			SessionID: session.ID().String(),
-		}, nil
+		// And say so in the text, not only in the fields. A caller reading the
+		// reply is told which pane failed and nothing about the session that
+		// survived, so the obvious next move -- send the same document again --
+		// fails on a name that already exists, for reasons the first reply
+		// never mentioned.
+		return toolFailure(fmt.Errorf(
+				"%w; the session %q (%s) was created and is still there with what "+
+					"was built before the failure, so building this document again "+
+					"will fail on the name: remove that session or use another name",
+				err, described.SessionName, session.ID())), buildWorkspaceOutput{
+				SessionID:   session.ID().String(),
+				SessionName: described.SessionName,
+			}, nil
 	}
 	name, _ := session.Name()
 	return nil, buildWorkspaceOutput{

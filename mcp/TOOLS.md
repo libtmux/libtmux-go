@@ -916,6 +916,8 @@ Reads only. Repeating it changes nothing.
 | Argument | Type | |
 | --- | --- | --- |
 | `includeMessages` | boolean | add tmux's own server message log, which records what tmux refused and why |
+| `maxBytes` | integer | how many bytes of log messages to return at most, keeping the most recent |
+| `maxLines` | integer | how many log messages to return at most, keeping the most recent |
 
 | Returns | Type |
 | --- | --- |
@@ -926,11 +928,15 @@ Reads only. Repeating it changes nothing.
 | `safetyLevel` **required** | string |
 | `sessions` **required** | integer |
 | `socketPath` **required** | string |
+| `truncated` **required** | boolean |
 | `version` **required** | string |
 | `windows` **required** | integer |
 | `attachedClients` | array |
 | `callerPaneId` | string |
 | `messages` | array |
+| `messagesUnavailable` | string |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
 
 ### `get_session_info`
 

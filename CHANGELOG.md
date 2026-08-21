@@ -27,6 +27,17 @@ the tree, and `golangci-lint` now gates it so the older forms cannot return.
 
 ### tmux
 
+A control connection no longer answers the next command with the last one's
+reply. tmux writes a guard block for every command it runs on a client's
+behalf, not only the ones that client sent, and marks the difference in the
+block's flags: 1 for a command that arrived over the control channel, 0 for
+anything else. Keys delivered into a pane that is in a mode are the ordinary
+way to get the others, because a mode looks each key up as a binding and runs
+the command it finds. Reading a stranger's block as a reply shifted every later
+reply by one for the life of the connection, which is how a server identity
+probe came back holding a session listing and every tool after it failed or
+answered the wrong question.
+
 `FormatValues.SessionActive` reports tmux's `session_active`, which says whether
 a session is the asking client's current one. tmux added it at 3.6 and the
 format catalog did not carry it, so it could not be read typed. The catalog is
@@ -88,6 +99,47 @@ creates a root beside the others, so a test that spawns a child suite could not
 tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
+
+`build_workspace` says what a partial build left behind. Building is not atomic
+and cannot be, because tmux has no transaction, so a document that fails part
+way leaves the session and the panes made before the failure. The reply named
+the pane it died on and nothing else, so a caller read it as nothing having
+happened and sent the same document again — which fails on a name that already
+exists, for a reason the first reply never gave. The failure now names the
+session, carries its name beside its identifier, and says the two ways on.
+
+`respawn_pane` says why it will not respawn a live pane. tmux refuses without
+`-k` and reports only `respawn-pane exited 1`; the refusal now names what the
+pane is running and the `kill` argument that replaces it.
+
+Every tool that delivers keystrokes refuses a pane that is in a mode:
+`send_keys`, `send_keys_batch`, `paste_text`, `paste_buffer` and `run_command`.
+Copy mode reads keys as its own bindings, so the text never reached the program
+and something else happened instead — and one of the bindings waits for a
+further key, after which the client that sent it never gets a reply and
+supplying the awaited key does not release it. It is the sender that blocks
+rather than control clients in particular, so another client doing it, or a
+person doing it at a keyboard, costs this server nothing: the only way to lose
+the connection was to send such a key over it. `run_command` was the worst of
+them, hanging past the `timeoutSeconds` its own caller set and taking the
+connection with it.
+
+The refusal names both ways on, because a caller who entered the mode
+deliberately wants to read rather than to undo it: `capture_pane` with
+`includeHistory` and `startLine` reads scrollback without leaving the mode or
+sending anything, and `exit_copy_mode` returns the pane to the program.
+
+`get_server_info` reports a failure as a failure, and says separately when it
+could not read the message log it was asked for. tmux keeps that log per client
+and before 3.6 refuses the command outright when nothing is attached, so the
+answer there is neither an empty log nor a broken server: `messagesUnavailable`
+carries the reason, the way `run_command` names why output is missing, and the
+rest of the reply still arrives. It answered a tmux it could
+not read with `alive: false`, no socket and zero of everything, which is also
+what a healthy empty server looks like, so a caller could not tell "there is
+nothing there" from "I could not tell". The liveness probe already reports a
+server that is not running as a plain no, so an error from it means something
+else and is now returned; the same goes for the snapshot behind the counts.
 
 `select_layout` offers the mirrored presets on tmux 3.5 or newer, matching the
 tmux module.

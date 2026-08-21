@@ -63,6 +63,9 @@ func (t *tools) sendKeysBatch(
 	if err != nil {
 		return nil, sendKeysBatchOutput{}, err
 	}
+	if err := refuseAPaneInAMode(pane, "send_keys_batch"); err != nil {
+		return nil, sendKeysBatchOutput{}, err
+	}
 	for index, key := range input.Keys {
 		if key == "" {
 			return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: index},
@@ -134,6 +137,9 @@ func (t *tools) pasteText(
 	}
 	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting text")
 	if err != nil {
+		return nil, pasteTextOutput{}, err
+	}
+	if err := refuseAPaneInAMode(pane, "paste_text"); err != nil {
 		return nil, pasteTextOutput{}, err
 	}
 	output := pasteTextOutput{PaneID: pane.ID().String()}
@@ -235,6 +241,30 @@ func (t *tools) enterCopyMode(
 	return nil, copyModeOutput{PaneID: pane.ID().String(), InCopyMode: true}, nil
 }
 
+// refuseAPaneInAMode declines to type into a pane that is not listening.
+//
+// A pane in copy mode reads keys as that mode's bindings rather than passing
+// them to the program, so the text never arrives and something else happens
+// instead: a binding that copies a selection, moves the cursor, or waits for a
+// further key. The last one is why this is a refusal rather than a warning: the
+// client that sent such a key never gets its reply, and supplying the key the
+// binding waits for does not release it. It is the sender that blocks rather
+// than control clients in particular, which is what makes refusing here a whole
+// fix -- another client doing it, or a person doing it at a keyboard, costs
+// this connection nothing.
+func refuseAPaneInAMode(pane tmux.Pane, tool string) error {
+	mode, ok := pane.Formats().PaneInMode()
+	if !ok || mode == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"pane %s is in a mode, so %s would be read as that mode's key bindings "+
+			"rather than reaching the program. To read scrollback, capture_pane "+
+			"with includeHistory and startLine reads it without leaving the mode "+
+			"or sending anything; to reach the program, exit_copy_mode first",
+		pane.ID(), tool)
+}
+
 // exitCopyMode returns a pane to passing keys to the program in it.
 func (t *tools) exitCopyMode(
 	ctx context.Context,
@@ -262,6 +292,9 @@ func (t *tools) sendKeys(
 	}
 	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
 	if err != nil {
+		return nil, sendKeysOutput{}, err
+	}
+	if err := refuseAPaneInAMode(pane, "send_keys"); err != nil {
 		return nil, sendKeysOutput{}, err
 	}
 	command := input.Command

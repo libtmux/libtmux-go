@@ -2676,3 +2676,247 @@ func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
 		})
 	}
 }
+
+// TestServerMessagesAreBoundedLikeEveryOtherReply covers the one reply in this
+// package that had a count cap and no byte cap.
+//
+// tmux's message log records the commands it ran, and this server's own
+// listings carry a format string naming every field it wants, so the log is
+// mostly this server quoted back at itself at thousands of characters a line.
+// A hundred of those is a reply no caller can afford, and the caller cannot
+// see it coming: the size belongs to the log, not to the request.
+//
+//libtmux:real-tmux
+func TestServerMessagesAreBoundedLikeEveryOtherReply(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: messages\nwindows:\n  - panes:\n      - {}\n")
+
+	// A log long enough to be worth bounding, made the way a caller makes one:
+	// by asking this server questions.
+	call(ctx, t, session, "set_option", map[string]any{
+		"scope": "server", "name": "message-limit", "value": "1000",
+	}, nil)
+	for range 40 {
+		call(ctx, t, session, "list_panes", map[string]any{}, nil)
+	}
+
+	measure := func(arguments map[string]any) (int, int, bool) {
+		t.Helper()
+		var reply struct {
+			Messages            []string `json:"messages"`
+			MessagesUnavailable string   `json:"messagesUnavailable"`
+			Truncated           bool     `json:"truncated"`
+		}
+		arguments["includeMessages"] = true
+		result := call(ctx, t, session, "get_server_info", arguments, &reply)
+		if result.IsError {
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			t.Fatalf("get_server_info %v: %s", arguments, said)
+		}
+		// tmux keeps the message log per client and refuses the command
+		// outright before 3.5 when nothing is attached, which the in-memory
+		// transport used here never is. The reply has to say so rather than
+		// return an empty log, and there is nothing to bound when it does.
+		if reply.MessagesUnavailable != "" {
+			if len(reply.Messages) != 0 {
+				t.Errorf("the log is reported unavailable and carries %d messages",
+					len(reply.Messages))
+			}
+			t.Skipf("this tmux will not report its message log here: %s",
+				reply.MessagesUnavailable)
+		}
+		size := 0
+		for _, message := range reply.Messages {
+			size += len(message) + 1
+		}
+		return len(reply.Messages), size, reply.Truncated
+	}
+
+	// The number is this test's own claim rather than a copy of the cap: what
+	// matters is that a caller who asked for nothing cannot be handed a reply
+	// measured in hundreds of kilobytes. Unbounded, this log runs past 180,000.
+	const affordable = 32_000
+	count, size, truncated := measure(map[string]any{})
+	if size > affordable {
+		t.Errorf("asking for the message log with no bounds returned %d bytes over "+
+			"%d messages; a caller cannot spend that and did not ask to", size, count)
+	}
+	if truncated && count == 0 {
+		t.Error("the reply reports truncation and carries nothing")
+	}
+
+	// A caller may ask for less, and is told that it cost something.
+	fewer, _, fewerTruncated := measure(map[string]any{"maxLines": 5})
+	if fewer > 5 {
+		t.Errorf("maxLines 5 returned %d messages", fewer)
+	}
+	if count > fewer && !fewerTruncated {
+		t.Error("a reply cut to five messages does not report the truncation")
+	}
+
+	// And may bound the bytes, which is the cap that was missing.
+	_, tight, tightTruncated := measure(map[string]any{"maxLines": 1000, "maxBytes": 4000})
+	if tight > 4000 {
+		t.Errorf("maxBytes 4000 returned %d bytes", tight)
+	}
+	if size > tight && !tightTruncated {
+		t.Error("a reply cut to four thousand bytes does not report the truncation")
+	}
+}
+
+// TestServerInfoDoesNotInventAHealthyEmptyServer covers a reply that a caller
+// would believe.
+//
+// A tmux server with nothing in it and a tmux this process could not run come
+// back as the same reply once the errors are dropped: alive false, no socket,
+// zero of everything. The first is an answer and the second is not knowing, and
+// a caller acting on the second acts on a description of a server that does not
+// exist.
+//
+//libtmux:real-tmux
+func TestServerInfoDoesNotInventAHealthyEmptyServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	unreachable := tmux.NewServer(tmux.ServerOptions{
+		Binary:     filepath.Join(t.TempDir(), "there-is-no-tmux-here"),
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+	})
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(unreachable).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "unreachable"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	var reported struct {
+		Alive    bool   `json:"alive"`
+		Sessions int    `json:"sessions"`
+		Socket   string `json:"socketPath"`
+	}
+	result := call(ctx, t, session, "get_server_info", map[string]any{}, &reported)
+	if !result.IsError {
+		t.Fatalf("a tmux that cannot be run was reported as alive=%t with %d sessions "+
+			"and socket %q, rather than as an error",
+			reported.Alive, reported.Sessions, reported.Socket)
+	}
+}
+
+// TestAHalfBuiltWorkspaceSaysWhatSurvived covers a failure whose leftovers the
+// reply did not mention.
+//
+// Build is not atomic and cannot be: tmux has no transaction. The reply named
+// the pane it died on and nothing else, so a caller who read it believed
+// nothing happened and sent the same document again -- which fails on a name
+// that already exists, for a reason the first reply never gave. The batch tools
+// have the same property and disclose it; this now does too.
+//
+//libtmux:real-tmux
+func TestAHalfBuiltWorkspaceSaysWhatSurvived(t *testing.T) {
+	session, _, ctx := connect(t)
+
+	// More panes than an eighty-column window can hold, so tmux refuses part
+	// way through rather than at the start.
+	document := "session_name: halfbuilt\nwindows:\n  - panes:\n" +
+		strings.Repeat("      - {}\n", 40)
+	result := call(ctx, t, session, "build_workspace", map[string]any{
+		"document": document,
+	}, nil)
+	if !result.IsError {
+		t.Skip("this tmux fitted forty panes, so there is no partial build to report")
+	}
+	// The helper stops at IsError, so the fields are read here: a failed call
+	// still carries the identifiers a caller cleans up with.
+	var reported struct {
+		SessionID   string `json:"sessionId"`
+		SessionName string `json:"sessionName"`
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &reported); err != nil {
+		t.Fatal(err)
+	}
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	if !strings.Contains(said, "halfbuilt") {
+		t.Errorf("the failure does not name the session it left behind: %q", said)
+	}
+	if reported.SessionName != "halfbuilt" {
+		t.Errorf("sessionName = %q, want the name that was asked for", reported.SessionName)
+	}
+	if reported.SessionID == "" {
+		t.Error("no session id to clean up with")
+	}
+
+	// The session really is there, which is what the reply now says.
+	var listed struct {
+		Sessions []struct {
+			Name string `json:"name"`
+		} `json:"sessions"`
+	}
+	call(ctx, t, session, "list_sessions", map[string]any{}, &listed)
+	found := false
+	for _, each := range listed.Sessions {
+		if each.Name == "halfbuilt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the reply named a surviving session that is not there")
+	}
+}
+
+// TestRespawningALivePaneNamesTheWayOut covers tmux's own refusal reaching a
+// caller unexplained.
+//
+// tmux will not respawn a pane that is still running without -k, and says so
+// as "respawn-pane exited 1". The way out is one argument away, and every
+// other refusal in this server names it.
+//
+//libtmux:real-tmux
+func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: respawn\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	result := call(ctx, t, session, "respawn_pane", map[string]any{"paneId": pane}, nil)
+	if !result.IsError {
+		t.Fatal("respawning a live pane without kill was accepted")
+	}
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	if !strings.Contains(said, "kill") {
+		t.Errorf("the refusal does not name the way out: %q", said)
+	}
+	if strings.Contains(said, "exited 1") {
+		t.Errorf("the refusal is tmux's exit code rather than a reason: %q", said)
+	}
+
+	// And the way out works.
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": pane, "kill": true,
+	}, nil); result.IsError {
+		t.Errorf("respawn_pane with kill: %#v", result.Content)
+	}
+}

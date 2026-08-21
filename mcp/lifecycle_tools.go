@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -224,6 +225,17 @@ func (t *tools) respawnPane(
 	if err != nil {
 		return nil, respawnPaneOutput{}, err
 	}
+	// tmux refuses a live pane without -k, and says only that respawn-pane
+	// exited 1. The caller's way out is one argument away, so it is named here
+	// rather than left to be guessed from tmux's exit code.
+	if !input.Kill {
+		if dead, ok := pane.Formats().PaneDead(); ok && !dead {
+			return nil, respawnPaneOutput{}, fmt.Errorf(
+				"pane %s is still running %s, and tmux refuses to respawn a live "+
+					"pane; pass kill to replace what is running, or leave it alone",
+				pane.ID(), currentCommandOf(pane))
+		}
+	}
 	respawn := tmux.RespawnRequest{Kill: input.Kill}
 	if input.Command != "" {
 		command := input.Command
@@ -234,6 +246,15 @@ func (t *tools) respawnPane(
 		return nil, respawnPaneOutput{}, err
 	}
 	return nil, respawnPaneOutput{PaneID: respawned.ID().String()}, nil
+}
+
+// currentCommandOf names what a pane is running, for an error that reads
+// better with it than with a placeholder.
+func currentCommandOf(pane tmux.Pane) string {
+	if command, ok := pane.Formats().PaneCurrentCommand(); ok && command != "" {
+		return command
+	}
+	return "a program"
 }
 
 // renameSessionInput gives a session a new name.

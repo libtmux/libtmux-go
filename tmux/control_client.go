@@ -57,6 +57,26 @@ type ControlClient struct {
 	closeRequested atomic.Bool
 	closeOnce      sync.Once
 	closeErr       error
+
+	// dispatching reports that startup is over and every frame from here has
+	// to be matched to a command this client sent. The attach tmux performs to
+	// start the client is not one of those, so its frame is read before this
+	// is set.
+	dispatching atomic.Bool
+}
+
+// ownReply reports whether a frame answers a command this client sent.
+//
+// tmux writes a guard block for every command it runs on a client's behalf,
+// and marks in the guard's flags whether the command arrived over the control
+// channel: it computes them as !!(state & CMDQ_STATE_CONTROL), so 1 is this
+// client's command and 0 is anything else. Keys sent into a pane that is in a
+// mode are the ordinary way to get one of the others, because a mode looks a
+// key up as a binding and the command it runs belongs to this client without
+// having been sent by it. Reading such a block as a reply shifts every later
+// reply by one for the life of the connection.
+func (f controlFrame) ownReply() bool {
+	return f.flags != 0
 }
 
 type controlRequest struct {
@@ -218,6 +238,7 @@ func (s Server) OpenControl(
 		return nil, client.failStartup(err)
 	}
 	client.clientName = clientName
+	client.dispatching.Store(true)
 	go client.runRequests()
 	return client, nil
 }
@@ -531,6 +552,11 @@ func (c *ControlClient) readStream() {
 				}
 			}
 			if frame != nil {
+				// Somebody else's block. Dropping it is what keeps this
+				// client's replies matched to its own commands.
+				if c.dispatching.Load() && !frame.ownReply() {
+					continue
+				}
 				select {
 				case c.frames <- *frame:
 				case <-c.closing:

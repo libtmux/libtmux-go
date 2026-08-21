@@ -263,6 +263,13 @@ func (t *tools) startCommand(
 	if err != nil {
 		return nil, err
 	}
+	// Before the pane is asked to do anything. A mode reads the command as key
+	// bindings, and one of them takes a pending key and never gives the sending
+	// client its reply -- so this does not merely fail, it hangs past the
+	// timeoutSeconds the caller set and takes the connection with it.
+	if err := refuseAPaneInAMode(pane, "run_command"); err != nil {
+		return nil, err
+	}
 
 	// A pane whose process has exited reads no keys, so the wrapper would never
 	// run and the wait would reach its deadline having done nothing. Saying so

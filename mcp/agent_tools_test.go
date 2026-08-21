@@ -2496,3 +2496,74 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 		t.Error("a pane written after the restart told no subscriber")
 	}
 }
+
+// TestTypingIntoAPaneInAModeIsRefused covers keys that were never going to
+// reach the program.
+//
+// A pane in copy mode reads keys as that mode's bindings. The text does not
+// arrive, something else happens instead, and one of the things that can
+// happen is a binding that waits for a further key -- after which the client
+// that sent it never gets a reply. run_command is the one that shows how bad
+// that is: it hung past the timeout its own caller set and took the connection
+// with it. Every tool that delivers keystrokes is refused, because the hazard
+// belongs to the keystrokes rather than to any one tool.
+//
+//libtmux:real-tmux
+func TestTypingIntoAPaneInAModeIsRefused(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: moded\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	send(ctx, t, session, pane, "seq 1 200")
+	if result := call(ctx, t, session, "enter_copy_mode", map[string]any{
+		"paneId": pane, "scrollUp": true,
+	}, nil); result.IsError {
+		t.Fatalf("enter_copy_mode: %#v", result.Content)
+	}
+	call(ctx, t, session, "load_buffer", map[string]any{
+		"text": "staged", "name": "moded",
+	}, nil)
+
+	for tool, arguments := range map[string]map[string]any{
+		"send_keys":       {"paneId": pane, "command": "echo NOPE"},
+		"send_keys_batch": {"paneId": pane, "keys": []string{"h", "i"}},
+		"paste_text":      {"paneId": pane, "text": "echo NOPE"},
+		"paste_buffer":    {"paneId": pane, "name": "moded"},
+		"run_command":     {"paneId": pane, "command": "echo NOPE", "timeoutSeconds": 5},
+	} {
+		result := call(ctx, t, session, tool, arguments, nil)
+		if !result.IsError {
+			t.Errorf("%s into a pane in copy mode was accepted", tool)
+			continue
+		}
+		said := ""
+		for _, content := range result.Content {
+			if text, ok := content.(*sdk.TextContent); ok {
+				said += text.Text
+			}
+		}
+		// Both ways on, because a caller who entered the mode deliberately
+		// wants to read rather than to undo it.
+		for _, wanted := range []string{"capture_pane", "exit_copy_mode", tool} {
+			if !strings.Contains(said, wanted) {
+				t.Errorf("the %s refusal does not name %s: %q", tool, wanted, said)
+			}
+		}
+		// And the connection is still there, which run_command used to cost.
+		if listed := call(ctx, t, session, "list_panes", map[string]any{}, nil); listed.IsError {
+			t.Fatalf("the connection did not survive refusing %s: %#v", tool, listed.Content)
+		}
+	}
+
+	// The way out works, after which typing lands.
+	if result := call(ctx, t, session, "exit_copy_mode", map[string]any{
+		"paneId": pane,
+	}, nil); result.IsError {
+		t.Fatalf("exit_copy_mode: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "send_keys", map[string]any{
+		"paneId": pane, "command": "echo LANDS",
+	}, nil); result.IsError {
+		t.Fatalf("send_keys after leaving copy mode: %#v", result.Content)
+	}
+}
