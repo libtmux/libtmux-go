@@ -294,7 +294,15 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 	select {
 	case <-updated:
 	case <-time.After(30 * time.Second):
-		t.Fatalf("a subscription to tmux://panes/%s/content was never told", pane)
+		// Whether the pane wrote at all separates a watch that did not report
+		// from output that never happened, which the bare timeout does not.
+		var shown struct {
+			Lines []string `json:"lines"`
+		}
+		captured := call(ctx, t, session, "capture_pane", map[string]any{"paneId": pane}, &shown)
+		t.Fatalf("a subscription to tmux://panes/%s/content was never told; "+
+			"the pane itself shows error=%t lines=%q",
+			pane, captured.IsError, shown.Lines)
 	}
 }
 

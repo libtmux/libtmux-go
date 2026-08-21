@@ -691,7 +691,7 @@ func send(ctx context.Context, t *testing.T, session *sdk.ClientSession, pane, c
 		"paneId": pane, "command": command,
 	}, nil)
 	if result.IsError {
-		t.Fatalf("send %q: %#v", command, result.Content)
+		t.Fatalf("send %q: %s", command, resultText(result))
 	}
 }
 
