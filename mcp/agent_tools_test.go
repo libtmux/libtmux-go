@@ -2567,3 +2567,163 @@ func TestTypingIntoAPaneInAModeIsRefused(t *testing.T) {
 		t.Fatalf("send_keys after leaving copy mode: %#v", result.Content)
 	}
 }
+
+// TestClearingTheScrollbackSaysTheOutputIsGone covers a command whose output
+// vanished with no sign that anything was lost.
+//
+// run_command locates a command's output by two marks, absolute positions in
+// tmux's grid taken before and after. ESC[3J erases the scrollback and
+// renumbers the grid, so the closing mark lands below the opening one and the
+// arithmetic yields nothing -- which the code returned as no output at all,
+// indistinguishable from a command that printed nothing. clear, tput clear and
+// reset all emit ESC[3J under xterm-256color, so "clear; make test" reported
+// success and returned silence.
+//
+//libtmux:real-tmux
+func TestClearingTheScrollbackSaysTheOutputIsGone(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: cleared\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	run := func(command string) (output []string, missed bool, status int) {
+		t.Helper()
+		var reply struct {
+			Output      []string `json:"output"`
+			LinesMissed bool     `json:"linesMissed"`
+			ExitStatus  *int     `json:"exitStatus"`
+		}
+		result := call(ctx, t, session, "run_command", map[string]any{
+			"paneId": pane, "command": command, "timeoutSeconds": 10,
+		}, &reply)
+		if result.IsError {
+			t.Fatalf("run_command %q: %#v", command, result.Content)
+		}
+		if reply.ExitStatus == nil {
+			t.Fatalf("run_command %q recorded no exit status", command)
+		}
+		return reply.Output, reply.LinesMissed, *reply.ExitStatus
+	}
+
+	// Erasing the screen alone keeps the marks valid, so the output arrives
+	// and nothing was lost.
+	output, missed, status := run(`printf '\033[2J\033[H'; echo KEPT`)
+	if status != 0 || missed {
+		t.Errorf("erasing the screen: status %d, linesMissed %t", status, missed)
+	}
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "KEPT")
+	}) {
+		t.Errorf("erasing the screen lost the output: %q", output)
+	}
+
+	// Erasing the scrollback renumbers the grid under the marks. What the
+	// command printed afterwards is still on the screen and still has to come
+	// back, and the reply has to say that anything before it is gone.
+	output, missed, status = run(`printf '\033[3J'; echo SURVIVES`)
+	if status != 0 {
+		t.Errorf("erasing the scrollback: status %d, want the command's own", status)
+	}
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "SURVIVES")
+	}) {
+		t.Errorf("what the command printed after erasing the scrollback was "+
+			"dropped: %q", output)
+	}
+	if !missed {
+		t.Error("the scrollback was erased and the reply does not report the loss")
+	}
+
+	// clear is the ordinary way to reach it, and the reason this matters:
+	// "clear; make test" reported success and returned silence.
+	output, missed, status = run("clear; echo AFTERCLEAR")
+	if status != 0 || !missed {
+		t.Errorf("clear: status %d, linesMissed %t", status, missed)
+	}
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "AFTERCLEAR")
+	}) {
+		t.Errorf("clear lost the output that followed it: %q", output)
+	}
+
+	// A command that printed nothing is still distinguishable from one whose
+	// output went missing.
+	output, missed, _ = run("true")
+	if len(output) != 0 || missed {
+		t.Errorf("a command that printed nothing reported %q, linesMissed %t",
+			output, missed)
+	}
+}
+
+// TestJoinWrappedReadsAPaneAsTmuxDoes covers a seam that was reported as a
+// defect here and belongs to tmux.
+//
+// In a narrow pane with a shell prompt that draws several rows, the join can
+// put the prompt's last row and the command typed after it on one line and
+// orphan the command's wrapped tail on the next. tmux's own capture-pane -J
+// does the same, because it is tmux that decides which rows were wrapped, from
+// a flag it sets as it wraps them. Reproducing tmux rather than improving on it
+// is the contract, so this pins the equivalence: a later divergence is then a
+// change here rather than something nobody notices.
+//
+//libtmux:real-tmux
+func TestJoinWrappedReadsAPaneAsTmuxDoes(t *testing.T) {
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session,
+		"session_name: joined\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	call(ctx, t, session, "resize_pane", map[string]any{"paneId": pane, "width": 40}, nil)
+	// Comfortably more than two rows of a forty-column pane, so joined and
+	// unjoined cannot come out the same.
+	send(ctx, t, session, pane, "printf 'X%.0s' {1..95}; echo")
+	time.Sleep(time.Second)
+
+	read := func(join bool) []string {
+		t.Helper()
+		var reply struct {
+			Lines []string `json:"lines"`
+		}
+		if result := call(ctx, t, session, "capture_pane", map[string]any{
+			"paneId": pane, "joinWrapped": join,
+		}, &reply); result.IsError {
+			t.Fatalf("capture_pane joinWrapped=%t: %#v", join, result.Content)
+		}
+		return reply.Lines
+	}
+	joined, unjoined := read(true), read(false)
+	if slices.Equal(joined, unjoined) {
+		t.Fatal("joining changed nothing, so this pane cannot tell the two apart")
+	}
+
+	panes, err := target.Panes(ctx)
+	if err != nil {
+		t.Fatalf("Panes() = %v", err)
+	}
+	var found tmux.Pane
+	for _, each := range panes {
+		if each.ID().String() == pane {
+			found = each
+		}
+	}
+	if found.ID().String() != pane {
+		t.Fatalf("pane %s is not in the listing", pane)
+	}
+	theirs, err := found.Capture(ctx, tmux.CapturePaneRequest{JoinWrapped: true})
+	if err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+
+	trim := func(rows []string) []string {
+		kept := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if row = strings.TrimRight(row, " "); row != "" {
+				kept = append(kept, row)
+			}
+		}
+		return kept
+	}
+	if mine, tmuxs := trim(joined), trim(theirs); !slices.Equal(mine, tmuxs) {
+		t.Errorf("joinWrapped diverged from capture-pane -J\n  ours: %q\n  tmux: %q",
+			mine, tmuxs)
+	}
+}

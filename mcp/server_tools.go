@@ -80,7 +80,7 @@ type getServerInfoOutput struct {
 	Clients int `json:"clients"`
 	// AttachedClients is what each of them is, so a caller can tell a person
 	// watching a session from this server's own control connection.
-	AttachedClients []attachedClient `json:"attachedClients,omitempty"`
+	AttachedClients []attachedClient `json:"attachedClients"`
 	// Messages is tmux's own message log, reported only when asked for.
 	Messages []string `json:"messages,omitempty"`
 	// MessagesUnavailable says why Messages is missing, and is absent when it

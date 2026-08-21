@@ -247,16 +247,23 @@ func resolveScope(requested string) (string, error) {
 type showEnvironmentInput struct {
 	// SessionName is the session to read. Empty reads the only one.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read; empty uses the only session"`
-	// Name reads one variable rather than all of them.
-	Name string `json:"name,omitempty" jsonschema:"one variable to read; empty reads all of them"`
+	// Name reads one variable, with its value. Empty lists the names only.
+	Name string `json:"name,omitempty" jsonschema:"one variable to read, with its value; empty lists every variable's name without values"`
+	// MaxLines and MaxBytes bound the listing, whose size belongs to the
+	// environment rather than to the request.
+	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many variables to return at most"`
+	// MaxBytes bounds the same listing by size.
+	MaxBytes int `json:"maxBytes,omitempty" jsonschema:"how many bytes of listing to return at most"`
 }
 
 // environmentEntry is one variable in a session's environment.
 type environmentEntry struct {
 	// Name is the variable.
 	Name string `json:"name"`
-	// Value is what new processes will see.
-	Value string `json:"value"`
+	// Value is what new processes will see. It is present when this variable
+	// was asked for by name and absent from a listing, which carries names
+	// alone.
+	Value string `json:"value,omitempty"`
 	// Removed reports that tmux will unset this variable for new processes
 	// rather than set it, which is a thing tmux can be told to do and which no
 	// value alone expresses.
@@ -280,7 +287,13 @@ type showEnvironmentOutput struct {
 	// SessionName is the session that was read.
 	SessionName string `json:"sessionName"`
 	// Variables are its environment entries, sorted by name.
-	Variables []environmentEntry `json:"variables,omitempty"`
+	Variables []environmentEntry `json:"variables"`
+	// ValuesWithheld reports that this reply lists names without values, which
+	// is what a listing returns. Asking for one variable by name returns its
+	// value.
+	ValuesWithheld bool `json:"valuesWithheld,omitempty"`
+	// truncation reports what the bounds dropped.
+	truncation
 }
 
 // showEnvironment reads what new processes in a session will inherit.
@@ -296,9 +309,21 @@ type showEnvironmentOutput struct {
 // asking what a pane would get was told it gets no PATH at all. Each entry
 // says which layer it came from.
 //
-// Values are reported as tmux holds them. An environment is a place people put
-// credentials, so the caller is receiving whatever is there; reading one
-// variable by name rather than all of them is the narrower ask.
+// A listing carries names without values. An environment is where people keep
+// credentials, and a reply that hands every value to a model puts all of them
+// somewhere they cannot be taken back from -- one call on a developer's machine
+// returned eleven live API tokens. Naming a variable returns its value, because
+// that is a caller asking for one thing rather than receiving everything.
+//
+// Redacting by name pattern was the alternative and is worse: TOKEN, KEY and
+// SECRET catch the variables named after what they are, miss the ones named
+// after what they belong to, and leave a caller believing the reply was
+// filtered. A denylist that fails open is worse than none, because it is
+// trusted. This fails closed and costs a caller who wants a value one argument.
+//
+// The names are the answer to most of what this is asked. Which variables a
+// pane will inherit, whether one is set at all, and which layer it comes from
+// are all in a listing; the value matters for the few a caller then names.
 func (t *tools) showEnvironment(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -323,6 +348,7 @@ func (t *tools) showEnvironment(
 			}
 			scope = environmentScopeServer
 		}
+		output.Variables = []environmentEntry{}
 		if ok {
 			output.Variables = []environmentEntry{{
 				Name: wanted, Value: value.Value, Removed: value.Removed,
@@ -355,10 +381,27 @@ func (t *tools) showEnvironment(
 			Scope: environmentScopeSession,
 		}
 	}
-	output.Variables = slices.Collect(maps.Values(merged))
-	slices.SortFunc(output.Variables, func(a, b environmentEntry) int {
+	listed := slices.Collect(maps.Values(merged))
+	slices.SortFunc(listed, func(a, b environmentEntry) int {
 		return strings.Compare(a.Name, b.Name)
 	})
+	// Names alone, and said so rather than left to be noticed.
+	for index := range listed {
+		listed[index].Value = ""
+	}
+	output.ValuesWithheld = true
+
+	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
+	if err != nil {
+		return nil, showEnvironmentOutput{}, err
+	}
+	names := make([]string, 0, len(listed))
+	for _, entry := range listed {
+		names = append(names, entry.Name)
+	}
+	kept, report := limits.apply(names)
+	output.Variables = listed[len(listed)-len(kept):]
+	output.truncation = report
 	return nil, output, nil
 }
 
@@ -448,8 +491,10 @@ type hook struct {
 type showHooksOutput struct {
 	// Scope is where they were read.
 	Scope string `json:"scope"`
-	// Hooks are the hooks set there, sorted by name.
-	Hooks []hook `json:"hooks,omitempty"`
+	// Hooks are the hooks set there, sorted by name. Always an array: a scope
+	// with none is something a caller iterates zero times rather than a key it
+	// has to test for.
+	Hooks []hook `json:"hooks"`
 }
 
 // showHooks reads the commands tmux will run on its own.

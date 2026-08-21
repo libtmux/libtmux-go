@@ -29,7 +29,16 @@ type capturePaneInput struct {
 	EndLine *int `json:"endLine,omitempty" jsonschema:"last row to read, on the same scale as startLine"`
 	// JoinWrapped rejoins a line the terminal wrapped, so a long line arrives
 	// as one line rather than as however many the pane is wide.
-	JoinWrapped bool `json:"joinWrapped,omitempty" jsonschema:"rejoin lines the terminal wrapped"`
+	//
+	// tmux decides which rows were wrapped, from a flag it sets when it wraps
+	// one, and this asks it rather than working it out. A prompt that draws
+	// several rows without wrapping to reach them can leave a row flagged, so
+	// the join can put a prompt's last row and the command typed after it on
+	// one line and orphan the command's own wrapped tail on the next. The
+	// output of a program is unaffected. Byte-identical to capture-pane -J,
+	// which is the point: the seam is tmux's and reproducing it is what keeps
+	// a caller's reading of a pane the same as tmux's own.
+	JoinWrapped bool `json:"joinWrapped,omitempty" jsonschema:"rejoin lines the terminal wrapped, as tmux does it; a multi-row shell prompt can be joined to the line after it"`
 	// Styles keeps the terminal's colour and attribute sequences, which a
 	// capture otherwise strips. In a program that reports its state by colour
 	// rather than in words, the colour is the state: a red FAILED and a green

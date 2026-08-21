@@ -199,6 +199,9 @@ type resizePaneInput struct {
 
 // resizePaneOutput reports the size tmux settled on.
 type resizePaneOutput struct {
+	// PaneID is the pane that was resized. A caller that named none had the
+	// active one resolved for it, and the reply is where it learns which.
+	PaneID string `json:"paneId"`
 	// Width is the pane's width in cells after the change.
 	Width int `json:"width"`
 	// Height is the pane's height in cells after the change.
@@ -237,7 +240,9 @@ func (t *tools) resizePane(
 	}
 	width, _ := resized.Formats().PaneWidth()
 	height, _ := resized.Formats().PaneHeight()
-	return nil, resizePaneOutput{Width: width, Height: height}, nil
+	return nil, resizePaneOutput{
+		PaneID: resized.ID().String(), Width: width, Height: height,
+	}, nil
 }
 
 // selectLayoutInput arranges a window's panes.

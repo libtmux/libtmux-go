@@ -159,6 +159,12 @@ type runCommandOutput struct {
 	// failing to read the pane does not fail the call, but a caller branching
 	// on empty output needs to know which of the two it has.
 	OutputUnavailable string `json:"outputUnavailable,omitempty"`
+	// LinesMissed reports that part of the output is gone rather than
+	// truncated: the command erased tmux's scrollback, which renumbers the grid
+	// the marks are recorded against, so whatever it printed before that cannot
+	// be found. What it printed afterwards is still here. capture_since uses
+	// the same word for the same thing.
+	LinesMissed bool `json:"linesMissed,omitempty"`
 	// EffectiveTimeoutSeconds is the wait this call actually ran, which is
 	// what timeoutSeconds asked for unless the server's ceiling was lower. It
 	// is absent from a detached run, which waited for nothing.
@@ -492,15 +498,42 @@ func attachCommandOutput(
 	// row holds whatever the shell drew next, and reading it returns a prompt
 	// as though the command had printed one.
 	if closed, err := readMark(closedPath); err == nil {
+		// A closing mark above the opening one means the grid was renumbered
+		// while the command ran, which is what erasing the scrollback does:
+		// ESC[3J drops the history and every absolute row moves with it. The
+		// marks no longer locate anything, and returning no output for that
+		// reads as a command that printed nothing. clear, tput clear and reset
+		// all emit it, so this is the ordinary way to hit it rather than a
+		// curiosity.
 		end := closed.row
 		if closed.column == 0 {
 			end--
 		}
-		if end < opened.row {
-			output.Output = nil
-			return
+		if closed.row < opened.row {
+			// The grid was renumbered while the command ran, which is what
+			// erasing the scrollback does: ESC[3J drops the history and every
+			// absolute row moves with it, so the opening mark addresses
+			// nothing. Whatever was printed before the erase is gone, but what
+			// came after it is on the screen and still bounded by the closing
+			// mark, so the read starts at the top rather than returning
+			// nothing. clear, tput clear and reset all emit ESC[3J, which makes
+			// this the ordinary case rather than a curiosity.
+			output.LinesMissed = true
+			request.Start = tmux.CaptureLine(-now.historySize)
+			if end < 0 {
+				output.Output = nil
+				return
+			}
+			request.End = tmux.CaptureLine(end - now.historySize)
+		} else {
+			if end < opened.row {
+				// The cursor finished where it started, so the command printed
+				// nothing. That is an answer rather than a failure.
+				output.Output = nil
+				return
+			}
+			request.End = tmux.CaptureLine(end - now.historySize)
 		}
-		request.End = tmux.CaptureLine(end - now.historySize)
 	}
 	lines, err := pane.Capture(ctx, request)
 	if err != nil {

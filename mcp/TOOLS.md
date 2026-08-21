@@ -680,7 +680,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- | --- |
 | `endLine` | integer | last row to read, on the same scale as startLine |
 | `includeHistory` | boolean | read scrollback as well as the visible screen |
-| `joinWrapped` | boolean | rejoin lines the terminal wrapped |
+| `joinWrapped` | boolean | rejoin lines the terminal wrapped, as tmux does it; a multi-row shell prompt can be joined to the line after it |
 | `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
 | `maxLines` | integer | how many lines to return at most, keeping the last ones |
 | `paneId` | string | a tmux pane id such as %1; empty reads the active pane |
@@ -922,6 +922,7 @@ Reads only. Repeating it changes nothing.
 | Returns | Type |
 | --- | --- |
 | `alive` **required** | boolean |
+| `attachedClients` **required** | array |
 | `clients` **required** | integer |
 | `insideThisServer` **required** | boolean |
 | `panes` **required** | integer |
@@ -931,7 +932,6 @@ Reads only. Repeating it changes nothing.
 | `truncated` **required** | boolean |
 | `version` **required** | string |
 | `windows` **required** | integer |
-| `attachedClients` | array |
 | `callerPaneId` | string |
 | `messages` | array |
 | `messagesUnavailable` | string |
@@ -1267,6 +1267,7 @@ Changes tmux by a step. Repeating it compounds.
 | Returns | Type |
 | --- | --- |
 | `height` **required** | integer |
+| `paneId` **required** | string |
 | `width` **required** | integer |
 
 ### `resize_window`
@@ -1331,6 +1332,7 @@ Changes tmux by a step. Repeating it compounds.
 | `effectiveTimeoutSeconds` | integer |
 | `exitStatus` | integer |
 | `jobId` | string |
+| `linesMissed` | boolean |
 | `output` | array |
 | `outputUnavailable` | string |
 | `running` | string |
@@ -1526,13 +1528,19 @@ Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` | string | one variable to read; empty reads all of them |
+| `maxBytes` | integer | how many bytes of listing to return at most |
+| `maxLines` | integer | how many variables to return at most |
+| `name` | string | one variable to read, with its value; empty lists every variable's name without values |
 | `sessionName` | string | the session to read; empty uses the only session |
 
 | Returns | Type |
 | --- | --- |
 | `sessionName` **required** | string |
-| `variables` | array |
+| `truncated` **required** | boolean |
+| `variables` **required** | array |
+| `truncatedBytes` | integer |
+| `truncatedLines` | integer |
+| `valuesWithheld` | boolean |
 
 ### `show_hooks`
 
@@ -1550,8 +1558,8 @@ Reads only. Repeating it changes nothing.
 
 | Returns | Type |
 | --- | --- |
+| `hooks` **required** | array |
 | `scope` **required** | string |
-| `hooks` | array |
 
 ### `show_option`
 

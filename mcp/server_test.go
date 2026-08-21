@@ -2920,3 +2920,193 @@ func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 		t.Errorf("respawn_pane with kill: %#v", result.Content)
 	}
 }
+
+// TestTheEnvironmentListingWithholdsValues covers a reply that put every
+// credential on a developer's machine into a model's context.
+//
+// An environment is where people keep API tokens, and a no-argument call
+// returned all of them with their values -- eleven live ones on the machine
+// this was found on. A listing now carries names, which is what most of the
+// question is, and naming a variable returns its value, which is a caller
+// asking for one thing rather than receiving everything.
+//
+//libtmux:real-tmux
+func TestTheEnvironmentListingWithholdsValues(t *testing.T) {
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: secrets\nwindows:\n  - panes:\n      - {}\n")
+
+	const secret = "s3cr3t-value-nobody-asked-for"
+	for name, value := range map[string]string{
+		"PROBE_LOOKS_LIKE_A_TOKEN": secret,
+		"PROBE_ORDINARY":           "plain",
+	} {
+		if err := target.SetEnvironment(ctx, name, value,
+			tmux.SetEnvironmentOptions{}); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+
+	var listed struct {
+		Variables []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"variables"`
+		ValuesWithheld bool `json:"valuesWithheld"`
+	}
+	result := call(ctx, t, session, "show_environment", map[string]any{}, &listed)
+	if result.IsError {
+		t.Fatalf("show_environment: %#v", result.Content)
+	}
+	if len(listed.Variables) == 0 {
+		t.Fatal("the listing is empty, so it proves nothing")
+	}
+	if !listed.ValuesWithheld {
+		t.Error("the listing does not say it withheld the values")
+	}
+	seeded := false
+	for _, entry := range listed.Variables {
+		if entry.Value != "" {
+			t.Errorf("the listing carries a value for %s", entry.Name)
+		}
+		if entry.Name == "PROBE_LOOKS_LIKE_A_TOKEN" {
+			seeded = true
+		}
+	}
+	if !seeded {
+		t.Error("the listing omits a variable that is set, so names are not enough")
+	}
+	// Nothing in the whole reply, not only the field this test reads.
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok &&
+			strings.Contains(text.Text, secret) {
+			t.Error("the reply text carries the value")
+		}
+	}
+
+	// Naming one returns its value, which is the narrower ask.
+	var one struct {
+		Variables []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"variables"`
+		ValuesWithheld bool `json:"valuesWithheld"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{
+		"name": "PROBE_LOOKS_LIKE_A_TOKEN",
+	}, &one)
+	if len(one.Variables) != 1 || one.Variables[0].Value != secret {
+		t.Errorf("naming a variable did not return its value: %+v", one.Variables)
+	}
+	if one.ValuesWithheld {
+		t.Error("a named read reports its value withheld")
+	}
+
+	// And the listing is bounded like its peers.
+	var few struct {
+		Variables []struct{} `json:"variables"`
+		Truncated bool       `json:"truncated"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{"maxLines": 2}, &few)
+	if len(few.Variables) > 2 {
+		t.Errorf("maxLines 2 returned %d variables", len(few.Variables))
+	}
+	if len(listed.Variables) > 2 && !few.Truncated {
+		t.Error("a bounded listing does not report the truncation")
+	}
+}
+
+// TestAnEmptyCollectionIsStillAnArray covers a reply a consumer cannot iterate.
+//
+// A scope with no hooks returned {"scope":"server"} and nothing else, so a
+// caller had to branch on a missing key rather than loop over an empty list.
+// The same applied to the attached clients. Both are collections a caller walks
+// and neither absence means anything the emptiness does not; the text fields
+// elsewhere are different, because run_command's missing output distinguishes a
+// command that printed nothing from one whose output could not be read.
+//
+//libtmux:real-tmux
+func TestAnEmptyCollectionIsStillAnArray(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: arrays\nwindows:\n  - panes:\n      - {}\n")
+
+	raw := func(tool string, arguments map[string]any) map[string]any {
+		t.Helper()
+		result := call(ctx, t, session, tool, arguments, nil)
+		if result.IsError {
+			t.Fatalf("%s: %#v", tool, result.Content)
+		}
+		encoded, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(encoded, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		return decoded
+	}
+
+	hooks := raw("show_hooks", map[string]any{"scope": "server"})
+	found, present := hooks["hooks"]
+	if !present {
+		t.Errorf("show_hooks omits the hooks key: %v", hooks)
+	} else if _, ok := found.([]any); !ok && found != nil {
+		t.Errorf("hooks is %T rather than an array", found)
+	}
+
+	info := raw("get_server_info", map[string]any{})
+	clients, present := info["attachedClients"]
+	if !present {
+		t.Errorf("get_server_info omits the attachedClients key: %v", info)
+	} else if _, ok := clients.([]any); !ok && clients != nil {
+		t.Errorf("attachedClients is %T rather than an array", clients)
+	}
+}
+
+// TestResizingAPaneSaysWhichPaneMoved covers a reply a caller cannot act on.
+//
+// paneId is optional and resolves the active pane, so a caller that left it out
+// was told a width and a height with nothing saying whose. Every other pane
+// tool here echoes the pane it acted on.
+//
+//libtmux:real-tmux
+func TestResizingAPaneSaysWhichPaneMoved(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session,
+		"session_name: resized\nwindows:\n  - panes:\n      - {}\n      - {}\n")
+
+	var resized struct {
+		PaneID string `json:"paneId"`
+		Height int    `json:"height"`
+	}
+	// No paneId, which is the case that could not be read back.
+	result := call(ctx, t, session, "resize_pane", map[string]any{"height": 8}, &resized)
+	if result.IsError {
+		t.Fatalf("resize_pane: %#v", result.Content)
+	}
+	if resized.PaneID == "" {
+		t.Fatal("resize_pane did not say which pane it resized")
+	}
+	if !strings.HasPrefix(resized.PaneID, "%") {
+		t.Errorf("paneId = %q, want a tmux pane id", resized.PaneID)
+	}
+
+	// And it is the pane tmux actually changed.
+	var info struct {
+		Pane struct {
+			ID       string `json:"id"`
+			Geometry struct {
+				Height int `json:"height"`
+			} `json:"geometry"`
+		} `json:"pane"`
+	}
+	call(ctx, t, session, "get_pane_info", map[string]any{"paneId": resized.PaneID}, &info)
+	if info.Pane.ID != resized.PaneID {
+		t.Errorf("resize_pane named %s and get_pane_info reports %s",
+			resized.PaneID, info.Pane.ID)
+	}
+	if info.Pane.Geometry.Height != resized.Height {
+		t.Errorf("resize_pane reported height %d and the pane is %d",
+			resized.Height, info.Pane.Geometry.Height)
+	}
+}
