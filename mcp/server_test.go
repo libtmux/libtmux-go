@@ -2975,6 +2975,22 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 	}
 	doomed := doomedWindow.PaneID
 
+	// What the server can see of its own making, logged because this failed
+	// where it could not be reproduced and the reply named a pane the snapshot
+	// did not hold.
+	var seen struct {
+		Panes []struct {
+			ID     string `json:"id"`
+			Window string `json:"window"`
+			Status struct {
+				Dead bool `json:"dead"`
+			} `json:"status"`
+		} `json:"panes"`
+		Total int `json:"total"`
+	}
+	call(ctx, t, session, "list_panes", map[string]any{"detail": "full"}, &seen)
+	t.Logf("created %q; server holds %d panes: %+v", doomed, seen.Total, seen.Panes)
+
 	if result := call(ctx, t, session, "respawn_pane", map[string]any{
 		"paneId": doomed, "command": "true", "kill": true,
 	}, nil); result.IsError {
