@@ -61,6 +61,18 @@ func connectWith(
 	return clientSession, target, ctx
 }
 
+// resultText is every text part of a reply joined, which is what a failure
+// message needs. Printing the content slice prints pointers.
+func resultText(result *sdk.CallToolResult) string {
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	return said
+}
+
 // call invokes one tool and decodes its structured result into value.
 func call(
 	ctx context.Context,
@@ -2957,7 +2969,7 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 	if result := call(ctx, t, session, "respawn_pane", map[string]any{
 		"paneId": doomed, "command": "true", "kill": true,
 	}, nil); result.IsError {
-		t.Fatalf("respawn_pane: %#v", result.Content)
+		t.Fatalf("respawn_pane on %s: %s", doomed, resultText(result))
 	}
 
 	// Reaping waits on the child's exit reaching tmux, so this polls rather
@@ -2978,13 +2990,13 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 	if result := call(ctx, t, session, "create_window", map[string]any{
 		"sessionName": "reaped", "name": "held",
 	}, &made); result.IsError {
-		t.Fatalf("create_window: %#v", result.Content)
+		t.Fatalf("create_window: %s", resultText(result))
 	}
 	if result := call(ctx, t, session, "set_option", map[string]any{
 		"name": "remain-on-exit", "value": "on",
 		"scope": "window", "windowId": made.WindowID,
 	}, nil); result.IsError {
-		t.Fatalf("set_option: %#v", result.Content)
+		t.Fatalf("set_option: %s", resultText(result))
 	}
 	if result := call(ctx, t, session, "respawn_pane", map[string]any{
 		"paneId": made.PaneID, "command": "true", "kill": true,
