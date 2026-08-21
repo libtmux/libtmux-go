@@ -2956,15 +2956,24 @@ func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 //libtmux:real-tmux
 func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 	session, _, ctx := connect(t)
-	// Two windows, so losing one leaves the session and the server standing
-	// while the rest of this runs.
-	workspace(ctx, t, session, "session_name: reaped\nwindows:\n"+
-		"  - panes:\n      - {}\n  - panes:\n      - {}\n")
-	panes := paneIDs(ctx, t, session)
-	if len(panes) != 2 {
-		t.Fatalf("want two panes to work with, got %v", panes)
+	// Both panes run something that outlives the assertions. A pane left to a
+	// shell is a pane that can end on its own, and one ending early takes its
+	// window and then the session out from under the test -- which is how this
+	// failed on a slower machine while passing on every tmux release here.
+	if result := call(ctx, t, session, "create_session", map[string]any{
+		"name": "reaped", "command": "sleep 300",
+	}, nil); result.IsError {
+		t.Fatalf("create_session: %s", resultText(result))
 	}
-	doomed := panes[1]
+	var doomedWindow struct {
+		PaneID string `json:"paneId"`
+	}
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "reaped", "name": "doomed", "command": "sleep 300",
+	}, &doomedWindow); result.IsError {
+		t.Fatalf("create_window: %s", resultText(result))
+	}
+	doomed := doomedWindow.PaneID
 
 	if result := call(ctx, t, session, "respawn_pane", map[string]any{
 		"paneId": doomed, "command": "true", "kill": true,
