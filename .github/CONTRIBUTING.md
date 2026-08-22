@@ -2,9 +2,9 @@
 
 Thanks for looking. This repository holds four Go modules, and the gates below
 are what a change has to pass. `AGENTS.md` covers the same ground in more
-detail and is the authority where the two disagree, except on writing: the
-conventions under [Writing](#writing) govern doc comments, Markdown, and the
-changelog, and `AGENTS.md` points here for them.
+detail and is the authority where the two disagree. For how to write a doc
+comment, a changelog entry, or a commit message, follow
+[WRITING.md](WRITING.md).
 
 ## Getting set up
 
@@ -95,122 +95,5 @@ and the file it is in is not one the change touched.
 
 ## Writing
 
-Three surfaces, one voice. A doc comment says what a caller may rely on; a
-changelog entry says what changed; prose says what happens. All three are
-present tense, lead with the thing being described, and stop. Why it was built
-that way belongs in the commit message, which is timestamped and attached to
-the diff.
-
-The most useful editing operation is deleting the introductory sentence.
-
-| Instead of | Prefer |
-| --- | --- |
-| "We added…" | "`Foo` now supports…" |
-| "New and improved" | "`Foo` now…" |
-| "powerful", "seamless" | state the capability |
-| "easily", "simply" | omit |
-| "robust" | name the failure that is handled |
-| "optimized" | give the magnitude |
-| "various fixes" | name the components |
-| "under the hood" | omit unless observable |
-| "please note that" | state the fact |
-| "in order to" | "to" |
-| "utilize" | "use" |
-
-### Doc comments
-
-Every exported declaration has one, and it begins with the name of the thing it
-describes — `go doc` and pkg.go.dev use that to build the summary, so
-`// Start boots the server` works and `// This function starts the server` does
-not. The first sentence stands alone and ends with a period. Use `//` on every
-line, never `/* */`.
-
-Document the contract, not the implementation: what a caller may rely on. Zero
-values, what `nil` means, ownership, mutation, ordering, whether it blocks,
-whether it is safe for concurrent use, which errors are returned, whether
-returned memory aliases the input. Those are what a reader infers the API from.
-A comment describing the mutex inside a type is not documentation.
-
-Break long comment lines at sentence and clause boundaries rather than at a
-column, so an edit shows as one changed line rather than a reflowed paragraph.
-Indent a line to render it as a code block.
-
-Doc comments are Go doc comment syntax, not Markdown. It has paragraphs, `# `
-headings, lists, indented preformatted blocks, and links. It has no bold, no
-italics, and no inline backticks — those arrive at the reader as the characters
-they are. Square brackets are doc links: `[Run]` and `[tmux.Server]` resolve,
-and a bracketed unexported identifier renders as its own brackets, so write it
-in prose instead.
-
-### Implementation comments
-
-Keep one only when losing it would force a future maintainer to rediscover a
-consequential, non-obvious fact that the code, types, assertions, and tests do
-not already communicate: an upstream quirk, an invariant a type cannot express,
-code that looks wrong and is not. Never narrate the next line. `AGENTS.md`
-states the rule in full, with its keep and delete lists.
-
-### The changelog
-
-A ledger, not a narrative. It is scanned, and the question a reader is asking
-is whether an entry affects them, so one change gets one bullet:
-
-```markdown
-### mcp
-
-- `run_command` no longer returns its own sourcing line as output.
-- Add `onError` to the three batch tools, choosing between stopping at the
-  first failure and running the calls after it. Stopping remains the default.
-```
-
-Group by the component affected, not by whether something is a feature or a
-fix; a reader arrives knowing which part they use. A component with more than a
-handful of entries takes `####` headings for its areas.
-
-Lead with the identifier and a concrete verb — add, fix, remove, deprecate,
-support, requires, `now`, `no longer`. Name identifiers literally: `Client.Do`,
-`--client`, `LIBTMUX_SAFETY`, `tmux://panes/{pane}`. One to three sentences.
-
-State a changed default explicitly, and an incompatibility more explicitly
-still, with the way forward in the same bullet:
-
-```markdown
-- `show_option`, `set_option` and `show_hooks` now reject `windowId` at pane
-  scope rather than ignoring it. Pass `scope: window` to read at window scope.
-```
-
-Do not sell a fix: "no longer returns another command's reply", not "improves
-reliability". Do not describe effort. Give the old behaviour only where it
-explains a break, and mention mechanism only where a caller can observe it — a
-refactor that changes nothing observable is not an entry.
-
-Entries land under `## Unreleased`. The maintainer assigns the version when
-cutting a release, so nothing here predicts one.
-
-### Markdown
-
-Keep to what a plain CommonMark renderer understands. No renderer-specific
-extension, and in particular no GitHub alert blocks — `> [!NOTE]` and the rest
-are literal text everywhere but GitHub, which is where the fewest readers of a
-Go module are. Tables, badges, and links are fine.
-
-Code blocks are paste-and-run units: one command per block, explanations in
-prose above rather than as `#` comments inside, shell commands tagged `console`
-with a `$ ` prefix, and a long command split with `\` one flag per line.
-
-
-## Commits
-
-```
-Scope(type[detail]): concise description
-
-why: Explanation of necessity or impact.
-
-what:
-- Specific technical changes made
-- Focused on a single topic
-```
-
-Keep the subject to 50 characters or fewer and wrap body lines at 72. Common
-types: **feat**, **fix**, **refactor**, **docs**, **chore**, **test**,
-**style**. Never create or push tags; the owner handles releases.
+For doc comments, `CHANGELOG.md`, release notes, commit messages, Markdown, and
+source comments, follow [WRITING.md](WRITING.md).
