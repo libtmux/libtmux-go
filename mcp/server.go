@@ -63,9 +63,12 @@ var closedArguments = map[string]map[string][]any{
 	"move_pane":    {"direction": placementValues},
 	// Required, and no default: which side to look toward is the whole
 	// question find_pane_by_position asks.
-	"find_pane_by_position": {"direction": {"above", "below", "left", "right"}},
-	"list_panes":            {"detail": {"", detailStandard, detailFull}},
-	"get_recipe":            {"name": recipeValues},
+	"find_pane_by_position":        {"direction": {"above", "below", "left", "right"}},
+	"list_panes":                   {"detail": {"", detailStandard, detailFull}},
+	"get_recipe":                   {"name": recipeValues},
+	"call_readonly_tools_batch":    {"onError": onErrorValues},
+	"call_mutating_tools_batch":    {"onError": onErrorValues},
+	"call_destructive_tools_batch": {"onError": onErrorValues},
 }
 
 // scopeValues is what a scope takes. Every tool taking one reads empty as pane
@@ -75,6 +78,10 @@ var scopeValues = []any{"", scopeServer, scopeSession, scopeWindow, scopePane}
 // placementValues is where a pane goes. Both tools taking one read empty as
 // below.
 var placementValues = []any{"", "below", "above", "right", "left"}
+
+// onErrorValues is what a batch does with a failure, empty included: every
+// batch documents empty as stopping.
+var onErrorValues = []any{"", onErrorStop, onErrorContinue}
 
 // recipeValues comes from the recipes themselves rather than a second list of
 // their names, which would be wrong the first time one is added.

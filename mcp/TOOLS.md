@@ -631,12 +631,14 @@ Run several tools in one request, in order, including the ones that end somethin
 | Argument | Type | |
 | --- | --- | --- |
 | `calls` **required** | array | the calls to run, in order |
+| `onError` | `""`, `stop`, `continue` | what a failing call does to the calls after it; empty stops the batch |
 
 | Returns | Type |
 | --- | --- |
 | `completed` **required** | integer |
 | `results` **required** | array |
 | `skipped` **required** | array |
+| `failed` | integer |
 
 ### `call_mutating_tools_batch`
 
@@ -647,12 +649,14 @@ Changes tmux by a step. Repeating it compounds.
 | Argument | Type | |
 | --- | --- | --- |
 | `calls` **required** | array | the calls to run, in order |
+| `onError` | `""`, `stop`, `continue` | what a failing call does to the calls after it; empty stops the batch |
 
 | Returns | Type |
 | --- | --- |
 | `completed` **required** | integer |
 | `results` **required** | array |
 | `skipped` **required** | array |
+| `failed` | integer |
 
 ### `call_readonly_tools_batch`
 
@@ -663,12 +667,14 @@ Reads only. Repeating it changes nothing.
 | Argument | Type | |
 | --- | --- | --- |
 | `calls` **required** | array | the calls to run, in order |
+| `onError` | `""`, `stop`, `continue` | what a failing call does to the calls after it; empty stops the batch |
 
 | Returns | Type |
 | --- | --- |
 | `completed` **required** | integer |
 | `results` **required** | array |
 | `skipped` **required** | array |
+| `failed` | integer |
 
 ### `capture_pane`
 

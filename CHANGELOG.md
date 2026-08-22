@@ -100,6 +100,15 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+The three batch tools take `onError`, which chooses between stopping at the
+first failure and running the calls after it. Stopping is still the default and
+suits a sequence — split, resize, run — where a step nobody took makes the ones
+after it wrong. Independent calls are the other ordinary shape, and there a stop
+turned one failure into a whole batch a caller could not tell the state of and
+had to re-send call by call to find out. A reply told to continue reports
+`failed` and skips nothing. The Python server of the same name has had the
+choice since it was written.
+
 `delete_buffer` says what a buffer left behind costs, which is what decides
 whether to call it: the buffer stays on the tmux server for anyone attached to
 paste by hand, and tmux drops the oldest of a bounded stack to make room.

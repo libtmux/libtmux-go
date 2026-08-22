@@ -90,9 +90,11 @@ registration.
 
 Both run their batch tools through the same per-tool schemas as a direct call.
 
-The Python batch takes `on_error`, choosing between stopping at the first
-failure and running the rest. This one always stops, and reports which calls it
-skipped.
+Both batches choose what a failure does to the calls after it — `on_error`
+there, `onError` here — and both default to stopping. Stopping suits a sequence,
+where a step nobody took makes the ones after it wrong; continuing suits
+independent calls, where one failure otherwise turns the whole batch into
+something a caller cannot tell the state of.
 
 ## Being found
 

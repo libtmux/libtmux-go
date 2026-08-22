@@ -1313,6 +1313,77 @@ func TestWaitForTextSeesWhatThePaneAlreadyShowed(t *testing.T) {
 	}
 }
 
+// TestABatchToldToContinueRunsTheCallsAfterAFailure covers the other ordinary
+// shape a batch has.
+//
+// Stopping is right for a sequence, where a step nobody took makes the ones
+// after it wrong. It is wrong for independent calls, where one failure turned
+// the whole batch into something a caller cannot tell the state of and had to
+// re-send call by call to find out. The Python server of the same name has
+// taken the choice since it was written.
+//
+//libtmux:real-tmux
+func TestABatchToldToContinueRunsTheCallsAfterAFailure(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: continuing\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	// A failure between two calls that would each succeed on their own.
+	calls := []map[string]any{
+		{"tool": "get_pane_info", "arguments": map[string]any{"paneId": pane}},
+		{"tool": "get_pane_info", "arguments": map[string]any{"paneId": "%9000"}},
+		{"tool": "list_panes", "arguments": map[string]any{}},
+	}
+	type report struct {
+		Results []struct {
+			Tool  string `json:"tool"`
+			Error string `json:"error"`
+		} `json:"results"`
+		Completed int      `json:"completed"`
+		Failed    int      `json:"failed"`
+		Skipped   []string `json:"skipped"`
+	}
+
+	var stopped report
+	call(ctx, t, session, "call_readonly_tools_batch",
+		map[string]any{"calls": calls}, &stopped)
+	if stopped.Completed != 1 || len(stopped.Results) != 2 {
+		t.Errorf("stopping ran %d and reported %d results, want 1 and 2",
+			stopped.Completed, len(stopped.Results))
+	}
+	if !slices.Equal(stopped.Skipped, []string{"list_panes"}) {
+		t.Errorf("stopping skipped %q, want the call after the failure", stopped.Skipped)
+	}
+
+	var continued report
+	call(ctx, t, session, "call_readonly_tools_batch",
+		map[string]any{"calls": calls, "onError": "continue"}, &continued)
+	if continued.Completed != 2 {
+		t.Errorf("continuing ran %d of the two that work", continued.Completed)
+	}
+	if continued.Failed != 1 {
+		t.Errorf("continuing reported %d failures, want 1", continued.Failed)
+	}
+	if len(continued.Results) != 3 {
+		t.Fatalf("continuing reported %d results, want one per call", len(continued.Results))
+	}
+	if len(continued.Skipped) != 0 {
+		t.Errorf("continuing skipped %q, and it skips nothing", continued.Skipped)
+	}
+	if continued.Results[1].Error == "" {
+		t.Error("the failing call is not reported as failed")
+	}
+	if continued.Results[2].Tool != "list_panes" || continued.Results[2].Error != "" {
+		t.Errorf("the call after the failure did not run: %+v", continued.Results[2])
+	}
+
+	// An unknown value is refused rather than read as the default.
+	if result := call(ctx, t, session, "call_readonly_tools_batch",
+		map[string]any{"calls": calls[:1], "onError": "carry-on"}, nil); !result.IsError {
+		t.Error("a batch took an onError it does not have")
+	}
+}
+
 // TestBatchArgumentsAreCheckedLikeAnyCall covers the one place a mistake used
 // to pass: the schema the SDK enforces on a call of its own does not reach a
 // call inside a batch, so a misspelled field was dropped and the call ran on

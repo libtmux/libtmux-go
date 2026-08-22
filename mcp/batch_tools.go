@@ -49,6 +49,12 @@ type batchCall struct {
 type batchInput struct {
 	// Calls run in order, each after the one before it finished.
 	Calls []batchCall `json:"calls" jsonschema:"the calls to run, in order"`
+	// OnError decides what a failure does to the calls after it. Stopping is
+	// the default because a batch is usually a sequence -- split, then resize,
+	// then run -- where a step nobody took makes the ones after it wrong.
+	// Independent calls are the other ordinary shape, and there a stop turns
+	// one failure into a whole batch nobody can tell the state of.
+	OnError string `json:"onError,omitempty" jsonschema:"what a failing call does to the calls after it; empty stops the batch"`
 }
 
 // batchResult is what one call in a batch produced.
@@ -72,8 +78,35 @@ type batchOutput struct {
 	// Skipped names the tools after the failure, in order, which never ran. A
 	// caller of the mutating batch has to know which of its changes were not
 	// made, and counting the difference between the calls it sent and the
-	// results it got back is not something a reply should ask of it.
+	// results it got back is not something a reply should ask of it. It is
+	// empty when the batch was told to continue, where nothing is skipped and
+	// Failed is what says how it went.
 	Skipped []string `json:"skipped"`
+	// Failed is how many calls failed, which only a batch told to continue can
+	// have more than one of. Reading it off Results means walking them.
+	Failed int `json:"failed,omitempty"`
+}
+
+const (
+	// onErrorStop ends a batch at its first failure.
+	onErrorStop = "stop"
+	// onErrorContinue runs every call whatever the ones before it did.
+	onErrorContinue = "continue"
+)
+
+// resolveOnError reads what a failure should do. An unknown value is refused
+// rather than treated as the default, because the two answers differ in what
+// they leave behind and a caller that asked for one and got the other cannot
+// tell from the reply.
+func resolveOnError(requested string) (string, error) {
+	switch requested {
+	case "", onErrorStop:
+		return onErrorStop, nil
+	case onErrorContinue:
+		return onErrorContinue, nil
+	default:
+		return "", fmt.Errorf("onError %q is not stop or continue", requested)
+	}
 }
 
 // callReadOnlyToolsBatch runs several reading tools in one request.
@@ -133,6 +166,10 @@ func (t *tools) runBatch(
 	if len(input.Calls) == 0 {
 		return nil, batchOutput{}, errors.New("a batch needs at least one call")
 	}
+	onError, err := resolveOnError(input.OnError)
+	if err != nil {
+		return nil, batchOutput{}, err
+	}
 	for _, call := range input.Calls {
 		known, served := t.dispatchers[call.Tool]
 		if !served {
@@ -157,14 +194,22 @@ func (t *tools) runBatch(
 			output.Results = append(output.Results, batchResult{
 				Tool: call.Tool, Error: "arguments could not be encoded: " + err.Error(),
 			})
-			break
+			output.Failed++
+			if onError == onErrorStop {
+				break
+			}
+			continue
 		}
 		value, err := t.dispatchers[call.Tool].call(ctx, request, encodedArguments)
 		if err != nil {
 			output.Results = append(output.Results, batchResult{
 				Tool: call.Tool, Error: err.Error(),
 			})
-			break
+			output.Failed++
+			if onError == onErrorStop {
+				break
+			}
+			continue
 		}
 		decoded := map[string]any{}
 		encoded, err := json.Marshal(value)
@@ -175,7 +220,11 @@ func (t *tools) runBatch(
 			output.Results = append(output.Results, batchResult{
 				Tool: call.Tool, Error: "result could not be encoded: " + err.Error(),
 			})
-			break
+			output.Failed++
+			if onError == onErrorStop {
+				break
+			}
+			continue
 		}
 		output.Results = append(output.Results, batchResult{Tool: call.Tool, Result: decoded})
 		output.Completed++
