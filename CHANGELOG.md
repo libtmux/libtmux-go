@@ -100,6 +100,14 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`show_option`, `set_option`, and `show_hooks` refuse a `windowId` at pane
+scope, which is what they already did with every other mismatched pair. Pane
+scope was the one that let one through: tmux walks pane, then window, then
+session, then server from the pane it is handed, so a caller who named a window
+was answered about the active pane instead, and nothing in the reply said the
+argument had been thrown away. Setting one that way wrote to the pane. Pane is
+also the default scope, so naming only a `windowId` hit this.
+
 A resource read on a socket with no tmux server says so, in the same sentence
 the listings use. Five of the seven reads answered with tmux's own "command
 failed: display-message exited 1: error connecting to ...", which names an

@@ -204,6 +204,10 @@ func (t *tools) setOption(
 func scopeUses(scope, paneID, windowID string) error {
 	switch scope {
 	case scopePane:
+		if strings.TrimSpace(windowID) != "" {
+			return fmt.Errorf("windowId is not read at %s scope; use scope "+
+				"window, or drop windowId", scope)
+		}
 		return nil
 	case scopeWindow:
 		if strings.TrimSpace(paneID) != "" {

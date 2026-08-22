@@ -2858,6 +2858,27 @@ func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
 			true,
 		},
 		{
+			// Pane scope was the one that read nothing back: tmux walks
+			// pane, window, session, server from the pane it is given, so a
+			// caller who meant the window got the active pane's answer.
+			"a window at pane scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "pane", "windowId": "@0"},
+			true,
+		},
+		{
+			"a window at pane scope, setting one", "set_option",
+			map[string]any{
+				"name": "history-limit", "value": "5000",
+				"scope": "pane", "windowId": "@0",
+			},
+			true,
+		},
+		{
+			"a window at the default scope, which is pane", "show_hooks",
+			map[string]any{"windowId": "@0"},
+			true,
+		},
+		{
 			"a pane at pane scope is the point", "show_option",
 			map[string]any{"name": "history-limit", "scope": "pane", "paneId": pane},
 			false,
