@@ -1262,6 +1262,31 @@ func TestBatchArgumentsAreCheckedLikeAnyCall(t *testing.T) {
 	if after := len(paneIDs(ctx, t, session)); after != before {
 		t.Errorf("a rejected call still split a pane: %d then %d", before, after)
 	}
+
+	// The closed sets are part of the same schema, so a batch has to hold a
+	// value to them too, and by the schema rather than by whatever the handler
+	// happens to tolerate.
+	for _, arguments := range []map[string]any{
+		{"paneId": panes[0], "direction": "sideways"},
+		// Accepted by the handler, which folds case, and outside the set the
+		// schema publishes.
+		{"paneId": panes[0], "direction": "RIGHT"},
+	} {
+		batch.Completed, batch.Results = 0, nil
+		call(ctx, t, session, "call_mutating_tools_batch", map[string]any{
+			"calls": []map[string]any{{"tool": "split_window", "arguments": arguments}},
+		}, &batch)
+		if batch.Completed != 0 {
+			t.Errorf("a batch took direction %q", arguments["direction"])
+		}
+		if len(batch.Results) == 0 || !strings.Contains(batch.Results[0].Error, "enum") {
+			t.Errorf("direction %q refused for the wrong reason: %+v",
+				arguments["direction"], batch.Results)
+		}
+	}
+	if after := len(paneIDs(ctx, t, session)); after != before {
+		t.Errorf("a rejected direction still split a pane: %d then %d", before, after)
+	}
 }
 
 // TestSendKeysRecoversAPaneLeftBusy covers the way back from a run_command

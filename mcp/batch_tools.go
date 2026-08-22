@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -197,12 +198,20 @@ func batched[In, Out any](
 	request *mcp.CallToolRequest,
 	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
 	arguments json.RawMessage,
+	schema *jsonschema.Resolved,
 ) (any, error) {
-	// The arguments are decoded strictly, because the schema the SDK enforces
-	// on a call of its own is not applied to one reached from here. Without
-	// this a misspelled field is dropped and the call runs on defaults,
-	// reporting success for something the client did not ask for, and a batch
-	// is where a misspelling is most likely.
+	// The SDK applies a tool's schema only to a call it dispatches itself, so
+	// a batch has to apply it here or a batched call would accept what the
+	// same call alone is refused: a value outside a closed set, a number where
+	// a string goes.
+	if schema != nil {
+		if err := schema.Validate(argumentValue(arguments)); err != nil {
+			return nil, fmt.Errorf("arguments are not what this tool takes: %w", err)
+		}
+	}
+	// Decoded strictly as well, so a tool whose schema would not resolve still
+	// refuses a misspelled field rather than dropping it and running on
+	// defaults, which reports success for something nobody asked for.
 	var input In
 	if len(arguments) != 0 {
 		decoder := json.NewDecoder(bytes.NewReader(arguments))
@@ -219,6 +228,17 @@ func batched[In, Out any](
 		return nil, fmt.Errorf("%s", batchErrorText(result))
 	}
 	return output, nil
+}
+
+// argumentValue is one call's arguments as a schema validator reads them.
+// Absent arguments are an empty object rather than null, because a tool that
+// needs none is called in a batch by naming it and nothing else.
+func argumentValue(arguments json.RawMessage) any {
+	var value any
+	if len(arguments) == 0 || json.Unmarshal(arguments, &value) != nil || value == nil {
+		return map[string]any{}
+	}
+	return value
 }
 
 // batchErrorText reports what a failing call said, so a batch's report carries

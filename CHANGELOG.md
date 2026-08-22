@@ -100,6 +100,15 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A call inside a batch is checked against the same schema as a call on its own.
+The SDK validates only what it dispatches itself, and a batch dispatches its
+own calls, so `call_readonly_tools_batch` and the two beside it were the one
+way into a handler with no schema in front of it: an argument outside a closed
+set, or of the wrong type entirely, reached the handler and was refused or
+tolerated by whatever that handler happened to do. Arguments were already
+decoded strictly there, which caught a misspelled field; it could not catch a
+wrong value in a field spelled right.
+
 Every argument whose set of values is closed now publishes that set as a JSON
 Schema `enum`: `scope` on `show_option`, `set_option`, and `show_hooks`,
 `direction` on `split_window`, `move_pane`, and `find_pane_by_position`,

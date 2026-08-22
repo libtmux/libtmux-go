@@ -114,6 +114,12 @@ func register[In, Out any](
 			tool.InputSchema = schema
 		}
 	}
+	// The same schema the SDK enforces on a direct call, kept so a batch can
+	// enforce it too. The SDK applies it only to calls it dispatches itself.
+	var resolved *jsonschema.Resolved
+	if schema, ok := tool.InputSchema.(*jsonschema.Schema); ok {
+		resolved, _ = schema.Resolve(nil)
+	}
 	mcp.AddTool(server, tool, handler)
 	if !t.batchable {
 		// Advertised, but not reachable from inside a batch. Remembering which
@@ -129,7 +135,7 @@ func register[In, Out any](
 			request *mcp.CallToolRequest,
 			arguments json.RawMessage,
 		) (any, error) {
-			return batched(ctx, request, handler, arguments)
+			return batched(ctx, request, handler, arguments, resolved)
 		},
 	}
 }
