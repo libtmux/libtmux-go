@@ -18,7 +18,7 @@ isolates a run, and using it leaves the person's own configuration alone.
 | codex | `codex exec` | `CODEX_HOME` | `codex mcp get <name>` — parses config, no spawn | `--dangerously-bypass-approvals-and-sandbox` |
 | gemini | `gemini -p` | project `.gemini/settings.json` | `gemini mcp list` | `--approval-mode yolo --skip-trust` |
 | agy | `agy -p` | `--gemini_dir <path>` | none short of a model call | `--dangerously-skip-permissions` |
-| opencode | `opencode run` | `opencode.json` in cwd | not established | not established |
+| opencode | `opencode run` | `opencode.json` in cwd | a headless run — it calls tools unprompted | none needed |
 | pi | none — no MCP client | n/a | n/a | n/a |
 
 ## What was reached
@@ -55,9 +55,9 @@ own status command before writing anything down about the server.
 
 **Whether a CLI passes your environment to the server it spawns is per CLI,
 and it decides which tmux the server reaches.** With `TMUX_TMPDIR` exported and
-the same prompt, claude and grok reached the probe's tmux; codex and
+the same prompt, claude, grok, and opencode reached the probe's tmux; codex and
 cursor-agent reached the default socket and reported the machine as empty. A
-test that sets `TMUX_TMPDIR` and asserts on panes therefore passes on two of
+test that sets `TMUX_TMPDIR` and asserts on panes therefore passes on three of
 them and quietly measures nothing on the other two. Put the socket in the
 config's `env` when it must be certain, and read the reply's `serverNote` or
 `get_server_info`'s `socketPath` to find out which one answered.
