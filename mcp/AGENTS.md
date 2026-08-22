@@ -12,6 +12,15 @@ everything about the real process: JSON-RPC framing, schema validation on the
 wire, argument coercion by a client, and the handshake itself. Test through a
 real client as well.
 
+`.agents/skills/testing-the-mcp-server/` carries the whole procedure: the
+three-socket layout, the fidelity layers, and a per-CLI matrix of isolation
+levers and what each client's failure actually means. The rest of this section
+is the part worth knowing before reading it.
+
+The socket is chosen once, at launch, rather than per call as the Python server
+allows: `-socket-name` or `-socket-path`, falling back to `LIBTMUX_SOCKET`. A
+flag wins over the variable, and `-doctor` names which of them was taken.
+
 ### The MCP Inspector
 
 Configure it with a client config file rather than argv. The Inspector's own
