@@ -33,9 +33,18 @@ func notFound(err error, what, id, lister string) error {
 	if !errors.Is(err, tmux.ErrSnapshotNotFound) {
 		return err
 	}
-	return fmt.Errorf("no %s %s on this tmux server; %s reports the %ss that exist",
-		what, id, lister, what)
+	return missing{fmt.Errorf(
+		"no %s %s on this tmux server; %s reports the %ss that exist",
+		what, id, lister, what)}
 }
+
+// missing keeps the prose above answerable by errors.Is. Replacing tmux's
+// message with a better one otherwise throws away the one fact a caller might
+// branch on, which is what tells a target that is not there from a server that
+// could not be asked.
+type missing struct{ error }
+
+func (missing) Is(target error) bool { return target == tmux.ErrSnapshotNotFound }
 
 // resolveSession finds the session a call names, or the only one there is.
 func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, error) {
@@ -51,9 +60,9 @@ func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, 
 				return session, nil
 			}
 		}
-		return tmux.Session{}, fmt.Errorf(
+		return tmux.Session{}, missing{fmt.Errorf(
 			"no session named %q on this tmux server; list_sessions reports "+
-				"the sessions that exist", wanted)
+				"the sessions that exist", wanted)}
 	}
 	switch len(sessions) {
 	case 0:

@@ -100,6 +100,23 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A resource read that names nothing answers with the protocol's own
+`-32002 Resource not found` rather than code 0, and keeps the message that
+says what to call instead. A client had no way to tell a URI naming nothing
+from a server that broke, because a handler's plain error reaches the wire
+as code 0.
+
+A pane read through a resource says "no pane %9 on this tmux server;
+list_panes reports the panes that exist", which is what the equivalent window
+and session reads already said. Two of the six reads went straight to tmux and
+answered with tmux's own "snapshot object not found", which names the mechanism
+and leaves the way out to be guessed.
+
+Both pane templates say that an id is written without its sigil, as both window
+templates already did. Every tool hands a pane back as `%1`, the templates were
+the only place a client learns to write it as `1`, and the two that are asked
+for most often were the two that did not say.
+
 `list_panes`, `list_windows`, and `list_sessions` say when there is no tmux
 server on the socket at all, in a `serverNote` present only then. They answer
 rather than failing, which is right — asking what is there is the ordinary

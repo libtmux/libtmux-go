@@ -3,11 +3,13 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -78,11 +80,13 @@ func addResources(server *mcp.Server, t *tools) {
 		},
 		{
 			templatePane, "tmux pane", "One tmux Pane",
-			"One pane's identity, position, and what it is running.",
+			"One pane's identity, position, and what it is running, addressed " +
+				"by pane id without its sigil, so %1 is written 1.",
 		},
 		{
 			templatePaneContent, "tmux pane content", "Contents of One Pane",
-			"What one pane is showing, as text.",
+			"What one pane is showing, as text, addressed by pane id without " +
+				"its sigil, so %1 is written 1.",
 		},
 	} {
 		server.AddResourceTemplate(&mcp.ResourceTemplate{
@@ -116,7 +120,31 @@ func (t *tools) readTemplated(
 	ctx context.Context,
 	request *mcp.ReadResourceRequest,
 ) (*mcp.ReadResourceResult, error) {
-	uri := request.Params.URI
+	result, err := t.readOne(ctx, request.Params.URI)
+	return result, resourceError(request.Params.URI, err)
+}
+
+// resourceError says on the wire that a URI named nothing.
+//
+// The SDK sends a handler's plain error as code 0, which a client cannot tell
+// from a server that broke; the protocol has a code for this and reserves the
+// message for "Resource not found", which says less than the prose here does.
+// Both fit: the code classifies and the message says what to call instead.
+func resourceError(uri string, err error) error {
+	if err == nil || !errors.Is(err, tmux.ErrSnapshotNotFound) {
+		return err
+	}
+	return &jsonrpc.Error{
+		Code:    mcp.CodeResourceNotFound,
+		Message: err.Error(),
+		Data:    json.RawMessage(fmt.Sprintf(`{"uri":%q}`, uri)),
+	}
+}
+
+func (t *tools) readOne(
+	ctx context.Context,
+	uri string,
+) (*mcp.ReadResourceResult, error) {
 	switch {
 	case strings.HasPrefix(uri, "tmux://sessions/") && strings.HasSuffix(uri, "/windows"):
 		name := strings.TrimSuffix(strings.TrimPrefix(uri, "tmux://sessions/"), "/windows")
@@ -176,7 +204,7 @@ func (t *tools) readWindowPanes(
 ) (*mcp.ReadResourceResult, error) {
 	window, err := t.tmux().Window(ctx, tmux.WindowID(id))
 	if err != nil {
-		return nil, err
+		return nil, notFound(err, "window", id, "list_windows")
 	}
 	panes, err := window.SearchPanes(ctx, nil)
 	if err != nil {
@@ -212,7 +240,7 @@ func (t *tools) readWindow(ctx context.Context, uri, id string) (*mcp.ReadResour
 func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
 	pane, err := t.tmux().Pane(ctx, tmux.PaneID(id))
 	if err != nil {
-		return nil, err
+		return nil, notFound(err, "pane", id, "list_panes")
 	}
 	return jsonResource(uri, t.summarize(ctx, pane))
 }

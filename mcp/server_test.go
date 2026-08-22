@@ -17,6 +17,7 @@ import (
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -3286,6 +3287,46 @@ func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
 	}
 }
 
+// TestAResourceNamingNothingSaysSoInTheProtocol covers the two halves of a
+// failed read: the code a client branches on and the message a model acts on.
+//
+// A handler's plain error reaches the wire as code 0, which says neither that
+// the URI named nothing nor that the server broke, and the reads that went
+// straight to tmux answered with tmux's own "snapshot object not found", which
+// names the mechanism rather than the way out.
+//
+//libtmux:real-tmux
+func TestAResourceNamingNothingSaysSoInTheProtocol(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: absent\nwindows:\n  - panes:\n      - {}\n")
+
+	for uri, want := range map[string]string{
+		"tmux://panes/9000":         "no pane %9000",
+		"tmux://panes/9000/content": "no pane %9000",
+		"tmux://windows/9000":       "no window @9000",
+		"tmux://windows/9000/panes": "no window @9000",
+		"tmux://sessions/nowhere":   `no session named "nowhere"`,
+	} {
+		_, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri})
+		if err == nil {
+			t.Errorf("%s was read", uri)
+			continue
+		}
+		var wire *jsonrpc.Error
+		if !errors.As(err, &wire) {
+			t.Errorf("%s failed as %T, not a JSON-RPC error", uri, err)
+			continue
+		}
+		if wire.Code != sdk.CodeResourceNotFound {
+			t.Errorf("%s failed with code %d, want %d",
+				uri, wire.Code, sdk.CodeResourceNotFound)
+		}
+		if !strings.Contains(wire.Message, want) {
+			t.Errorf("%s says %q, want it to name %q", uri, wire.Message, want)
+		}
+	}
+}
+
 // TestEveryAdvertisedResourceCanBeRead covers a template a client cannot use.
 //
 // A resource template is a promise: a client fills in the blank and reads. The
@@ -3328,6 +3369,16 @@ func TestEveryAdvertisedResourceCanBeRead(t *testing.T) {
 		"tmux://panes/{pane}":               "tmux://panes/" + bare(only.ID),
 		"tmux://panes/{pane}/content":       "tmux://panes/" + bare(only.ID) + "/content",
 	}
+	// A template whose blank had to lose a sigil to be readable has to say
+	// that it did. Every tool hands an id back with one, so the description is
+	// the only place a client learns to take it off, and a template silent
+	// about it reads as one that takes what the tools returned.
+	sigilled := map[string]bool{
+		"tmux://windows/{window}":       true,
+		"tmux://windows/{window}/panes": true,
+		"tmux://panes/{pane}":           true,
+		"tmux://panes/{pane}/content":   true,
+	}
 	if len(templates.ResourceTemplates) != len(filled) {
 		t.Errorf("%d templates advertised, %d covered here",
 			len(templates.ResourceTemplates), len(filled))
@@ -3337,6 +3388,11 @@ func TestEveryAdvertisedResourceCanBeRead(t *testing.T) {
 		if !ok {
 			t.Errorf("%s is advertised and this test does not read it", template.URITemplate)
 			continue
+		}
+		if sigilled[template.URITemplate] &&
+			!strings.Contains(template.Description, "without its sigil") {
+			t.Errorf("%s takes an id with a sigil stripped and says %q",
+				template.URITemplate, template.Description)
 		}
 		if _, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri}); err != nil {
 			t.Errorf("%s advertises %q, and reading %s says: %v",
