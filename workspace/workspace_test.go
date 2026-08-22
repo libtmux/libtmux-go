@@ -115,6 +115,11 @@ func TestParseAcceptsQuotedBooleans(t *testing.T) {
 	}
 }
 
+// The panes run something that does not finish. A pane whose command exits
+// takes its window, then the session, then the server -- so a test asserting
+// on what was built races that teardown, and answers "no server running" on a
+// machine slow enough to lose.
+//
 //libtmux:real-tmux
 func TestBuildCreatesTheDescribedHierarchy(t *testing.T) {
 	server, ctx := testServer(t)
@@ -123,11 +128,11 @@ session_name: build-test
 windows:
   - window_name: editor
     panes:
-      - echo one
-      - echo two
+      - sleep 300
+      - sleep 300
   - window_name: shell
     panes:
-      - echo three
+      - sleep 300
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -180,7 +185,7 @@ options:
 windows:
   - window_name: only
     panes:
-      - echo hi
+      - sleep 300
 `))
 	if err != nil {
 		t.Fatal(err)
