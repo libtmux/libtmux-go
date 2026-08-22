@@ -1264,6 +1264,81 @@ func connectAsking(
 	return clientSession, target, ctx, &asked
 }
 
+// TestEndingWhatHoldsTheCallerPaneIsAskedAbout covers the way around the write
+// guard.
+//
+// The guard names one pane, and everything containing it reaches the same
+// terminal one level up: a client refused kill_pane got the same outcome from
+// kill_window, and was told nothing, because the answer travelled through the
+// pane that had just gone. The Python server of the same name refuses all four.
+//
+//libtmux:real-tmux
+func TestEndingWhatHoldsTheCallerPaneIsAskedAbout(t *testing.T) {
+	const ownPane = "%0"
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	t.Setenv("TMUX_PANE", ownPane)
+	t.Setenv("TMUX", "")
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: holding\nwindows:\n  - panes:\n      - {}\n")
+	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || len(socket.Stdout) == 0 {
+		t.Fatalf("read the socket path: %v", err)
+	}
+	t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+	var listed struct {
+		Panes []struct {
+			WindowID string `json:"windowId"`
+			Session  string `json:"session"`
+		} `json:"panes"`
+	}
+	call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	if len(listed.Panes) == 0 {
+		t.Fatal("no panes to be held by anything")
+	}
+	holder := listed.Panes[0]
+
+	for _, ending := range []struct {
+		tool      string
+		arguments map[string]any
+		names     string
+	}{
+		{"kill_window", map[string]any{"windowId": holder.WindowID}, holder.WindowID},
+		{"kill_session", map[string]any{"sessionName": holder.Session}, holder.Session},
+		{"kill_server", map[string]any{"confirm": true}, "tmux server"},
+	} {
+		t.Run(ending.tool, func(t *testing.T) {
+			result := call(ctx, t, session, ending.tool, ending.arguments, nil)
+			if !result.IsError {
+				t.Fatalf("%s ended what holds the caller pane", ending.tool)
+			}
+			said := resultText(result)
+			if !strings.Contains(said, ending.names) {
+				t.Errorf("the refusal does not name %s: %q", ending.names, said)
+			}
+			if !strings.Contains(said, "holds the pane this server is running in") {
+				t.Errorf("the refusal does not say why: %q", said)
+			}
+		})
+	}
+
+	// The same tools still work on something that does not hold it, which is
+	// what keeps this a guard rather than a ban.
+	var made struct {
+		WindowID string `json:"windowId"`
+	}
+	call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": holder.Session, "command": "sleep 300",
+	}, &made)
+	if made.WindowID == "" {
+		t.Fatal("no second window to end")
+	}
+	if result := call(ctx, t, session, "kill_window",
+		map[string]any{"windowId": made.WindowID}, nil); result.IsError {
+		t.Errorf("a window holding no caller pane was refused: %s", resultText(result))
+	}
+}
+
 // TestWritingToTheCallerPaneIsAskedAbout covers the one pane where being wrong
 // cannot be undone. Typing into the pane this server runs in reaches the
 // terminal the conversation is happening in, and isCaller in a reply is only a

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -114,11 +115,75 @@ func (t *tools) confirmCallerWrite(
 	}
 
 	identifier := pane.ID().String()
-	result, err := request.Session.Elicit(ctx, &mcp.ElicitParams{
-		Message: fmt.Sprintf(
-			"%s is the pane this MCP server is running in. %s there will reach "+
-				"the terminal you are talking to it through. Allow it?",
+	return t.askAboutTheCaller(ctx, request, identifier,
+		fmt.Sprintf("%s is the pane this MCP server is running in. %s there "+
+			"will reach the terminal you are talking to it through. Allow it?",
 			identifier, action),
+		fmt.Sprintf("%s is the pane this server is running in, so %s there "+
+			"types into the terminal you are talking to it through. This client "+
+			"cannot be asked to allow it, so it is refused: name another pane, "+
+			"make one with split_window or create_session, or list_panes to find "+
+			"one where isCaller is false", identifier, action),
+		fmt.Sprintf(callerWriteGuard, identifier, action))
+}
+
+// confirmCallerLoss asks before ending something the caller's pane is inside.
+//
+// The write guard names one pane, and everything holding it reaches the same
+// terminal one level up: a client refused kill_pane got the same outcome from
+// kill_window, kill_session, or kill_server, and was told nothing -- the answer
+// never arrived, because the pane carrying the reply had gone. holds is worked
+// out by the caller, which already has the container in hand.
+func (t *tools) confirmCallerLoss(
+	ctx context.Context,
+	request *mcp.CallToolRequest,
+	holds bool,
+	subject string,
+) error {
+	if !holds || request == nil || request.Session == nil {
+		return nil
+	}
+	return t.askAboutTheCaller(ctx, request, subject,
+		fmt.Sprintf("%s holds the pane this MCP server is running in. Ending it "+
+			"will close the terminal you are talking to it through. Allow it?",
+			subject),
+		fmt.Sprintf("%s holds the pane this server is running in, so ending it "+
+			"closes the terminal you are talking to it through. This client "+
+			"cannot be asked to allow it, so it is refused: get_server_info "+
+			"names the pane this server runs in, and list_panes marks it",
+			subject),
+		fmt.Sprintf("the person declined: %s holds the pane this server is "+
+			"running in, so ending it closes the terminal this conversation is "+
+			"happening in", subject))
+}
+
+// callerPaneOnThisServer is the caller's own pane, when this process runs in
+// one of the panes of the server it drives.
+func (t *tools) callerPaneOnThisServer(ctx context.Context) (tmux.Pane, bool) {
+	caller := t.callerIdentityFor(ctx)
+	if !caller.inside {
+		return tmux.Pane{}, false
+	}
+	socket := t.socketPath(ctx)
+	if socket == "" || resolvePath(socket) != caller.socket {
+		return tmux.Pane{}, false
+	}
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(caller.paneID))
+	if err != nil {
+		return tmux.Pane{}, false
+	}
+	return pane, true
+}
+
+// askAboutTheCaller puts one yes-or-no question to the person and turns the
+// three ways it can end into the three answers a client gets.
+func (t *tools) askAboutTheCaller(
+	ctx context.Context,
+	request *mcp.CallToolRequest,
+	identifier, question, unaskable, declined string,
+) error {
+	result, err := request.Session.Elicit(ctx, &mcp.ElicitParams{
+		Message: question,
 		// No fields to fill in: the answer is the action, and asking for a
 		// value as well would make a yes-or-no question into a form.
 		RequestedSchema: map[string]any{
@@ -140,16 +205,10 @@ func (t *tools) confirmCallerWrite(
 			"pane":  identifier,
 			"why":   err.Error(),
 		})
-		return fmt.Errorf(
-			"%s is the pane this server is running in, so %s there types into "+
-				"the terminal you are talking to it through. This client cannot "+
-				"be asked to allow it, so it is refused: name another pane, make "+
-				"one with split_window or create_session, or list_panes to find "+
-				"one where isCaller is false",
-			identifier, action)
+		return errors.New(unaskable)
 	}
 	if result.Action != "accept" {
-		return fmt.Errorf(callerWriteGuard, identifier, action)
+		return errors.New(declined)
 	}
 	return nil
 }

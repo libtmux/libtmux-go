@@ -100,6 +100,15 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+Ending a window, a session, or the tmux server is asked about when it holds
+the pane this server is running in, the same way writing into that pane already
+was. The write guard named one pane and nothing containing it, so a client
+refused `kill_pane` reached the same outcome with `kill_window` one level up --
+and was told nothing, because the answer travelled through the pane that had
+just gone. Verified by running the server inside a pane of the server it
+drives: `kill_window`, `kill_session`, and `kill_server` all went through and
+none of them answered. The Python server of the same name refuses all four.
+
 A subscriber is told about what happened while nothing was watching. A control
 connection ends whenever the set of sessions changes, and the whole set is
 rebuilt from scratch; in between, tmux reports a pane's output to nobody and

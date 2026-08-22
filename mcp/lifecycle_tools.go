@@ -40,7 +40,7 @@ type killSessionOutput struct {
 // killSession ends one session and everything running in it.
 func (t *tools) killSession(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input killSessionInput,
 ) (*mcp.CallToolResult, killSessionOutput, error) {
 	// An empty name is what a model sends when it does not know one, and tmux
@@ -52,6 +52,15 @@ func (t *tools) killSession(
 	// tmux resolves a bare target by prefix and pattern, so "alph" kills
 	// "alpha". The "=" prefix anchors it to an exact name, which is what this
 	// tool documents and what a model expects when it repeats a name it read.
+	holdsCaller := false
+	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+		name, _ := caller.Formats().SessionName()
+		holdsCaller = name == input.SessionName
+	}
+	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
+		"session "+input.SessionName); err != nil {
+		return nil, killSessionOutput{}, err
+	}
 	if err := t.tmux().KillSession(ctx, "="+input.SessionName); err != nil {
 		return nil, killSessionOutput{}, err
 	}
@@ -82,7 +91,7 @@ type killWindowOutput struct {
 // working in.
 func (t *tools) killWindow(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input killWindowInput,
 ) (*mcp.CallToolResult, killWindowOutput, error) {
 	if strings.TrimSpace(input.WindowID) == "" {
@@ -91,6 +100,14 @@ func (t *tools) killWindow(
 	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, killWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
+	}
+	holdsCaller := false
+	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+		holdsCaller = caller.WindowID() == window.ID()
+	}
+	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
+		"window "+input.WindowID); err != nil {
+		return nil, killWindowOutput{}, err
 	}
 	sessionID := window.SessionID()
 	if err := window.Kill(ctx); err != nil {
@@ -173,11 +190,16 @@ type killServerOutput struct {
 // teardown of the last one.
 func (t *tools) killServer(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input killServerInput,
 ) (*mcp.CallToolResult, killServerOutput, error) {
 	if !input.Confirm {
 		return nil, killServerOutput{}, errors.New("confirm must be true: this ends every session on the tmux server")
+	}
+	_, holdsCaller := t.callerPaneOnThisServer(ctx)
+	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
+		"this tmux server"); err != nil {
+		return nil, killServerOutput{}, err
 	}
 	// Counted before rather than after, because after there is nothing to ask.
 	sessions, _ := t.tmux().Sessions(ctx)
