@@ -191,15 +191,21 @@ func TestAttachSessionRealHelper(t *testing.T) {
 	t.Fatalf("session %s is unavailable", target)
 }
 
-// detach sends the detach key until the client goes, rather than once.
+// detach ends the attached client, by its keyboard first and by the server if
+// that does not take.
 //
-// tmux reports a client as attached before that client is reading its
-// terminal, and a prefix written into the gap reaches the pane's shell
-// instead: the pty then shows "^Bd" echoed and the shell's bell, the client
-// never leaves, and the test spends its whole budget waiting for a process
-// that is not going to exit. Sending it again costs nothing -- once the client
-// has gone there is no process left to write to -- and it is the only signal
-// available, since "attached" is as much as tmux will say.
+// The keyboard is the path a person uses and is worth exercising, but it
+// cannot be relied on to land: tmux reports a client as attached before that
+// client is interpreting keys, and a prefix written into that gap reaches the
+// pane's shell instead. CI caught it twice on two tmux versions, with "^Bd"
+// echoed into the pty and the shell's bell beside it, after which the client
+// stayed and the test spent its whole budget waiting for a process that was
+// not going to exit.
+//
+// Asking the server does not go through the client's key handling at all, so
+// it is not subject to that race. Sending the key and then ending the client
+// if it did not take keeps the ordinary path covered while making the outcome
+// independent of a race this test is not about.
 func detach(
 	ctx context.Context,
 	t *testing.T,
@@ -208,22 +214,30 @@ func detach(
 ) {
 	t.Helper()
 	// C-b d, the default binding.
-	key := []byte{2, 'd'}
-	for {
-		if _, err := process.Write(ctx, key); err != nil {
-			// Written after the client left, which is the success this is
-			// waiting for rather than a failure.
-			return
-		}
-		select {
-		case <-process.Done():
-			return
-		case <-ctx.Done():
-			t.Fatalf("the client never detached: %v; output %q", ctx.Err(), process.Output())
-		case <-time.After(250 * time.Millisecond):
-		}
-		if clients, err := server.ListClients(ctx); err == nil && len(clients) == 0 {
-			return
+	if _, err := process.Write(ctx, []byte{2, 'd'}); err != nil {
+		// Written after the client left, which is the outcome this wants.
+		return
+	}
+	select {
+	case <-process.Done():
+		return
+	case <-ctx.Done():
+		t.Fatalf("the client never detached: %v; output %q", ctx.Err(), process.Output())
+	case <-time.After(500 * time.Millisecond):
+	}
+	if clients, err := server.ListClients(ctx); err == nil && len(clients) == 0 {
+		return
+	}
+	// By name. "-a" means every client but the current one, and run from
+	// outside a client there is no current one, so it detaches nothing.
+	named, err := server.Cmd(ctx, "list-clients", "-F", "#{client_name}")
+	if err != nil || named.ExitCode != 0 {
+		t.Fatalf("name the client the key did not detach: (%#v, %v)", named, err)
+	}
+	for _, client := range named.Stdout {
+		if _, err := server.Cmd(ctx, "detach-client", "-t", client); err != nil {
+			t.Fatalf("detach %s after the key did not take: %v; output %q",
+				client, err, process.Output())
 		}
 	}
 }

@@ -106,13 +106,15 @@ withholds 5, and none of them answers: a level that hides a tool from the
 listing and still dispatches it is worse than one that never hid it, because
 the operator believes the bound is in place.
 
-The real-tmux attach test sends its detach key until the client goes, rather
-than once. tmux reports a client as attached before that client is reading its
-terminal, and the prefix written into that gap reached the pane's shell
-instead — CI caught it twice, on two different tmux versions, with `^Bd`
+The real-tmux attach test ends its client by the server when the detach key
+does not take. tmux reports a client as attached before that client is
+interpreting keys, and the prefix written into that gap reached the pane's
+shell instead — CI caught it twice, on two different tmux versions, with `^Bd`
 echoed into the pty and the shell's bell beside it. The client then never left
 and the test spent its whole two-minute budget waiting for a process that was
-not going to exit.
+not going to exit. The keyboard is still the first move, because it is the path
+a person uses; asking the server does not go through the client's key handling
+at all, so the outcome no longer depends on a race the test is not about.
 
 `-doctor` names a `LIBTMUX_SAFETY` value it did not understand. A misspelling
 selects the lowest level, which is the right direction — someone who set the
