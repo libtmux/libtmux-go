@@ -3,8 +3,8 @@ module github.com/libtmux/libtmux-go/mcp
 go 1.26.0
 
 require (
-	github.com/libtmux/libtmux-go v0.0.1-alpha.3
-	github.com/libtmux/libtmux-go/workspace v0.0.1-alpha.3
+	github.com/libtmux/libtmux-go v0.0.1-alpha.4
+	github.com/libtmux/libtmux-go/workspace v0.0.1-alpha.4
 	// Held below v1.7.0 until modelcontextprotocol/go-sdk#1168 is released.
 	//
 	// Under protocol 2026-07-28 a log message carries only when the client

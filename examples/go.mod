@@ -2,6 +2,6 @@ module github.com/libtmux/libtmux-go/examples
 
 go 1.26.0
 
-require github.com/libtmux/libtmux-go v0.0.1-alpha.3
+require github.com/libtmux/libtmux-go v0.0.1-alpha.4
 
 replace github.com/libtmux/libtmux-go => ../

@@ -7,7 +7,7 @@ version.
 Modules are tagged per directory, so each carries its own version: the core as
 `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`.
 
-## Unreleased
+## v0.0.1-alpha.4, workspace/v0.0.1-alpha.4, mcp/v0.0.1-alpha.7
 
 ### tmux
 
