@@ -100,6 +100,13 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`-doctor` names a `LIBTMUX_SAFETY` value it did not understand. A misspelling
+selects the lowest level, which is the right direction — someone who set the
+variable at all was bounding what a model may do, and a typo must not widen the
+bound — but it did so silently, and the report that exists to explain a short
+tool list read exactly like one from an operator who asked for `readonly` on
+purpose.
+
 `mcp/PARITY.md` is measured rather than read. Both servers were started and
 driven by the same script, and the counts in it came back off the wire. That
 corrected a claim source-reading had got wrong: the two share fifty-five tool

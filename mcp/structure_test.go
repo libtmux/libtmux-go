@@ -153,3 +153,31 @@ func TestEveryClosedSetReachesTheSchema(t *testing.T) {
 		}
 	}
 }
+
+// TestASafetyValueThatIsNotALevelIsNamed covers the silent half of failing
+// closed.
+//
+// A misspelled level selects the lowest, which is the right direction: someone
+// who set the variable at all was bounding what a model may do. But the report
+// that exists to explain a short tool list then reads exactly like one from an
+// operator who asked for readonly on purpose.
+func TestASafetyValueThatIsNotALevelIsNamed(t *testing.T) {
+	for _, level := range []struct{ value, rejected string }{
+		{"destructve", "destructve"},
+		// Trimmed and folded before it is matched, so neither is a rejection.
+		{"  Readonly ", ""},
+		{"destructive", ""},
+		{"", ""},
+	} {
+		value, want := level.value, level.rejected
+		t.Setenv(SafetyEnvironmentVariable, value)
+		if got := RejectedSafetyValue(); got != want {
+			t.Errorf("%q was reported as rejected %q, want %q", value, got, want)
+		}
+	}
+	// Absent is not the same as empty: only absent means no preference.
+	t.Setenv(SafetyEnvironmentVariable, "nonsense")
+	if ResolvedSafetyLevel() != SafetyReadOnly {
+		t.Error("a value that is not a level did not fall back to the lowest")
+	}
+}

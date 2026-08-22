@@ -233,6 +233,10 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 		fmt.Println("           (not a fault; tmux starts one when something asks it to)")
 	}
 	fmt.Printf("  safety:  %s\n", info.SafetyLevel)
+	if rejected := tmuxmcp.RejectedSafetyValue(); rejected != "" {
+		fmt.Printf("           %s is %q, which is not a level; the lowest was taken\n",
+			tmuxmcp.SafetyEnvironmentVariable, rejected)
+	}
 
 	switch {
 	case info.InsideThisServer:

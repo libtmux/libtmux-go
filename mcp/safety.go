@@ -73,6 +73,27 @@ func safetyFromEnvironment() SafetyLevel {
 	}
 }
 
+// RejectedSafetyValue is what the environment asked for when it was not a
+// level, and empty when it was one or was absent.
+//
+// The fallback above is deliberate and silent, and silence is wrong in the one
+// place that exists to explain a short tool list: an operator who wrote
+// "destructve" gets the readonly surface and a report that reads exactly like
+// one who asked for readonly on purpose.
+func RejectedSafetyValue() string {
+	raw, set := os.LookupEnv(SafetyEnvironmentVariable)
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if !set || trimmed == "" {
+		return ""
+	}
+	switch trimmed {
+	case string(SafetyReadOnly), string(SafetyMutating), string(SafetyDestructive):
+		return ""
+	default:
+		return raw
+	}
+}
+
 // ResolvedSafetyLevel reports the level a server started now would run at.
 //
 // A tool that prints the variable instead names a level the server may not be
