@@ -202,7 +202,7 @@ jobs:
 
       - name: Cache the tmux build for ${{ matrix.tmux-version }}
         id: tmux-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/tmux-builds/tmux-${{ matrix.tmux-version }}
           key: tmux-${{ matrix.tmux-version }}
