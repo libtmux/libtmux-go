@@ -240,6 +240,13 @@ fixture a pane that outlives the assertions made about it.
 
 ## Documentation
 
+How to write a doc comment, a changelog entry, or any prose here is set out in
+[.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) under *Writing*. It governs;
+what follows adds the parts specific to working in this repository. The
+changelog rules are only there — a ledger of one change per bullet, grouped by
+component, leading with the identifier and a concrete verb — so read them
+before editing `CHANGELOG.md`.
+
 `DESIGN.md` holds the conventions this package holds itself to and the bakeoff
 decisions behind them. `PARITY.md` is how the surface is checked against the
 Python library. `BENCHMARKS.md` is what each way of reaching tmux costs.
@@ -506,5 +513,8 @@ by it.
 
 ## References
 
+- Writing conventions: [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)
+- Go doc comments: https://go.dev/doc/comment
+- Go release notes, the model for the changelog: https://go.dev/doc/go1.24
 - Python library: https://libtmux.git-pull.com/
 - tmux manual: http://man.openbsd.org/OpenBSD-current/man1/tmux.1
