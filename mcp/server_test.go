@@ -3571,10 +3571,21 @@ func TestEveryToolAgreesWithEverySafetyLevel(t *testing.T) {
 			// has to work there. Listing one and then failing it because of
 			// the level is the same lie as withholding one and dispatching it,
 			// told the other way round.
+			// A tool whose contract is to wait blocks until its own deadline
+			// when it is called with nothing, which measures the clock rather
+			// than the level and spends the budget every later call needs.
+			waits := map[string]bool{"wait_for_text": true, "wait_for_channel": true}
 			for name := range offered {
-				result, err := session.CallTool(ctx, &sdk.CallToolParams{
+				if waits[name] {
+					continue
+				}
+				// Bounded on its own, so a tool that blocks fails itself
+				// rather than every tool after it.
+				callCtx, endCall := context.WithTimeout(ctx, 10*time.Second)
+				result, err := session.CallTool(callCtx, &sdk.CallToolParams{
 					Name: name, Arguments: map[string]any{},
 				})
+				endCall()
 				if err != nil {
 					t.Errorf("%s is offered at %s and the call failed: %v", name, level, err)
 					continue
@@ -3587,8 +3598,9 @@ func TestEveryToolAgreesWithEverySafetyLevel(t *testing.T) {
 						name, level, resultText(result))
 				}
 			}
-			t.Logf("%s: %d withheld and unreachable, %d offered and none refused for safety",
-				level, withheld, len(offered))
+			t.Logf("%s: %d withheld and unreachable, %d offered and none refused "+
+				"for safety (%d that only wait were not called)",
+				level, withheld, len(offered)-len(waits), len(waits))
 		})
 	}
 }

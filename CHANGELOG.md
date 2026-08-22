@@ -105,8 +105,9 @@ that hides a tool and still dispatches it is worse than one that never hid it,
 because the operator believes the bound is in place; a level that offers a tool
 and then refuses it for safety is the same lie the other way round. `readonly`
 withholds 36 of the 58 and offers 22, `mutating` withholds 5 and offers 53, and
-`destructive` offers all 58 — 174 combinations, none of them wrong in either
-direction.
+`destructive` offers all 58 — none of them wrong in either direction. The two
+whose contract is to wait are not called with nothing, because that measures
+the clock rather than the level.
 
 The real-tmux attach test ends its client by the server when the detach key
 does not take. tmux reports a client as attached before that client is
