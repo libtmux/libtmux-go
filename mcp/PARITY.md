@@ -67,6 +67,12 @@ elicitation, and only refuses when the client has not said it can be asked.
 That refusal names the way out: another pane, `split_window`, or `list_panes`
 to find one where `isCaller` is false.
 
+A yes about writing there can be kept for the rest of the session, because a
+guard that asks before every keystroke is one people learn to click through.
+It covers writing to that pane and nothing else — ending the pane, its window,
+its session, or the server asks again, and those forms do not offer to keep the
+answer.
+
 ## Watching a pane
 
 Both offer `capture_since`, which returns what a pane wrote since the cursor
