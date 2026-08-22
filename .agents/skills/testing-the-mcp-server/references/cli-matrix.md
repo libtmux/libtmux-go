@@ -42,6 +42,12 @@ Six of the seven call a tool for real. The seventh connects.
 
 Nothing here failed on the server.
 
+The closed value sets were checked the same way, since a schema is only worth
+publishing if a client enforces it: `list_panes` with `detail: "verbose"` and
+`show_hooks` with `scope: "SERVER"` were refused before reaching a handler by
+every client that runs a model here — claude, codex, cursor, grok, opencode,
+antigravity — each quoting the same enum error back.
+
 **Two of these looked like server faults and were not**, which is the reason
 this file exists. codex returned `401 Unauthorized` and agy timed out to
 nothing — both while running under a throwaway config home, which relocates
