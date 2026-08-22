@@ -53,6 +53,16 @@ Modules are tagged per directory, so each carries its own version: the core as
 - `run_command` no longer writes its wrapper's errors into the pane after a
   timeout.
 
+#### Panes that cannot read
+
+- `send_keys`, `send_keys_batch`, `paste_text`, `paste_buffer` and
+  `run_command` now refuse a pane whose program has exited, naming
+  `respawn_pane`. They reported the keys sent, or a count, for keystrokes
+  nothing read.
+- The same five now refuse a pane in copy mode, where a key is read as that
+  mode's binding rather than reaching the program. A binding that waits for a
+  further key never answers the client that sent one.
+
 #### Safety
 
 - A write to the pane the server runs in is now refused when the client cannot
@@ -77,6 +87,9 @@ Modules are tagged per directory, so each carries its own version: the core as
   `RIGHT`. Use the canonical spellings the schema publishes.
 - `show_option`, `set_option` and `show_hooks` now reject `windowId` at pane
   scope rather than ignoring it. Pass `scope: window` to read at window scope.
+- `select_layout` now refuses `layout` and `spread` together rather than
+  honouring one. Pass `spread` to even the panes already in the window, or a
+  layout to replace the arrangement.
 - `capture_since` cursors are now version 2, about a third smaller. A version 1
   cursor is refused; call `capture_since` without one to start again.
 
@@ -89,16 +102,33 @@ Modules are tagged per directory, so each carries its own version: the core as
 - `kill_pane`, `kill_window`, `move_pane`, `move_window`, `select_pane` and
   `select_window` now name the listing that finds an id, rather than repeating
   tmux's `snapshot object not found`.
+- `respawn_pane` now reports `gone` when the pane cannot be read back after a
+  respawn that itself succeeded. A command that exits takes the pane with it,
+  which read as a failed respawn naming a snapshot that did not hold it.
 - `-doctor` now reports a `LIBTMUX_SAFETY` value it did not recognise. An
   unrecognised value still selects `readonly`.
+
+#### Resources and completions
+
+- A resource URI now decodes percent-escapes, so
+  `tmux://sessions/spaced%20name` reads the session named `spaced name`. A name
+  needing an escape reached tmux with the escape still in it.
+- Completion now answers in the dialect the caller asked in: tmux's own
+  spelling for a prompt argument, the URI spelling for a resource slot. A
+  completed prompt argument named a pane that every tool rejects.
 
 #### Additions
 
 - Add `onError` to the three batch tools, choosing between stopping at the
   first failure and running the calls after it. Stopping remains the default.
 - Add `tmux://sessions/{session}` and `tmux://windows/{window}` resources.
-- Add `LIBTMUX_SOCKET_PATH` and `LIBTMUX_TMUX_BIN`, matching the Python server
-  of the same name.
+- Add annotations to every tool, marking it read-only, mutating, settling or
+  destructive, so a client can tell a read from a kill before it calls.
+- Add `mcp/TOOLS.md`, a per-tool reference generated from the registered
+  schemas. `go generate` rewrites it, so a schema and the documentation of it
+  cannot drift.
+- Add `LIBTMUX_SOCKET`, `LIBTMUX_SOCKET_PATH` and `LIBTMUX_TMUX_BIN`, matching
+  the Python server of the same name. A flag naming a socket wins over them.
 - Add `skipped` to `list_panes`, `list_windows` and `list_sessions`, the count
   their criteria left out.
 - Add `mcp/PARITY.md`, comparing this server with the Python server of the same
