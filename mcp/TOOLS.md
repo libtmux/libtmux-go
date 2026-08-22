@@ -774,7 +774,7 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `delete_buffer`
 
-Remove a buffer this server staged.
+Remove a buffer this server staged, once nothing else will paste it.
 
 Changes tmux to a state. Repeating it is safe.
 

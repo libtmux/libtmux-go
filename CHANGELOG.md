@@ -100,6 +100,10 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`delete_buffer` says what a buffer left behind costs, which is what decides
+whether to call it: the buffer stays on the tmux server for anyone attached to
+paste by hand, and tmux drops the oldest of a bounded stack to make room.
+
 A `run_command` whose whole output is blank lines reports them, rather than
 reporting that the command printed nothing. A blank row is an empty line, and a
 capture that is nothing but empty lines arrives as no lines at all; the marks

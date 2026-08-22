@@ -94,8 +94,9 @@ func BenchmarkToolCall(b *testing.B) {
 
 // BenchmarkBatchAgainstSerial measures what a batch actually saves, which is
 // not server time. Over this transport the two run the same tmux commands and
-// come out level on the clock; what the batch saves is a third of the
-// allocations and, over a real pipe, two of the three round trips. Its reason
+// come out level on the clock and level on allocation count; what the batch
+// saves is the bytes of two replies it never builds, and over a real pipe two
+// of the three round trips. Its reason
 // to exist is the caller's turn rather than the server's CPU, so a change that
 // made batching slower per call than its parts would still be worth having and
 // this is here to show which of the two moved.

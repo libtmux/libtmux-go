@@ -285,6 +285,9 @@ func addBufferTools(server *mcp.Server, t *tools) {
 	register(server, t, &mcp.Tool{
 		Name:        "delete_buffer",
 		Annotations: settling("Delete a tmux Buffer"),
-		Description: "Remove a buffer this server staged.",
+		Description: "Remove a buffer this server staged, once nothing else " +
+			"will paste it. A buffer left behind stays on the tmux server for " +
+			"anyone attached to paste by hand, and tmux keeps a bounded stack " +
+			"of them, so the oldest is dropped to make room for a new one.",
 	}, t.deleteBuffer)
 }
