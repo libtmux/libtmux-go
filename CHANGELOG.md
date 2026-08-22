@@ -100,6 +100,12 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`mcp/PARITY.md` is measured rather than read. Both servers were started and
+driven by the same script, and the counts in it came back off the wire. That
+corrected a claim source-reading had got wrong: the two share fifty-five tool
+names, and no argument names at all — this server spells them in camelCase and
+the Python one in snake_case, on all 215 of its arguments.
+
 Every collection an MCP reply carries is published as an array rather than as
 null-or-array. A Go slice infers as either, because a nil one marshals to null,
 so twenty-four fields across the surface told a client to handle a case that

@@ -76,6 +76,14 @@ It reports which advertised tools a plan never called, so a sweep can be grown
 until that list is empty, and flags a tool that declares an `outputSchema` and
 answers without one.
 
+`references/compare.py` is its sibling for the question "how does this differ
+from another MCP server". It counts what a handshake declares and what a tool
+list carries, drives the three calls a client gets wrong, and prints one JSON
+report; run it against each server and diff. Use it rather than reading one
+server's source against the other's schemas — that is how a comparison here
+came to claim both servers took the same arguments, when one names every
+argument in snake_case and the other in camelCase.
+
 Two rules decide whether it works:
 
 - **Hold stdin open.** Closing it ends the server before it answers, which

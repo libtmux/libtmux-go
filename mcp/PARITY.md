@@ -10,16 +10,41 @@ supported Python *library* capability has a Go equivalent, proved from a symbol
 manifest. This is a comparison of two *servers*, and neither is a port of the
 other. Nothing here is a promise.
 
-Every claim below was checked against both servers as they stand: the tool
-lists by parsing each server's registrations, the behaviour by driving this
-server's binary over stdio JSON-RPC, including from inside a pane of the tmux
-server it drives.
+Every claim below was measured, not read: both servers were started and driven
+over stdio JSON-RPC by the same script, and this one was additionally driven
+from inside a pane of the tmux server it drives. Where a number appears it came
+back off the wire.
+
+## The surface, counted
+
+| | here | Python |
+| --- | --- | --- |
+| Tools | 58 | 56 |
+| Arguments across them | 202 | 293 |
+| Arguments with a closed set published as `enum` | 10 | 5 |
+| Tools carrying an output schema | 58 | 56 |
+| Tools carrying annotations | 58 | 56 |
+| Collections published as null-or-array | 0 | 0 |
+| Prompts | 4 | 4 |
+| Resources, and templates | 1 and 6 | 0 and 6 |
+| Capabilities declared | completions, logging, prompts, resources (with subscribe), tools | experimental, extensions, logging, prompts, resources, tools |
 
 ## The tools
 
-Fifty-five tool names are the same on both, take the same arguments for the
-same purpose, and are grouped the same way. An operator swapping one server for
-the other changes a command, not a prompt.
+Fifty-five tool names are the same on both and are grouped the same way. The
+arguments are not: this server names them in camelCase and the Python one in
+snake_case, on every argument it has — 215 snake_case and no camelCase, counted
+off its own schemas. `paneId` is `pane_id`, `timeoutSeconds` is `timeout`.
+Swapping one server for the other therefore changes every call, not just the
+command that starts it.
+
+The argument counts differ for a reason worth knowing before choosing. Python
+takes `socket_name` on 48 of its tools, `session_id` on 33, and `window_id` on
+26, because a call chooses its own target; strip those four targeting arguments
+and its 293 become 142, against this server's 202. The trade runs both ways:
+Python spends arguments on reaching any tmux server, and this one spends them
+on narrowing a listing — `list_panes` here takes `command`, `pathUnder`,
+`dead`, `active`, and `detail` where Python takes one `filters`.
 
 Three tools are here and not there:
 
@@ -83,16 +108,27 @@ rather than its whole screen. Both offer `wait_for_text` and
 This one also lets a client subscribe. It declares the `subscribe` capability,
 holds a tmux control-mode connection per session for as long as anything is
 subscribed, and sends `notifications/resources/updated` when a watched pane
-writes. A client that can subscribe never asks; it is told. The Python server
-registers its resources for reading only.
+writes — measured at 20ms from the write, over a real process. A client that
+can subscribe never asks; it is told. The Python server's handshake declares no
+subscribe capability, so its resources are read when a client asks and not
+before.
 
 ## What the schemas say
 
 Both publish closed value sets as JSON Schema `enum`, so a client validates
-before the call and a model picks from a list rather than reading a sentence.
-The Python server writes them as `typing.Literal` and pydantic emits the enum;
-this one keeps a table of tool and argument and writes it into the schema at
-registration.
+before the call and a model picks from a list rather than reading a sentence:
+ten arguments here, five there. The Python server writes them as
+`typing.Literal` and pydantic emits the enum; this one keeps a table of tool and
+argument and writes it into the schema at registration.
+
+Both refuse a value outside a set, an argument of the wrong type, and a field
+they do not have — driven at all three, both answered with an error rather than
+running. What each says differs: Python answers a bad `detail` with pydantic's
+"Unexpected keyword argument", because it has no `detail` at all, where this one
+names the values it takes.
+
+Both publish every collection as an array rather than as null-or-array, so a
+client can count what came back without checking for null first.
 
 Both run their batch tools through the same per-tool schemas as a direct call.
 
@@ -109,9 +145,11 @@ diagnosing a pane, and laying out a workspace. Two are only there —
 `run_and_wait` and `interrupt_gracefully` — and two are only here,
 `watch_pane` and `recover_pane`.
 
-This one also answers `completion/complete`, so a client's picker offers the
-panes and sessions that exist when a prompt argument or a resource template
-blank is being filled. And it ships `TOOLS.md`, generated from the schemas, so
+This one also answers `completion/complete` and says so in its handshake, so a
+client's picker offers the panes and sessions that exist when a prompt argument
+or a resource template blank is being filled. The Python handshake declares no
+completions capability, and declares `experimental` and `extensions`, which
+this one does not. And it ships `TOOLS.md`, generated from the schemas, so
 the reference cannot drift from the tools.
 
 ## Addressing the hierarchy
