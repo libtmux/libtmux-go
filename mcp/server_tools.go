@@ -137,6 +137,9 @@ func (t *tools) getServerInfo(
 	}
 	output.Alive = alive
 	if !alive {
+		// An array, because the field is one on every other path and a client
+		// that iterates it should not have to check for null first.
+		output.AttachedClients = []attachedClient{}
 		return nil, output, nil
 	}
 

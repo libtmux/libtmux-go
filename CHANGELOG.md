@@ -100,6 +100,20 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`list_panes`, `list_windows`, and `list_sessions` say when there is no tmux
+server on the socket at all, in a `serverNote` present only then. They answer
+rather than failing, which is right — asking what is there is the ordinary
+opening move — but tmux exits when its last pane goes, so a listing of nothing
+is never a quiet server. A client reading an empty list as an idle machine goes
+on to look for a pane that was never going to be there, and that is what an MCP
+client which starts its servers with a curated environment produces every time:
+the server loses `TMUX_TMPDIR`, looks at the default socket, and reports the
+machine as empty. `get_server_info` knew all along and nothing else asked it.
+
+`get_server_info` reports `attachedClients` as an empty array rather than null
+when the server is not running. Everywhere else it is an array, and a client
+that iterates it should not have to find out that one path is different.
+
 A call inside a batch is checked against the same schema as a call on its own.
 The SDK validates only what it dispatches itself, and a batch dispatches its
 own calls, so `call_readonly_tools_batch` and the two beside it were the one

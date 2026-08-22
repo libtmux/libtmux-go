@@ -1054,6 +1054,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- |
 | `panes` **required** | array |
 | `total` **required** | integer |
+| `serverNote` | string |
 | `skipped` | integer |
 
 ### `list_servers`
@@ -1091,6 +1092,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- |
 | `sessions` **required** | array |
 | `total` **required** | integer |
+| `serverNote` | string |
 | `skipped` | integer |
 
 ### `list_windows`
@@ -1109,6 +1111,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- |
 | `total` **required** | integer |
 | `windows` **required** | array |
+| `serverNote` | string |
 | `skipped` | integer |
 
 ### `load_buffer`

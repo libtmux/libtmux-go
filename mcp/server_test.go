@@ -438,6 +438,75 @@ func TestConnectLeavesAnEmptyServerAlone(t *testing.T) {
 	}
 }
 
+// TestAnAbsentServerIsNotAnEmptyOne covers what a listing says when there is
+// no tmux on the socket at all.
+//
+// The listing answers rather than failing, because asking what is there is the
+// ordinary opening move; but tmux exits when its last pane goes, so a listing
+// of nothing is never a quiet server. Without the note a client reads the
+// wrong socket as an idle machine and goes looking for a pane that was never
+// going to be there, which is what a client that starts its servers with a
+// curated environment produces every time.
+//
+//libtmux:real-tmux
+func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	target := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+	})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "absent-server"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	for _, listing := range []string{"list_panes", "list_windows", "list_sessions"} {
+		var reported struct {
+			Total      int    `json:"total"`
+			ServerNote string `json:"serverNote"`
+		}
+		result := call(ctx, t, session, listing, map[string]any{}, &reported)
+		if result.IsError {
+			t.Fatalf("%s: %s", listing, resultText(result))
+		}
+		if reported.Total != 0 {
+			t.Errorf("%s found %d on a socket with no server", listing, reported.Total)
+		}
+		if !strings.Contains(reported.ServerNote, "no tmux server is running") {
+			t.Errorf("%s said nothing about the absent server: %q",
+				listing, reported.ServerNote)
+		}
+	}
+
+	// The same question asked directly, and the field a client iterates.
+	var info struct {
+		Alive           bool  `json:"alive"`
+		AttachedClients []any `json:"attachedClients"`
+	}
+	call(ctx, t, session, "get_server_info", map[string]any{}, &info)
+	if info.Alive {
+		t.Error("get_server_info called an absent server alive")
+	}
+	if info.AttachedClients == nil {
+		t.Error("attachedClients came back null, not an empty array")
+	}
+}
+
 // TestConnectLeavesAChosenTransportAlone covers an embedder declining the
 // long-lived client, which is what a tmux configuration that reacts to
 // attachment wants.
