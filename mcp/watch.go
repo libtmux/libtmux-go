@@ -205,6 +205,12 @@ func (w *watchers) remove(canonical, spelling string) {
 		return
 	}
 	delete(w.subscribed, canonical)
+	// These outlive their subscription otherwise, one entry per pane ever
+	// watched, for the life of the process. Nothing else drops them: the
+	// coalescing window is only cleared wholesale when a rebuild restarts the
+	// stream, and a deferral clears just its own key when it fires.
+	delete(w.owed, canonical)
+	delete(w.notified, canonical)
 	if len(w.subscribed) == 0 && w.stop != nil {
 		w.stop()
 		w.stop = nil
@@ -484,7 +490,7 @@ func (w *watchers) notify(ctx context.Context, uri string) {
 		w.owed[uri] = true
 		time.AfterFunc(watchNotifyInterval-since, func() {
 			w.mutex.Lock()
-			w.owed[uri] = false
+			delete(w.owed, uri)
 			w.mutex.Unlock()
 			w.notify(context.WithoutCancel(ctx), uri)
 		})

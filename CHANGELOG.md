@@ -179,6 +179,10 @@ the break-even from about 586 bytes of screen to about 374. Cursors are now
 `capture-since-v2`, and one from the older format is refused rather than read
 as a fresh start.
 
+Unsubscribing drops the watcher's record of a pane. The coalescing window and
+the deferral flag were keyed by URI and never pruned, so a process that watched
+many panes over its life kept one entry per pane it had ever watched.
+
 A notification the coalescing window holds back is deferred rather than
 dropped. Two notifications about one pane inside a quarter of a second are one
 notification, which is what the window is for; but a client re-reads when it is
