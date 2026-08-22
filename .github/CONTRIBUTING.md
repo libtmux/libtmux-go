@@ -77,11 +77,9 @@ $ for module in . examples workspace mcp benchmarks; do (cd "$module" && go run 
 
 Generated code is checked in, so regenerate it and confirm the tree is
 unchanged rather than trusting that it is. The Go in the Markdown is generated
-from the examples too, so a snippet cannot drift from the program it was copied
-from: a region is named where it is written, with `// docs:<name>` and
-`// docs:end`, and a Markdown file asks for it between `<!-- docs:<name> -->`
-and `<!-- docs:end -->`. An unmarked block is hand-written and says so by not
-being marked:
+too, quoted from programs that compile and run, so a snippet cannot drift from
+the code it came from. The markers, and what happens when one of them is wrong,
+are in [examples/README.md](../examples/README.md):
 
 ```console
 $ go generate ./... && git diff --exit-code

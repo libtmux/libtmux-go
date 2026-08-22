@@ -362,6 +362,11 @@ Bad:
 $ git log --max-count=10 --graph --oneline
 ```
 
+A Go block between `docs:` markers is not written by hand. `go generate` copies
+it from a program that compiles and runs against a real tmux, so edit that
+program and never the block — [the examples README](../examples/README.md) has
+the markers. An unmarked block is hand-written and says so by not being marked.
+
 ## Commits
 
 ```
