@@ -100,6 +100,18 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A session and a window can be read as resources of their own, at
+`tmux://sessions/{session}` and `tmux://windows/{window}`. The hierarchy
+offered the list at the top and the pane at the bottom and nothing in between,
+so a client browsing it could reach a pane's detail but not the window holding
+it. The Python server of the same name has carried both for a while.
+
+Two window templates said an id was written "such as @1". That is the one
+spelling a read cannot take: a template is matched by a regexp built from it,
+so a raw sigil is answered by the SDK before this package sees it. They now
+name the form that works, and a test reads every advertised template rather
+than trusting the description.
+
 The socket path and the tmux executable can be given in the environment, as
 `LIBTMUX_SOCKET_PATH` and `LIBTMUX_TMUX_BIN`, which is what the Python server
 of the same name calls them. Both were flags and nothing else, and a client

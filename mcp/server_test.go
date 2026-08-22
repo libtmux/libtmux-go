@@ -3116,6 +3116,65 @@ func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
 	}
 }
 
+// TestEveryAdvertisedResourceCanBeRead covers a template a client cannot use.
+//
+// A resource template is a promise: a client fills in the blank and reads. The
+// blanks here take ids, and the ids have sigils a URI cannot carry raw, so a
+// description naming one -- "such as @1" -- advertises the single spelling
+// that answers "resource not found". Nothing checked that what is advertised
+// can be read, so the wrong spelling sat in two descriptions.
+//
+//libtmux:real-tmux
+func TestEveryAdvertisedResourceCanBeRead(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: readable\nwindows:\n"+
+		"  - panes:\n      - {}\n")
+
+	var listed struct {
+		Panes []struct {
+			ID       string `json:"id"`
+			WindowID string `json:"windowId"`
+			Session  string `json:"session"`
+		} `json:"panes"`
+	}
+	call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	if len(listed.Panes) == 0 {
+		t.Fatal("no panes to address")
+	}
+	only := listed.Panes[0]
+	// Without the sigil, which is the form the descriptions now name and the
+	// only one a template can match.
+	bare := func(id string) string { return strings.TrimLeft(id, "%@$") }
+
+	templates, err := session.ListResourceTemplates(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filled := map[string]string{
+		"tmux://sessions/{session}":         "tmux://sessions/" + only.Session,
+		"tmux://sessions/{session}/windows": "tmux://sessions/" + only.Session + "/windows",
+		"tmux://windows/{window}":           "tmux://windows/" + bare(only.WindowID),
+		"tmux://windows/{window}/panes":     "tmux://windows/" + bare(only.WindowID) + "/panes",
+		"tmux://panes/{pane}":               "tmux://panes/" + bare(only.ID),
+		"tmux://panes/{pane}/content":       "tmux://panes/" + bare(only.ID) + "/content",
+	}
+	if len(templates.ResourceTemplates) != len(filled) {
+		t.Errorf("%d templates advertised, %d covered here",
+			len(templates.ResourceTemplates), len(filled))
+	}
+	for _, template := range templates.ResourceTemplates {
+		uri, ok := filled[template.URITemplate]
+		if !ok {
+			t.Errorf("%s is advertised and this test does not read it", template.URITemplate)
+			continue
+		}
+		if _, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri}); err != nil {
+			t.Errorf("%s advertises %q, and reading %s says: %v",
+				template.URITemplate, template.Description, uri, err)
+		}
+	}
+}
+
 // TestTheEnvironmentListingWithholdsValues covers a reply that put every
 // credential on a developer's machine into a model's context.
 //

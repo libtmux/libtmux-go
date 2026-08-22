@@ -36,6 +36,8 @@ import (
 // %1 and a client that subscribed with one got silence.
 const (
 	resourceSessions       = "tmux://sessions"
+	templateSession        = "tmux://sessions/{session}"
+	templateWindow         = "tmux://windows/{window}"
 	templateSessionWindows = "tmux://sessions/{session}/windows"
 	templateWindowPanes    = "tmux://windows/{window}/panes"
 	templatePane           = "tmux://panes/{pane}"
@@ -64,7 +66,15 @@ func addResources(server *mcp.Server, t *tools) {
 		},
 		{
 			templateWindowPanes, "tmux window panes", "Panes of One Window",
-			"The panes of one window, addressed by window id such as @1.",
+			"The panes of one window, addressed by window id without its sigil, so @1 is written 1.",
+		},
+		{
+			templateSession, "tmux session", "One tmux Session",
+			"One session's windows and what it holds, addressed by name.",
+		},
+		{
+			templateWindow, "tmux window", "One tmux Window",
+			"One window's panes and layout, addressed by window id without its sigil, so @1 is written 1.",
 		},
 		{
 			templatePane, "tmux pane", "One tmux Pane",
@@ -120,6 +130,13 @@ func (t *tools) readTemplated(
 	case strings.HasPrefix(uri, "tmux://panes/"):
 		id := decodeSegment(strings.TrimPrefix(uri, "tmux://panes/"))
 		return t.readPane(ctx, uri, withSigil(id, "%"))
+	// After the suffixed forms above, which these would otherwise swallow.
+	case strings.HasPrefix(uri, "tmux://sessions/"):
+		name := decodeSegment(strings.TrimPrefix(uri, "tmux://sessions/"))
+		return t.readSession(ctx, uri, name)
+	case strings.HasPrefix(uri, "tmux://windows/"):
+		id := decodeSegment(strings.TrimPrefix(uri, "tmux://windows/"))
+		return t.readWindow(ctx, uri, withSigil(id, "@"))
 	default:
 		return nil, fmt.Errorf("%q is not a tmux resource this server serves", uri)
 	}
@@ -170,6 +187,26 @@ func (t *tools) readWindowPanes(
 		summaries = append(summaries, listedPane{paneSummary: t.summarize(ctx, pane)})
 	}
 	return jsonResource(uri, listPanesOutput{Panes: summaries, Total: len(panes)})
+}
+
+// readSession answers one session, which the hierarchy offered no way to read
+// on its own: the list was there and the leaf was there, and the branch
+// between them was not.
+func (t *tools) readSession(ctx context.Context, uri, name string) (*mcp.ReadResourceResult, error) {
+	_, info, err := t.getSessionInfo(ctx, nil, getSessionInfoInput{SessionName: name})
+	if err != nil {
+		return nil, err
+	}
+	return jsonResource(uri, info)
+}
+
+// readWindow answers one window, for the same reason.
+func (t *tools) readWindow(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
+	_, info, err := t.getWindowInfo(ctx, nil, getWindowInfoInput{WindowID: id})
+	if err != nil {
+		return nil, err
+	}
+	return jsonResource(uri, info)
 }
 
 func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
