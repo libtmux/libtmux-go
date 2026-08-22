@@ -100,6 +100,11 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+`mcp/PARITY.md` sets out where this server and the Python server of the same
+name differ: the tool surface, what each knows about its own pane and what it
+refuses because of it, watching, the schemas, discovery, how each addresses the
+tmux hierarchy, and how each is tested.
+
 Ending a window, a session, or the tmux server is asked about when it holds
 the pane this server is running in, the same way writing into that pane already
 was. The write guard named one pane and nothing containing it, so a client

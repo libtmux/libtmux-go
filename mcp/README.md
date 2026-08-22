@@ -290,6 +290,12 @@ plus recipes, gotchas, and what the server logs:
 That page is reference material, read by search rather than read through, which
 is why it is not here.
 
+There is a second MCP server for tmux under the same name, written in Python.
+The two serve the same tmux and answer to the same clients, and where they
+differ is set out separately:
+
+**[Against the Python server →](PARITY.md)**
+
 ## Troubleshooting
 
 **Ask the server first.** `-doctor` answers most of what follows without a
