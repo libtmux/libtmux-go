@@ -288,8 +288,9 @@ command usually leads to its method without a lookup.
 | [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
 | [`CHANGELOG.md`](CHANGELOG.md) | What each release changed |
 | [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) | The gates a change has to pass |
+| [`WRITING.md`](.github/WRITING.md) | How this repository writes: docs, the changelog, commits |
 | [`SECURITY.md`](SECURITY.md) | What this software executes, and how to report a hole in it |
-| [`AGENTS.md`](AGENTS.md) | Working on this repository |
+| [`AGENTS.md`](AGENTS.md) | Which of the above applies to what you are changing |
 | [`examples/`](examples/) | Runnable programs for each of the above |
 
 ## License
