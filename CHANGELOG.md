@@ -100,6 +100,12 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+The `agent-workflow` example starts a tmux server when the socket has none,
+which is the ordinary way to arrive at it. Running it exactly as its own
+documentation says — a socket name nobody has used yet — reached `split_window`
+on a server that was not running and printed tmux's connection error, so the
+first thing a reader runs failed.
+
 Every tool is checked against every safety level, in both directions. A level
 that hides a tool and still dispatches it is worse than one that never hid it,
 because the operator believes the bound is in place; a level that offers a tool
