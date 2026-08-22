@@ -62,8 +62,19 @@ $ export TMUX_TMPDIR=/tmp/libtmux-go-probe && mkdir -p "$TMUX_TMPDIR" && unset T
 
 Fastest and most deterministic, and it reaches everything the Go tests cannot:
 framing, schema validation on the wire, protocol negotiation, and the
-environment a client actually supplies. Write a driver that spawns the binary,
-holds stdin open, and matches replies by id.
+environment a client actually supplies. `references/drive.py` is that driver:
+it spawns the binary with an environment it builds rather than inherits, holds
+stdin open, matches replies by id, declines any question the server asks, and
+reads a plan of JSON-RPC calls from stdin.
+
+```console
+$ ./references/drive.py "$(command -v libtmux-mcp)" TMUX_TMPDIR=/tmp/libtmux-go-probe \
+    <<< '[{"method":"tools/call","params":{"name":"list_panes","arguments":{}}}]'
+```
+
+It reports which advertised tools a plan never called, so a sweep can be grown
+until that list is empty, and flags a tool that declares an `outputSchema` and
+answers without one.
 
 Two rules decide whether it works:
 
@@ -73,6 +84,12 @@ Two rules decide whether it works:
   with a curated environment. Passing your shell's hides a whole class of bug —
   and hides the self-detection path, since a curated environment carries
   neither `TMUX` nor `TMUX_PANE`.
+- **Run the driver from inside a pane to reach self-detection at all.** Started
+  anywhere else, `isCaller` is null in every reply and every guard that depends
+  on it is untested. `tmux new-window -d "drive.py ..."` on the server under
+  test sets `TMUX` and `TMUX_PANE` for you. Aim a destructive tool at the
+  pane's window, session, and server as well as at the pane: a guard that knows
+  one pane and not what holds it is reached one level up.
 
 The highest-yield check at this layer is free: every tool declares an
 `outputSchema`, so validate each reply's `structuredContent` against the tool's

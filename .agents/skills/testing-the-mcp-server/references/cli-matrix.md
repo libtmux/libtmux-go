@@ -53,6 +53,15 @@ own status command before writing anything down about the server.
 
 ## The traps
 
+**Whether a CLI passes your environment to the server it spawns is per CLI,
+and it decides which tmux the server reaches.** With `TMUX_TMPDIR` exported and
+the same prompt, claude and grok reached the probe's tmux; codex and
+cursor-agent reached the default socket and reported the machine as empty. A
+test that sets `TMUX_TMPDIR` and asserts on panes therefore passes on two of
+them and quietly measures nothing on the other two. Put the socket in the
+config's `env` when it must be certain, and read the reply's `serverNote` or
+`get_server_info`'s `socketPath` to find out which one answered.
+
 **A config-home flag relocates config, not credentials.** `CODEX_HOME` and
 `--gemini_dir` move the configuration and leave the credential behind, so a run
 under one fails to authenticate while the same CLI works normally. That reads
