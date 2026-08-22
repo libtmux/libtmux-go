@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -29,8 +30,11 @@ type dispatcher struct {
 	// may call it from. A tool that says it is destructive is governed by
 	// having said so, here as well as at registration.
 	annotations *mcp.ToolAnnotations
-	// call runs the tool with arguments a client supplied.
-	call func(context.Context, json.RawMessage) (any, error)
+	// call runs the tool with arguments a client supplied. The originating
+	// request travels with it, because a guard that asks the person needs the
+	// session to ask on -- a batched write to the caller's own pane is the
+	// same write as a direct one.
+	call func(context.Context, *mcp.CallToolRequest, json.RawMessage) (any, error)
 }
 
 // batchCall is one tool call inside a batch.
@@ -45,6 +49,12 @@ type batchCall struct {
 type batchInput struct {
 	// Calls run in order, each after the one before it finished.
 	Calls []batchCall `json:"calls" jsonschema:"the calls to run, in order"`
+	// OnError decides what a failure does to the calls after it. Stopping is
+	// the default because a batch is usually a sequence -- split, then resize,
+	// then run -- where a step nobody took makes the ones after it wrong.
+	// Independent calls are the other ordinary shape, and there a stop turns
+	// one failure into a whole batch nobody can tell the state of.
+	OnError string `json:"onError,omitempty" jsonschema:"what a failing call does to the calls after it; empty stops the batch"`
 }
 
 // batchResult is what one call in a batch produced.
@@ -68,8 +78,35 @@ type batchOutput struct {
 	// Skipped names the tools after the failure, in order, which never ran. A
 	// caller of the mutating batch has to know which of its changes were not
 	// made, and counting the difference between the calls it sent and the
-	// results it got back is not something a reply should ask of it.
+	// results it got back is not something a reply should ask of it. It is
+	// empty when the batch was told to continue, where nothing is skipped and
+	// Failed is what says how it went.
 	Skipped []string `json:"skipped"`
+	// Failed is how many calls failed, which only a batch told to continue can
+	// have more than one of. Reading it off Results means walking them.
+	Failed int `json:"failed,omitempty"`
+}
+
+const (
+	// onErrorStop ends a batch at its first failure.
+	onErrorStop = "stop"
+	// onErrorContinue runs every call whatever the ones before it did.
+	onErrorContinue = "continue"
+)
+
+// resolveOnError reads what a failure should do. An unknown value is refused
+// rather than treated as the default, because the two answers differ in what
+// they leave behind and a caller that asked for one and got the other cannot
+// tell from the reply.
+func resolveOnError(requested string) (string, error) {
+	switch requested {
+	case "", onErrorStop:
+		return onErrorStop, nil
+	case onErrorContinue:
+		return onErrorContinue, nil
+	default:
+		return "", fmt.Errorf("onError %q is not stop or continue", requested)
+	}
 }
 
 // callReadOnlyToolsBatch runs several reading tools in one request.
@@ -79,10 +116,10 @@ type batchOutput struct {
 // worse than a batch that did nothing. The check happens before anything runs.
 func (t *tools) callReadOnlyToolsBatch(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input batchInput,
 ) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, input, SafetyReadOnly)
+	return t.runBatch(ctx, request, input, SafetyReadOnly)
 }
 
 // callMutatingToolsBatch runs several tools in one request, including ones
@@ -93,10 +130,10 @@ func (t *tools) callReadOnlyToolsBatch(
 // anything.
 func (t *tools) callMutatingToolsBatch(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input batchInput,
 ) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, input, SafetyMutating)
+	return t.runBatch(ctx, request, input, SafetyMutating)
 }
 
 // callDestructiveToolsBatch runs several tools in one request, including the
@@ -107,10 +144,10 @@ func (t *tools) callMutatingToolsBatch(
 // time races tmux's own teardown of the window when the last one goes.
 func (t *tools) callDestructiveToolsBatch(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input batchInput,
 ) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, input, SafetyDestructive)
+	return t.runBatch(ctx, request, input, SafetyDestructive)
 }
 
 // runBatch performs the calls in order, stopping at the first failure.
@@ -122,11 +159,16 @@ func (t *tools) callDestructiveToolsBatch(
 // panes were gone.
 func (t *tools) runBatch(
 	ctx context.Context,
+	request *mcp.CallToolRequest,
 	input batchInput,
 	tier SafetyLevel,
 ) (*mcp.CallToolResult, batchOutput, error) {
 	if len(input.Calls) == 0 {
 		return nil, batchOutput{}, errors.New("a batch needs at least one call")
+	}
+	onError, err := resolveOnError(input.OnError)
+	if err != nil {
+		return nil, batchOutput{}, err
 	}
 	for _, call := range input.Calls {
 		known, served := t.dispatchers[call.Tool]
@@ -152,14 +194,22 @@ func (t *tools) runBatch(
 			output.Results = append(output.Results, batchResult{
 				Tool: call.Tool, Error: "arguments could not be encoded: " + err.Error(),
 			})
-			break
+			output.Failed++
+			if onError == onErrorStop {
+				break
+			}
+			continue
 		}
-		value, err := t.dispatchers[call.Tool].call(ctx, encodedArguments)
+		value, err := t.dispatchers[call.Tool].call(ctx, request, encodedArguments)
 		if err != nil {
 			output.Results = append(output.Results, batchResult{
 				Tool: call.Tool, Error: err.Error(),
 			})
-			break
+			output.Failed++
+			if onError == onErrorStop {
+				break
+			}
+			continue
 		}
 		decoded := map[string]any{}
 		encoded, err := json.Marshal(value)
@@ -170,7 +220,11 @@ func (t *tools) runBatch(
 			output.Results = append(output.Results, batchResult{
 				Tool: call.Tool, Error: "result could not be encoded: " + err.Error(),
 			})
-			break
+			output.Failed++
+			if onError == onErrorStop {
+				break
+			}
+			continue
 		}
 		output.Results = append(output.Results, batchResult{Tool: call.Tool, Result: decoded})
 		output.Completed++
@@ -190,14 +244,23 @@ func (t *tools) runBatch(
 // tool-level failure as an error so the batch stops where the call did.
 func batched[In, Out any](
 	ctx context.Context,
+	request *mcp.CallToolRequest,
 	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
 	arguments json.RawMessage,
+	schema *jsonschema.Resolved,
 ) (any, error) {
-	// The arguments are decoded strictly, because the schema the SDK enforces
-	// on a call of its own is not applied to one reached from here. Without
-	// this a misspelled field is dropped and the call runs on defaults,
-	// reporting success for something the client did not ask for, and a batch
-	// is where a misspelling is most likely.
+	// The SDK applies a tool's schema only to a call it dispatches itself, so
+	// a batch has to apply it here or a batched call would accept what the
+	// same call alone is refused: a value outside a closed set, a number where
+	// a string goes.
+	if schema != nil {
+		if err := schema.Validate(argumentValue(arguments)); err != nil {
+			return nil, fmt.Errorf("arguments are not what this tool takes: %w", err)
+		}
+	}
+	// Decoded strictly as well, so a tool whose schema would not resolve still
+	// refuses a misspelled field rather than dropping it and running on
+	// defaults, which reports success for something nobody asked for.
 	var input In
 	if len(arguments) != 0 {
 		decoder := json.NewDecoder(bytes.NewReader(arguments))
@@ -206,7 +269,7 @@ func batched[In, Out any](
 			return nil, fmt.Errorf("arguments are not what this tool takes: %w", err)
 		}
 	}
-	result, output, err := handler(ctx, nil, input)
+	result, output, err := handler(ctx, request, input)
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +277,17 @@ func batched[In, Out any](
 		return nil, fmt.Errorf("%s", batchErrorText(result))
 	}
 	return output, nil
+}
+
+// argumentValue is one call's arguments as a schema validator reads them.
+// Absent arguments are an empty object rather than null, because a tool that
+// needs none is called in a batch by naming it and nothing else.
+func argumentValue(arguments json.RawMessage) any {
+	var value any
+	if len(arguments) == 0 || json.Unmarshal(arguments, &value) != nil || value == nil {
+		return map[string]any{}
+	}
+	return value
 }
 
 // batchErrorText reports what a failing call said, so a batch's report carries

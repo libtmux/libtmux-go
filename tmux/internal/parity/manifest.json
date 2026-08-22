@@ -31629,7 +31629,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBefore37"
+          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe"
         },
         {
           "kind": "real-tmux",
@@ -31655,7 +31655,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBefore37"
+          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe"
         },
         {
           "kind": "real-tmux",
@@ -31682,7 +31682,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBefore37"
+          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe"
         },
         {
           "kind": "real-tmux",
@@ -31711,7 +31711,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBefore37"
+          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe"
         },
         {
           "kind": "real-tmux",
@@ -31739,7 +31739,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBefore37"
+          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe"
         },
         {
           "kind": "real-tmux",
@@ -33152,7 +33152,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBefore37"
+          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe"
         },
         {
           "kind": "real-tmux",
@@ -35169,7 +35169,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBefore37"
+          "test": "tmux.TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe"
         },
         {
           "kind": "real-tmux",

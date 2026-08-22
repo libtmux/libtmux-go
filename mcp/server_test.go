@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -27,10 +29,23 @@ func TestMain(m *testing.M) {
 // returns a connected client session. Both are torn down with the test.
 func connect(t *testing.T) (*sdk.ClientSession, tmux.Server, context.Context) {
 	t.Helper()
+	return connectWith(t, tmuxtest.ServerOptions{})
+}
+
+// connectWith is connect against a server the test configures.
+//
+// FixedShell is the one worth knowing about: it gives every pane /bin/sh and a
+// one-character prompt, so a test about where the cursor sits measures the code
+// rather than whoever's shell configuration the suite inherited.
+func connectWith(
+	t *testing.T,
+	options tmuxtest.ServerOptions,
+) (*sdk.ClientSession, tmux.Server, context.Context) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	target := tmuxtest.NewServerWithOptions(ctx, t, options)
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
@@ -46,6 +61,18 @@ func connect(t *testing.T) (*sdk.ClientSession, tmux.Server, context.Context) {
 	}
 	t.Cleanup(func() { _ = clientSession.Close() })
 	return clientSession, target, ctx
+}
+
+// resultText is every text part of a reply joined, which is what a failure
+// message needs. Printing the content slice prints pointers.
+func resultText(result *sdk.CallToolResult) string {
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	return said
 }
 
 // call invokes one tool and decodes its structured result into value.
@@ -412,6 +439,92 @@ func TestConnectLeavesAnEmptyServerAlone(t *testing.T) {
 	}
 }
 
+// TestAnAbsentServerIsNotAnEmptyOne covers what a listing says when there is
+// no tmux on the socket at all.
+//
+// The listing answers rather than failing, because asking what is there is the
+// ordinary opening move; but tmux exits when its last pane goes, so a listing
+// of nothing is never a quiet server. Without the note a client reads the
+// wrong socket as an idle machine and goes looking for a pane that was never
+// going to be there, which is what a client that starts its servers with a
+// curated environment produces every time.
+//
+//libtmux:real-tmux
+func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	target := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+	})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "absent-server"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	for _, listing := range []string{"list_panes", "list_windows", "list_sessions"} {
+		var reported struct {
+			Total      int    `json:"total"`
+			ServerNote string `json:"serverNote"`
+		}
+		result := call(ctx, t, session, listing, map[string]any{}, &reported)
+		if result.IsError {
+			t.Fatalf("%s: %s", listing, resultText(result))
+		}
+		if reported.Total != 0 {
+			t.Errorf("%s found %d on a socket with no server", listing, reported.Total)
+		}
+		if !strings.Contains(reported.ServerNote, "no tmux server is running") {
+			t.Errorf("%s said nothing about the absent server: %q",
+				listing, reported.ServerNote)
+		}
+	}
+
+	// A read has no empty list to hand back, so it fails -- but with the same
+	// sentence, rather than the tmux command that failed and the socket file
+	// that is not there.
+	for _, uri := range []string{
+		"tmux://panes/0", "tmux://panes/0/content", "tmux://windows/0",
+		"tmux://windows/0/panes", "tmux://sessions/anything",
+	} {
+		_, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri})
+		if err == nil {
+			t.Errorf("%s was read on a socket with no server", uri)
+			continue
+		}
+		if !strings.Contains(err.Error(), "no tmux server is running") {
+			t.Errorf("%s says %q, want it to name the absent server", uri, err)
+		}
+	}
+
+	// The same question asked directly, and the field a client iterates.
+	var info struct {
+		Alive           bool  `json:"alive"`
+		AttachedClients []any `json:"attachedClients"`
+	}
+	call(ctx, t, session, "get_server_info", map[string]any{}, &info)
+	if info.Alive {
+		t.Error("get_server_info called an absent server alive")
+	}
+	if info.AttachedClients == nil {
+		t.Error("attachedClients came back null, not an empty array")
+	}
+}
+
 // TestConnectLeavesAChosenTransportAlone covers an embedder declining the
 // long-lived client, which is what a tmux configuration that reacts to
 // attachment wants.
@@ -710,6 +823,113 @@ func TestResizePaneSetsTheSizeTmuxSettlesOn(t *testing.T) {
 		"paneId": panes[0],
 	}, nil); !result.IsError {
 		t.Error("a resize naming no dimension was accepted")
+	}
+}
+
+// TestSelectLayoutRefusesTwoAlternativesItself covers a pair tmux rejects. The
+// schema can hold both, so the tool has to say which of its own arguments
+// conflict — otherwise tmux's parser answers, naming modes this tool does not
+// offer.
+//
+//libtmux:real-tmux
+func TestSelectLayoutRefusesTwoAlternativesItself(t *testing.T) {
+	session, _, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: layouts\nwindows:\n  - panes:\n      - {}\n      - {}\n",
+	}, nil)
+
+	result := call(ctx, t, session, "select_layout", map[string]any{
+		"layout": "tiled", "spread": true,
+	}, nil)
+	if !result.IsError {
+		t.Fatal("a layout and a spread together were accepted")
+	}
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	for _, leaked := range []string{"mutually exclusive", "invalid server command"} {
+		if strings.Contains(said, leaked) {
+			t.Errorf("the refusal is tmux's parser talking, not this tool: %q", said)
+		}
+	}
+	if !strings.Contains(said, "alternatives") {
+		t.Errorf("the refusal does not say the two are alternatives: %q", said)
+	}
+
+	// Each on its own still works.
+	for _, arguments := range []map[string]any{
+		{"layout": "tiled"},
+		{"spread": true},
+	} {
+		if result := call(ctx, t, session, "select_layout", arguments, nil); result.IsError {
+			t.Errorf("select_layout %v was refused: %#v", arguments, result.Content)
+		}
+	}
+}
+
+// TestEveryPresetThisTmuxArrangesIsOffered covers an allowlist that stopped
+// keeping up with tmux.
+//
+// A name tmux does not know is not merely refused: 3.3a dies of it and takes
+// every session on the socket, which is why the names are checked before they
+// are sent. The cost of that is a list that has to grow when tmux's does, and
+// the mirrored presets arrived at 3.5 without it.
+//
+// The mirrored pair is checked against the running version rather than by
+// sending an unknown name to find out, because finding out is what ends a 3.3a
+// server. Where the tool does offer one, tmux is made to apply it, so the
+// boundary is not taken on trust.
+//
+//libtmux:real-tmux
+func TestEveryPresetThisTmuxArrangesIsOffered(t *testing.T) {
+	session, target, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: presets\nwindows:\n  - panes:\n      - {}\n      - {}\n",
+	}, nil)
+
+	version, err := target.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	mirrored, err := tmux.ParseVersion("3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for preset, since := range map[string]bool{
+		"even-horizontal":          true,
+		"even-vertical":            true,
+		"main-horizontal":          true,
+		"main-vertical":            true,
+		"tiled":                    true,
+		"main-horizontal-mirrored": version.AtLeast(mirrored),
+		"main-vertical-mirrored":   version.AtLeast(mirrored),
+	} {
+		result := call(ctx, t, session, "select_layout",
+			map[string]any{"layout": preset}, nil)
+		if result.IsError == since {
+			t.Errorf("select_layout %q on tmux %s: refused = %t, want %t",
+				preset, version, result.IsError, !since)
+			continue
+		}
+		if !since {
+			continue
+		}
+		// Offering it is only right if tmux arranges it, so read back what the
+		// window ended up with rather than trusting the call's own success.
+		var window struct {
+			Layout string `json:"layout"`
+		}
+		if info := call(ctx, t, session, "get_window_info",
+			map[string]any{}, &window); info.IsError {
+			t.Fatalf("get_window_info: %#v", info.Content)
+		}
+		if window.Layout == "" {
+			t.Errorf("after select_layout %q the window reports no layout", preset)
+		}
 	}
 }
 
@@ -1093,6 +1313,77 @@ func TestWaitForTextSeesWhatThePaneAlreadyShowed(t *testing.T) {
 	}
 }
 
+// TestABatchToldToContinueRunsTheCallsAfterAFailure covers the other ordinary
+// shape a batch has.
+//
+// Stopping is right for a sequence, where a step nobody took makes the ones
+// after it wrong. It is wrong for independent calls, where one failure turned
+// the whole batch into something a caller cannot tell the state of and had to
+// re-send call by call to find out. The Python server of the same name has
+// taken the choice since it was written.
+//
+//libtmux:real-tmux
+func TestABatchToldToContinueRunsTheCallsAfterAFailure(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: continuing\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	// A failure between two calls that would each succeed on their own.
+	calls := []map[string]any{
+		{"tool": "get_pane_info", "arguments": map[string]any{"paneId": pane}},
+		{"tool": "get_pane_info", "arguments": map[string]any{"paneId": "%9000"}},
+		{"tool": "list_panes", "arguments": map[string]any{}},
+	}
+	type report struct {
+		Results []struct {
+			Tool  string `json:"tool"`
+			Error string `json:"error"`
+		} `json:"results"`
+		Completed int      `json:"completed"`
+		Failed    int      `json:"failed"`
+		Skipped   []string `json:"skipped"`
+	}
+
+	var stopped report
+	call(ctx, t, session, "call_readonly_tools_batch",
+		map[string]any{"calls": calls}, &stopped)
+	if stopped.Completed != 1 || len(stopped.Results) != 2 {
+		t.Errorf("stopping ran %d and reported %d results, want 1 and 2",
+			stopped.Completed, len(stopped.Results))
+	}
+	if !slices.Equal(stopped.Skipped, []string{"list_panes"}) {
+		t.Errorf("stopping skipped %q, want the call after the failure", stopped.Skipped)
+	}
+
+	var continued report
+	call(ctx, t, session, "call_readonly_tools_batch",
+		map[string]any{"calls": calls, "onError": "continue"}, &continued)
+	if continued.Completed != 2 {
+		t.Errorf("continuing ran %d of the two that work", continued.Completed)
+	}
+	if continued.Failed != 1 {
+		t.Errorf("continuing reported %d failures, want 1", continued.Failed)
+	}
+	if len(continued.Results) != 3 {
+		t.Fatalf("continuing reported %d results, want one per call", len(continued.Results))
+	}
+	if len(continued.Skipped) != 0 {
+		t.Errorf("continuing skipped %q, and it skips nothing", continued.Skipped)
+	}
+	if continued.Results[1].Error == "" {
+		t.Error("the failing call is not reported as failed")
+	}
+	if continued.Results[2].Tool != "list_panes" || continued.Results[2].Error != "" {
+		t.Errorf("the call after the failure did not run: %+v", continued.Results[2])
+	}
+
+	// An unknown value is refused rather than read as the default.
+	if result := call(ctx, t, session, "call_readonly_tools_batch",
+		map[string]any{"calls": calls[:1], "onError": "carry-on"}, nil); !result.IsError {
+		t.Error("a batch took an onError it does not have")
+	}
+}
+
 // TestBatchArgumentsAreCheckedLikeAnyCall covers the one place a mistake used
 // to pass: the schema the SDK enforces on a call of its own does not reach a
 // call inside a batch, so a misspelled field was dropped and the call ran on
@@ -1128,6 +1419,138 @@ func TestBatchArgumentsAreCheckedLikeAnyCall(t *testing.T) {
 	}
 	if after := len(paneIDs(ctx, t, session)); after != before {
 		t.Errorf("a rejected call still split a pane: %d then %d", before, after)
+	}
+
+	// The closed sets are part of the same schema, so a batch has to hold a
+	// value to them too, and by the schema rather than by whatever the handler
+	// happens to tolerate.
+	for _, arguments := range []map[string]any{
+		{"paneId": panes[0], "direction": "sideways"},
+		// Accepted by the handler, which folds case, and outside the set the
+		// schema publishes.
+		{"paneId": panes[0], "direction": "RIGHT"},
+	} {
+		batch.Completed, batch.Results = 0, nil
+		call(ctx, t, session, "call_mutating_tools_batch", map[string]any{
+			"calls": []map[string]any{{"tool": "split_window", "arguments": arguments}},
+		}, &batch)
+		if batch.Completed != 0 {
+			t.Errorf("a batch took direction %q", arguments["direction"])
+		}
+		if len(batch.Results) == 0 || !strings.Contains(batch.Results[0].Error, "enum") {
+			t.Errorf("direction %q refused for the wrong reason: %+v",
+				arguments["direction"], batch.Results)
+		}
+	}
+	if after := len(paneIDs(ctx, t, session)); after != before {
+		t.Errorf("a rejected direction still split a pane: %d then %d", before, after)
+	}
+}
+
+// TestACommandThatPrintedBlankLinesSaysSo covers the one answer that reads as
+// its own opposite.
+//
+// A blank row is an empty line, and a capture that is nothing but empty lines
+// arrives as no lines at all, so a command whose whole output is blank lines
+// was reported as having printed nothing. Those are different answers, and the
+// reply has no other field that tells them apart.
+//
+//libtmux:real-tmux
+func TestACommandThatPrintedBlankLinesSaysSo(t *testing.T) {
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: blanks\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	for _, printed := range []struct {
+		command string
+		want    []string
+	}{
+		{"echo", []string{""}},
+		{`printf '\n\n'`, []string{"", ""}},
+		{`printf '\n\nx\n'`, []string{"", "", "x"}},
+		// Still distinguishable from a command that printed nothing at all.
+		{"true", nil},
+	} {
+		t.Run(printed.command, func(t *testing.T) {
+			var reported struct {
+				Output     []string `json:"output"`
+				ExitStatus *int     `json:"exitStatus"`
+			}
+			call(ctx, t, session, "run_command", map[string]any{
+				"paneId": pane, "command": printed.command, "timeoutSeconds": 15,
+			}, &reported)
+			if reported.ExitStatus == nil || *reported.ExitStatus != 0 {
+				t.Fatalf("exit status = %v, want 0", reported.ExitStatus)
+			}
+			if !slices.Equal(reported.Output, printed.want) {
+				t.Errorf("output = %q, want %q", reported.Output, printed.want)
+			}
+		})
+	}
+}
+
+// TestATimedOutRunLeavesNothingOfItsOwnInThePane covers the wrapper outliving
+// the wait that started it.
+//
+// A run that times out is still running, and the directory it records itself
+// in is removed when the call returns. Minutes later the command finishes, the
+// wrapper reaches its own bookkeeping, and the shell reports the redirections
+// it cannot open -- four lines of this package's temporary paths, printed into
+// somebody's terminal long after the call that caused them, and read as
+// command output by whatever runs next.
+//
+//libtmux:real-tmux
+func TestATimedOutRunLeavesNothingOfItsOwnInThePane(t *testing.T) {
+	// A plain POSIX shell, which is what the wrapper is written for, and a
+	// prompt that is one character rather than whoever's shell the suite
+	// inherited.
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: outlived\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var timedOut struct {
+		TimedOut bool `json:"timedOut"`
+	}
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "sleep 3", "timeoutSeconds": 1,
+	}, &timedOut)
+	if !timedOut.TimedOut {
+		t.Fatal("the command did not outlast its wait")
+	}
+
+	// Wait for the pane to go quiet, which is after the command has finished
+	// and the wrapper behind it has run its own lines. Waiting for the command
+	// to leave instead returns before those lines are written.
+	var quiet struct {
+		Outcome string `json:"outcome"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "idleSeconds": 2, "timeoutSeconds": 30,
+	}, &quiet)
+	if quiet.Outcome != "idle" {
+		t.Fatalf("the pane settled as %q, not idle", quiet.Outcome)
+	}
+
+	var shown struct {
+		Lines []string `json:"lines"`
+	}
+	call(ctx, t, session, "capture_pane", map[string]any{"paneId": pane}, &shown)
+	whole := strings.Join(shown.Lines, "\n")
+	for _, leaked := range []string{"cannot create", "Directory nonexistent", "status"} {
+		if strings.Contains(whole, leaked) {
+			t.Errorf("the pane holds %q after a timed-out run:\n%s", leaked, whole)
+		}
+	}
+
+	// And the next run reads its own output rather than the leftovers.
+	var next struct {
+		Output []string `json:"output"`
+	}
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "echo after-the-timeout",
+	}, &next)
+	if len(next.Output) != 1 || next.Output[0] != "after-the-timeout" {
+		t.Errorf("the next run read %q", next.Output)
 	}
 }
 
@@ -1537,6 +1960,72 @@ func TestToolDescriptionsCarryNoSchemaSyntax(t *testing.T) {
 	}
 }
 
+// TestEveryChangingToolSaysWhetherRepeatingItCompounds covers the hint a
+// client needs after a timeout: a call that may or may not have landed can be
+// retried only when repeating it cannot compound. A tool added without
+// deciding lands in neither list and fails here rather than defaulting to the
+// cautious answer silently.
+//
+//libtmux:real-tmux
+func TestEveryChangingToolSaysWhetherRepeatingItCompounds(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Changing tmux to a state: doing it twice leaves the same state.
+	settles := map[string]bool{
+		"clear_pane": true, "delete_buffer": true, "exit_copy_mode": true,
+		"move_window": true, "rename_session": true, "rename_window": true,
+		"select_layout": true, "select_pane": true, "select_window": true,
+		"set_environment": true, "set_option": true, "set_pane_title": true,
+	}
+	// Changing tmux by a step, or by one that reverses: splitting twice makes
+	// two panes, swapping twice puts them back, zooming twice unzooms.
+	compounds := map[string]bool{
+		"build_workspace": true, "call_destructive_tools_batch": true,
+		"call_mutating_tools_batch": true, "create_session": true,
+		"create_window": true, "enter_copy_mode": true, "kill_pane": true,
+		"kill_server": true, "kill_session": true, "kill_window": true,
+		"load_buffer": true, "move_pane": true, "paste_buffer": true,
+		"paste_text": true, "pipe_pane": true, "resize_pane": true,
+		"resize_window": true, "respawn_pane": true, "run_command": true,
+		"send_keys": true, "send_keys_batch": true, "signal_channel": true,
+		"split_window": true, "swap_pane": true,
+	}
+
+	for _, tool := range listed.Tools {
+		annotations := tool.Annotations
+		if annotations == nil {
+			t.Errorf("%s carries no annotations at all", tool.Name)
+			continue
+		}
+		if annotations.ReadOnlyHint {
+			if !annotations.IdempotentHint {
+				t.Errorf("%s only reads, so repeating it cannot compound", tool.Name)
+			}
+			continue
+		}
+		switch {
+		case settles[tool.Name]:
+			if !annotations.IdempotentHint {
+				t.Errorf("%s sets a state, so it should say repeating it is safe",
+					tool.Name)
+			}
+		case compounds[tool.Name]:
+			if annotations.IdempotentHint {
+				t.Errorf("%s compounds, so it must not say repeating it is safe",
+					tool.Name)
+			}
+		default:
+			t.Errorf("%s is a changing tool in neither list: decide whether "+
+				"repeating it compounds and add it to one", tool.Name)
+		}
+	}
+}
+
 // TestSafetyLevelWithholdsTools covers the guarantee a level makes: a tool
 // above it is never advertised, so no prompt reaches it, and a batch cannot
 // reach around the level that hid it.
@@ -1552,6 +2041,9 @@ func TestSafetyLevelWithholdsTools(t *testing.T) {
 		{"readonly", false, false, true},
 		{"", false, true, false},
 		{"destructive", true, true, false},
+		// A level nobody meant to write is the one case where guessing wrong
+		// hands out more than was asked for, so it reads as the lowest.
+		{"readonyl", false, false, true},
 	} {
 		t.Run("level "+testCase.level, func(t *testing.T) {
 			t.Setenv("LIBTMUX_SAFETY", testCase.level)
@@ -1640,6 +2132,39 @@ func TestResourcesAddressTheHierarchy(t *testing.T) {
 	if len(panes) == 0 {
 		t.Fatal("no panes")
 	}
+
+	// Which spellings a URI takes, pinned rather than assumed. Every tool hands
+	// a pane back as %1, so a client composing a URI from one is the likely
+	// path, and a read and a subscription of the same string must not disagree
+	// about whether it is a URI at all.
+	bare := strings.TrimPrefix(panes[0], "%")
+	for _, spelling := range []struct {
+		uri      string
+		readable bool
+		why      string
+	}{
+		{"tmux://panes/" + bare + "/content", true, "the form the templates and completions give"},
+		{"tmux://panes/%25" + bare + "/content", true, "the sigil, percent-encoded"},
+		{
+			"tmux://panes/%" + bare + "/content", false,
+			"the sigil raw, which no URI can carry: % begins an escape",
+		},
+	} {
+		_, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: spelling.uri})
+		if (err == nil) != spelling.readable {
+			t.Errorf("read %s (%s): error = %v, want readable = %t",
+				spelling.uri, spelling.why, err, spelling.readable)
+		}
+		// Subscription is routed by the string itself rather than by template,
+		// so it takes the raw sigil too and must keep doing so: a client that
+		// subscribed and got silence is the defect that bought this.
+		if err := session.Subscribe(ctx, &sdk.SubscribeParams{URI: spelling.uri}); err != nil {
+			t.Errorf("subscribe %s (%s): %v", spelling.uri, spelling.why, err)
+		}
+		if err := session.Unsubscribe(ctx, &sdk.UnsubscribeParams{URI: spelling.uri}); err != nil {
+			t.Errorf("unsubscribe %s: %v", spelling.uri, err)
+		}
+	}
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		read, err = session.ReadResource(ctx, &sdk.ReadResourceParams{
@@ -1674,6 +2199,45 @@ func TestResourcesAddressTheHierarchy(t *testing.T) {
 		URI: "tmux://nonsense/1",
 	}); err == nil {
 		t.Error("an unknown resource URI was accepted")
+	}
+}
+
+// TestResourceURIsArePercentDecoded covers the promise the URI comment makes:
+// both the bare form and the percent-encoded sigil form address one object. A
+// name needing an escape has no other spelling, so without decoding it cannot
+// be addressed as a resource at all.
+//
+//libtmux:real-tmux
+func TestResourceURIsArePercentDecoded(t *testing.T) {
+	session, _, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: spaced name\nwindows:\n  - window_name: only\n" +
+			"    panes:\n      - shell: sleep 300\n",
+	}, nil)
+
+	// A session whose name needs an escape has exactly one legal spelling.
+	read, err := session.ReadResource(ctx, &sdk.ReadResourceParams{
+		URI: "tmux://sessions/spaced%20name/windows",
+	})
+	if err != nil {
+		t.Fatalf("read windows of an escaped session name: %v", err)
+	}
+	if len(read.Contents) == 0 || !strings.Contains(read.Contents[0].Text, "only") {
+		t.Errorf("an escaped session name selects no windows: %+v", read.Contents)
+	}
+
+	// %25 is how a client encodes the sigil tmux prints, so %250 is pane %0.
+	panes := paneIDs(ctx, t, session)
+	if len(panes) == 0 {
+		t.Fatal("no panes")
+	}
+	encoded := "tmux://panes/%25" + strings.TrimPrefix(panes[0], "%")
+	read, err = session.ReadResource(ctx, &sdk.ReadResourceParams{URI: encoded})
+	if err != nil {
+		t.Fatalf("read %s: %v", encoded, err)
+	}
+	if len(read.Contents) == 0 || !strings.Contains(read.Contents[0].Text, panes[0]) {
+		t.Errorf("%s does not describe pane %s: %+v", encoded, panes[0], read.Contents)
 	}
 }
 
@@ -1898,7 +2462,9 @@ func TestCompletionsOfferValuesThatExist(t *testing.T) {
 		t.Errorf("a prefix matching nothing offered %v", got.Completion.Values)
 	}
 
-	// A prompt argument completes the same way.
+	// A prompt argument is answered in the dialect the tools speak, because
+	// what fills it is read back by a model and passed to paneId. Offering the
+	// URI form there hands the model an id every tool rejects.
 	got, err = session.Complete(ctx, &sdk.CompleteParams{
 		Ref:      &sdk.CompleteReference{Type: "ref/prompt", Name: "diagnose_pane"},
 		Argument: sdk.CompleteParamsArgument{Name: "pane", Value: ""},
@@ -1907,7 +2473,61 @@ func TestCompletionsOfferValuesThatExist(t *testing.T) {
 		t.Fatalf("complete a prompt argument: %v", err)
 	}
 	if len(got.Completion.Values) == 0 {
-		t.Error("a prompt argument offered nothing")
+		t.Fatal("a prompt argument offered nothing")
+	}
+	for _, value := range got.Completion.Values {
+		if !strings.HasPrefix(value, "%") {
+			t.Errorf("offered %q to a prompt, which no tool accepts as a pane", value)
+		}
+	}
+
+	// Whatever is offered for a prompt has to be usable as a pane id, which is
+	// the whole claim: hand it straight to a tool.
+	if len(got.Completion.Values) > 0 {
+		result := call(ctx, t, session, "get_pane_info", map[string]any{
+			"paneId": got.Completion.Values[0],
+		}, nil)
+		if result.IsError {
+			t.Errorf("a completed prompt value is not a pane a tool will take: %#v",
+				result.Content)
+		}
+	}
+}
+
+// TestCompletionsEscapeWhatAUriMustCarry covers a name a URI cannot hold as it
+// stands: a completion for a template slot is pasted into a path, so it has to
+// arrive already escaped or the URI it builds does not parse.
+//
+//libtmux:real-tmux
+func TestCompletionsEscapeWhatAUriMustCarry(t *testing.T) {
+	session, _, ctx := connect(t)
+	call(ctx, t, session, "build_workspace", map[string]any{
+		"document": "session_name: spaced name\nwindows:\n  - window_name: only\n" +
+			"    panes:\n      - {}\n",
+	}, nil)
+
+	got, err := session.Complete(ctx, &sdk.CompleteParams{
+		Ref: &sdk.CompleteReference{
+			Type: "ref/resource", URI: "tmux://sessions/{session}/windows",
+		},
+		Argument: sdk.CompleteParamsArgument{Name: "session", Value: "spaced"},
+	})
+	if err != nil {
+		t.Fatalf("complete a session: %v", err)
+	}
+	if !slices.Contains(got.Completion.Values, "spaced%20name") {
+		t.Fatalf("offered %v, want the name escaped for a path", got.Completion.Values)
+	}
+
+	// The value a client was handed has to build a URI that reads.
+	read, err := session.ReadResource(ctx, &sdk.ReadResourceParams{
+		URI: "tmux://sessions/" + got.Completion.Values[0] + "/windows",
+	})
+	if err != nil {
+		t.Fatalf("read the URI a completion built: %v", err)
+	}
+	if len(read.Contents) == 0 || !strings.Contains(read.Contents[0].Text, "only") {
+		t.Errorf("the URI a completion built selects no windows: %+v", read.Contents)
 	}
 }
 
@@ -2025,6 +2645,8 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 type advertisedSchema struct {
 	Properties map[string]struct {
 		Description string `json:"description"`
+		// Enum is the closed set of values, absent when any value goes.
+		Enum []any `json:"enum"`
 	} `json:"properties"`
 }
 
@@ -2059,6 +2681,79 @@ func TestEveryArgumentSaysWhatItIs(t *testing.T) {
 				t.Errorf("%s: argument %q has no description", tool.Name, name)
 			}
 		}
+	}
+}
+
+// TestAValueOutsideAClosedSetIsRefused covers what publishing a closed set is
+// for: the server enforces it rather than describing it, and still takes every
+// value it lists. An enum that narrowed what a tool accepts would break
+// callers instead of guiding them.
+//
+//libtmux:real-tmux
+func TestAValueOutsideAClosedSetIsRefused(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+	// Two panes, so a side to look toward has something on it, and shells
+	// rather than commands, so nothing exits under the assertions.
+	workspace(ctx, t, session,
+		"session_name: closed-sets\nwindows:\n  - panes:\n      - {}\n      - {}\n")
+
+	pane := firstPane(ctx, t, session)
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemas := map[string]advertisedSchema{}
+	for _, tool := range listed.Tools {
+		schemas[tool.Name] = schemaOf(t, tool)
+	}
+	for _, closed := range []struct {
+		tool     string
+		argument string
+		fixed    map[string]any
+	}{
+		// No paneId: the tools that take a scope refuse a target the scope
+		// does not read, which is a constraint of its own.
+		{"show_hooks", "scope", map[string]any{}},
+		{"list_panes", "detail", map[string]any{}},
+		{"find_pane_by_position", "direction", map[string]any{"paneId": pane}},
+	} {
+		t.Run(closed.tool+"/"+closed.argument, func(t *testing.T) {
+			send := func(value string) *sdk.CallToolResult {
+				arguments := map[string]any{closed.argument: value}
+				maps.Copy(arguments, closed.fixed)
+				result, err := session.CallTool(ctx, &sdk.CallToolParams{
+					Name: closed.tool, Arguments: arguments,
+				})
+				if err != nil {
+					return &sdk.CallToolResult{
+						IsError: true,
+						Content: []sdk.Content{&sdk.TextContent{Text: err.Error()}},
+					}
+				}
+				return result
+			}
+			if result := send("sideways"); !result.IsError {
+				t.Errorf("%s took an unlisted %s", closed.tool, closed.argument)
+			} else if said := resultText(result); !strings.Contains(said, "enum") {
+				t.Errorf("refused for the wrong reason: %s", said)
+			}
+			property, carried := schemas[closed.tool].Properties[closed.argument]
+			if !carried || len(property.Enum) == 0 {
+				t.Fatalf("%s publishes no set for %s", closed.tool, closed.argument)
+			}
+			for _, value := range property.Enum {
+				// Empty means the default and is reached by omitting the
+				// argument, which is what a client actually sends.
+				if value == nil || value == "" {
+					continue
+				}
+				if result := send(value.(string)); result.IsError {
+					t.Errorf("%s refused its own %s %q: %s",
+						closed.tool, closed.argument, value, resultText(result))
+				}
+			}
+		})
 	}
 }
 
@@ -2240,5 +2935,1057 @@ func TestListServersLeavesOutSocketsNothingIsListeningOn(t *testing.T) {
 	call(ctx, t, session, "list_servers", map[string]any{"maxServers": 1}, &capped)
 	if len(capped.Servers) > 1 {
 		t.Errorf("maxServers 1 returned %d servers", len(capped.Servers))
+	}
+}
+
+// TestANamedTargetThatIsGoneNamesTheCallThatFindsOne covers the difference
+// between an error a model can read and one it can act on.
+//
+// tmux answers with what it looked for, which names the mechanism and leaves
+// the way out to be guessed. The listing is always the right next move, so the
+// refusal says so.
+//
+// This is about a tool that resolves a target. The listing tools take the same
+// argument names as filters, where selecting nothing is an answer rather than
+// a failure, and they are deliberately not here.
+//
+//libtmux:real-tmux
+func TestANamedTargetThatIsGoneNamesTheCallThatFindsOne(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: named\nwindows:\n  - panes:\n      - {}\n")
+
+	for _, testCase := range []struct {
+		tool, argument, value, wants string
+	}{
+		{"capture_pane", "paneId", "%99999", "list_panes"},
+		{"get_pane_info", "paneId", "%99999", "list_panes"},
+		{"get_window_info", "windowId", "@99999", "list_windows"},
+		{"get_session_info", "sessionName", "no-such-session", "list_sessions"},
+		{"send_keys", "paneId", "%99999", "list_panes"},
+	} {
+		t.Run(testCase.tool+"/"+testCase.argument, func(t *testing.T) {
+			arguments := map[string]any{testCase.argument: testCase.value}
+			if testCase.tool == "send_keys" {
+				arguments["command"] = "true"
+			}
+			result := call(ctx, t, session, testCase.tool, arguments, nil)
+			if !result.IsError {
+				t.Fatalf("a target that does not exist was accepted")
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, testCase.wants) {
+				t.Errorf("the refusal does not name %s: %q", testCase.wants, said)
+			}
+			if strings.Contains(said, "snapshot object") {
+				t.Errorf("the refusal is tmux's wording, not this server's: %q", said)
+			}
+		})
+	}
+}
+
+// TestASettingsScopeRefusesATargetItCannotRead covers an argument thrown away
+// without a word.
+//
+// A caller who means a pane and writes session gets a session-wide answer, and
+// nothing in the reply says the pane they named was discarded — so a mistake
+// in one field reads as a successful call about something else.
+//
+//libtmux:real-tmux
+func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: scoped\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	for _, testCase := range []struct {
+		name      string
+		tool      string
+		arguments map[string]any
+		refused   bool
+	}{
+		{
+			"a pane at session scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "session", "paneId": pane},
+			true,
+		},
+		{
+			"a window at server scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "server", "windowId": "@0"},
+			true,
+		},
+		{
+			"a pane at window scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "window", "paneId": pane},
+			true,
+		},
+		{
+			"setting one too", "set_option",
+			map[string]any{
+				"name": "history-limit", "value": "5000",
+				"scope": "session", "paneId": pane,
+			},
+			true,
+		},
+		{
+			"hooks too", "show_hooks",
+			map[string]any{"scope": "session", "paneId": pane},
+			true,
+		},
+		{
+			// Pane scope was the one that read nothing back: tmux walks
+			// pane, window, session, server from the pane it is given, so a
+			// caller who meant the window got the active pane's answer.
+			"a window at pane scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "pane", "windowId": "@0"},
+			true,
+		},
+		{
+			"a window at pane scope, setting one", "set_option",
+			map[string]any{
+				"name": "history-limit", "value": "5000",
+				"scope": "pane", "windowId": "@0",
+			},
+			true,
+		},
+		{
+			"a window at the default scope, which is pane", "show_hooks",
+			map[string]any{"windowId": "@0"},
+			true,
+		},
+		{
+			"a pane at pane scope is the point", "show_option",
+			map[string]any{"name": "history-limit", "scope": "pane", "paneId": pane},
+			false,
+		},
+		{
+			"naming no target is fine", "show_option",
+			map[string]any{"name": "history-limit", "scope": "session"},
+			false,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := call(ctx, t, session, testCase.tool, testCase.arguments, nil)
+			if result.IsError != testCase.refused {
+				t.Fatalf("isError = %v, want %v: %#v",
+					result.IsError, testCase.refused, result.Content)
+			}
+			if !testCase.refused {
+				return
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, "not read at") {
+				t.Errorf("the refusal does not say the argument is unread: %q", said)
+			}
+		})
+	}
+}
+
+// TestServerMessagesAreBoundedLikeEveryOtherReply covers the one reply in this
+// package that had a count cap and no byte cap.
+//
+// tmux's message log records the commands it ran, and this server's own
+// listings carry a format string naming every field it wants, so the log is
+// mostly this server quoted back at itself at thousands of characters a line.
+// A hundred of those is a reply no caller can afford, and the caller cannot
+// see it coming: the size belongs to the log, not to the request.
+//
+//libtmux:real-tmux
+func TestServerMessagesAreBoundedLikeEveryOtherReply(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: messages\nwindows:\n  - panes:\n      - {}\n")
+
+	// A log long enough to be worth bounding, made the way a caller makes one:
+	// by asking this server questions.
+	call(ctx, t, session, "set_option", map[string]any{
+		"scope": "server", "name": "message-limit", "value": "1000",
+	}, nil)
+	for range 40 {
+		call(ctx, t, session, "list_panes", map[string]any{}, nil)
+	}
+
+	measure := func(arguments map[string]any) (int, int, bool) {
+		t.Helper()
+		var reply struct {
+			Messages            []string `json:"messages"`
+			MessagesUnavailable string   `json:"messagesUnavailable"`
+			Truncated           bool     `json:"truncated"`
+		}
+		arguments["includeMessages"] = true
+		result := call(ctx, t, session, "get_server_info", arguments, &reply)
+		if result.IsError {
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			t.Fatalf("get_server_info %v: %s", arguments, said)
+		}
+		// tmux keeps the message log per client and refuses the command
+		// outright before 3.5 when nothing is attached, which the in-memory
+		// transport used here never is. The reply has to say so rather than
+		// return an empty log, and there is nothing to bound when it does.
+		if reply.MessagesUnavailable != "" {
+			if len(reply.Messages) != 0 {
+				t.Errorf("the log is reported unavailable and carries %d messages",
+					len(reply.Messages))
+			}
+			t.Skipf("this tmux will not report its message log here: %s",
+				reply.MessagesUnavailable)
+		}
+		size := 0
+		for _, message := range reply.Messages {
+			size += len(message) + 1
+		}
+		return len(reply.Messages), size, reply.Truncated
+	}
+
+	// The number is this test's own claim rather than a copy of the cap: what
+	// matters is that a caller who asked for nothing cannot be handed a reply
+	// measured in hundreds of kilobytes. Unbounded, this log runs past 180,000.
+	const affordable = 32_000
+	count, size, truncated := measure(map[string]any{})
+	if size > affordable {
+		t.Errorf("asking for the message log with no bounds returned %d bytes over "+
+			"%d messages; a caller cannot spend that and did not ask to", size, count)
+	}
+	if truncated && count == 0 {
+		t.Error("the reply reports truncation and carries nothing")
+	}
+
+	// A caller may ask for less, and is told that it cost something.
+	fewer, _, fewerTruncated := measure(map[string]any{"maxLines": 5})
+	if fewer > 5 {
+		t.Errorf("maxLines 5 returned %d messages", fewer)
+	}
+	if count > fewer && !fewerTruncated {
+		t.Error("a reply cut to five messages does not report the truncation")
+	}
+
+	// And may bound the bytes, which is the cap that was missing.
+	_, tight, tightTruncated := measure(map[string]any{"maxLines": 1000, "maxBytes": 4000})
+	if tight > 4000 {
+		t.Errorf("maxBytes 4000 returned %d bytes", tight)
+	}
+	if size > tight && !tightTruncated {
+		t.Error("a reply cut to four thousand bytes does not report the truncation")
+	}
+}
+
+// TestServerInfoDoesNotInventAHealthyEmptyServer covers a reply that a caller
+// would believe.
+//
+// A tmux server with nothing in it and a tmux this process could not run come
+// back as the same reply once the errors are dropped: alive false, no socket,
+// zero of everything. The first is an answer and the second is not knowing, and
+// a caller acting on the second acts on a description of a server that does not
+// exist.
+//
+//libtmux:real-tmux
+func TestServerInfoDoesNotInventAHealthyEmptyServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	unreachable := tmux.NewServer(tmux.ServerOptions{
+		Binary:     filepath.Join(t.TempDir(), "there-is-no-tmux-here"),
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+	})
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(unreachable).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "unreachable"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	var reported struct {
+		Alive    bool   `json:"alive"`
+		Sessions int    `json:"sessions"`
+		Socket   string `json:"socketPath"`
+	}
+	result := call(ctx, t, session, "get_server_info", map[string]any{}, &reported)
+	if !result.IsError {
+		t.Fatalf("a tmux that cannot be run was reported as alive=%t with %d sessions "+
+			"and socket %q, rather than as an error",
+			reported.Alive, reported.Sessions, reported.Socket)
+	}
+}
+
+// TestAHalfBuiltWorkspaceSaysWhatSurvived covers a failure whose leftovers the
+// reply did not mention.
+//
+// Build is not atomic and cannot be: tmux has no transaction. The reply named
+// the pane it died on and nothing else, so a caller who read it believed
+// nothing happened and sent the same document again -- which fails on a name
+// that already exists, for a reason the first reply never gave. The batch tools
+// have the same property and disclose it; this now does too.
+//
+//libtmux:real-tmux
+func TestAHalfBuiltWorkspaceSaysWhatSurvived(t *testing.T) {
+	session, _, ctx := connect(t)
+
+	// More panes than an eighty-column window can hold, so tmux refuses part
+	// way through rather than at the start.
+	document := "session_name: halfbuilt\nwindows:\n  - panes:\n" +
+		strings.Repeat("      - {}\n", 40)
+	result := call(ctx, t, session, "build_workspace", map[string]any{
+		"document": document,
+	}, nil)
+	if !result.IsError {
+		t.Skip("this tmux fitted forty panes, so there is no partial build to report")
+	}
+	// The helper stops at IsError, so the fields are read here: a failed call
+	// still carries the identifiers a caller cleans up with.
+	var reported struct {
+		SessionID   string `json:"sessionId"`
+		SessionName string `json:"sessionName"`
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &reported); err != nil {
+		t.Fatal(err)
+	}
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	if !strings.Contains(said, "halfbuilt") {
+		t.Errorf("the failure does not name the session it left behind: %q", said)
+	}
+	if reported.SessionName != "halfbuilt" {
+		t.Errorf("sessionName = %q, want the name that was asked for", reported.SessionName)
+	}
+	if reported.SessionID == "" {
+		t.Error("no session id to clean up with")
+	}
+
+	// The session really is there, which is what the reply now says.
+	var listed struct {
+		Sessions []struct {
+			Name string `json:"name"`
+		} `json:"sessions"`
+	}
+	call(ctx, t, session, "list_sessions", map[string]any{}, &listed)
+	found := false
+	for _, each := range listed.Sessions {
+		if each.Name == "halfbuilt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the reply named a surviving session that is not there")
+	}
+}
+
+// TestRespawningALivePaneNamesTheWayOut covers tmux's own refusal reaching a
+// caller unexplained.
+//
+// tmux will not respawn a pane that is still running without -k, and says so
+// as "respawn-pane exited 1". The way out is one argument away, and every
+// other refusal in this server names it.
+//
+//libtmux:real-tmux
+func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: respawn\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	result := call(ctx, t, session, "respawn_pane", map[string]any{"paneId": pane}, nil)
+	if !result.IsError {
+		t.Fatal("respawning a live pane without kill was accepted")
+	}
+	said := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			said += text.Text
+		}
+	}
+	if !strings.Contains(said, "kill") {
+		t.Errorf("the refusal does not name the way out: %q", said)
+	}
+	if strings.Contains(said, "exited 1") {
+		t.Errorf("the refusal is tmux's exit code rather than a reason: %q", said)
+	}
+
+	// And the way out works.
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": pane, "kill": true,
+	}, nil); result.IsError {
+		t.Errorf("respawn_pane with kill: %#v", result.Content)
+	}
+}
+
+// TestACommandThatExitsTakesThePaneAndItsWindow covers the gap between what
+// respawn_pane promises and what a caller gets.
+//
+// Keeping the pane and its place in the layout holds while the command runs.
+// A command that exits leaves tmux nothing to keep, and remain-on-exit is the
+// only thing that holds the pane open, so the description has to name it.
+//
+//libtmux:real-tmux
+func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
+	session, _, ctx := connect(t)
+	// Both panes run something that outlives the assertions. A pane left to a
+	// shell is a pane that can end on its own, and one ending early takes its
+	// window and then the session out from under the test -- which is how this
+	// failed on a slower machine while passing on every tmux release here.
+	if result := call(ctx, t, session, "create_session", map[string]any{
+		"name": "reaped", "command": "sleep 300",
+	}, nil); result.IsError {
+		t.Fatalf("create_session: %s", resultText(result))
+	}
+	var doomedWindow struct {
+		PaneID string `json:"paneId"`
+	}
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "reaped", "name": "doomed", "command": "sleep 300",
+	}, &doomedWindow); result.IsError {
+		t.Fatalf("create_window: %s", resultText(result))
+	}
+	doomed := doomedWindow.PaneID
+
+	// The reply may already say the pane went: reading it back is the last
+	// thing a respawn does, and a command that exits can beat that read.
+	var restarted struct {
+		PaneID string `json:"paneId"`
+		Gone   bool   `json:"gone"`
+	}
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": doomed, "command": "true", "kill": true,
+	}, &restarted); result.IsError {
+		t.Fatalf("respawn_pane on %s: %s", doomed, resultText(result))
+	}
+	if restarted.PaneID != doomed {
+		t.Errorf("respawn_pane answered for %q, want %q", restarted.PaneID, doomed)
+	}
+
+	// Reaping waits on the child's exit reaching tmux, so this polls rather
+	// than looking once and calling the answer settled.
+	deadline := time.Now().Add(10 * time.Second)
+	for slices.Contains(paneIDs(ctx, t, session), doomed) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s outlived a command that exited", doomed)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// And the way to keep it, which is what the description now points at.
+	var made struct {
+		PaneID   string `json:"paneId"`
+		WindowID string `json:"windowId"`
+	}
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "reaped", "name": "held",
+	}, &made); result.IsError {
+		t.Fatalf("create_window: %s", resultText(result))
+	}
+	if result := call(ctx, t, session, "set_option", map[string]any{
+		"name": "remain-on-exit", "value": "on",
+		"scope": "window", "windowId": made.WindowID,
+	}, nil); result.IsError {
+		t.Fatalf("set_option: %s", resultText(result))
+	}
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": made.PaneID, "command": "true", "kill": true,
+	}, nil); result.IsError {
+		t.Fatalf("respawn_pane: %#v", result.Content)
+	}
+
+	// The pane stays, so what this waits for is the process ending rather than
+	// the pane going.
+	deadline = time.Now().Add(10 * time.Second)
+	for {
+		var listed struct {
+			Panes []struct {
+				ID     string `json:"id"`
+				Status struct {
+					Dead bool `json:"dead"`
+				} `json:"status"`
+			} `json:"panes"`
+		}
+		call(ctx, t, session, "list_panes", map[string]any{
+			"sessionName": "reaped", "detail": "full",
+		}, &listed)
+		found := false
+		for _, pane := range listed.Panes {
+			if pane.ID != made.PaneID {
+				continue
+			}
+			found = true
+			if pane.Status.Dead {
+				return
+			}
+		}
+		if !found {
+			t.Fatalf("%s was reaped though remain-on-exit was set", made.PaneID)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never reported its command as finished", made.PaneID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestAFilteredListingSaysHowManyItLeftOut covers a total a client reads as a
+// remainder.
+//
+// total counts what was there before the criteria ran, so a shorter list under
+// a larger total is what a filter excluded. Every tool here that returns pane
+// text does shorten its reply and says so, which makes "ask again for the
+// rest" the available and wrong reading. list_servers has always answered this
+// with skipped; the listings a client reaches for first did not.
+//
+//libtmux:real-tmux
+func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: counted\nwindows:\n"+
+		"  - panes:\n      - {}\n  - panes:\n      - {}\n")
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "counted", "name": "singled-out",
+	}, nil); result.IsError {
+		t.Fatalf("create_window: %#v", result.Content)
+	}
+
+	var listed struct {
+		Windows []struct {
+			Name string `json:"name"`
+		} `json:"windows"`
+		Total   int `json:"total"`
+		Skipped int `json:"skipped"`
+	}
+	call(ctx, t, session, "list_windows", map[string]any{"name": "singled-out"}, &listed)
+	if len(listed.Windows) != 1 {
+		t.Fatalf("the filter did not select one window: %#v", listed.Windows)
+	}
+	if listed.Total <= len(listed.Windows) {
+		t.Fatalf("nothing was filtered out, so this proves nothing: total %d",
+			listed.Total)
+	}
+	if listed.Total != len(listed.Windows)+listed.Skipped {
+		t.Errorf("total %d does not reconcile: %d listed, %d skipped",
+			listed.Total, len(listed.Windows), listed.Skipped)
+	}
+
+	// An unfiltered listing left nothing out, and says so by omitting the
+	// field rather than by a zero a caller has to tell apart from a filter
+	// that happened to exclude none. A pointer is what distinguishes the two,
+	// because an absent key leaves a plain int at whatever it already held.
+	var unfiltered struct {
+		Windows []struct{} `json:"windows"`
+		Total   int        `json:"total"`
+		Skipped *int       `json:"skipped"`
+	}
+	call(ctx, t, session, "list_windows", map[string]any{}, &unfiltered)
+	if unfiltered.Skipped != nil {
+		t.Errorf("an unfiltered listing reported %d skipped", *unfiltered.Skipped)
+	}
+	if unfiltered.Total != len(unfiltered.Windows) {
+		t.Errorf("an unfiltered listing dropped %d of %d",
+			unfiltered.Total-len(unfiltered.Windows), unfiltered.Total)
+	}
+}
+
+// TestEveryToolAgreesWithEverySafetyLevel covers the whole cross-product of
+// tool and level, in both directions, rather than the one tool a spot check
+// would try.
+//
+// A level that withholds a tool and still dispatches it is worse than one that
+// never withheld it, because the operator believes the bound is in place. A
+// level that offers a tool and then refuses it for safety is the same lie told
+// the other way round. Which tools a level withholds comes from the
+// annotations, so the set moves whenever a tool is added, and a spot check on
+// kill_server said nothing about the other thirty-five.
+//
+//libtmux:real-tmux
+func TestEveryToolAgreesWithEverySafetyLevel(t *testing.T) {
+	everything := func(t *testing.T) map[string]bool {
+		t.Helper()
+		t.Setenv("LIBTMUX_SAFETY", "destructive")
+		session, _, ctx := connect(t)
+		listed, err := session.ListTools(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names := map[string]bool{}
+		for _, tool := range listed.Tools {
+			names[tool.Name] = true
+		}
+		return names
+	}(t)
+
+	for _, level := range []string{"readonly", "mutating"} {
+		t.Run(level, func(t *testing.T) {
+			t.Setenv("LIBTMUX_SAFETY", level)
+			session, _, ctx := connect(t)
+			listed, err := session.ListTools(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			offered := map[string]bool{}
+			for _, tool := range listed.Tools {
+				offered[tool.Name] = true
+			}
+			withheld := 0
+			for name := range everything {
+				if offered[name] {
+					continue
+				}
+				withheld++
+				// Unknown rather than refused: a withheld tool is not a tool
+				// this server serves, and saying anything else tells a client
+				// the bound is a preference.
+				_, err := session.CallTool(ctx, &sdk.CallToolParams{
+					Name: name, Arguments: map[string]any{},
+				})
+				if err == nil {
+					t.Errorf("%s is withheld at %s and answered anyway", name, level)
+					continue
+				}
+				if !strings.Contains(err.Error(), "unknown tool") {
+					t.Errorf("%s at %s was refused as %v, want unknown", name, level, err)
+				}
+			}
+			if withheld == 0 {
+				t.Errorf("%s withholds nothing, which is not what it is for", level)
+			}
+
+			// The other half of the cross-product: a tool a level does offer
+			// has to work there. Listing one and then failing it because of
+			// the level is the same lie as withholding one and dispatching it,
+			// told the other way round.
+			// A tool whose contract is to wait blocks until its own deadline
+			// when it is called with nothing, which measures the clock rather
+			// than the level and spends the budget every later call needs.
+			waits := map[string]bool{"wait_for_text": true, "wait_for_channel": true}
+			for name := range offered {
+				if waits[name] {
+					continue
+				}
+				// Bounded on its own, so a tool that blocks fails itself
+				// rather than every tool after it.
+				callCtx, endCall := context.WithTimeout(ctx, 10*time.Second)
+				result, err := session.CallTool(callCtx, &sdk.CallToolParams{
+					Name: name, Arguments: map[string]any{},
+				})
+				endCall()
+				if err != nil {
+					t.Errorf("%s is offered at %s and the call failed: %v", name, level, err)
+					continue
+				}
+				// Most refuse for want of a required argument, which is the
+				// tool answering rather than the level withholding it. What
+				// must not appear is the safety refusal.
+				if result.IsError && strings.Contains(resultText(result), "safety") {
+					t.Errorf("%s is offered at %s and refused for safety: %s",
+						name, level, resultText(result))
+				}
+			}
+			t.Logf("%s: %d withheld and unreachable, %d offered and none refused "+
+				"for safety (%d that only wait were not called)",
+				level, withheld, len(offered)-len(waits), len(waits))
+		})
+	}
+}
+
+// TestAnIdThatNamesNothingSaysWhichListingFindsOne is a behavioural gate on
+// every tool that takes an id.
+//
+// tmux answers with what it looked for -- "snapshot object not found: pane
+// %9" -- which names the mechanism. A model reading that has no reason to
+// prefer listing over trying another id, and the listing is always the right
+// next move, which is why notFound exists. Six tools reached tmux directly and
+// returned its message instead, and nothing said so: each is a correct-looking
+// call to the tmux module. Asking every tool at once covers the ones nobody
+// has written yet.
+//
+//libtmux:real-tmux
+func TestAnIdThatNamesNothingSaysWhichListingFindsOne(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: named\nwindows:\n  - panes:\n      - {}\n")
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One absent id per argument, with the listing that would have found one.
+	absent := map[string]struct{ value, lister string }{
+		"paneId":   {"%9000", "list_panes"},
+		"windowId": {"@9000", "list_windows"},
+	}
+	// A batch takes a list of calls rather than an id, and reports what the
+	// call inside it said; the tools it dispatches are covered on their own.
+	exempt := map[string]bool{
+		"call_readonly_tools_batch": true, "call_mutating_tools_batch": true,
+		"call_destructive_tools_batch": true,
+	}
+	// A listing reads an id as a criterion rather than a target: nothing
+	// matching it is an empty list and not a missing object, and the reply's
+	// total says what the criteria selected from.
+	criteria := map[string]bool{"list_panes": true, "list_windows": true}
+	asked := 0
+	for _, tool := range listed.Tools {
+		if exempt[tool.Name] {
+			continue
+		}
+		for argument, want := range absent {
+			if _, takes := schemaOf(t, tool).Properties[argument]; !takes {
+				continue
+			}
+			asked++
+			result, err := session.CallTool(ctx, &sdk.CallToolParams{
+				Name: tool.Name, Arguments: map[string]any{argument: want.value},
+			})
+			var said string
+			switch {
+			case err != nil:
+				said = err.Error()
+			case result.IsError:
+				said = resultText(result)
+			default:
+				if !criteria[tool.Name] {
+					t.Errorf("%s accepted %s %s", tool.Name, argument, want.value)
+				}
+				continue
+			}
+			// A tool may refuse for a reason of its own before it looks the id
+			// up -- a missing second argument, a guard. What it must not do is
+			// repeat tmux's own words for an id that is not there.
+			if strings.Contains(said, "snapshot object not found") {
+				t.Errorf("%s answers a missing %s with tmux's message: %s",
+					tool.Name, argument, said)
+			}
+			if strings.Contains(said, "no pane") || strings.Contains(said, "no window") {
+				if !strings.Contains(said, want.lister) {
+					t.Errorf("%s says %q without naming %s",
+						tool.Name, said, want.lister)
+				}
+			}
+		}
+	}
+	if asked < 20 {
+		t.Errorf("only %d tools take an id, which is fewer than this server has", asked)
+	}
+}
+
+// TestAResourceNamingNothingSaysSoInTheProtocol covers the two halves of a
+// failed read: the code a client branches on and the message a model acts on.
+//
+// A handler's plain error reaches the wire as code 0, which says neither that
+// the URI named nothing nor that the server broke, and the reads that went
+// straight to tmux answered with tmux's own "snapshot object not found", which
+// names the mechanism rather than the way out.
+//
+//libtmux:real-tmux
+func TestAResourceNamingNothingSaysSoInTheProtocol(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: absent\nwindows:\n  - panes:\n      - {}\n")
+
+	for uri, want := range map[string]string{
+		"tmux://panes/9000":         "no pane %9000",
+		"tmux://panes/9000/content": "no pane %9000",
+		"tmux://windows/9000":       "no window @9000",
+		"tmux://windows/9000/panes": "no window @9000",
+		"tmux://sessions/nowhere":   `no session named "nowhere"`,
+	} {
+		_, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri})
+		if err == nil {
+			t.Errorf("%s was read", uri)
+			continue
+		}
+		var wire *jsonrpc.Error
+		if !errors.As(err, &wire) {
+			t.Errorf("%s failed as %T, not a JSON-RPC error", uri, err)
+			continue
+		}
+		if wire.Code != sdk.CodeResourceNotFound {
+			t.Errorf("%s failed with code %d, want %d",
+				uri, wire.Code, sdk.CodeResourceNotFound)
+		}
+		if !strings.Contains(wire.Message, want) {
+			t.Errorf("%s says %q, want it to name %q", uri, wire.Message, want)
+		}
+	}
+}
+
+// TestEveryAdvertisedResourceCanBeRead covers a template a client cannot use.
+//
+// A resource template is a promise: a client fills in the blank and reads. The
+// blanks here take ids, and the ids have sigils a URI cannot carry raw, so a
+// description naming one -- "such as @1" -- advertises the single spelling
+// that answers "resource not found". Nothing checked that what is advertised
+// can be read, so the wrong spelling sat in two descriptions.
+//
+//libtmux:real-tmux
+func TestEveryAdvertisedResourceCanBeRead(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: readable\nwindows:\n"+
+		"  - panes:\n      - {}\n")
+
+	var listed struct {
+		Panes []struct {
+			ID       string `json:"id"`
+			WindowID string `json:"windowId"`
+			Session  string `json:"session"`
+		} `json:"panes"`
+	}
+	call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	if len(listed.Panes) == 0 {
+		t.Fatal("no panes to address")
+	}
+	only := listed.Panes[0]
+	// Without the sigil, which is the form the descriptions now name and the
+	// only one a template can match.
+	bare := func(id string) string { return strings.TrimLeft(id, "%@$") }
+
+	templates, err := session.ListResourceTemplates(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filled := map[string]string{
+		"tmux://sessions/{session}":         "tmux://sessions/" + only.Session,
+		"tmux://sessions/{session}/windows": "tmux://sessions/" + only.Session + "/windows",
+		"tmux://windows/{window}":           "tmux://windows/" + bare(only.WindowID),
+		"tmux://windows/{window}/panes":     "tmux://windows/" + bare(only.WindowID) + "/panes",
+		"tmux://panes/{pane}":               "tmux://panes/" + bare(only.ID),
+		"tmux://panes/{pane}/content":       "tmux://panes/" + bare(only.ID) + "/content",
+	}
+	// A template whose blank had to lose a sigil to be readable has to say
+	// that it did. Every tool hands an id back with one, so the description is
+	// the only place a client learns to take it off, and a template silent
+	// about it reads as one that takes what the tools returned.
+	sigilled := map[string]bool{
+		"tmux://windows/{window}":       true,
+		"tmux://windows/{window}/panes": true,
+		"tmux://panes/{pane}":           true,
+		"tmux://panes/{pane}/content":   true,
+	}
+	if len(templates.ResourceTemplates) != len(filled) {
+		t.Errorf("%d templates advertised, %d covered here",
+			len(templates.ResourceTemplates), len(filled))
+	}
+	for _, template := range templates.ResourceTemplates {
+		uri, ok := filled[template.URITemplate]
+		if !ok {
+			t.Errorf("%s is advertised and this test does not read it", template.URITemplate)
+			continue
+		}
+		if sigilled[template.URITemplate] &&
+			!strings.Contains(template.Description, "without its sigil") {
+			t.Errorf("%s takes an id with a sigil stripped and says %q",
+				template.URITemplate, template.Description)
+		}
+		if _, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri}); err != nil {
+			t.Errorf("%s advertises %q, and reading %s says: %v",
+				template.URITemplate, template.Description, uri, err)
+		}
+	}
+}
+
+// TestTheEnvironmentListingWithholdsValues covers a reply that put every
+// credential on a developer's machine into a model's context.
+//
+// An environment is where people keep API tokens, and a no-argument call
+// returned all of them with their values -- eleven live ones on the machine
+// this was found on. A listing now carries names, which is what most of the
+// question is, and naming a variable returns its value, which is a caller
+// asking for one thing rather than receiving everything.
+//
+//libtmux:real-tmux
+func TestTheEnvironmentListingWithholdsValues(t *testing.T) {
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: secrets\nwindows:\n  - panes:\n      - {}\n")
+
+	const secret = "s3cr3t-value-nobody-asked-for"
+	for name, value := range map[string]string{
+		"PROBE_LOOKS_LIKE_A_TOKEN": secret,
+		"PROBE_ORDINARY":           "plain",
+	} {
+		if err := target.SetEnvironment(ctx, name, value,
+			tmux.SetEnvironmentOptions{}); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+
+	var listed struct {
+		Variables []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"variables"`
+		ValuesWithheld bool `json:"valuesWithheld"`
+	}
+	result := call(ctx, t, session, "show_environment", map[string]any{}, &listed)
+	if result.IsError {
+		t.Fatalf("show_environment: %#v", result.Content)
+	}
+	if len(listed.Variables) == 0 {
+		t.Fatal("the listing is empty, so it proves nothing")
+	}
+	if !listed.ValuesWithheld {
+		t.Error("the listing does not say it withheld the values")
+	}
+	seeded := false
+	for _, entry := range listed.Variables {
+		if entry.Value != "" {
+			t.Errorf("the listing carries a value for %s", entry.Name)
+		}
+		if entry.Name == "PROBE_LOOKS_LIKE_A_TOKEN" {
+			seeded = true
+		}
+	}
+	if !seeded {
+		t.Error("the listing omits a variable that is set, so names are not enough")
+	}
+	// Nothing in the whole reply, not only the field this test reads.
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok &&
+			strings.Contains(text.Text, secret) {
+			t.Error("the reply text carries the value")
+		}
+	}
+
+	// Naming one returns its value, which is the narrower ask.
+	var one struct {
+		Variables []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"variables"`
+		ValuesWithheld bool `json:"valuesWithheld"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{
+		"name": "PROBE_LOOKS_LIKE_A_TOKEN",
+	}, &one)
+	if len(one.Variables) != 1 || one.Variables[0].Value != secret {
+		t.Errorf("naming a variable did not return its value: %+v", one.Variables)
+	}
+	if one.ValuesWithheld {
+		t.Error("a named read reports its value withheld")
+	}
+
+	// And the listing is bounded like its peers.
+	var few struct {
+		Variables []struct{} `json:"variables"`
+		Truncated bool       `json:"truncated"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{"maxLines": 2}, &few)
+	if len(few.Variables) > 2 {
+		t.Errorf("maxLines 2 returned %d variables", len(few.Variables))
+	}
+	if len(listed.Variables) > 2 && !few.Truncated {
+		t.Error("a bounded listing does not report the truncation")
+	}
+}
+
+// TestAnEmptyCollectionIsStillAnArray covers a reply a consumer cannot iterate.
+//
+// A scope with no hooks returned {"scope":"server"} and nothing else, so a
+// caller had to branch on a missing key rather than loop over an empty list.
+// The same applied to the attached clients. Both are collections a caller walks
+// and neither absence means anything the emptiness does not; the text fields
+// elsewhere are different, because run_command's missing output distinguishes a
+// command that printed nothing from one whose output could not be read.
+//
+//libtmux:real-tmux
+func TestAnEmptyCollectionIsStillAnArray(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: arrays\nwindows:\n  - panes:\n      - {}\n")
+
+	raw := func(tool string, arguments map[string]any) map[string]any {
+		t.Helper()
+		result := call(ctx, t, session, tool, arguments, nil)
+		if result.IsError {
+			t.Fatalf("%s: %#v", tool, result.Content)
+		}
+		encoded, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(encoded, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		return decoded
+	}
+
+	hooks := raw("show_hooks", map[string]any{"scope": "server"})
+	found, present := hooks["hooks"]
+	if !present {
+		t.Errorf("show_hooks omits the hooks key: %v", hooks)
+	} else if _, ok := found.([]any); !ok && found != nil {
+		t.Errorf("hooks is %T rather than an array", found)
+	}
+
+	info := raw("get_server_info", map[string]any{})
+	clients, present := info["attachedClients"]
+	if !present {
+		t.Errorf("get_server_info omits the attachedClients key: %v", info)
+	} else if _, ok := clients.([]any); !ok && clients != nil {
+		t.Errorf("attachedClients is %T rather than an array", clients)
+	}
+}
+
+// TestResizingAPaneSaysWhichPaneMoved covers a reply a caller cannot act on.
+//
+// paneId is optional and resolves the active pane, so a caller that left it out
+// was told a width and a height with nothing saying whose. Every other pane
+// tool here echoes the pane it acted on.
+//
+//libtmux:real-tmux
+func TestResizingAPaneSaysWhichPaneMoved(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session,
+		"session_name: resized\nwindows:\n  - panes:\n      - {}\n      - {}\n")
+
+	var resized struct {
+		PaneID string `json:"paneId"`
+		Height int    `json:"height"`
+	}
+	// No paneId, which is the case that could not be read back.
+	result := call(ctx, t, session, "resize_pane", map[string]any{"height": 8}, &resized)
+	if result.IsError {
+		t.Fatalf("resize_pane: %#v", result.Content)
+	}
+	if resized.PaneID == "" {
+		t.Fatal("resize_pane did not say which pane it resized")
+	}
+	if !strings.HasPrefix(resized.PaneID, "%") {
+		t.Errorf("paneId = %q, want a tmux pane id", resized.PaneID)
+	}
+
+	// And it is the pane tmux actually changed.
+	var info struct {
+		Pane struct {
+			ID       string `json:"id"`
+			Geometry struct {
+				Height int `json:"height"`
+			} `json:"geometry"`
+		} `json:"pane"`
+	}
+	call(ctx, t, session, "get_pane_info", map[string]any{"paneId": resized.PaneID}, &info)
+	if info.Pane.ID != resized.PaneID {
+		t.Errorf("resize_pane named %s and get_pane_info reports %s",
+			resized.PaneID, info.Pane.ID)
+	}
+	if info.Pane.Geometry.Height != resized.Height {
+		t.Errorf("resize_pane reported height %d and the pane is %d",
+			resized.Height, info.Pane.Geometry.Height)
 	}
 }

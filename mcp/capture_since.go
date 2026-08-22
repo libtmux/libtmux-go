@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,8 +36,8 @@ import (
 const (
 	// cursorPrefix names the format so a cursor from another version, or from
 	// somewhere else entirely, is refused rather than misread.
-	cursorPrefix  = "capture-since-v1:"
-	cursorVersion = 1
+	cursorPrefix  = "capture-since-v2:"
+	cursorVersion = 2
 	// fingerprintRows is how many rows before the anchor a cursor records.
 	// Enough that the run is unique on a screen of repeated prompts, few
 	// enough that carrying it in every reply costs little.
@@ -87,15 +86,18 @@ type captureSinceOutput struct {
 
 // captureCursor is a cursor's decoded contents.
 type captureCursor struct {
-	PaneID string `json:"paneId"`
+	// The field names are one character because a cursor travels in every
+	// reply and nothing reads it: it is base64 of this JSON behind a prefix,
+	// and the only reader is decodeCursor.
+	PaneID string `json:"p"`
 	// PanePID identifies the process in the pane. A respawned pane keeps its
 	// id, so without this a cursor would silently continue reading a different
 	// program's output as though it were the same one's.
-	PanePID     int `json:"panePid"`
-	Version     int `json:"version"`
-	HistorySize int `json:"historySize"`
-	PaneHeight  int `json:"paneHeight"`
-	AnchorAbs   int `json:"anchorAbs"`
+	PanePID     int `json:"i"`
+	Version     int `json:"v"`
+	HistorySize int `json:"h"`
+	PaneHeight  int `json:"e"`
+	AnchorAbs   int `json:"n"`
 	// Leading are the rows immediately above the anchor, oldest first, which
 	// is what finds the anchor again after tmux renumbers the grid.
 	//
@@ -104,13 +106,42 @@ type captureCursor struct {
 	// everywhere and therefore nowhere. The anchor row itself is the one a
 	// shell rewrites the instant anything is typed, so a run including it
 	// stops matching precisely when the pane is being used.
-	Leading []string `json:"leading,omitempty"`
+	// Packed rather than a JSON array: every row would otherwise carry two
+	// quotes and a comma, which on a screenful is more than the hashes.
+	Leading packedHashes `json:"l,omitempty"`
 	// AnchorHash is the anchor row as it was, which says whether the row has
 	// been written over since and therefore whether it is new.
-	AnchorHash string `json:"anchorHash,omitempty"`
+	AnchorHash string `json:"a,omitempty"`
 	// BelowHashes are the rows after the anchor the last reply already
 	// carried, so they are not sent twice.
-	BelowHashes []string `json:"belowHashes,omitempty"`
+	BelowHashes packedHashes `json:"b,omitempty"`
+}
+
+// hashWidth is how many characters one row's fingerprint takes, which is
+// base64 of the eight bytes lineHash keeps.
+const hashWidth = 11
+
+// packedHashes is a run of fixed-width row fingerprints in one string, so the
+// JSON carries no quote, comma, or bracket per row.
+type packedHashes []string
+
+func (h packedHashes) MarshalJSON() ([]byte, error) {
+	return json.Marshal(strings.Join(h, ""))
+}
+
+func (h *packedHashes) UnmarshalJSON(raw []byte) error {
+	var packed string
+	if err := json.Unmarshal(raw, &packed); err != nil {
+		return err
+	}
+	if len(packed)%hashWidth != 0 {
+		return fmt.Errorf("a run of %d characters is not whole fingerprints", len(packed))
+	}
+	*h = nil
+	for at := 0; at < len(packed); at += hashWidth {
+		*h = append(*h, packed[at:at+hashWidth])
+	}
+	return nil
 }
 
 // paneState is where tmux's grid stood at one instant.
@@ -592,7 +623,10 @@ func lineHash(line string) string {
 	// mostly blank rows cost more than sending that screen would have. These
 	// are compared against the rows of one pane, so even a pane holding a
 	// million rows is nowhere near an accidental collision.
-	return hex.EncodeToString(sum[:8])
+	//
+	// Base64 rather than hex, which is eleven characters for the same eight
+	// bytes instead of sixteen.
+	return base64.RawURLEncoding.EncodeToString(sum[:8])
 }
 
 // encodeCursor renders a cursor as one opaque string.
@@ -679,7 +713,7 @@ func addCaptureTools(server *mcp.Server, t *tools) {
 	}, t.captureSince)
 	register(server, t, &mcp.Tool{
 		Name:        "clear_pane",
-		Annotations: mutating("Clear a tmux Pane"),
+		Annotations: settling("Clear a tmux Pane"),
 		Description: "Clear a pane's screen, and its scrollback when asked. " +
 			"Clearing what has already been read keeps later captures small.",
 	}, t.clearPane)

@@ -31,6 +31,12 @@ type getServerInfoInput struct {
 	// records what it refused and why. It is off by default because it is
 	// diagnostic and can be long.
 	IncludeMessages bool `json:"includeMessages,omitempty" jsonschema:"add tmux's own server message log, which records what tmux refused and why"`
+	// MaxLines and MaxBytes bound the message log, which is the only part of
+	// this reply whose size belongs to the server rather than to the request.
+	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many log messages to return at most, keeping the most recent"`
+	// MaxBytes bounds the same log by size, which a count cannot: one message
+	// carries the whole format string of the command it records.
+	MaxBytes int `json:"maxBytes,omitempty" jsonschema:"how many bytes of log messages to return at most, keeping the most recent"`
 }
 
 // attachedClient is one tmux client attached to this server.
@@ -74,9 +80,16 @@ type getServerInfoOutput struct {
 	Clients int `json:"clients"`
 	// AttachedClients is what each of them is, so a caller can tell a person
 	// watching a session from this server's own control connection.
-	AttachedClients []attachedClient `json:"attachedClients,omitempty"`
+	AttachedClients []attachedClient `json:"attachedClients"`
 	// Messages is tmux's own message log, reported only when asked for.
 	Messages []string `json:"messages,omitempty"`
+	// MessagesUnavailable says why Messages is missing, and is absent when it
+	// is not. Asked-for-and-empty and asked-for-and-not-delivered are
+	// different answers, and this is what tells them apart without failing a
+	// reply whose other fields are all present: tmux keeps the message log per
+	// client, and before 3.5 it refuses the command outright when nothing is
+	// attached.
+	MessagesUnavailable string `json:"messagesUnavailable,omitempty"`
 	// InsideThisServer reports whether this MCP server is itself running in a
 	// pane of the tmux server it addresses. When true, CallerPaneID names that
 	// pane and anything done to it is done to the terminal this is running in.
@@ -89,6 +102,9 @@ type getServerInfoOutput struct {
 	// SafetyLevel is what the operator allowed, which explains a shorter tool
 	// list than a client expected.
 	SafetyLevel string `json:"safetyLevel"`
+	// truncation reports what the message log lost to the bounds, in the same
+	// fields every other bounded reply here uses.
+	truncation
 }
 
 // getServerInfo says what this server is pointed at.
@@ -107,14 +123,23 @@ func (t *tools) getServerInfo(
 		SafetyLevel:  string(t.level),
 		CallerPaneID: caller.paneID,
 	}
-	if version, err := t.target.Version(ctx); err == nil {
+	if version, err := t.tmux().Version(ctx); err == nil {
 		output.Version = version.String()
 	}
-	alive, err := t.target.IsAlive(ctx)
-	// A server that cannot be asked whether it is alive is not, which is the
-	// answer a client wants rather than an error about the asking.
-	output.Alive = err == nil && alive
-	if !output.Alive {
+	// A server that is not running is an answer; a server that could not be
+	// asked is not. IsAlive already reports the first as (false, nil), so an
+	// error here means this could not be read -- and answering that with
+	// alive:false and a reply full of zeros describes a healthy empty server
+	// that nobody can tell from a broken connection.
+	alive, err := t.tmux().IsAlive(ctx)
+	if err != nil {
+		return nil, getServerInfoOutput{}, err
+	}
+	output.Alive = alive
+	if !alive {
+		// An array, because the field is one on every other path and a client
+		// that iterates it should not have to check for null first.
+		output.AttachedClients = []attachedClient{}
 		return nil, output, nil
 	}
 
@@ -124,35 +149,66 @@ func (t *tools) getServerInfo(
 		resolvePath(socket) == caller.socket
 
 	// One snapshot answers all of these. A snapshot per question would let the
-	// counts disagree with each other and would cost a listing each.
-	if snapshot, err := t.target.Snapshot(ctx); err == nil {
-		output.Sessions = len(snapshot.Sessions())
-		output.Windows = len(snapshot.Windows())
-		output.Panes = len(snapshot.Panes())
-		clients := snapshot.Clients()
-		output.Clients = len(clients)
-		output.AttachedClients = summarizeClients(clients)
+	// counts disagree with each other and would cost a listing each. A failure
+	// is reported rather than left as zeros, for the same reason: a server with
+	// no sessions and a server that could not be counted read identically.
+	snapshot, err := t.tmux().Snapshot(ctx)
+	if err != nil {
+		return nil, getServerInfoOutput{}, err
 	}
+	output.Sessions = len(snapshot.Sessions())
+	output.Windows = len(snapshot.Windows())
+	output.Panes = len(snapshot.Panes())
+	clients := snapshot.Clients()
+	output.Clients = len(clients)
+	output.AttachedClients = summarizeClients(clients)
 	if input.IncludeMessages {
-		if messages, err := t.target.ShowMessages(ctx, tmux.ShowMessagesRequest{}); err == nil {
-			output.Messages = boundMessages(messages)
+		messages, err := t.tmux().ShowMessages(ctx, tmux.ShowMessagesRequest{})
+		if err != nil {
+			// Said rather than swallowed, and said rather than raised: the
+			// rest of this reply is correct, and a caller that asked for the
+			// log as well should not lose the answer it came for.
+			output.MessagesUnavailable = err.Error()
+		} else {
+			kept, dropped, err := boundMessages(messages, input.MaxLines, input.MaxBytes)
+			if err != nil {
+				return nil, getServerInfoOutput{}, err
+			}
+			output.Messages, output.truncation = kept, dropped
 		}
 	}
 	return nil, output, nil
 }
 
-// serverMessagesMax bounds the message log a reply carries. tmux keeps its
-// last message-limit lines, which an operator can set into the thousands, and
-// the recent ones are what explain what just happened.
-const serverMessagesMax = 100
+// serverMessagesMax and serverMessagesBytes bound the message log a reply
+// carries when a caller names no bounds of their own.
+//
+// tmux keeps its last message-limit lines, which an operator can set into the
+// thousands, and the recent ones are what explain what just happened. A count
+// alone does not bound it: every line records a whole command, and the
+// listings this server runs carry a format naming each field they want, so the
+// log is largely this server quoted back to itself at thousands of characters
+// a line. A hundred of those is a reply no caller can afford.
+const (
+	serverMessagesMax   = 100
+	serverMessagesBytes = 16_000
+)
 
-// boundMessages keeps the most recent messages, which are the ones that
-// explain what a caller just saw.
-func boundMessages(messages []string) []string {
-	if len(messages) <= serverMessagesMax {
-		return messages
+// boundMessages keeps the most recent messages that fit, and reports the rest
+// as dropped, through the same bounds every other reply here uses.
+func boundMessages(messages []string, maxLines, maxBytes int) ([]string, truncation, error) {
+	if maxLines == 0 {
+		maxLines = serverMessagesMax
 	}
-	return messages[len(messages)-serverMessagesMax:]
+	if maxBytes == 0 {
+		maxBytes = serverMessagesBytes
+	}
+	limits, err := resolveBounds(maxLines, maxBytes)
+	if err != nil {
+		return nil, truncation{}, err
+	}
+	kept, dropped := limits.apply(messages)
+	return kept, dropped, nil
 }
 
 // summarizeClients describes who is attached.

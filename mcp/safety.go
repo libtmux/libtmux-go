@@ -30,21 +30,77 @@ const (
 // the Python server so an operator configuring both writes one thing.
 const SafetyEnvironmentVariable = "LIBTMUX_SAFETY"
 
+// SocketEnvironmentVariable names the variable that selects the tmux socket
+// when no flag does, matching the Python server for the same reason. A flag
+// wins over it, and only an operator sets either.
+const SocketEnvironmentVariable = "LIBTMUX_SOCKET"
+
+// SocketPathEnvironmentVariable names a socket by path rather than by name,
+// for a socket outside the directory tmux keeps them in. A client starts this
+// server with an environment rather than an argument vector, so a path that
+// only a flag could give was a path a client could not reach.
+const SocketPathEnvironmentVariable = "LIBTMUX_SOCKET_PATH"
+
+// BinaryEnvironmentVariable names the tmux executable, for the same reason:
+// the -binary flag is unreachable from a client configuration that passes
+// environment and nothing else.
+const BinaryEnvironmentVariable = "LIBTMUX_TMUX_BIN"
+
 // safetyFromEnvironment reads the level an operator asked for.
 //
-// An unreadable value selects the default rather than failing: a server that
-// refuses to start over a misspelled variable is worse than one that runs at
-// the level it would have run at anyway, and the level it chose is reported in
-// the instructions where a client sees it.
+// An unreadable value selects the lowest level rather than failing. Refusing
+// to start over a misspelled variable is worse than running, but the direction
+// to fall back in is a separate question: someone who wrote LIBTMUX_SAFETY at
+// all was bounding what a model may do, and a typo in that variable must not
+// widen the bound. Only an absent variable means "no preference", and only
+// that selects the default. Python's server resolves the same input the same
+// way.
 func safetyFromEnvironment() SafetyLevel {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(SafetyEnvironmentVariable))) {
+	raw, set := os.LookupEnv(SafetyEnvironmentVariable)
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if !set || trimmed == "" {
+		return SafetyMutating
+	}
+	switch trimmed {
 	case string(SafetyReadOnly):
 		return SafetyReadOnly
+	case string(SafetyMutating):
+		return SafetyMutating
 	case string(SafetyDestructive):
 		return SafetyDestructive
 	default:
-		return SafetyMutating
+		return SafetyReadOnly
 	}
+}
+
+// RejectedSafetyValue is what the environment asked for when it was not a
+// level, and empty when it was one or was absent.
+//
+// The fallback above is deliberate and silent, and silence is wrong in the one
+// place that exists to explain a short tool list: an operator who wrote
+// "destructve" gets the readonly surface and a report that reads exactly like
+// one who asked for readonly on purpose.
+func RejectedSafetyValue() string {
+	raw, set := os.LookupEnv(SafetyEnvironmentVariable)
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if !set || trimmed == "" {
+		return ""
+	}
+	switch trimmed {
+	case string(SafetyReadOnly), string(SafetyMutating), string(SafetyDestructive):
+		return ""
+	default:
+		return raw
+	}
+}
+
+// ResolvedSafetyLevel reports the level a server started now would run at.
+//
+// A tool that prints the variable instead names a level the server may not be
+// running, which is exactly wrong for a value that is rejected rather than
+// obeyed.
+func ResolvedSafetyLevel() SafetyLevel {
+	return safetyFromEnvironment()
 }
 
 // permits reports whether a tool with these annotations may be advertised.

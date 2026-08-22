@@ -361,12 +361,12 @@ func TestServerAccessListReportsVersionProbeFailures(t *testing.T) {
 	}
 }
 
-func TestRefreshClientRequestsClipboardAt37(t *testing.T) {
+func TestRefreshClientRequestsClipboardOnceItIsSafe(t *testing.T) {
 	t.Parallel()
 
 	target := ClientName("/dev/pts/9")
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}},
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.4"}}},
 		{result: tmuxcmd.Result{}},
 	}}
 	err := serverWithRunner(runner).RefreshClient(
@@ -393,13 +393,13 @@ func TestRefreshClientRequestsClipboardAt37(t *testing.T) {
 // libtmux:parity libtmux.server.Server.refresh_client#warning:1fa7f6b92788
 // libtmux:parity libtmux.server.Server.switch_client
 // libtmux:parity libtmux.session.Session.switch_client
-func TestRefreshClientWarnsAndOmitsClipboardBefore37(t *testing.T) {
+func TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe(t *testing.T) {
 	t.Parallel()
 
 	target := ClientName("/dev/pts/9")
 	var warnings []Warning
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}}},
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
 		{result: tmuxcmd.Result{}},
 	}}
 	server := degradingServerWithRunner(runner)
@@ -428,9 +428,9 @@ func TestRefreshClientWarnsAndOmitsClipboardBefore37(t *testing.T) {
 	if warning.Kind != WarningUnsupportedFeature ||
 		warning.Subcommand != "refresh-client" ||
 		warning.Feature != "request_clipboard" ||
-		warning.CurrentVersion.String() != "3.6" ||
-		warning.RequiredVersion.String() != "3.7" {
-		t.Fatalf("warning = %#v, want refresh-client clipboard minimum 3.7", warning)
+		warning.CurrentVersion.String() != "3.3a" ||
+		warning.RequiredVersion.String() != "3.4" {
+		t.Fatalf("warning = %#v, want refresh-client clipboard minimum 3.4", warning)
 	}
 }
 

@@ -100,7 +100,7 @@ func TestCheckedInFormatAccessorsAreScopedAndUnique(t *testing.T) {
 		}
 	}
 	wantDirectCounts := map[string]int{
-		"Session": 26,
+		"Session": 27,
 		"Window":  32,
 		"Pane":    77,
 		"Client":  24,
@@ -110,11 +110,11 @@ func TestCheckedInFormatAccessorsAreScopedAndUnique(t *testing.T) {
 			t.Errorf("%s direct format accessors = %d, want %d", receiver, got, want)
 		}
 	}
-	if viewCount != 180 {
-		t.Errorf("FormatValues accessors = %d, want 180", viewCount)
+	if viewCount != 181 {
+		t.Errorf("FormatValues accessors = %d, want 181", viewCount)
 	}
-	if len(methods) != 339 {
-		t.Fatalf("generated format accessors = %d, want 339", len(methods))
+	if len(methods) != 341 {
+		t.Fatalf("generated format accessors = %d, want 341", len(methods))
 	}
 	for _, absent := range []string{
 		"Session.WindowWidth", "Window.SessionName", "Pane.WindowName",
@@ -614,8 +614,8 @@ func TestCheckedInFormatSpecGeneratesCheckedInOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read checked-in format spec: %v", err)
 	}
-	if len(spec.Fields) != 199 {
-		t.Fatalf("checked-in format fields = %d, want 199", len(spec.Fields))
+	if len(spec.Fields) != 200 {
+		t.Fatalf("checked-in format fields = %d, want 200", len(spec.Fields))
 	}
 	if spec.Schema != 2 {
 		t.Fatalf("checked-in format schema = %d, want 2", spec.Schema)
@@ -741,8 +741,8 @@ func TestGeneratedFormatAccessorsDocumentSnapshotContracts(t *testing.T) {
 			}
 		}
 	}
-	if wantAccessors != 339 {
-		t.Fatalf("generated format accessors = %d, want 339", wantAccessors)
+	if wantAccessors != 341 {
+		t.Fatalf("generated format accessors = %d, want 341", wantAccessors)
 	}
 	if len(documentation) != wantAccessors {
 		t.Errorf("documented generated accessors = %d, want %d", len(documentation), wantAccessors)

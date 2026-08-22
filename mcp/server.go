@@ -3,10 +3,14 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"runtime/debug"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -41,6 +45,86 @@ func buildVersion() string {
 // batch entry here is the same idea one layer down — a tool a level withheld
 // was never registered, so it is not in the table a batch dispatches through
 // either, and there is no second list to keep in step.
+// closedArguments names, per tool, the arguments whose set of accepted values
+// is closed, and what that set holds.
+//
+// A struct tag cannot say this: jsonschema-go reads the whole tag as the
+// description and offers nothing else, so a set the code closes was closed
+// only in prose on the wire. A client had nothing to validate against and a
+// model had to infer the words out of a sentence.
+//
+// Keyed by tool as well as argument, because the same argument name is not the
+// same set twice. Empty is listed wherever the tool documents it as a default,
+// so the schema accepts exactly what the tool accepts.
+var closedArguments = map[string]map[string][]any{
+	"show_option":  {"scope": scopeValues},
+	"set_option":   {"scope": scopeValues},
+	"show_hooks":   {"scope": scopeValues},
+	"split_window": {"direction": placementValues},
+	"move_pane":    {"direction": placementValues},
+	// Required, and no default: which side to look toward is the whole
+	// question find_pane_by_position asks.
+	"find_pane_by_position":        {"direction": {"above", "below", "left", "right"}},
+	"list_panes":                   {"detail": {"", detailStandard, detailFull}},
+	"get_recipe":                   {"name": recipeValues},
+	"call_readonly_tools_batch":    {"onError": onErrorValues},
+	"call_mutating_tools_batch":    {"onError": onErrorValues},
+	"call_destructive_tools_batch": {"onError": onErrorValues},
+}
+
+// scopeValues is what a scope takes. Every tool taking one reads empty as pane
+// scope.
+var scopeValues = []any{"", scopeServer, scopeSession, scopeWindow, scopePane}
+
+// placementValues is where a pane goes. Both tools taking one read empty as
+// below.
+var placementValues = []any{"", "below", "above", "right", "left"}
+
+// onErrorValues is what a batch does with a failure, empty included: every
+// batch documents empty as stopping.
+var onErrorValues = []any{"", onErrorStop, onErrorContinue}
+
+// recipeValues comes from the recipes themselves rather than a second list of
+// their names, which would be wrong the first time one is added.
+var recipeValues = func() []any {
+	values := make([]any, 0, len(recipes))
+	for _, offered := range recipes {
+		values = append(values, offered.name)
+	}
+	return values
+}()
+
+// listsAreLists drops null from every array in a schema, and recurses.
+//
+// jsonschema-go infers a Go slice as null-or-array because a nil slice
+// marshals to null. Nothing here returns one: a reply's collections are built
+// empty and appended to, which is the shape every listing documents, so
+// publishing null-or-array told a client to handle a case that never arrives.
+func listsAreLists(schema *jsonschema.Schema) {
+	if schema == nil {
+		return
+	}
+	if len(schema.Types) > 1 && slices.Contains(schema.Types, "array") {
+		schema.Types = slices.DeleteFunc(schema.Types, func(kind string) bool {
+			return kind == "null"
+		})
+	}
+	listsAreLists(schema.Items)
+	for _, property := range schema.Properties {
+		listsAreLists(property)
+	}
+}
+
+// constrain writes a tool's closed sets into the schema clients validate
+// against.
+func constrain(name string, schema *jsonschema.Schema) {
+	for argument, values := range closedArguments[name] {
+		if property, ok := schema.Properties[argument]; ok {
+			property.Enum = values
+		}
+	}
+}
+
 func register[In, Out any](
 	server *mcp.Server,
 	t *tools,
@@ -49,6 +133,32 @@ func register[In, Out any](
 ) {
 	if !t.level.permits(tool.Annotations) {
 		return
+	}
+	handler = recovering(t, handler)
+	// Inferred here rather than left to the SDK, so the closed sets above can
+	// be written into it before anything validates against it.
+	if tool.InputSchema == nil {
+		if schema, err := jsonschema.For[In](nil); err == nil {
+			constrain(tool.Name, schema)
+			tool.InputSchema = schema
+		}
+	}
+	// Inferred here too, so a list can be published as a list. A Go slice
+	// infers as null-or-array, which says the opposite of what every reply
+	// here promises: a collection that came back empty is an empty array, so
+	// a client can count it without checking for null first. The sweep over
+	// the whole surface is what holds the code to the tighter claim.
+	if tool.OutputSchema == nil {
+		if schema, err := jsonschema.For[Out](nil); err == nil {
+			listsAreLists(schema)
+			tool.OutputSchema = schema
+		}
+	}
+	// The same schema the SDK enforces on a direct call, kept so a batch can
+	// enforce it too. The SDK applies it only to calls it dispatches itself.
+	var resolved *jsonschema.Resolved
+	if schema, ok := tool.InputSchema.(*jsonschema.Schema); ok {
+		resolved, _ = schema.Resolve(nil)
 	}
 	mcp.AddTool(server, tool, handler)
 	if !t.batchable {
@@ -60,8 +170,12 @@ func register[In, Out any](
 	}
 	t.dispatchers[tool.Name] = dispatcher{
 		annotations: tool.Annotations,
-		call: func(ctx context.Context, arguments json.RawMessage) (any, error) {
-			return batched(ctx, handler, arguments)
+		call: func(
+			ctx context.Context,
+			request *mcp.CallToolRequest,
+			arguments json.RawMessage,
+		) (any, error) {
+			return batched(ctx, request, handler, arguments, resolved)
 		},
 	}
 }
@@ -106,13 +220,13 @@ func NewServer(target tmux.Server) *mcp.Server {
 func newServer(target tmux.Server) (*mcp.Server, *tools) {
 	level := safetyFromEnvironment()
 	tools := &tools{
-		target:      target,
 		level:       level,
 		dispatchers: map[string]dispatcher{},
 		unbatchable: map[string]struct{}{},
 		batchable:   true,
 		jobs:        newJobs(),
 	}
+	tools.reaching.Store(&target)
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "libtmux",
 		Version: Version,
@@ -151,7 +265,7 @@ func Run(ctx context.Context, target tmux.Server) error {
 	// process owns. Collecting it removes that directory; a server that stops
 	// while some are uncollected removes the rest here.
 	defer tools.jobs.close()
-	return server.Run(ctx, handshakeOrderedTransport{inner: &mcp.StdioTransport{}})
+	return server.Run(ctx, handshakeOrderedTransport{inner: stdio()})
 }
 
 // Connect puts the server on a control-mode transport when it can, so a client
@@ -202,9 +316,17 @@ func Connect(ctx context.Context, target tmux.Server) (tmux.Server, *tmux.Contro
 const connectTimeout = 5 * time.Second
 
 type tools struct {
-	target   tmux.Server
+	// reaching holds the tmux server every tool goes through. It is a pointer
+	// that is replaced rather than a value that is written, because a pooled
+	// control connection is retired from whichever call first finds it dead
+	// while others are in flight.
+	reaching atomic.Pointer[tmux.Server]
 	level    SafetyLevel
 	watchers *watchers
+	// consented names the panes a session allowed for the rest of it, and
+	// consentMutex guards it: calls arrive concurrently.
+	consented    map[*mcp.ServerSession]map[string]bool
+	consentMutex sync.Mutex
 	// dispatchers is how a batch reaches each advertised tool, filled in by
 	// register as the tools are advertised.
 	dispatchers map[string]dispatcher
@@ -224,11 +346,56 @@ type tools struct {
 	jobs *jobs
 }
 
+// tmux is the server tools reach through now, which is not always the one
+// this process started with.
+func (t *tools) tmux() tmux.Server { return *t.reaching.Load() }
+
+// retirePool drops a pooled control connection that has died.
+//
+// The pool is an optimisation: before it existed every command spawned a
+// process, and that is what this falls back to. tmux going away and coming
+// back is an ordinary thing for a person to do, and it used to cost every tool
+// for the life of this process -- each call answering "control client is
+// closed" because nothing reopened what died with the old server.
+func (t *tools) retirePool() {
+	current := t.tmux()
+	if current.Engine() == nil {
+		return
+	}
+	plain := current.WithEngine(current.SubprocessEngine())
+	t.reaching.Store(&plain)
+}
+
+// recovering retires a pooled connection that has died, so the calls after
+// this one work again.
+//
+// The failed call is not run a second time. A wait opens a control connection
+// of its own and reports the same error when it ends, so this cannot tell a
+// dead pool from a connection that did its job -- and retrying the second kind
+// runs a wait that already finished for the whole of its timeout again. One
+// call reporting the restart is the honest cost of not knowing which it was.
+func recovering[In, Out any](
+	t *tools,
+	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
+) func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error) {
+	return func(
+		ctx context.Context,
+		request *mcp.CallToolRequest,
+		input In,
+	) (*mcp.CallToolResult, Out, error) {
+		result, output, err := handler(ctx, request, input)
+		if err != nil && errors.Is(err, tmux.ErrControlClosed) {
+			t.retirePool()
+		}
+		return result, output, err
+	}
+}
+
 // socketPath asks tmux where its socket is, so a pane's server can be compared
 // with the one this process was told it belongs to. An unreachable server
 // reports nothing, which makes every caller answer false rather than true.
 func (t *tools) socketPath(ctx context.Context) string {
-	result, err := t.target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	result, err := t.tmux().Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || len(result.Stdout) == 0 {
 		return ""
 	}

@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,10 +194,19 @@ func TestACursorForAnotherPaneIsRefused(t *testing.T) {
 	}
 
 	damaged := call(ctx, t, session, "capture_since", map[string]any{
-		"paneId": panes[0], "cursor": "capture-since-v1:not-base64!!",
+		"paneId": panes[0], "cursor": "capture-since-v2:not-base64!!",
 	}, nil)
 	if !damaged.IsError {
 		t.Error("a damaged cursor was accepted rather than refused")
+	}
+
+	// A cursor from a format this server has stopped issuing. Reading it as a
+	// fresh start would send the whole screen as though it were new.
+	stale := call(ctx, t, session, "capture_since", map[string]any{
+		"paneId": panes[0], "cursor": "capture-since-v1:e30",
+	}, nil)
+	if !stale.IsError {
+		t.Error("a cursor from an older format was accepted")
 	}
 
 	foreign := call(ctx, t, session, "capture_since", map[string]any{
@@ -691,7 +701,7 @@ func send(ctx context.Context, t *testing.T, session *sdk.ClientSession, pane, c
 		"paneId": pane, "command": command,
 	}, nil)
 	if result.IsError {
-		t.Fatalf("send %q: %#v", command, result.Content)
+		t.Fatalf("send %q: %s", command, resultText(result))
 	}
 }
 
@@ -700,7 +710,7 @@ func send(ctx context.Context, t *testing.T, session *sdk.ClientSession, pane, c
 //
 //libtmux:real-tmux
 func TestTheEnvironmentIsWhatANewPaneWouldGet(t *testing.T) {
-	session, _, ctx := connect(t)
+	session, target, ctx := connect(t)
 	workspace(ctx, t, session, "session_name: environ\nwindows:\n  - panes:\n      - {}\n")
 
 	result := call(ctx, t, session, "set_environment", map[string]any{
@@ -736,6 +746,68 @@ func TestTheEnvironmentIsWhatANewPaneWouldGet(t *testing.T) {
 	}, &gone)
 	if len(gone.Variables) != 0 {
 		t.Errorf("an unset variable was still reported: %+v", gone.Variables)
+	}
+
+	// tmux keeps two layers and a new pane inherits both, the session's
+	// overriding the server's. Reading only one of them answers a question
+	// nobody asked: PATH lives in the server's, so a caller asking what a pane
+	// will get was told it gets no PATH.
+	if _, err := target.Cmd(ctx, "set-environment", "-g",
+		"LIBTMUX_MCP_GLOBAL", "from-the-server"); err != nil {
+		t.Fatalf("set a server-wide variable: %v", err)
+	}
+	if _, err := target.Cmd(ctx, "set-environment", "-g",
+		"LIBTMUX_MCP_BOTH", "from-the-server"); err != nil {
+		t.Fatalf("set a server-wide variable: %v", err)
+	}
+	call(ctx, t, session, "set_environment", map[string]any{
+		"name": "LIBTMUX_MCP_BOTH", "value": "from-the-session",
+	}, nil)
+
+	var inherited struct {
+		Variables []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+			Scope string `json:"scope"`
+		} `json:"variables"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{
+		"name": "LIBTMUX_MCP_GLOBAL",
+	}, &inherited)
+	if len(inherited.Variables) != 1 ||
+		inherited.Variables[0].Value != "from-the-server" {
+		t.Errorf("a variable a new pane inherits from the server was not "+
+			"reported: %+v", inherited.Variables)
+	} else if inherited.Variables[0].Scope != "server" {
+		t.Errorf("scope = %q, want server", inherited.Variables[0].Scope)
+	}
+
+	// The session's value is the one a pane gets, so it is the one reported.
+	call(ctx, t, session, "show_environment", map[string]any{
+		"name": "LIBTMUX_MCP_BOTH",
+	}, &inherited)
+	if len(inherited.Variables) != 1 ||
+		inherited.Variables[0].Value != "from-the-session" {
+		t.Errorf("the session's value does not override the server's: %+v",
+			inherited.Variables)
+	} else if inherited.Variables[0].Scope != "session" {
+		t.Errorf("scope = %q, want session", inherited.Variables[0].Scope)
+	}
+
+	// Listing everything covers both layers too.
+	var all struct {
+		Variables []struct {
+			Name string `json:"name"`
+		} `json:"variables"`
+	}
+	call(ctx, t, session, "show_environment", map[string]any{}, &all)
+	named := map[string]bool{}
+	for _, variable := range all.Variables {
+		named[variable.Name] = true
+	}
+	if !named["LIBTMUX_MCP_GLOBAL"] {
+		t.Errorf("listing everything omits what the server holds: %d variables",
+			len(all.Variables))
 	}
 }
 
@@ -786,6 +858,48 @@ func TestBuffersAreThisServersOwn(t *testing.T) {
 		"name": staged.Name,
 	}, nil); result.IsError {
 		t.Errorf("delete_buffer: %#v", result.Content)
+	}
+}
+
+// TestALoadedBufferIsReachableByTheNameItAnswersWith covers a handle that stops
+// addressing the thing it names.
+//
+// tmux 3.7 cleans a buffer name for display before storing it, and doubles a
+// backslash doing so, while lookup does not repeat the cleaning. A name holding
+// one is therefore stored under a spelling the caller was never told, so the
+// buffer could be neither read nor deleted through the handle load_buffer
+// returned. Below 3.7 the same call round-trips, which is the whole problem: one
+// name meant two things depending on the tmux underneath.
+//
+//libtmux:real-tmux
+func TestALoadedBufferIsReachableByTheNameItAnswersWith(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: handles\nwindows:\n  - panes:\n      - {}\n")
+
+	for _, name := range []string{`a\b`, `\`, `back\\slash`} {
+		var staged struct {
+			Name string `json:"name"`
+		}
+		result := call(ctx, t, session, "load_buffer", map[string]any{
+			"text": "payload", "name": name,
+		}, &staged)
+		if !result.IsError {
+			// Accepting it is only sound if the handle works, so hold it to that.
+			read := call(ctx, t, session, "show_buffer", map[string]any{
+				"name": staged.Name,
+			}, nil)
+			if read.IsError {
+				t.Errorf("load_buffer(%q) answered with %q, which show_buffer cannot "+
+					"reach: %#v", name, staged.Name, read.Content)
+			}
+			call(ctx, t, session, "delete_buffer", map[string]any{"name": staged.Name}, nil)
+			continue
+		}
+		if text, ok := result.Content[0].(*sdk.TextContent); ok &&
+			!strings.Contains(text.Text, `\`) {
+			t.Errorf("load_buffer(%q) was refused without naming the character: %s",
+				name, text.Text)
+		}
 	}
 }
 
@@ -1126,7 +1240,7 @@ func reportOwnPaneFromInside(t *testing.T, socket, report string) {
 // handler decides what the person says.
 func connectAsking(
 	t *testing.T,
-	answer func(*sdk.ElicitRequest) string,
+	answer func(*sdk.ElicitRequest) *sdk.ElicitResult,
 ) (*sdk.ClientSession, tmux.Server, context.Context, *int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1148,7 +1262,7 @@ func connectAsking(
 			request *sdk.ElicitRequest,
 		) (*sdk.ElicitResult, error) {
 			asked++
-			return &sdk.ElicitResult{Action: answer(request)}, nil
+			return answer(request), nil
 		}
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "asking-client"}, options)
@@ -1158,6 +1272,275 @@ func connectAsking(
 	}
 	t.Cleanup(func() { _ = clientSession.Close() })
 	return clientSession, target, ctx, &asked
+}
+
+// answering is an elicitation handler that always gives the same action.
+func answering(action string) func(*sdk.ElicitRequest) *sdk.ElicitResult {
+	return func(*sdk.ElicitRequest) *sdk.ElicitResult {
+		return &sdk.ElicitResult{Action: action}
+	}
+}
+
+// propertiesOf is the form an elicitation asked to have filled in.
+func propertiesOf(t *testing.T, request *sdk.ElicitRequest) map[string]any {
+	t.Helper()
+	encoded, err := json.Marshal(request.Params.RequestedSchema)
+	if err != nil {
+		t.Fatalf("marshal the requested schema: %v", err)
+	}
+	var schema struct {
+		Properties map[string]any `json:"properties"`
+	}
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		t.Fatalf("decode the requested schema: %v", err)
+	}
+	return schema.Properties
+}
+
+// TestAYesAboutTheCallerPaneCanBeKept covers the question asked once per call.
+//
+// A guard that asks every time is a guard people learn to click through, and
+// an agent doing five things in the caller's pane asked five times. A yes can
+// now be kept for the rest of the session -- but only for writing there, and
+// only when the person said so. Ending the pane asks again whatever was said
+// about typing into it, because those are not the same yes.
+//
+//libtmux:real-tmux
+func TestAYesAboutTheCallerPaneCanBeKept(t *testing.T) {
+	const ownPane = "%0"
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	t.Setenv("TMUX_PANE", ownPane)
+	t.Setenv("TMUX", "")
+
+	asked := 0
+	remembering, keeping := true, false
+	session, target, ctx, _ := connectAsking(t, func(request *sdk.ElicitRequest) *sdk.ElicitResult {
+		asked++
+		_, offered := propertiesOf(t, request)["remember"]
+		if offered != remembering {
+			t.Errorf("the form offered to keep the yes = %v, want %v",
+				offered, remembering)
+		}
+		if !offered {
+			return &sdk.ElicitResult{Action: "accept"}
+		}
+		return &sdk.ElicitResult{
+			Action:  "accept",
+			Content: map[string]any{"remember": keeping},
+		}
+	})
+	workspace(ctx, t, session, "session_name: kept\nwindows:\n  - panes:\n      - {}\n")
+	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || len(socket.Stdout) == 0 {
+		t.Fatalf("read the socket path: %v", err)
+	}
+	t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+	// Without an answer that keeps it, every write asks.
+	for range 2 {
+		call(ctx, t, session, "send_keys", map[string]any{
+			"paneId": ownPane, "command": "echo asked",
+		}, nil)
+	}
+	if asked != 2 {
+		t.Fatalf("two writes asked %d times, want one each", asked)
+	}
+
+	// Then one that keeps it, and the writes after it go through unasked --
+	// including through a different tool, because the yes is about the pane.
+	keeping = true
+	asked = 0
+	call(ctx, t, session, "send_keys", map[string]any{
+		"paneId": ownPane, "command": "echo keeping",
+	}, nil)
+	if asked != 1 {
+		t.Fatalf("keeping the yes asked %d times, want once", asked)
+	}
+	for _, kept := range []struct {
+		tool      string
+		arguments map[string]any
+	}{
+		{"send_keys", map[string]any{"paneId": ownPane, "command": "echo after"}},
+		{"paste_text", map[string]any{"paneId": ownPane, "text": "echo pasted"}},
+		{"clear_pane", map[string]any{"paneId": ownPane}},
+	} {
+		if result := call(ctx, t, session, kept.tool, kept.arguments, nil); result.IsError {
+			t.Errorf("%s was refused after the yes was kept: %s", kept.tool, resultText(result))
+		}
+	}
+	if asked != 1 {
+		t.Errorf("writes after the kept yes asked %d more times", asked-1)
+	}
+
+	// Ending the pane is a different yes, so it asks whatever was said about
+	// typing there, and its form never offers to keep it.
+	remembering = false
+	if result := call(ctx, t, session, "kill_pane",
+		map[string]any{"paneId": ownPane}, nil); result.IsError {
+		t.Errorf("kill_pane was refused by an accepting client: %s", resultText(result))
+	}
+	if asked != 2 {
+		t.Errorf("ending the pane asked %d times in total, want one of its own", asked)
+	}
+}
+
+// TestOneSessionsYesDoesNotSilenceAnother covers a kept consent reaching a
+// client that never gave it.
+//
+// The answers are held per session for exactly this reason, and nothing
+// checked it. An MCP server can carry several sessions -- an embedder holds
+// one per client -- and a yes about writing into the caller's pane that leaked
+// across them would let a second client type into somebody's terminal on the
+// strength of a question it never saw.
+//
+//libtmux:real-tmux
+func TestOneSessionsYesDoesNotSilenceAnother(t *testing.T) {
+	const ownPane = "%0"
+	t.Setenv("TMUX_PANE", ownPane)
+	t.Setenv("TMUX", "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	t.Cleanup(cancel)
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	server := tmuxmcp.NewServer(target)
+
+	// Two clients of one server, as an embedder holds them.
+	join := func(name string, answer func(*sdk.ElicitRequest) *sdk.ElicitResult) (*sdk.ClientSession, *int) {
+		clientTransport, serverTransport := sdk.NewInMemoryTransports()
+		serverSession, err := server.Connect(ctx, serverTransport, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = serverSession.Close() })
+		asked := 0
+		client := sdk.NewClient(&sdk.Implementation{Name: name}, &sdk.ClientOptions{
+			ElicitationHandler: func(
+				_ context.Context, request *sdk.ElicitRequest,
+			) (*sdk.ElicitResult, error) {
+				asked++
+				return answer(request), nil
+			},
+		})
+		session, err := client.Connect(ctx, clientTransport, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = session.Close() })
+		return session, &asked
+	}
+
+	first, askedFirst := join("first", func(*sdk.ElicitRequest) *sdk.ElicitResult {
+		return &sdk.ElicitResult{Action: "accept", Content: map[string]any{"remember": true}}
+	})
+	second, askedSecond := join("second", func(*sdk.ElicitRequest) *sdk.ElicitResult {
+		return &sdk.ElicitResult{Action: "decline"}
+	})
+
+	workspace(ctx, t, first, "session_name: shared\nwindows:\n  - panes:\n      - {}\n")
+	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || len(socket.Stdout) == 0 {
+		t.Fatalf("read the socket path: %v", err)
+	}
+	t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+	// The first client says yes and keeps it, then writes again unasked.
+	for range 2 {
+		if result := call(ctx, t, first, "send_keys", map[string]any{
+			"paneId": ownPane, "command": "echo first",
+		}, nil); result.IsError {
+			t.Fatalf("the first client was refused: %s", resultText(result))
+		}
+	}
+	if *askedFirst != 1 {
+		t.Errorf("the first client was asked %d times, want once", *askedFirst)
+	}
+
+	// The second client never saw that question, so it must be asked its own
+	// -- and its answer must be the one that governs its own call.
+	result := call(ctx, t, second, "send_keys", map[string]any{
+		"paneId": ownPane, "command": "echo second",
+	}, nil)
+	if *askedSecond != 1 {
+		t.Errorf("the second client was asked %d times, want once of its own", *askedSecond)
+	}
+	if !result.IsError {
+		t.Error("the second client wrote to the caller pane on another client's yes")
+	}
+}
+
+// TestEndingWhatHoldsTheCallerPaneIsAskedAbout covers the way around the write
+// guard.
+//
+// The guard names one pane, and everything containing it reaches the same
+// terminal one level up: a client refused kill_pane got the same outcome from
+// kill_window, and was told nothing, because the answer travelled through the
+// pane that had just gone. The Python server of the same name refuses all four.
+//
+//libtmux:real-tmux
+func TestEndingWhatHoldsTheCallerPaneIsAskedAbout(t *testing.T) {
+	const ownPane = "%0"
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	t.Setenv("TMUX_PANE", ownPane)
+	t.Setenv("TMUX", "")
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: holding\nwindows:\n  - panes:\n      - {}\n")
+	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || len(socket.Stdout) == 0 {
+		t.Fatalf("read the socket path: %v", err)
+	}
+	t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+	var listed struct {
+		Panes []struct {
+			WindowID string `json:"windowId"`
+			Session  string `json:"session"`
+		} `json:"panes"`
+	}
+	call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	if len(listed.Panes) == 0 {
+		t.Fatal("no panes to be held by anything")
+	}
+	holder := listed.Panes[0]
+
+	for _, ending := range []struct {
+		tool      string
+		arguments map[string]any
+		names     string
+	}{
+		{"kill_window", map[string]any{"windowId": holder.WindowID}, holder.WindowID},
+		{"kill_session", map[string]any{"sessionName": holder.Session}, holder.Session},
+		{"kill_server", map[string]any{"confirm": true}, "tmux server"},
+	} {
+		t.Run(ending.tool, func(t *testing.T) {
+			result := call(ctx, t, session, ending.tool, ending.arguments, nil)
+			if !result.IsError {
+				t.Fatalf("%s ended what holds the caller pane", ending.tool)
+			}
+			said := resultText(result)
+			if !strings.Contains(said, ending.names) {
+				t.Errorf("the refusal does not name %s: %q", ending.names, said)
+			}
+			if !strings.Contains(said, "holds the pane this server is running in") {
+				t.Errorf("the refusal does not say why: %q", said)
+			}
+		})
+	}
+
+	// The same tools still work on something that does not hold it, which is
+	// what keeps this a guard rather than a ban.
+	var made struct {
+		WindowID string `json:"windowId"`
+	}
+	call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": holder.Session, "command": "sleep 300",
+	}, &made)
+	if made.WindowID == "" {
+		t.Fatal("no second window to end")
+	}
+	if result := call(ctx, t, session, "kill_window",
+		map[string]any{"windowId": made.WindowID}, nil); result.IsError {
+		t.Errorf("a window holding no caller pane was refused: %s", resultText(result))
+	}
 }
 
 // TestWritingToTheCallerPaneIsAskedAbout covers the one pane where being wrong
@@ -1173,7 +1556,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 
 	arrange := func(
 		t *testing.T,
-		answer func(*sdk.ElicitRequest) string,
+		answer func(*sdk.ElicitRequest) *sdk.ElicitResult,
 	) (*sdk.ClientSession, context.Context, *int) {
 		t.Helper()
 		t.Setenv("TMUX_PANE", ownPane)
@@ -1189,7 +1572,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	}
 
 	t.Run("declining stops the write", func(t *testing.T) {
-		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "decline" })
+		session, ctx, asked := arrange(t, answering("decline"))
 		result := call(ctx, t, session, "send_keys", map[string]any{
 			"paneId": ownPane, "command": "echo into-my-own-terminal",
 		}, nil)
@@ -1201,8 +1584,53 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 		}
 	})
 
+	t.Run("a client that cannot be asked is refused", func(t *testing.T) {
+		// Elicitation is optional, and letting the write through when nobody
+		// can be asked makes the guard advisory: the client least able to warn
+		// its person is the one that types into their terminal unannounced. It
+		// happened -- a peer session identifying its own server ran a command
+		// against the caller pane and put the text in its user's prompt box.
+		t.Setenv("TMUX_PANE", ownPane)
+		t.Setenv("TMUX", "")
+		session, target, ctx := connect(t)
+		workspace(ctx, t, session, "session_name: unasked\nwindows:\n  - panes:\n      - {}\n")
+		socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+		if err != nil || len(socket.Stdout) == 0 {
+			t.Fatalf("read the socket path: %v", err)
+		}
+		t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+		for _, tool := range []string{"send_keys", "run_command"} {
+			arguments := map[string]any{"paneId": ownPane, "command": "echo into-my-own-terminal"}
+			if tool == "run_command" {
+				arguments["timeoutSeconds"] = 5
+			}
+			result := call(ctx, t, session, tool, arguments, nil)
+			if !result.IsError {
+				t.Errorf("%s reached the caller pane with nobody able to be asked", tool)
+				continue
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, ownPane) {
+				t.Errorf("the %s refusal does not name the pane: %q", tool, said)
+			}
+			// The caller whose only pane is this one has nowhere to be sent,
+			// so making a pane is named beside finding one.
+			for _, way := range []string{"split_window", "create_session", "isCaller"} {
+				if !strings.Contains(said, way) {
+					t.Errorf("the %s refusal does not offer %s: %q", tool, way, said)
+				}
+			}
+		}
+	})
+
 	t.Run("accepting lets it through", func(t *testing.T) {
-		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "accept" })
+		session, ctx, asked := arrange(t, answering("accept"))
 		result := call(ctx, t, session, "send_keys", map[string]any{
 			"paneId": ownPane, "command": "true",
 		}, nil)
@@ -1214,11 +1642,39 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 		}
 	})
 
+	t.Run("a batch is asked about too", func(t *testing.T) {
+		session, ctx, asked := arrange(t, answering("decline"))
+		var out struct {
+			Completed int `json:"completed"`
+			Results   []struct {
+				Tool  string `json:"tool"`
+				Error string `json:"error"`
+			} `json:"results"`
+		}
+		call(ctx, t, session, "call_mutating_tools_batch", map[string]any{
+			"calls": []map[string]any{{
+				"tool": "send_keys",
+				"arguments": map[string]any{
+					"paneId": ownPane, "command": "echo into-my-own-terminal",
+				},
+			}},
+		}, &out)
+		if out.Completed != 0 {
+			t.Error("a batch typed into the caller pane a direct call was refused")
+		}
+		if len(out.Results) == 0 || !strings.Contains(out.Results[0].Error, "declined") {
+			t.Errorf("the batch does not report the decline: %+v", out.Results)
+		}
+		if *asked != 1 {
+			t.Errorf("the person was asked %d times for a batched write, want once", *asked)
+		}
+	})
+
 	t.Run("another pane is not asked about", func(t *testing.T) {
 		t.Setenv("TMUX_PANE", ownPane)
 		t.Setenv("TMUX", "")
 		session, target, ctx, asked := connectAsking(t,
-			func(*sdk.ElicitRequest) string { return "decline" })
+			answering("decline"))
 		workspace(ctx, t, session,
 			"session_name: elsewhere\nwindows:\n  - panes:\n      - {}\n      - {}\n")
 		socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
@@ -1249,13 +1705,39 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 		}
 	})
 
-	t.Run("a client that cannot be asked keeps working", func(t *testing.T) {
+	t.Run("a client that cannot be asked is still stopped", func(t *testing.T) {
+		// This reverses what this test asserted before. Letting the write
+		// through when nobody could be asked was chosen so a client without
+		// elicitation kept the behaviour it had; what that bought in practice
+		// was a guard that is absent from the clients most likely to need it.
+		// Writing to somebody's own terminal unannounced is the harm, and it
+		// does not become acceptable because their client cannot show a prompt.
 		session, ctx, _ := arrange(t, nil)
 		result := call(ctx, t, session, "send_keys", map[string]any{
 			"paneId": ownPane, "command": "true",
 		}, nil)
-		if result.IsError {
-			t.Errorf("a client without elicitation was blocked: %#v", result.Content)
+		if !result.IsError {
+			t.Error("a client that cannot be asked typed into the caller pane")
+		}
+
+		// Every other pane is unaffected, which is what keeps this a guard on
+		// one pane rather than a restriction on the tool.
+		var listed struct {
+			Panes []struct {
+				ID       string `json:"id"`
+				IsCaller *bool  `json:"isCaller"`
+			} `json:"panes"`
+		}
+		call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+		for _, pane := range listed.Panes {
+			if pane.IsCaller != nil && *pane.IsCaller {
+				continue
+			}
+			if result := call(ctx, t, session, "send_keys", map[string]any{
+				"paneId": pane.ID, "command": "true",
+			}, nil); result.IsError {
+				t.Errorf("writing to %s was refused: %#v", pane.ID, result.Content)
+			}
 		}
 	})
 }
@@ -1271,7 +1753,7 @@ func TestEnteringCopyModeOnTheCallerPaneIsAskedAbout(t *testing.T) {
 	t.Setenv("TMUX_PANE", ownPane)
 	t.Setenv("TMUX", "")
 	session, target, ctx, asked := connectAsking(t,
-		func(*sdk.ElicitRequest) string { return "decline" })
+		answering("decline"))
 	workspace(ctx, t, session, "session_name: copymode\nwindows:\n  - panes:\n      - {}\n")
 	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || len(socket.Stdout) == 0 {
@@ -2187,4 +2669,729 @@ func waitForDeadPane(
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("the pane's shell never exited")
+}
+
+// TestRunCommandSaysWhyThereIsNoOutput covers the reply a caller cannot act on.
+//
+// A pane running something that is not a shell takes the keys as that
+// program's input, so the wrapper never runs and never writes its opening
+// mark. Reporting the failed open names a path inside this server and hands
+// the reader a filesystem error for a tmux problem.
+//
+//libtmux:real-tmux
+func TestRunCommandSaysWhyThereIsNoOutput(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session,
+		"session_name: busy\nwindows:\n  - panes:\n      - shell: sleep 300\n")
+	pane := firstPane(ctx, t, session)
+
+	var ran struct {
+		OutputUnavailable string `json:"outputUnavailable"`
+		TimedOut          bool   `json:"timedOut"`
+		Running           string `json:"running"`
+	}
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "echo never-runs", "timeoutSeconds": 3,
+	}, &ran)
+
+	if ran.OutputUnavailable == "" {
+		t.Fatal("a pane that never ran the command reported no reason")
+	}
+	if strings.Contains(ran.OutputUnavailable, "/tmp/") ||
+		strings.Contains(ran.OutputUnavailable, "no such file") {
+		t.Errorf("the reason is this server's own bookkeeping, not the cause: %q",
+			ran.OutputUnavailable)
+	}
+	if !strings.Contains(ran.OutputUnavailable, "never ran") {
+		t.Errorf("the reason does not say the command never ran: %q",
+			ran.OutputUnavailable)
+	}
+	if !strings.Contains(ran.OutputUnavailable, "respawn_pane") {
+		t.Errorf("the reason names no way out: %q", ran.OutputUnavailable)
+	}
+}
+
+// TestToolsKeepWorkingAfterTmuxRestarts covers a tmux server that goes away
+// and comes back, which is an ordinary thing for a person to do.
+//
+// The control connection is opened once at startup and every command goes
+// through it. When tmux dies the connection dies with it, and nothing reopened
+// it: every later call failed with "control client is closed" for the life of
+// the process, so restarting tmux meant restarting every agent attached to it.
+// The connection is an optimisation, and the behaviour without it is spawning
+// a process per command, so losing it should cost speed rather than function.
+//
+//libtmux:real-tmux
+func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	t.Cleanup(cancel)
+	// A socket of its own, not the shared harness's: this test kills the tmux
+	// server it is using, and the harness owns the cleanup of the one it made.
+	socket := filepath.Join(t.TempDir(), "tmux.sock")
+	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+	// A pool attaches to a session, so there has to be one before it opens.
+	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "before", Width: 80, Height: 24,
+	}); err != nil {
+		t.Fatalf("start the first session: %v", err)
+	}
+
+	// Through the pooled control connection, which is what Run serves over and
+	// what connect() in these tests does not build. The in-memory path having
+	// no pool is why this went unnoticed: the failure needs the connection
+	// that only the real server opens.
+	connected, pool := tmuxmcp.Connect(ctx, target)
+	if pool == nil {
+		t.Skip("no control pool on this tmux; the failure needs one")
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(connected).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "restart"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	if result := call(ctx, t, session, "list_panes", map[string]any{}, nil); result.IsError {
+		t.Fatalf("list_panes before the restart: %#v", result.Content)
+	}
+
+	if err := target.Kill(ctx); err != nil {
+		t.Fatalf("kill the tmux server: %v", err)
+	}
+	// Bring one back on the same socket, as a person restarting tmux would.
+	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "after", Width: 80, Height: 24,
+	}); err != nil {
+		t.Fatalf("start a replacement tmux server: %v", err)
+	}
+
+	// The call that finds the connection dead reports it: a wait opens one of
+	// its own and ends with the same error, so a retry here cannot tell the
+	// two apart. What must not happen is every later call failing too.
+	call(ctx, t, session, "list_panes", map[string]any{}, nil)
+
+	var listed struct {
+		Panes []struct {
+			ID string `json:"id"`
+		} `json:"panes"`
+	}
+	result := call(ctx, t, session, "list_panes", map[string]any{}, &listed)
+	if result.IsError {
+		t.Fatalf("list_panes stayed broken after the restart: %#v", result.Content)
+	}
+	if len(listed.Panes) == 0 {
+		t.Error("the replacement server's pane was not reported")
+	}
+
+	// And the server's own account of itself has to agree that tmux is up.
+	var info struct {
+		Alive bool `json:"alive"`
+	}
+	call(ctx, t, session, "get_server_info", map[string]any{}, &info)
+	if !info.Alive {
+		t.Error("get_server_info reports the tmux server dead after it came back")
+	}
+
+	// Watching has to come back too. It holds a connection of its own and
+	// retries when one drops, but it was reaching tmux through the handle it
+	// was built with, and the pool inside that handle is the one the restart
+	// killed. A subscription made afterwards was accepted and never delivered,
+	// which is the same silence as having no watcher at all.
+	pane := listed.Panes[0].ID
+	uri := "tmux://panes/" + strings.TrimPrefix(pane, "%") + "/content"
+	updated := make(chan string, 8)
+	watchClient := sdk.NewClient(&sdk.Implementation{Name: "restart-watch"}, &sdk.ClientOptions{
+		ResourceUpdatedHandler: func(_ context.Context, r *sdk.ResourceUpdatedNotificationRequest) {
+			select {
+			case updated <- r.Params.URI:
+			default:
+			}
+		},
+	})
+	watchTransport, watchServer := sdk.NewInMemoryTransports()
+	watchSession, err := tmuxmcp.NewServer(connected).Connect(ctx, watchServer, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watchSession.Close() })
+	watching, err := watchClient.Connect(ctx, watchTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watching.Close() })
+	subscribeStarted := time.Now()
+	if err := watching.Subscribe(ctx, &sdk.SubscribeParams{URI: uri}); err != nil {
+		t.Fatalf("subscribe after the restart: %v", err)
+	}
+	// How long that took says whether the watch ever attached: it answers as
+	// soon as a connection is carrying notifications, and only runs out the
+	// bound when none arrives.
+	subscribeTook := time.Since(subscribeStarted)
+	// run_command rather than send_keys, because this has to know the pane
+	// actually wrote. Keys are handed to whatever is reading the pane, and a
+	// shell that has only just been restarted is not reading yet -- they were
+	// swallowed, the pane stayed at its prompt, and the silence read as a
+	// watch that had not attached. run_command waits for the command it typed
+	// to finish, so reaching the assertion means there was something to be
+	// told about.
+	write := func() *sdk.CallToolResult {
+		return call(ctx, t, watching, "run_command", map[string]any{
+			"paneId": pane, "command": "echo watched-after-restart", "timeoutSeconds": 20,
+		}, nil)
+	}
+	// The pool retires a connection the restart killed on the call that finds
+	// it, and deliberately does not run that call again -- so the first tool
+	// call through this handle reports the restart. Retrying is what a client
+	// does, and what the fix above promises will then work.
+	written := write()
+	if written.IsError {
+		written = write()
+	}
+	if written.IsError {
+		t.Fatalf("run_command after the restart, twice: %s", resultText(written))
+	}
+	select {
+	case <-updated:
+	case <-time.After(20 * time.Second):
+		var shown struct {
+			Lines []string `json:"lines"`
+		}
+		captured := call(ctx, t, watching, "capture_pane", map[string]any{"paneId": pane}, &shown)
+		t.Errorf("a pane written after the restart told no subscriber; "+
+			"subscribe took %s, the pane shows error=%t lines=%q",
+			subscribeTook.Round(time.Millisecond), captured.IsError, shown.Lines)
+	}
+}
+
+// TestTypingIntoAPaneInAModeIsRefused covers keys that were never going to
+// reach the program.
+//
+// A pane in copy mode reads keys as that mode's bindings. The text does not
+// arrive, something else happens instead, and one of the things that can
+// happen is a binding that waits for a further key -- after which the client
+// that sent it never gets a reply. run_command is the one that shows how bad
+// that is: it hung past the timeout its own caller set and took the connection
+// with it. Every tool that delivers keystrokes is refused, because the hazard
+// belongs to the keystrokes rather than to any one tool.
+//
+//libtmux:real-tmux
+func TestTypingIntoAPaneInAModeIsRefused(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: moded\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	send(ctx, t, session, pane, "seq 1 200")
+	if result := call(ctx, t, session, "enter_copy_mode", map[string]any{
+		"paneId": pane, "scrollUp": true,
+	}, nil); result.IsError {
+		t.Fatalf("enter_copy_mode: %#v", result.Content)
+	}
+	call(ctx, t, session, "load_buffer", map[string]any{
+		"text": "staged", "name": "moded",
+	}, nil)
+
+	for tool, arguments := range map[string]map[string]any{
+		"send_keys":       {"paneId": pane, "command": "echo NOPE"},
+		"send_keys_batch": {"paneId": pane, "keys": []string{"h", "i"}},
+		"paste_text":      {"paneId": pane, "text": "echo NOPE"},
+		"paste_buffer":    {"paneId": pane, "name": "moded"},
+		"run_command":     {"paneId": pane, "command": "echo NOPE", "timeoutSeconds": 5},
+	} {
+		result := call(ctx, t, session, tool, arguments, nil)
+		if !result.IsError {
+			t.Errorf("%s into a pane in copy mode was accepted", tool)
+			continue
+		}
+		said := ""
+		for _, content := range result.Content {
+			if text, ok := content.(*sdk.TextContent); ok {
+				said += text.Text
+			}
+		}
+		// Both ways on, because a caller who entered the mode deliberately
+		// wants to read rather than to undo it.
+		for _, wanted := range []string{"capture_pane", "exit_copy_mode", tool} {
+			if !strings.Contains(said, wanted) {
+				t.Errorf("the %s refusal does not name %s: %q", tool, wanted, said)
+			}
+		}
+		// And the connection is still there, which run_command used to cost.
+		if listed := call(ctx, t, session, "list_panes", map[string]any{}, nil); listed.IsError {
+			t.Fatalf("the connection did not survive refusing %s: %#v", tool, listed.Content)
+		}
+	}
+
+	// The way out works, after which typing lands.
+	if result := call(ctx, t, session, "exit_copy_mode", map[string]any{
+		"paneId": pane,
+	}, nil); result.IsError {
+		t.Fatalf("exit_copy_mode: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "send_keys", map[string]any{
+		"paneId": pane, "command": "echo LANDS",
+	}, nil); result.IsError {
+		t.Fatalf("send_keys after leaving copy mode: %#v", result.Content)
+	}
+}
+
+// runInPane runs one command and returns its output, failing the test if the
+// command did not finish.
+func runInPane(
+	ctx context.Context,
+	t *testing.T,
+	session *sdk.ClientSession,
+	pane, command string,
+) []string {
+	t.Helper()
+	var reply struct {
+		Output     []string `json:"output"`
+		ExitStatus *int     `json:"exitStatus"`
+	}
+	result := call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": command, "timeoutSeconds": 10,
+	}, &reply)
+	if result.IsError {
+		t.Fatalf("run_command %q: %#v", command, result.Content)
+	}
+	if reply.ExitStatus == nil {
+		t.Fatalf("run_command %q recorded no exit status", command)
+	}
+	return reply.Output
+}
+
+// TestAnEraseAfterAScreenClearStillReturnsTheOutput covers a command whose
+// output came back as nothing at all.
+//
+// A mark is one number, history_size plus cursor_y. Erasing the scrollback
+// drops a line of history while the cursor moves down one, so the sum is the
+// same on both sides of the command and the erase leaves no trace in it. The
+// reply then said the command printed nothing. Clearing the screen first is
+// what lines the two up, which puts this one `clear` away from ordinary.
+//
+//libtmux:real-tmux
+func TestAnEraseAfterAScreenClearStillReturnsTheOutput(t *testing.T) {
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: summed\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	// The screen clear is the precondition rather than scene-setting: without
+	// it the two marks differ and the erase is visible in them.
+	runInPane(ctx, t, session, pane, `printf '\033[2J\033[H'; echo KEPT`)
+
+	output := runInPane(ctx, t, session, pane, `printf '\033[3J'; echo SURVIVES`)
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "SURVIVES")
+	}) {
+		t.Errorf("the command printed after erasing the scrollback and the "+
+			"reply holds none of it: %q", output)
+	}
+}
+
+// TestRecoveredOutputHoldsNoWrapperEcho covers the shell's echo of this
+// server's own command arriving as though the command had printed it.
+//
+// Recovering from an erase means reading from the top of the grid, and the top
+// of an erased grid holds the prompt and the line that sourced the wrapper.
+// run_command exists so a caller never has to tell those from output, and a
+// contaminated reply is worse than a silent one: silence is obviously wrong
+// and gets retried, a plausible first line gets believed.
+//
+//libtmux:real-tmux
+func TestRecoveredOutputHoldsNoWrapperEcho(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: echoed\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	runInPane(ctx, t, session, pane, `printf '\033[2J\033[H'; echo KEPT`)
+	output := runInPane(ctx, t, session, pane, `printf '\033[3J'; echo SURVIVES`)
+
+	// Without this the check below passes on a reply that recovered nothing,
+	// which is the defect this recovery exists to fix.
+	if len(output) == 0 {
+		t.Fatal("nothing was recovered, so holding no echo proves nothing")
+	}
+	for _, line := range output {
+		if strings.Contains(line, "libtmux-mcp-run") {
+			t.Errorf("the reply holds this server's own sourcing line: %q", output)
+		}
+	}
+}
+
+// TestEveryDeliveryRefusesAPaneWithNoProcess covers four tools reporting
+// success for keys that reached nothing.
+//
+// run_command refused a dead pane and named respawn_pane. Its neighbours did
+// not look, so send_keys answered {"sent": "..."} and send_keys_batch answered
+// {"sent": 1} for keystrokes delivered to a pane with no process to read them.
+// An agent reads that as delivered and waits for output that cannot come.
+//
+// The guard was applied by hand at the one tool that remembered it, which is
+// the thing resolvePaneToDeliver exists to stop.
+//
+//libtmux:real-tmux
+func TestEveryDeliveryRefusesAPaneWithNoProcess(t *testing.T) {
+	session, _, ctx := connect(t)
+	pane := deadPaneHeldOpen(ctx, t, session, "corpse")
+
+	if result := call(ctx, t, session, "load_buffer", map[string]any{
+		"text": "x", "name": "corpse",
+	}, nil); result.IsError {
+		t.Fatalf("load_buffer: %#v", result.Content)
+	}
+
+	for _, delivery := range []struct {
+		tool      string
+		arguments map[string]any
+	}{
+		{"send_keys", map[string]any{"paneId": pane, "command": "echo LEAK"}},
+		{"send_keys_batch", map[string]any{"paneId": pane, "keys": []string{"a"}}},
+		{"paste_text", map[string]any{"paneId": pane, "text": "LEAK"}},
+		{"paste_buffer", map[string]any{"paneId": pane, "name": "corpse"}},
+		{"run_command", map[string]any{"paneId": pane, "command": "echo LEAK", "timeoutSeconds": 5}},
+	} {
+		t.Run(delivery.tool, func(t *testing.T) {
+			result := call(ctx, t, session, delivery.tool, delivery.arguments, nil)
+			if !result.IsError {
+				t.Fatalf("%s reported success against a pane with no process", delivery.tool)
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, "respawn_pane") {
+				t.Errorf("the refusal does not name the way out: %q", said)
+			}
+			if strings.Contains(said, "exited 1") {
+				t.Errorf("the refusal is tmux's exit code rather than a reason: %q", said)
+			}
+		})
+	}
+}
+
+// TestADeadPaneIsStillReadableAndRestartable is the other half: the guard must
+// not reach the tools whose point is a pane that has stopped.
+//
+// A person attached to the session scrolls a corpse by hand, which no capture
+// does for them, so entering a mode has to keep working. Clearing and
+// respawning one are reasonable for their own reasons.
+//
+//libtmux:real-tmux
+func TestADeadPaneIsStillReadableAndRestartable(t *testing.T) {
+	session, _, ctx := connect(t)
+	pane := deadPaneHeldOpen(ctx, t, session, "readable")
+
+	for _, allowed := range []struct {
+		tool      string
+		arguments map[string]any
+	}{
+		{"enter_copy_mode", map[string]any{"paneId": pane}},
+		{"exit_copy_mode", map[string]any{"paneId": pane}},
+		{"clear_pane", map[string]any{"paneId": pane}},
+		{"respawn_pane", map[string]any{"paneId": pane, "command": "sleep 60"}},
+	} {
+		if result := call(ctx, t, session, allowed.tool, allowed.arguments, nil); result.IsError {
+			t.Errorf("%s was refused on a dead pane: %#v", allowed.tool, result.Content)
+		}
+	}
+}
+
+// deadPaneHeldOpen makes a pane whose process has exited and which tmux keeps.
+func deadPaneHeldOpen(
+	ctx context.Context,
+	t *testing.T,
+	session *sdk.ClientSession,
+	name string,
+) string {
+	t.Helper()
+	var made struct {
+		PaneID   string `json:"paneId"`
+		WindowID string `json:"windowId"`
+	}
+	if result := call(ctx, t, session, "create_session", map[string]any{
+		"name": name, "command": "sleep 300",
+	}, nil); result.IsError {
+		t.Fatalf("create_session: %#v", result.Content)
+	}
+	// A second window, so the pane going does not take the session with it
+	// while the assertions are still running.
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": name, "name": "held", "command": "sleep 300",
+	}, &made); result.IsError {
+		t.Fatalf("create_window: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "set_option", map[string]any{
+		"name": "remain-on-exit", "value": "on",
+		"scope": "window", "windowId": made.WindowID,
+	}, nil); result.IsError {
+		t.Fatalf("set_option: %#v", result.Content)
+	}
+	if result := call(ctx, t, session, "respawn_pane", map[string]any{
+		"paneId": made.PaneID, "command": "true", "kill": true,
+	}, nil); result.IsError {
+		t.Fatalf("respawn_pane: %#v", result.Content)
+	}
+	// The pane stays; what this waits for is the process ending.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var listed struct {
+			Panes []struct {
+				ID     string `json:"id"`
+				Status struct {
+					Dead bool `json:"dead"`
+				} `json:"status"`
+			} `json:"panes"`
+		}
+		call(ctx, t, session, "list_panes", map[string]any{
+			"sessionName": name, "detail": "full",
+		}, &listed)
+		for _, pane := range listed.Panes {
+			if pane.ID == made.PaneID && pane.Status.Dead {
+				return made.PaneID
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never reported its command as finished", made.PaneID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestAWaitThatIgnoredWhatWasAlreadyThereSaysSo covers the one reply here that
+// reads as a hang.
+//
+// sinceEntry asks for text written during the wait, so text that was already on
+// the pane is deliberately ignored and the deadline runs out. Both facts are on
+// the wire -- matchedAtEntry true beside a timeout -- and a caller has to
+// reason from the pair to the cause. The explanation existed only in a Go doc
+// comment on the field, which is not a place a client reads.
+//
+//libtmux:real-tmux
+func TestAWaitThatIgnoredWhatWasAlreadyThereSaysSo(t *testing.T) {
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: already\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	runInPane(ctx, t, session, pane, "echo ALREADY-THERE")
+
+	var reply struct {
+		Outcome        string `json:"outcome"`
+		MatchedAtEntry bool   `json:"matchedAtEntry"`
+		EntryNote      string `json:"entryNote"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{"ALREADY-THERE"},
+		"sinceEntry": true, "timeoutSeconds": 2,
+	}, &reply)
+
+	// The precondition, not the finding: without both of these the note has
+	// nothing to explain and this asserts against the wrong reply.
+	if reply.Outcome != "timeout" || !reply.MatchedAtEntry {
+		t.Fatalf("want a timeout with a match at entry, got outcome %q matchedAtEntry %t",
+			reply.Outcome, reply.MatchedAtEntry)
+	}
+	if !strings.Contains(reply.EntryNote, "sinceEntry") {
+		t.Errorf("the reply does not say why it waited out its deadline: %q",
+			reply.EntryNote)
+	}
+
+	// And it stays off the replies that are not puzzling.
+	var plain struct {
+		Outcome   string `json:"outcome"`
+		EntryNote string `json:"entryNote"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{"ALREADY-THERE"}, "timeoutSeconds": 2,
+	}, &plain)
+	if plain.Outcome != "matched" {
+		t.Fatalf("want a match without sinceEntry, got %q", plain.Outcome)
+	}
+	if plain.EntryNote != "" {
+		t.Errorf("a reply that matched carries a note anyway: %q", plain.EntryNote)
+	}
+}
+
+// TestClearingTheScrollbackSaysTheOutputIsGone covers a command whose output
+// vanished with no sign that anything was lost.
+//
+// run_command locates a command's output by two marks, absolute positions in
+// tmux's grid taken before and after. ESC[3J erases the scrollback and
+// renumbers the grid, so the closing mark lands below the opening one and the
+// arithmetic yields nothing -- which the code returned as no output at all,
+// indistinguishable from a command that printed nothing. clear, tput clear and
+// reset all emit ESC[3J under xterm-256color, so "clear; make test" reported
+// success and returned silence.
+//
+//libtmux:real-tmux
+func TestClearingTheScrollbackSaysTheOutputIsGone(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: cleared\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	run := func(command string) (output []string, missed bool, status int) {
+		t.Helper()
+		var reply struct {
+			Output      []string `json:"output"`
+			LinesMissed bool     `json:"linesMissed"`
+			ExitStatus  *int     `json:"exitStatus"`
+		}
+		result := call(ctx, t, session, "run_command", map[string]any{
+			"paneId": pane, "command": command, "timeoutSeconds": 10,
+		}, &reply)
+		if result.IsError {
+			t.Fatalf("run_command %q: %#v", command, result.Content)
+		}
+		if reply.ExitStatus == nil {
+			t.Fatalf("run_command %q recorded no exit status", command)
+		}
+		return reply.Output, reply.LinesMissed, *reply.ExitStatus
+	}
+
+	// Erasing the screen alone keeps the marks valid, so the output arrives
+	// and nothing was lost.
+	output, missed, status := run(`printf '\033[2J\033[H'; echo KEPT`)
+	if status != 0 || missed {
+		t.Errorf("erasing the screen: status %d, linesMissed %t", status, missed)
+	}
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "KEPT")
+	}) {
+		t.Errorf("erasing the screen lost the output: %q", output)
+	}
+
+	// The pad is the precondition, not decoration: an erase with no scrollback
+	// to erase renumbers nothing, and the step above left none. Without it this
+	// asserts against a grid that never moved, which is how it came to pass on
+	// one tmux and fail on another.
+	pad := "for i in $(seq 1 40); do echo pad$i; done"
+	run(pad)
+
+	// Erasing the scrollback renumbers the grid under the marks. What the
+	// command printed afterwards is still on the screen and still has to come
+	// back, and the reply has to say that anything before it is gone.
+	output, missed, status = run(`printf '\033[3J'; echo SURVIVES`)
+	if status != 0 {
+		t.Errorf("erasing the scrollback: status %d, want the command's own", status)
+	}
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "SURVIVES")
+	}) {
+		t.Errorf("what the command printed after erasing the scrollback was "+
+			"dropped: %q", output)
+	}
+	if !missed {
+		t.Error("the scrollback was erased and the reply does not report the loss")
+	}
+
+	// clear is the ordinary way to reach it, and the reason this matters:
+	// "clear; make test" reported success and returned silence. Returning the
+	// output is the contract; whether the erase also renumbers far enough to be
+	// reported is not, because tmux releases differ on it and the command's own
+	// output was never lost either way.
+	run(pad)
+	output, _, status = run("clear; echo AFTERCLEAR")
+	if status != 0 {
+		t.Errorf("clear: status %d, want the command's own", status)
+	}
+	if !slices.ContainsFunc(output, func(line string) bool {
+		return strings.Contains(line, "AFTERCLEAR")
+	}) {
+		t.Errorf("clear lost the output that followed it: %q", output)
+	}
+
+	// A command that printed nothing is still distinguishable from one whose
+	// output went missing.
+	output, missed, _ = run("true")
+	if len(output) != 0 || missed {
+		t.Errorf("a command that printed nothing reported %q, linesMissed %t",
+			output, missed)
+	}
+}
+
+// TestJoinWrappedReadsAPaneAsTmuxDoes covers a seam that was reported as a
+// defect here and belongs to tmux.
+//
+// In a narrow pane with a shell prompt that draws several rows, the join can
+// put the prompt's last row and the command typed after it on one line and
+// orphan the command's wrapped tail on the next. tmux's own capture-pane -J
+// does the same, because it is tmux that decides which rows were wrapped, from
+// a flag it sets as it wraps them. Reproducing tmux rather than improving on it
+// is the contract, so this pins the equivalence: a later divergence is then a
+// change here rather than something nobody notices.
+//
+//libtmux:real-tmux
+func TestJoinWrappedReadsAPaneAsTmuxDoes(t *testing.T) {
+	session, target, ctx := connect(t)
+	workspace(ctx, t, session,
+		"session_name: joined\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	call(ctx, t, session, "resize_pane", map[string]any{"paneId": pane, "width": 40}, nil)
+	// Comfortably more than two rows of a forty-column pane, so joined and
+	// unjoined cannot come out the same.
+	send(ctx, t, session, pane, "printf 'X%.0s' {1..95}; echo")
+	time.Sleep(time.Second)
+
+	read := func(join bool) []string {
+		t.Helper()
+		var reply struct {
+			Lines []string `json:"lines"`
+		}
+		if result := call(ctx, t, session, "capture_pane", map[string]any{
+			"paneId": pane, "joinWrapped": join,
+		}, &reply); result.IsError {
+			t.Fatalf("capture_pane joinWrapped=%t: %#v", join, result.Content)
+		}
+		return reply.Lines
+	}
+	joined, unjoined := read(true), read(false)
+	if slices.Equal(joined, unjoined) {
+		t.Fatal("joining changed nothing, so this pane cannot tell the two apart")
+	}
+
+	panes, err := target.Panes(ctx)
+	if err != nil {
+		t.Fatalf("Panes() = %v", err)
+	}
+	var found tmux.Pane
+	for _, each := range panes {
+		if each.ID().String() == pane {
+			found = each
+		}
+	}
+	if found.ID().String() != pane {
+		t.Fatalf("pane %s is not in the listing", pane)
+	}
+	theirs, err := found.Capture(ctx, tmux.CapturePaneRequest{JoinWrapped: true})
+	if err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+
+	trim := func(rows []string) []string {
+		kept := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if row = strings.TrimRight(row, " "); row != "" {
+				kept = append(kept, row)
+			}
+		}
+		return kept
+	}
+	if mine, tmuxs := trim(joined), trim(theirs); !slices.Equal(mine, tmuxs) {
+		t.Errorf("joinWrapped diverged from capture-pane -J\n  ours: %q\n  tmux: %q",
+			mine, tmuxs)
+	}
 }

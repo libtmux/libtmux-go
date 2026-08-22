@@ -827,6 +827,35 @@ resolve, so the core is tagged before the modules that depend on it. The local
 `replace` directives are what make the tree build before any of that exists;
 they are not a substitute for the requirement.
 
+## One tmux server, chosen once
+
+The MCP server addresses the socket it was started with and nothing in a call
+can retarget it: `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET`, or
+`LIBTMUX_SOCKET_PATH`, resolved at launch, with `-doctor` naming which was
+taken. The Python server of the same name takes `socket_name` on 48 of its
+tools instead, so a call chooses.
+
+This is a decision rather than an omission, and the reasoning is not
+ergonomics. An MCP server runs with the operator's authority and is driven by a
+model reading text it did not write. A per-call socket makes "which tmux" part
+of that text, so a model that is talked into a socket path reaches a tmux the
+operator never granted — every other server on the machine, including one
+holding a session someone is working in. Fixing the target at launch makes that
+unreachable by construction rather than by a check that has to be right every
+time.
+
+Two alternatives were weighed. Taking a socket per call and validating it
+against an operator-declared allowlist keeps the reach and adds a list to get
+wrong, and the failure is silent: an allowlist with one entry too many is
+indistinguishable from a correct one until it matters. Running one server per
+tmux socket is what this design already supports, costs a process, and is what
+`list_servers` exists to make discoverable — it reports the other servers on
+the machine precisely so a person can point a second instance at one, while
+nothing a model says can reach them from this one.
+
+The cost is real and is not hidden: a client that wants two tmux servers runs
+two of these. That is the trade, taken deliberately.
+
 ## Bakeoff decisions
 
 | Problem | Selected approach | Rejected approaches |
@@ -839,6 +868,7 @@ they are not a substitute for the requirement.
 | MCP listing criteria | Typed criteria matched in Go against the snapshot the tool already takes | A caller-supplied tmux `-f` expression; typed criteria compiled into one |
 | MCP detached commands | An in-process handle table, bounded, whose entries keep their answer once read | A handle encoding the paths it needs; one-shot collection |
 | MCP per-pane state | A field on the listing's own row type | A field on the shared pane summary; a separate digest tool |
+| MCP command output | Reading the pane's grid between two cursor marks | Teeing the command's bytes to a file; copying the pane's byte stream with `pipe-pane` |
 
 The execution bakeoff showed that some apparently missing tmux targets still
 return success for `display-message`; failure tests use commands with stable
@@ -872,6 +902,34 @@ The per-pane state bakeoff was settled by measuring the tool list. Hanging the
 state off the shared pane summary added its schema to the four other tools that
 report a pane and never fill it in -- 304 bytes each, advertised to every client
 on every session. A row type belonging to the listing costs it once.
+
+The command-output bakeoff was run because the grid arithmetic had accumulated
+five compensations -- an echo to remove, a grid that moved, a scrollback that
+was erased, a screen that was cleared, rows that wrapped -- and each one looked
+like a reason to replace the approach rather than patch it again. Twenty-five
+shapes were put to all three: the marks answered twenty-four, and both
+byte-capture approaches answered twenty.
+
+The four they lost are the same four, and they are the point. A byte capture
+returns what the program wrote; the grid returns what a terminal shows. So
+`clear` arrives as `ESC[H ESC[J ESC[3J`, a progress bar written with carriage
+returns arrives as every frame it drew rather than as the one it left, and a
+coloured word arrives wrapped in escapes. tmux has already done that rendering,
+and redoing it outside tmux is a terminal emulator.
+
+Teeing lost a second time, decisively: a command whose stdout is a pipe is not
+a command running in a terminal. `[ -t 1 ]` reports a pipe, so colour is off,
+paging is off, and any program that branches on `isatty` takes the other
+branch -- which is the opposite of what a tool called `run_command` on a tmux
+pane is for. `pipe-pane` keeps the tty, and is the approach to reach for if the
+requirement ever becomes bytes rather than what the pane shows.
+
+The compensations are therefore the price of the answer, not evidence against
+the approach. What the bakeoff did find was a case none of them covered: a
+command whose whole output is blank lines was reported as having printed
+nothing, because a capture that is nothing but empty lines arrives as no lines
+at all. Both losers got it right for free, and the marks already count the rows,
+so the fix is theirs grafted onto the winner.
 
 The batching bakeoff settled the result shape. Distinguishing what an operation
 produced by its Go type reaches for either an interface with one implementation

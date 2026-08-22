@@ -7,6 +7,144 @@ version.
 Modules are tagged per directory, so each carries its own version: the core as
 `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`.
 
+## Unreleased
+
+### tmux
+
+- `NewSession` with `KillExisting` no longer kills a session whose name matches
+  another session's identifier. Creating one could end that session, and end
+  the server with it when it was the last.
+- `HasSession` with `Pattern` false now answers for the name itself. `Pattern`
+  true still accepts tmux's full target syntax.
+- `NewSession` now rejects a session name containing a control character, a
+  DEL, or malformed UTF-8. tmux accepted these before 3.7 and stored the name
+  visibility-encoded.
+- A control-mode connection no longer returns another command's reply. tmux
+  writes a guard block for every command it runs, not only the client's own,
+  and reading a stranger's shifted every later reply by one.
+- `SelectLayout` now accepts `main-horizontal-mirrored` and
+  `main-vertical-mirrored` on tmux 3.5 and newer.
+- `RefreshClientRequest.RequestClipboard` now requires tmux 3.4, lowered from
+  3.7.
+- `FormatValues.SessionActive` reports tmux's `session_active`.
+- A socket directory tmux refuses to use now returns `ErrNoServer` rather than
+  an unrecognised command failure. The reason tmux gave is carried on the
+  error.
+
+### mcp
+
+#### Watching a pane
+
+- A subscription to `tmux://panes/%1/content` now receives notifications. Only
+  the sigil-less spelling worked, and every tool returns a pane with its sigil.
+- A subscriber is now notified of writes that happen while the watcher rebuilds
+  its connections.
+- A notification suppressed by the coalescing window is now deferred rather
+  than dropped, so the last write of a burst is reported.
+
+#### Running commands
+
+- `run_command` now returns the output of a command that clears the screen or
+  erases the scrollback. Both previously read as a command that printed
+  nothing.
+- `run_command` no longer returns its own sourcing line as output.
+- `run_command` now reports output that is entirely blank lines, rather than
+  reporting no output.
+- `run_command` no longer writes its wrapper's errors into the pane after a
+  timeout.
+
+#### Panes that cannot read
+
+- `send_keys`, `send_keys_batch`, `paste_text`, `paste_buffer` and
+  `run_command` now refuse a pane whose program has exited, naming
+  `respawn_pane`. They reported the keys sent, or a count, for keystrokes
+  nothing read.
+- The same five now refuse a pane in copy mode, where a key is read as that
+  mode's binding rather than reaching the program. A binding that waits for a
+  further key never answers the client that sent one.
+
+#### Safety
+
+- A write to the pane the server runs in is now refused when the client cannot
+  be asked about it. It was previously allowed, which made the guard advisory
+  for every client without elicitation support.
+- `kill_window`, `kill_session` and `kill_server` now refuse a target holding
+  the pane the server runs in.
+- A batched write to that pane now asks, as a direct call already did.
+- Writes to that pane can now be allowed for the rest of the session. Ending
+  the pane, its window, its session, or the server asks every time.
+- `show_environment` now returns variable names without their values. A call
+  with no arguments returned every value, credentials included.
+
+#### Schemas
+
+- `scope`, `direction`, `detail`, and `get_recipe`'s `name` now publish their
+  accepted values as a JSON Schema `enum`.
+- A call inside a batch is now validated against the tool's schema. The batch
+  tools were the one route to a handler with no schema in front of it.
+- Collections in a reply are now typed `array` rather than `null` or `array`.
+- `scope` and `direction` no longer accept case variants such as `SERVER` or
+  `RIGHT`. Use the canonical spellings the schema publishes.
+- `show_option`, `set_option` and `show_hooks` now reject `windowId` at pane
+  scope rather than ignoring it. Pass `scope: window` to read at window scope.
+- `select_layout` now refuses `layout` and `spread` together rather than
+  honouring one. Pass `spread` to even the panes already in the window, or a
+  layout to replace the arrangement.
+- `capture_since` cursors are now version 2, about a third smaller. A version 1
+  cursor is refused; call `capture_since` without one to start again.
+
+#### Diagnostics
+
+- `list_panes`, `list_windows` and `list_sessions` now report `serverNote` when
+  no tmux server is running on the socket.
+- A resource read that names nothing now returns `-32002 Resource not found`
+  and names the listing to call, rather than tmux's `display-message exited 1`.
+- `kill_pane`, `kill_window`, `move_pane`, `move_window`, `select_pane` and
+  `select_window` now name the listing that finds an id, rather than repeating
+  tmux's `snapshot object not found`.
+- `respawn_pane` now reports `gone` when the pane cannot be read back after a
+  respawn that itself succeeded. A command that exits takes the pane with it,
+  which read as a failed respawn naming a snapshot that did not hold it.
+- `-doctor` now reports a `LIBTMUX_SAFETY` value it did not recognise. An
+  unrecognised value still selects `readonly`.
+
+#### Resources and completions
+
+- A resource URI now decodes percent-escapes, so
+  `tmux://sessions/spaced%20name` reads the session named `spaced name`. A name
+  needing an escape reached tmux with the escape still in it.
+- Completion now answers in the dialect the caller asked in: tmux's own
+  spelling for a prompt argument, the URI spelling for a resource slot. A
+  completed prompt argument named a pane that every tool rejects.
+
+#### Additions
+
+- Add `onError` to the three batch tools, choosing between stopping at the
+  first failure and running the calls after it. Stopping remains the default.
+- Add `tmux://sessions/{session}` and `tmux://windows/{window}` resources.
+- Add annotations to every tool, marking it read-only, mutating, settling or
+  destructive, so a client can tell a read from a kill before it calls.
+- Add `mcp/TOOLS.md`, a per-tool reference generated from the registered
+  schemas. `go generate` rewrites it, so a schema and the documentation of it
+  cannot drift.
+- Add `LIBTMUX_SOCKET`, `LIBTMUX_SOCKET_PATH` and `LIBTMUX_TMUX_BIN`, matching
+  the Python server of the same name. A flag naming a socket wins over them.
+- Add `skipped` to `list_panes`, `list_windows` and `list_sessions`, the count
+  their criteria left out.
+- Add `mcp/PARITY.md`, comparing this server with the Python server of the same
+  name.
+
+#### Reliability
+
+- The server now survives a tmux restart.
+- A frame that will not parse no longer ends the server.
+
+### workspace
+
+- The document check now rejects two windows claiming one `window_index`,
+  naming the line and both windows. tmux refuses the second itself, but reports
+  only that `new-window` exited non-zero.
+
 ## v0.0.1-alpha.3, workspace/v0.0.1-alpha.3, mcp/v0.0.1-alpha.6
 
 ### All modules

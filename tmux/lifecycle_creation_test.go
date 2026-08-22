@@ -29,7 +29,7 @@ func TestAuxiliaryCreationFailuresRedactPayloads(t *testing.T) {
 			name:       "session pre-kill",
 			subcommand: "kill-session",
 			responses: []versionResponse{
-				{result: tmuxcmd.Result{ExitCode: 0}},
+				{result: tmuxcmd.Result{Stdout: []string{"$5 " + secret}}},
 				failure,
 			},
 			invoke: func(server Server) error {
@@ -72,7 +72,7 @@ func TestNewSessionCopiesEnvironmentBeforeExistenceProbe(t *testing.T) {
 	width, height := 101, 31
 	environment := map[string]string{"KEY": "before"}
 	runner := newLifecycleProbeGateRunner(
-		versionResponse{result: tmuxcmd.Result{ExitCode: 1}},
+		versionResponse{result: tmuxcmd.Result{ExitCode: 0}},
 		versionResponse{result: tmuxcmd.Result{Stderr: []string{"stop"}, ExitCode: 7}},
 	)
 	done := make(chan error, 1)

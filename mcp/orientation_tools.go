@@ -21,12 +21,28 @@ import (
 // move, and failing it would make every session begin with an error. A socket
 // this server cannot use still fails, because [tmux.ErrNoServer] classifies
 // only what tmux refused before running the command.
-func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, error) {
-	snapshot, err := t.target.Snapshot(ctx)
+func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, bool, error) {
+	snapshot, err := t.tmux().Snapshot(ctx)
 	if errors.Is(err, tmux.ErrNoServer) {
-		return tmux.Snapshot{}, nil
+		return tmux.Snapshot{}, false, nil
 	}
-	return snapshot, err
+	return snapshot, err == nil, err
+}
+
+// noServerNote is what a listing says rather than describing an absent server
+// as an empty one. tmux exits when its last pane goes, so a listing of nothing
+// is not an idle server: it is no server, which is usually the wrong socket
+// rather than a quiet machine, and a caller that reads it as quiet goes on to
+// look for a pane that was never going to be there.
+const noServerNote = "no tmux server is running on this socket; " +
+	"get_server_info says which socket that is, and create_session starts one"
+
+// noteWhenAbsent is noServerNote when there is no server, and empty otherwise.
+func noteWhenAbsent(running bool) string {
+	if running {
+		return ""
+	}
+	return noServerNote
 }
 
 // A listing narrows where it is read rather than where it is used.
@@ -78,7 +94,7 @@ type listPanesInput struct {
 	// Active keeps only each window's active pane, or only the others.
 	Active *bool `json:"active,omitempty" jsonschema:"keep only active panes, or only inactive ones"`
 	// Detail chooses how much is reported per pane.
-	Detail string `json:"detail,omitempty" jsonschema:"how much to report per pane: standard, or full to add exit status, path, title, and history size"`
+	Detail string `json:"detail,omitempty" jsonschema:"how much to report per pane; full adds exit status, path, title, and history size"`
 }
 
 // listedPane is a pane as a listing reports it: the shape every other tool
@@ -102,6 +118,13 @@ type listPanesOutput struct {
 	// Total is how many panes the server held before the criteria were
 	// applied, so a caller can see what its filter selected from.
 	Total int `json:"total"`
+	// Skipped is how many the criteria left out. Without it a caller
+	// reads a shorter list against a larger total as a reply that was
+	// shortened, which is what the tools returning pane text do.
+	Skipped int `json:"skipped,omitempty"`
+	// ServerNote is present only when there is no tmux server on the socket at
+	// all, which an empty list alone does not say.
+	ServerNote string `json:"serverNote,omitempty"`
 }
 
 // listPanes reports the panes matching a caller's criteria.
@@ -116,7 +139,7 @@ func (t *tools) listPanes(
 	}
 	// One snapshot rather than a listing per pane, so session and window names
 	// come from the same observation as the panes themselves.
-	snapshot, err := t.orientationSnapshot(ctx)
+	snapshot, running, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listPanesOutput{Panes: []listedPane{}}, err
 	}
@@ -139,7 +162,10 @@ func (t *tools) listPanes(
 		}
 		summaries = append(summaries, listed)
 	}
-	return nil, listPanesOutput{Panes: summaries, Total: len(panes)}, nil
+	return nil, listPanesOutput{
+		Panes: summaries, Total: len(panes),
+		Skipped: len(panes) - len(summaries), ServerNote: noteWhenAbsent(running),
+	}, nil
 }
 
 // keeps reports whether one pane satisfies every criterion given. Criteria
@@ -221,6 +247,13 @@ type listWindowsOutput struct {
 	// Total is how many windows the server held before the criteria were
 	// applied.
 	Total int `json:"total"`
+	// Skipped is how many the criteria left out. Without it a caller
+	// reads a shorter list against a larger total as a reply that was
+	// shortened, which is what the tools returning pane text do.
+	Skipped int `json:"skipped,omitempty"`
+	// ServerNote is present only when there is no tmux server on the socket at
+	// all, which an empty list alone does not say.
+	ServerNote string `json:"serverNote,omitempty"`
 }
 
 // listWindows reports the windows matching a caller's criteria.
@@ -233,7 +266,7 @@ func (t *tools) listWindows(
 	_ *mcp.CallToolRequest,
 	input listWindowsInput,
 ) (*mcp.CallToolResult, listWindowsOutput, error) {
-	snapshot, err := t.orientationSnapshot(ctx)
+	snapshot, running, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listWindowsOutput{}, err
 	}
@@ -254,7 +287,10 @@ func (t *tools) listWindows(
 		}
 		summaries = append(summaries, summary)
 	}
-	return nil, listWindowsOutput{Windows: summaries, Total: len(windows)}, nil
+	return nil, listWindowsOutput{
+		Windows: summaries, Total: len(windows),
+		Skipped: len(windows) - len(summaries), ServerNote: noteWhenAbsent(running),
+	}, nil
 }
 
 // listSessionsInput narrows which sessions are listed. Every field is optional.
@@ -273,6 +309,13 @@ type listSessionsOutput struct {
 	// Total is how many sessions the server held before the criteria were
 	// applied.
 	Total int `json:"total"`
+	// Skipped is how many the criteria left out. Without it a caller
+	// reads a shorter list against a larger total as a reply that was
+	// shortened, which is what the tools returning pane text do.
+	Skipped int `json:"skipped,omitempty"`
+	// ServerNote is present only when there is no tmux server on the socket at
+	// all, which an empty list alone does not say.
+	ServerNote string `json:"serverNote,omitempty"`
 }
 
 // listSessions reports the sessions matching a caller's criteria.
@@ -281,7 +324,7 @@ func (t *tools) listSessions(
 	_ *mcp.CallToolRequest,
 	input listSessionsInput,
 ) (*mcp.CallToolResult, listSessionsOutput, error) {
-	snapshot, err := t.orientationSnapshot(ctx)
+	snapshot, running, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listSessionsOutput{}, err
 	}
@@ -298,7 +341,10 @@ func (t *tools) listSessions(
 		}
 		summaries = append(summaries, summary)
 	}
-	return nil, listSessionsOutput{Sessions: summaries, Total: len(sessions)}, nil
+	return nil, listSessionsOutput{
+		Sessions: summaries, Total: len(sessions),
+		Skipped: len(sessions) - len(summaries), ServerNote: noteWhenAbsent(running),
+	}, nil
 }
 
 // selectWindowInput chooses the window a session shows.
@@ -322,9 +368,9 @@ func (t *tools) selectWindow(
 	_ *mcp.CallToolRequest,
 	input selectWindowInput,
 ) (*mcp.CallToolResult, selectWindowOutput, error) {
-	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
-		return nil, selectWindowOutput{}, err
+		return nil, selectWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
 	selected, err := window.Select(ctx)
 	if err != nil {
@@ -364,7 +410,7 @@ func addOrientationTools(server *mcp.Server, t *tools) {
 	}, t.listSessions)
 	register(server, t, &mcp.Tool{
 		Name:        "select_window",
-		Annotations: mutating("Select a tmux Window"),
+		Annotations: settling("Select a tmux Window"),
 		Description: "Make one window its session's current window, which is what " +
 			"puts a person in front of a window this client created.",
 	}, t.selectWindow)

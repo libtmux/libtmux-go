@@ -22,9 +22,33 @@ import (
 // a client's next call address something it did not choose, and the mistake
 // surfaces as a command run in the wrong pane rather than as an error.
 
+// notFound restates a target that does not exist as the call that would have
+// found one.
+//
+// tmux answers with what it looked for -- "snapshot object not found: pane
+// %9" -- which names the mechanism and leaves a caller to guess the way out.
+// A model reading that has no reason to prefer listing over trying another id,
+// and the listing is always the right next move.
+func notFound(err error, what, id, lister string) error {
+	if !errors.Is(err, tmux.ErrSnapshotNotFound) {
+		return err
+	}
+	return missing{fmt.Errorf(
+		"no %s %s on this tmux server; %s reports the %ss that exist",
+		what, id, lister, what)}
+}
+
+// missing keeps the prose above answerable by errors.Is. Replacing tmux's
+// message with a better one otherwise throws away the one fact a caller might
+// branch on, which is what tells a target that is not there from a server that
+// could not be asked.
+type missing struct{ error }
+
+func (missing) Is(target error) bool { return target == tmux.ErrSnapshotNotFound }
+
 // resolveSession finds the session a call names, or the only one there is.
 func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, error) {
-	sessions, err := t.target.Sessions(ctx)
+	sessions, err := t.tmux().Sessions(ctx)
 	if err != nil {
 		return tmux.Session{}, err
 	}
@@ -36,7 +60,9 @@ func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, 
 				return session, nil
 			}
 		}
-		return tmux.Session{}, fmt.Errorf("no session named %q", wanted)
+		return tmux.Session{}, missing{fmt.Errorf(
+			"no session named %q on this tmux server; list_sessions reports "+
+				"the sessions that exist", wanted)}
 	}
 	switch len(sessions) {
 	case 0:
@@ -55,7 +81,8 @@ func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, 
 // which is what "this window" means to someone looking at a terminal.
 func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux.Window, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		return t.target.Window(ctx, tmux.WindowID(wanted))
+		window, err := t.tmux().Window(ctx, tmux.WindowID(wanted))
+		return window, notFound(err, "window", wanted, "list_windows")
 	}
 	session, err := t.resolveSession(ctx, sessionName)
 	if err != nil {
@@ -71,7 +98,8 @@ func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux
 // it would otherwise spend a list_panes call to name.
 func (t *tools) resolvePane(ctx context.Context, id, sessionName string) (tmux.Pane, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		return t.target.Pane(ctx, tmux.PaneID(wanted))
+		pane, err := t.tmux().Pane(ctx, tmux.PaneID(wanted))
+		return pane, notFound(err, "pane", wanted, "list_panes")
 	}
 	window, err := t.resolveWindow(ctx, "", sessionName)
 	if err != nil {

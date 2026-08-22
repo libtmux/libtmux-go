@@ -166,7 +166,7 @@ func (t *tools) searchPanes(
 	perPane := clamp(input.MaxMatchesPerPane, searchDefaultMatchesPerPane, searchCeilingMatchesPerPane)
 	paneLimit := clamp(input.MaxPanes, searchDefaultPanes, searchCeilingPanes)
 
-	snapshot, err := t.target.Snapshot(ctx)
+	snapshot, err := t.tmux().Snapshot(ctx)
 	if err != nil {
 		return nil, searchPanesOutput{}, err
 	}
@@ -177,7 +177,7 @@ func (t *tools) searchPanes(
 		request.Start = tmux.CaptureBoundary
 	}
 
-	server := t.target
+	server := t.tmux()
 	socket := t.socketPath(ctx)
 	caller := t.callerIdentityFor(ctx)
 	matched := make([]paneMatch, 0)

@@ -20,7 +20,7 @@ type splitWindowInput struct {
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to split when paneId is empty"`
 	// Direction places the new pane relative to that one: below, above, right,
 	// or left. Empty places it below, as tmux does.
-	Direction string `json:"direction,omitempty" jsonschema:"where the new pane goes: below, above, right, or left"`
+	Direction string `json:"direction,omitempty" jsonschema:"where the new pane goes; empty puts it below"`
 	// Percentage gives the new pane that share of the space, from 1 to 100.
 	// Zero lets tmux halve the pane.
 	Percentage int `json:"percentage,omitempty" jsonschema:"the new pane's share of the space, 1 to 100"`
@@ -57,7 +57,7 @@ type movePaneInput struct {
 	ToWindowID string `json:"toWindowId,omitempty" jsonschema:"the window to move the pane into, such as @2; empty breaks it out into a new window"`
 	// Direction places the moved pane relative to the destination's active
 	// pane: below, above, right, or left. Empty places it below, as tmux does.
-	Direction string `json:"direction,omitempty" jsonschema:"where the moved pane goes in the destination: below, above, right, or left"`
+	Direction string `json:"direction,omitempty" jsonschema:"where the moved pane goes in the destination; empty puts it below"`
 	// Percentage gives the moved pane that share of the destination, 1 to 100.
 	Percentage int `json:"percentage,omitempty" jsonschema:"the moved pane's share of the destination window, 1 to 100"`
 	// Name is the new window's name when the pane is broken out.
@@ -105,9 +105,9 @@ func (t *tools) movePane(
 		return nil, movePaneOutput{}, fmt.Errorf(
 			"percentage %d is not between 1 and 100", input.Percentage)
 	}
-	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
-		return nil, movePaneOutput{}, err
+		return nil, movePaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
 
 	if input.ToWindowID == "" {
@@ -125,9 +125,9 @@ func (t *tools) movePane(
 		}, nil
 	}
 
-	destination, err := t.target.Window(ctx, tmux.WindowID(input.ToWindowID))
+	destination, err := t.tmux().Window(ctx, tmux.WindowID(input.ToWindowID))
 	if err != nil {
-		return nil, movePaneOutput{}, err
+		return nil, movePaneOutput{}, notFound(err, "window", input.ToWindowID, "list_windows")
 	}
 	request := tmux.JoinPaneRequest{
 		TargetWindow: destination,
@@ -199,6 +199,9 @@ type resizePaneInput struct {
 
 // resizePaneOutput reports the size tmux settled on.
 type resizePaneOutput struct {
+	// PaneID is the pane that was resized. A caller that named none had the
+	// active one resolved for it, and the reply is where it learns which.
+	PaneID string `json:"paneId"`
 	// Width is the pane's width in cells after the change.
 	Width int `json:"width"`
 	// Height is the pane's height in cells after the change.
@@ -237,7 +240,9 @@ func (t *tools) resizePane(
 	}
 	width, _ := resized.Formats().PaneWidth()
 	height, _ := resized.Formats().PaneHeight()
-	return nil, resizePaneOutput{Width: width, Height: height}, nil
+	return nil, resizePaneOutput{
+		PaneID: resized.ID().String(), Width: width, Height: height,
+	}, nil
 }
 
 // selectLayoutInput arranges a window's panes.
@@ -248,7 +253,7 @@ type selectLayoutInput struct {
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's current window to arrange when windowId is empty"`
 	// Layout is one of tmux's presets, or a layout string read from
 	// get_window_info. Empty with Spread set redistributes the space instead.
-	Layout string `json:"layout,omitempty" jsonschema:"even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, or a layout string from get_window_info"`
+	Layout string `json:"layout,omitempty" jsonschema:"even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, main-horizontal-mirrored or main-vertical-mirrored from tmux 3.5, or a layout string from get_window_info"`
 	// Spread gives every pane an equal share without changing the arrangement.
 	Spread bool `json:"spread,omitempty" jsonschema:"give every pane an equal share of the space"`
 }
@@ -274,6 +279,11 @@ var layoutPresets = map[string]bool{
 	"main-horizontal": true,
 	"main-vertical":   true,
 	"tiled":           true,
+	// tmux added these at 3.5. They are passed on rather than gated here,
+	// because the tmux module refuses them below that with the version it
+	// found, which is the answer a client can act on.
+	"main-horizontal-mirrored": true,
+	"main-vertical-mirrored":   true,
 }
 
 // layoutString matches tmux's own description of an arrangement, which
@@ -294,6 +304,13 @@ func (t *tools) selectLayout(
 	layout := strings.TrimSpace(input.Layout)
 	if layout == "" && !input.Spread {
 		return nil, selectLayoutOutput{}, errors.New("layout or spread is required")
+	}
+	// tmux refuses the pair. Saying so here keeps its parser's wording, which
+	// names modes this tool does not offer, from reaching a client.
+	if layout != "" && input.Spread {
+		return nil, selectLayoutOutput{}, errors.New(
+			"layout and spread are alternatives: spread evens the panes already " +
+				"in the window, a layout replaces the arrangement")
 	}
 	if layout != "" && !layoutPresets[layout] && !layoutString.MatchString(layout) {
 		return nil, selectLayoutOutput{}, fmt.Errorf(
@@ -347,9 +364,9 @@ func (t *tools) selectPane(
 	_ *mcp.CallToolRequest,
 	input selectPaneInput,
 ) (*mcp.CallToolResult, selectPaneOutput, error) {
-	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
-		return nil, selectPaneOutput{}, err
+		return nil, selectPaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
 	selected, err := pane.Select(ctx, tmux.PaneSelectRequest{})
 	if err != nil {
@@ -395,7 +412,7 @@ func (t *tools) swapPane(
 	if input.PaneID == input.WithPaneID {
 		return nil, swapPaneOutput{}, errors.New("a pane cannot be swapped with itself")
 	}
-	server := t.target
+	server := t.tmux()
 	pane, err := server.Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, swapPaneOutput{}, err
@@ -504,9 +521,9 @@ func (t *tools) moveWindow(
 	if strings.TrimSpace(input.WindowID) == "" {
 		return nil, moveWindowOutput{}, errors.New("windowId is required")
 	}
-	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
-		return nil, moveWindowOutput{}, err
+		return nil, moveWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
 	request := tmux.MoveWindowRequest{TargetIndex: input.Index}
 	if name := strings.TrimSpace(input.SessionName); name != "" {
@@ -545,16 +562,17 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 	}, t.resizePane)
 	register(server, t, &mcp.Tool{
 		Name:        "select_pane",
-		Annotations: mutating("Select a tmux Pane"),
+		Annotations: settling("Select a tmux Pane"),
 		Description: "Make one pane its window's active pane, which is where a " +
 			"person's keystrokes go.",
 	}, t.selectPane)
 	register(server, t, &mcp.Tool{
 		Name:        "select_layout",
-		Annotations: mutating("Arrange a Window's Panes"),
+		Annotations: settling("Arrange a Window's Panes"),
 		Description: "Arrange a window's panes with one of tmux's presets " +
 			"(even-horizontal, even-vertical, main-horizontal, main-vertical, " +
-			"tiled), spread them evenly, or restore a layout string read from " +
+			"tiled, and the mirrored pair from tmux 3.5), spread them evenly, " +
+			"or restore a layout string read from " +
 			"get_window_info.",
 	}, t.selectLayout)
 	register(server, t, &mcp.Tool{
@@ -580,7 +598,7 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 	}, t.resizeWindow)
 	register(server, t, &mcp.Tool{
 		Name:        "move_window",
-		Annotations: mutating("Move a tmux Window"),
+		Annotations: settling("Move a tmux Window"),
 		Description: "Move a window to another index, or into another session. " +
 			"It keeps its id.",
 	}, t.moveWindow)

@@ -305,7 +305,34 @@ func (w Workspace) Validate() error {
 	for index, window := range w.Windows {
 		problems = append(problems, windowProblems(index, window)...)
 	}
+	problems = append(problems, indexCollisions(w.Windows)...)
 	return errors.Join(problems...)
+}
+
+// indexCollisions reports two windows asking for the same window_index.
+//
+// tmux refuses the second one, and its refusal is that new-window exited
+// non-zero -- which names neither the index nor which of the two windows lost.
+// Two windows in one document claiming one place is a mistake in the document,
+// so it is caught here with the rest of them, where a line number can be given.
+func indexCollisions(windows []Window) []error {
+	claimed := map[int]int{}
+	var problems []error
+	for position, window := range windows {
+		if window.Index == nil || *window.Index < 0 {
+			continue
+		}
+		if first, taken := claimed[*window.Index]; taken {
+			problems = append(problems, fmt.Errorf(
+				"%w: %swindow %d (%q) asks for window_index %d, which window %d "+
+					"(%q) already has",
+				ErrInvalidWorkspace, windowPosition(window), position, window.Name,
+				*window.Index, first, windows[first].Name))
+			continue
+		}
+		claimed[*window.Index] = position
+	}
+	return problems
 }
 
 // windowProblems reports everything wrong with one window.

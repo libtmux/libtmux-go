@@ -36,8 +36,8 @@ func newProgressReporter(
 	message string,
 ) *progressReporter {
 	reporter := &progressReporter{stopped: make(chan struct{})}
-	// A call made from a batch has no request of its own, and a client that
-	// did not send a token did not ask to hear about this.
+	// A client that did not send a token did not ask to hear about this, and
+	// a batched call reports under the token its batch was given.
 	if request == nil || request.Session == nil || request.Params == nil {
 		return reporter
 	}

@@ -59,7 +59,7 @@ func (t *tools) sendKeysBatch(
 	if len(input.Keys) == 0 {
 		return nil, sendKeysBatchOutput{}, errors.New("keys is required")
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
+	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "sending keys", "send_keys_batch")
 	if err != nil {
 		return nil, sendKeysBatchOutput{}, err
 	}
@@ -132,13 +132,13 @@ func (t *tools) pasteText(
 	if input.Text == "" {
 		return nil, pasteTextOutput{}, errors.New("text is required")
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting text")
+	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "pasting text", "paste_text")
 	if err != nil {
 		return nil, pasteTextOutput{}, err
 	}
 	output := pasteTextOutput{PaneID: pane.ID().String()}
 
-	server := t.target
+	server := t.tmux()
 	name := "libtmux-mcp-paste-" + strconv.FormatInt(pasteSequence.Add(1), 10)
 	if err := server.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
@@ -235,6 +235,41 @@ func (t *tools) enterCopyMode(
 	return nil, copyModeOutput{PaneID: pane.ID().String(), InCopyMode: true}, nil
 }
 
+// refuseAPaneInAMode declines to type into a pane that is not listening.
+//
+// A pane in copy mode reads keys as that mode's bindings rather than passing
+// them to the program, so the text never arrives and something else happens
+// instead: a binding that copies a selection, moves the cursor, or waits for a
+// further key. The last one is why this is a refusal rather than a warning: the
+// client that sent such a key never gets its reply, and supplying the key the
+// binding waits for does not release it. It is the sender that blocks rather
+// than control clients in particular, which is what makes refusing here a whole
+// fix -- another client doing it, or a person doing it at a keyboard, costs
+// this connection nothing.
+func refuseAPaneThatCannotRead(pane tmux.Pane, tool string) error {
+	formats := pane.Formats()
+	// Before the mode, because a pane can be dead and in a mode at once -- a
+	// corpse is scrollable -- and having no process is the more fundamental of
+	// the two: leaving the mode would not give the keys anywhere to go.
+	if dead, _ := formats.PaneDead(); dead {
+		return fmt.Errorf(
+			"pane %s has no process: its program exited, so it reads no keys and "+
+				"%s reaches nothing. respawn_pane restarts it, and capture_pane "+
+				"with includeHistory still reads what it printed",
+			pane.ID(), tool)
+	}
+	mode, ok := formats.PaneInMode()
+	if !ok || mode == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"pane %s is in a mode, so %s would be read as that mode's key bindings "+
+			"rather than reaching the program. To read scrollback, capture_pane "+
+			"with includeHistory and startLine reads it without leaving the mode "+
+			"or sending anything; to reach the program, exit_copy_mode first",
+		pane.ID(), tool)
+}
+
 // exitCopyMode returns a pane to passing keys to the program in it.
 func (t *tools) exitCopyMode(
 	ctx context.Context,
@@ -260,7 +295,7 @@ func (t *tools) sendKeys(
 	if strings.TrimSpace(input.Command) == "" {
 		return nil, sendKeysOutput{}, errors.New("command is required")
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "sending keys")
+	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "sending keys", "send_keys")
 	if err != nil {
 		return nil, sendKeysOutput{}, err
 	}
@@ -338,7 +373,7 @@ func addInputTools(server *mcp.Server, t *tools) {
 	}, t.enterCopyMode)
 	register(server, t, &mcp.Tool{
 		Name:        "exit_copy_mode",
-		Annotations: mutating("Leave Copy Mode"),
+		Annotations: settling("Leave Copy Mode"),
 		Description: "Return a pane from copy mode to passing keys to the " +
 			"program running in it.",
 	}, t.exitCopyMode)

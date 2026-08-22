@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/workspace"
@@ -40,7 +41,7 @@ func (t *tools) createWindow(
 	_ *mcp.CallToolRequest,
 	input createWindowInput,
 ) (*mcp.CallToolResult, createWindowOutput, error) {
-	server := t.target
+	server := t.tmux()
 	session, err := t.resolveSession(ctx, input.SessionName)
 	if err != nil {
 		return nil, createWindowOutput{}, err
@@ -96,7 +97,7 @@ func (t *tools) createSession(
 	_ *mcp.CallToolRequest,
 	input createSessionInput,
 ) (*mcp.CallToolResult, createSessionOutput, error) {
-	session, err := t.target.NewSession(ctx, tmux.NewSessionRequest{
+	session, err := t.tmux().NewSession(ctx, tmux.NewSessionRequest{
 		Name:           input.Name,
 		Command:        input.Command,
 		StartDirectory: input.StartDirectory,
@@ -134,7 +135,7 @@ func (t *tools) buildWorkspace(
 	if err != nil {
 		return nil, buildWorkspaceOutput{}, err
 	}
-	session, err := workspace.Build(ctx, t.target, described)
+	session, err := workspace.Build(ctx, t.tmux(), described)
 	if err != nil {
 		// Build is not atomic, so report the partial session rather than
 		// dropping the identifier a caller needs in order to clean up. Without
@@ -143,9 +144,19 @@ func (t *tools) buildWorkspace(
 		if session.ID() == "" {
 			return nil, buildWorkspaceOutput{}, err
 		}
-		return toolFailure(err), buildWorkspaceOutput{
-			SessionID: session.ID().String(),
-		}, nil
+		// And say so in the text, not only in the fields. A caller reading the
+		// reply is told which pane failed and nothing about the session that
+		// survived, so the obvious next move -- send the same document again --
+		// fails on a name that already exists, for reasons the first reply
+		// never mentioned.
+		return toolFailure(fmt.Errorf(
+				"%w; the session %q (%s) was created and is still there with what "+
+					"was built before the failure, so building this document again "+
+					"will fail on the name: remove that session or use another name",
+				err, described.SessionName, session.ID())), buildWorkspaceOutput{
+				SessionID:   session.ID().String(),
+				SessionName: described.SessionName,
+			}, nil
 	}
 	name, _ := session.Name()
 	return nil, buildWorkspaceOutput{

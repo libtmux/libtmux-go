@@ -603,6 +603,18 @@ func TestServerUnreachableMatchesOnlyPreConnectionFailures(t *testing.T) {
 		"can't find session: $9":                                       false,
 		"invalid option: not-a-real-option":                            false,
 		"the words no server running on appear mid-sentence elsewhere": false,
+
+		// What 3.2a said with "error creating", 3.3a onward says five other
+		// ways, all from the same function and all before a command runs.
+		"couldn't create directory /run/tmux/tmux-1000 (Permission denied)": true,
+		"couldn't read directory /run/tmux/tmux-1000 (Permission denied)":   true,
+		"directory /run/tmux/tmux-1000 has unsafe permissions":              true,
+		"/run/tmux/tmux-1000 is not a directory":                            true,
+		"no suitable socket path":                                           true,
+
+		// The suffixes are anchored, so tmux's own use of the same words for
+		// something a caller can act on stays out of the class.
+		"can't find directory: no such directory is not a directory here": false,
 	} {
 		if got := commandServerUnreachable([]string{line}); got != want {
 			t.Errorf("commandServerUnreachable(%q) = %t, want %t", line, got, want)

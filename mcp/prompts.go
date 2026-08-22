@@ -137,7 +137,7 @@ func promptFor(offered recipe) mcp.PromptHandler {
 // getRecipeInput names the job to be told how to do.
 type getRecipeInput struct {
 	// Name is the recipe wanted.
-	Name string `json:"name" jsonschema:"which recipe to read: diagnose_pane, watch_pane, recover_pane, or set_up_workspace"`
+	Name string `json:"name" jsonschema:"which recipe to read"`
 	// Argument is the pane or task it is about, and may be omitted to be told
 	// how to find it.
 	Argument string `json:"argument,omitempty" jsonschema:"the pane id the recipe is about, such as %1, or for set_up_workspace what the workspace is for"`

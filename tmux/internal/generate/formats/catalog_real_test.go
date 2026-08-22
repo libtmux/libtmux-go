@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,6 +61,8 @@ func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 		fields[field.Name] = field
 	}
 
+	attachCatalogClient(ctx, t, socket)
+
 	inventory := runCatalogTmux(ctx, t, socket, "display-message", "-p", "-a")
 	seen := make(map[string]struct{})
 	missing := make([]string, 0)
@@ -99,6 +102,46 @@ func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 			missing,
 			incompatible,
 		)
+	}
+}
+
+// attachCatalogClient holds a control-mode client on the server for as long as
+// the test runs.
+//
+// Without one, tmux's inventory omits every variable that needs a client to
+// have a value, which is what let session_active reach 3.6 without the catalog
+// noticing. Control mode is used rather than an ordinary attach because it
+// needs no terminal, and stdin is held open because closing it detaches.
+func attachCatalogClient(ctx context.Context, t *testing.T, socket string) {
+	t.Helper()
+
+	client := exec.CommandContext(ctx, "tmux", "-S", socket, "-C",
+		"attach-session", "-t", "catalog")
+	held, err := client.StdinPipe()
+	if err != nil {
+		t.Fatalf("hold the control client's stdin: %v", err)
+	}
+	client.Stdout, client.Stderr = io.Discard, io.Discard
+	if err := client.Start(); err != nil {
+		t.Fatalf("attach a control client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = held.Close()
+		_ = client.Process.Kill()
+		_, _ = client.Process.Wait()
+	})
+
+	// The inventory is only complete once tmux has registered the client.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		listed := runCatalogTmux(ctx, t, socket, "list-clients", "-F", "#{client_name}")
+		if strings.TrimSpace(listed) != "" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no control client registered, so the inventory would be partial")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

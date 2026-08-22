@@ -89,6 +89,12 @@ func TestParseRejectsMisspelledAndIncompleteWorkspaces(t *testing.T) {
 		"unknown window field":    "session_name: s\nwindows: [{nope: 1, panes: [echo hi]}]\n",
 		"unknown pane field":      "session_name: s\nwindows: [{panes: [{nope: 1, shell_command: echo hi}]}]\n",
 		"unknown command field":   "session_name: s\nwindows: [{panes: [{shell_command: [{cmd: hi, nope: 1}]}]}]\n",
+		// tmux refuses the second claim on an index, and its refusal is that
+		// new-window exited non-zero -- naming neither the index nor which
+		// window lost. Two windows claiming one place is a document mistake.
+		"window_index claimed twice": "session_name: s\n" +
+			"windows: [{window_index: 5, panes: [echo hi]}, " +
+			"{window_index: 5, panes: [echo hi]}]\n",
 	} {
 		if _, err := workspace.Parse([]byte(document)); !errors.Is(err, workspace.ErrInvalidWorkspace) {
 			t.Errorf("%s: Parse() error = %v, want ErrInvalidWorkspace", name, err)
@@ -109,6 +115,11 @@ func TestParseAcceptsQuotedBooleans(t *testing.T) {
 	}
 }
 
+// The panes run something that does not finish. A pane whose command exits
+// takes its window, then the session, then the server -- so a test asserting
+// on what was built races that teardown, and answers "no server running" on a
+// machine slow enough to lose.
+//
 //libtmux:real-tmux
 func TestBuildCreatesTheDescribedHierarchy(t *testing.T) {
 	server, ctx := testServer(t)
@@ -117,11 +128,11 @@ session_name: build-test
 windows:
   - window_name: editor
     panes:
-      - echo one
-      - echo two
+      - sleep 300
+      - sleep 300
   - window_name: shell
     panes:
-      - echo three
+      - sleep 300
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +185,7 @@ options:
 windows:
   - window_name: only
     panes:
-      - echo hi
+      - sleep 300
 `))
 	if err != nil {
 		t.Fatal(err)

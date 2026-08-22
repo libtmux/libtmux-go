@@ -136,6 +136,7 @@ var generatedFormatFields = [...]formatField{
 	{name: "selection_start_x", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
 	{name: "selection_start_y", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
 	{name: "server_sessions", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}},
+	{name: "session_active", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
 	{name: "session_activity", scope: formatScopeSession, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
 	{name: "session_activity_flag", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
 	{name: "session_alert", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
@@ -794,6 +795,11 @@ func (v FormatValues) ScrollRegionUpper() (int, bool) { return v.values.getInt("
 // ok == false means the field was absent, empty, or malformed; use [FormatValues.Raw] to inspect the exact materialized expansion.
 func (v FormatValues) ServerSessions() (int, bool) { return v.values.getInt("server_sessions") }
 
+// SessionActive returns a typed bool value and an ok result parsed from tmux #{session_active} in a materialized hierarchy record's session-scoped fields (tmux 3.6 or later), not a live tmux read.
+// See [Server.Snapshot] for a fresh hierarchy; projected cross-scope fields do not guarantee that the referenced object is present in the same snapshot.
+// ok == false means the field was absent, empty, or malformed; use [FormatValues.Raw] to inspect the exact materialized expansion.
+func (v FormatValues) SessionActive() (bool, bool) { return v.values.getBool("session_active") }
+
 // SessionActivity returns a typed time.Time value and an ok result parsed from tmux #{session_activity} in a materialized hierarchy record's session-scoped fields (tmux 3.2a or later), not a live tmux read.
 // See [Server.Snapshot] for a fresh hierarchy; projected cross-scope fields do not guarantee that the referenced object is present in the same snapshot.
 // ok == false means the field was absent, empty, or malformed; use [FormatValues.Raw] to inspect the exact materialized expansion.
@@ -1183,6 +1189,11 @@ func (s Session) ActiveWindowIndex() (int, bool) { return s.formats.getInt("acti
 // See [Server.Snapshot] for a fresh hierarchy and [Session.Formats] for projected fields.
 // ok == false means the field was absent, empty, or malformed; use [FormatValues.Raw] to inspect the exact materialized expansion.
 func (s Session) LastWindowIndex() (int, bool) { return s.formats.getInt("last_window_index") }
+
+// Active returns a typed bool value and an ok result parsed from tmux #{session_active} in this Session's materialized session-scoped record (tmux 3.6 or later), not a live tmux read.
+// See [Server.Snapshot] for a fresh hierarchy and [Session.Formats] for projected fields.
+// ok == false means the field was absent, empty, or malformed; use [FormatValues.Raw] to inspect the exact materialized expansion.
+func (s Session) Active() (bool, bool) { return s.formats.getBool("session_active") }
 
 // Activity returns a typed time.Time value and an ok result parsed from tmux #{session_activity} in this Session's materialized session-scoped record (tmux 3.2a or later), not a live tmux read.
 // See [Server.Snapshot] for a fresh hierarchy and [Session.Formats] for projected fields.

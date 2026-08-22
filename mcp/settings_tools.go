@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -41,7 +42,7 @@ type showOptionInput struct {
 	// Scope is where to read it: server, session, window, or pane. Empty reads
 	// it at pane scope, where tmux's own inheritance means a pane option falls
 	// back through window and session to the global value.
-	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty reads at pane scope"`
+	Scope string `json:"scope,omitempty" jsonschema:"the scope to read at; empty reads at pane scope"`
 	// PaneID, WindowID, and SessionName pick the object to read it on.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to read the option on"`
 	// WindowID picks the window for window scope.
@@ -78,13 +79,16 @@ func (t *tools) showOption(
 	if err != nil {
 		return nil, showOptionOutput{}, err
 	}
+	if err := scopeUses(scope, input.PaneID, input.WindowID); err != nil {
+		return nil, showOptionOutput{}, err
+	}
 	output := showOptionOutput{Name: input.Name, Scope: scope}
 
 	var value string
 	var set bool
 	switch scope {
 	case scopeServer:
-		value, set, err = t.target.RawOption(ctx, input.Name)
+		value, set, err = t.tmux().RawOption(ctx, input.Name)
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -120,7 +124,7 @@ type setOptionInput struct {
 	Value string `json:"value" jsonschema:"the value to set"`
 	// Scope is where to set it: server, session, window, or pane. Empty sets
 	// it at pane scope, which is the narrowest and affects nothing else.
-	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty sets at pane scope"`
+	Scope string `json:"scope,omitempty" jsonschema:"the scope to set at; empty sets at pane scope"`
 	// PaneID, WindowID, and SessionName pick the object to set it on.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to set the option on"`
 	// WindowID picks the window for window scope.
@@ -158,11 +162,14 @@ func (t *tools) setOption(
 	if err != nil {
 		return nil, setOptionOutput{}, err
 	}
+	if err := scopeUses(scope, input.PaneID, input.WindowID); err != nil {
+		return nil, setOptionOutput{}, err
+	}
 	output := setOptionOutput{Name: input.Name, Scope: scope, Value: input.Value}
 
 	switch scope {
 	case scopeServer:
-		err = t.target.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+		err = t.tmux().SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -188,6 +195,39 @@ func (t *tools) setOption(
 	return nil, output, nil
 }
 
+// scopeUses reports whether a scope reads the target a caller named, so an
+// argument the scope cannot use is refused rather than discarded.
+//
+// A caller who means a pane and writes session gets a session-wide answer, and
+// nothing in the reply says the pane they named was thrown away. Refusing is
+// the same choice resolving a target makes: refused rather than guessed.
+func scopeUses(scope, paneID, windowID string) error {
+	switch scope {
+	case scopePane:
+		if strings.TrimSpace(windowID) != "" {
+			return fmt.Errorf("windowId is not read at %s scope; use scope "+
+				"window, or drop windowId", scope)
+		}
+		return nil
+	case scopeWindow:
+		if strings.TrimSpace(paneID) != "" {
+			return fmt.Errorf("paneId is not read at %s scope; use scope pane, "+
+				"or drop paneId", scope)
+		}
+		return nil
+	default:
+		for name, value := range map[string]string{
+			"paneId": paneID, "windowId": windowID,
+		} {
+			if strings.TrimSpace(value) != "" {
+				return fmt.Errorf("%s is not read at %s scope; name the scope "+
+					"that reads it, or drop %s", name, scope, name)
+			}
+		}
+		return nil
+	}
+}
+
 // resolveScope reads the scope a settings call named.
 func resolveScope(requested string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(requested)) {
@@ -211,28 +251,53 @@ func resolveScope(requested string) (string, error) {
 type showEnvironmentInput struct {
 	// SessionName is the session to read. Empty reads the only one.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read; empty uses the only session"`
-	// Name reads one variable rather than all of them.
-	Name string `json:"name,omitempty" jsonschema:"one variable to read; empty reads all of them"`
+	// Name reads one variable, with its value. Empty lists the names only.
+	Name string `json:"name,omitempty" jsonschema:"one variable to read, with its value; empty lists every name with its scope and no values. Several values at once: put several of these in call_readonly_tools_batch"`
+	// MaxLines and MaxBytes bound the listing, whose size belongs to the
+	// environment rather than to the request.
+	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many variables to return at most"`
+	// MaxBytes bounds the same listing by size.
+	MaxBytes int `json:"maxBytes,omitempty" jsonschema:"how many bytes of listing to return at most"`
 }
 
 // environmentEntry is one variable in a session's environment.
 type environmentEntry struct {
 	// Name is the variable.
 	Name string `json:"name"`
-	// Value is what new processes will see.
-	Value string `json:"value"`
+	// Value is what new processes will see. It is present when this variable
+	// was asked for by name and absent from a listing, which carries names
+	// alone.
+	Value string `json:"value,omitempty"`
 	// Removed reports that tmux will unset this variable for new processes
 	// rather than set it, which is a thing tmux can be told to do and which no
 	// value alone expresses.
 	Removed bool `json:"removed,omitempty"`
+	// Scope is the layer this value came from: "session" when the session sets
+	// it, "server" when it comes from the server-wide environment. A caller
+	// changing one needs to know which, because set_environment writes the
+	// session's, which shadows the server's for that session alone.
+	Scope string `json:"scope"`
 }
+
+// The layers tmux resolves an inherited variable through, named in a reply so
+// a caller knows which one it is looking at.
+const (
+	environmentScopeServer  = "server"
+	environmentScopeSession = "session"
+)
 
 // showEnvironmentOutput carries a session's environment.
 type showEnvironmentOutput struct {
 	// SessionName is the session that was read.
 	SessionName string `json:"sessionName"`
 	// Variables are its environment entries, sorted by name.
-	Variables []environmentEntry `json:"variables,omitempty"`
+	Variables []environmentEntry `json:"variables"`
+	// ValuesWithheld reports that this reply lists names without values, which
+	// is what a listing returns. Asking for one variable by name returns its
+	// value.
+	ValuesWithheld bool `json:"valuesWithheld,omitempty"`
+	// truncation reports what the bounds dropped.
+	truncation
 }
 
 // showEnvironment reads what new processes in a session will inherit.
@@ -242,9 +307,31 @@ type showEnvironmentOutput struct {
 // process began. A client debugging why a command cannot find something reads
 // this to learn what the next pane would get.
 //
-// Values are reported as tmux holds them. A session environment is a place
-// people put credentials, so the caller is receiving whatever is there;
-// reading one variable by name rather than all of them is the narrower ask.
+// tmux keeps two layers and a pane inherits both, the session's overriding the
+// server's, so both are read and merged. Reading only the session's answered a
+// question nobody asked: PATH lives in the server's environment, so a caller
+// asking what a pane would get was told it gets no PATH at all. Each entry
+// says which layer it came from.
+//
+// A listing carries names without values. An environment is where people keep
+// credentials, and a reply that hands every value to a model puts all of them
+// somewhere they cannot be taken back from -- one call on a developer's machine
+// returned eleven live API tokens. Naming a variable returns its value, because
+// that is a caller asking for one thing rather than receiving everything.
+//
+// Redacting by name pattern was the alternative and is worse: TOKEN, KEY and
+// SECRET catch the variables named after what they are, miss the ones named
+// after what they belong to, and leave a caller believing the reply was
+// filtered. A denylist that fails open is worse than none, because it is
+// trusted. This fails closed and costs a caller who wants a value one argument.
+//
+// The names are the answer to most of what this is asked. Which variables a
+// pane will inherit, whether one is set at all, and which layer it comes from
+// are all in a listing; the value matters for the few a caller then names. The
+// scope is what makes that work -- provenance is the one thing a name cannot
+// be reasoned back to, and it is what "does the session override the server"
+// turns on -- and several named reads go in one call_readonly_tools_batch, so
+// wanting a handful of values costs one round trip rather than one each.
 func (t *tools) showEnvironment(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -262,27 +349,67 @@ func (t *tools) showEnvironment(
 		if err != nil {
 			return nil, output, err
 		}
+		scope := environmentScopeSession
+		if !ok {
+			if value, ok, err = t.tmux().GetEnvironment(ctx, wanted); err != nil {
+				return nil, output, err
+			}
+			scope = environmentScopeServer
+		}
+		output.Variables = []environmentEntry{}
 		if ok {
 			output.Variables = []environmentEntry{{
 				Name: wanted, Value: value.Value, Removed: value.Removed,
+				Scope: scope,
 			}}
 		}
 		return nil, output, nil
 	}
 
-	variables, err := session.ShowEnvironment(ctx)
+	// The server's layer first, then the session's over the top of it, which is
+	// the order tmux resolves them in for a new process.
+	merged := map[string]environmentEntry{}
+	serverWide, err := t.tmux().ShowEnvironment(ctx)
 	if err != nil {
 		return nil, output, err
 	}
-	output.Variables = make([]environmentEntry, 0, len(variables))
-	for key, value := range variables {
-		output.Variables = append(output.Variables, environmentEntry{
+	for key, value := range serverWide {
+		merged[key] = environmentEntry{
 			Name: key, Value: value.Value, Removed: value.Removed,
-		})
+			Scope: environmentScopeServer,
+		}
 	}
-	slices.SortFunc(output.Variables, func(a, b environmentEntry) int {
+	sessionWide, err := session.ShowEnvironment(ctx)
+	if err != nil {
+		return nil, output, err
+	}
+	for key, value := range sessionWide {
+		merged[key] = environmentEntry{
+			Name: key, Value: value.Value, Removed: value.Removed,
+			Scope: environmentScopeSession,
+		}
+	}
+	listed := slices.Collect(maps.Values(merged))
+	slices.SortFunc(listed, func(a, b environmentEntry) int {
 		return strings.Compare(a.Name, b.Name)
 	})
+	// Names alone, and said so rather than left to be noticed.
+	for index := range listed {
+		listed[index].Value = ""
+	}
+	output.ValuesWithheld = true
+
+	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
+	if err != nil {
+		return nil, showEnvironmentOutput{}, err
+	}
+	names := make([]string, 0, len(listed))
+	for _, entry := range listed {
+		names = append(names, entry.Name)
+	}
+	kept, report := limits.apply(names)
+	output.Variables = listed[len(listed)-len(kept):]
+	output.truncation = report
 	return nil, output, nil
 }
 
@@ -346,7 +473,7 @@ func (t *tools) setEnvironment(
 type showHooksInput struct {
 	// Scope is where to read them: server, session, window, or pane. Empty
 	// reads them at pane scope.
-	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty reads at pane scope"`
+	Scope string `json:"scope,omitempty" jsonschema:"the scope to read at; empty reads at pane scope"`
 	// PaneID, WindowID, and SessionName pick the object to read them on.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to read hooks on"`
 	// WindowID picks the window for window scope.
@@ -372,8 +499,10 @@ type hook struct {
 type showHooksOutput struct {
 	// Scope is where they were read.
 	Scope string `json:"scope"`
-	// Hooks are the hooks set there, sorted by name.
-	Hooks []hook `json:"hooks,omitempty"`
+	// Hooks are the hooks set there, sorted by name. Always an array: a scope
+	// with none is something a caller iterates zero times rather than a key it
+	// has to test for.
+	Hooks []hook `json:"hooks"`
 }
 
 // showHooks reads the commands tmux will run on its own.
@@ -393,6 +522,9 @@ func (t *tools) showHooks(
 ) (*mcp.CallToolResult, showHooksOutput, error) {
 	scope, err := resolveScope(input.Scope)
 	if err != nil {
+		return nil, showHooksOutput{}, err
+	}
+	if err := scopeUses(scope, input.PaneID, input.WindowID); err != nil {
 		return nil, showHooksOutput{}, err
 	}
 	output := showHooksOutput{Scope: scope}
@@ -425,7 +557,7 @@ func (t *tools) showHooks(
 		arguments = append(arguments, "-p", "-t", pane.ID().String())
 	}
 
-	result, err := t.target.Cmd(ctx, arguments...)
+	result, err := t.tmux().Cmd(ctx, arguments...)
 	if err != nil {
 		return nil, output, err
 	}
@@ -470,7 +602,7 @@ func addSettingsTools(server *mcp.Server, t *tools) {
 	}, t.showOption)
 	register(server, t, &mcp.Tool{
 		Name:        "set_option",
-		Annotations: mutating("Set a tmux Option"),
+		Annotations: settling("Set a tmux Option"),
 		Description: "Set one tmux option. Pane scope by default, which affects " +
 			"that pane and nothing else; server scope changes every session the " +
 			"person has open.",
@@ -484,7 +616,7 @@ func addSettingsTools(server *mcp.Server, t *tools) {
 	}, t.showEnvironment)
 	register(server, t, &mcp.Tool{
 		Name:        "set_environment",
-		Annotations: mutating("Set a Session's Environment"),
+		Annotations: settling("Set a Session's Environment"),
 		Description: "Set or remove a variable for processes a session starts " +
 			"from now on. It changes nothing already running.",
 	}, t.setEnvironment)

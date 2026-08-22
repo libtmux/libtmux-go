@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -27,7 +28,8 @@ func (t *tools) complete(
 		already = request.Params.Context.Arguments
 	}
 
-	values, err := t.completionValues(ctx, argument.Name, already)
+	forURI := request.Params.Ref == nil || request.Params.Ref.Type != "ref/prompt"
+	values, err := t.completionValues(ctx, argument.Name, already, forURI)
 	if err != nil {
 		// A completion that cannot be computed is an empty list rather than a
 		// failure: a client asking what a value could be should not have its
@@ -60,10 +62,18 @@ func (t *tools) complete(
 //
 // The names are the ones the resource templates and prompts use, so a variable
 // added there is completed here by having been named the same.
+//
+// The two callers do not speak the same dialect, and a value is only useful in
+// the one that asked. A resource slot is pasted into a path, where an id
+// carries no sigil and a name has to be escaped. A prompt argument is read
+// back by a model and handed to paneId, where tmux's own spelling is the only
+// one any tool accepts. Answering both in the URI dialect is what made a
+// completed prompt name a pane that every tool rejects.
 func (t *tools) completionValues(
 	ctx context.Context,
 	name string,
 	already map[string]string,
+	forURI bool,
 ) ([]string, error) {
 	switch name {
 	case "session":
@@ -73,7 +83,7 @@ func (t *tools) completionValues(
 		}
 		values := make([]string, 0, len(sessions.Sessions))
 		for _, session := range sessions.Sessions {
-			values = append(values, session.Name)
+			values = append(values, forPath(session.Name, forURI))
 		}
 		return values, nil
 	case "window":
@@ -88,7 +98,7 @@ func (t *tools) completionValues(
 			if session := already["session"]; session != "" && window.Session != session {
 				continue
 			}
-			values = append(values, strings.TrimPrefix(window.ID, "@"))
+			values = append(values, withoutSigil(window.ID, "@", forURI))
 		}
 		return values, nil
 	case "pane":
@@ -101,9 +111,7 @@ func (t *tools) completionValues(
 			if session := already["session"]; session != "" && pane.Session != session {
 				continue
 			}
-			// Without the sigil, matching the URIs: a percent sign begins an
-			// escape, so it is not what a client puts in the path.
-			values = append(values, strings.TrimPrefix(pane.ID, "%"))
+			values = append(values, withoutSigil(pane.ID, "%", forURI))
 		}
 		return values, nil
 	default:
@@ -111,11 +119,30 @@ func (t *tools) completionValues(
 	}
 }
 
+// withoutSigil drops the sigil for a URI slot and keeps it everywhere else. A
+// percent sign begins an escape, so it is not what a client puts in a path.
+func withoutSigil(id, sigil string, forURI bool) string {
+	if !forURI {
+		return id
+	}
+	return strings.TrimPrefix(id, sigil)
+}
+
+// forPath escapes a name for a URI slot. A session may be called anything, and
+// a client pastes what it is offered straight into the path.
+func forPath(name string, forURI bool) string {
+	if !forURI {
+		return name
+	}
+	return url.PathEscape(name)
+}
+
 // completionFor builds the handler the server options take, which is set
 // before the tools value exists.
 func completionFor(target tmux.Server) func(
 	context.Context, *mcp.CompleteRequest,
 ) (*mcp.CompleteResult, error) {
-	completing := &tools{target: target}
+	completing := &tools{}
+	completing.reaching.Store(&target)
 	return completing.complete
 }

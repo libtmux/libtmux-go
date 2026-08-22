@@ -94,8 +94,8 @@ func (p *Plan) SelectLayout(target Ref, request SelectLayoutRequest) {
 	p.add(Op{
 		name:   "select-layout",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
-			return selectLayoutArguments(resolved, request)
+		build: func(resolved, _ string, version Version) ([]string, error) {
+			return selectLayoutArguments(resolved, request, version)
 		},
 	})
 }

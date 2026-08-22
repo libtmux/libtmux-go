@@ -52,11 +52,28 @@ func run(socketName string) error {
 	var server struct {
 		SocketPath       string `json:"socketPath"`
 		Version          string `json:"version"`
+		Alive            bool   `json:"alive"`
 		InsideThisServer bool   `json:"insideThisServer"`
 		CallerPaneID     string `json:"callerPaneId"`
 	}
 	if err := call(ctx, session, "get_server_info", nil, &server); err != nil {
 		return err
+	}
+
+	// A socket nobody has started yet is the ordinary way to arrive here, and
+	// every tool below needs a pane. Asking first is what a client does rather
+	// than splitting a window on a server that is not running and reading
+	// tmux's connection error.
+	if !server.Alive {
+		fmt.Println("no tmux server on that socket yet; starting one")
+		if err := call(ctx, session, "create_session", map[string]any{
+			"name": "agent-workflow", "command": "sleep 3600",
+		}, nil); err != nil {
+			return err
+		}
+		if err := call(ctx, session, "get_server_info", nil, &server); err != nil {
+			return err
+		}
 	}
 	fmt.Printf("tmux %s on %s\n", server.Version, server.SocketPath)
 

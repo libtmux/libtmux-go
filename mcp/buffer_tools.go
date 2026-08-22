@@ -67,7 +67,7 @@ func (t *tools) loadBuffer(
 	if err != nil {
 		return nil, bufferRef{}, err
 	}
-	if err := t.target.SetBuffer(ctx, tmux.SetBufferRequest{
+	if err := t.tmux().SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
 		Name: &name,
 	}); err != nil {
@@ -114,7 +114,7 @@ func (t *tools) showBuffer(
 	if err != nil {
 		return nil, showBufferOutput{}, err
 	}
-	contents, err := t.target.ShowBuffer(ctx, &name)
+	contents, err := t.tmux().ShowBuffer(ctx, &name)
 	if err != nil {
 		// tmux says only that show-buffer failed, which reads as a broken tool
 		// rather than a buffer that is not there. Naming what was looked for
@@ -160,7 +160,8 @@ func (t *tools) pasteBuffer(
 	if err != nil {
 		return nil, pasteBufferOutput{}, err
 	}
-	pane, err := t.resolvePaneToWrite(ctx, request, input.PaneID, input.SessionName, "pasting a buffer")
+	pane, err := t.resolvePaneToDeliver(
+		ctx, request, input.PaneID, input.SessionName, "pasting a buffer", "paste_buffer")
 	if err != nil {
 		return nil, pasteBufferOutput{}, err
 	}
@@ -196,7 +197,7 @@ func (t *tools) deleteBuffer(
 	if err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
-	if err := t.target.DeleteBuffer(ctx, &name); err != nil {
+	if err := t.tmux().DeleteBuffer(ctx, &name); err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
 	return nil, deleteBufferOutput{Deleted: name}, nil
@@ -213,13 +214,33 @@ func bufferName(requested string) (string, error) {
 	if name == "" {
 		return bufferPrefix + strconv.FormatInt(bufferSequence.Add(1), 10), nil
 	}
-	if strings.ContainsAny(name, " \t\n") {
-		return "", fmt.Errorf("buffer name %q must not contain whitespace", requested)
+	if err := usableBufferName(requested, name); err != nil {
+		return "", err
 	}
 	if strings.HasPrefix(name, bufferPrefix) {
 		return name, nil
 	}
 	return bufferPrefix + name, nil
+}
+
+// usableBufferName refuses what tmux would not hand back unchanged.
+//
+// From 3.7 tmux cleans a name for display before storing it and doubles a
+// backslash doing so, while lookup does not repeat the cleaning. The buffer
+// then answers to a spelling the caller was never told, so the handle these
+// tools return would address nothing. Below 3.7 the same name round-trips,
+// which is why it is refused rather than left to the tmux underneath.
+func usableBufferName(requested, name string) error {
+	if strings.ContainsAny(name, " \t\n") {
+		return fmt.Errorf("buffer name %q must not contain whitespace", requested)
+	}
+	if strings.Contains(name, `\`) {
+		return fmt.Errorf(
+			"buffer name %q must not contain a backslash: tmux 3.7 stores it "+
+				"doubled and looks it up undoubled, so the name would not "+
+				"reach the buffer", requested)
+	}
+	return nil
 }
 
 // ownBufferName refuses a name this server did not create.
@@ -233,8 +254,8 @@ func ownBufferName(requested string) (string, error) {
 		// it thinks of the buffer, and refuse anything else.
 		name = bufferPrefix + name
 	}
-	if strings.ContainsAny(name, " \t\n") {
-		return "", fmt.Errorf("buffer name %q must not contain whitespace", requested)
+	if err := usableBufferName(requested, name); err != nil {
+		return "", err
 	}
 	return name, nil
 }
@@ -252,7 +273,8 @@ func addBufferTools(server *mcp.Server, t *tools) {
 		Name:        "paste_buffer",
 		Annotations: mutating("Paste a tmux Buffer"),
 		Description: "Deliver a staged buffer into a pane as text, with no tmux " +
-			"key names read.",
+			"key names read. The name load_buffer returned reaches the buffer, " +
+			"and so does the short one passed to it.",
 	}, t.pasteBuffer)
 	register(server, t, &mcp.Tool{
 		Name:        "show_buffer",
@@ -262,7 +284,10 @@ func addBufferTools(server *mcp.Server, t *tools) {
 	}, t.showBuffer)
 	register(server, t, &mcp.Tool{
 		Name:        "delete_buffer",
-		Annotations: mutating("Delete a tmux Buffer"),
-		Description: "Remove a buffer this server staged.",
+		Annotations: settling("Delete a tmux Buffer"),
+		Description: "Remove a buffer this server staged, once nothing else " +
+			"will paste it. A buffer left behind stays on the tmux server for " +
+			"anyone attached to paste by hand, and tmux keeps a bounded stack " +
+			"of them, so the oldest is dropped to make room for a new one.",
 	}, t.deleteBuffer)
 }

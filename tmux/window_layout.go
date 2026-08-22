@@ -33,7 +33,15 @@ func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) e
 	if err != nil {
 		return err
 	}
-	arguments, err := selectLayoutArguments(target, request)
+	// The version is only needed for a name tmux learned partway through the
+	// supported range, so it is not asked for otherwise.
+	var version Version
+	if layoutMirroredPresets[request.Layout] {
+		if version, err = w.server.Version(ctx); err != nil {
+			return err
+		}
+	}
+	arguments, err := selectLayoutArguments(target, request, version)
 	if err != nil {
 		return err
 	}
@@ -50,6 +58,16 @@ var layoutPresets = map[string]bool{
 	"tiled":           true,
 }
 
+// layoutMirroredPresets are the arrangements tmux added at 3.5, which put the
+// main pane on the far side. Below that they are names tmux does not know, and
+// an unrecognised name is what the check below exists to stop.
+var layoutMirroredPresets = map[string]bool{
+	"main-horizontal-mirrored": true,
+	"main-vertical-mirrored":   true,
+}
+
+var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
+
 // layoutStringPattern matches tmux's own description of an arrangement, which
 // #{window_layout} reports and select-layout accepts back. It begins with a
 // checksum, which is what makes it distinguishable from a name.
@@ -64,9 +82,15 @@ var layoutStringPattern = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
 // caller. Every other supported version returns an error, so refusing here
 // costs those versions nothing but the message, and it is the only place a
 // caller can be told before the damage.
-func validateLayout(layout string) error {
+func validateLayout(layout string, version Version) error {
 	if layout == "" || layoutPresets[layout] || layoutStringPattern.MatchString(layout) {
 		return nil
+	}
+	if layoutMirroredPresets[layout] {
+		if version.AtLeast(layoutMirroredVersion) {
+			return nil
+		}
+		return &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
 	}
 	return invalidServerCommandRequest(
 		"select-layout",
@@ -82,6 +106,7 @@ func validateLayout(layout string) error {
 func selectLayoutArguments(
 	target string,
 	request SelectLayoutRequest,
+	version Version,
 ) ([]string, error) {
 	if err := validateServerCommandArguments(
 		"select-layout",
@@ -90,7 +115,7 @@ func selectLayoutArguments(
 	); err != nil {
 		return nil, err
 	}
-	if err := validateLayout(request.Layout); err != nil {
+	if err := validateLayout(request.Layout, version); err != nil {
 		return nil, err
 	}
 

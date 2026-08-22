@@ -265,7 +265,7 @@ func (t *tools) getJob(
 		defer reporter.stop()
 		// A handle with no engine, because a command that blocks inside tmux
 		// holds a pooled connection for as long as it blocks.
-		waiter := t.target.WithEngine(t.target.SubprocessEngine())
+		waiter := t.tmux().WithEngine(t.tmux().SubprocessEngine())
 		_ = waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: entry.channel})
 	}
 
@@ -274,7 +274,7 @@ func (t *tools) getJob(
 	if readErr != nil {
 		// No status yet is the ordinary unfinished case rather than a fault,
 		// so the reply says what the pane is doing instead of failing.
-		if pane, paneErr := t.target.Pane(ctx, entry.paneID); paneErr == nil {
+		if pane, paneErr := t.tmux().Pane(ctx, entry.paneID); paneErr == nil {
 			output.Running, _ = pane.Formats().PaneCurrentCommand()
 		}
 		return nil, output, nil
@@ -290,7 +290,7 @@ func (t *tools) getJob(
 	// kept has to answer a later call that asks for more. The caller's bounds
 	// are applied to the reply below.
 	var collected runCommandOutput
-	if pane, paneErr := t.target.Pane(ctx, entry.paneID); paneErr == nil {
+	if pane, paneErr := t.tmux().Pane(ctx, entry.paneID); paneErr == nil {
 		attachCommandOutput(ctx, pane, entry.openedAt, entry.closedAt,
 			bounds{lines: ceilingMaxLines, bytes: ceilingMaxBytes}, &collected)
 	}

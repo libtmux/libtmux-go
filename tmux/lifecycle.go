@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -290,11 +291,17 @@ type SplitPaneRequest struct {
 }
 
 // HasSession reports whether the configured tmux server has a matching
-// session without changing it. Pattern false performs an exact match; Pattern
-// true preserves tmux's session-pattern semantics. Completed nonzero exits are
-// predicate misses. Local validation errors match
-// [ErrInvalidServerCommandRequest] or [ErrInvalidRequest]; transport and
-// context failures remain errors.
+// session without changing it. Pattern false answers for the name itself;
+// Pattern true preserves tmux's session-pattern semantics, where a target may
+// also name a session by identifier, by the tty of a client attached to it, by
+// unique prefix, or by glob. Completed nonzero exits are predicate misses.
+// Local validation errors match [ErrInvalidServerCommandRequest] or
+// [ErrInvalidRequest]; transport and context failures remain errors.
+//
+// The exact question is answered against the session list rather than by
+// tmux's exact-match marker, because that marker suppresses only the last two
+// rungs of tmux's ladder: "=$0" still resolves the identifier, and "=/dev/pts/3"
+// still resolves the client, so both report a session nothing is named.
 func (s Server) HasSession(ctx context.Context, request HasSessionRequest) (bool, error) {
 	if err := validateServerCommandArgument(
 		"has-session", "Target", request.Target, true,
@@ -304,15 +311,42 @@ func (s Server) HasSession(ctx context.Context, request HasSessionRequest) (bool
 	if err := validateLifecycleSessionName("target", request.Target); err != nil {
 		return false, err
 	}
-	target := request.Target
 	if !request.Pattern {
-		target = "=" + target
+		identifier, err := s.sessionNamed(ctx, request.Target)
+		return identifier != "", err
 	}
-	result, err := s.literalCmd(ctx, "has-session", "-t", target)
+	result, err := s.literalCmd(ctx, "has-session", "-t", request.Target)
 	if err != nil {
 		return false, err
 	}
 	return result.ExitCode == 0, nil
+}
+
+// sessionNamed returns the identifier of the session carrying exactly this
+// name, or an empty identifier when no session does. A server that is not
+// running holds no session by any name, which is a miss rather than a failure.
+//
+// The identifier leads the format so that the split point is unambiguous: a
+// name may hold a space, and every identifier is one token.
+func (s Server) sessionNamed(ctx context.Context, name string) (SessionID, error) {
+	rows, err := s.literalCmd(ctx, "list-sessions", "-F", "#{session_id} #{session_name}")
+	if err != nil {
+		return "", err
+	}
+	if rows.ExitCode != 0 {
+		commandErr := newCommandError("list-sessions", rows)
+		if errors.Is(commandErr, ErrNoServer) {
+			return "", nil
+		}
+		return "", commandErr
+	}
+	for _, row := range rows.Stdout {
+		identifier, found, ok := strings.Cut(row, " ")
+		if ok && found == name {
+			return SessionID(identifier), nil
+		}
+	}
+	return "", nil
 }
 
 // NewSession creates a detached session, then returns a newly materialized
@@ -355,15 +389,18 @@ func (s Server) NewSession(ctx context.Context, request NewSessionRequest) (Sess
 		if err := validateLifecycleSessionName("name", request.Name); err != nil {
 			return Session{}, err
 		}
-		exists, err := effective.HasSession(ctx, HasSessionRequest{Target: request.Name})
+		// The session is killed by identifier rather than by the name that
+		// found it, because tmux would resolve that name again through its own
+		// ladder and can land on a different session.
+		existing, err := effective.sessionNamed(ctx, request.Name)
 		if err != nil {
 			return Session{}, err
 		}
-		if exists && !request.KillExisting {
+		if existing != "" && !request.KillExisting {
 			return Session{}, fmt.Errorf("%w: %q", ErrSessionExists, request.Name)
 		}
-		if exists {
-			result, err := effective.literalCmd(ctx, "kill-session", "-t", request.Name)
+		if existing != "" {
+			result, err := effective.literalCmd(ctx, "kill-session", "-t", existing.String())
 			if _, err = requireRedactedLifecycleSuccess("kill-session", result, err); err != nil {
 				return Session{}, err
 			}
@@ -1200,11 +1237,26 @@ func validateLifecycleSessionName(field, name string) error {
 	if strings.ContainsAny(name, ".:") {
 		return invalidLifecycleRequest(field + " must not contain periods or colons")
 	}
+	// A control byte is refused for the same reason a delimiter is: to make one
+	// name mean one thing on every supported release. tmux rejects these from
+	// 3.7; before that it accepts them and stores the name visibility-encoded,
+	// so a bell arrives as a backslash and an "a" and the session ends up under
+	// a name nobody asked for.
+	if !utf8.ValidString(name) {
+		return invalidLifecycleRequest(field + " must be valid UTF-8")
+	}
+	for _, character := range name {
+		if character < 0x20 || character == 0x7f {
+			return invalidLifecycleRequest(
+				field + " must not contain control characters")
+		}
+	}
 	return nil
 }
 
 // ValidateSessionName reports whether name can be used as a tmux session
-// name. Empty names and the target delimiters '.' and ':' are rejected.
+// name. Empty names, the target delimiters '.' and ':', control characters and
+// invalid UTF-8 are rejected.
 func ValidateSessionName(name string) error {
 	return validateLifecycleSessionName("name", name)
 }

@@ -3,10 +3,13 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -25,9 +28,18 @@ import (
 // and a percent sign begins an escape in a URI, so tmux://panes/%0/content is
 // not a URI a client can parse at all. The sigil is redundant inside a path
 // already saying panes, and requiring %250 instead would be correct and
-// unusable. Both forms are accepted on the way in.
+// unusable.
+//
+// A read takes the bare form or the encoded one. It cannot take the raw sigil:
+// a template is matched by a regexp built from it, and a percent that is not
+// followed by two hex digits matches no template, so the SDK answers before
+// this package is reached. A subscription takes all three, because it is routed
+// by the string itself — and it has to, since every tool hands a pane back as
+// %1 and a client that subscribed with one got silence.
 const (
 	resourceSessions       = "tmux://sessions"
+	templateSession        = "tmux://sessions/{session}"
+	templateWindow         = "tmux://windows/{window}"
 	templateSessionWindows = "tmux://sessions/{session}/windows"
 	templateWindowPanes    = "tmux://windows/{window}/panes"
 	templatePane           = "tmux://panes/{pane}"
@@ -56,15 +68,25 @@ func addResources(server *mcp.Server, t *tools) {
 		},
 		{
 			templateWindowPanes, "tmux window panes", "Panes of One Window",
-			"The panes of one window, addressed by window id such as @1.",
+			"The panes of one window, addressed by window id without its sigil, so @1 is written 1.",
+		},
+		{
+			templateSession, "tmux session", "One tmux Session",
+			"One session's windows and what it holds, addressed by name.",
+		},
+		{
+			templateWindow, "tmux window", "One tmux Window",
+			"One window's panes and layout, addressed by window id without its sigil, so @1 is written 1.",
 		},
 		{
 			templatePane, "tmux pane", "One tmux Pane",
-			"One pane's identity, position, and what it is running.",
+			"One pane's identity, position, and what it is running, addressed " +
+				"by pane id without its sigil, so %1 is written 1.",
 		},
 		{
 			templatePaneContent, "tmux pane content", "Contents of One Pane",
-			"What one pane is showing, as text.",
+			"What one pane is showing, as text, addressed by pane id without " +
+				"its sigil, so %1 is written 1.",
 		},
 	} {
 		server.AddResourceTemplate(&mcp.ResourceTemplate{
@@ -98,22 +120,78 @@ func (t *tools) readTemplated(
 	ctx context.Context,
 	request *mcp.ReadResourceRequest,
 ) (*mcp.ReadResourceResult, error) {
-	uri := request.Params.URI
+	result, err := t.readOne(ctx, request.Params.URI)
+	return result, resourceError(request.Params.URI, err)
+}
+
+// resourceError says on the wire that a URI named nothing.
+//
+// The SDK sends a handler's plain error as code 0, which a client cannot tell
+// from a server that broke; the protocol has a code for this and reserves the
+// message for "Resource not found", which says less than the prose here does.
+// Both fit: the code classifies and the message says what to call instead.
+func resourceError(uri string, err error) error {
+	if errors.Is(err, tmux.ErrNoServer) {
+		// The listings answer this with an empty list and a note. A read
+		// cannot: there is no object to hand back. What it can do is say the
+		// same thing the listings say, rather than repeating the tmux command
+		// that failed and the socket file that is not there.
+		return errors.New(noServerNote)
+	}
+	if err == nil || !errors.Is(err, tmux.ErrSnapshotNotFound) {
+		return err
+	}
+	return &jsonrpc.Error{
+		Code:    mcp.CodeResourceNotFound,
+		Message: err.Error(),
+		Data:    json.RawMessage(fmt.Sprintf(`{"uri":%q}`, uri)),
+	}
+}
+
+func (t *tools) readOne(
+	ctx context.Context,
+	uri string,
+) (*mcp.ReadResourceResult, error) {
 	switch {
 	case strings.HasPrefix(uri, "tmux://sessions/") && strings.HasSuffix(uri, "/windows"):
 		name := strings.TrimSuffix(strings.TrimPrefix(uri, "tmux://sessions/"), "/windows")
-		return t.readSessionWindows(ctx, uri, name)
+		return t.readSessionWindows(ctx, uri, decodeSegment(name))
 	case strings.HasPrefix(uri, "tmux://windows/") && strings.HasSuffix(uri, "/panes"):
 		id := strings.TrimSuffix(strings.TrimPrefix(uri, "tmux://windows/"), "/panes")
-		return t.readWindowPanes(ctx, uri, withSigil(id, "@"))
+		return t.readWindowPanes(ctx, uri, withSigil(decodeSegment(id), "@"))
 	case strings.HasPrefix(uri, "tmux://panes/") && strings.HasSuffix(uri, "/content"):
 		id := strings.TrimSuffix(strings.TrimPrefix(uri, "tmux://panes/"), "/content")
-		return t.readPaneContent(ctx, uri, withSigil(id, "%"))
+		return t.readPaneContent(ctx, uri, withSigil(decodeSegment(id), "%"))
 	case strings.HasPrefix(uri, "tmux://panes/"):
-		return t.readPane(ctx, uri, withSigil(strings.TrimPrefix(uri, "tmux://panes/"), "%"))
+		id := decodeSegment(strings.TrimPrefix(uri, "tmux://panes/"))
+		return t.readPane(ctx, uri, withSigil(id, "%"))
+	// After the suffixed forms above, which these would otherwise swallow.
+	case strings.HasPrefix(uri, "tmux://sessions/"):
+		name := decodeSegment(strings.TrimPrefix(uri, "tmux://sessions/"))
+		return t.readSession(ctx, uri, name)
+	case strings.HasPrefix(uri, "tmux://windows/"):
+		id := decodeSegment(strings.TrimPrefix(uri, "tmux://windows/"))
+		return t.readWindow(ctx, uri, withSigil(id, "@"))
 	default:
 		return nil, fmt.Errorf("%q is not a tmux resource this server serves", uri)
 	}
+}
+
+// decodeSegment turns one path segment back into the text it stands for.
+//
+// A tmux name is not restricted to what a URI may carry: a session called
+// "spaced name" has no spelling but "spaced%20name", and %25 is how a client
+// writes the sigil in %0. Comparing the still-encoded string against tmux's
+// answer never matches, so such an object is unaddressable without this.
+//
+// A segment that will not decode is used as it was given, which is what a
+// name containing a bare percent sign arrives as.
+func decodeSegment(segment string) string {
+	decoded, err := url.PathUnescape(segment)
+	if err != nil {
+		return segment
+	}
+	return decoded
 }
 
 func (t *tools) readSessionWindows(
@@ -131,9 +209,9 @@ func (t *tools) readWindowPanes(
 	ctx context.Context,
 	uri, id string,
 ) (*mcp.ReadResourceResult, error) {
-	window, err := t.target.Window(ctx, tmux.WindowID(id))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(id))
 	if err != nil {
-		return nil, err
+		return nil, notFound(err, "window", id, "list_windows")
 	}
 	panes, err := window.SearchPanes(ctx, nil)
 	if err != nil {
@@ -146,10 +224,30 @@ func (t *tools) readWindowPanes(
 	return jsonResource(uri, listPanesOutput{Panes: summaries, Total: len(panes)})
 }
 
-func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
-	pane, err := t.target.Pane(ctx, tmux.PaneID(id))
+// readSession answers one session, which the hierarchy offered no way to read
+// on its own: the list was there and the leaf was there, and the branch
+// between them was not.
+func (t *tools) readSession(ctx context.Context, uri, name string) (*mcp.ReadResourceResult, error) {
+	_, info, err := t.getSessionInfo(ctx, nil, getSessionInfoInput{SessionName: name})
 	if err != nil {
 		return nil, err
+	}
+	return jsonResource(uri, info)
+}
+
+// readWindow answers one window, for the same reason.
+func (t *tools) readWindow(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
+	_, info, err := t.getWindowInfo(ctx, nil, getWindowInfoInput{WindowID: id})
+	if err != nil {
+		return nil, err
+	}
+	return jsonResource(uri, info)
+}
+
+func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(id))
+	if err != nil {
+		return nil, notFound(err, "pane", id, "list_panes")
 	}
 	return jsonResource(uri, t.summarize(ctx, pane))
 }

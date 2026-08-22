@@ -30,6 +30,11 @@
 // module proxy has never heard of otherwise lands in every config at once and
 // surfaces later as a server that will not start, separately, in each client.
 //
+// A client whose configuration cannot be read is named and left exactly as it
+// is, and the others are still written: stopping at the first would leave the
+// clients before it swapped and the ones after it untouched, with nothing
+// saying which was which.
+//
 // It writes only global configuration, only the one server entry, and only
 // after copying the file beside itself. Swapping something already swapped
 // keeps the first backup, so revert lands on what was there before any of it,
@@ -533,7 +538,15 @@ func report(clients []client) error {
 	return nil
 }
 
+// useLocal points every installed client at the entry.
+//
+// One client that cannot be written does not stop the others. Returning at the
+// first failure left the clients before it swapped and the ones after it
+// untouched, and nothing said which was which: a CLI that was never reached
+// looks exactly like one that was. Every failure is collected and named
+// instead, so one run says everything that needs fixing.
 func useLocal(clients []client, entry map[string]any, dryRun bool) error {
+	var failures []error
 	for _, c := range clients {
 		if _, err := os.Stat(c.path); errors.Is(err, os.ErrNotExist) {
 			continue
@@ -543,14 +556,22 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 			continue
 		}
 		if err := writeEntry(c, entry); err != nil {
-			return fmt.Errorf("%s: %w", c.name, err)
+			fmt.Fprintf(os.Stderr, "%-12s not changed: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
 		}
 		fmt.Printf("%-12s now runs %s\n", c.name, describe(entry))
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
+// revert restores every client that has a backup.
+//
+// As with useLocal, one client that cannot be restored does not strand the
+// others: a half-reverted set is the state hardest to reason about, and the
+// one a person reaches for revert to get out of.
 func revert(clients []client, dryRun bool) error {
+	var failures []error
 	for _, c := range clients {
 		backup := backupPath(c)
 		if _, err := os.Stat(backup); errors.Is(err, os.ErrNotExist) {
@@ -562,10 +583,14 @@ func revert(clients []client, dryRun bool) error {
 		}
 		contents, err := os.ReadFile(backup)
 		if err != nil {
-			return fmt.Errorf("%s: %w", c.name, err)
+			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
 		}
 		if err := os.WriteFile(c.path, contents, 0o600); err != nil {
-			return fmt.Errorf("%s: %w", c.name, err)
+			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
 		}
 		// Removed, so the next swap takes a backup of what is there then. A
 		// kept one is stale the moment the file is edited afterwards, and
@@ -573,11 +598,14 @@ func revert(clients []client, dryRun bool) error {
 		// leaving it means a later revert restores a version from before the
 		// edit and discards it.
 		if err := os.Remove(backup); err != nil {
-			return fmt.Errorf("%s: %w", c.name, err)
+			fmt.Fprintf(os.Stderr, "%-12s restored, but its backup remains: %v\n",
+				c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
 		}
 		fmt.Printf("%-12s restored from %s\n", c.name, filepath.Base(backup))
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 // entryOf reports the server entry a client currently holds.

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -39,7 +40,7 @@ type killSessionOutput struct {
 // killSession ends one session and everything running in it.
 func (t *tools) killSession(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input killSessionInput,
 ) (*mcp.CallToolResult, killSessionOutput, error) {
 	// An empty name is what a model sends when it does not know one, and tmux
@@ -51,7 +52,16 @@ func (t *tools) killSession(
 	// tmux resolves a bare target by prefix and pattern, so "alph" kills
 	// "alpha". The "=" prefix anchors it to an exact name, which is what this
 	// tool documents and what a model expects when it repeats a name it read.
-	if err := t.target.KillSession(ctx, "="+input.SessionName); err != nil {
+	holdsCaller := false
+	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+		name, _ := caller.Formats().SessionName()
+		holdsCaller = name == input.SessionName
+	}
+	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
+		"session "+input.SessionName); err != nil {
+		return nil, killSessionOutput{}, err
+	}
+	if err := t.tmux().KillSession(ctx, "="+input.SessionName); err != nil {
 		return nil, killSessionOutput{}, err
 	}
 	return nil, killSessionOutput{Killed: input.SessionName}, nil
@@ -81,14 +91,22 @@ type killWindowOutput struct {
 // working in.
 func (t *tools) killWindow(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input killWindowInput,
 ) (*mcp.CallToolResult, killWindowOutput, error) {
 	if strings.TrimSpace(input.WindowID) == "" {
 		return nil, killWindowOutput{}, errors.New("windowId is required")
 	}
-	window, err := t.target.Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
+		return nil, killWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
+	}
+	holdsCaller := false
+	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+		holdsCaller = caller.WindowID() == window.ID()
+	}
+	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
+		"window "+input.WindowID); err != nil {
 		return nil, killWindowOutput{}, err
 	}
 	sessionID := window.SessionID()
@@ -98,7 +116,7 @@ func (t *tools) killWindow(
 	output := killWindowOutput{Killed: input.WindowID}
 	// A session that is gone cannot be looked up, which is the answer rather
 	// than a failure.
-	if _, err := t.target.Session(ctx, sessionID); err != nil {
+	if _, err := t.tmux().Session(ctx, sessionID); err != nil {
 		output.SessionEnded = true
 	}
 	return nil, output, nil
@@ -128,13 +146,15 @@ func (t *tools) killPane(
 	if strings.TrimSpace(input.PaneID) == "" {
 		return nil, killPaneOutput{}, errors.New("paneId is required")
 	}
-	pane, err := t.target.Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
-		return nil, killPaneOutput{}, err
+		return nil, killPaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
 	// Named rather than resolved, so the guard is asked for here rather than
 	// by the resolver every other write goes through.
-	if err := t.confirmCallerWrite(ctx, request, pane, "ending it"); err != nil {
+	// Never remembered: this ends the pane the conversation is happening in,
+	// and a yes about typing there is not a yes about that.
+	if err := t.confirmCallerWrite(ctx, request, pane, "ending it", false); err != nil {
 		return nil, killPaneOutput{}, err
 	}
 	windowID := pane.WindowID()
@@ -142,7 +162,7 @@ func (t *tools) killPane(
 		return nil, killPaneOutput{}, err
 	}
 	output := killPaneOutput{Killed: input.PaneID}
-	if _, err := t.target.Window(ctx, windowID); err != nil {
+	if _, err := t.tmux().Window(ctx, windowID); err != nil {
 		output.WindowEnded = true
 	}
 	return nil, output, nil
@@ -172,15 +192,20 @@ type killServerOutput struct {
 // teardown of the last one.
 func (t *tools) killServer(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input killServerInput,
 ) (*mcp.CallToolResult, killServerOutput, error) {
 	if !input.Confirm {
 		return nil, killServerOutput{}, errors.New("confirm must be true: this ends every session on the tmux server")
 	}
+	_, holdsCaller := t.callerPaneOnThisServer(ctx)
+	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
+		"this tmux server"); err != nil {
+		return nil, killServerOutput{}, err
+	}
 	// Counted before rather than after, because after there is nothing to ask.
-	sessions, _ := t.target.Sessions(ctx)
-	if err := t.target.Kill(ctx); err != nil {
+	sessions, _ := t.tmux().Sessions(ctx)
+	if err := t.tmux().Kill(ctx); err != nil {
 		return nil, killServerOutput{}, err
 	}
 	return nil, killServerOutput{SessionsKilled: len(sessions)}, nil
@@ -203,6 +228,11 @@ type respawnPaneInput struct {
 type respawnPaneOutput struct {
 	// PaneID is the pane that was restarted, which keeps its id.
 	PaneID string `json:"paneId"`
+	// Gone reports that the pane was reaped before it could be read back,
+	// which is what a command that exits leaves behind: tmux takes the pane
+	// with the process, and the window too when it held nothing else. The
+	// respawn itself ran; there is simply no pane left to describe.
+	Gone bool `json:"gone,omitempty"`
 }
 
 // respawnPane restarts what a pane runs, in the pane it already has.
@@ -224,6 +254,17 @@ func (t *tools) respawnPane(
 	if err != nil {
 		return nil, respawnPaneOutput{}, err
 	}
+	// tmux refuses a live pane without -k, and says only that respawn-pane
+	// exited 1. The caller's way out is one argument away, so it is named here
+	// rather than left to be guessed from tmux's exit code.
+	if !input.Kill {
+		if dead, ok := pane.Formats().PaneDead(); ok && !dead {
+			return nil, respawnPaneOutput{}, fmt.Errorf(
+				"pane %s is still running %s, and tmux refuses to respawn a live "+
+					"pane; pass kill to replace what is running, or leave it alone",
+				pane.ID(), currentCommandOf(pane))
+		}
+	}
 	respawn := tmux.RespawnRequest{Kill: input.Kill}
 	if input.Command != "" {
 		command := input.Command
@@ -231,9 +272,26 @@ func (t *tools) respawnPane(
 	}
 	respawned, err := pane.Respawn(ctx, respawn)
 	if err != nil {
+		// Reading the pane back is the last thing a respawn does, and a
+		// command that exits can be gone before that read lands -- reliably so
+		// on a machine slower than the one this was written on. The respawn
+		// ran; reporting it as a failure would say the opposite of what
+		// happened.
+		if errors.Is(err, tmux.ErrSnapshotNotFound) {
+			return nil, respawnPaneOutput{PaneID: pane.ID().String(), Gone: true}, nil
+		}
 		return nil, respawnPaneOutput{}, err
 	}
 	return nil, respawnPaneOutput{PaneID: respawned.ID().String()}, nil
+}
+
+// currentCommandOf names what a pane is running, for an error that reads
+// better with it than with a placeholder.
+func currentCommandOf(pane tmux.Pane) string {
+	if command, ok := pane.Formats().PaneCurrentCommand(); ok && command != "" {
+		return command
+	}
+	return "a program"
 }
 
 // renameSessionInput gives a session a new name.
@@ -393,23 +451,26 @@ func addLifecycleTools(server *mcp.Server, t *tools) {
 		Annotations: mutating("Restart a Pane's Program"),
 		Description: "Restart what a pane runs, keeping the pane and its place " +
 			"in the layout. Use it on a pane whose program exited rather than " +
-			"killing the pane and splitting a new one.",
+			"killing the pane and splitting a new one. A command that exits " +
+			"takes the pane with it, and the window if it was the last one: " +
+			"set remain-on-exit on the window first to keep it as a dead pane " +
+			"list_panes can report.",
 	}, t.respawnPane)
 	register(server, t, &mcp.Tool{
 		Name:        "rename_session",
-		Annotations: mutating("Rename a tmux Session"),
+		Annotations: settling("Rename a tmux Session"),
 		Description: "Give a session a name a person will recognise. Its id does " +
 			"not change.",
 	}, t.renameSession)
 	register(server, t, &mcp.Tool{
 		Name:        "rename_window",
-		Annotations: mutating("Rename a tmux Window"),
+		Annotations: settling("Rename a tmux Window"),
 		Description: "Name a window, which also stops tmux renaming it after " +
 			"whatever is running in it.",
 	}, t.renameWindow)
 	register(server, t, &mcp.Tool{
 		Name:        "set_pane_title",
-		Annotations: mutating("Title a tmux Pane"),
+		Annotations: settling("Title a tmux Pane"),
 		Description: "Set the title tmux draws on a pane's border, which is how " +
 			"to label which pane is which in a layout someone else will read.",
 	}, t.setPaneTitle)

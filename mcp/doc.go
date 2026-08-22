@@ -131,3 +131,5 @@
 // See examples/agent-workflow for a program that finds its own pane, splits
 // it, runs a command in the new one and reports the layout.
 package mcp
+
+//go:generate go run ./internal/generate/toolsref -output TOOLS.md

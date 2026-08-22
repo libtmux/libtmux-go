@@ -122,14 +122,14 @@ func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
 	control := tmuxtest.NewControlMode(context.Background(), t, server, work)
 	target := control.ClientName()
 
-	// RequestClipboard needs tmux 3.7. Below it the refresh is refused rather
+	// RequestClipboard needs tmux 3.4. Below it the refresh is refused rather
 	// than run without the flag, so the rest of this test refreshes with a
 	// request this tmux can carry.
 	version, err := server.Version(ctx)
 	if err != nil {
 		t.Fatalf("Version() error = %v", err)
 	}
-	version37, err := tmux.ParseVersion("3.7")
+	clipboardVersion, err := tmux.ParseVersion("3.4")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
 		TargetClient:     target,
 		RequestClipboard: true,
 	}
-	if !version.AtLeast(version37) {
+	if !version.AtLeast(clipboardVersion) {
 		if err := server.RefreshClient(ctx, refresh); !errors.Is(err, tmux.ErrVersionTooLow) {
 			t.Fatalf("RefreshClient(RequestClipboard) on tmux %s error = %v, want ErrVersionTooLow", version, err)
 		}
@@ -145,6 +145,12 @@ func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
 	}
 	if err := server.RefreshClient(ctx, refresh); err != nil {
 		t.Fatalf("RefreshClient() error = %v", err)
+	}
+	// The refusal below 3.4 exists because the flag ends the server there, so
+	// the server outliving the request is the whole of what is being checked.
+	if alive, err := server.IsAlive(ctx); err != nil || !alive {
+		t.Fatalf("IsAlive() = (%t, %v) after a clipboard refresh, want the server still up",
+			alive, err)
 	}
 
 	if err := server.SwitchClient(ctx, "client-beta"); err != nil {

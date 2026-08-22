@@ -297,3 +297,59 @@ func TestASecondSwapBacksUpWhatIsThereBySecondTime(t *testing.T) {
 			got, edited)
 	}
 }
+
+// TestOneUnwritableClientDoesNotStopTheRest covers a swap across several CLIs
+// where one of them has a config this cannot edit.
+//
+// Returning at the first failure leaves the clients before it swapped and the
+// ones after it untouched, which is a mixed state nothing reports: the CLIs
+// that were never reached look exactly like the ones that were, and the next
+// run has to be made after fixing the broken one. Every client is attempted
+// and every failure is named instead.
+func TestOneUnwritableClientDoesNotStopTheRest(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	write := func(name, contents string) client {
+		t.Helper()
+		target := client{
+			name: name, path: filepath.Join(directory, name+".json"),
+			key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+		}
+		if err := os.WriteFile(target.path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return target
+	}
+	first := write("first", `{"mcpServers":{}}`)
+	broken := write("broken", `NOT JSON`)
+	last := write("last", `{"mcpServers":{}}`)
+
+	entry := map[string]any{"command": "/bin/true"}
+	err := useLocal([]client{first, broken, last}, entry, false)
+	if err == nil {
+		t.Fatal("a client that could not be written reported no error")
+	}
+	if !strings.Contains(err.Error(), "broken") {
+		t.Errorf("the error does not name the client that failed: %v", err)
+	}
+
+	for _, target := range []client{first, last} {
+		contents, readErr := os.ReadFile(target.path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if !strings.Contains(string(contents), "tmux") {
+			t.Errorf("%s was not swapped, so one broken config stopped the rest: %s",
+				target.name, contents)
+		}
+	}
+	// The one that could not be parsed is left exactly as it was.
+	contents, readErr := os.ReadFile(broken.path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(contents) != "NOT JSON" {
+		t.Errorf("the unreadable config was rewritten: %s", contents)
+	}
+}

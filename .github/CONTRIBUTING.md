@@ -27,7 +27,19 @@ $ export TMUX_TMPDIR=/tmp/libtmux-go-test && mkdir -p "$TMUX_TMPDIR" && unset TM
 ## The gates
 
 `go test ./...` stops at a module boundary, so every module is named one at a
-time or it rots unchecked. Format, lint, vet, and test the tmux module:
+time or it rots unchecked.
+
+The linter is pinned in the tests workflow and a local install is commonly
+older. `golangci-lint` typechecks against the toolchain's own export data, so
+the two disagree in both directions: an older binary reports a newer Go's
+packages as typecheck failures, and a newer one reports lints an older one has
+no analyzer for. Run the pinned release before believing a clean local one:
+
+```console
+$ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1 run ./...
+```
+
+Format, lint, vet, and test the tmux module:
 
 ```console
 $ gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...
@@ -74,6 +86,12 @@ dependencies:
 ```console
 $ for module in . examples workspace mcp benchmarks; do (cd "$module" && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...) || break; done
 ```
+
+It reports the standard library as well as dependencies, so it fails on a
+toolchain behind the latest patch even when nothing here has changed. CI sets
+up `stable` and does not see it. `mcp` is where it lands first, because the MCP
+SDK's transports are what reach `crypto/tls` and `net/url`. Upgrade the
+toolchain rather than suppressing the finding.
 
 Generated code is checked in, so regenerate it and confirm the tree is
 unchanged rather than trusting that it is. The Go in the Markdown is generated

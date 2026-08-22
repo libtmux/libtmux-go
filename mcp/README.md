@@ -70,7 +70,7 @@ startup, and a client cannot change it afterwards:
 
 | Flag | Meaning |
 | --- | --- |
-| `-socket-name` | tmux socket name; empty uses tmux's default socket |
+| `-socket-name` | tmux socket name; empty uses `LIBTMUX_SOCKET`, then tmux's default socket |
 | `-socket-path` | explicit socket path; overrides `-socket-name` |
 | `-binary` | tmux executable; empty resolves `tmux` through `PATH` |
 
@@ -94,7 +94,7 @@ $ libtmux-mcp -doctor -socket-name my-application
 ```
 libtmux-mcp doctor
   tmux:    3.7b
-  socket:  /tmp/tmux-1000/my-application
+  socket:  /tmp/tmux-1000/my-application (from -socket-name)
   holds:   1 sessions, 1 windows, 1 panes, 0 clients attached
   safety:  mutating
   caller:  pane %1 of this very server — acting on it acts on
@@ -183,6 +183,10 @@ had before. This is a guard rail rather than a boundary: a caller with
 that cannot be asked would break them all to enforce something that was never
 enforceable.
 
+A write reached through a batch asks in the same way a direct one does. The
+question goes to the client that sent the batch, and declining fails that call
+and stops the batch there.
+
 ## Limiting what a client can do
 
 `LIBTMUX_SAFETY` bounds the tools this server advertises:
@@ -192,6 +196,11 @@ enforceable.
 | `readonly` | only the tools that read tmux |
 | `mutating` | those plus the ones that change it, and is the default |
 | `destructive` | those plus the ones that end something: `kill_pane`, `kill_window`, `kill_session`, `kill_server` |
+
+An unset or empty variable takes the default. A value naming no level takes
+`readonly`, because setting the variable at all is asking for a bound and a
+typo in it must not widen one; `-tools` reports the level in force rather than
+the string that was rejected.
 
 A tool above the level is never advertised, so no prompt reaches it, and a
 batch cannot reach around the level either. The active level is stated in the
@@ -205,6 +214,7 @@ so.
 | Variable | Does |
 | --- | --- |
 | `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
+| `LIBTMUX_SOCKET` | names the tmux socket when no `-socket-name` or `-socket-path` says; a flag wins |
 | `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
 | `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
 | `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |
@@ -279,6 +289,12 @@ plus recipes, gotchas, and what the server logs:
 
 That page is reference material, read by search rather than read through, which
 is why it is not here.
+
+There is a second MCP server for tmux under the same name, written in Python.
+The two serve the same tmux and answer to the same clients, and where they
+differ is set out separately:
+
+**[Against the Python server →](PARITY.md)**
 
 ## Troubleshooting
 
