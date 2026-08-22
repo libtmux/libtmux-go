@@ -100,6 +100,16 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A subscriber is told about what happened while nothing was watching. A control
+connection ends whenever the set of sessions changes, and the whole set is
+rebuilt from scratch; in between, tmux reports a pane's output to nobody and
+keeps no record to catch up from, so a write in that window was never mentioned
+again and a subscriber sat silent while the pane it watched filled. Somebody
+else creating a session anywhere on the server was enough to open the window,
+and it was a second wide. It is now a hundredth of that, and every subscription
+is reported once as soon as the connections are back, because anything may have
+changed with nobody to say so.
+
 A `run_command` that times out leaves nothing of its own in the pane. The
 command is still running when the call returns, and the directory it records
 itself in was removed at that point, so minutes later the wrapper reached its

@@ -46,6 +46,11 @@ const watchReadyWait = 10 * time.Second
 // this long once, rather than forever.
 const watchRetryInterval = time.Second
 
+// watchRebuildInterval is how long to wait before replacing a set of
+// connections that was up and ended, which is short because every subscriber
+// is deaf until it is back.
+const watchRebuildInterval = 10 * time.Millisecond
+
 // watchers turns tmux's control-mode notifications into resource updates.
 type watchers struct {
 	server *mcp.Server
@@ -222,12 +227,20 @@ func (w *watchers) start() {
 // Only cancellation ends this, which happens when the last subscriber goes.
 func (w *watchers) watch(ctx context.Context) {
 	defer w.forget()
-	for ctx.Err() == nil {
-		w.follow(ctx)
+	for built := false; ctx.Err() == nil; {
+		attended := w.follow(ctx, built)
+		built = built || attended
+		// A set that was up and then ended is a rebuild, and every subscriber
+		// is deaf until it is back; a set that never came up is a server with
+		// nothing to attach to, which is worth waiting on.
+		wait := watchRetryInterval
+		if attended {
+			wait = watchRebuildInterval
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(watchRetryInterval):
+		case <-time.After(wait):
 		}
 	}
 }
@@ -243,7 +256,7 @@ func (w *watchers) forget() {
 
 // follow holds one tmux connection and dispatches what it reports, returning
 // when that connection ends for any reason.
-func (w *watchers) follow(ctx context.Context) {
+func (w *watchers) follow(ctx context.Context, rebuilt bool) bool {
 	// Connections of its own rather than the pooled one, because these are
 	// held open for as long as anything is subscribed and the pool is for
 	// commands that return.
@@ -255,7 +268,7 @@ func (w *watchers) follow(ctx context.Context) {
 	plain := w.target.WithEngine(w.target.SubprocessEngine())
 	sessions, err := w.attending(ctx, plain)
 	if err != nil || len(sessions) == 0 {
-		return
+		return false
 	}
 
 	// One connection per session, because tmux reports a pane's output only to
@@ -283,10 +296,11 @@ func (w *watchers) follow(ctx context.Context) {
 			// session created later gets a connection, and how one that went
 			// away stops being waited on.
 			defer cancel()
-			w.followSession(ctx, plain, session)
+			w.followSession(ctx, plain, session, rebuilt)
 		}()
 	}
 	attending.Wait()
+	return true
 }
 
 // attending chooses the sessions to hold a connection to: those owning a
@@ -349,6 +363,7 @@ func (w *watchers) followSession(
 	ctx context.Context,
 	server tmux.Server,
 	session tmux.Session,
+	rebuilt bool,
 ) {
 	control, err := server.OpenControl(ctx, session)
 	if err != nil {
@@ -356,6 +371,9 @@ func (w *watchers) followSession(
 	}
 	defer func() { _ = control.Close() }()
 	w.attached()
+	if rebuilt {
+		w.tellEveryone(ctx)
+	}
 
 	for {
 		notification, err := control.NextNotification(ctx)
@@ -462,6 +480,31 @@ func (w *watchers) notify(ctx context.Context, uri string) {
 		_ = w.server.ResourceUpdated(ctx, &mcp.ResourceUpdatedNotificationParams{
 			URI: spelling,
 		})
+	}
+}
+
+// tellEveryone reports every subscription once, for the gap where nothing was
+// listening.
+//
+// A connection ends whenever the set of sessions changes, and the set is
+// rebuilt from scratch; between the two, tmux reports a pane's output to
+// nobody and there is no record of it to catch up from. A write in that window
+// was never mentioned again, so a subscriber watching a pane sat silent while
+// the pane filled. A re-read the client did not need costs one call.
+//
+// The coalescing window is cleared first: it exists to thin a live stream, and
+// this is the stream restarting, so a notification a moment before the gap
+// must not swallow the one that says what happened during it.
+func (w *watchers) tellEveryone(ctx context.Context) {
+	w.mutex.Lock()
+	w.notified = map[string]time.Time{}
+	watched := make([]string, 0, len(w.subscribed))
+	for uri := range w.subscribed {
+		watched = append(watched, uri)
+	}
+	w.mutex.Unlock()
+	for _, uri := range watched {
+		w.notify(ctx, uri)
 	}
 }
 

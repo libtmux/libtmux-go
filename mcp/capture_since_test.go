@@ -248,6 +248,89 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 // too and then never delivered, because updates are addressed by the sigil-less
 // form alone. Nothing distinguished that from a pane which never wrote.
 //
+// TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched covers the gap in
+// the middle of a rebuild.
+//
+// A control connection ends whenever the set of sessions changes, and the
+// whole set is rebuilt from scratch. Between the two, tmux reports a pane's
+// output to nobody, and tmux keeps no record to catch up from: a write in that
+// window was never mentioned again, so a subscriber sat silent while the pane
+// it was watching filled. Somebody else creating a session anywhere on the
+// server was enough.
+//
+//libtmux:real-tmux
+func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	t.Cleanup(cancel)
+
+	socket := filepath.Join(t.TempDir(), "tmux.sock")
+	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+
+	updated := make(chan string, 64)
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "gap"}, &sdk.ClientOptions{
+		ResourceUpdatedHandler: func(_ context.Context, request *sdk.ResourceUpdatedNotificationRequest) {
+			updated <- request.Params.URI
+		},
+	})
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	workspace(ctx, t, session, "session_name: watched\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+	if err := session.Subscribe(ctx, &sdk.SubscribeParams{
+		URI: "tmux://panes/" + pane + "/content",
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	drain := func() {
+		for {
+			select {
+			case <-updated:
+			default:
+				return
+			}
+		}
+	}
+	// The first write proves the watch is live, so a later silence is the gap
+	// and not a subscription that never started.
+	send(ctx, t, session, pane, "echo watching")
+	select {
+	case <-updated:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the subscription was never told about the first write")
+	}
+
+	for round := range 3 {
+		drain()
+		// A session made anywhere on the server ends every connection.
+		call(ctx, t, session, "create_session", map[string]any{
+			"name": fmt.Sprintf("churn-%d", round), "command": "sleep 300",
+		}, nil)
+		// Long enough to be past the connection ending and inside the gap.
+		time.Sleep(150 * time.Millisecond)
+		send(ctx, t, session, pane, fmt.Sprintf("echo round-%d", round))
+		select {
+		case <-updated:
+		case <-time.After(20 * time.Second):
+			t.Fatalf("round %d: a write during a rebuild was never reported", round)
+		}
+	}
+}
+
 //libtmux:real-tmux
 func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
