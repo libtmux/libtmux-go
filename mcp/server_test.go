@@ -3503,6 +3503,72 @@ func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
 	}
 }
 
+// TestAWithheldToolIsUnreachableAtEveryLevel covers the whole cross-product of
+// tool and safety level, rather than the one tool a spot check would try.
+//
+// A level that withholds a tool from the listing and still dispatches it is
+// worse than one that never withheld it: the operator believes the bound is in
+// place. Which tools each level withholds is derived from the annotations, so
+// the set changes whenever a tool is added, and a spot check on kill_server
+// says nothing about the other thirty-five.
+//
+//libtmux:real-tmux
+func TestAWithheldToolIsUnreachableAtEveryLevel(t *testing.T) {
+	everything := func(t *testing.T) map[string]bool {
+		t.Helper()
+		t.Setenv("LIBTMUX_SAFETY", "destructive")
+		session, _, ctx := connect(t)
+		listed, err := session.ListTools(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names := map[string]bool{}
+		for _, tool := range listed.Tools {
+			names[tool.Name] = true
+		}
+		return names
+	}(t)
+
+	for _, level := range []string{"readonly", "mutating"} {
+		t.Run(level, func(t *testing.T) {
+			t.Setenv("LIBTMUX_SAFETY", level)
+			session, _, ctx := connect(t)
+			listed, err := session.ListTools(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			offered := map[string]bool{}
+			for _, tool := range listed.Tools {
+				offered[tool.Name] = true
+			}
+			withheld := 0
+			for name := range everything {
+				if offered[name] {
+					continue
+				}
+				withheld++
+				// Unknown rather than refused: a withheld tool is not a tool
+				// this server serves, and saying anything else tells a client
+				// the bound is a preference.
+				_, err := session.CallTool(ctx, &sdk.CallToolParams{
+					Name: name, Arguments: map[string]any{},
+				})
+				if err == nil {
+					t.Errorf("%s is withheld at %s and answered anyway", name, level)
+					continue
+				}
+				if !strings.Contains(err.Error(), "unknown tool") {
+					t.Errorf("%s at %s was refused as %v, want unknown", name, level, err)
+				}
+			}
+			if withheld == 0 {
+				t.Errorf("%s withholds nothing, which is not what it is for", level)
+			}
+			t.Logf("%s withholds %d of %d, none reachable", level, withheld, len(everything))
+		})
+	}
+}
+
 // TestAnIdThatNamesNothingSaysWhichListingFindsOne is a behavioural gate on
 // every tool that takes an id.
 //

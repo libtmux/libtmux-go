@@ -100,6 +100,12 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+Every tool a safety level withholds is checked for reachability, not just the
+one a spot check would try. `readonly` withholds 36 of the 58 and `mutating`
+withholds 5, and none of them answers: a level that hides a tool from the
+listing and still dispatches it is worse than one that never hid it, because
+the operator believes the bound is in place.
+
 The real-tmux attach test sends its detach key until the client goes, rather
 than once. tmux reports a client as attached before that client is reading its
 terminal, and the prefix written into that gap reached the pane's shell
