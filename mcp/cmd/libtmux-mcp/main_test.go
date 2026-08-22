@@ -106,3 +106,38 @@ func TestResolveSocketPrefersAFlagOverTheEnvironment(t *testing.T) {
 		})
 	}
 }
+
+// TestTheSocketAndBinaryComeFromTheEnvironmentToo covers the options a client
+// could not reach.
+//
+// An MCP client starts this server with an environment rather than an argument
+// vector, so an option only a flag could set was one a client configuration
+// could not use. A socket outside tmux's own directory is the ordinary case:
+// naming it in the variable that takes a NAME joins it to that directory and
+// addresses nothing, which is the mistake this pair exists to make impossible.
+func TestTheSocketAndBinaryComeFromTheEnvironmentToo(t *testing.T) {
+	t.Run("a path in the environment is taken as a path", func(t *testing.T) {
+		t.Setenv("LIBTMUX_SOCKET_PATH", "/somewhere/else/tmux.sock")
+		if got := socketPathFrom(""); got != "/somewhere/else/tmux.sock" {
+			t.Errorf("socketPathFrom() = %q, want the path from the environment", got)
+		}
+	})
+	t.Run("the flag wins over the environment", func(t *testing.T) {
+		t.Setenv("LIBTMUX_SOCKET_PATH", "/from/the/environment.sock")
+		if got := socketPathFrom("/from/the/flag.sock"); got != "/from/the/flag.sock" {
+			t.Errorf("socketPathFrom() = %q, want the flag to win", got)
+		}
+	})
+	t.Run("the binary comes from the environment", func(t *testing.T) {
+		t.Setenv("LIBTMUX_TMUX_BIN", "/opt/tmux/bin/tmux")
+		if got := binaryFrom(""); got != "/opt/tmux/bin/tmux" {
+			t.Errorf("binaryFrom() = %q, want the path from the environment", got)
+		}
+	})
+	t.Run("doctor names the path variable as the origin", func(t *testing.T) {
+		t.Setenv("LIBTMUX_SOCKET_PATH", "/somewhere/else/tmux.sock")
+		if _, origin := resolveSocket("", ""); origin != "LIBTMUX_SOCKET_PATH" {
+			t.Errorf("origin = %q, want %q", origin, "LIBTMUX_SOCKET_PATH")
+		}
+	})
+}

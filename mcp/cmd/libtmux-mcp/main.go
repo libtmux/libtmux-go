@@ -38,8 +38,8 @@ import (
 
 func main() {
 	socketName := flag.String("socket-name", "", "tmux socket name; empty uses LIBTMUX_SOCKET, then tmux's default socket")
-	socketPath := flag.String("socket-path", "", "explicit tmux socket path; overrides -socket-name")
-	binary := flag.String("binary", "", "tmux executable; empty resolves tmux through PATH")
+	socketPath := flag.String("socket-path", "", "explicit tmux socket path; empty uses LIBTMUX_SOCKET_PATH; overrides -socket-name")
+	binary := flag.String("binary", "", "tmux executable; empty uses LIBTMUX_TMUX_BIN, then resolves tmux through PATH")
 	version := flag.Bool("version", false, "print the version and exit")
 	tools := flag.Bool("tools", false, "print the tools this server would advertise and exit")
 	doctor := flag.Bool("doctor", false, "report what this server can see and exit")
@@ -54,8 +54,8 @@ func main() {
 
 	target := tmux.NewServer(tmux.ServerOptions{
 		SocketName: resolvedSocket,
-		SocketPath: *socketPath,
-		Binary:     *binary,
+		SocketPath: socketPathFrom(*socketPath),
+		Binary:     binaryFrom(*binary),
 	})
 
 	var err error
@@ -329,5 +329,30 @@ func resolveSocket(name, path string) (resolved, origin string) {
 	if named := strings.TrimSpace(os.Getenv(tmuxmcp.SocketEnvironmentVariable)); named != "" {
 		return named, tmuxmcp.SocketEnvironmentVariable
 	}
+	if path := strings.TrimSpace(os.Getenv(tmuxmcp.SocketPathEnvironmentVariable)); path != "" {
+		return "", tmuxmcp.SocketPathEnvironmentVariable
+	}
 	return "", "tmux's default"
+}
+
+// socketPathFrom resolves the socket path, which the flag names and the
+// environment can too.
+//
+// The two are not interchangeable: a name is joined to the directory tmux
+// keeps sockets in, a path is taken as it stands. Reading a path out of the
+// variable that takes a name produced a doubled path and an error naming a
+// socket nobody asked for.
+func socketPathFrom(flagged string) string {
+	if flagged != "" {
+		return flagged
+	}
+	return strings.TrimSpace(os.Getenv(tmuxmcp.SocketPathEnvironmentVariable))
+}
+
+// binaryFrom resolves the tmux executable from the flag or the environment.
+func binaryFrom(flagged string) string {
+	if flagged != "" {
+		return flagged
+	}
+	return strings.TrimSpace(os.Getenv(tmuxmcp.BinaryEnvironmentVariable))
 }

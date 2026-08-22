@@ -35,6 +35,17 @@ const SafetyEnvironmentVariable = "LIBTMUX_SAFETY"
 // wins over it, and only an operator sets either.
 const SocketEnvironmentVariable = "LIBTMUX_SOCKET"
 
+// SocketPathEnvironmentVariable names a socket by path rather than by name,
+// for a socket outside the directory tmux keeps them in. A client starts this
+// server with an environment rather than an argument vector, so a path that
+// only a flag could give was a path a client could not reach.
+const SocketPathEnvironmentVariable = "LIBTMUX_SOCKET_PATH"
+
+// BinaryEnvironmentVariable names the tmux executable, for the same reason:
+// the -binary flag is unreachable from a client configuration that passes
+// environment and nothing else.
+const BinaryEnvironmentVariable = "LIBTMUX_TMUX_BIN"
+
 // safetyFromEnvironment reads the level an operator asked for.
 //
 // An unreadable value selects the lowest level rather than failing. Refusing

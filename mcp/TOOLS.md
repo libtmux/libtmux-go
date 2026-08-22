@@ -1308,6 +1308,7 @@ Changes tmux by a step. Repeating it compounds.
 | Returns | Type |
 | --- | --- |
 | `paneId` **required** | string |
+| `gone` | boolean |
 
 ### `run_command`
 

@@ -100,6 +100,15 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+The socket path and the tmux executable can be given in the environment, as
+`LIBTMUX_SOCKET_PATH` and `LIBTMUX_TMUX_BIN`, which is what the Python server
+of the same name calls them. Both were flags and nothing else, and a client
+starts this server with an environment rather than an argument vector -- so a
+socket outside the directory tmux keeps its own in was unreachable from a
+client configuration. Naming that socket in `LIBTMUX_SOCKET`, which takes a
+name, joins it to that directory and addresses nothing. A flag still wins over
+either variable.
+
 `run_command` finds the end of a redrawn prompt line even when no whole copy of
 it reached the grid. It looked for the line it had typed and, not finding one,
 returned every row it had read -- the prompt, its fragments, and the PREVIOUS
