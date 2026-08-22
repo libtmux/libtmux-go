@@ -230,9 +230,9 @@ beneath it. `fmt.Errorf("connect a client: %w", err)` is a frame;
 `fmt.Errorf("an error occurred: %w", err)` is not.
 
 What a binary prints at the top is a different surface from the chain beneath
-it, and may say more than the chain does — a suggestion, a file and line, the
-flag that would fix it. Keep the chain machine-shaped and put the help beside
-it.
+it. Prefix it with the program's own name, as `libtmux-mcp` does, and let it
+say more than the chain where that helps: a suggestion, a file and line, the
+flag that would fix it. Keep the chain itself machine-shaped.
 
 ## Command-line help
 
