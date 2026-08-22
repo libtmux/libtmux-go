@@ -88,9 +88,7 @@ func TestAttachSessionAgainstRealTmuxPTY(t *testing.T) {
 				}
 			}
 
-			if _, err := process.Write(ctx, []byte{2, 'd'}); err != nil {
-				t.Fatalf("write detach key: %v", err)
-			}
+			detach(ctx, t, server, process)
 			if err := process.Wait(ctx); err != nil {
 				t.Fatalf("attach helper error = %v; output %q", err, process.Output())
 			}
@@ -191,6 +189,43 @@ func TestAttachSessionRealHelper(t *testing.T) {
 		}
 	}
 	t.Fatalf("session %s is unavailable", target)
+}
+
+// detach sends the detach key until the client goes, rather than once.
+//
+// tmux reports a client as attached before that client is reading its
+// terminal, and a prefix written into the gap reaches the pane's shell
+// instead: the pty then shows "^Bd" echoed and the shell's bell, the client
+// never leaves, and the test spends its whole budget waiting for a process
+// that is not going to exit. Sending it again costs nothing -- once the client
+// has gone there is no process left to write to -- and it is the only signal
+// available, since "attached" is as much as tmux will say.
+func detach(
+	ctx context.Context,
+	t *testing.T,
+	server tmux.Server,
+	process *tmuxtest.PTYProcess,
+) {
+	t.Helper()
+	// C-b d, the default binding.
+	key := []byte{2, 'd'}
+	for {
+		if _, err := process.Write(ctx, key); err != nil {
+			// Written after the client left, which is the success this is
+			// waiting for rather than a failure.
+			return
+		}
+		select {
+		case <-process.Done():
+			return
+		case <-ctx.Done():
+			t.Fatalf("the client never detached: %v; output %q", ctx.Err(), process.Output())
+		case <-time.After(250 * time.Millisecond):
+		}
+		if clients, err := server.ListClients(ctx); err == nil && len(clients) == 0 {
+			return
+		}
+	}
 }
 
 func waitForAttachClient(

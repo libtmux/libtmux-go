@@ -100,6 +100,14 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+The real-tmux attach test sends its detach key until the client goes, rather
+than once. tmux reports a client as attached before that client is reading its
+terminal, and the prefix written into that gap reached the pane's shell
+instead — CI caught it twice, on two different tmux versions, with `^Bd`
+echoed into the pty and the shell's bell beside it. The client then never left
+and the test spent its whole two-minute budget waiting for a process that was
+not going to exit.
+
 `-doctor` names a `LIBTMUX_SAFETY` value it did not understand. A misspelling
 selects the lowest level, which is the right direction — someone who set the
 variable at all was bounding what a model may do, and a typo must not widen the
