@@ -100,6 +100,14 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A resource read on a socket with no tmux server says so, in the same sentence
+the listings use. Five of the seven reads answered with tmux's own "command
+failed: display-message exited 1: error connecting to ...", which names an
+internal command and a socket file rather than the state a caller can act on.
+That is what an MCP client whose servers get a curated environment sees on
+every read, because the server loses `TMUX_TMPDIR` and looks at the default
+socket.
+
 A resource read that names nothing answers with the protocol's own
 `-32002 Resource not found` rather than code 0, and keeps the message that
 says what to call instead. A client had no way to tell a URI naming nothing

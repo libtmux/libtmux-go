@@ -34,9 +34,8 @@ func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, bool, e
 // is not an idle server: it is no server, which is usually the wrong socket
 // rather than a quiet machine, and a caller that reads it as quiet goes on to
 // look for a pane that was never going to be there.
-const noServerNote = "no tmux server is running on this socket, so there is " +
-	"nothing here to list; get_server_info says which socket that is, and " +
-	"create_session starts one"
+const noServerNote = "no tmux server is running on this socket; " +
+	"get_server_info says which socket that is, and create_session starts one"
 
 // noteWhenAbsent is noServerNote when there is no server, and empty otherwise.
 func noteWhenAbsent(running bool) string {

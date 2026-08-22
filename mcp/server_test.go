@@ -494,6 +494,23 @@ func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 		}
 	}
 
+	// A read has no empty list to hand back, so it fails -- but with the same
+	// sentence, rather than the tmux command that failed and the socket file
+	// that is not there.
+	for _, uri := range []string{
+		"tmux://panes/0", "tmux://panes/0/content", "tmux://windows/0",
+		"tmux://windows/0/panes", "tmux://sessions/anything",
+	} {
+		_, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri})
+		if err == nil {
+			t.Errorf("%s was read on a socket with no server", uri)
+			continue
+		}
+		if !strings.Contains(err.Error(), "no tmux server is running") {
+			t.Errorf("%s says %q, want it to name the absent server", uri, err)
+		}
+	}
+
 	// The same question asked directly, and the field a client iterates.
 	var info struct {
 		Alive           bool  `json:"alive"`

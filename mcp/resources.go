@@ -131,6 +131,13 @@ func (t *tools) readTemplated(
 // message for "Resource not found", which says less than the prose here does.
 // Both fit: the code classifies and the message says what to call instead.
 func resourceError(uri string, err error) error {
+	if errors.Is(err, tmux.ErrNoServer) {
+		// The listings answer this with an empty list and a note. A read
+		// cannot: there is no object to hand back. What it can do is say the
+		// same thing the listings say, rather than repeating the tmux command
+		// that failed and the socket file that is not there.
+		return errors.New(noServerNote)
+	}
 	if err == nil || !errors.Is(err, tmux.ErrSnapshotNotFound) {
 		return err
 	}
