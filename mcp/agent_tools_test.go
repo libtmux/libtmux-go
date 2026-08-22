@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,10 +194,19 @@ func TestACursorForAnotherPaneIsRefused(t *testing.T) {
 	}
 
 	damaged := call(ctx, t, session, "capture_since", map[string]any{
-		"paneId": panes[0], "cursor": "capture-since-v1:not-base64!!",
+		"paneId": panes[0], "cursor": "capture-since-v2:not-base64!!",
 	}, nil)
 	if !damaged.IsError {
 		t.Error("a damaged cursor was accepted rather than refused")
+	}
+
+	// A cursor from a format this server has stopped issuing. Reading it as a
+	// fresh start would send the whole screen as though it were new.
+	stale := call(ctx, t, session, "capture_since", map[string]any{
+		"paneId": panes[0], "cursor": "capture-since-v1:e30",
+	}, nil)
+	if !stale.IsError {
+		t.Error("a cursor from an older format was accepted")
 	}
 
 	foreign := call(ctx, t, session, "capture_since", map[string]any{
@@ -1230,7 +1240,7 @@ func reportOwnPaneFromInside(t *testing.T, socket, report string) {
 // handler decides what the person says.
 func connectAsking(
 	t *testing.T,
-	answer func(*sdk.ElicitRequest) string,
+	answer func(*sdk.ElicitRequest) *sdk.ElicitResult,
 ) (*sdk.ClientSession, tmux.Server, context.Context, *int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1252,7 +1262,7 @@ func connectAsking(
 			request *sdk.ElicitRequest,
 		) (*sdk.ElicitResult, error) {
 			asked++
-			return &sdk.ElicitResult{Action: answer(request)}, nil
+			return answer(request), nil
 		}
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "asking-client"}, options)
@@ -1262,6 +1272,116 @@ func connectAsking(
 	}
 	t.Cleanup(func() { _ = clientSession.Close() })
 	return clientSession, target, ctx, &asked
+}
+
+// answering is an elicitation handler that always gives the same action.
+func answering(action string) func(*sdk.ElicitRequest) *sdk.ElicitResult {
+	return func(*sdk.ElicitRequest) *sdk.ElicitResult {
+		return &sdk.ElicitResult{Action: action}
+	}
+}
+
+// propertiesOf is the form an elicitation asked to have filled in.
+func propertiesOf(t *testing.T, request *sdk.ElicitRequest) map[string]any {
+	t.Helper()
+	encoded, err := json.Marshal(request.Params.RequestedSchema)
+	if err != nil {
+		t.Fatalf("marshal the requested schema: %v", err)
+	}
+	var schema struct {
+		Properties map[string]any `json:"properties"`
+	}
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		t.Fatalf("decode the requested schema: %v", err)
+	}
+	return schema.Properties
+}
+
+// TestAYesAboutTheCallerPaneCanBeKept covers the question asked once per call.
+//
+// A guard that asks every time is a guard people learn to click through, and
+// an agent doing five things in the caller's pane asked five times. A yes can
+// now be kept for the rest of the session -- but only for writing there, and
+// only when the person said so. Ending the pane asks again whatever was said
+// about typing into it, because those are not the same yes.
+//
+//libtmux:real-tmux
+func TestAYesAboutTheCallerPaneCanBeKept(t *testing.T) {
+	const ownPane = "%0"
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	t.Setenv("TMUX_PANE", ownPane)
+	t.Setenv("TMUX", "")
+
+	asked := 0
+	remembering, keeping := true, false
+	session, target, ctx, _ := connectAsking(t, func(request *sdk.ElicitRequest) *sdk.ElicitResult {
+		asked++
+		_, offered := propertiesOf(t, request)["remember"]
+		if offered != remembering {
+			t.Errorf("the form offered to keep the yes = %v, want %v",
+				offered, remembering)
+		}
+		if !offered {
+			return &sdk.ElicitResult{Action: "accept"}
+		}
+		return &sdk.ElicitResult{
+			Action:  "accept",
+			Content: map[string]any{"remember": keeping},
+		}
+	})
+	workspace(ctx, t, session, "session_name: kept\nwindows:\n  - panes:\n      - {}\n")
+	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || len(socket.Stdout) == 0 {
+		t.Fatalf("read the socket path: %v", err)
+	}
+	t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+	// Without an answer that keeps it, every write asks.
+	for range 2 {
+		call(ctx, t, session, "send_keys", map[string]any{
+			"paneId": ownPane, "command": "echo asked",
+		}, nil)
+	}
+	if asked != 2 {
+		t.Fatalf("two writes asked %d times, want one each", asked)
+	}
+
+	// Then one that keeps it, and the writes after it go through unasked --
+	// including through a different tool, because the yes is about the pane.
+	keeping = true
+	asked = 0
+	call(ctx, t, session, "send_keys", map[string]any{
+		"paneId": ownPane, "command": "echo keeping",
+	}, nil)
+	if asked != 1 {
+		t.Fatalf("keeping the yes asked %d times, want once", asked)
+	}
+	for _, kept := range []struct {
+		tool      string
+		arguments map[string]any
+	}{
+		{"send_keys", map[string]any{"paneId": ownPane, "command": "echo after"}},
+		{"paste_text", map[string]any{"paneId": ownPane, "text": "echo pasted"}},
+		{"clear_pane", map[string]any{"paneId": ownPane}},
+	} {
+		if result := call(ctx, t, session, kept.tool, kept.arguments, nil); result.IsError {
+			t.Errorf("%s was refused after the yes was kept: %s", kept.tool, resultText(result))
+		}
+	}
+	if asked != 1 {
+		t.Errorf("writes after the kept yes asked %d more times", asked-1)
+	}
+
+	// Ending the pane is a different yes, so it asks whatever was said about
+	// typing there, and its form never offers to keep it.
+	remembering = false
+	if result := call(ctx, t, session, "kill_pane",
+		map[string]any{"paneId": ownPane}, nil); result.IsError {
+		t.Errorf("kill_pane was refused by an accepting client: %s", resultText(result))
+	}
+	if asked != 2 {
+		t.Errorf("ending the pane asked %d times in total, want one of its own", asked)
+	}
 }
 
 // TestEndingWhatHoldsTheCallerPaneIsAskedAbout covers the way around the write
@@ -1352,7 +1472,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 
 	arrange := func(
 		t *testing.T,
-		answer func(*sdk.ElicitRequest) string,
+		answer func(*sdk.ElicitRequest) *sdk.ElicitResult,
 	) (*sdk.ClientSession, context.Context, *int) {
 		t.Helper()
 		t.Setenv("TMUX_PANE", ownPane)
@@ -1368,7 +1488,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	}
 
 	t.Run("declining stops the write", func(t *testing.T) {
-		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "decline" })
+		session, ctx, asked := arrange(t, answering("decline"))
 		result := call(ctx, t, session, "send_keys", map[string]any{
 			"paneId": ownPane, "command": "echo into-my-own-terminal",
 		}, nil)
@@ -1426,7 +1546,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	})
 
 	t.Run("accepting lets it through", func(t *testing.T) {
-		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "accept" })
+		session, ctx, asked := arrange(t, answering("accept"))
 		result := call(ctx, t, session, "send_keys", map[string]any{
 			"paneId": ownPane, "command": "true",
 		}, nil)
@@ -1439,7 +1559,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	})
 
 	t.Run("a batch is asked about too", func(t *testing.T) {
-		session, ctx, asked := arrange(t, func(*sdk.ElicitRequest) string { return "decline" })
+		session, ctx, asked := arrange(t, answering("decline"))
 		var out struct {
 			Completed int `json:"completed"`
 			Results   []struct {
@@ -1470,7 +1590,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 		t.Setenv("TMUX_PANE", ownPane)
 		t.Setenv("TMUX", "")
 		session, target, ctx, asked := connectAsking(t,
-			func(*sdk.ElicitRequest) string { return "decline" })
+			answering("decline"))
 		workspace(ctx, t, session,
 			"session_name: elsewhere\nwindows:\n  - panes:\n      - {}\n      - {}\n")
 		socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
@@ -1549,7 +1669,7 @@ func TestEnteringCopyModeOnTheCallerPaneIsAskedAbout(t *testing.T) {
 	t.Setenv("TMUX_PANE", ownPane)
 	t.Setenv("TMUX", "")
 	session, target, ctx, asked := connectAsking(t,
-		func(*sdk.ElicitRequest) string { return "decline" })
+		answering("decline"))
 	workspace(ctx, t, session, "session_name: copymode\nwindows:\n  - panes:\n      - {}\n")
 	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || len(socket.Stdout) == 0 {

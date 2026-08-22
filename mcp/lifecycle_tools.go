@@ -152,7 +152,9 @@ func (t *tools) killPane(
 	}
 	// Named rather than resolved, so the guard is asked for here rather than
 	// by the resolver every other write goes through.
-	if err := t.confirmCallerWrite(ctx, request, pane, "ending it"); err != nil {
+	// Never remembered: this ends the pane the conversation is happening in,
+	// and a yes about typing there is not a yes about that.
+	if err := t.confirmCallerWrite(ctx, request, pane, "ending it", false); err != nil {
 		return nil, killPaneOutput{}, err
 	}
 	windowID := pane.WindowID()

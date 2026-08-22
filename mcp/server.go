@@ -290,6 +290,10 @@ type tools struct {
 	reaching atomic.Pointer[tmux.Server]
 	level    SafetyLevel
 	watchers *watchers
+	// consented names the panes a session allowed for the rest of it, and
+	// consentMutex guards it: calls arrive concurrently.
+	consented    map[*mcp.ServerSession]map[string]bool
+	consentMutex sync.Mutex
 	// dispatchers is how a batch reaches each advertised tool, filled in by
 	// register as the tools are advertised.
 	dispatchers map[string]dispatcher

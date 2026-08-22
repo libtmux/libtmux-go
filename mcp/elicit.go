@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -40,8 +41,21 @@ import (
 
 // callerWriteGuard is what a caller is told when the person says no.
 const callerWriteGuard = "the person declined: %s is the pane this server " +
-	"is running in, so %s there types into the terminal this conversation is " +
+	"is running in, so %s it reaches the terminal this conversation is " +
 	"happening in"
+
+// callerEndGuard is the same for something that ends the pane rather than
+// writing to it, where "types into" describes the wrong harm.
+const callerEndGuard = "the person declined: %s is the pane this server is " +
+	"running in, so %s it closes the terminal this conversation is happening in"
+
+// capitalise starts a sentence with the action it is about.
+func capitalise(action string) string {
+	if action == "" {
+		return action
+	}
+	return strings.ToUpper(action[:1]) + action[1:]
+}
 
 // resolvePaneToWrite resolves the pane a write is aimed at and, when that pane
 // is this server's own, asks the person before letting it through.
@@ -57,7 +71,7 @@ func (t *tools) resolvePaneToWrite(
 	if err != nil {
 		return tmux.Pane{}, err
 	}
-	if err := t.confirmCallerWrite(ctx, request, pane, action); err != nil {
+	if err := t.confirmCallerWrite(ctx, request, pane, action, true); err != nil {
 		return tmux.Pane{}, err
 	}
 	return pane, nil
@@ -101,6 +115,7 @@ func (t *tools) confirmCallerWrite(
 	request *mcp.CallToolRequest,
 	pane tmux.Pane,
 	action string,
+	remembers bool,
 ) error {
 	// A batch carries the request it was called with down to each of its
 	// calls, so a batched write is asked about like any other. Without a
@@ -115,16 +130,25 @@ func (t *tools) confirmCallerWrite(
 	}
 
 	identifier := pane.ID().String()
+	if remembers && t.allowed(request, identifier) {
+		return nil
+	}
+	// "there" belongs to a write and reads wrong on a kill, which reaches the
+	// same terminal by ending it rather than by typing into it.
+	reaches, guard := "typing into", callerWriteGuard
+	if !remembers {
+		reaches, guard = "ending", callerEndGuard
+	}
 	return t.askAboutTheCaller(ctx, request, identifier,
-		fmt.Sprintf("%s is the pane this MCP server is running in. %s there "+
-			"will reach the terminal you are talking to it through. Allow it?",
-			identifier, action),
-		fmt.Sprintf("%s is the pane this server is running in, so %s there "+
-			"types into the terminal you are talking to it through. This client "+
+		fmt.Sprintf("%s is the pane this MCP server is running in. %s it "+
+			"reaches the terminal you are talking to it through. Allow it?",
+			identifier, capitalise(action)),
+		fmt.Sprintf("%s is the pane this server is running in, so %s it "+
+			"reaches the terminal you are talking to it through. This client "+
 			"cannot be asked to allow it, so it is refused: name another pane, "+
 			"make one with split_window or create_session, or list_panes to find "+
-			"one where isCaller is false", identifier, action),
-		fmt.Sprintf(callerWriteGuard, identifier, action))
+			"one where isCaller is false", identifier, reaches),
+		fmt.Sprintf(guard, identifier, reaches), remembers)
 }
 
 // confirmCallerLoss asks before ending something the caller's pane is inside.
@@ -154,7 +178,11 @@ func (t *tools) confirmCallerLoss(
 			subject),
 		fmt.Sprintf("the person declined: %s holds the pane this server is "+
 			"running in, so ending it closes the terminal this conversation is "+
-			"happening in", subject))
+			"happening in", subject),
+		// Ending something is never remembered. The harm is not the same as a
+		// write's: a keystroke into the wrong terminal is disruptive, and
+		// ending the terminal ends the conversation that would have said so.
+		false)
 }
 
 // callerPaneOnThisServer is the caller's own pane, when this process runs in
@@ -181,15 +209,27 @@ func (t *tools) askAboutTheCaller(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	identifier, question, unaskable, declined string,
+	remembers bool,
 ) error {
+	// A yes-or-no question, except where the yes can be kept: the client
+	// renders this as a form either way, so the field costs nothing it had.
+	schema := map[string]any{"type": "object", "properties": map[string]any{}}
+	if remembers {
+		schema["properties"] = map[string]any{
+			"remember": map[string]any{
+				"type":        "boolean",
+				"title":       "Allow this pane for the rest of the session",
+				"description": "Stop asking before writing to this pane. Ending it still asks.",
+			},
+		}
+	}
 	result, err := request.Session.Elicit(ctx, &mcp.ElicitParams{
 		Message: question,
-		// No fields to fill in: the answer is the action, and asking for a
-		// value as well would make a yes-or-no question into a form.
-		RequestedSchema: map[string]any{
-			"type":       "object",
-			"properties": map[string]any{},
-		},
+		// One field, so the person says how long the yes lasts rather than
+		// this server deciding. Remembering every accept would widen a
+		// consent nobody gave; remembering none is the question again on
+		// every keystroke.
+		RequestedSchema: schema,
 	})
 	if err != nil {
 		// A client that cannot be asked is refused rather than waved through.
@@ -210,5 +250,43 @@ func (t *tools) askAboutTheCaller(
 	if result.Action != "accept" {
 		return errors.New(declined)
 	}
+	if remember, ok := result.Content["remember"].(bool); ok && remember && remembers {
+		t.remember(request, identifier)
+	}
 	return nil
+}
+
+// rememberedSessions bounds how many clients' answers are kept at once.
+//
+// Nothing tells this server that a session has gone -- the SDK offers no
+// closed hook -- so the map would otherwise grow for the life of a hosted
+// server. A stdio server has one session and never reaches this; exceeding it
+// costs one client being asked again, which is the safe direction.
+const rememberedSessions = 32
+
+// allowed reports a pane this session already said yes to for the rest of it.
+func (t *tools) allowed(request *mcp.CallToolRequest, pane string) bool {
+	t.consentMutex.Lock()
+	defer t.consentMutex.Unlock()
+	return t.consented[request.Session][pane]
+}
+
+// remember keeps one session's yes about one pane.
+func (t *tools) remember(request *mcp.CallToolRequest, pane string) {
+	t.consentMutex.Lock()
+	defer t.consentMutex.Unlock()
+	if t.consented == nil {
+		t.consented = map[*mcp.ServerSession]map[string]bool{}
+	}
+	if _, known := t.consented[request.Session]; !known &&
+		len(t.consented) >= rememberedSessions {
+		// Forgetting everything rather than choosing whose answer to drop:
+		// the choice would need an ordering nothing here keeps, and the cost
+		// of being wrong is one question asked again.
+		clear(t.consented)
+	}
+	if t.consented[request.Session] == nil {
+		t.consented[request.Session] = map[string]bool{}
+	}
+	t.consented[request.Session][pane] = true
 }
