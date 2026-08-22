@@ -1376,6 +1376,71 @@ func TestBatchArgumentsAreCheckedLikeAnyCall(t *testing.T) {
 	}
 }
 
+// TestATimedOutRunLeavesNothingOfItsOwnInThePane covers the wrapper outliving
+// the wait that started it.
+//
+// A run that times out is still running, and the directory it records itself
+// in is removed when the call returns. Minutes later the command finishes, the
+// wrapper reaches its own bookkeeping, and the shell reports the redirections
+// it cannot open -- four lines of this package's temporary paths, printed into
+// somebody's terminal long after the call that caused them, and read as
+// command output by whatever runs next.
+//
+//libtmux:real-tmux
+func TestATimedOutRunLeavesNothingOfItsOwnInThePane(t *testing.T) {
+	// A plain POSIX shell, which is what the wrapper is written for, and a
+	// prompt that is one character rather than whoever's shell the suite
+	// inherited.
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: outlived\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	var timedOut struct {
+		TimedOut bool `json:"timedOut"`
+	}
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "sleep 3", "timeoutSeconds": 1,
+	}, &timedOut)
+	if !timedOut.TimedOut {
+		t.Fatal("the command did not outlast its wait")
+	}
+
+	// Wait for the pane to go quiet, which is after the command has finished
+	// and the wrapper behind it has run its own lines. Waiting for the command
+	// to leave instead returns before those lines are written.
+	var quiet struct {
+		Outcome string `json:"outcome"`
+	}
+	call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "idleSeconds": 2, "timeoutSeconds": 30,
+	}, &quiet)
+	if quiet.Outcome != "idle" {
+		t.Fatalf("the pane settled as %q, not idle", quiet.Outcome)
+	}
+
+	var shown struct {
+		Lines []string `json:"lines"`
+	}
+	call(ctx, t, session, "capture_pane", map[string]any{"paneId": pane}, &shown)
+	whole := strings.Join(shown.Lines, "\n")
+	for _, leaked := range []string{"cannot create", "Directory nonexistent", "status"} {
+		if strings.Contains(whole, leaked) {
+			t.Errorf("the pane holds %q after a timed-out run:\n%s", leaked, whole)
+		}
+	}
+
+	// And the next run reads its own output rather than the leftovers.
+	var next struct {
+		Output []string `json:"output"`
+	}
+	call(ctx, t, session, "run_command", map[string]any{
+		"paneId": pane, "command": "echo after-the-timeout",
+	}, &next)
+	if len(next.Output) != 1 || next.Output[0] != "after-the-timeout" {
+		t.Errorf("the next run read %q", next.Output)
+	}
+}
+
 // TestSendKeysRecoversAPaneLeftBusy covers the way back from a run_command
 // that timed out. The pane still holds that command, so every later one times
 // out too, and nothing else in the tool set can interrupt it.

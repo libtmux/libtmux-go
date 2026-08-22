@@ -330,8 +330,18 @@ func (t *tools) startCommand(
 		shellQuote(socket.Stdout[0]),
 		shellQuote(pane.ID().String()),
 	)
+	//
+	// Everything the wrapper does for itself is a brace group with its errors
+	// discarded, so that a run outliving this directory stays invisible: a
+	// command still running when its wait times out reaches these lines after
+	// the directory is gone, and a shell reports a redirection it cannot open
+	// on its own, into the pane. Silencing the redirection alone does not do
+	// it -- a shell applies them left to right and has already failed on the
+	// first by the time it reads the second. The command keeps its own stderr,
+	// which is the output being collected.
 	script := fmt.Sprintf(
-		"%s > %s; ( %s ); printf %%s $? > %s; %s > %s; %s -S %s wait-for -S %s\n",
+		"{ %s > %s; } 2>/dev/null; ( %s ); { printf %%s $? > %s; } 2>/dev/null; "+
+			"{ %s > %s; } 2>/dev/null; { %s -S %s wait-for -S %s; } 2>/dev/null\n",
 		mark,
 		shellQuote(openedPath),
 		input.Command,

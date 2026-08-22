@@ -100,6 +100,17 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A `run_command` that times out leaves nothing of its own in the pane. The
+command is still running when the call returns, and the directory it records
+itself in was removed at that point, so minutes later the wrapper reached its
+own bookkeeping and the shell printed four lines naming this package's
+temporary paths into somebody's terminal -- long after the call that caused
+them, and read as command output by whatever ran next. The wrapper's own writes
+now discard their errors. Redirecting one of them is not enough: a shell
+applies redirections left to right and has already failed on the first by the
+time it reads the second, so each is a brace group with its stderr discarded.
+The command keeps its own stderr, which is the output being collected.
+
 A missing pane or window names the listing that would have found one, from
 every tool rather than most of them. `kill_pane`, `kill_window`, `move_pane`,
 `move_window`, `select_pane`, and `select_window` reached tmux directly and
