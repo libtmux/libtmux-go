@@ -287,7 +287,7 @@ command usually leads to its method without a lookup.
 | [`PARITY.md`](PARITY.md) | How the surface is checked against the Python libtmux |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
 | [`CHANGELOG.md`](CHANGELOG.md) | What each release changed |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | The gates a change has to pass |
+| [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) | The gates a change has to pass |
 | [`SECURITY.md`](SECURITY.md) | What this software executes, and how to report a hole in it |
 | [`AGENTS.md`](AGENTS.md) | Working on this repository |
 | [`examples/`](examples/) | Runnable programs for each of the above |
