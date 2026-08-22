@@ -100,6 +100,28 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A yes about writing into the caller's own pane can be kept for the rest of the
+session. The guard asked before every write, so an agent doing five things in
+that pane asked five times, and a guard that asks every time is one people
+learn to click through. The elicitation now carries a field for it, and the yes
+covers writing to that pane and nothing else: ending the pane, its window, its
+session, or the server asks again whatever was said about typing there, and the
+form those ask on does not offer to keep the answer. Nothing tells this server
+that a session has gone, so the answers are bounded at 32 clients and all
+forgotten together when that is passed; the cost of being wrong is one question
+asked again.
+
+`capture_since`'s cursor is about a third smaller: 586 bytes per reply to 374
+on the benchmark that measures it. Nothing reads a cursor but the server that
+issued it, so its field names are one character, its row fingerprints are
+base64 rather than base16, and the runs of them are packed into one string
+instead of a JSON array that spends two quotes and a comma per row. It does not
+make `capture_since` cheaper than a whole capture of a nearly-blank screen --
+a cursor is fixed overhead and that screen is nearly nothing -- but it moves
+the break-even from about 586 bytes of screen to about 374. Cursors are now
+`capture-since-v2`, and one from the older format is refused rather than read
+as a fresh start.
+
 A notification the coalescing window holds back is deferred rather than
 dropped. Two notifications about one pane inside a quarter of a second are one
 notification, which is what the window is for; but a client re-reads when it is
