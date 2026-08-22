@@ -1376,6 +1376,48 @@ func TestBatchArgumentsAreCheckedLikeAnyCall(t *testing.T) {
 	}
 }
 
+// TestACommandThatPrintedBlankLinesSaysSo covers the one answer that reads as
+// its own opposite.
+//
+// A blank row is an empty line, and a capture that is nothing but empty lines
+// arrives as no lines at all, so a command whose whole output is blank lines
+// was reported as having printed nothing. Those are different answers, and the
+// reply has no other field that tells them apart.
+//
+//libtmux:real-tmux
+func TestACommandThatPrintedBlankLinesSaysSo(t *testing.T) {
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+	workspace(ctx, t, session, "session_name: blanks\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	for _, printed := range []struct {
+		command string
+		want    []string
+	}{
+		{"echo", []string{""}},
+		{`printf '\n\n'`, []string{"", ""}},
+		{`printf '\n\nx\n'`, []string{"", "", "x"}},
+		// Still distinguishable from a command that printed nothing at all.
+		{"true", nil},
+	} {
+		t.Run(printed.command, func(t *testing.T) {
+			var reported struct {
+				Output     []string `json:"output"`
+				ExitStatus *int     `json:"exitStatus"`
+			}
+			call(ctx, t, session, "run_command", map[string]any{
+				"paneId": pane, "command": printed.command, "timeoutSeconds": 15,
+			}, &reported)
+			if reported.ExitStatus == nil || *reported.ExitStatus != 0 {
+				t.Fatalf("exit status = %v, want 0", reported.ExitStatus)
+			}
+			if !slices.Equal(reported.Output, printed.want) {
+				t.Errorf("output = %q, want %q", reported.Output, printed.want)
+			}
+		})
+	}
+}
+
 // TestATimedOutRunLeavesNothingOfItsOwnInThePane covers the wrapper outliving
 // the wait that started it.
 //

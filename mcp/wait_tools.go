@@ -493,6 +493,9 @@ func attachCommandOutput(
 		Start:       tmux.CaptureLine(opened.row - now.historySize),
 		JoinWrapped: true,
 	}
+	// rows is how many rows the command wrote, known only where the closing
+	// mark bounded the read.
+	rows := 0
 	// The closing row belongs to the output only when the cursor stopped part
 	// way along it. A cursor at column zero means the last line ended, so that
 	// row holds whatever the shell drew next, and reading it returns a prompt
@@ -537,12 +540,21 @@ func attachCommandOutput(
 				return
 			}
 			request.End = tmux.CaptureLine(end - now.historySize)
+			rows = end - opened.row + 1
 		}
 	}
 	lines, err := pane.Capture(ctx, request)
 	if err != nil {
 		output.OutputUnavailable = err.Error()
 		return
+	}
+	// A blank row is an empty line, and a capture that is nothing but empty
+	// lines arrives as no lines at all. The rows the marks counted are the
+	// answer: a command whose whole output is blank lines printed them, and
+	// reporting nothing says it printed nothing. Only when the capture came
+	// back empty -- a short one otherwise is wrapped rows rejoined.
+	if len(lines) == 0 && rows > 0 {
+		lines = make([]string, rows)
 	}
 	// Rejoining preserves the spaces a row is padded with, and tmux only trims
 	// them itself from 3.4. Trimming here rather than leaving it to tmux is

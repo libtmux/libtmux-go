@@ -100,6 +100,12 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A `run_command` whose whole output is blank lines reports them, rather than
+reporting that the command printed nothing. A blank row is an empty line, and a
+capture that is nothing but empty lines arrives as no lines at all; the marks
+already counted the rows, so the answer was there to give. `echo` on its own is
+the shortest way to see it.
+
 `mcp/PARITY.md` sets out where this server and the Python server of the same
 name differ: the tool surface, what each knows about its own pane and what it
 refuses because of it, watching, the schemas, discovery, how each addresses the
