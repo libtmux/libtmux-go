@@ -60,6 +60,36 @@ func TestACoalescedNotificationIsDeferredNotDropped(t *testing.T) {
 	}
 }
 
+// TestUnsubscribingDropsThePanesRecord covers the two maps keyed by URI.
+//
+// Neither is large and nothing fails when they grow, which is why they grew: a
+// server watching panes that come and go kept one entry per pane it had ever
+// watched, for as long as the process lived.
+func TestUnsubscribingDropsThePanesRecord(t *testing.T) {
+	const uri = "tmux://panes/%7/content"
+	watchers := newWatchers(
+		mcp.NewServer(&mcp.Implementation{Name: "pruning", Version: "1"}, nil),
+		tmux.NewServer(tmux.ServerOptions{SocketName: "pruning-unused"}),
+	)
+	watchers.subscribed[uri] = 1
+	watchers.spelled[uri] = map[string]int{uri: 1}
+
+	ctx := context.Background()
+	watchers.notify(ctx, uri) // records when it went out
+	watchers.notify(ctx, uri) // inside the window, so one is owed
+	if watchers.at(uri).IsZero() || !watchers.owes(uri) {
+		t.Fatal("the notification did not leave a record to drop")
+	}
+
+	watchers.remove(uri, uri)
+	if !watchers.at(uri).IsZero() {
+		t.Error("the coalescing window outlived the subscription")
+	}
+	if watchers.owes(uri) {
+		t.Error("the deferral outlived the subscription")
+	}
+}
+
 // at is when the last notification about one URI went out.
 func (w *watchers) at(uri string) time.Time {
 	w.mutex.Lock()
