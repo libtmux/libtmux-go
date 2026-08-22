@@ -7,7 +7,7 @@ version.
 Modules are tagged per directory, so each carries its own version: the core as
 `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`.
 
-## Unreleased
+## v0.0.1-alpha.3, workspace/v0.0.1-alpha.3, mcp/v0.0.1-alpha.6
 
 ### All modules
 
@@ -71,14 +71,17 @@ Modules are tagged per directory, so each carries its own version: the core as
 - `mcp/go.mod` now requires the current core. It required `v0.0.1-alpha.1` for
   the whole life of `v0.0.1-alpha.2`, and it is the one module here with no
   `replace` directive, so that requirement is what `go install` resolved.
-- The registry entry is named for the language rather than the project.
-- The READMEs no longer name a version to install. Both told a reader to fetch
-  `v0.0.1-alpha.1`, which is retracted, so the command refused to run.
 
 ### workspace
 
 - A rejection with no line to point at no longer reports "line 0". An empty or
   unparseable document reported a line that cannot exist.
+
+## mcp/v0.0.1-alpha.5
+
+- The registry entry is named for the language rather than the project.
+- The READMEs no longer name a version to install. Both told a reader to fetch
+  `v0.0.1-alpha.1`, which is retracted, so the command refused to run.
 
 ## mcp/v0.0.1-alpha.4
 
