@@ -616,7 +616,7 @@ func (p Pane) Join(ctx context.Context, request JoinPaneRequest) (Pane, error) {
 // to "3.7" uses the placeholder-and-rename workaround. On exactly 3.7, empty
 // Name can leave the new window named "libtmux". A nonempty Name requires a
 // second rename, which may fail after the window was created. Versions such as
-// 3.7a and 3.7b do not take this workaround.
+// 3.7a, 3.7b and 3.7c do not take this workaround.
 //
 // If tmux prints a valid WindowID before a transport error, a 3.7 rename fails,
 // or exact refresh fails, BreakPane returns the known or predicted window

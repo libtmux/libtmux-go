@@ -141,7 +141,7 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 // requires tmux 3.7 or newer; older versions synchronously deliver a warning to
 // the caller-goroutine [WarningHandler] before running the reduced command with
 // tmux's default format.
-// tmux 3.7, 3.7a, and 3.7b redirect a table's sole matching binding to a
+// tmux 3.7, 3.7a, 3.7b, and 3.7c redirect a table's sole matching binding to a
 // client status message, leaving stdout empty; this method preserves that
 // upstream and Python behavior. Development tmux has corrected the issue.
 // A list failure is returned rather than answered with no rows.

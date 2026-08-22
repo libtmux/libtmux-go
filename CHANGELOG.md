@@ -15,6 +15,10 @@ Modules are tagged per directory, so each carries its own version: the core as
   support window, so it moves as releases age out. A consumer on an older Go
   cannot build, and `go get` passes the same minimum on to anything importing
   these modules. No exported identifier changed.
+- tmux 3.7c no longer fails the key-binding compatibility check. It leaves
+  stdout empty for a table's sole binding exactly as 3.7 through 3.7b do, and
+  the check now expects that of it. The supported range is unchanged: 3.7c is
+  not in the tested matrix, so nothing here claims to check it.
 
 ### tmux/tmuxtest
 

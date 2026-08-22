@@ -162,7 +162,7 @@ func TestListKeysSingleBindingCompatibilityAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Version() error = %v", err)
 	}
 	switch version.String() {
-	case "3.7", "3.7a", "3.7b":
+	case "3.7", "3.7a", "3.7b", "3.7c":
 		if lines == nil || len(lines) != 0 {
 			t.Fatalf("ListKeys() on tmux %s = %#v, want nonnil compatibility empty", version, lines)
 		}
