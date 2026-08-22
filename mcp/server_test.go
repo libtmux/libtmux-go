@@ -3503,17 +3503,19 @@ func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
 	}
 }
 
-// TestAWithheldToolIsUnreachableAtEveryLevel covers the whole cross-product of
-// tool and safety level, rather than the one tool a spot check would try.
+// TestEveryToolAgreesWithEverySafetyLevel covers the whole cross-product of
+// tool and level, in both directions, rather than the one tool a spot check
+// would try.
 //
-// A level that withholds a tool from the listing and still dispatches it is
-// worse than one that never withheld it: the operator believes the bound is in
-// place. Which tools each level withholds is derived from the annotations, so
-// the set changes whenever a tool is added, and a spot check on kill_server
-// says nothing about the other thirty-five.
+// A level that withholds a tool and still dispatches it is worse than one that
+// never withheld it, because the operator believes the bound is in place. A
+// level that offers a tool and then refuses it for safety is the same lie told
+// the other way round. Which tools a level withholds comes from the
+// annotations, so the set moves whenever a tool is added, and a spot check on
+// kill_server said nothing about the other thirty-five.
 //
 //libtmux:real-tmux
-func TestAWithheldToolIsUnreachableAtEveryLevel(t *testing.T) {
+func TestEveryToolAgreesWithEverySafetyLevel(t *testing.T) {
 	everything := func(t *testing.T) map[string]bool {
 		t.Helper()
 		t.Setenv("LIBTMUX_SAFETY", "destructive")
@@ -3564,7 +3566,29 @@ func TestAWithheldToolIsUnreachableAtEveryLevel(t *testing.T) {
 			if withheld == 0 {
 				t.Errorf("%s withholds nothing, which is not what it is for", level)
 			}
-			t.Logf("%s withholds %d of %d, none reachable", level, withheld, len(everything))
+
+			// The other half of the cross-product: a tool a level does offer
+			// has to work there. Listing one and then failing it because of
+			// the level is the same lie as withholding one and dispatching it,
+			// told the other way round.
+			for name := range offered {
+				result, err := session.CallTool(ctx, &sdk.CallToolParams{
+					Name: name, Arguments: map[string]any{},
+				})
+				if err != nil {
+					t.Errorf("%s is offered at %s and the call failed: %v", name, level, err)
+					continue
+				}
+				// Most refuse for want of a required argument, which is the
+				// tool answering rather than the level withholding it. What
+				// must not appear is the safety refusal.
+				if result.IsError && strings.Contains(resultText(result), "safety") {
+					t.Errorf("%s is offered at %s and refused for safety: %s",
+						name, level, resultText(result))
+				}
+			}
+			t.Logf("%s: %d withheld and unreachable, %d offered and none refused for safety",
+				level, withheld, len(offered))
 		})
 	}
 }
