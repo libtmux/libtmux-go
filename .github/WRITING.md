@@ -1,17 +1,19 @@
 # Writing
 
-How this repository writes: doc comments, `CHANGELOG.md`, release notes, commit
-messages, Markdown, and source comments. It governs every surface a reader
-reaches, and it applies to a one-line doc comment as much as to a release note.
+How this repository writes: `README.md`, doc comments, source comments, error
+strings, command-line help, `CHANGELOG.md`, release notes, Markdown, and commit
+messages. It governs every surface a reader reaches, and it applies to a
+one-line flag description as much as to a release note.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers how we work — setting up, the gates,
 where a test goes. This covers how we write.
 
 ## Voice
 
-Three surfaces, one voice. A doc comment says what a caller may rely on; a
-changelog entry says what changed; prose says what happens. All three are
-present tense, lead with the thing being described, and stop. Why it was built
+Many surfaces, one voice. A doc comment says what a caller may rely on; a
+changelog entry says what changed; an error string names what failed; prose
+says what happens. All of them are present tense, lead with the thing being
+described, and stop. Why it was built
 that way belongs in the commit message, which is timestamped and attached to
 the diff.
 
@@ -34,6 +36,41 @@ The most useful editing operation is deleting the introductory sentence.
 | "delve into" | "read", or omit |
 | "best practices" | name the practice |
 | "in order to" | "to" |
+
+## README
+
+The README is the door; pkg.go.dev is the manual. It answers what this is, why
+you would reach for it, how to install it, what normal use looks like, and what
+contract you are buying into — in that order, and then it stops.
+
+Lead with the noun and what it does. A reader decides in one sentence whether
+to keep reading, and a paragraph of context spends that sentence on nothing.
+
+Get to code that runs. A library shows the smallest honest integration, and
+honest means the errors are handled: an example that elides `if err != nil` is
+not an example of Go. Every command has to succeed on a clean machine, because
+a reader runs them literally, and so does an agent.
+
+State what a reader would otherwise infer from the source:
+
+- Defaults, including what an empty or zero value means. A default is part of
+  the contract.
+- Failure behaviour a caller has to plan around: exit status, retries, what is
+  overwritten, what is assumed about the network or the filesystem.
+- The support policy — which Go versions, which tmux versions — kept honest
+  against the `go` directive.
+
+Claims have to be falsifiable. "No runtime dependencies" is one. A performance
+claim carries its number and the command that reproduces it, or it does not
+appear. Three badges is plenty.
+
+Say what the library is not for. A short list of non-goals is worth more to
+someone evaluating it than another list of features, because it is the part
+they cannot read off the API surface.
+
+Do not restate pkg.go.dev. The README explains the project and the package
+documentation explains the API; two descriptions of one API is one description
+that will be wrong.
 
 ## Doc comments
 
@@ -71,6 +108,26 @@ characters they are.
 Square brackets are doc links, not emphasis. `[Run]` and `[tmux.Server]`
 resolve; a bracketed unexported identifier resolves nowhere and renders as its
 own brackets on pkg.go.dev, so write the thing in prose instead.
+
+A package comment lives in `doc.go` and begins `Package <name>`. Its later
+paragraphs are where what holds across the whole package goes, rather than
+across any one declaration: whether it starts goroutines, whether it keeps
+global state, what the zero value of the main type does, who controls
+scheduling.
+
+`// Deprecated:` is read by tooling, not only by people. Give it its own
+paragraph, name the replacement, and leave the rest of the comment describing
+what the declaration still does.
+
+Prefer an `Example` to another paragraph. One ending in an `// Output:` comment
+is compiled, run by `go test`, and rendered on pkg.go.dev beside the
+declaration, so it cannot describe an API that no longer exists — which no
+amount of prose can promise. What enforces the output comment is in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+pkg.go.dev renders nothing for a module without a recognised `LICENSE`, and it
+caches a tagged version permanently. Preview with a local `pkgsite` before
+tagging, not after.
 
 ## Source comments
 
@@ -155,6 +212,41 @@ exempt from nothing else. Ceiling: a good man page entry.
 Exported doc comments and `Example` functions fall under this exception — an
 `Example` function is compiled and run.
 
+## Error messages
+
+An error string names the immediate failure, in lowercase, with no trailing
+period. It is a fragment that will be wrapped, not a sentence that will be read
+alone.
+
+Wrap with `%w` and let context build outward, so the chain reads from the
+outermost operation inward:
+
+```text
+start server: load config: decode relay.yaml: unknown field "lisetn"
+```
+
+Each frame adds the operation it was attempting, not a restatement of the frame
+beneath it. `fmt.Errorf("connect a client: %w", err)` is a frame;
+`fmt.Errorf("an error occurred: %w", err)` is not.
+
+What a binary prints at the top is a different surface from the chain beneath
+it, and may say more than the chain does — a suggestion, a file and line, the
+flag that would fix it. Keep the chain machine-shaped and put the help beside
+it.
+
+## Command-line help
+
+`--help` is a surface, not a dump of the flag set. Every flag carries a
+lowercase description and an explicit default, including what an empty value
+means, which is the part a reader cannot guess:
+
+```text
+-socket-name string
+    tmux socket name; empty uses tmux's default socket
+```
+
+A description that restates the flag name is not a description.
+
 ## The changelog
 
 A ledger, not a narrative. It is scanned, and the question a reader is asking
@@ -192,7 +284,29 @@ refactor that changes nothing observable is not an entry.
 Entries land under `## Unreleased`. The maintainer assigns the version when
 cutting a release, so nothing here predicts one.
 
-Release notes follow the same rules, and
+## Release notes
+
+The changelog is a ledger; a release page is a briefing. The ledger answers
+"does this entry affect me", one line at a time. The briefing answers "should I
+take this upgrade, and what will it cost me", so it leads with the two or three
+things worth noticing and leaves the rest to the ledger.
+
+Each item runs change, then implication, then whether the reader has to act:
+
+> Routing tables are rebuilt incrementally. Configurations that took hundreds
+> of milliseconds to reload should complete faster. No configuration change is
+> required.
+
+Say which kind of change each one is, because that is what an upgrade review
+sorts by: behaviour, API, performance, operational, migration required, or no
+action required. The last is worth writing down — a reader who has to derive it
+derives it slowly.
+
+A retracted release gets a `retract` directive in `go.mod` and a line saying so
+the same day. A security fix carries its GHSA or CVE identifier and is filed to
+the Go vulnerability database, so `govulncheck` reports it to the people
+running the old version.
+
 [Go's release notes](https://go.dev/doc/go1.24) are the model.
 
 ## Markdown
@@ -263,6 +377,18 @@ what:
 Keep the subject to 50 characters or fewer, excluding any trailing `(#NN)` pull
 request reference, and wrap body lines at 72. Separate the `why:` and `what:`
 blocks with a blank line.
+
+The subject completes "this change modifies X to ___", which is why it is a
+verb phrase rather than a noun. "Add a literal flag" completes it; "Literal
+flag changes" does not.
+
+The body carries the reasoning that [Source comments](#source-comments) keeps
+out of the code: why this shape and not the obvious one, what was ruled out,
+which failure prompted it. It is what a maintainer reaches through `git blame`
+years later, and the diff never contains it.
+
+One logical change per commit. A branch that will be reviewed carries no `wip`
+and no "address review" — those name states of the work, not changes to it.
 
 Common types:
 
