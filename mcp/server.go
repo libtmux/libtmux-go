@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,6 +94,27 @@ var recipeValues = func() []any {
 	return values
 }()
 
+// listsAreLists drops null from every array in a schema, and recurses.
+//
+// jsonschema-go infers a Go slice as null-or-array because a nil slice
+// marshals to null. Nothing here returns one: a reply's collections are built
+// empty and appended to, which is the shape every listing documents, so
+// publishing null-or-array told a client to handle a case that never arrives.
+func listsAreLists(schema *jsonschema.Schema) {
+	if schema == nil {
+		return
+	}
+	if len(schema.Types) > 1 && slices.Contains(schema.Types, "array") {
+		schema.Types = slices.DeleteFunc(schema.Types, func(kind string) bool {
+			return kind == "null"
+		})
+	}
+	listsAreLists(schema.Items)
+	for _, property := range schema.Properties {
+		listsAreLists(property)
+	}
+}
+
 // constrain writes a tool's closed sets into the schema clients validate
 // against.
 func constrain(name string, schema *jsonschema.Schema) {
@@ -119,6 +141,17 @@ func register[In, Out any](
 		if schema, err := jsonschema.For[In](nil); err == nil {
 			constrain(tool.Name, schema)
 			tool.InputSchema = schema
+		}
+	}
+	// Inferred here too, so a list can be published as a list. A Go slice
+	// infers as null-or-array, which says the opposite of what every reply
+	// here promises: a collection that came back empty is an empty array, so
+	// a client can count it without checking for null first. The sweep over
+	// the whole surface is what holds the code to the tighter claim.
+	if tool.OutputSchema == nil {
+		if schema, err := jsonschema.For[Out](nil); err == nil {
+			listsAreLists(schema)
+			tool.OutputSchema = schema
 		}
 	}
 	// The same schema the SDK enforces on a direct call, kept so a batch can

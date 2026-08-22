@@ -100,6 +100,19 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+Every collection an MCP reply carries is published as an array rather than as
+null-or-array. A Go slice infers as either, because a nil one marshals to null,
+so twenty-four fields across the surface told a client to handle a case that
+never arrives — and the one place it did arrive, `attachedClients` on a server
+that is not running, went unnoticed because the schema permitted it. The SDK
+validates a reply against this schema before sending it, so a collection that
+came back nil is now the server's error rather than the client's surprise.
+
+Every tool is called and every reply held to the schema that tool publishes.
+Nothing checked that before: a contract the server declares and then breaks is
+a bug no assertion had to be written for, and it surfaces in whichever client
+generated its types from the schema.
+
 A yes about writing into the caller's own pane can be kept for the rest of the
 session. The guard asked before every write, so an agent doing five things in
 that pane asked five times, and a guard that asks every time is one people
