@@ -165,9 +165,9 @@ and the file it is in is not one the change touched.
 
 ## Pull requests
 
-A passing gate is evidence only once it has been shown capable of failing, so
-pair a new test with a deliberate break that proves it bites. Keep the change
-narrowly scoped: unrelated cleanup belongs in its own commit, or its own pull
-request.
+One subject per pull request. Unrelated cleanup found along the way belongs in
+its own commit, and usually in its own pull request.
 
-Commit format is in [WRITING.md](WRITING.md).
+Commit format is in [WRITING.md](WRITING.md). The constraints every change is
+held to — scope, reuse, and the rule that a new test is paired with a
+deliberate break proving it bites — are in [`AGENTS.md`](../AGENTS.md).
