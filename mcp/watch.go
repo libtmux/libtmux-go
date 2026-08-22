@@ -64,6 +64,9 @@ type watchers struct {
 	// The SDK routes an update by the string a session subscribed with, so a
 	// pane watched as %1 has to be told as %1.
 	spelled map[string]map[string]int
+	// owed names the URIs whose notification the interval held back and which
+	// a timer will send when it expires.
+	owed map[string]bool
 	// ready is closed once a control connection is open, and replaced whenever
 	// the set of them is rebuilt. A subscriber waits on the one taken before
 	// its own rebuild, so it waits for a connection that will carry its pane
@@ -89,6 +92,7 @@ func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
 		subscribed: map[string]int{},
 		spelled:    map[string]map[string]int{},
 		notified:   map[string]time.Time{},
+		owed:       map[string]bool{},
 		ready:      make(chan struct{}),
 	}
 }
@@ -454,16 +458,36 @@ func (w *watchers) affected(notification tmux.ControlNotification) []string {
 }
 
 // notify sends one resource update, no more often than the interval allows.
+//
+// A notification the interval holds back is deferred rather than dropped. The
+// last write of a burst commonly lands inside the shadow of the one before it,
+// and a client re-reading on the earlier notification reads the pane before
+// that write arrived: dropping it leaves the client a few hundred milliseconds
+// stale with nothing coming to correct it, which for a pane that then goes
+// quiet is permanent.
 func (w *watchers) notify(ctx context.Context, uri string) {
 	w.mutex.Lock()
 	watched := w.subscribed[uri] > 0
-	recent := time.Since(w.notified[uri]) < watchNotifyInterval
+	since := time.Since(w.notified[uri])
+	recent := since < watchNotifyInterval
 	var spellings []string
 	if watched && !recent {
 		w.notified[uri] = time.Now()
 		for spelling := range w.spelled[uri] {
 			spellings = append(spellings, spelling)
 		}
+	}
+	// One timer per URI, because a burst suppresses many and they all describe
+	// the same change: the deferred notification says the pane moved, not how
+	// often.
+	if watched && recent && !w.owed[uri] {
+		w.owed[uri] = true
+		time.AfterFunc(watchNotifyInterval-since, func() {
+			w.mutex.Lock()
+			w.owed[uri] = false
+			w.mutex.Unlock()
+			w.notify(context.WithoutCancel(ctx), uri)
+		})
 	}
 	w.mutex.Unlock()
 	if !watched || recent {

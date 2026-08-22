@@ -100,6 +100,13 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A notification the coalescing window holds back is deferred rather than
+dropped. Two notifications about one pane inside a quarter of a second are one
+notification, which is what the window is for; but a client re-reads when it is
+told, so a write landing after that read and before the window expired was
+never mentioned again, and a pane that then went quiet left the client stale
+with nothing coming to correct it.
+
 The three batch tools take `onError`, which chooses between stopping at the
 first failure and running the calls after it. Stopping is still the default and
 suits a sequence — split, resize, run — where a step nobody took makes the ones
