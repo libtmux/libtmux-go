@@ -454,5 +454,5 @@ $ go run ./cmd/libtmux-mcp -socket-name my-application
 
 It reads JSON-RPC from stdin, so a pipe that closes immediately ends the server
 before it answers. Hold stdin open while waiting for replies. See
-[`AGENTS.md`](../AGENTS.md) for what else is worth knowing before
+[`AGENTS.md`](AGENTS.md) for what else is worth knowing before
 testing this by hand.
