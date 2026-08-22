@@ -827,6 +827,35 @@ resolve, so the core is tagged before the modules that depend on it. The local
 `replace` directives are what make the tree build before any of that exists;
 they are not a substitute for the requirement.
 
+## One tmux server, chosen once
+
+The MCP server addresses the socket it was started with and nothing in a call
+can retarget it: `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET`, or
+`LIBTMUX_SOCKET_PATH`, resolved at launch, with `-doctor` naming which was
+taken. The Python server of the same name takes `socket_name` on 48 of its
+tools instead, so a call chooses.
+
+This is a decision rather than an omission, and the reasoning is not
+ergonomics. An MCP server runs with the operator's authority and is driven by a
+model reading text it did not write. A per-call socket makes "which tmux" part
+of that text, so a model that is talked into a socket path reaches a tmux the
+operator never granted — every other server on the machine, including one
+holding a session someone is working in. Fixing the target at launch makes that
+unreachable by construction rather than by a check that has to be right every
+time.
+
+Two alternatives were weighed. Taking a socket per call and validating it
+against an operator-declared allowlist keeps the reach and adds a list to get
+wrong, and the failure is silent: an allowlist with one entry too many is
+indistinguishable from a correct one until it matters. Running one server per
+tmux socket is what this design already supports, costs a process, and is what
+`list_servers` exists to make discoverable — it reports the other servers on
+the machine precisely so a person can point a second instance at one, while
+nothing a model says can reach them from this one.
+
+The cost is real and is not hidden: a client that wants two tmux servers runs
+two of these. That is the trade, taken deliberately.
+
 ## Bakeoff decisions
 
 | Problem | Selected approach | Rejected approaches |
