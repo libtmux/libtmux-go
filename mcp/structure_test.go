@@ -1,13 +1,19 @@
 package mcp
 
 import (
+	"context"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // TestKeysReachAPaneOnlyThroughTheDeliveryResolver is the gate under the
@@ -81,5 +87,69 @@ func TestKeysReachAPaneOnlyThroughTheDeliveryResolver(t *testing.T) {
 	if checked < 3 {
 		t.Errorf("only %d functions were found to type into a pane; the shape "+
 			"this looks for has moved", checked)
+	}
+}
+
+// TestEveryClosedSetReachesTheSchema gates closedArguments against the tools
+// moving out from under it. An argument renamed or a tool withdrawn leaves an
+// entry naming nothing, and the set stops being published while the table
+// still claims it: on the wire the argument goes back to being any string.
+func TestEveryClosedSetReachesTheSchema(t *testing.T) {
+	t.Setenv(SafetyEnvironmentVariable, "destructive")
+	t.Setenv(RecipeToolEnvironmentVariable, "1")
+
+	ctx := context.Background()
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	if _, err := NewServer(
+		tmux.NewServer(tmux.ServerOptions{SocketName: "closed-sets-unused"}),
+	).Connect(ctx, serverTransport, nil); err != nil {
+		t.Fatal(err)
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "closed-sets", Version: "1"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Decoded from the wire rather than read off the Tool, because what a
+	// client validates against is the JSON, not the value that produced it.
+	advertised := map[string]struct {
+		Properties map[string]struct {
+			Enum []any `json:"enum"`
+		} `json:"properties"`
+	}{}
+	for _, tool := range listed.Tools {
+		encoded, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatalf("%s: marshal input schema: %v", tool.Name, err)
+		}
+		schema := advertised[tool.Name]
+		if err := json.Unmarshal(encoded, &schema); err != nil {
+			t.Fatalf("%s: decode input schema: %v", tool.Name, err)
+		}
+		advertised[tool.Name] = schema
+	}
+	for name, arguments := range closedArguments {
+		schema, offered := advertised[name]
+		if !offered {
+			t.Errorf("closedArguments names %q, which is not a tool", name)
+			continue
+		}
+		for argument, values := range arguments {
+			property, carried := schema.Properties[argument]
+			if !carried {
+				t.Errorf("%s has no argument %q", name, argument)
+				continue
+			}
+			if !slices.Equal(property.Enum, values) {
+				t.Errorf("%s %s: enum = %v, want %v",
+					name, argument, property.Enum, values)
+			}
+		}
 	}
 }

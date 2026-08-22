@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -43,6 +44,58 @@ func buildVersion() string {
 // batch entry here is the same idea one layer down — a tool a level withheld
 // was never registered, so it is not in the table a batch dispatches through
 // either, and there is no second list to keep in step.
+// closedArguments names, per tool, the arguments whose set of accepted values
+// is closed, and what that set holds.
+//
+// A struct tag cannot say this: jsonschema-go reads the whole tag as the
+// description and offers nothing else, so a set the code closes was closed
+// only in prose on the wire. A client had nothing to validate against and a
+// model had to infer the words out of a sentence.
+//
+// Keyed by tool as well as argument, because the same argument name is not the
+// same set twice. Empty is listed wherever the tool documents it as a default,
+// so the schema accepts exactly what the tool accepts.
+var closedArguments = map[string]map[string][]any{
+	"show_option":  {"scope": scopeValues},
+	"set_option":   {"scope": scopeValues},
+	"show_hooks":   {"scope": scopeValues},
+	"split_window": {"direction": placementValues},
+	"move_pane":    {"direction": placementValues},
+	// Required, and no default: which side to look toward is the whole
+	// question find_pane_by_position asks.
+	"find_pane_by_position": {"direction": {"above", "below", "left", "right"}},
+	"list_panes":            {"detail": {"", detailStandard, detailFull}},
+	"get_recipe":            {"name": recipeValues},
+}
+
+// scopeValues is what a scope takes. Every tool taking one reads empty as pane
+// scope.
+var scopeValues = []any{"", scopeServer, scopeSession, scopeWindow, scopePane}
+
+// placementValues is where a pane goes. Both tools taking one read empty as
+// below.
+var placementValues = []any{"", "below", "above", "right", "left"}
+
+// recipeValues comes from the recipes themselves rather than a second list of
+// their names, which would be wrong the first time one is added.
+var recipeValues = func() []any {
+	values := make([]any, 0, len(recipes))
+	for _, offered := range recipes {
+		values = append(values, offered.name)
+	}
+	return values
+}()
+
+// constrain writes a tool's closed sets into the schema clients validate
+// against.
+func constrain(name string, schema *jsonschema.Schema) {
+	for argument, values := range closedArguments[name] {
+		if property, ok := schema.Properties[argument]; ok {
+			property.Enum = values
+		}
+	}
+}
+
 func register[In, Out any](
 	server *mcp.Server,
 	t *tools,
@@ -53,6 +106,14 @@ func register[In, Out any](
 		return
 	}
 	handler = recovering(t, handler)
+	// Inferred here rather than left to the SDK, so the closed sets above can
+	// be written into it before anything validates against it.
+	if tool.InputSchema == nil {
+		if schema, err := jsonschema.For[In](nil); err == nil {
+			constrain(tool.Name, schema)
+			tool.InputSchema = schema
+		}
+	}
 	mcp.AddTool(server, tool, handler)
 	if !t.batchable {
 		// Advertised, but not reachable from inside a batch. Remembering which

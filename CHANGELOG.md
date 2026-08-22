@@ -100,6 +100,23 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+Every argument whose set of values is closed now publishes that set as a JSON
+Schema `enum`: `scope` on `show_option`, `set_option`, and `show_hooks`,
+`direction` on `split_window`, `move_pane`, and `find_pane_by_position`,
+`detail` on `list_panes`, and `name` on `get_recipe`. The sets were closed in
+the handlers all along and stated in prose in the descriptions, which put the
+whole burden on the model: nothing validated a value before the call, and a
+word read out of a sentence is a word that can be got wrong. The empty string
+is a member wherever a tool documents one as its default. The Python server of
+the same name has had these as `Literal` types since it was written.
+
+This narrows one thing. The resolvers behind `scope` and `direction` lowercase
+and trim what they are given, so `SERVER` and `RIGHT` were taken; the schema
+publishes the canonical spellings and nothing else, and a case-variant is now
+refused before the call runs. That tolerance was never documented or tested,
+and a client sending `RIGHT` was reading the description rather than the
+schema.
+
 A session and a window can be read as resources of their own, at
 `tmux://sessions/{session}` and `tmux://windows/{window}`. The hierarchy
 offered the list at the top and the pane at the bottom and nothing in between,

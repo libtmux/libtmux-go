@@ -42,7 +42,7 @@ type showOptionInput struct {
 	// Scope is where to read it: server, session, window, or pane. Empty reads
 	// it at pane scope, where tmux's own inheritance means a pane option falls
 	// back through window and session to the global value.
-	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty reads at pane scope"`
+	Scope string `json:"scope,omitempty" jsonschema:"the scope to read at; empty reads at pane scope"`
 	// PaneID, WindowID, and SessionName pick the object to read it on.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to read the option on"`
 	// WindowID picks the window for window scope.
@@ -124,7 +124,7 @@ type setOptionInput struct {
 	Value string `json:"value" jsonschema:"the value to set"`
 	// Scope is where to set it: server, session, window, or pane. Empty sets
 	// it at pane scope, which is the narrowest and affects nothing else.
-	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty sets at pane scope"`
+	Scope string `json:"scope,omitempty" jsonschema:"the scope to set at; empty sets at pane scope"`
 	// PaneID, WindowID, and SessionName pick the object to set it on.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to set the option on"`
 	// WindowID picks the window for window scope.
@@ -469,7 +469,7 @@ func (t *tools) setEnvironment(
 type showHooksInput struct {
 	// Scope is where to read them: server, session, window, or pane. Empty
 	// reads them at pane scope.
-	Scope string `json:"scope,omitempty" jsonschema:"server, session, window, or pane; empty reads at pane scope"`
+	Scope string `json:"scope,omitempty" jsonschema:"the scope to read at; empty reads at pane scope"`
 	// PaneID, WindowID, and SessionName pick the object to read them on.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to read hooks on"`
 	// WindowID picks the window for window scope.

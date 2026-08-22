@@ -844,7 +844,7 @@ Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `direction` **required** | string | the side to look toward: above, below, left, or right |
+| `direction` **required** | `above`, `below`, `left`, `right` | the side to look toward |
 | `paneId` | string | the tmux pane id to look from; empty looks from the active pane |
 | `sessionName` | string | which session's active pane to look from when paneId is empty |
 
@@ -1045,7 +1045,7 @@ Reads only. Repeating it changes nothing.
 | `active` | boolean | keep only active panes, or only inactive ones |
 | `command` | string | keep panes whose current command contains this text, ignoring case |
 | `dead` | boolean | keep only panes whose process has exited, or only those still running |
-| `detail` | string | how much to report per pane: standard, or full to add exit status, path, title, and history size |
+| `detail` | `""`, `standard`, `full` | how much to report per pane; full adds exit status, path, title, and history size |
 | `pathUnder` | string | keep panes whose working directory is at or below this path |
 | `sessionName` | string | list only this session's panes |
 | `windowId` | string | list only this window's panes, such as @1 |
@@ -1136,7 +1136,7 @@ Changes tmux by a step. Repeating it compounds.
 | Argument | Type | |
 | --- | --- | --- |
 | `paneId` **required** | string | the tmux pane id to move, such as %1 |
-| `direction` | string | where the moved pane goes in the destination: below, above, right, or left |
+| `direction` | `""`, `below`, `above`, `right`, `left` | where the moved pane goes in the destination; empty puts it below |
 | `focus` | boolean | make the pane active where it lands, moving what a person sees |
 | `name` | string | the new window's name when breaking the pane out |
 | `percentage` | integer | the moved pane's share of the destination window, 1 to 100 |
@@ -1477,7 +1477,7 @@ Changes tmux to a state. Repeating it is safe.
 | `name` **required** | string | the tmux option name, such as history-limit |
 | `value` **required** | string | the value to set |
 | `paneId` | string | the pane to set the option on |
-| `scope` | string | server, session, window, or pane; empty sets at pane scope |
+| `scope` | `""`, `server`, `session`, `window`, `pane` | the scope to set at; empty sets at pane scope |
 | `sessionName` | string | the session to set the option on |
 | `windowId` | string | the window to set the option on |
 
@@ -1556,7 +1556,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- | --- |
 | `name` | string | report only this hook, such as pane-died; empty reports every hook in force |
 | `paneId` | string | the pane to read hooks on |
-| `scope` | string | server, session, window, or pane; empty reads at pane scope |
+| `scope` | `""`, `server`, `session`, `window`, `pane` | the scope to read at; empty reads at pane scope |
 | `sessionName` | string | the session to read hooks on |
 | `windowId` | string | the window to read hooks on |
 
@@ -1575,7 +1575,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- | --- |
 | `name` **required** | string | the tmux option name, such as history-limit |
 | `paneId` | string | the pane to read the option on |
-| `scope` | string | server, session, window, or pane; empty reads at pane scope |
+| `scope` | `""`, `server`, `session`, `window`, `pane` | the scope to read at; empty reads at pane scope |
 | `sessionName` | string | the session to read the option on |
 | `windowId` | string | the window to read the option on |
 
@@ -1633,7 +1633,7 @@ Changes tmux by a step. Repeating it compounds.
 | Argument | Type | |
 | --- | --- | --- |
 | `command` | string | a command for the new pane to run instead of a shell |
-| `direction` | string | where the new pane goes: below, above, right, or left |
+| `direction` | `""`, `below`, `above`, `right`, `left` | where the new pane goes; empty puts it below |
 | `paneId` | string | the tmux pane id to split; empty splits the active pane |
 | `percentage` | integer | the new pane's share of the space, 1 to 100 |
 | `sessionName` | string | which session's active pane to split when paneId is empty |

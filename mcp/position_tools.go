@@ -33,7 +33,7 @@ type findPaneByPositionInput struct {
 	// SessionName picks the session when PaneID is empty.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to look from when paneId is empty"`
 	// Direction is the side to look toward: above, below, left, or right.
-	Direction string `json:"direction" jsonschema:"the side to look toward: above, below, left, or right"`
+	Direction string `json:"direction" jsonschema:"the side to look toward"`
 }
 
 // findPaneByPositionOutput reports the neighbour, if there is one.

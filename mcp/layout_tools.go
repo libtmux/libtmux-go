@@ -20,7 +20,7 @@ type splitWindowInput struct {
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to split when paneId is empty"`
 	// Direction places the new pane relative to that one: below, above, right,
 	// or left. Empty places it below, as tmux does.
-	Direction string `json:"direction,omitempty" jsonschema:"where the new pane goes: below, above, right, or left"`
+	Direction string `json:"direction,omitempty" jsonschema:"where the new pane goes; empty puts it below"`
 	// Percentage gives the new pane that share of the space, from 1 to 100.
 	// Zero lets tmux halve the pane.
 	Percentage int `json:"percentage,omitempty" jsonschema:"the new pane's share of the space, 1 to 100"`
@@ -57,7 +57,7 @@ type movePaneInput struct {
 	ToWindowID string `json:"toWindowId,omitempty" jsonschema:"the window to move the pane into, such as @2; empty breaks it out into a new window"`
 	// Direction places the moved pane relative to the destination's active
 	// pane: below, above, right, or left. Empty places it below, as tmux does.
-	Direction string `json:"direction,omitempty" jsonschema:"where the moved pane goes in the destination: below, above, right, or left"`
+	Direction string `json:"direction,omitempty" jsonschema:"where the moved pane goes in the destination; empty puts it below"`
 	// Percentage gives the moved pane that share of the destination, 1 to 100.
 	Percentage int `json:"percentage,omitempty" jsonschema:"the moved pane's share of the destination window, 1 to 100"`
 	// Name is the new window's name when the pane is broken out.

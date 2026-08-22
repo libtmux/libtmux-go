@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -2354,6 +2355,8 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 type advertisedSchema struct {
 	Properties map[string]struct {
 		Description string `json:"description"`
+		// Enum is the closed set of values, absent when any value goes.
+		Enum []any `json:"enum"`
 	} `json:"properties"`
 }
 
@@ -2388,6 +2391,79 @@ func TestEveryArgumentSaysWhatItIs(t *testing.T) {
 				t.Errorf("%s: argument %q has no description", tool.Name, name)
 			}
 		}
+	}
+}
+
+// TestAValueOutsideAClosedSetIsRefused covers what publishing a closed set is
+// for: the server enforces it rather than describing it, and still takes every
+// value it lists. An enum that narrowed what a tool accepts would break
+// callers instead of guiding them.
+//
+//libtmux:real-tmux
+func TestAValueOutsideAClosedSetIsRefused(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+	// Two panes, so a side to look toward has something on it, and shells
+	// rather than commands, so nothing exits under the assertions.
+	workspace(ctx, t, session,
+		"session_name: closed-sets\nwindows:\n  - panes:\n      - {}\n      - {}\n")
+
+	pane := firstPane(ctx, t, session)
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemas := map[string]advertisedSchema{}
+	for _, tool := range listed.Tools {
+		schemas[tool.Name] = schemaOf(t, tool)
+	}
+	for _, closed := range []struct {
+		tool     string
+		argument string
+		fixed    map[string]any
+	}{
+		// No paneId: the tools that take a scope refuse a target the scope
+		// does not read, which is a constraint of its own.
+		{"show_hooks", "scope", map[string]any{}},
+		{"list_panes", "detail", map[string]any{}},
+		{"find_pane_by_position", "direction", map[string]any{"paneId": pane}},
+	} {
+		t.Run(closed.tool+"/"+closed.argument, func(t *testing.T) {
+			send := func(value string) *sdk.CallToolResult {
+				arguments := map[string]any{closed.argument: value}
+				maps.Copy(arguments, closed.fixed)
+				result, err := session.CallTool(ctx, &sdk.CallToolParams{
+					Name: closed.tool, Arguments: arguments,
+				})
+				if err != nil {
+					return &sdk.CallToolResult{
+						IsError: true,
+						Content: []sdk.Content{&sdk.TextContent{Text: err.Error()}},
+					}
+				}
+				return result
+			}
+			if result := send("sideways"); !result.IsError {
+				t.Errorf("%s took an unlisted %s", closed.tool, closed.argument)
+			} else if said := resultText(result); !strings.Contains(said, "enum") {
+				t.Errorf("refused for the wrong reason: %s", said)
+			}
+			property, carried := schemas[closed.tool].Properties[closed.argument]
+			if !carried || len(property.Enum) == 0 {
+				t.Fatalf("%s publishes no set for %s", closed.tool, closed.argument)
+			}
+			for _, value := range property.Enum {
+				// Empty means the default and is reached by omitting the
+				// argument, which is what a client actually sends.
+				if value == nil || value == "" {
+					continue
+				}
+				if result := send(value.(string)); result.IsError {
+					t.Errorf("%s refused its own %s %q: %s",
+						closed.tool, closed.argument, value, resultText(result))
+				}
+			}
+		})
 	}
 }
 

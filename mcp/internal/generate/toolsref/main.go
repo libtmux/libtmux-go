@@ -113,6 +113,8 @@ func listTools() ([]*sdk.Tool, error) {
 type property struct {
 	name, kind, description string
 	required                bool
+	// values is the closed set the schema names, empty when any value goes.
+	values []string
 }
 
 // render writes the reference for every tool.
@@ -166,6 +168,7 @@ func propertiesOf(schema any) []property {
 		Properties map[string]struct {
 			Type        any    `json:"type"`
 			Description string `json:"description"`
+			Enum        []any  `json:"enum"`
 		} `json:"properties"`
 		Required []string `json:"required"`
 	}
@@ -181,6 +184,7 @@ func propertiesOf(schema any) []property {
 		out = append(out, property{
 			name: name, kind: typeName(value.Type),
 			description: value.Description, required: required[name],
+			values: enumNames(value.Enum),
 		})
 	}
 	slices.SortFunc(out, func(a, b property) int {
@@ -218,6 +222,24 @@ func typeName(kind any) string {
 	}
 }
 
+// enumNames renders a closed set for the type column, where naming the values
+// says more than "string" does. An empty string is a real member wherever a
+// tool documents one as its default, so it is shown rather than dropped.
+func enumNames(values []any) []string {
+	names := make([]string, 0, len(values))
+	for _, value := range values {
+		name, ok := value.(string)
+		if !ok {
+			return nil
+		}
+		if name == "" {
+			name = `""`
+		}
+		names = append(names, "`"+name+"`")
+	}
+	return names
+}
+
 func writeTable(out *bytes.Buffer, heading string, properties []property) {
 	if len(properties) == 0 {
 		return
@@ -234,6 +256,9 @@ func writeTable(out *bytes.Buffer, heading string, properties []property) {
 		fmt.Fprintf(out, "\n| %s | Type |\n| --- | --- |\n", heading)
 	}
 	for _, one := range properties {
+		if len(one.values) > 0 {
+			one.kind = strings.Join(one.values, ", ")
+		}
 		name := "`" + one.name + "`"
 		if one.required {
 			name += " **required**"

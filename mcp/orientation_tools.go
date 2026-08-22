@@ -78,7 +78,7 @@ type listPanesInput struct {
 	// Active keeps only each window's active pane, or only the others.
 	Active *bool `json:"active,omitempty" jsonschema:"keep only active panes, or only inactive ones"`
 	// Detail chooses how much is reported per pane.
-	Detail string `json:"detail,omitempty" jsonschema:"how much to report per pane: standard, or full to add exit status, path, title, and history size"`
+	Detail string `json:"detail,omitempty" jsonschema:"how much to report per pane; full adds exit status, path, title, and history size"`
 }
 
 // listedPane is a pane as a listing reports it: the shape every other tool
