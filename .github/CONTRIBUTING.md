@@ -163,6 +163,18 @@ the machine and not the code — the failing test moves between runs, the failur
 reads as `no server running` or `WaitDelay expired` rather than a wrong value,
 and the file it is in is not one the change touched.
 
+## Done means
+
+Every gate above passes, in every module rather than only the one that changed,
+and:
+
+- New exported behaviour carries an `Example` ending in an output comment.
+- Anything a caller can observe has an entry under `## Unreleased` in
+  `CHANGELOG.md`.
+
+The second is the one nothing enforces. A change that reaches a caller and
+leaves no changelog entry is not finished.
+
 ## Pull requests
 
 One subject per pull request. Unrelated cleanup found along the way belongs in
