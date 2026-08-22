@@ -107,7 +107,7 @@ func (t *tools) movePane(
 	}
 	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
-		return nil, movePaneOutput{}, err
+		return nil, movePaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
 
 	if input.ToWindowID == "" {
@@ -127,7 +127,7 @@ func (t *tools) movePane(
 
 	destination, err := t.tmux().Window(ctx, tmux.WindowID(input.ToWindowID))
 	if err != nil {
-		return nil, movePaneOutput{}, err
+		return nil, movePaneOutput{}, notFound(err, "window", input.ToWindowID, "list_windows")
 	}
 	request := tmux.JoinPaneRequest{
 		TargetWindow: destination,
@@ -366,7 +366,7 @@ func (t *tools) selectPane(
 ) (*mcp.CallToolResult, selectPaneOutput, error) {
 	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
-		return nil, selectPaneOutput{}, err
+		return nil, selectPaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
 	selected, err := pane.Select(ctx, tmux.PaneSelectRequest{})
 	if err != nil {
@@ -523,7 +523,7 @@ func (t *tools) moveWindow(
 	}
 	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
-		return nil, moveWindowOutput{}, err
+		return nil, moveWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
 	request := tmux.MoveWindowRequest{TargetIndex: input.Index}
 	if name := strings.TrimSpace(input.SessionName); name != "" {

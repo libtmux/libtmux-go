@@ -100,6 +100,14 @@ tell its child's root from a sibling binary's. Setting it separates them.
 
 ### mcp
 
+A missing pane or window names the listing that would have found one, from
+every tool rather than most of them. `kill_pane`, `kill_window`, `move_pane`,
+`move_window`, `select_pane`, and `select_window` reached tmux directly and
+returned its `snapshot object not found: pane "%9"`, which names the mechanism
+and leaves the way out to be guessed at; a model reading that has no reason to
+prefer listing over trying another id. Each was a correct-looking call to the
+tmux module, which is why nothing said so.
+
 `show_option`, `set_option`, and `show_hooks` refuse a `windowId` at pane
 scope, which is what they already did with every other mismatched pair. Pane
 scope was the one that let one through: tmux walks pane, then window, then

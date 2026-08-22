@@ -370,7 +370,7 @@ func (t *tools) selectWindow(
 ) (*mcp.CallToolResult, selectWindowOutput, error) {
 	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
-		return nil, selectWindowOutput{}, err
+		return nil, selectWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
 	selected, err := window.Select(ctx)
 	if err != nil {

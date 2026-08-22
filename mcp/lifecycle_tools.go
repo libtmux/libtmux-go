@@ -90,7 +90,7 @@ func (t *tools) killWindow(
 	}
 	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
-		return nil, killWindowOutput{}, err
+		return nil, killWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
 	sessionID := window.SessionID()
 	if err := window.Kill(ctx); err != nil {
@@ -131,7 +131,7 @@ func (t *tools) killPane(
 	}
 	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
-		return nil, killPaneOutput{}, err
+		return nil, killPaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
 	// Named rather than resolved, so the guard is asked for here rather than
 	// by the resolver every other write goes through.

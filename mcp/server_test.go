@@ -3325,6 +3325,87 @@ func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
 	}
 }
 
+// TestAnIdThatNamesNothingSaysWhichListingFindsOne is a behavioural gate on
+// every tool that takes an id.
+//
+// tmux answers with what it looked for -- "snapshot object not found: pane
+// %9" -- which names the mechanism. A model reading that has no reason to
+// prefer listing over trying another id, and the listing is always the right
+// next move, which is why notFound exists. Six tools reached tmux directly and
+// returned its message instead, and nothing said so: each is a correct-looking
+// call to the tmux module. Asking every tool at once covers the ones nobody
+// has written yet.
+//
+//libtmux:real-tmux
+func TestAnIdThatNamesNothingSaysWhichListingFindsOne(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: named\nwindows:\n  - panes:\n      - {}\n")
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One absent id per argument, with the listing that would have found one.
+	absent := map[string]struct{ value, lister string }{
+		"paneId":   {"%9000", "list_panes"},
+		"windowId": {"@9000", "list_windows"},
+	}
+	// A batch takes a list of calls rather than an id, and reports what the
+	// call inside it said; the tools it dispatches are covered on their own.
+	exempt := map[string]bool{
+		"call_readonly_tools_batch": true, "call_mutating_tools_batch": true,
+		"call_destructive_tools_batch": true,
+	}
+	// A listing reads an id as a criterion rather than a target: nothing
+	// matching it is an empty list and not a missing object, and the reply's
+	// total says what the criteria selected from.
+	criteria := map[string]bool{"list_panes": true, "list_windows": true}
+	asked := 0
+	for _, tool := range listed.Tools {
+		if exempt[tool.Name] {
+			continue
+		}
+		for argument, want := range absent {
+			if _, takes := schemaOf(t, tool).Properties[argument]; !takes {
+				continue
+			}
+			asked++
+			result, err := session.CallTool(ctx, &sdk.CallToolParams{
+				Name: tool.Name, Arguments: map[string]any{argument: want.value},
+			})
+			var said string
+			switch {
+			case err != nil:
+				said = err.Error()
+			case result.IsError:
+				said = resultText(result)
+			default:
+				if !criteria[tool.Name] {
+					t.Errorf("%s accepted %s %s", tool.Name, argument, want.value)
+				}
+				continue
+			}
+			// A tool may refuse for a reason of its own before it looks the id
+			// up -- a missing second argument, a guard. What it must not do is
+			// repeat tmux's own words for an id that is not there.
+			if strings.Contains(said, "snapshot object not found") {
+				t.Errorf("%s answers a missing %s with tmux's message: %s",
+					tool.Name, argument, said)
+			}
+			if strings.Contains(said, "no pane") || strings.Contains(said, "no window") {
+				if !strings.Contains(said, want.lister) {
+					t.Errorf("%s says %q without naming %s",
+						tool.Name, said, want.lister)
+				}
+			}
+		}
+	}
+	if asked < 20 {
+		t.Errorf("only %d tools take an id, which is fewer than this server has", asked)
+	}
+}
+
 // TestAResourceNamingNothingSaysSoInTheProtocol covers the two halves of a
 // failed read: the code a client branches on and the message a model acts on.
 //
