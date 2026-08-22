@@ -1384,6 +1384,90 @@ func TestAYesAboutTheCallerPaneCanBeKept(t *testing.T) {
 	}
 }
 
+// TestOneSessionsYesDoesNotSilenceAnother covers a kept consent reaching a
+// client that never gave it.
+//
+// The answers are held per session for exactly this reason, and nothing
+// checked it. An MCP server can carry several sessions -- an embedder holds
+// one per client -- and a yes about writing into the caller's pane that leaked
+// across them would let a second client type into somebody's terminal on the
+// strength of a question it never saw.
+//
+//libtmux:real-tmux
+func TestOneSessionsYesDoesNotSilenceAnother(t *testing.T) {
+	const ownPane = "%0"
+	t.Setenv("TMUX_PANE", ownPane)
+	t.Setenv("TMUX", "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	t.Cleanup(cancel)
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	server := tmuxmcp.NewServer(target)
+
+	// Two clients of one server, as an embedder holds them.
+	join := func(name string, answer func(*sdk.ElicitRequest) *sdk.ElicitResult) (*sdk.ClientSession, *int) {
+		clientTransport, serverTransport := sdk.NewInMemoryTransports()
+		serverSession, err := server.Connect(ctx, serverTransport, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = serverSession.Close() })
+		asked := 0
+		client := sdk.NewClient(&sdk.Implementation{Name: name}, &sdk.ClientOptions{
+			ElicitationHandler: func(
+				_ context.Context, request *sdk.ElicitRequest,
+			) (*sdk.ElicitResult, error) {
+				asked++
+				return answer(request), nil
+			},
+		})
+		session, err := client.Connect(ctx, clientTransport, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = session.Close() })
+		return session, &asked
+	}
+
+	first, askedFirst := join("first", func(*sdk.ElicitRequest) *sdk.ElicitResult {
+		return &sdk.ElicitResult{Action: "accept", Content: map[string]any{"remember": true}}
+	})
+	second, askedSecond := join("second", func(*sdk.ElicitRequest) *sdk.ElicitResult {
+		return &sdk.ElicitResult{Action: "decline"}
+	})
+
+	workspace(ctx, t, first, "session_name: shared\nwindows:\n  - panes:\n      - {}\n")
+	socket, err := target.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || len(socket.Stdout) == 0 {
+		t.Fatalf("read the socket path: %v", err)
+	}
+	t.Setenv("TMUX", socket.Stdout[0]+",1234,0")
+
+	// The first client says yes and keeps it, then writes again unasked.
+	for range 2 {
+		if result := call(ctx, t, first, "send_keys", map[string]any{
+			"paneId": ownPane, "command": "echo first",
+		}, nil); result.IsError {
+			t.Fatalf("the first client was refused: %s", resultText(result))
+		}
+	}
+	if *askedFirst != 1 {
+		t.Errorf("the first client was asked %d times, want once", *askedFirst)
+	}
+
+	// The second client never saw that question, so it must be asked its own
+	// -- and its answer must be the one that governs its own call.
+	result := call(ctx, t, second, "send_keys", map[string]any{
+		"paneId": ownPane, "command": "echo second",
+	}, nil)
+	if *askedSecond != 1 {
+		t.Errorf("the second client was asked %d times, want once of its own", *askedSecond)
+	}
+	if !result.IsError {
+		t.Error("the second client wrote to the caller pane on another client's yes")
+	}
+}
+
 // TestEndingWhatHoldsTheCallerPaneIsAskedAbout covers the way around the write
 // guard.
 //

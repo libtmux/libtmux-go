@@ -145,6 +145,12 @@ Nothing checked that before: a contract the server declares and then breaks is
 a bug no assertion had to be written for, and it surfaces in whichever client
 generated its types from the schema.
 
+One client's kept yes does not silence another's question. The answers are
+held per session for exactly that reason and nothing checked it: a server can
+carry several sessions, an embedder holds one per client, and a consent that
+leaked between them would let a second client type into somebody's terminal on
+the strength of a question it never saw.
+
 A yes about writing into the caller's own pane can be kept for the rest of the
 session. The guard asked before every write, so an agent doing five things in
 that pane asked five times, and a guard that asks every time is one people
