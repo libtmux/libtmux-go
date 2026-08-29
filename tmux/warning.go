@@ -132,7 +132,7 @@ func newControlPoolUnusedWarning() Warning {
 		Kind: WarningControlPoolUnused,
 		Message: "a control pool is open on this server, but this command " +
 			"started a tmux process: the record issuing it predates the pool; " +
-			"move it with WithServer",
+			"move it with WithEngine",
 	}
 }
 

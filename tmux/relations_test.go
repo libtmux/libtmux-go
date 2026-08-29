@@ -452,92 +452,82 @@ func liveRelationshipRecords(t *testing.T, version Version) snapshotRecords {
 	}
 }
 
-// TestRebindingARecordCarriesItsRelationsAcross covers the half of WithServer
-// that no engine test can see. Relations are read out of snapshot state the
-// original handle built, so a rebind that stopped at the receiver would leave
-// every window, pane, and attachment reached through it on the handle the
-// caller moved off, which is exactly the silent trap WithServer exists to
-// close. Nothing here runs tmux: a handle is configuration, not a connection.
-func TestRebindingARecordCarriesItsRelationsAcross(t *testing.T) {
+// TestSelectingAnEngineOnARecordCarriesItsRelationsAcross covers the half of
+// WithEngine that no engine test can see. Relations are read out of snapshot
+// state the original handle built, so selecting an engine only on the receiver
+// would leave every window, pane, and attachment reached through it on the old
+// handle. Nothing here runs tmux: an engine selection is configuration.
+func TestSelectingAnEngineOnARecordCarriesItsRelationsAcross(t *testing.T) {
 	t.Parallel()
 
-	const socket = "/tmp/libtmux-go-rebind.sock"
 	snapshot := linkedSnapshot(t)
-	rebound := NewServer(ServerOptions{SocketPath: socket})
+	engine := snapshot.Server().SubprocessEngine()
 
 	session, err := snapshot.SessionByID(SessionID("$1"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved := session.WithServer(rebound)
-	if got := moved.Server().SocketPath(); got != socket {
-		t.Fatalf("WithServer().Server().SocketPath() = %q, want %q", got, socket)
+	moved := session.WithEngine(engine)
+	if moved.Server().Engine() == nil {
+		t.Fatal("WithEngine().Server().Engine() is nil")
 	}
-	if got := session.Server().SocketPath(); got != "" {
-		t.Fatalf("WithServer() changed its receiver: SocketPath() = %q", got)
+	if !moved.Server().Equal(session.Server()) {
+		t.Fatalf("WithEngine() changed server %s to %s", session.Server(), moved.Server())
+	}
+	if session.Server().Engine() != nil {
+		t.Fatal("WithEngine() changed its receiver")
 	}
 
-	sockets := map[string]bool{}
-	record := func(value string) { sockets[value] = true }
+	engines := map[bool]int{}
+	record := func(server Server) { engines[server.Engine() != nil]++ }
 	relatedWindows, _ := moved.Windows()
 	for _, window := range relatedWindows {
-		record(window.Server().SocketPath())
+		record(window.Server())
 		if parent, ok := window.Session(); ok {
-			record(parent.Server().SocketPath())
+			record(parent.Server())
 		}
 		relatedPanes, _ := window.Panes()
 		for _, pane := range relatedPanes {
-			record(pane.Server().SocketPath())
+			record(pane.Server())
 			if parent, ok := pane.Window(); ok {
-				record(parent.Server().SocketPath())
+				record(parent.Server())
 			}
 			if parent, ok := pane.Session(); ok {
-				record(parent.Server().SocketPath())
+				record(parent.Server())
 			}
 		}
 	}
 	relatedPanes, _ := moved.Panes()
 	for _, pane := range relatedPanes {
-		record(pane.Server().SocketPath())
+		record(pane.Server())
 	}
 	if activeWindow, ok := moved.ActiveWindow(); ok {
-		record(activeWindow.Server().SocketPath())
+		record(activeWindow.Server())
 	}
 	if activePane, ok := moved.ActivePane(); ok {
-		record(activePane.Server().SocketPath())
+		record(activePane.Server())
 	}
 
 	client, err := snapshot.ClientByName(ClientName("/dev/pts/9"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	movedClient := client.WithServer(rebound)
-	for _, attached := range []func() (string, bool){
-		func() (string, bool) {
-			value, ok := movedClient.AttachedSession()
-			return value.Server().SocketPath(), ok
-		},
-		func() (string, bool) {
-			value, ok := movedClient.AttachedWindow()
-			return value.Server().SocketPath(), ok
-		},
-		func() (string, bool) {
-			value, ok := movedClient.AttachedPane()
-			return value.Server().SocketPath(), ok
-		},
-	} {
-		value, ok := attached()
-		if !ok {
-			t.Fatal("the linked snapshot lost a client attachment")
-		}
-		record(value)
+	movedClient := client.WithEngine(engine)
+	attachedSession, sessionOK := movedClient.AttachedSession()
+	attachedWindow, windowOK := movedClient.AttachedWindow()
+	attachedPane, paneOK := movedClient.AttachedPane()
+	if !sessionOK || !windowOK || !paneOK {
+		t.Fatal("the linked snapshot lost a client attachment")
 	}
+	record(attachedSession.Server())
+	record(attachedWindow.Server())
+	record(attachedPane.Server())
 
-	if len(sockets) != 1 || !sockets[socket] {
-		t.Fatalf("relations of a rebound record report sockets %v, want only %q", sockets, socket)
+	if engines[false] != 0 || engines[true] == 0 {
+		t.Fatalf("relations selected engines %v, want only non-nil engines", engines)
 	}
-	if got := snapshot.Sessions()[0].Server().SocketPath(); got != "" {
-		t.Fatalf("WithServer() changed the snapshot it read from: SocketPath() = %q", got)
+	if snapshot.Sessions()[0].Server().Engine() != nil {
+		t.Fatal("WithEngine() changed the snapshot it read from")
 	}
 }
 

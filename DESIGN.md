@@ -440,7 +440,7 @@ type Engine interface {
 
 A record materialized before a connection keeps the handle it was made on and
 pays for a tmux process per command. Measured: three reads on a stale record
-cost nine processes and on the same record moved with `WithServer`, none. That
+cost nine processes and on the same record using `WithEngine`, none. That
 is reported as a `WarningControlPoolUnused`, completing `WarningControlPoolClosed`
 which reported the same symptom for a pool that had been closed; covering one
 and not the other left the commoner case to be measured rather than told. It

@@ -33,8 +33,8 @@
 //     returns the handle, the session on it, and the pool that owns the
 //     connections. Use the session it returns rather than the one passed in.
 //     [Server.WithEngine] with [ControlClient.Engine] is the same thing
-//     assembled by hand. Windows and panes already in hand move across with
-//     [Pane.WithServer] and its counterparts.
+//     assembled by hand. Windows and panes already in hand select that engine
+//     with [Pane.WithEngine] and its counterparts.
 //   - Read and set options and hooks: [Session.Options] and
 //     [Session.SetBellAction] show the pair; "Finding an option or hook" below
 //     gives the rule that maps every tmux name to its Go name, and
@@ -265,9 +265,8 @@
 // pool was opened keeps starting a tmux process for every command. Its results
 // are unchanged and only its cost differs, so this is reported through
 // [WarningHandler] as a [WarningControlPoolUnused] rather than refused.
-// [Session.WithServer] and its counterparts move a record onto the connected
-// handle in one line, and the session [Server.OpenControlPool] hands back is
-// already on it.
+// [Session.WithEngine] and its counterparts select the pool engine in one
+// line, and the session [Server.OpenControlPool] hands back already carries it.
 //
 // Concurrency is a size rather than a transport. [ControlPoolRequest] takes a
 // number of connections and a caller's own goroutines decide what runs at once;
@@ -395,15 +394,14 @@
 //
 // A record carries the handle that produced it, so a session, window, pane, or
 // client obtained before that call keeps starting a tmux process for every
-// command and reports no error while doing so. [Pane.WithServer] and its
-// counterparts on [Session], [Window], and [Client] move one across:
+// command and reports no error while doing so. [Pane.WithEngine] and its
+// counterparts on [Session], [Window], and [Client] select the engine:
 //
-//	pane = pane.WithServer(connected)
+//	pane = pane.WithEngine(connected.Engine())
 //
-// Nothing is read back, because a handle is configuration rather than state:
-// the move is a struct copy, and the relations reached through the moved record
-// come back on the same handle. [Server.Session] and its counterparts remain
-// the way to obtain a record the caller does not already hold.
+// Nothing is read back: the record keeps its server selector, and relations
+// reached through it carry the same engine. [Server.Session] and its
+// counterparts remain the way to obtain a record the caller does not hold.
 //
 // One read stays on a process even on a connected handle, and there is a way
 // around it. [Pane.Capture] and [Pane.CaptureBytes] promise tmux's own stdout

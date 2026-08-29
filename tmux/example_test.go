@@ -1381,11 +1381,11 @@ func ExampleControlClient_NextNotification() {
 	// Output: the pane reported it was ready
 }
 
-// ExamplePane_WithServer counts what a record costs before and after it is
+// ExamplePane_WithEngine counts what a record costs before and after it is
 // moved onto a connected handle. The counter is there because the failure it
 // prevents is silent: a record made before the engine existed keeps starting a
 // tmux process for every command and reports nothing wrong while doing so.
-func ExamplePane_WithServer() {
+func ExamplePane_WithEngine() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -1445,7 +1445,7 @@ func ExamplePane_WithServer() {
 
 	// The move is a value operation: the pane's handle is configuration, so
 	// nothing is looked up again and no command is sent.
-	pane = pane.WithServer(connected)
+	pane = pane.WithEngine(connected.Engine())
 
 	before = count()
 	if _, err := pane.Refresh(ctx); err != nil {
@@ -1495,7 +1495,7 @@ func ExamplePane_CaptureToFile() {
 		return
 	}
 	defer func() { _ = client.Close() }()
-	pane = pane.WithServer(server.WithEngine(client.Engine()))
+	pane = pane.WithEngine(client.Engine())
 
 	command := "printf 'build ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
@@ -1545,7 +1545,7 @@ func ExampleServer_OpenControlPool() {
 
 	// The session was taken before the pool existed, so it still carries the
 	// forking handle. Moving it across needs no tmux command.
-	windows, err := session.WithServer(connected).SearchWindows(ctx, nil)
+	windows, err := session.WithEngine(connected.Engine()).SearchWindows(ctx, nil)
 	if err != nil {
 		fmt.Println("search windows:", err)
 		return

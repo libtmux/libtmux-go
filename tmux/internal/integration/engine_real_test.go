@@ -356,7 +356,7 @@ func connectedHarness(
 }
 
 // TestRebindMovesAHeldRecordOntoAnEngineWithoutALookup measures the trap
-// WithServer closes. A record made before the engine existed keeps forking and
+// WithEngine closes. A record made before the engine existed keeps forking and
 // says nothing about it, so the failure is a silent performance one; the point
 // of the guard is that moving the record costs no tmux command at all.
 //
@@ -384,16 +384,16 @@ func TestRebindMovesAHeldRecordOntoAnEngineWithoutALookup(t *testing.T) {
 
 	runner.reset()
 	engine.reset()
-	bound := held.WithServer(connected)
+	bound := held.WithEngine(connected.Engine())
 	if runner.total() != 0 || engine.total() != 0 {
 		t.Fatalf(
-			"WithServer() ran %d processes and %d control commands, want none",
+			"WithEngine() ran %d processes and %d control commands, want none",
 			runner.total(),
 			engine.total(),
 		)
 	}
 	if bound.ID() != held.ID() {
-		t.Fatalf("WithServer() ID = %q, want %q", bound.ID(), held.ID())
+		t.Fatalf("WithEngine() ID = %q, want %q", bound.ID(), held.ID())
 	}
 
 	if _, err := bound.Refresh(ctx); err != nil {
@@ -445,7 +445,7 @@ func TestFileCaptureWatchLoopStartsNoProcesses(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("ResolveActivePane() = (%t, %v), want a pane", ok, err)
 	}
-	bound := pane.WithServer(connected)
+	bound := pane.WithEngine(connected.Engine())
 	path := filepath.Join(t.TempDir(), "pane.txt")
 
 	const rounds = 30
@@ -518,7 +518,7 @@ func TestFileCaptureReportsTheSameContentAsAPrintedCapture(t *testing.T) {
 	// of them, as a shell redrawing its prompt does, fails a comparison that
 	// has nothing to do with the transports. The set is taken again when they
 	// disagree, and only a pane that never holds still fails.
-	bound := pane.WithServer(connected)
+	bound := pane.WithEngine(connected.Engine())
 	path := filepath.Join(t.TempDir(), "pane.txt")
 	request := tmux.CapturePaneRequest{Start: tmux.CaptureBoundary, End: tmux.CaptureBoundary}
 
@@ -977,7 +977,7 @@ func TestAConnectionProvesItsOwnServerIdentity(t *testing.T) {
 	t.Cleanup(func() { _ = pool.Close() })
 
 	recorder := &subcommandEngine{inner: pool.Engine(), seen: map[string]int{}}
-	instrumented := live.WithServer(server.WithEngine(recorder))
+	instrumented := live.WithEngine(recorder)
 	if _, err := instrumented.SearchWindows(ctx, nil); err != nil {
 		t.Fatalf("read over the connection: %v", err)
 	}

@@ -52,8 +52,8 @@ type ControlPoolRequest struct {
 // leave one behind that nobody asked for.
 //
 // The returned handle is the one to derive records from. A record taken from
-// the original handle keeps starting a process; [Pane.WithServer] and its
-// counterparts move one across without a lookup.
+// the original handle keeps starting a process; its WithEngine method selects
+// the pool engine without a lookup.
 //
 // The transport is otherwise four separate things a caller has to know: open a
 // control client, adapt it to an [Engine], select that engine on a handle copy,
@@ -124,7 +124,7 @@ func (s Server) OpenControlPool(
 	// arrived. A caller writing "server, session, pool, err := ..." shadows the
 	// session they passed in, so the one they go on to use is the one that
 	// carries the connections.
-	pool.session = session.WithServer(connected)
+	pool.session = session.withServer(connected)
 	return connected, pool.session, pool, nil
 }
 
