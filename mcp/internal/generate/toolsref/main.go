@@ -89,7 +89,9 @@ func listTools() ([]*sdk.Tool, error) {
 	// No tmux is contacted: listing the tools is answered from registration.
 	target := tmux.NewServer(tmux.ServerOptions{SocketName: "toolsref-unused"})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	if _, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil); err != nil {
+	instance := tmuxmcp.NewServer(target)
+	defer func() { _ = instance.Close() }()
+	if _, err := instance.Connect(ctx, serverTransport, nil); err != nil {
 		return nil, err
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "toolsref", Version: "1"}, nil)

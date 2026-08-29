@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"runtime/debug"
 	"slices"
 	"sync"
@@ -205,19 +206,35 @@ var toolGroups = []func(*mcp.Server, *tools){
 	addBatchTools,
 }
 
-// NewServer returns an MCP server exposing target through the tools below.
-//
-// Anything the server holds beyond the process is released by [Run]. A caller
-// driving the returned server itself keeps a bounded number of temporary
-// directories, which the operating system reclaims with the process.
-func NewServer(target tmux.Server) *mcp.Server {
-	server, _ := newServer(target)
-	return server
+// Instance owns an MCP server and the resources its tools allocate. The
+// embedded SDK server keeps its methods available directly.
+type Instance struct {
+	*mcp.Server
+	tools *tools
+	audit io.Closer
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
-// newServer builds the server and hands back the tools behind it, so that Run
-// can release what they hold when it stops.
-func newServer(target tmux.Server) (*mcp.Server, *tools) {
+// Close stops watchers, removes detached-job files, and closes an owned audit
+// file. It does not close an Engine supplied through target.
+func (i *Instance) Close() error {
+	if i == nil {
+		return nil
+	}
+	i.closeOnce.Do(func() {
+		i.tools.watchers.close()
+		i.tools.jobs.close()
+		if i.audit != nil {
+			i.closeErr = i.audit.Close()
+		}
+	})
+	return i.closeErr
+}
+
+// NewServer returns a closeable MCP instance exposing target.
+func NewServer(target tmux.Server) *Instance {
 	level := safetyFromEnvironment()
 	tools := &tools{
 		level:       level,
@@ -241,7 +258,8 @@ func newServer(target tmux.Server) (*mcp.Server, *tools) {
 	// operator asked for one, wraps the backstop so a refused reply is
 	// recorded as refused.
 	server.AddReceivingMiddleware(backstop())
-	if writer := auditWriter(); writer != nil {
+	writer, auditOwner := auditWriter()
+	if writer != nil {
 		server.AddReceivingMiddleware(audit(writer))
 	}
 
@@ -251,7 +269,7 @@ func newServer(target tmux.Server) (*mcp.Server, *tools) {
 	addResources(server, tools)
 	addPrompts(server, level)
 
-	return server, tools
+	return &Instance{Server: server, tools: tools, audit: auditOwner}
 }
 
 // Run serves target over stdin and stdout until ctx is done.
@@ -260,12 +278,9 @@ func Run(ctx context.Context, target tmux.Server) error {
 	if pool != nil {
 		defer func() { _ = pool.Close() }()
 	}
-	server, tools := newServer(connected)
-	// A command left running records itself in a temporary directory this
-	// process owns. Collecting it removes that directory; a server that stops
-	// while some are uncollected removes the rest here.
-	defer tools.jobs.close()
-	return server.Run(ctx, handshakeOrderedTransport{inner: stdio()})
+	instance := NewServer(connected)
+	defer func() { _ = instance.Close() }()
+	return instance.Run(ctx, handshakeOrderedTransport{inner: stdio()})
 }
 
 // Connect puts the server on a control-mode transport when it can, so a client

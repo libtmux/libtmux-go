@@ -366,13 +366,16 @@ import (
 ```
 
 ```go
-server := tmuxmcp.NewServer(tmux.NewServer(tmux.ServerOptions{SocketName: "app"}))
-session, err := server.Connect(ctx, transport, nil)
+instance := tmuxmcp.NewServer(tmux.NewServer(tmux.ServerOptions{SocketName: "app"}))
+defer instance.Close()
+session, err := instance.Connect(ctx, transport, nil)
 ```
 
-`NewServer` returns the SDK's `*sdk.Server`, so the usual SDK options,
-middleware, and transports apply. This package is named `mcp` and so is the
-SDK's, so a file using both has to rename one of them.
+`NewServer` returns an `Instance` embedding the SDK's `*sdk.Server`, so the
+usual SDK methods remain available. Close the instance after its sessions to
+release job files, watcher connections, timers, and an owned audit file. This
+package is named `mcp` and so is the SDK's, so a file using both has to rename
+one of them.
 
 ## Developing on it
 

@@ -64,9 +64,8 @@ type watchers struct {
 	// The SDK routes an update by the string a session subscribed with, so a
 	// pane watched as %1 has to be told as %1.
 	spelled map[string]map[string]int
-	// owed names the URIs whose notification the interval held back and which
-	// a timer will send when it expires.
-	owed map[string]bool
+	// owed holds the deferred notification timer for each URI.
+	owed map[string]*time.Timer
 	// ready is closed once a control connection is open, and replaced whenever
 	// the set of them is rebuilt. A subscriber waits on the one taken before
 	// its own rebuild, so it waits for a connection that will carry its pane
@@ -82,6 +81,8 @@ type watchers struct {
 	// anything about it, so the arrival of the subscription is the only thing
 	// that can say the set is now wrong.
 	rebuild func()
+	closed  bool
+	wait    sync.WaitGroup
 }
 
 // newWatchers builds the watcher set for one MCP server.
@@ -92,7 +93,7 @@ func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
 		subscribed: map[string]int{},
 		spelled:    map[string]map[string]int{},
 		notified:   map[string]time.Time{},
-		owed:       map[string]bool{},
+		owed:       map[string]*time.Timer{},
 		ready:      make(chan struct{}),
 	}
 }
@@ -155,6 +156,11 @@ func watchedURI(uri string) string {
 func (w *watchers) add(canonical, spelling string) <-chan struct{} {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
+	if w.closed {
+		ready := make(chan struct{})
+		close(ready)
+		return ready
+	}
 	w.subscribed[canonical]++
 	if w.spelled[canonical] == nil {
 		w.spelled[canonical] = map[string]int{}
@@ -209,7 +215,10 @@ func (w *watchers) remove(canonical, spelling string) {
 	// watched, for the life of the process. Nothing else drops them: the
 	// coalescing window is only cleared wholesale when a rebuild restarts the
 	// stream, and a deferral clears just its own key when it fires.
-	delete(w.owed, canonical)
+	if timer := w.owed[canonical]; timer != nil {
+		timer.Stop()
+		delete(w.owed, canonical)
+	}
 	delete(w.notified, canonical)
 	if len(w.subscribed) == 0 && w.stop != nil {
 		w.stop()
@@ -221,7 +230,30 @@ func (w *watchers) remove(canonical, spelling string) {
 func (w *watchers) start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	w.stop = cancel
-	go w.watch(ctx)
+	w.wait.Add(1)
+	go func() {
+		defer w.wait.Done()
+		w.watch(ctx)
+	}()
+}
+
+func (w *watchers) close() {
+	w.mutex.Lock()
+	if !w.closed {
+		w.closed = true
+		if w.stop != nil {
+			w.stop()
+		}
+		for uri, timer := range w.owed {
+			timer.Stop()
+			delete(w.owed, uri)
+		}
+		clear(w.subscribed)
+		clear(w.spelled)
+		clear(w.notified)
+	}
+	w.mutex.Unlock()
+	w.wait.Wait()
 }
 
 // watch keeps a tmux connection for as long as anything is subscribed.
@@ -473,6 +505,10 @@ func (w *watchers) affected(notification tmux.ControlNotification) []string {
 // quiet is permanent.
 func (w *watchers) notify(ctx context.Context, uri string) {
 	w.mutex.Lock()
+	if w.closed {
+		w.mutex.Unlock()
+		return
+	}
 	watched := w.subscribed[uri] > 0
 	since := time.Since(w.notified[uri])
 	recent := since < watchNotifyInterval
@@ -486,14 +522,22 @@ func (w *watchers) notify(ctx context.Context, uri string) {
 	// One timer per URI, because a burst suppresses many and they all describe
 	// the same change: the deferred notification says the pane moved, not how
 	// often.
-	if watched && recent && !w.owed[uri] {
-		w.owed[uri] = true
-		time.AfterFunc(watchNotifyInterval-since, func() {
+	if watched && recent && w.owed[uri] == nil {
+		var timer *time.Timer
+		timer = time.AfterFunc(watchNotifyInterval-since, func() {
 			w.mutex.Lock()
+			if w.owed[uri] != timer {
+				w.mutex.Unlock()
+				return
+			}
 			delete(w.owed, uri)
+			closed := w.closed
 			w.mutex.Unlock()
-			w.notify(context.WithoutCancel(ctx), uri)
+			if !closed {
+				w.notify(context.WithoutCancel(ctx), uri)
+			}
 		})
+		w.owed[uri] = timer
 	}
 	w.mutex.Unlock()
 	if !watched || recent {

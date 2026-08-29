@@ -143,17 +143,24 @@ func isClientHangup(err error) bool {
 func inspect(target tmux.Server) (context.Context, *sdk.ClientSession, func(), error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	if _, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil); err != nil {
+	instance := tmuxmcp.NewServer(target)
+	if _, err := instance.Connect(ctx, serverTransport, nil); err != nil {
+		_ = instance.Close()
 		cancel()
 		return nil, nil, nil, err
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "libtmux-mcp-cli", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
+		_ = instance.Close()
 		cancel()
 		return nil, nil, nil, err
 	}
-	return ctx, session, func() { _ = session.Close(); cancel() }, nil
+	return ctx, session, func() {
+		_ = session.Close()
+		_ = instance.Close()
+		cancel()
+	}, nil
 }
 
 // reportTools prints what a client would be offered.

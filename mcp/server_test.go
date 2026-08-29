@@ -48,7 +48,9 @@ func connectWith(
 	target := tmuxtest.NewServerWithOptions(ctx, t, options)
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	instance := tmuxmcp.NewServer(target)
+	t.Cleanup(func() { _ = instance.Close() })
+	serverSession, err := instance.Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

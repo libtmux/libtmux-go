@@ -33,8 +33,8 @@ func ExampleRun() {
 // Put the server on a transport of your own — an in-memory pair, a pipe, or
 // anything else the SDK speaks — rather than stdin and stdout.
 //
-// [tmuxmcp.NewServer] returns the SDK's own server, so its options, middleware
-// and transports all apply.
+// [tmuxmcp.NewServer] returns an instance embedding the SDK server, so its
+// methods remain available and Close releases resources owned by the tools.
 func ExampleNewServer() {
 	// The work is in a function returning an error so that the session is
 	// closed on every path out of it. An example that logs and exits with a
@@ -55,7 +55,9 @@ func whichPaneAmIIn(ctx context.Context) error {
 	}
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	if _, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil); err != nil {
+	instance := tmuxmcp.NewServer(target)
+	defer func() { _ = instance.Close() }()
+	if _, err := instance.Connect(ctx, serverTransport, nil); err != nil {
 		return err
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "example", Version: "1"}, nil)

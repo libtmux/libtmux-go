@@ -63,13 +63,13 @@ var auditIdentifiers = map[string]bool{
 	"startLine": true, "endLine": true, "tool": true,
 }
 
-// auditWriter reports where the record goes, and whether it is on at all.
-func auditWriter() io.Writer {
+// auditWriter reports where the record goes and what this process owns.
+func auditWriter() (io.Writer, io.Closer) {
 	switch destination := strings.TrimSpace(os.Getenv(AuditEnvironmentVariable)); destination {
 	case "":
-		return nil
+		return nil, nil
 	case "stderr":
-		return os.Stderr
+		return os.Stderr, nil
 	default:
 		// Appended to, and never created with permissions a second user could
 		// read: a record of what an operator ran is theirs.
@@ -77,9 +77,9 @@ func auditWriter() io.Writer {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "libtmux-mcp: cannot write the audit record to %s: %v\n",
 				destination, err)
-			return nil
+			return nil, nil
 		}
-		return file
+		return file, file
 	}
 }
 

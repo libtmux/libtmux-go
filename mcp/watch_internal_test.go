@@ -101,5 +101,5 @@ func (w *watchers) at(uri string) time.Time {
 func (w *watchers) owes(uri string) bool {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
-	return w.owed[uri]
+	return w.owed[uri] != nil
 }

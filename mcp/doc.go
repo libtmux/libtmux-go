@@ -4,9 +4,9 @@
 // takes no runtime dependency, while speaking MCP needs one, so this lives in
 // its own module.
 //
-// This package is named mcp and so is the SDK's, which [NewServer] returns a
-// value from. A file using both must rename one of them, and naming both is
-// what using this package looks like:
+// This package is named mcp and so is the SDK's, whose server [Instance]
+// embeds. A file using both must rename one of them, and naming both is what
+// using this package looks like:
 //
 //	import (
 //		sdk "github.com/modelcontextprotocol/go-sdk/mcp"
