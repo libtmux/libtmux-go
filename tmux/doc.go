@@ -59,14 +59,21 @@
 // expose several views with the same [WindowID], and panes in those views share
 // a [PaneID]. ID-only snapshot lookups may return [ErrSnapshotAmbiguous]; use
 // [Snapshot.WindowsByID], [Snapshot.PanesByID], or relationship resolvers when
-// the exact linked view matters. [Window.Equal] and [Pane.Equal] compare stable
-// tmux identity and deliberately collapse linked views.
+// the exact linked view matters. Equal methods compare stable tmux identity
+// and the daemon provenance that materialized it. [Window.Equal] and
+// [Pane.Equal] deliberately collapse linked views from that same daemon.
 //
 // [Snapshot] is observational, not transactional. It verifies the server
 // identity around collection but cannot make several tmux commands atomic.
 // Relationship accessors return new slices of shallow copies.
 // Search methods use the same opening and closing identity probes and fail if
 // the tmux daemon changes during their listing.
+//
+// Materialized records retain that daemon identity. Follow-up operations use
+// an atomic tmux-side guard, so a daemon that later takes over the same socket
+// cannot receive a stale record's command; the refusal matches
+// [ErrDaemonReplaced]. Refs derived from records retain the same provenance,
+// while [SessionRef], [WindowRef], and [PaneRef] remain selector-relative.
 //
 // Record relationship methods such as [Session.Windows] and [Window.Panes]
 // return a bool because targeted lookups do not materialize relations. False

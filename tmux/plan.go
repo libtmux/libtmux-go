@@ -41,27 +41,39 @@ type Ref struct {
 	// zero when target names one that already exists. It is one-based so that
 	// the zero Ref is not silently a reference to the first step.
 	step int
+	// daemon is present only on refs derived from materialized records. Raw ID
+	// constructors remain selector-relative.
+	daemon *snapshotServerIdentity
 }
 
 // Ref returns a [Ref] addressing the receiver.
-func (s Session) Ref() Ref { return SessionRef(s.sessionID) }
+func (s Session) Ref() Ref { return refFor(s.sessionID.String(), s.server.daemon) }
 
 // Ref returns a [Ref] addressing the receiver.
-func (w Window) Ref() Ref { return WindowRef(w.windowID) }
+func (w Window) Ref() Ref { return refFor(w.windowID.String(), w.server.daemon) }
 
 // Ref returns a [Ref] addressing the receiver.
-func (p Pane) Ref() Ref { return PaneRef(p.paneID) }
+func (p Pane) Ref() Ref { return refFor(p.paneID.String(), p.server.daemon) }
 
-// SessionRef returns a [Ref] addressing a session by ID, for a caller holding
-// an identifier rather than a record.
+func refFor(target string, daemon *snapshotServerIdentity) Ref {
+	ref := Ref{target: target}
+	if daemon != nil {
+		identity := *daemon
+		ref.daemon = &identity
+	}
+	return ref
+}
+
+// SessionRef returns a selector-relative [Ref] addressing a session by ID, for
+// a caller holding an identifier rather than a materialized record.
 func SessionRef(id SessionID) Ref { return Ref{target: id.String()} }
 
-// WindowRef returns a [Ref] addressing a window by ID, for a caller holding an
-// identifier rather than a record.
+// WindowRef returns a selector-relative [Ref] addressing a window by ID, for a
+// caller holding an identifier rather than a materialized record.
 func WindowRef(id WindowID) Ref { return Ref{target: id.String()} }
 
-// PaneRef returns a [Ref] addressing a pane by ID, for a caller holding an
-// identifier rather than a record.
+// PaneRef returns a selector-relative [Ref] addressing a pane by ID, for a
+// caller holding an identifier rather than a materialized record.
 func PaneRef(id PaneID) Ref { return Ref{target: id.String()} }
 
 // String returns the target a Ref resolves to, or a placeholder naming the step
@@ -458,6 +470,13 @@ func (p *Plan) RunWith(
 	if len(p.ops) == 0 {
 		return PlanResult{Ops: results}, nil
 	}
+	expected, err := p.expectedDaemon()
+	if err != nil {
+		return PlanResult{Ops: results}, err
+	}
+	if expected != nil {
+		server = server.withDaemon(*expected)
+	}
 
 	var version Version
 	if p.needsVersion() {
@@ -494,6 +513,26 @@ func (p *Plan) RunWith(
 		}
 	}
 	return PlanResult{Ops: results}, nil
+}
+
+func (p *Plan) expectedDaemon() (*snapshotServerIdentity, error) {
+	var expected *snapshotServerIdentity
+	for index, op := range p.ops {
+		for _, ref := range []Ref{op.target, op.source} {
+			if ref.daemon == nil {
+				continue
+			}
+			if expected != nil && !sameSnapshotIdentity(*expected, *ref.daemon) {
+				return nil, &PlanError{
+					Step:   index,
+					Reason: "references different tmux server instances",
+				}
+			}
+			identity := *ref.daemon
+			expected = &identity
+		}
+	}
+	return expected, nil
 }
 
 // checkGrouping rejects omitted, repeated, or reordered operations before I/O.

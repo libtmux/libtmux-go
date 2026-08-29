@@ -17,6 +17,7 @@ import (
 // are safe to share.
 type Server struct {
 	state          *serverState
+	daemon         *snapshotServerIdentity
 	engine         Engine
 	engineFallback EngineFallbackPolicy
 	// engineless records that this handle gave up its engine deliberately, so

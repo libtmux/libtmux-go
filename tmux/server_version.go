@@ -178,6 +178,9 @@ func (s Server) loadVersion(ctx context.Context, refresh bool) (Version, error) 
 	if err != nil {
 		return Version{}, err
 	}
+	if s.daemon != nil {
+		return s.daemon.version, nil
+	}
 	cache := &state.shared.version
 	for {
 		cache.mu.Lock()

@@ -1343,6 +1343,7 @@ func newSessionCommandServer(server Server) (Server, error) {
 			// TMUX was removed from the environment reaching it.
 			shared: state.shared,
 		},
+		daemon:         server.daemon,
 		engine:         server.engine,
 		engineFallback: server.engineFallback,
 		engineless:     server.engineless,

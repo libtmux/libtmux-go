@@ -428,6 +428,9 @@ func (s Server) probeClosingIdentity(
 }
 
 func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdentity, error) {
+	if s.daemon != nil {
+		return *s.daemon, nil
+	}
 	fields := snapshotIdentityFields()
 	result, rawOutput, err := s.literalCmdWithRaw(
 		ctx,
@@ -657,6 +660,26 @@ func newSnapshotWithIdentity(
 		}
 		state.clients = append(state.clients, view)
 		state.clientsByName[view.clientName] = append(state.clientsByName[view.clientName], viewIndex)
+	}
+	provenance := expectedIdentity
+	if provenance == nil {
+		provenance = identity.observed
+	}
+	if provenance != nil {
+		bound := server.withDaemon(*provenance)
+		state.server = bound
+		for index := range state.sessions {
+			state.sessions[index].server = bound
+		}
+		for index := range state.windows {
+			state.windows[index].server = bound
+		}
+		for index := range state.panes {
+			state.panes[index].server = bound
+		}
+		for index := range state.clients {
+			state.clients[index].server = bound
+		}
 	}
 
 	return Snapshot{state: state}, nil

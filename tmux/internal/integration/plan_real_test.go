@@ -170,6 +170,76 @@ func TestPlanRefusesTheZeroRef(t *testing.T) {
 	}
 }
 
+//libtmux:real-tmux
+func TestPlanRefusesReferencesFromDifferentDaemons(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	firstServer := tmuxtest.NewServer(ctx, t)
+	secondServer := tmuxtest.NewServer(ctx, t)
+
+	firstSessions, err := firstServer.Sessions(ctx)
+	if err != nil || len(firstSessions) != 1 {
+		t.Fatalf("first Sessions() = (%d, %v), want one", len(firstSessions), err)
+	}
+	secondSessions, err := secondServer.Sessions(ctx)
+	if err != nil || len(secondSessions) != 1 {
+		t.Fatalf("second Sessions() = (%d, %v), want one", len(secondSessions), err)
+	}
+
+	plan := tmux.NewPlan()
+	plan.RenameSession(firstSessions[0].Ref(), "must-not-run-first")
+	plan.RenameSession(secondSessions[0].Ref(), "must-not-run-second")
+	result, err := plan.Run(ctx, firstServer)
+	var refused *tmux.PlanError
+	if !errors.As(err, &refused) || refused.Step != 1 {
+		t.Fatalf("Run() error = %v, want PlanError at step 1", err)
+	}
+	for index, op := range result.Ops {
+		if op.Status != tmux.OpSkipped {
+			t.Errorf("operation %d = %v, want skipped", index, op.Status)
+		}
+	}
+	for index, session := range []tmux.Session{firstSessions[0], secondSessions[0]} {
+		refreshed, refreshErr := session.Refresh(ctx)
+		if refreshErr != nil {
+			t.Fatalf("refresh session %d: %v", index, refreshErr)
+		}
+		if name, ok := refreshed.Name(); !ok || name != "work" {
+			t.Errorf("session %d name = (%q, %t), want (work, true)", index, name, ok)
+		}
+	}
+}
+
+//libtmux:real-tmux
+func TestPlanAtomicallyRejectsTheWrongServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	origin := tmuxtest.NewServer(ctx, t)
+	other := tmuxtest.NewServer(ctx, t)
+
+	sessions, err := origin.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	plan := tmux.NewPlan()
+	plan.RenameSession(sessions[0].Ref(), "must-not-reach-other")
+	result, err := plan.Run(ctx, other)
+	if !errors.Is(err, tmux.ErrDaemonReplaced) {
+		t.Fatalf("Run() error = %v, want ErrDaemonReplaced", err)
+	}
+	if len(result.Ops) != 1 || result.Ops[0].Status != tmux.OpSkipped {
+		t.Fatalf("operation results = %#v, want one skipped operation", result.Ops)
+	}
+
+	otherSessions, err := other.Sessions(ctx)
+	if err != nil || len(otherSessions) != 1 {
+		t.Fatalf("other Sessions() = (%d, %v), want one", len(otherSessions), err)
+	}
+	if name, ok := otherSessions[0].Name(); !ok || name != "work" {
+		t.Fatalf("other session name = (%q, %t), want (work, true)", name, ok)
+	}
+}
+
 // tmux does not attribute a grouped command-list failure to an individual
 // operation, so every operation in the dispatch is indeterminate.
 //

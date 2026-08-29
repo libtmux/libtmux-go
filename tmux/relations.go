@@ -72,7 +72,7 @@ func (w Window) LinkedSessions() ([]Session, bool) {
 		seen[sessionID] = struct{}{}
 		session, ok := oneAt(w.snapshot.sessions, w.snapshot.sessionsByID[sessionID])
 		if ok {
-			result = append(result, session)
+			result = append(result, session.withServer(w.server))
 		}
 	}
 	return result, true

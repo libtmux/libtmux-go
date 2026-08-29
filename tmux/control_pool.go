@@ -73,6 +73,9 @@ func (s Server) OpenControlPool(
 	}
 	s.connectionState().coordination().pools.Add(1)
 	connected := s.WithEngine(pool.Engine())
+	if session.server.daemon != nil {
+		connected = connected.withDaemon(*session.server.daemon)
+	}
 	// The session is handed back on the connected handle rather than as it
 	// arrived. A caller writing "server, session, pool, err := ..." shadows the
 	// session they passed in, so the one they go on to use is the one that

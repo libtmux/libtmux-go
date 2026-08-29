@@ -148,6 +148,9 @@ func (e *commandTransportError) Unwrap() error { return e.err }
 // commandTransportFailure leaves executable-resolution and truncated-read
 // failures strict so configuration errors or partial output cannot become empty rows.
 func commandTransportFailure(err error) error {
+	if errors.Is(err, ErrDaemonReplaced) {
+		return err
+	}
 	if _, ok := errors.AsType[*exec.Error](err); ok {
 		return err
 	}

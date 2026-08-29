@@ -116,8 +116,9 @@ func TestServerPointLookupsUseScopedFramedListings(t *testing.T) {
 			if id != test.wantID || format != test.wantFormat {
 				t.Fatalf("lookup = (%q, %q), want (%q, %q)", id, format, test.wantID, test.wantFormat)
 			}
-			if producingServer != server {
-				t.Fatalf("lookup Server() = %#v, want original strict handle", producingServer)
+			if producingServer.connectionState() != server.connectionState() ||
+				producingServer.daemon == nil {
+				t.Fatal("lookup Server() did not retain its state and daemon provenance")
 			}
 
 			requests := runner.recordedRequests()
@@ -906,8 +907,9 @@ func TestModelRefreshReturnsNewLiveValue(t *testing.T) {
 			if id != test.wantID || name != test.wantName || !receiverUnchanged {
 				t.Fatalf("Refresh() = (%q, %q, unchanged %t), want (%q, %q, true)", id, name, receiverUnchanged, test.wantID, test.wantName)
 			}
-			if producingServer != server {
-				t.Fatalf("Refresh().Server() = %#v, want original strict handle", producingServer)
+			if producingServer.connectionState() != server.connectionState() ||
+				producingServer.daemon == nil {
+				t.Fatal("Refresh().Server() did not retain its state and daemon provenance")
 			}
 		})
 	}

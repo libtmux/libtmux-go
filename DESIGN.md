@@ -192,6 +192,14 @@ Each build probes the connected server's PID, start time, socket, and version
 before and after its listings and checks that identity on every nonempty row.
 A server restart during collection is an invariant error, while ordinary
 dangling relationships remain observable.
+Each materialized record keeps that four-part daemon provenance. Its follow-up
+commands wrap the requested operation in one tmux-side `if-shell`, comparing
+the current PID, start time, and socket before execution. A replacement daemon
+therefore rejects a stale record atomically instead of receiving its command
+after a separate liveness probe. Record equality and record-derived plan refs
+include the provenance; raw ID refs remain relative to the server selected at
+execution. A plan containing refs from different daemons is invalid before it
+sends anything.
 Snapshot slice accessors return fresh slices, and iterators range over
 materialized state only. Duplicate point lookup reports ambiguity. Live point
 lookups (`Server.Session`, `Server.Window`, `Server.Pane`, and `Server.Client`)

@@ -245,28 +245,78 @@ func (s Server) runCommand(
 	if err != nil {
 		return tmuxcmd.Result{ExitCode: -1}, err
 	}
+	guarded, guard, err := s.guardCommand(args, commandList)
+	if err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
+	if guard != nil {
+		commandList = false
+	}
 	engine, err := s.commandEngine(kind)
 	if err != nil {
 		return tmuxcmd.Result{ExitCode: -1}, err
 	}
+	var result tmuxcmd.Result
 	if engine != nil {
-		arguments := args
+		arguments := guarded
 		if kind != CommandServer {
-			arguments = s.commandArguments(args)
+			arguments = s.commandArguments(guarded)
 		}
-		return runEngine(ctx, engine, kind, state.config, arguments, stdio, commandList)
+		result, err = runEngine(ctx, engine, kind, state.config, arguments, stdio, commandList)
+	} else {
+		arguments := guarded
+		if !commandList {
+			arguments = escapeCommandListSeparators(arguments)
+		}
+		result, err = state.executor.Run(ctx, tmuxcmd.Request{
+			Binary:      state.config.executable,
+			Arguments:   s.commandArguments(arguments),
+			Environment: slices.Clone(state.config.processEnvironment),
+			Directory:   state.config.directory,
+			Stdio:       stdio,
+		})
 	}
-	arguments := args
-	if !commandList {
-		arguments = escapeCommandListSeparators(arguments)
+	if guard == nil {
+		return result, err
 	}
-	return state.executor.Run(ctx, tmuxcmd.Request{
-		Binary:      state.config.executable,
-		Arguments:   s.commandArguments(arguments),
-		Environment: slices.Clone(state.config.processEnvironment),
-		Directory:   state.config.directory,
-		Stdio:       stdio,
-	})
+	result.Command = s.originalCommand(kind, args, engine != nil)
+	if err == nil && guard.rejected(result.ExitCode, result.Stderr) {
+		return tmuxcmd.Result{Command: result.Command, ExitCode: -1}, ErrDaemonReplaced
+	}
+	if err == nil && stdio != nil && result.ExitCode != 0 &&
+		s.daemonNoLongerAtSocket(ctx) {
+		return tmuxcmd.Result{Command: result.Command, ExitCode: -1}, ErrDaemonReplaced
+	}
+	return result, err
+}
+
+// Streaming commands hand stderr to the caller, so the guard's private
+// failure marker is unavailable here. Probe only after a nonzero exit and use
+// a fresh process: a selected engine may remain connected to an old daemon
+// after another one has taken over its socket.
+func (s Server) daemonNoLongerAtSocket(ctx context.Context) bool {
+	if s.daemon == nil {
+		return false
+	}
+	current, err := s.withoutDaemon().WithEngine(nil).probeSnapshotIdentity(ctx)
+	if err != nil {
+		return errors.Is(err, ErrNoServer)
+	}
+	return !sameSnapshotIdentity(*s.daemon, current)
+}
+
+func (s Server) originalCommand(kind CommandKind, arguments []string, engine bool) []string {
+	if engine {
+		if kind == CommandServer {
+			return slices.Clone(arguments)
+		}
+		return s.commandArguments(arguments)
+	}
+	state, err := s.stateForUse()
+	if err != nil {
+		return nil
+	}
+	return append([]string{state.config.executable}, s.commandArguments(arguments)...)
 }
 
 // runExactArgv routes a complete tmux argv that carries its own client-global

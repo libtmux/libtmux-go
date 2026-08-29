@@ -483,7 +483,8 @@ func TestNewWindowBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 		t.Fatalf("NewWindow() error = %v", err)
 	}
 	name, _ := window.Name()
-	if window.windowID != "@8" || window.windowIndex != 4 || name != "editor" || window.Server() != server {
+	if window.windowID != "@8" || window.windowIndex != 4 || name != "editor" ||
+		window.Server().connectionState() != server.connectionState() || window.Server().daemon == nil {
 		t.Fatalf("NewWindow() = %#v with name %q, want live @8 index 4 model", window, name)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
@@ -526,7 +527,8 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SplitPane() error = %v", err)
 	}
-	if pane.paneID != "%9" || pane.paneIndex != 1 || pane.Server() != server {
+	if pane.paneID != "%9" || pane.paneIndex != 1 ||
+		pane.Server().connectionState() != server.connectionState() || pane.Server().daemon == nil {
 		t.Fatalf("SplitPane() = %#v, want live %%9 model", pane)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{

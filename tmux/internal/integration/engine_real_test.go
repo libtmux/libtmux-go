@@ -932,14 +932,12 @@ func TestAWarningPrintsItself(t *testing.T) {
 	}
 }
 
-// TestAConnectionProvesItsOwnServerIdentity covers the second identity probe a
-// snapshot read otherwise pays. Its only job is to prove that the listing came
-// from one tmux server instance, which a connection already guarantees: tmux
-// ends a client with the server it attached to, so a client that answers at
-// all answers from the instance it was opened against.
+// A materialized record retains the identity that produced it. Follow-up reads
+// guard that identity inside tmux rather than probing around the listing,
+// regardless of transport.
 //
 //libtmux:real-tmux
-func TestAConnectionProvesItsOwnServerIdentity(t *testing.T) {
+func TestMaterializedRecordCarriesItsServerIdentity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -982,7 +980,7 @@ func TestAConnectionProvesItsOwnServerIdentity(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	// Forking: the guard costs a probe on each side of the listing.
+	// A process executes one guarded listing without separate identity probes.
 	mutex.Lock()
 	carried = map[string]int{}
 	mutex.Unlock()
@@ -991,12 +989,17 @@ func TestAConnectionProvesItsOwnServerIdentity(t *testing.T) {
 	}
 	mutex.Lock()
 	forkingProbes := carried["display-message"]
+	forkingGuards := carried["if-shell"]
 	mutex.Unlock()
-	if forkingProbes != 2 {
-		t.Fatalf("a forking read issued %d identity probes, want 2", forkingProbes)
+	if forkingProbes != 0 || forkingGuards != 1 {
+		t.Fatalf(
+			"a forking read issued %d probes and %d guards, want 0 and 1",
+			forkingProbes,
+			forkingGuards,
+		)
 	}
 
-	// Connected: the transport proves it, so only the opening probe remains.
+	// A connection carries the same guard and also needs no probe.
 	_, live, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
 	if err != nil {
 		t.Fatalf("open pool: %v", err)
@@ -1008,8 +1011,12 @@ func TestAConnectionProvesItsOwnServerIdentity(t *testing.T) {
 	if _, err := instrumented.SearchWindows(ctx, nil); err != nil {
 		t.Fatalf("read over the connection: %v", err)
 	}
-	if got := recorder.total("display-message"); got != 1 {
-		t.Fatalf("a connected read issued %d identity probes, want 1", got)
+	if probes, guards := recorder.total("display-message"), recorder.total("if-shell"); probes != 0 || guards != 1 {
+		t.Fatalf(
+			"a connected read issued %d probes and %d guards, want 0 and 1",
+			probes,
+			guards,
+		)
 	}
 }
 
