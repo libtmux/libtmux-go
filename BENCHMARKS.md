@@ -137,34 +137,41 @@ $ go -C mcp test -run '^$' -bench . -benchtime 60x .
 Only the allocation counts are recorded, and deliberately. Talking to tmux
 dominates the wall clock of every call here, and the clock moves with whatever
 else the machine is running -- the same six calls span 15ms to 44ms between
-runs on an idle laptop and a busy one, while their allocation counts repeat to
-within a tenth of a percent. Publishing the times per release would be
-recording the load rather than the server. Compare one revision against another
-on one machine, and watch the allocations.
+runs on an idle laptop and a busy one, while their allocation counts move far
+less. Publishing the times per release would be recording the load rather than
+the server. Compare one revision against another on one machine, and watch the
+allocations.
+
+The table is the median of three 60-iteration samples on the machine named
+above, capped to 10 runtime threads, on Linux with Go 1.26.7 and tmux 3.7c.
+These calls reuse MCP's provenance-bound control connection instead of starting
+a tmux process for each command. The control protocol allocates more Go objects
+than the older subprocess-backed MCP path; the execution-path tables above show
+the process reduction that trade buys.
 
 | Call | allocs/op |
 | --- | --- |
-| `list_sessions` | 2,186 |
-| `get_server_info` | 2,377 |
-| `list_panes` | 2,712 |
-| `list_panes` with `detail: full` | 2,894 |
-| `display_message` | 6,001 |
-| `capture_pane` | 6,024 |
+| `list_sessions` | 2,379 |
+| `get_server_info` | 2,660 |
+| `list_panes` | 2,796 |
+| `list_panes` with `detail: full` | 3,026 |
+| `display_message` | 6,539 |
+| `capture_pane` | 7,404 |
 
 Two of these measure a claim rather than a cost.
 
-**A batch is not faster than its parts.** Three listings batched and the same
-three sent one at a time come out level on the clock; the batch allocates
-1.88MB against 2.52MB and, over a real pipe rather than the in-memory transport
-these run on, spends one round trip rather than three. Its reason to exist is
-the caller's turn, not the server's CPU.
+**A batch saves framing, not server work.** Three listings batched and the same
+three sent one at a time run the same tmux commands. The batch allocates 1.59MB
+against 2.25MB and, over a real pipe rather than the in-memory transport these
+run on, spends one round trip rather than three. Its reason to exist is the
+caller's turn, not the server's CPU.
 
 **`capture_since` has a break-even.** It reads the pane and then fingerprints
 the rows to mint a cursor, so it costs more than a plain capture and returns a
-cursor of about half a kilobyte in every reply. On an 80x24 pane of short lines
-that is 585 bytes against 152, and `capture_pane` wins on both counts. It earns
-its place on a wide pane holding full lines, read repeatedly -- which is what it
-is for, and is worth knowing is not every pane.
+cursor in every reply. On an 80x24 pane of short lines that is about 373 bytes
+against 173, and `capture_pane` wins on both counts. It earns its place on a wide
+pane holding full lines, read repeatedly -- which is what it is for, and is
+worth knowing is not every pane.
 
 ## What waiting and watching cost
 
