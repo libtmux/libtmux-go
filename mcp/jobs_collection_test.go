@@ -587,7 +587,9 @@ func TestElectedGetJobCannotOutliveItsEffectiveTimeout(t *testing.T) {
 func TestConcurrentGetJobFollowersJoinBeforeTheTmuxWait(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	// A fixed shell keeps the election window measuring collector handoff
+	// rather than how long an interactive shell takes to start.
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{FixedShell: true})
 	created, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "job-followers"})
 	if err != nil {
 		t.Fatal(err)
