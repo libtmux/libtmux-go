@@ -452,6 +452,49 @@ func TestServerSnapshotUsesVersionedFramedListings(t *testing.T) {
 	})
 }
 
+type boundDecliningEngine struct{}
+
+func (boundDecliningEngine) Supports(CommandKind) bool { return false }
+
+func (boundDecliningEngine) Run(
+	context.Context,
+	CommandKind,
+	CommandRequest,
+) (CommandResult, error) {
+	panic("declining engine must not run")
+}
+
+func (boundDecliningEngine) InstanceBound() bool { return true }
+
+func TestSnapshotKeepsClosingProbeWhenBoundEngineDeclinesServerCommands(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	identity := tmuxcmd.Result{
+		RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(),
+			snapshotRowValues(version, nil),
+		),
+		ExitCode: 0,
+	}
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: identity},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		{result: identity},
+	}}
+	server := serverWithRunner(runner).WithEngine(boundDecliningEngine{})
+
+	if _, err := server.Snapshot(context.Background()); err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if got := len(runner.recordedRequests()); got != 6 {
+		t.Fatalf("Snapshot() command count = %d, want closing identity probe after fallback", got)
+	}
+}
+
 func TestServerSnapshotReportsListFailure(t *testing.T) {
 	t.Parallel()
 

@@ -198,7 +198,7 @@ type InstanceBoundEngine interface {
 
 func (s Server) boundToInstance() bool {
 	bound, ok := s.engine.(InstanceBoundEngine)
-	return ok && bound.InstanceBound()
+	return ok && s.engine.Supports(CommandServer) && bound.InstanceBound()
 }
 
 // engineDecliner reports noteworthy changes in an engine's support.
