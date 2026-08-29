@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -24,7 +23,9 @@ func (t *tools) complete(
 	forURI := request.Params.Ref == nil || request.Params.Ref.Type != "ref/prompt"
 	values, err := t.completionValues(ctx, argument.Name, already, forURI)
 	if err != nil {
-		//nolint:nilerr // completion discovery failures degrade to an empty picker
+		if t.runtime.isTerminalError(err) {
+			return nil, err
+		}
 		return &mcp.CompleteResult{Completion: mcp.CompletionResultDetails{
 			Values: []string{},
 		}}, nil
@@ -111,10 +112,16 @@ func forPath(name string, forURI bool) string {
 	return url.PathEscape(name)
 }
 
-func completionFor(target tmux.Server) func(
-	context.Context, *mcp.CompleteRequest,
+func (t *tools) completeObserved(
+	ctx context.Context,
+	request *mcp.CompleteRequest,
 ) (*mcp.CompleteResult, error) {
-	completing := &tools{}
-	completing.reaching.Store(&target)
-	return completing.complete
+	requestCtx, acquired, err := t.acquireRequestRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer acquired.release()
+	result, err := t.complete(requestCtx, request)
+	t.runtime.observe(err)
+	return result, err
 }

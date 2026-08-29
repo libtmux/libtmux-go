@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,16 +22,14 @@ import (
 // wait_for_text follows external output, and wait_for_channel follows tmux signals.
 
 const (
-	runCommandBinary         = "tmux"
 	runCommandDefaultTimeout = 120 * time.Second
 	// waitProgressInterval is how often a long wait tells the client it is
 	// still waiting. A client that asked for progress on a two-minute wait
 	// should not go two minutes without hearing anything.
 	waitProgressInterval = 2 * time.Second
-	// waitBufferMax bounds what a wait keeps in order to match against it. A
-	// pane writing continuously would otherwise grow this without limit, and
-	// nothing beyond the last of it can match a pattern anyway.
-	waitBufferMax = 256 * 1024
+	// waitBufferMax bounds both matching and returned observation text. Prefix
+	// loss is reported, and matching is defined over this retained tail.
+	waitBufferMax = ceilingMaxBytes
 	// waitCeilingDefault bounds how long any one wait may be asked to run.
 	// Longer than a build a person waits for, short enough that one wrong
 	// pattern costs a wait rather than the conversation it was part of.
@@ -70,6 +70,12 @@ func resolveWaitTimeout(requested int) (timeout time.Duration, clamped bool) {
 		return ceiling, true
 	}
 	return timeout, false
+}
+
+func isOwnWaitDeadline(ctx, waitCtx context.Context, err error) bool {
+	return ctx.Err() == nil &&
+		errors.Is(waitCtx.Err(), context.DeadlineExceeded) &&
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // runCommandInput runs one command in a pane and waits for it to finish.
@@ -144,7 +150,7 @@ type runCommandOutput struct {
 	truncation
 }
 
-// runCommand types a command at a shell prompt and waits on a tmux channel.
+// runCommand types a command at a shell prompt and waits for its commit record.
 // A shared filesystem carries its exit status and cursor marks bound its output.
 // If the pane is busy, the text reaches that program instead; timeout results
 // report the pane's running command.
@@ -164,7 +170,7 @@ func (t *tools) runCommand(
 			return nil, runCommandOutput{}, err
 		}
 	}
-	started, err := t.startCommand(ctx, request, input)
+	started, err := t.startCommand(ctx, request, input, owned)
 	if err != nil {
 		return nil, runCommandOutput{}, err
 	}
@@ -173,29 +179,34 @@ func (t *tools) runCommand(
 	// A detached run is finished here. The handle is what collects it, and the
 	// directory it records itself in outlives this call because of that.
 	if input.Detach {
-		if !owned.keep(started) {
-			_ = os.RemoveAll(started.directory)
-			return nil, output, ErrInstanceClosed
-		}
 		output.JobID = started.id
 		output.Detached = true
 		return nil, output, nil
 	}
 	defer func() { _ = os.RemoveAll(started.directory) }()
+	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+	output.TimeoutClamped = clamped
+	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
+	defer waitCancel()
+	reporter := newProgressReporter(waitCtx, request, timeout, "waiting for the command to finish")
+	defer reporter.stop()
 
-	pane, err := t.tmux().Pane(ctx, started.paneID)
+	pane, err := t.tmux(waitCtx).Pane(waitCtx, started.paneID)
 	if err != nil {
+		if isOwnWaitDeadline(ctx, waitCtx, err) {
+			return finishRunCommandDeadline(*started, output, "")
+		}
 		return nil, output, err
 	}
-	return t.awaitCommand(ctx, request, awaiting{
-		server:     t.tmux(),
+	running, _ := pane.Formats().PaneCurrentCommand()
+	return t.awaitCommand(ctx, waitCtx, awaiting{
 		pane:       pane,
-		channel:    started.channel,
 		statusPath: started.statusAt,
 		openedPath: started.openedAt,
 		closedPath: started.closedAt,
 		limits:     limits,
-		requested:  input.TimeoutSeconds,
+		running:    running,
 		output:     output,
 	})
 }
@@ -204,17 +215,18 @@ func (t *tools) runCommand(
 // identifies it, without waiting for anything.
 //
 // It is separate from waiting because the two are independent: the wrapper
-// records the same status against the same channel whether or not this process
-// is the one that reads it, so detaching changes who waits and nothing else.
+// records the same status whether or not this process is the one that reads it,
+// so detaching changes who waits and nothing else.
 func (t *tools) startCommand(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input runCommandInput,
+	owned *jobs,
 ) (*job, error) {
 	if strings.TrimSpace(input.Command) == "" {
 		return nil, errors.New("command is required")
 	}
-	server := t.tmux()
+	server := t.tmux(ctx)
 	// Resolved for delivery, which refuses a pane that cannot read the keys
 	// before the pane is asked to do anything. Either refusal saves this tool
 	// the whole timeoutSeconds the caller set: a mode reads the command as key
@@ -233,162 +245,212 @@ func (t *tools) startCommand(
 	if len(socket.Stdout) == 0 || socket.Stdout[0] == "" {
 		return nil, errors.New("tmux did not report its socket path")
 	}
+	tmuxExecutable := server.Executable()
 
 	directory, err := os.MkdirTemp("", "libtmux-mcp-run")
 	if err != nil {
 		return nil, err
 	}
 
-	// The random channel is also the session-local job handle. It prevents
-	// another server driving the same tmux from guessing and signalling it.
-	channel := "libtmux-mcp-" + rand.Text()
+	jobID := "libtmux-mcp-" + rand.Text()
 	statusPath := filepath.Join(directory, "status")
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")
+	commandPath := filepath.Join(directory, "command")
+	statusTemp := statusPath + ".tmp"
+	openedTemp := openedPath + ".tmp"
+	closedTemp := closedPath + ".tmp"
 
 	// In-pane marks exclude shell echo; the closing column distinguishes a
 	// newline from output ending mid-row. Files hide markers from the pane, and
-	// a subshell keeps an `exit` command from bypassing status and signaling.
+	// sourcing the caller's script inside a subshell keeps its syntax and an
+	// `exit` command from changing the bookkeeping wrapper's structure.
 	mark := fmt.Sprintf(
 		"%s -S %s display-message -p -t %s "+
 			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
-		shellQuote(runCommandBinary),
+		shellQuote(tmuxExecutable),
 		shellQuote(socket.Stdout[0]),
 		shellQuote(pane.ID().String()),
 	)
-	// Brace groups suppress wrapper errors before inner file redirections. After
-	// timeout cleanup removes the directory, trailing stderr redirection is too
-	// late because shells apply redirections left to right. Command stderr remains
+	// Publish each record by rename so a zero-time poll cannot observe a file
+	// after creation but before its small payload has been written. Brace groups
+	// suppress wrapper errors before inner file redirections. After timeout
+	// cleanup removes the directory, trailing stderr redirection is too late
+	// because shells apply redirections left to right. Command stderr remains
 	// captured.
 	script := fmt.Sprintf(
-		"{ %s > %s; } 2>/dev/null; ( %s ); { printf %%s $? > %s; } 2>/dev/null; "+
-			"{ %s > %s; } 2>/dev/null; { %s -S %s wait-for -S %s; } 2>/dev/null\n",
+		"{ %s > %s && command mv %s %s; } 2>/dev/null; ( . %s ); "+
+			"{ printf %%s $? > %s && command mv %s %s; } 2>/dev/null; "+
+			"{ %s > %s && command mv %s %s; } 2>/dev/null\n",
 		mark,
+		shellQuote(openedTemp),
+		shellQuote(openedTemp),
 		shellQuote(openedPath),
-		input.Command,
+		shellQuote(commandPath),
+		shellQuote(statusTemp),
+		shellQuote(statusTemp),
 		shellQuote(statusPath),
 		mark,
+		shellQuote(closedTemp),
+		shellQuote(closedTemp),
 		shellQuote(closedPath),
-		shellQuote(runCommandBinary),
-		shellQuote(socket.Stdout[0]),
-		shellQuote(channel),
 	)
 
-	// Source the script so tabs and control bytes bypass the shell's line editor;
-	// only this package-controlled path is typed into the pane.
+	if err := os.WriteFile(commandPath, []byte(input.Command+"\n"), 0o600); err != nil {
+		_ = os.RemoveAll(directory)
+		return nil, err
+	}
+	// Source the wrapper so tabs and control bytes bypass the shell's line
+	// editor; only this package-controlled path is typed into the pane.
 	scriptPath := filepath.Join(directory, "script")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
 		return nil, err
 	}
-	sourceScript := ". " + shellQuote(scriptPath)
-	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-		Command:         &sourceScript,
-		SuppressHistory: input.SuppressHistory,
-	}); err != nil {
-		_ = os.RemoveAll(directory)
-		return nil, err
-	}
-	return &job{
-		id:        channel,
+	started := &job{
+		id:        jobID,
 		paneID:    pane.ID(),
-		channel:   channel,
 		command:   input.Command,
 		directory: directory,
 		openedAt:  openedPath,
 		closedAt:  closedPath,
 		statusAt:  statusPath,
 		started:   time.Now(),
-	}, nil
+	}
+	if owned != nil {
+		if err := owned.keep(started); err != nil {
+			_ = os.RemoveAll(directory)
+			return nil, err
+		}
+	}
+	sourceScript := ". " + shellQuote(scriptPath)
+	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
+		Command:         &sourceScript,
+		SuppressHistory: input.SuppressHistory,
+	}); err != nil {
+		if owned != nil {
+			owned.discard(started.id)
+		} else {
+			_ = os.RemoveAll(directory)
+		}
+		return nil, err
+	}
+	return started, nil
 }
 
 // awaiting is what a wait for one command needs to know, gathered so that the
 // wait reads as one step rather than eight parameters.
 type awaiting struct {
-	server                             tmux.Server
 	pane                               tmux.Pane
-	channel                            string
 	statusPath, openedPath, closedPath string
 	limits                             bounds
-	requested                          int
+	running                            string
 	output                             runCommandOutput
 }
 
-// awaitCommand blocks until a started command signals its channel, and reads
-// back its status and the rows it wrote.
+// awaitCommand blocks until a started command publishes its commit record, and
+// reads back its status and the rows it wrote.
 func (t *tools) awaitCommand(
 	ctx context.Context,
-	request *mcp.CallToolRequest,
+	waitCtx context.Context,
 	waiting awaiting,
 ) (*mcp.CallToolResult, runCommandOutput, error) {
 	output := waiting.output
-	timeout, clamped := resolveWaitTimeout(waiting.requested)
-	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
-	output.TimeoutClamped = clamped
-	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
-	defer waitCancel()
-	reporter := newProgressReporter(request, timeout, "waiting for the command to finish")
-	defer reporter.stop()
 
-	// The wait runs on a handle with no engine, because a command that blocks
-	// inside tmux holds a pooled connection for as long as it blocks.
-	waiter := waiting.server.WithEngine(waiting.server.SubprocessEngine())
-	if err := waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: waiting.channel}); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
-			running := ""
-			if fresh, freshErr := waiting.server.Pane(ctx, waiting.pane.ID()); freshErr == nil {
-				running, _ = fresh.Formats().PaneCurrentCommand()
-			}
-			// The result says the command did not finish; why is diagnostic
-			// rather than part of the answer, so it goes to the log a client
-			// asked for rather than into the reply.
-			logToClient(ctx, request, "warning", map[string]any{
-				"event":   "run_command timed out",
-				"pane":    waiting.pane.ID().String(),
-				"running": running,
-				"seconds": int(timeout.Seconds()),
-			})
-			output.TimedOut = true
-			output.Running = running
-			attachCommandOutput(ctx, waiting.pane,
-				waiting.openedPath, waiting.closedPath, waiting.limits, &output)
-			return nil, output, nil
-		}
+	completion := job{
+		openedAt: waiting.openedPath,
+		statusAt: waiting.statusPath,
+		closedAt: waiting.closedPath,
+	}
+	status, ready, err := waitForCompletedJob(waitCtx, completion)
+	if err == nil && ready {
+		return t.finishAwaitedCommand(ctx, waitCtx, waiting, output, status)
+	}
+	if ctx.Err() != nil {
+		return nil, output, ctx.Err()
+	}
+	if !isOwnWaitDeadline(ctx, waitCtx, err) {
 		return nil, output, err
 	}
+	return finishRunCommandDeadline(completion, output, waiting.running)
+}
 
-	recorded, err := os.ReadFile(waiting.statusPath)
-	if err != nil {
-		return nil, output, fmt.Errorf("command finished without recording a status: %w", err)
-	}
-	status, err := strconv.Atoi(strings.TrimSpace(string(recorded)))
-	if err != nil {
-		return nil, output, fmt.Errorf("unreadable exit status %q", recorded)
-	}
+func (t *tools) finishAwaitedCommand(
+	ctx context.Context,
+	waitCtx context.Context,
+	waiting awaiting,
+	output runCommandOutput,
+	status int,
+) (*mcp.CallToolResult, runCommandOutput, error) {
 	output.ExitStatus = &status
-	attachCommandOutput(ctx, waiting.pane,
-		waiting.openedPath, waiting.closedPath, waiting.limits, &output)
+	if outputErr := t.attachCommandOutput(waitCtx, waiting.pane,
+		waiting.openedPath, waiting.closedPath, waiting.limits, &output); outputErr != nil {
+		if isOwnWaitDeadline(ctx, waitCtx, outputErr) {
+			output.Output = nil
+			output.OutputUnavailable = "the effective timeout ended before pane output was collected"
+			return nil, output, nil
+		}
+		return nil, output, outputErr
+	}
+	return nil, output, nil
+}
+
+func finishRunCommandDeadline(
+	completion job,
+	output runCommandOutput,
+	running string,
+) (*mcp.CallToolResult, runCommandOutput, error) {
+	status, ready, err := readCompletedJob(completion)
+	if err != nil {
+		return nil, output, err
+	}
+	if ready {
+		output.ExitStatus = &status
+	} else {
+		output.TimedOut = true
+		output.Running = running
+	}
+	output.OutputUnavailable = "the effective timeout ended before pane output was collected"
+	if _, openedErr := readMark(completion.openedAt); errors.Is(openedErr, os.ErrNotExist) {
+		output.OutputUnavailable = commandNeverRanReason(running)
+	}
 	return nil, output, nil
 }
 
 // attachCommandOutput preserves a recorded exit status when capture fails and
 // reports why output is unavailable. A missing closing mark reads to screen end.
-func attachCommandOutput(
+func (t *tools) attachCommandOutput(
 	ctx context.Context,
 	pane tmux.Pane,
 	openedPath, closedPath string,
 	limits bounds,
 	output *runCommandOutput,
-) {
+) error {
+	processPane, err := t.processPane(ctx, pane)
+	if err != nil {
+		if t.runtime.isTerminalError(err) || isContextError(err) {
+			return err
+		}
+		output.OutputUnavailable = err.Error()
+		return nil
+	}
+	pane = processPane
 	opened, err := readMark(openedPath)
 	if err != nil {
-		output.OutputUnavailable = markMissing(ctx, pane, err)
-		return
+		reason, reasonErr := t.markMissing(ctx, pane, err)
+		if reasonErr != nil {
+			return reasonErr
+		}
+		output.OutputUnavailable = reason
+		return nil
 	}
 	now, err := readPaneState(ctx, pane)
 	if err != nil {
+		if t.runtime.isTerminalError(err) || isContextError(err) {
+			return err
+		}
 		output.OutputUnavailable = err.Error()
-		return
+		return nil
 	}
 	// Convert absolute marks to current grid rows; tmux renumbers trimmed history.
 	request := tmux.CapturePaneRequest{
@@ -414,7 +476,7 @@ func attachCommandOutput(
 			request.Start = tmux.CaptureLine(-now.historySize)
 			if end < 0 {
 				output.Output = nil
-				return
+				return nil
 			}
 			request.End = tmux.CaptureLine(end - now.historySize)
 		} else {
@@ -422,7 +484,7 @@ func attachCommandOutput(
 				// The cursor finished where it started, so the command printed
 				// nothing. That is an answer rather than a failure.
 				output.Output = nil
-				return
+				return nil
 			}
 			request.End = tmux.CaptureLine(end - now.historySize)
 			rows = end - opened.row + 1
@@ -430,8 +492,11 @@ func attachCommandOutput(
 	}
 	lines, err := pane.Capture(ctx, request)
 	if err != nil {
+		if t.runtime.isTerminalError(err) || isContextError(err) {
+			return err
+		}
 		output.OutputUnavailable = err.Error()
-		return
+		return nil
 	}
 	// tmux collapses an all-blank capture, so recover its marked row count.
 	if len(lines) == 0 && rows > 0 {
@@ -446,6 +511,7 @@ func attachCommandOutput(
 	kept, report := limits.apply(lines)
 	output.Output = kept
 	output.truncation = report
+	return nil
 }
 
 // moved reports grid renumbering at a stable pane size. Resize-induced history
@@ -540,14 +606,20 @@ type mark struct {
 
 // markMissing translates an absent opening mark into a pane-level diagnostic;
 // the wrapper never ran.
-func markMissing(ctx context.Context, pane tmux.Pane, err error) string {
+func (t *tools) markMissing(ctx context.Context, pane tmux.Pane, err error) (string, error) {
 	if !errors.Is(err, os.ErrNotExist) {
-		return err.Error()
+		return err.Error(), nil
 	}
 	running := ""
 	if fresh, freshErr := pane.Refresh(ctx); freshErr == nil {
 		running, _ = fresh.Formats().PaneCurrentCommand()
+	} else if t.runtime.isTerminalError(freshErr) || isContextError(freshErr) {
+		return "", freshErr
 	}
+	return commandNeverRanReason(running), nil
+}
+
+func commandNeverRanReason(running string) string {
 	if running == "" {
 		return "the pane never ran the command: it went to whatever the pane " +
 			"is running as that program's input rather than to a shell"
@@ -605,13 +677,14 @@ type waitForTextInput struct {
 	// the deadline.
 	Stop []string `json:"stop,omitempty" jsonschema:"markers of failure that end the wait early, such as \"error:\""`
 	// Regex reads Patterns and Stop as regular expressions. They are matched
-	// across the pane's whole output with ^ and $ anchoring at line ends.
+	// across the retained output tail with ^ and $ anchoring at line ends.
 	Regex bool `json:"regex,omitempty" jsonschema:"read the patterns as regular expressions"`
 	// MatchCase requires the capitalisation to match too.
 	MatchCase bool `json:"matchCase,omitempty" jsonschema:"require the capitalisation to match"`
-	// SinceEntry ignores what the pane already shows, so only output written
-	// after the call began can match. Use it when the pattern is something the
-	// pane may have said before and the question is whether it says it again.
+	// SinceEntry ignores the exact screen baseline captured after the watcher
+	// attaches, so only later output can match. Use it when the pattern is
+	// something the pane may have said before and the question is whether it
+	// says it again.
 	SinceEntry bool `json:"sinceEntry,omitempty" jsonschema:"ignore what the pane already shows and match only new output"`
 	// IdleSeconds ends the wait when the pane has written nothing for that
 	// long. It is the ending for a program whose output cannot be predicted:
@@ -659,8 +732,8 @@ type waitForTextOutput struct {
 	// Matched is the pattern that ended the wait, whether it came from
 	// Patterns or from Stop.
 	Matched string `json:"matched,omitempty"`
-	// MatchedAtEntry reports that a match was already on the screen when the
-	// wait began rather than written during it. A client that cares whether
+	// MatchedAtEntry reports that a match was already on the attached screen
+	// baseline rather than written after it. A client that cares whether
 	// something just happened, as opposed to having happened, checks this.
 	MatchedAtEntry bool `json:"matchedAtEntry"`
 	// EntryNote says what happened when a wait ran its whole deadline with the
@@ -693,6 +766,11 @@ func (t *tools) waitForText(
 	request *mcp.CallToolRequest,
 	input waitForTextInput,
 ) (*mcp.CallToolResult, waitForTextOutput, error) {
+	if input.TimeoutSeconds < 0 || input.IdleSeconds < 0 {
+		return nil, waitForTextOutput{}, errors.New(
+			"timeoutSeconds and idleSeconds must not be negative",
+		)
+	}
 	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
 	if err != nil {
 		return nil, waitForTextOutput{}, err
@@ -706,72 +784,105 @@ func (t *tools) waitForText(
 		return nil, waitForTextOutput{}, err
 	}
 
-	server := t.tmux()
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
-	if err != nil {
-		return nil, waitForTextOutput{}, err
-	}
-	output := waitForTextOutput{PaneID: pane.ID().String(), Outcome: outcomeTimeout}
-	started := time.Now()
-	// Resolved before the entry check rather than beside the wait it bounds,
-	// so that a match already on the screen reports the same budget a match
-	// arriving a minute later would have.
 	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
-	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
-	output.TimeoutClamped = clamped
+	started := time.Now()
+	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
+	defer waitCancel()
+	output := waitForTextOutput{
+		Outcome:                 outcomeTimeout,
+		EffectiveTimeoutSeconds: int(timeout.Seconds()),
+		TimeoutClamped:          clamped,
+	}
+	finishTimeout := func(err error) (*mcp.CallToolResult, waitForTextOutput, error) {
+		if isOwnWaitDeadline(ctx, waitCtx, err) {
+			return finishWait(
+				&output, outcomeTimeout, "", false, nil, limits, truncation{}, started,
+			)
+		}
+		return nil, output, err
+	}
+	reporter := newProgressReporter(waitCtx, request, timeout, "watching the pane")
+	defer reporter.stop()
+
+	process, err := t.runtime.process(waitCtx)
+	if err != nil {
+		return finishTimeout(err)
+	}
+	pane, err := t.resolvePane(waitCtx, input.PaneID, input.SessionName)
+	if err != nil {
+		return finishTimeout(err)
+	}
+	output.PaneID = pane.ID().String()
+	processPane, err := process.Pane(waitCtx, pane.ID())
+	if err != nil {
+		return finishTimeout(err)
+	}
+
+	observation, err := t.runtime.openObservation(waitCtx, processPane)
+	if err != nil {
+		return finishTimeout(err)
+	}
+	defer t.runtime.releaseObservation(observation)
+	entry := observation.Baseline()
 
 	// Read entry text even when ignored so a timeout can report that the match
 	// was already present rather than implying the pattern failed.
 	presentAtEntry := false
 	if len(patterns) > 0 || len(stops) > 0 {
-		if lines, captureErr := pane.Capture(ctx, tmux.CapturePaneRequest{}); captureErr == nil {
-			shown := strings.Join(lines, "\n")
-			stopName, stopped := firstMatch(stops, shown)
-			patternName, matchedNow := firstMatch(patterns, shown)
-			presentAtEntry = stopped || matchedNow
-			if !input.SinceEntry {
-				if stopped {
-					return finishWait(&output, outcomeStopped, stopName, true, lines, limits, started)
-				}
-				if matchedNow {
-					return finishWait(&output, outcomeMatched, patternName, true, lines, limits, started)
-				}
+		shown := strings.Join(entry, "\n")
+		stopName, stopped := firstMatch(stops, shown)
+		patternName, matchedNow := firstMatch(patterns, shown)
+		presentAtEntry = stopped || matchedNow
+		if !input.SinceEntry {
+			if stopped {
+				return finishWait(
+					&output, outcomeStopped, stopName, true, entry, limits, truncation{}, started,
+				)
+			}
+			if matchedNow {
+				return finishWait(
+					&output, outcomeMatched, patternName, true, entry, limits, truncation{}, started,
+				)
 			}
 		}
 	}
-
-	session, err := server.Session(ctx, pane.SessionID())
-	if err != nil {
-		return nil, output, err
-	}
-	// A connection of its own, closed with the wait, so that watching a pane
-	// does not hold a client attached for longer than the client asked for.
-	control, err := server.WithEngine(server.SubprocessEngine()).OpenControl(ctx, session)
-	if err != nil {
-		return nil, output, err
-	}
-	defer func() { _ = control.Close() }()
-
-	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
-	defer waitCancel()
-	reporter := newProgressReporter(request, timeout, "watching the pane")
-	defer reporter.stop()
-
 	idle := time.Duration(input.IdleSeconds) * time.Second
-	written, outcome, matched, err := watchPane(waitCtx, control, pane.ID(), patterns, stops, idle)
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
-		return nil, output, err
+	watched := watchPane(
+		waitCtx, observation, pane.ID(), patterns, stops, idle,
+	)
+	if watched.err != nil {
+		if !isOwnWaitDeadline(ctx, waitCtx, watched.err) {
+			return nil, output, watched.err
+		}
+		watched.outcome = outcomeTimeout
 	}
-	if outcome == outcomeTimeout {
+	if watched.outcome == outcomeTimeout {
 		logToClient(ctx, request, "warning", map[string]any{
 			"event":    "wait_for_text timed out",
 			"pane":     pane.ID().String(),
 			"patterns": input.Patterns,
-			"written":  len(written),
+			"written":  len(watched.written),
 			"seconds":  int(timeout.Seconds()),
 		})
 	}
-	return finishWait(&output, outcome, matched, presentAtEntry, splitWritten(written), limits, started)
+	return finishWait(
+		&output,
+		watched.outcome,
+		watched.matched,
+		presentAtEntry,
+		splitWritten(watched.written),
+		limits,
+		watched.truncation,
+		started,
+	)
+}
+
+type paneWatchResult struct {
+	written string
+	outcome string
+	matched string
+	truncation
+	err error
 }
 
 // watchPane reads a pane's output until something matches or the wait ends.
@@ -782,54 +893,74 @@ func (t *tools) waitForText(
 // pane saying something, so it must not count as the pane still working.
 func watchPane(
 	ctx context.Context,
-	control *tmux.ControlClient,
+	notifications paneNotificationSource,
 	paneID tmux.PaneID,
 	patterns, stops []namedMatcher,
 	idle time.Duration,
-) (written string, outcome, matched string, err error) {
-	var buffer strings.Builder
+) paneWatchResult {
+	var result paneWatchResult
+	var normalizer terminalTextNormalizer
+	buffer := make([]byte, 0, min(waitBufferMax, 4096))
 	quiet := time.Now().Add(idle)
+	consume := func(data []byte) (string, string, bool) {
+		buffer = normalizer.appendChunk(buffer, data)
+		if len(buffer) > waitBufferMax {
+			start := len(buffer) - waitBufferMax
+			for start < len(buffer) && !utf8.RuneStart(buffer[start]) {
+				start++
+			}
+			dropped := buffer[:start]
+			result.TruncatedBytes += len(dropped)
+			result.TruncatedLines += bytes.Count(dropped, []byte{'\n'})
+			result.Truncated = true
+			buffer = append(buffer[:0], buffer[start:]...)
+		}
+		seen := string(buffer)
+		if name, hit := firstMatch(stops, seen); hit {
+			return outcomeStopped, name, true
+		}
+		if name, hit := firstMatch(patterns, seen); hit {
+			return outcomeMatched, name, true
+		}
+		if len(patterns) == 0 && len(stops) == 0 && idle == 0 {
+			return outcomeOutput, "", true
+		}
+		return "", "", false
+	}
 	for {
 		readCtx, cancelRead := ctx, context.CancelFunc(func() {})
 		if idle > 0 {
 			readCtx, cancelRead = context.WithDeadline(ctx, quiet)
 		}
-		notification, notifyErr := control.NextNotification(readCtx)
+		notification, notifyErr := notifications.NextNotification(readCtx)
+		readErr := readCtx.Err()
 		cancelRead()
 		if notifyErr != nil {
 			// The idle window closing is an answer; the whole wait running out
 			// is not. Only the outer context being live tells them apart.
-			if idle > 0 && ctx.Err() == nil {
-				return buffer.String(), outcomeIdle, "", nil
+			if idle > 0 && errors.Is(notifyErr, context.DeadlineExceeded) &&
+				errors.Is(readErr, context.DeadlineExceeded) && ctx.Err() == nil {
+				result.written = string(buffer)
+				result.outcome = outcomeIdle
+				return result
 			}
-			return buffer.String(), outcomeTimeout, "", notifyErr
+			result.written = string(buffer)
+			result.err = paneObservationError(notifyErr)
+			return result
 		}
 		id, data, isOutput := notification.Output()
 		if !isOutput || id != paneID {
 			continue
 		}
+		if len(data) == 0 {
+			continue
+		}
 		quiet = time.Now().Add(idle)
-		buffer.Write(data)
-		if buffer.Len() > waitBufferMax {
-			// Only the tail can still complete a match, and a pane writing
-			// without stopping would otherwise be kept in full.
-			trimmed := buffer.String()
-			buffer.Reset()
-			buffer.WriteString(trimmed[len(trimmed)-waitBufferMax:])
-		}
-		seen := buffer.String()
-		if name, hit := firstMatch(stops, seen); hit {
-			return seen, outcomeStopped, name, nil
-		}
-		if name, hit := firstMatch(patterns, seen); hit {
-			return seen, outcomeMatched, name, nil
-		}
-		if len(patterns) == 0 && len(stops) == 0 && idle == 0 {
-			// Nothing to match means the caller is waiting for the pane to say
-			// anything at all, and it just has. An idle window is the other
-			// way round: the caller is waiting for the pane to stop, so the
-			// first byte is the start of what it waits out rather than an end.
-			return seen, outcomeOutput, "", nil
+		if ending, name, done := consume(data); done {
+			result.written = string(buffer)
+			result.outcome = ending
+			result.matched = name
+			return result
 		}
 	}
 }
@@ -841,6 +972,7 @@ func finishWait(
 	atEntry bool,
 	lines []string,
 	limits bounds,
+	earlier truncation,
 	started time.Time,
 ) (*mcp.CallToolResult, waitForTextOutput, error) {
 	kept, report := limits.apply(lines)
@@ -851,27 +983,24 @@ func finishWait(
 	// Only on the pairing that puzzles, so a note that appears on every wait is
 	// not a note anybody reads.
 	if atEntry && outcome == outcomeTimeout {
-		output.EntryNote = "the text was already on the pane when this wait " +
-			"began, and sinceEntry ignored it, so the deadline ran out waiting " +
+		output.EntryNote = "the text was already on the pane's attached " +
+			"baseline, and sinceEntry ignored it, so the " +
+			"deadline ran out waiting " +
 			"for it to be written again. The same call without sinceEntry " +
 			"returns at once."
 	}
 	output.Lines = kept
-	output.truncation = report
+	output.truncation = addTruncation(report, earlier)
 	output.ElapsedSeconds = time.Since(started).Seconds()
 	return textResult(kept), *output, nil
 }
 
-// splitWritten turns a pane's byte stream into lines a caller can read.
-//
-// Carriage returns are dropped rather than kept: a terminal writes them to
-// move the cursor, and a client reading the result as text would find them
-// embedded in the middle of lines that look correct on a screen.
+// splitWritten turns the normalized pane stream into reply lines.
 func splitWritten(written string) []string {
 	if written == "" {
 		return nil
 	}
-	return strings.Split(strings.ReplaceAll(written, "\r\n", "\n"), "\n")
+	return strings.Split(written, "\n")
 }
 
 // namedMatcher is a test on some text together with the pattern that made it,
@@ -952,12 +1081,14 @@ func addWaitTools(server *mcp.Server, t *tools) {
 	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "wait_for_text",
 		Annotations: readOnly("Wait for Pane Output"),
-		Description: "Wait until a pane writes one of several patterns, reading " +
-			"what the pane produces rather than its screen. Use it for output the " +
+		Description: "Wait until a pane writes one of several patterns. It takes " +
+			"one exact screen baseline after attaching, then reads what the pane " +
+			"produces without polling. Use it for output the " +
 			"client did not author, such as a service announcing it is ready. " +
 			"Pass stop with the markers of failure you already know, so a run " +
 			"that failed returns at once instead of at the deadline. Omit " +
-			"patterns to wait for any output at all. When you cannot predict what " +
+			"patterns to wait for any output at all. Matching retains the most recent " +
+			"one megabyte and reports any older prefix as truncation. When you cannot predict what " +
 			"finishing prints, set idleSeconds and wait for the pane to go quiet " +
 			"instead.",
 	}, t.waitForText)

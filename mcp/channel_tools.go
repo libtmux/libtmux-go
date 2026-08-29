@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -23,6 +22,11 @@ type waitForChannelInput struct {
 type waitForChannelOutput struct {
 	// Signalled reports whether the channel was signalled before the deadline.
 	Signalled bool `json:"signalled"`
+	// EffectiveTimeoutSeconds is the wait this call actually ran, which is
+	// what timeoutSeconds asked for unless the server's ceiling was lower.
+	EffectiveTimeoutSeconds int `json:"effectiveTimeoutSeconds"`
+	// TimeoutClamped reports that the ceiling shortened the requested wait.
+	TimeoutClamped bool `json:"timeoutClamped,omitempty"`
 }
 
 // signalChannelInput releases whoever is waiting on a channel.
@@ -45,31 +49,45 @@ type signalChannelOutput struct {
 // starts; this covers everything it did not.
 func (t *tools) waitForChannel(
 	ctx context.Context,
-	_ *mcp.CallToolRequest,
+	request *mcp.CallToolRequest,
 	input waitForChannelInput,
 ) (*mcp.CallToolResult, waitForChannelOutput, error) {
 	channel, err := validChannel(input.Channel)
 	if err != nil {
 		return nil, waitForChannelOutput{}, err
 	}
-	timeout := time.Duration(input.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = runCommandDefaultTimeout
+	if input.TimeoutSeconds < 0 {
+		return nil, waitForChannelOutput{}, errors.New("timeoutSeconds must not be negative")
+	}
+	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+	output := waitForChannelOutput{
+		EffectiveTimeoutSeconds: int(timeout.Seconds()),
+		TimeoutClamped:          clamped,
 	}
 	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
 	defer waitCancel()
+	reporter := newProgressReporter(ctx, request, timeout, "waiting for the channel to be signalled")
+	defer reporter.stop()
 
-	// A wait that blocks inside tmux holds a pooled connection for as long as
-	// it blocks, which would leave nothing to carry the command that ends it.
-	server := t.tmux()
-	waiter := server.WithEngine(server.SubprocessEngine())
-	if err := waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: channel}); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
-			return nil, waitForChannelOutput{}, nil
+	// A caller-named channel cannot be signalled on timeout without releasing
+	// other waiters, so its bounded wait owns a cancellable process lane. Killing
+	// that client ends this call, but tmux retains its global waiter until a later
+	// signal.
+	waiter, err := t.runtime.process(waitCtx)
+	if err != nil {
+		if isOwnWaitDeadline(ctx, waitCtx, err) {
+			return nil, output, nil
 		}
-		return nil, waitForChannelOutput{}, err
+		return nil, output, err
 	}
-	return nil, waitForChannelOutput{Signalled: true}, nil
+	if err := waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: channel}); err != nil {
+		if isOwnWaitDeadline(ctx, waitCtx, err) {
+			return nil, output, nil
+		}
+		return nil, output, err
+	}
+	output.Signalled = true
+	return nil, output, nil
 }
 
 // signalChannel releases whoever is waiting on a tmux channel.
@@ -82,7 +100,7 @@ func (t *tools) signalChannel(
 	if err != nil {
 		return nil, signalChannelOutput{}, err
 	}
-	if err := t.tmux().WaitFor(ctx, tmux.WaitForRequest{
+	if err := t.tmux(ctx).WaitFor(ctx, tmux.WaitForRequest{
 		Channel: channel,
 		Mode:    tmux.WaitForModeSignal,
 	}); err != nil {
@@ -105,12 +123,12 @@ func validChannel(name string) (string, error) {
 
 // addChannelTools advertises the tools that use tmux's own coordination.
 func addChannelTools(server *mcp.Server, t *tools) {
-	register(server, t, CapabilityMetadataRead, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "wait_for_channel",
-		Annotations: readOnly("Wait on a tmux Channel"),
-		Description: "Wait until something signals a tmux wait-for channel. Use " +
-			"it to coordinate with anything that signals one, including a script " +
-			"or another client; run_command covers commands this client starts.",
+		Annotations: mutating("Wait on a tmux Channel"),
+		Description: "Wait until something signals a tmux wait-for channel. " +
+			"Timeout or cancellation ends this call but cannot remove tmux's global " +
+			"waiter; a later signal may be consumed by it, so do not reuse channel names.",
 	}, t.waitForChannel)
 	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "signal_channel",

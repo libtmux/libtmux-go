@@ -44,7 +44,7 @@ func (t *tools) findPaneByPosition(
 			"direction %q is not above, below, left, or right", input.Direction)
 	}
 
-	server := t.tmux()
+	server := t.tmux(ctx)
 	origin, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
 	if err != nil {
 		return nil, findPaneByPositionOutput{}, err

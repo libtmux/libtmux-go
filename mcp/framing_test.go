@@ -18,10 +18,11 @@ func TestAFrameThatIsNotJSONIsDroppedRatherThanFatal(t *testing.T) {
 		"",
 		"   ",
 		"\x00\x01binary",
+		"[garbage",
+		"[1,2,3]",
 		// Valid JSON that is not a JSON-RPC message ends the read loop just as
 		// a syntax error does, so the filter has to reject it too.
 		"{}",
-		"[1,2,3]",
 		`{"jsonrpc":"2.0"}`,
 		good,
 	}, "\n") + "\n"
@@ -45,8 +46,8 @@ func TestAFrameThatIsNotJSONIsDroppedRatherThanFatal(t *testing.T) {
 	if got := strings.Count(string(passed), good); got != 2 {
 		t.Errorf("kept %d of the 2 good frames", got)
 	}
-	if dropped := strings.Count(notified.String(), "ignoring a frame"); dropped != 7 {
-		t.Errorf("reported %d dropped frames, want the 7 the decoder rejects:\n%s",
+	if dropped := strings.Count(notified.String(), "ignoring a frame"); dropped != 8 {
+		t.Errorf("reported %d dropped frames, want the 8 the decoder rejects:\n%s",
 			dropped, notified.String())
 	}
 }
@@ -68,6 +69,23 @@ func TestALongFrameSurvivesTheFilter(t *testing.T) {
 	if strings.TrimSpace(string(passed)) != string(encoded) {
 		t.Errorf("a %d byte frame did not survive: got %d bytes",
 			len(encoded), len(strings.TrimSpace(string(passed))))
+	}
+}
+
+func TestAnOversizedFrameIsBoundedAndTheNextFrameSurvives(t *testing.T) {
+	const good = `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`
+	stream := strings.Repeat("x", jsonRPCFrameMaxBytes+1) + "\n" + good + "\n"
+	var notified bytes.Buffer
+	reader := wholeJSONLines(io.NopCloser(strings.NewReader(stream)), &notified)
+	passed, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(passed)) != good {
+		t.Fatalf("frame after oversized input = %q, want valid next frame", passed)
+	}
+	if !strings.Contains(notified.String(), "past 8388608 bytes") {
+		t.Fatalf("oversized frame diagnostic = %q", notified.String())
 	}
 }
 

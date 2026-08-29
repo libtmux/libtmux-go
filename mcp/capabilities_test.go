@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -74,10 +75,21 @@ func TestMetadataServerRefusesOptionalContent(t *testing.T) {
 func TestMetadataServerRefusesPaneContentSubscriptions(t *testing.T) {
 	toolset := &tools{capabilities: newCapabilitySet([]Capability{CapabilityMetadataRead})}
 	err := toolset.subscribe(context.Background(), &sdk.SubscribeRequest{
-		Params: &sdk.SubscribeParams{URI: "tmux://panes/1/content"},
+		Session: &sdk.ServerSession{},
+		Params:  &sdk.SubscribeParams{URI: "tmux://panes/1/content"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "content-read") {
 		t.Fatalf("subscribe(content) error = %v, want content-read refusal", err)
+	}
+}
+
+func TestSubscriptionHandlersRejectMissingRequests(t *testing.T) {
+	toolset := &tools{capabilities: newCapabilitySet([]Capability{CapabilityMetadataRead})}
+	if err := toolset.subscribe(context.Background(), nil); !errors.Is(err, ErrInstanceClosed) {
+		t.Fatalf("subscribe(nil) error = %v, want ErrInstanceClosed", err)
+	}
+	if err := toolset.unsubscribe(context.Background(), nil); !errors.Is(err, ErrInstanceClosed) {
+		t.Fatalf("unsubscribe(nil) error = %v, want ErrInstanceClosed", err)
 	}
 }
 
@@ -132,6 +144,34 @@ func TestCapabilitiesAndSafetyBothWithholdTools(t *testing.T) {
 				if listed[name] {
 					t.Errorf("%s is advertised", name)
 				}
+			}
+		})
+	}
+}
+
+func TestChannelToolsRequireMutatingPaneControl(t *testing.T) {
+	for _, test := range []struct {
+		name, capabilities, safety string
+		wantWait, wantSignal       bool
+	}{
+		{name: "metadata alone", capabilities: "metadata-read", safety: "destructive"},
+		{name: "read-only pane control", capabilities: "pane-control", safety: "readonly"},
+		{
+			name: "mutating pane control", capabilities: "pane-control", safety: "mutating",
+			wantWait: true, wantSignal: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(CapabilitiesEnvironmentVariable, test.capabilities)
+			t.Setenv(SafetyEnvironmentVariable, test.safety)
+			listed := advertisedToolNames(t)
+			if listed["wait_for_channel"] != test.wantWait {
+				t.Errorf("wait_for_channel advertised = %t, want %t",
+					listed["wait_for_channel"], test.wantWait)
+			}
+			if listed["signal_channel"] != test.wantSignal {
+				t.Errorf("signal_channel advertised = %t, want %t",
+					listed["signal_channel"], test.wantSignal)
 			}
 		})
 	}
@@ -247,7 +287,7 @@ func TestEveryToolDeclaresItsRequiredCapability(t *testing.T) {
 		CapabilityMetadataRead: {
 			"call_readonly_tools_batch", "find_pane_by_position", "get_pane_info",
 			"get_server_info", "get_session_info", "get_window_info", "list_panes",
-			"list_servers", "list_sessions", "list_windows", "wait_for_channel",
+			"list_servers", "list_sessions", "list_windows",
 		},
 		CapabilityContentRead: {
 			"capture_pane", "capture_since", "get_job", "search_panes", "show_buffer",
@@ -256,7 +296,7 @@ func TestEveryToolDeclaresItsRequiredCapability(t *testing.T) {
 		CapabilityPaneControl: {
 			"call_mutating_tools_batch", "clear_pane", "display_message", "enter_copy_mode",
 			"exit_copy_mode", "paste_buffer", "paste_text", "pipe_pane", "run_command",
-			"send_keys", "send_keys_batch", "signal_channel",
+			"send_keys", "send_keys_batch", "signal_channel", "wait_for_channel",
 		},
 		CapabilityWorkspaceCreate: {
 			"build_workspace", "create_session", "create_window", "respawn_pane", "split_window",
@@ -319,7 +359,7 @@ func capabilitySession(t *testing.T) (*sdk.ClientSession, context.Context) {
 	}
 	instance := mustInternalMCPServer(t, target)
 	t.Cleanup(func() { _ = instance.Close() })
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(ctx, AssumeResponseCommit(serverTransport), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

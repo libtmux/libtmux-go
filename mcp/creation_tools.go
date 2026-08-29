@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -26,7 +27,7 @@ func (t *tools) createWindow(
 	_ *mcp.CallToolRequest,
 	input createWindowInput,
 ) (*mcp.CallToolResult, createWindowOutput, error) {
-	server := t.tmux()
+	server := t.tmux(ctx)
 	session, err := t.resolveSession(ctx, input.SessionName)
 	if err != nil {
 		return nil, createWindowOutput{}, err
@@ -41,16 +42,41 @@ func (t *tools) createWindow(
 		request.Name = &name
 	}
 	window, err := session.NewWindow(ctx, request)
-	if err != nil {
-		return nil, createWindowOutput{}, err
-	}
 	created := createWindowOutput{WindowID: window.ID().String()}
-	if fresh, lookupErr := server.Window(ctx, window.ID()); lookupErr == nil {
-		if pane, ok, paneErr := fresh.ResolveActivePane(ctx); paneErr == nil && ok {
-			created.PaneID = pane.ID().String()
+	if err != nil {
+		if created.WindowID == "" {
+			return nil, createWindowOutput{}, err
 		}
+		return t.partialWindowFailure(created, err)
 	}
+	fresh, lookupErr := server.Window(ctx, window.ID())
+	if lookupErr != nil {
+		return t.partialWindowFailure(created, lookupErr)
+	}
+	pane, ok, paneErr := fresh.ResolveActivePane(ctx)
+	if paneErr != nil {
+		return t.partialWindowFailure(created, paneErr)
+	}
+	if !ok {
+		return t.partialWindowFailure(
+			created,
+			errors.New("created window has no active pane"),
+		)
+	}
+	created.PaneID = pane.ID().String()
 	return nil, created, nil
+}
+
+func (t *tools) partialWindowFailure(
+	created createWindowOutput,
+	err error,
+) (*mcp.CallToolResult, createWindowOutput, error) {
+	t.runtime.observe(err)
+	return toolFailure(fmt.Errorf(
+		"%w; tmux created window %s before setup failed; use the returned ID to "+
+			"inspect or remove it before retrying",
+		err, created.WindowID,
+	)), created, nil
 }
 
 type createSessionInput struct {
@@ -64,19 +90,32 @@ type createSessionOutput struct {
 	SessionName string `json:"sessionName"`
 }
 
-// createSession starts detached because the MCP server is not a terminal.
+// createSession keeps an attached control client as the runtime command lane.
 func (t *tools) createSession(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
 	input createSessionInput,
 ) (*mcp.CallToolResult, createSessionOutput, error) {
-	session, err := t.tmux().NewSession(ctx, tmux.NewSessionRequest{
+	session, err := t.runtime.createSession(ctx, tmux.NewSessionRequest{
 		Name:           input.Name,
 		Command:        input.Command,
 		StartDirectory: input.StartDirectory,
 	})
 	if err != nil {
-		return nil, createSessionOutput{}, err
+		if session.ID() == "" {
+			return nil, createSessionOutput{}, err
+		}
+		name, ok := session.Name()
+		if !ok {
+			name = input.Name
+		}
+		return toolFailure(fmt.Errorf(
+				"%w; tmux created session %q (%s) before setup failed; use the "+
+					"returned ID to inspect or remove it before retrying",
+				err, name, session.ID(),
+			)), createSessionOutput{
+				SessionID: session.ID().String(), SessionName: name,
+			}, nil
 	}
 	name, _ := session.Name()
 	return nil, createSessionOutput{
@@ -102,8 +141,16 @@ func (t *tools) buildWorkspace(
 	if err != nil {
 		return nil, buildWorkspaceOutput{}, err
 	}
-	session, err := workspace.Build(ctx, t.tmux(), described)
+	initial, err := described.InitialSessionRequest()
 	if err != nil {
+		return nil, buildWorkspaceOutput{}, err
+	}
+	session, err := t.runtime.createSession(ctx, initial)
+	if err == nil {
+		err = workspace.BuildInto(ctx, session, described)
+	}
+	if err != nil {
+		t.runtime.observe(err)
 		// Workspace builds are non-atomic. Preserve any created session ID so
 		// the caller can clean it up.
 		if session.ID() == "" {
@@ -136,9 +183,8 @@ func addCreationTools(server *mcp.Server, t *tools) {
 	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "create_session",
 		Annotations: mutating("Create a tmux Session"),
-		Description: "Start one detached session and return its id and name. " +
-			"Detached because this server is not a terminal; a person or another " +
-			"client attaches to it.",
+		Description: "Start one session and return its id and name. The MCP " +
+			"runtime stays attached through its private control connection.",
 	}, t.createSession)
 	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "build_workspace",

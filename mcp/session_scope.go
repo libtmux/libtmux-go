@@ -11,6 +11,7 @@ type sessionScope struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	closed        bool
+	terminalErr   error
 	consent       map[string]bool
 	subscriptions map[scopedSubscription]struct{}
 	jobs          *jobs
@@ -34,6 +35,7 @@ func newSessionScope(parent context.Context) *sessionScope {
 
 func (s *sessionScope) subscribe(
 	watchers *watchers,
+	connection *sessionReadyConnection,
 	canonical, spelling string,
 ) (<-chan struct{}, error) {
 	s.mutex.Lock()
@@ -47,8 +49,16 @@ func (s *sessionScope) subscribe(
 		close(ready)
 		return ready, nil
 	}
+	ready, err := watchers.add(canonical, spelling)
+	if err != nil {
+		return nil, err
+	}
+	if err := watchers.route(s, connection, canonical, spelling); err != nil {
+		watchers.removeExplicit(canonical, spelling)
+		return nil, err
+	}
 	s.subscriptions[key] = struct{}{}
-	return watchers.add(canonical, spelling), nil
+	return ready, nil
 }
 
 func (s *sessionScope) unsubscribe(
@@ -62,7 +72,8 @@ func (s *sessionScope) unsubscribe(
 		return
 	}
 	delete(s.subscriptions, key)
-	watchers.remove(canonical, spelling)
+	watchers.unroute(s, canonical, spelling)
+	watchers.removeExplicit(canonical, spelling)
 }
 
 func (s *sessionScope) close(watchers *watchers) {
@@ -75,6 +86,7 @@ func (s *sessionScope) close(watchers *watchers) {
 	s.cancel()
 	clear(s.consent)
 	for subscription := range s.subscriptions {
+		watchers.unroute(s, subscription.canonical, subscription.spelling)
 		watchers.remove(subscription.canonical, subscription.spelling)
 		delete(s.subscriptions, subscription)
 	}
@@ -83,7 +95,26 @@ func (s *sessionScope) close(watchers *watchers) {
 }
 
 func (s *sessionScope) stop() {
-	if s != nil {
-		s.cancel()
+	s.terminate(nil)
+}
+
+func (s *sessionScope) terminate(err error) {
+	if s == nil {
+		return
 	}
+	s.mutex.Lock()
+	if s.terminalErr == nil && err != nil {
+		s.terminalErr = err
+	}
+	s.cancel()
+	s.mutex.Unlock()
+}
+
+func (s *sessionScope) terminalCause() error {
+	if s == nil {
+		return nil
+	}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.terminalErr
 }

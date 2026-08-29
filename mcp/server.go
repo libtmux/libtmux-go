@@ -3,13 +3,10 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"runtime/debug"
 	"slices"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
@@ -21,6 +18,18 @@ import (
 var Version = buildVersion()
 
 const fallbackVersion = "v0.0.1-alpha.7"
+
+// minimumTmuxVersion is the MCP floor. The core supports older tmux releases,
+// but terminal connections need 3.6 to survive destruction of their session.
+const minimumTmuxVersion = "3.6"
+
+func (i *Instance) requireTmuxVersion(ctx context.Context) error {
+	minimum, err := tmux.ParseVersion(minimumTmuxVersion)
+	if err != nil {
+		return err
+	}
+	return i.runtime.base.RequireVersion(ctx, minimum)
+}
 
 func buildVersion() string {
 	info, ok := debug.ReadBuildInfo()
@@ -43,6 +52,14 @@ var closedArguments = map[string]map[string][]any{
 	"call_readonly_tools_batch":    {"onError": onErrorValues},
 	"call_mutating_tools_batch":    {"onError": onErrorValues},
 	"call_destructive_tools_batch": {"onError": onErrorValues},
+}
+
+// minimumArguments adds numeric lower bounds that jsonschema-go cannot express
+// through struct tags.
+var minimumArguments = map[string]map[string]float64{
+	"get_job":          {"timeoutSeconds": 0},
+	"wait_for_channel": {"timeoutSeconds": 0},
+	"wait_for_text":    {"idleSeconds": 0, "timeoutSeconds": 0},
 }
 
 var scopeValues = []any{"", scopeServer, scopeSession, scopeWindow, scopePane}
@@ -82,6 +99,12 @@ func constrain(name string, schema *jsonschema.Schema) {
 			property.Enum = values
 		}
 	}
+	for argument, minimum := range minimumArguments[name] {
+		if property, ok := schema.Properties[argument]; ok {
+			minimum := minimum
+			property.Minimum = &minimum
+		}
+	}
 }
 
 // register advertises permitted tools and records the same surface for batches.
@@ -92,6 +115,30 @@ func register[In, Out any](
 	tool *mcp.Tool,
 	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
 ) {
+	registerHandler(server, t, capability, tool, handler, true)
+}
+
+// registerLocal advertises an MCP-only handler that delegates any tmux work
+// to already registered handlers. Batch tools use it so their outer request
+// does not hold an unbound runtime lease across an inner create_session call.
+func registerLocal[In, Out any](
+	server *mcp.Server,
+	t *tools,
+	capability Capability,
+	tool *mcp.Tool,
+	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
+) {
+	registerHandler(server, t, capability, tool, handler, false)
+}
+
+func registerHandler[In, Out any](
+	server *mcp.Server,
+	t *tools,
+	capability Capability,
+	tool *mcp.Tool,
+	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
+	withRuntime bool,
+) {
 	if !t.level.permits(tool.Annotations) || !t.capabilities.permits(capability) {
 		return
 	}
@@ -99,7 +146,9 @@ func register[In, Out any](
 		tool.Meta = mcp.Meta{}
 	}
 	tool.Meta[CapabilityMetaKey] = string(capability)
-	handler = recovering(t, handler)
+	if withRuntime {
+		handler = withRequestRuntime(t, handler)
+	}
 	// Infer early so closed argument enums can be applied before registration.
 	if tool.InputSchema == nil {
 		if schema, err := jsonschema.For[In](nil); err == nil {
@@ -162,16 +211,21 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	if _, err := target.SocketSelection(); err != nil {
 		return nil, fmt.Errorf("construct MCP server: %w", err)
 	}
+	if target.Engine() != nil || target.ConnectionBound() {
+		return nil, ErrRuntimeTargetBound
+	}
 
 	instance := newInstance()
+	runtime := newRuntime(instance.ctx, target, instance.terminal)
+	instance.runtime = runtime
 	tools := newToolRegistry()
 	tools.instance = instance
-	tools.reaching.Store(&target)
+	tools.runtime = runtime
 	serverOptions := &mcp.ServerOptions{
 		Instructions: callerInstructions(),
 	}
 	if tools.capabilities.permits(CapabilityMetadataRead) {
-		serverOptions.CompletionHandler = completionFor(target)
+		serverOptions.CompletionHandler = tools.completeObserved
 	}
 	if tools.capabilities.permits(CapabilityMetadataRead) ||
 		tools.capabilities.permits(CapabilityContentRead) {
@@ -184,7 +238,7 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	}, serverOptions)
 	instance.server = server
 	instance.tools = tools
-	tools.watchers = newWatchers(server, target)
+	tools.watchers = newWatchers(runtime)
 	// Audit wraps the backstop so oversized refusals are recorded.
 	server.AddReceivingMiddleware(backstop())
 	writer, auditOwner := auditWriter()
@@ -220,11 +274,7 @@ func registerToolGroups(server *mcp.Server, tools *tools) {
 
 // Run serves target over stdin and stdout until ctx is done.
 func Run(ctx context.Context, target tmux.Server) error {
-	connected, pool := Connect(ctx, target)
-	if pool != nil {
-		defer func() { _ = pool.Close() }()
-	}
-	instance, err := NewServer(connected)
+	instance, err := NewServer(target)
 	if err != nil {
 		return err
 	}
@@ -232,38 +282,9 @@ func Run(ctx context.Context, target tmux.Server) error {
 	return instance.Run(ctx, stdio())
 }
 
-// Connect opens a control pool only when target has no engine and has a session.
-// Failure leaves subprocess execution in place. The returned pool is an
-// attached tmux client that the caller must close.
-//
-// Each connection appears in list-clients, increments session_attached, and
-// may prevent destroy-unattached.
-func Connect(ctx context.Context, target tmux.Server) (tmux.Server, *tmux.ControlPool) {
-	if target.Engine() != nil {
-		return target, nil
-	}
-	sessions, err := target.Sessions(ctx)
-	if err != nil || len(sessions) == 0 {
-		return target, nil
-	}
-	openCtx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
-	connected, _, pool, err := target.OpenControlPool(
-		openCtx, sessions[0], tmux.ControlPoolRequest{},
-	)
-	if err != nil {
-		return target, nil
-	}
-	return connected, pool
-}
-
-// connectTimeout bounds control setup before the MCP server begins replying.
-const connectTimeout = 5 * time.Second
-
 type tools struct {
-	instance *Instance
-	// reaching is replaced atomically when a concurrent call retires the pool.
-	reaching     atomic.Pointer[tmux.Server]
+	instance     *Instance
+	runtime      *tmuxRuntime
 	level        SafetyLevel
 	capabilities capabilitySet
 	watchers     *watchers
@@ -271,44 +292,16 @@ type tools struct {
 	unbatchable  map[string]struct{}
 	// Batch tools set batchable false to prevent nested dispatch.
 	batchable bool
-	// A process cannot change its containing pane, so caller is resolved once.
-	caller     callerIdentity
-	callerOnce sync.Once
-}
-
-func (t *tools) tmux() tmux.Server { return *t.reaching.Load() }
-
-// retirePool replaces a dead control engine with subprocess execution.
-func (t *tools) retirePool() {
-	current := t.tmux()
-	if current.Engine() == nil {
-		return
-	}
-	plain := current.WithEngine(current.SubprocessEngine())
-	t.reaching.Store(&plain)
-}
-
-// recovering retires a dead pool but never retries a call that may have acted.
-func recovering[In, Out any](
-	t *tools,
-	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
-) func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error) {
-	return func(
-		ctx context.Context,
-		request *mcp.CallToolRequest,
-		input In,
-	) (*mcp.CallToolResult, Out, error) {
-		result, output, err := handler(ctx, request, input)
-		if err != nil && errors.Is(err, tmux.ErrControlClosed) {
-			t.retirePool()
-		}
-		return result, output, err
-	}
+	// A process cannot change its containing pane. Failed discovery is not
+	// cached because cancellation or transport loss may be transient.
+	callerMutex  sync.Mutex
+	caller       callerIdentity
+	callerCached bool
 }
 
 // An invalid target has no socket identity and cannot match the caller.
 func (t *tools) socketPath(_ context.Context) string {
-	selection, err := t.tmux().SocketSelection()
+	selection, err := t.runtime.base.SocketSelection()
 	if err != nil {
 		return ""
 	}

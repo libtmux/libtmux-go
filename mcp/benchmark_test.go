@@ -22,7 +22,9 @@ func benchServer(b *testing.B) (*sdk.ClientSession, context.Context) {
 
 	target := tmuxtest.NewServerWithOptions(ctx, b, tmuxtest.ServerOptions{})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(b, target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(b, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		b.Fatal(err)
 	}

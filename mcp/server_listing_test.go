@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -35,9 +37,7 @@ func TestListServersMarksAnAbsentImplicitTarget(t *testing.T) {
 				t.Fatal(err)
 			}
 			targetPath := filepath.Join(directory, testCase.wantName)
-			if err := os.WriteFile(targetPath, nil, 0o600); err != nil {
-				t.Fatal(err)
-			}
+			leaveDeadUnixSocket(t, targetPath)
 			executable, err := os.Executable()
 			if err != nil {
 				t.Fatal(err)
@@ -50,9 +50,12 @@ func TestListServersMarksAnAbsentImplicitTarget(t *testing.T) {
 					_ context.Context,
 					request tmux.CommandRequest,
 				) (tmux.CommandResult, error) {
+					if slices.Equal(request.Arguments, []string{"-V"}) {
+						return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
+					}
 					return tmux.CommandResult{
 						Command:  request.Arguments,
-						Stderr:   []string{"no server running"},
+						Stderr:   []string{"no server running on " + targetPath},
 						ExitCode: 1,
 					}, nil
 				}),
@@ -75,7 +78,7 @@ func TestListServersMarksAnAbsentImplicitTarget(t *testing.T) {
 				&listed,
 			)
 			if result.IsError {
-				t.Fatalf("list_servers failed: %#v", result.Content)
+				t.Fatalf("list_servers failed: %s", resultText(result))
 			}
 			if listed.SearchedIn != directory || len(listed.Servers) != 1 ||
 				listed.Servers[0].SocketPath != targetPath ||
@@ -104,7 +107,9 @@ func TestListServersUsesTargetsFrozenExecutionBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	sibling := filepath.Join(directory, "sibling")
-	if err := os.WriteFile(sibling, nil, 0o600); err != nil {
+	leaveDeadUnixSocket(t, sibling)
+	notASocket := filepath.Join(directory, "tmux.conf")
+	if err := os.WriteFile(notASocket, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ambientDirectory := filepath.Join(ambientRoot, fmt.Sprintf("tmux-%d", os.Getuid()))
@@ -112,9 +117,7 @@ func TestListServersUsesTargetsFrozenExecutionBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	ambient := filepath.Join(ambientDirectory, "ambient")
-	if err := os.WriteFile(ambient, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	leaveDeadUnixSocket(t, ambient)
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +139,9 @@ func TestListServersUsesTargetsFrozenExecutionBinding(t *testing.T) {
 			mutex.Lock()
 			requests = append(requests, request)
 			mutex.Unlock()
+			if slices.Equal(request.Arguments, []string{"-V"}) {
+				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
+			}
 			if slices.Contains(request.Arguments, "#{socket_path}") {
 				return tmux.CommandResult{
 					Command:  request.Arguments,
@@ -153,7 +159,7 @@ func TestListServersUsesTargetsFrozenExecutionBinding(t *testing.T) {
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	instance := mustMCPServer(t, target)
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(ctx, assumeResponseCommit(serverTransport), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,6 +219,9 @@ func TestListServersUsesTargetsFrozenExecutionBinding(t *testing.T) {
 		if slices.Contains(request.Arguments, "-S"+ambient) {
 			t.Fatalf("requests probed ambient socket: %#v", requests)
 		}
+		if slices.Contains(request.Arguments, "-S"+notASocket) {
+			t.Fatalf("requests probed a non-socket file: %#v", requests)
+		}
 		if slices.Contains(request.Arguments, wantSelector) {
 			if request.Binary != executable ||
 				!slices.Equal(request.Environment, frozenEnvironment) {
@@ -226,87 +235,160 @@ func TestListServersUsesTargetsFrozenExecutionBinding(t *testing.T) {
 	}
 }
 
-func TestListServersRetiresAClosedTargetEngine(t *testing.T) {
-	for _, closeOnCall := range []int64{1, 2} {
-		t.Run(fmt.Sprintf("call-%d", closeOnCall), func(t *testing.T) {
-			root := t.TempDir()
-			directory := filepath.Join(root, "tmux-"+strconv.Itoa(os.Getuid()))
-			if err := os.Mkdir(directory, 0o700); err != nil {
-				t.Fatal(err)
+//libtmux:real-tmux
+func TestListServersUsesTheBoundLaneForItsTarget(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	t.Cleanup(cancel)
+	base := tmuxtest.NewServer(ctx, t)
+	delegate := tmux.SubprocessRunner()
+	var blockProcess atomic.Bool
+	target := mustTmuxServer(t, tmux.ServerOptions{
+		Binary:             base.Executable(),
+		SocketPath:         base.SocketPath(),
+		ConfigFile:         base.ConfigFile(),
+		ProcessEnvironment: base.ProcessEnvironment(),
+		Runner: tmux.CommandRunnerFunc(func(
+			ctx context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			if blockProcess.Load() && !slices.Equal(request.Arguments, []string{"-V"}) {
+				return tmux.CommandResult{}, fmt.Errorf(
+					"%w: blocked process lane: %v", tmux.ErrControlClosed, request.Arguments,
+				)
 			}
-			executable, err := os.Executable()
-			if err != nil {
-				t.Fatal(err)
-			}
-			var subprocessCalls atomic.Int64
-			engine := &closingEngine{closeOnCall: closeOnCall}
-			target := mustTmuxServer(t, tmux.ServerOptions{
-				Binary:             executable,
-				SocketName:         "closed",
-				ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
-				Runner: tmux.CommandRunnerFunc(func(
-					_ context.Context,
-					request tmux.CommandRequest,
-				) (tmux.CommandResult, error) {
-					subprocessCalls.Add(1)
-					return tmux.CommandResult{
-						Command:  request.Arguments,
-						Stderr:   []string{"no server running"},
-						ExitCode: 1,
-					}, nil
-				}),
-			}).WithEngine(engine)
-			session, ctx := connectTarget(t, target)
+			return delegate.Run(ctx, request)
+		}),
+	})
+	session, sessionCtx := connectTarget(t, target)
+	var serverInfo struct{}
+	call(sessionCtx, t, session, "get_server_info", map[string]any{}, &serverInfo)
+	blockProcess.Store(true)
 
-			first, err := session.CallTool(ctx, &sdk.CallToolParams{
-				Name:      "list_servers",
-				Arguments: map[string]any{},
-			})
-			if err != nil {
-				t.Fatalf("first list_servers: %v", err)
-			}
-			if !first.IsError {
-				t.Fatalf("first list_servers succeeded through a closed engine: %#v", first.Content)
-			}
-			if subprocessCalls.Load() != 0 {
-				t.Fatalf("closed-engine call used subprocess %d times", subprocessCalls.Load())
-			}
+	callCtx, endCall := context.WithTimeout(sessionCtx, time.Second)
+	defer endCall()
+	result, err := session.CallTool(callCtx, &sdk.CallToolParams{
+		Name: "list_servers", Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("list_servers depended on the blocked process lane: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("list_servers failed: %s", resultText(result))
+	}
+}
 
-			second, err := session.CallTool(ctx, &sdk.CallToolParams{
-				Name:      "list_servers",
-				Arguments: map[string]any{},
-			})
-			if err != nil {
-				t.Fatalf("second list_servers: %v", err)
+func TestListServersProbesSiblingSocketsConcurrently(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, fmt.Sprintf("tmux-%d", os.Getuid()))
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	siblings := make([]string, 8)
+	for index := range siblings {
+		siblings[index] = filepath.Join(directory, fmt.Sprintf("sibling-%d", index))
+		leaveDeadUnixSocket(t, siblings[index])
+	}
+	targetPath := filepath.Join(t.TempDir(), "target")
+	started := make(chan struct{}, len(siblings))
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseProbes := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseProbes()
+	target := mustTmuxServer(t, tmux.ServerOptions{
+		Binary:             mustExecutable(t),
+		SocketPath:         targetPath,
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
+		Runner: tmux.CommandRunnerFunc(func(
+			ctx context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			if slices.Equal(request.Arguments, []string{"-V"}) {
+				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
 			}
-			if second.IsError {
-				t.Fatalf("second list_servers failed after recovery: %#v", second.Content)
+			for _, sibling := range siblings {
+				if !slices.Contains(request.Arguments, "-S"+sibling) {
+					continue
+				}
+				started <- struct{}{}
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return tmux.CommandResult{}, ctx.Err()
+				}
+				break
 			}
-			if subprocessCalls.Load() == 0 {
-				t.Fatal("second list_servers did not use the recovered subprocess engine")
-			}
+			return tmux.CommandResult{
+				Command:  request.Arguments,
+				Stderr:   []string{"no server running on " + targetPath},
+				ExitCode: 1,
+			}, nil
+		}),
+	})
+	selection, err := target.SocketSelection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selection.NamedDirectory != directory {
+		t.Fatalf("named socket directory = %q, want %q", selection.NamedDirectory, directory)
+	}
+	if info, err := os.Stat(siblings[0]); err != nil || info.Mode()&os.ModeSocket == 0 {
+		t.Fatalf("sibling is not a socket: (%v, %v)", info, err)
+	}
+	session, sessionCtx := connectTarget(t, target)
+	type callResult struct {
+		result *sdk.CallToolResult
+		err    error
+	}
+	returned := make(chan callResult, 1)
+	go func() {
+		result, err := session.CallTool(sessionCtx, &sdk.CallToolParams{
+			Name: "list_servers", Arguments: map[string]any{"includeDead": true},
 		})
+		returned <- callResult{result: result, err: err}
+	}()
+
+	for count := 0; count < 2; count++ {
+		select {
+		case <-started:
+		case got := <-returned:
+			if got.err != nil {
+				t.Fatalf("list_servers returned before probing siblings: %v", got.err)
+			}
+			t.Fatalf("list_servers returned before probing siblings: %s", resultText(got.result))
+		case <-time.After(time.Second):
+			t.Fatal("sibling socket probes ran serially")
+		}
+	}
+	releaseProbes()
+	got := <-returned
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if got.result.IsError {
+		t.Fatalf("list_servers failed: %s", resultText(got.result))
 	}
 }
 
-type closingEngine struct {
-	closeOnCall int64
-	calls       atomic.Int64
-}
-
-func (*closingEngine) Supports(kind tmux.CommandKind) bool {
-	return kind == tmux.CommandServer
-}
-
-func (engine *closingEngine) Run(
-	context.Context,
-	tmux.CommandKind,
-	tmux.CommandRequest,
-) (tmux.CommandResult, error) {
-	if engine.calls.Add(1) >= engine.closeOnCall {
-		return tmux.CommandResult{ExitCode: -1}, tmux.ErrControlClosed
+func mustExecutable(t *testing.T) string {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
 	}
-	return tmux.CommandResult{ExitCode: 0}, nil
+	return executable
+}
+
+func leaveDeadUnixSocket(t *testing.T, path string) {
+	t.Helper()
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener.SetUnlinkOnClose(false)
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
 }
 
 func connectTarget(
@@ -319,7 +401,7 @@ func connectTarget(
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	instance := mustMCPServer(t, target)
 	t.Cleanup(func() { _ = instance.Close() })
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(ctx, assumeResponseCommit(serverTransport), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,5 +414,3 @@ func connectTarget(
 	t.Cleanup(func() { _ = clientSession.Close() })
 	return clientSession, ctx
 }
-
-var _ tmux.Engine = (*closingEngine)(nil)

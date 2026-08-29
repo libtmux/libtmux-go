@@ -52,7 +52,7 @@ func (t *tools) loadBuffer(
 	if err != nil {
 		return nil, bufferRef{}, err
 	}
-	if err := t.tmux().SetBuffer(ctx, tmux.SetBufferRequest{
+	if err := t.tmux(ctx).SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
 		Name: &name,
 	}); err != nil {
@@ -95,7 +95,11 @@ func (t *tools) showBuffer(
 	if err != nil {
 		return nil, showBufferOutput{}, err
 	}
-	contents, err := t.tmux().ShowBuffer(ctx, &name)
+	process, err := t.runtime.process(ctx)
+	if err != nil {
+		return nil, showBufferOutput{}, err
+	}
+	contents, err := process.ShowBuffer(ctx, &name)
 	if err != nil {
 		// tmux reports only that show-buffer failed; include the normalized
 		// namespace name so the missing target is visible.
@@ -176,7 +180,7 @@ func (t *tools) deleteBuffer(
 	if err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
-	if err := t.tmux().DeleteBuffer(ctx, &name); err != nil {
+	if err := t.tmux(ctx).DeleteBuffer(ctx, &name); err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
 	return nil, deleteBufferOutput{Deleted: name}, nil

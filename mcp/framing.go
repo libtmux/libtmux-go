@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,8 +12,9 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// MCP stdio frames are newline-delimited. Pass blank or valid JSON-RPC lines
-// and drop malformed ones so the SDK can resynchronize on the next frame.
+var errJSONRPCBatchUnsupported = errors.New("libtmux MCP: JSON-RPC batches are unsupported")
+
+const jsonRPCFrameMaxBytes = 8 * 1024 * 1024
 
 // wholeJSONLines passes blank or valid JSON-RPC lines and reports malformed ones.
 func wholeJSONLines(r io.ReadCloser, notify io.Writer) io.ReadCloser {
@@ -27,12 +30,18 @@ type jsonLineReader struct {
 
 func (r *jsonLineReader) Read(into []byte) (int, error) {
 	for len(r.pending) == 0 {
-		// ReadString rather than a Scanner: a scanner caps a token, and a
-		// capture of a wide pane's scrollback is a legitimately long frame.
-		line, err := r.lines.ReadString('\n')
-		if len(line) > 0 {
-			if trimmed := trimFrame(line); len(trimmed) == 0 || decodable(trimmed) {
-				r.pending = []byte(line)
+		line, oversized, err := r.readLine()
+		if oversized {
+			_, _ = fmt.Fprintf(r.notify,
+				"libtmux-mcp: ignoring a JSON-RPC frame past %d bytes\n",
+				jsonRPCFrameMaxBytes)
+		} else if len(line) > 0 {
+			trimmed := trimFrame(line)
+			if isJSONRPCBatch(trimmed) {
+				return 0, errJSONRPCBatchUnsupported
+			}
+			if len(trimmed) == 0 || decodable(trimmed) {
+				r.pending = line
 			} else {
 				_, _ = fmt.Fprintf(r.notify,
 					"libtmux-mcp: ignoring a frame that is not a JSON-RPC "+
@@ -51,6 +60,22 @@ func (r *jsonLineReader) Read(into []byte) (int, error) {
 	return copied, nil
 }
 
+func (r *jsonLineReader) readLine() (line []byte, oversized bool, err error) {
+	for {
+		fragment, readErr := r.lines.ReadSlice('\n')
+		if !oversized && len(line)+len(fragment) <= jsonRPCFrameMaxBytes {
+			line = append(line, fragment...)
+		} else {
+			line = nil
+			oversized = true
+		}
+		if errors.Is(readErr, bufio.ErrBufferFull) {
+			continue
+		}
+		return line, oversized, readErr
+	}
+}
+
 func (r *jsonLineReader) Close() error { return r.source.Close() }
 
 // decodable also rejects valid JSON that is not a JSON-RPC message.
@@ -59,7 +84,23 @@ func decodable(frame []byte) bool {
 	return err == nil
 }
 
-func trimFrame(line string) []byte {
+func isJSONRPCBatch(frame []byte) bool {
+	if len(frame) == 0 || frame[0] != '[' {
+		return false
+	}
+	var messages []json.RawMessage
+	if err := json.Unmarshal(frame, &messages); err != nil || len(messages) == 0 {
+		return false
+	}
+	for _, message := range messages {
+		if !decodable(message) {
+			return false
+		}
+	}
+	return true
+}
+
+func trimFrame(line []byte) []byte {
 	end := len(line)
 	for end > 0 && (line[end-1] == '\n' || line[end-1] == '\r' || line[end-1] == ' ' ||
 		line[end-1] == '\t') {
@@ -69,7 +110,7 @@ func trimFrame(line string) []byte {
 	for start < end && (line[start] == ' ' || line[start] == '\t') {
 		start++
 	}
-	return []byte(line[start:end])
+	return line[start:end]
 }
 
 func stdio() *mcp.IOTransport {

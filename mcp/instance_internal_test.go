@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -57,6 +58,114 @@ type blockingTransport struct {
 	started chan struct{}
 }
 
+var errVersionGateTransportReached = errors.New("version gate transport reached")
+
+type versionGateTransport struct {
+	calls atomic.Int32
+}
+
+func (t *versionGateTransport) Connect(context.Context) (sdk.Connection, error) {
+	t.calls.Add(1)
+	return nil, errVersionGateTransportReached
+}
+
+func TestInstanceConnectChecksTheMCPVersionBeforeTransport(t *testing.T) {
+	for _, test := range []struct {
+		version   string
+		wantCalls int32
+		wantError error
+	}{
+		{version: "3.5", wantError: tmux.ErrVersionTooLow},
+		{version: "3.6", wantCalls: 1, wantError: errVersionGateTransportReached},
+	} {
+		t.Run(test.version, func(t *testing.T) {
+			target := mustInternalTmuxServer(t, tmux.ServerOptions{
+				SocketName: "version-gate-unused",
+				Runner: tmux.CommandRunnerFunc(func(
+					context.Context,
+					tmux.CommandRequest,
+				) (tmux.CommandResult, error) {
+					return tmux.CommandResult{Stdout: []string{"tmux " + test.version}}, nil
+				}),
+			})
+			instance := mustInternalMCPServer(t, target)
+			transport := &versionGateTransport{}
+			_, err := instance.Connect(
+				t.Context(), AssumeResponseCommit(transport), nil,
+			)
+			if !errors.Is(err, test.wantError) {
+				t.Fatalf("Connect() error = %v, want %v", err, test.wantError)
+			}
+			if calls := transport.calls.Load(); calls != test.wantCalls {
+				t.Fatalf("transport Connect calls = %d, want %d", calls, test.wantCalls)
+			}
+			if test.version == "3.5" {
+				var tooLow *tmux.VersionTooLowError
+				if !errors.As(err, &tooLow) || tooLow.Current.String() != "3.5" ||
+					tooLow.Minimum.String() != minimumTmuxVersion {
+					t.Fatalf("Connect() error = %#v, want current 3.5 and minimum %s",
+						err, minimumTmuxVersion)
+				}
+			}
+		})
+	}
+}
+
+func TestInstanceConnectRejectsInstalledTmuxBelowMCPFloor(t *testing.T) {
+	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+		SocketName: "installed-version-gate-unused",
+	})
+	current, err := target.Version(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	minimum, err := tmux.ParseVersion(minimumTmuxVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.AtLeast(minimum) {
+		t.Skipf("installed tmux %s meets the MCP %s floor", current, minimum)
+	}
+
+	instance := mustInternalMCPServer(t, target)
+	transport := &versionGateTransport{}
+	_, err = instance.Connect(
+		t.Context(), AssumeResponseCommit(transport), nil,
+	)
+	if !errors.Is(err, tmux.ErrVersionTooLow) {
+		t.Fatalf("Connect() error = %v, want ErrVersionTooLow", err)
+	}
+	var tooLow *tmux.VersionTooLowError
+	if !errors.As(err, &tooLow) || tooLow.Current != current || tooLow.Minimum != minimum {
+		t.Fatalf("Connect() error = %#v, want current %s and minimum %s",
+			err, current, minimum)
+	}
+	if calls := transport.calls.Load(); calls != 0 {
+		t.Fatalf("transport Connect calls = %d, want 0", calls)
+	}
+}
+
+func TestInstanceRejectsAnUnknownResponseCommitBeforeTransport(t *testing.T) {
+	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+		SocketName: "response-commit-unused",
+		Runner: tmux.CommandRunnerFunc(func(
+			context.Context,
+			tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
+		}),
+	})
+	instance := mustInternalMCPServer(t, target)
+	transport := &versionGateTransport{}
+	_, err := instance.Connect(t.Context(), transport, nil)
+	if !errors.Is(err, ErrResponseCommitUnknown) {
+		t.Fatalf("Connect() error = %v, want ErrResponseCommitUnknown", err)
+	}
+	if calls := transport.calls.Load(); calls != 0 {
+		t.Fatalf("transport Connect calls = %d, want 0", calls)
+	}
+}
+
 func (t *blockingTransport) Connect(ctx context.Context) (sdk.Connection, error) {
 	close(t.started)
 	<-ctx.Done()
@@ -70,7 +179,9 @@ func TestInstanceCloseCancelsAConnectingTransport(t *testing.T) {
 	transport := &blockingTransport{started: make(chan struct{})}
 	connected := make(chan error, 1)
 	go func() {
-		_, err := instance.Connect(context.Background(), transport, nil)
+		_, err := instance.Connect(
+			context.Background(), AssumeResponseCommit(transport), nil,
+		)
 		connected <- err
 	}()
 	<-transport.started
@@ -106,7 +217,9 @@ func TestSessionCloseCancelsAHandlerBeforeJoiningIt(t *testing.T) {
 	})
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := instance.Connect(t.Context(), serverTransport, nil)
+	serverSession, err := instance.Connect(
+		t.Context(), AssumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +317,7 @@ func TestInstanceConnectAlwaysOrdersTheHandshake(t *testing.T) {
 	}))
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	spy := &orderingSpyTransport{inner: serverTransport}
-	serverSession, err := instance.Connect(t.Context(), spy, nil)
+	serverSession, err := instance.Connect(t.Context(), AssumeResponseCommit(spy), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

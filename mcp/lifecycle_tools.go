@@ -32,7 +32,11 @@ func (t *tools) killSession(
 	}
 	// The "=" prefix anchors the target against tmux prefix and pattern matching.
 	holdsCaller := false
-	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+	caller, inside, err := t.callerPaneOnThisServer(ctx)
+	if err != nil {
+		return nil, killSessionOutput{}, err
+	}
+	if inside {
 		name, _ := caller.Formats().SessionName()
 		holdsCaller = name == input.SessionName
 	}
@@ -40,7 +44,7 @@ func (t *tools) killSession(
 		"session "+input.SessionName); err != nil {
 		return nil, killSessionOutput{}, err
 	}
-	if err := t.tmux().KillSession(ctx, "="+input.SessionName); err != nil {
+	if err := t.tmux(ctx).KillSession(ctx, "="+input.SessionName); err != nil {
 		return nil, killSessionOutput{}, err
 	}
 	return nil, killSessionOutput{Killed: input.SessionName}, nil
@@ -64,12 +68,16 @@ func (t *tools) killWindow(
 	if strings.TrimSpace(input.WindowID) == "" {
 		return nil, killWindowOutput{}, errors.New("windowId is required")
 	}
-	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux(ctx).Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, killWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
 	holdsCaller := false
-	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+	caller, inside, err := t.callerPaneOnThisServer(ctx)
+	if err != nil {
+		return nil, killWindowOutput{}, err
+	}
+	if inside {
 		holdsCaller = caller.WindowID() == window.ID()
 	}
 	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
@@ -83,7 +91,7 @@ func (t *tools) killWindow(
 	output := killWindowOutput{Killed: input.WindowID}
 	// Any failed post-kill lookup is reported as the source session ending; the
 	// requested window kill has already succeeded.
-	if _, err := t.tmux().Session(ctx, sessionID); err != nil {
+	if _, err := t.tmux(ctx).Session(ctx, sessionID); err != nil {
 		output.SessionEnded = true
 	}
 	return nil, output, nil
@@ -106,7 +114,7 @@ func (t *tools) killPane(
 	if strings.TrimSpace(input.PaneID) == "" {
 		return nil, killPaneOutput{}, errors.New("paneId is required")
 	}
-	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, killPaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
@@ -120,7 +128,7 @@ func (t *tools) killPane(
 		return nil, killPaneOutput{}, err
 	}
 	output := killPaneOutput{Killed: input.PaneID}
-	if _, err := t.tmux().Window(ctx, windowID); err != nil {
+	if _, err := t.tmux(ctx).Window(ctx, windowID); err != nil {
 		output.WindowEnded = true
 	}
 	return nil, output, nil
@@ -142,13 +150,16 @@ func (t *tools) killServer(
 	if !input.Confirm {
 		return nil, killServerOutput{}, errors.New("confirm must be true: this ends every session on the tmux server")
 	}
-	_, holdsCaller := t.callerPaneOnThisServer(ctx)
+	_, holdsCaller, err := t.callerPaneOnThisServer(ctx)
+	if err != nil {
+		return nil, killServerOutput{}, err
+	}
 	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
 		"this tmux server"); err != nil {
 		return nil, killServerOutput{}, err
 	}
-	sessions, _ := t.tmux().Sessions(ctx)
-	if err := t.tmux().Kill(ctx); err != nil {
+	sessions, _ := t.tmux(ctx).Sessions(ctx)
+	if err := t.tmux(ctx).Kill(ctx); err != nil {
 		return nil, killServerOutput{}, err
 	}
 	return nil, killServerOutput{SessionsKilled: len(sessions)}, nil

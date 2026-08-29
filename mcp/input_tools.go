@@ -122,7 +122,7 @@ func (t *tools) pasteText(
 	}
 	output := pasteTextOutput{PaneID: pane.ID().String()}
 
-	server := t.tmux()
+	server := t.tmux(ctx)
 	name := "libtmux-mcp-paste-" + strconv.FormatInt(pasteSequence.Add(1), 10)
 	if err := server.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
@@ -142,8 +142,8 @@ func (t *tools) pasteText(
 		DeleteAfter: true,
 		Bracket:     bracket,
 	}); err != nil {
-		_ = server.DeleteBuffer(ctx, &name)
-		return nil, output, err
+		cleanupErr := server.DeleteBuffer(ctx, &name)
+		return nil, output, errors.Join(err, cleanupErr)
 	}
 	if input.Enter {
 		enter := "Enter"
@@ -151,6 +151,7 @@ func (t *tools) pasteText(
 			Command:   &enter,
 			SkipEnter: true,
 		}); err != nil {
+			t.runtime.observe(err)
 			// The text arrived; only the Enter did not. Reporting the paste as
 			// a failure would invite a client to send it again.
 			return toolFailure(fmt.Errorf("text pasted but Enter was not sent: %w", err)),

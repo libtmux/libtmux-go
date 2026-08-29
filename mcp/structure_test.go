@@ -89,7 +89,7 @@ func TestEveryClosedSetReachesTheSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	instance := mustInternalMCPServer(t, target)
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(ctx, AssumeResponseCommit(serverTransport), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestBufferToolDescriptionsStateTheNamespaceBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	instance := mustInternalMCPServer(t, target)
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(ctx, AssumeResponseCommit(serverTransport), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

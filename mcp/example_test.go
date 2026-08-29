@@ -43,11 +43,11 @@ func ExampleAdvertisedTools() {
 	// Output: true
 }
 
-// Put the server on a transport of your own — an in-memory pair, a pipe, or
-// anything else the SDK speaks — rather than stdin and stdout.
+// Put the server on a transport of your own rather than stdin and stdout. Its
+// Connection must commit each response independently before Write returns nil.
 //
-// [tmuxmcp.NewServer] returns an instance embedding the SDK server, so its
-// methods remain available and Close releases resources owned by the tools.
+// [tmuxmcp.NewServer] returns an instance that owns the SDK server behind its
+// tracked Connect and Run methods. Close releases resources owned by the tools.
 func ExampleNewServer() {
 	// The work is in a function returning an error so that the session is
 	// closed on every path out of it. An example that logs and exits with a
@@ -76,7 +76,9 @@ func whichPaneAmIIn(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = instance.Close() }()
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(
+		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -253,7 +255,7 @@ func connectedClient(ctx context.Context) (*sdk.ClientSession, func()) {
 	if err != nil {
 		panic(err)
 	}
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(ctx, assumeResponseCommit(serverTransport), nil)
 	if err != nil {
 		_ = instance.Close()
 		panic(err)

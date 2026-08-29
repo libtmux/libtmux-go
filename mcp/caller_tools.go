@@ -32,28 +32,45 @@ func callerFromEnvironment() callerIdentity {
 }
 
 // callerIdentityFor uses tmux's environment when present, then falls back to
-// matching pane processes against this process's ancestors. The result is cached.
-func (t *tools) callerIdentityFor(ctx context.Context) callerIdentity {
-	t.callerOnce.Do(func() {
-		if fromEnvironment := callerFromEnvironment(); fromEnvironment.inside {
-			t.caller = fromEnvironment
-			return
+// matching pane processes against this process's ancestors. Successful empty
+// discovery is cached; failed discovery remains retryable.
+func (t *tools) callerIdentityFor(ctx context.Context) (callerIdentity, error) {
+	t.callerMutex.Lock()
+	defer t.callerMutex.Unlock()
+	if t.callerCached {
+		return t.caller, nil
+	}
+	caller := callerFromEnvironment()
+	var err error
+	if !caller.inside {
+		caller, err = t.callerFromProcessTree(ctx)
+		if err != nil {
+			return callerIdentity{}, err
 		}
-		t.caller = t.callerFromProcessTree(ctx)
-	})
-	return t.caller
+	}
+	t.caller = caller
+	t.callerCached = true
+	return caller, nil
 }
 
 // callerFromProcessTree finds the pane whose process this one descends from.
-func (t *tools) callerFromProcessTree(ctx context.Context) callerIdentity {
+func (t *tools) callerFromProcessTree(ctx context.Context) (callerIdentity, error) {
 	ancestors := ancestorPIDs()
 	if len(ancestors) == 0 {
-		return callerIdentity{}
+		return callerIdentity{}, nil
 	}
-	// One listing avoids a command per ancestor.
-	result, err := t.tmux().Cmd(ctx, "list-panes", "-a", "-F", "#{pane_pid}|#{pane_id}")
-	if err != nil || result.ExitCode != 0 {
-		return callerIdentity{}
+	// One listing avoids a command per ancestor and asks only for the two
+	// fields needed to match them.
+	process, err := t.runtime.process(ctx)
+	if err != nil {
+		return callerIdentity{}, err
+	}
+	result, err := process.Cmd(ctx, "list-panes", "-a", "-F", "#{pane_pid}|#{pane_id}")
+	if err != nil {
+		return callerIdentity{}, err
+	}
+	if result.ExitCode != 0 {
+		return callerIdentity{}, &tmux.CommandError{Subcommand: "list-panes", Result: result}
 	}
 	for _, line := range result.Stdout {
 		pid, paneID, ok := strings.Cut(strings.TrimSpace(line), "|")
@@ -68,9 +85,9 @@ func (t *tools) callerFromProcessTree(ctx context.Context) callerIdentity {
 			paneID: paneID,
 			socket: resolvePath(t.socketPath(ctx)),
 			inside: true,
-		}
+		}, nil
 	}
-	return callerIdentity{}
+	return callerIdentity{}, nil
 }
 
 // ancestorDepth bounds the walk up the process tree. A pane's shell is a

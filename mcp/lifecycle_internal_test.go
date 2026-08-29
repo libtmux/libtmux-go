@@ -5,10 +5,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -16,6 +20,72 @@ type gatedCloser struct {
 	started chan struct{}
 	release chan struct{}
 }
+
+type responseGateTransport struct {
+	inner     mcp.Transport
+	armed     <-chan struct{}
+	started   chan struct{}
+	release   <-chan struct{}
+	closed    chan struct{}
+	writeErr  error
+	once      sync.Once
+	closeOnce sync.Once
+	closes    atomic.Int64
+}
+
+func (t *responseGateTransport) Connect(ctx context.Context) (mcp.Connection, error) {
+	connection, err := t.inner.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &responseGateConnection{inner: connection, gate: t}, nil
+}
+
+type responseGateConnection struct {
+	inner mcp.Connection
+	gate  *responseGateTransport
+}
+
+func (c *responseGateConnection) Read(ctx context.Context) (jsonrpc.Message, error) {
+	return c.inner.Read(ctx)
+}
+
+func (c *responseGateConnection) Write(ctx context.Context, message jsonrpc.Message) error {
+	if _, response := message.(*jsonrpc.Response); !response {
+		return c.inner.Write(ctx, message)
+	}
+	select {
+	case <-c.gate.armed:
+	default:
+		return c.inner.Write(ctx, message)
+	}
+	c.gate.once.Do(func() { close(c.gate.started) })
+	if c.gate.writeErr != nil {
+		return c.gate.writeErr
+	}
+	select {
+	case <-c.gate.release:
+		return c.inner.Write(ctx, message)
+	case <-c.gate.closed:
+		return errResponseGateClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+var errResponseGateClosed = errors.New("response gate closed")
+
+func (c *responseGateConnection) Close() error {
+	c.gate.closes.Add(1)
+	c.gate.closeOnce.Do(func() {
+		if c.gate.closed != nil {
+			close(c.gate.closed)
+		}
+	})
+	return c.inner.Close()
+}
+
+func (c *responseGateConnection) SessionID() string { return c.inner.SessionID() }
 
 func (c *gatedCloser) Close() error {
 	close(c.started)
@@ -55,9 +125,265 @@ func TestInstanceRejectsConnectAfterShutdownStarts(t *testing.T) {
 	}
 
 	_, serverTransport := mcp.NewInMemoryTransports()
-	if session, err := instance.Connect(t.Context(), serverTransport, nil); err == nil {
+	if session, err := instance.Connect(
+		t.Context(), AssumeResponseCommit(serverTransport), nil,
+	); err == nil {
 		_ = session.Close()
 		t.Fatal("Connect() after Close() succeeded")
+	}
+}
+
+func TestTerminalToolFailureReachesCallerBeforeRunStops(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+		SocketName: "terminal-run-unused",
+		Runner: tmux.CommandRunnerFunc(func(
+			_ context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			if len(request.Arguments) == 1 && request.Arguments[0] == "-V" {
+				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
+			}
+			return tmux.CommandResult{ExitCode: -1}, tmux.ErrDaemonReplaced
+		}),
+	})
+	instance := mustInternalMCPServer(t, target)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	armed := make(chan struct{})
+	release := make(chan struct{})
+	gate := &responseGateTransport{
+		inner: serverTransport, armed: armed,
+		started: make(chan struct{}), release: release,
+	}
+	runResult := make(chan error, 1)
+	go func() { runResult <- instance.Run(ctx, AssumeResponseCommit(gate)) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "terminal-run"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = clientSession.Close() }()
+	close(armed)
+
+	type callResult struct {
+		result *mcp.CallToolResult
+		err    error
+	}
+	called := make(chan callResult, 1)
+	go func() {
+		result, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+			Name: "list_sessions", Arguments: map[string]any{},
+		})
+		called <- callResult{result: result, err: err}
+	}()
+	select {
+	case <-gate.started:
+	case <-ctx.Done():
+		t.Fatal("terminal response write did not start")
+	}
+	select {
+	case err := <-runResult:
+		t.Fatalf("Run() returned before the terminal response write: %v", err)
+	default:
+	}
+	select {
+	case result := <-called:
+		t.Fatalf("CallTool() returned before its response write: %#v", result)
+	default:
+	}
+	close(release)
+	var call callResult
+	select {
+	case call = <-called:
+	case <-ctx.Done():
+		t.Fatal("terminal response was not delivered")
+	}
+	result, callErr := call.result, call.err
+	if callErr != nil {
+		t.Fatalf("CallTool() error = %v, want a classified tool response", callErr)
+	}
+	responseText := ""
+	for _, content := range result.Content {
+		if text, ok := content.(*mcp.TextContent); ok {
+			responseText += text.Text
+		}
+	}
+	if !result.IsError || !strings.Contains(responseText, tmux.ErrDaemonReplaced.Error()) {
+		t.Fatalf("CallTool() = (%t, %q), want ErrDaemonReplaced response", result.IsError, responseText)
+	}
+	select {
+	case runErr := <-runResult:
+		if !errors.Is(runErr, tmux.ErrDaemonReplaced) {
+			t.Fatalf("Run() error = %v, want ErrDaemonReplaced", runErr)
+		}
+	case <-ctx.Done():
+		t.Fatal("Run did not stop after terminal tool failure")
+	}
+}
+
+func TestTerminalResponseWriteFailureClosesTheSession(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	writeErr := errors.New("response write failed")
+	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+		SocketName: "terminal-write-unused",
+		Runner: tmux.CommandRunnerFunc(func(
+			_ context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			if len(request.Arguments) == 1 && request.Arguments[0] == "-V" {
+				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
+			}
+			return tmux.CommandResult{ExitCode: -1}, tmux.ErrDaemonReplaced
+		}),
+	})
+	instance := mustInternalMCPServer(t, target)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	armed := make(chan struct{})
+	gate := &responseGateTransport{
+		inner: serverTransport, armed: armed,
+		started: make(chan struct{}), writeErr: writeErr,
+	}
+	runResult := make(chan error, 1)
+	go func() { runResult <- instance.Run(ctx, AssumeResponseCommit(gate)) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "terminal-write"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = clientSession.Close() }()
+	close(armed)
+
+	callDone := make(chan error, 1)
+	go func() {
+		_, callErr := clientSession.CallTool(ctx, &mcp.CallToolParams{
+			Name: "list_sessions", Arguments: map[string]any{},
+		})
+		callDone <- callErr
+	}()
+	select {
+	case <-gate.started:
+	case <-ctx.Done():
+		t.Fatal("failing terminal response write did not start")
+	}
+	var runErr error
+	select {
+	case runErr = <-runResult:
+	case <-ctx.Done():
+		t.Fatal("Run did not stop after response write failure")
+	}
+	if !errors.Is(runErr, tmux.ErrDaemonReplaced) || !errors.Is(runErr, writeErr) {
+		t.Fatalf("Run() error = %v, want terminal and response-write failures", runErr)
+	}
+	var callErr error
+	select {
+	case callErr = <-callDone:
+	case <-ctx.Done():
+		t.Fatal("CallTool did not stop after response write failure")
+	}
+	if callErr == nil {
+		t.Fatal("CallTool() succeeded after its response write failed")
+	}
+}
+
+func TestTerminalResponseDrainTimeoutClosesAStuckWrite(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+		SocketName: "terminal-stuck-write-unused",
+		Runner: tmux.CommandRunnerFunc(func(
+			_ context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			if len(request.Arguments) == 1 && request.Arguments[0] == "-V" {
+				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
+			}
+			return tmux.CommandResult{ExitCode: -1}, tmux.ErrDaemonReplaced
+		}),
+	})
+	instance := mustInternalMCPServer(t, target)
+	instance.drainWait = 10 * time.Millisecond
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	armed := make(chan struct{})
+	release := make(chan struct{})
+	gate := &responseGateTransport{
+		inner: serverTransport, armed: armed, started: make(chan struct{}),
+		release: release, closed: make(chan struct{}),
+	}
+	runResult := make(chan error, 1)
+	go func() { runResult <- instance.Run(ctx, AssumeResponseCommit(gate)) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "terminal-stuck-write"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = clientSession.Close() }()
+	defer close(release)
+	close(armed)
+
+	callDone := make(chan error, 1)
+	go func() {
+		_, callErr := clientSession.CallTool(ctx, &mcp.CallToolParams{
+			Name: "list_sessions", Arguments: map[string]any{},
+		})
+		callDone <- callErr
+	}()
+	select {
+	case <-gate.started:
+	case <-ctx.Done():
+		t.Fatal("stuck terminal response write did not start")
+	}
+	select {
+	case runErr := <-runResult:
+		if !errors.Is(runErr, tmux.ErrDaemonReplaced) ||
+			!errors.Is(runErr, errResponseGateClosed) {
+			t.Fatalf("Run() error = %v, want terminal and forced-close failures", runErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("response drain timeout did not close the stuck write")
+	}
+	if closes := gate.closes.Load(); closes != 1 {
+		t.Fatalf("transport Close() calls = %d, want 1", closes)
+	}
+	select {
+	case callErr := <-callDone:
+		if callErr == nil {
+			t.Fatal("CallTool() succeeded after its response write was force-closed")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("CallTool() remained blocked after the response write was force-closed")
+	}
+}
+
+func TestTerminalShutdownWaitsForEveryReadCallResponse(t *testing.T) {
+	instance := mustInternalMCPServer(t, mustInternalTmuxServer(t, tmux.ServerOptions{
+		SocketName: "terminal-replies-unused",
+	}))
+	scope := newSessionScope(instance.ctx)
+	firstID, err := jsonrpc.MakeID("first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondID, err := jsonrpc.MakeID("second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance.requestRead(scope, &jsonrpc.Request{ID: firstID})
+	instance.requestRead(scope, &jsonrpc.Request{ID: secondID})
+	instance.terminal(tmux.ErrDaemonReplaced)
+
+	instance.responseSettled(scope, &jsonrpc.Response{ID: secondID})
+	select {
+	case <-instance.closeDone:
+		t.Fatal("an unrelated response released the terminal response gate")
+	default:
+	}
+	instance.responseSettled(scope, &jsonrpc.Response{ID: firstID})
+	select {
+	case <-instance.closeDone:
+	case <-time.After(time.Second):
+		t.Fatal("the final response did not release terminal shutdown")
 	}
 }
 
@@ -68,7 +394,9 @@ func TestSessionJobsAreIsolatedAndReleasedOnDisconnect(t *testing.T) {
 
 	connect := func() *ServerSession {
 		_, transport := mcp.NewInMemoryTransports()
-		session, err := instance.Connect(t.Context(), transport, nil)
+		session, err := instance.Connect(
+			t.Context(), AssumeResponseCommit(transport), nil,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,11 +409,11 @@ func TestSessionJobsAreIsolatedAndReleasedOnDisconnect(t *testing.T) {
 	if err := os.Mkdir(directory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if !first.scope.jobs.keep(&job{
+	if err := first.scope.jobs.keep(&job{
 		id: "opaque-handle", directory: directory, finished: true,
 		started: time.Now(), ended: time.Now(),
-	}) {
-		t.Fatal("first session refused a job")
+	}); err != nil {
+		t.Fatalf("first session keep job: %v", err)
 	}
 
 	firstRequest := &mcp.CallToolRequest{Session: first.sdk}
@@ -115,7 +443,9 @@ func TestSessionConsentIsReleasedOnDisconnect(t *testing.T) {
 	}))
 	connect := func() *ServerSession {
 		_, transport := mcp.NewInMemoryTransports()
-		session, err := instance.Connect(t.Context(), transport, nil)
+		session, err := instance.Connect(
+			t.Context(), AssumeResponseCommit(transport), nil,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -148,7 +478,9 @@ func TestSessionSubscriptionsAreIdempotentAndOwned(t *testing.T) {
 	}))
 	connect := func() *ServerSession {
 		_, transport := mcp.NewInMemoryTransports()
-		session, err := instance.Connect(t.Context(), transport, nil)
+		session, err := instance.Connect(
+			t.Context(), AssumeResponseCommit(transport), nil,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,16 +495,18 @@ func TestSessionSubscriptionsAreIdempotentAndOwned(t *testing.T) {
 			Params:  &mcp.SubscribeParams{URI: uri},
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	if err := instance.tools.subscribe(ctx, request(first)); err != nil {
+	subscribe := func(request *mcp.SubscribeRequest) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		return instance.tools.subscribe(ctx, request)
+	}
+	if err := subscribe(request(first)); err != nil {
 		t.Fatal(err)
 	}
 	if got := instance.tools.watchers.subscriptionCount(uri); got != 1 {
 		t.Fatalf("watcher subscriptions = %d after first subscribe, want 1", got)
 	}
-	if err := instance.tools.unsubscribe(ctx, &mcp.UnsubscribeRequest{
+	if err := instance.tools.unsubscribe(context.Background(), &mcp.UnsubscribeRequest{
 		Session: second.sdk,
 		Params:  &mcp.UnsubscribeParams{URI: uri},
 	}); err != nil {
@@ -181,7 +515,7 @@ func TestSessionSubscriptionsAreIdempotentAndOwned(t *testing.T) {
 	if got := instance.tools.watchers.subscriptionCount(uri); got != 1 {
 		t.Fatalf("foreign unsubscribe changed count to %d, want 1", got)
 	}
-	if err := instance.tools.subscribe(ctx, request(first)); err != nil {
+	if err := subscribe(request(first)); err != nil {
 		t.Fatal(err)
 	}
 	if got := instance.tools.watchers.subscriptionCount(uri); got != 1 {
@@ -249,12 +583,12 @@ func TestInstanceCloseReleasesOwnedResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, transport := mcp.NewInMemoryTransports()
-	session, err := instance.Connect(t.Context(), transport, nil)
+	session, err := instance.Connect(t.Context(), AssumeResponseCommit(transport), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !session.scope.jobs.keep(&job{id: "job", directory: jobDirectory}) {
-		t.Fatal("session refused a job before shutdown")
+	if err := session.scope.jobs.keep(&job{id: "job", directory: jobDirectory}); err != nil {
+		t.Fatalf("session keep job before shutdown: %v", err)
 	}
 
 	auditFile, ok := instance.audit.(*os.File)
@@ -265,8 +599,8 @@ func TestInstanceCloseReleasesOwnedResources(t *testing.T) {
 	const uri = "tmux://panes/%9/content"
 	instance.tools.watchers.subscribed[uri] = 1
 	instance.tools.watchers.spelled[uri] = map[string]int{uri: 1}
-	instance.tools.watchers.notify(t.Context(), uri)
-	instance.tools.watchers.notify(t.Context(), uri)
+	instance.tools.watchers.notify(uri)
+	instance.tools.watchers.notify(uri)
 	if !instance.tools.watchers.owes(uri) {
 		t.Fatal("watcher has no deferred notification to release")
 	}

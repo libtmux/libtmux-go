@@ -234,7 +234,9 @@ func connect(
 	if err != nil {
 		return nil, nil, fmt.Errorf("construct the server: %w", err)
 	}
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(
+		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		_ = instance.Close()
 		return nil, nil, fmt.Errorf("start the server: %w", err)

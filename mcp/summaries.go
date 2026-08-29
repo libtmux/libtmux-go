@@ -99,8 +99,12 @@ func summarizePane(pane tmux.Pane, caller callerIdentity, socket string) paneSum
 }
 
 // summarize reads caller and socket state for one pane.
-func (t *tools) summarize(ctx context.Context, pane tmux.Pane) paneSummary {
-	return summarizePane(pane, t.callerIdentityFor(ctx), t.socketPath(ctx))
+func (t *tools) summarize(ctx context.Context, pane tmux.Pane) (paneSummary, error) {
+	caller, err := t.callerIdentityFor(ctx)
+	if err != nil {
+		return paneSummary{}, err
+	}
+	return summarizePane(pane, caller, t.socketPath(ctx)), nil
 }
 
 // Standalone windows may not carry materialized pane relations.

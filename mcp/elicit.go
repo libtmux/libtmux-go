@@ -87,7 +87,10 @@ func (t *tools) confirmCallerWrite(
 	if request == nil || request.Session == nil {
 		return nil
 	}
-	caller := t.callerIdentityFor(ctx)
+	caller, err := t.callerIdentityFor(ctx)
+	if err != nil {
+		return err
+	}
 	isCaller := caller.isCaller(pane, t.socketPath(ctx))
 	if isCaller == nil || !*isCaller {
 		return nil
@@ -151,20 +154,23 @@ func (t *tools) confirmCallerLoss(
 
 // callerPaneOnThisServer is the caller's own pane, when this process runs in
 // one of the panes of the server it drives.
-func (t *tools) callerPaneOnThisServer(ctx context.Context) (tmux.Pane, bool) {
-	caller := t.callerIdentityFor(ctx)
+func (t *tools) callerPaneOnThisServer(ctx context.Context) (tmux.Pane, bool, error) {
+	caller, err := t.callerIdentityFor(ctx)
+	if err != nil {
+		return tmux.Pane{}, false, err
+	}
 	if !caller.inside {
-		return tmux.Pane{}, false
+		return tmux.Pane{}, false, nil
 	}
 	socket := t.socketPath(ctx)
 	if socket == "" || resolvePath(socket) != caller.socket {
-		return tmux.Pane{}, false
+		return tmux.Pane{}, false, nil
 	}
-	pane, err := t.tmux().Pane(ctx, tmux.PaneID(caller.paneID))
+	pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(caller.paneID))
 	if err != nil {
-		return tmux.Pane{}, false
+		return tmux.Pane{}, false, err
 	}
-	return pane, true
+	return pane, true, nil
 }
 
 // askAboutTheCaller puts one yes-or-no question to the person and turns the

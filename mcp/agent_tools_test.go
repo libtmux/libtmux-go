@@ -547,7 +547,9 @@ func TestASubscriberIsToldWhenAPaneChanges(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -1149,7 +1151,9 @@ func reportOwnPaneFromInside(t *testing.T, socket, report string) {
 
 	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -1187,7 +1191,9 @@ func connectAsking(
 
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1329,7 +1335,9 @@ func TestOneSessionsYesDoesNotSilenceAnother(t *testing.T) {
 	// Two clients of one server, as an embedder holds them.
 	join := func(name string, answer func(*sdk.ElicitRequest) *sdk.ElicitResult) (*sdk.ClientSession, *int) {
 		clientTransport, serverTransport := sdk.NewInMemoryTransports()
-		serverSession, err := server.Connect(ctx, serverTransport, nil)
+		serverSession, err := server.Connect(
+			ctx, assumeResponseCommit(serverTransport), nil,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2510,25 +2518,17 @@ func TestToolsRejectAReplacementTmuxDaemon(t *testing.T) {
 		defer killCancel()
 		_ = target.Kill(killCtx)
 	})
-	// A pool attaches to a session, so there has to be one before it opens.
+	// The runtime attaches to an existing session, so there has to be one.
 	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "before", Width: 80, Height: 24,
 	}); err != nil {
 		t.Fatalf("start the first session: %v", err)
 	}
 
-	// Through the pooled control connection, which is what Run serves over and
-	// what connect() in these tests does not build. The in-memory path having
-	// no pool is why this went unnoticed: the failure needs the connection
-	// that only the real server opens.
-	connected, pool := tmuxmcp.Connect(ctx, target)
-	if pool == nil {
-		t.Skip("no control pool on this tmux; the failure needs one")
-	}
-	t.Cleanup(func() { _ = pool.Close() })
-
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(t, connected).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2554,13 +2554,20 @@ func TestToolsRejectAReplacementTmuxDaemon(t *testing.T) {
 		t.Fatalf("start a replacement tmux server: %v", err)
 	}
 
-	// The call that discovers the dead connection may have an uncertain
-	// outcome. Every later call must remain terminal rather than adopt the
-	// replacement daemon at the same socket.
-	call(ctx, t, session, "list_panes", map[string]any{}, nil)
-	result := call(ctx, t, session, "list_panes", map[string]any{}, nil)
-	if !result.IsError {
-		t.Fatal("the MCP session adopted a replacement tmux daemon")
+	// The first failed call makes the whole instance terminal. It may close the
+	// SDK session before the tool error reaches the caller; either result is a
+	// refusal, and every later call must remain refused.
+	first, firstErr := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "list_panes", Arguments: map[string]any{},
+	})
+	if firstErr == nil && !first.IsError {
+		t.Fatal("the first call adopted a replacement tmux daemon")
+	}
+	second, secondErr := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "list_panes", Arguments: map[string]any{},
+	})
+	if secondErr == nil && !second.IsError {
+		t.Fatal("a later call adopted a replacement tmux daemon")
 	}
 }
 

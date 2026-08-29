@@ -125,7 +125,9 @@ func inspect(target tmux.Server) (context.Context, *sdk.ClientSession, func(), e
 		cancel()
 		return nil, nil, nil, err
 	}
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(
+		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		_ = instance.Close()
 		cancel()

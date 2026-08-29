@@ -27,7 +27,7 @@ func (missing) Is(target error) bool { return target == tmux.ErrSnapshotNotFound
 
 // resolveSession finds the session a call names, or the only one there is.
 func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, error) {
-	sessions, err := t.tmux().Sessions(ctx)
+	sessions, err := t.tmux(ctx).Sessions(ctx)
 	if err != nil {
 		return tmux.Session{}, err
 	}
@@ -56,7 +56,7 @@ func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, 
 // resolveWindow uses the current window when id is empty.
 func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux.Window, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		window, err := t.tmux().Window(ctx, tmux.WindowID(wanted))
+		window, err := t.tmux(ctx).Window(ctx, tmux.WindowID(wanted))
 		return window, notFound(err, "window", wanted, "list_windows")
 	}
 	session, err := t.resolveSession(ctx, sessionName)
@@ -69,7 +69,7 @@ func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux
 // resolvePane uses the active pane when id is empty.
 func (t *tools) resolvePane(ctx context.Context, id, sessionName string) (tmux.Pane, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		pane, err := t.tmux().Pane(ctx, tmux.PaneID(wanted))
+		pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(wanted))
 		return pane, notFound(err, "pane", wanted, "list_panes")
 	}
 	window, err := t.resolveWindow(ctx, "", sessionName)
@@ -84,4 +84,14 @@ func (t *tools) resolvePane(ctx context.Context, id, sessionName string) (tmux.P
 		return tmux.Pane{}, fmt.Errorf("window %s has no active pane", window.ID())
 	}
 	return pane, nil
+}
+
+// processPane re-resolves a command-lane pane on the exact daemon's process
+// lane for operations whose stdout bytes cannot cross control mode.
+func (t *tools) processPane(ctx context.Context, pane tmux.Pane) (tmux.Pane, error) {
+	server, err := t.runtime.process(ctx)
+	if err != nil {
+		return tmux.Pane{}, err
+	}
+	return server.Pane(ctx, pane.ID())
 }

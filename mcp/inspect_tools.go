@@ -43,6 +43,11 @@ func (t *tools) snapshotPane(
 	if err != nil {
 		return nil, snapshotPaneOutput{}, err
 	}
+	commandPane := pane
+	pane, err = t.processPane(ctx, pane)
+	if err != nil {
+		return nil, snapshotPaneOutput{}, err
+	}
 	request := tmux.CapturePaneRequest{}
 	if input.IncludeHistory {
 		request.Start = tmux.CaptureBoundary
@@ -55,10 +60,14 @@ func (t *tools) snapshotPane(
 
 	formats := pane.Formats()
 	dead, _ := formats.PaneDead()
+	summary, err := t.summarize(ctx, commandPane)
+	if err != nil {
+		return nil, snapshotPaneOutput{}, err
+	}
 	output := snapshotPaneOutput{
 		Lines:      kept,
 		Dead:       dead,
-		Pane:       t.summarize(ctx, pane),
+		Pane:       summary,
 		truncation: report,
 	}
 	if status, ok := formats.PaneDeadStatus(); ok && dead {
@@ -117,7 +126,7 @@ func (t *tools) searchPanes(
 	perPane := clamp(input.MaxMatchesPerPane, searchDefaultMatchesPerPane, searchCeilingMatchesPerPane)
 	paneLimit := clamp(input.MaxPanes, searchDefaultPanes, searchCeilingPanes)
 
-	snapshot, err := t.tmux().Snapshot(ctx)
+	snapshot, err := t.tmux(ctx).Snapshot(ctx)
 	if err != nil {
 		return nil, searchPanesOutput{}, err
 	}
@@ -127,9 +136,18 @@ func (t *tools) searchPanes(
 		request.Start = tmux.CaptureBoundary
 	}
 
-	server := t.tmux()
+	server, err := t.runtime.process(ctx)
+	if err != nil {
+		return nil, searchPanesOutput{}, err
+	}
 	socket := t.socketPath(ctx)
-	caller := t.callerIdentityFor(ctx)
+	caller := callerIdentity{}
+	if len(snapshot.Panes()) > 0 {
+		caller, err = t.callerIdentityFor(ctx)
+		if err != nil {
+			return nil, searchPanesOutput{}, err
+		}
+	}
 	matched := make([]paneMatch, 0)
 	for _, pane := range snapshot.Panes() {
 		if session := strings.TrimSpace(input.SessionName); session != "" {
@@ -139,11 +157,17 @@ func (t *tools) searchPanes(
 		}
 		live, err := server.Pane(ctx, pane.ID())
 		if err != nil {
+			if t.runtime.isTerminalError(err) {
+				return nil, searchPanesOutput{}, err
+			}
 			// Ignore panes that disappear after the snapshot.
 			continue
 		}
 		lines, err := live.Capture(ctx, request)
 		if err != nil {
+			if t.runtime.isTerminalError(err) {
+				return nil, searchPanesOutput{}, err
+			}
 			continue
 		}
 		hits := make([]matchedLine, 0, perPane)
@@ -243,8 +267,12 @@ func (t *tools) getPaneInfo(
 	mode, _ := formats.PaneInMode()
 	historyLines, _ := formats.HistorySize()
 	historyLimit, _ := formats.HistoryLimit()
+	summary, err := t.summarize(ctx, pane)
+	if err != nil {
+		return nil, getPaneInfoOutput{}, err
+	}
 	output := getPaneInfoOutput{
-		Pane:         t.summarize(ctx, pane),
+		Pane:         summary,
 		Title:        title,
 		Path:         path,
 		PID:          pid,
@@ -293,7 +321,10 @@ func (t *tools) getWindowInfo(
 	height, _ := formats.WindowHeight()
 	zoomed, _ := formats.WindowZoomedFlag()
 
-	caller := t.callerIdentityFor(ctx)
+	caller, err := t.callerIdentityFor(ctx)
+	if err != nil {
+		return nil, getWindowInfoOutput{}, err
+	}
 	socket := t.socketPath(ctx)
 	summaries := make([]paneSummary, 0, len(panes))
 	for _, pane := range panes {
@@ -343,13 +374,15 @@ func (t *tools) getSessionInfo(
 	if created, ok := formats.SessionCreated(); ok {
 		output.Created = created.UTC().Format("2006-01-02T15:04:05Z")
 	}
-	if active, err := session.ResolveActiveWindow(ctx); err == nil {
-		output.ActiveWindowID = active.ID().String()
+	active, err := session.ResolveActiveWindow(ctx)
+	if err != nil {
+		return nil, getSessionInfoOutput{}, err
 	}
+	output.ActiveWindowID = active.ID().String()
 	for _, window := range windows {
 		panes, err := window.SearchPanes(ctx, nil)
 		if err != nil {
-			continue
+			return nil, getSessionInfoOutput{}, err
 		}
 		output.Windows = append(output.Windows, summarizeWindow(window, len(panes)))
 	}

@@ -223,7 +223,7 @@ func batchErrorText(result *mcp.CallToolResult) string {
 // Batch tools register last and remain unbatchable to prevent nested batches.
 func addBatchTools(server *mcp.Server, t *tools) {
 	t.batchable = false
-	register(server, t, CapabilityMetadataRead, &mcp.Tool{
+	registerLocal(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "call_readonly_tools_batch",
 		Annotations: readOnly("Batch of Reading Tools"),
 		Description: "Run several reading tools in one request, in order. " +
@@ -231,7 +231,7 @@ func addBatchTools(server *mcp.Server, t *tools) {
 			"believed to be read-only never alters a session. Stops at the first " +
 			"failure, and names the calls it skipped.",
 	}, t.callReadOnlyToolsBatch)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
+	registerLocal(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "call_mutating_tools_batch",
 		Annotations: mutating("Batch of Changing Tools"),
 		Description: "Run several tools in one request, in order, including ones " +
@@ -240,7 +240,7 @@ func addBatchTools(server *mcp.Server, t *tools) {
 			"failure, and what already ran stays, because tmux has no " +
 			"transaction; the reply names the calls it skipped.",
 	}, t.callMutatingToolsBatch)
-	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
+	registerLocal(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "call_destructive_tools_batch",
 		Annotations: destructive("Batch of Ending Tools"),
 		Description: "Run several tools in one request, in order, including the " +

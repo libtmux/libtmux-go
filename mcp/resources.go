@@ -91,11 +91,19 @@ func (t *tools) readSessions(
 	ctx context.Context,
 	request *mcp.ReadResourceRequest,
 ) (*mcp.ReadResourceResult, error) {
-	_, sessions, err := t.listSessions(ctx, nil, listSessionsInput{})
+	requestCtx, acquired, err := t.acquireRequestRuntime(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return jsonResource(request.Params.URI, sessions)
+	defer acquired.release()
+	_, sessions, err := t.listSessions(requestCtx, nil, listSessionsInput{})
+	if err != nil {
+		t.runtime.observe(err)
+		return nil, err
+	}
+	result, err := jsonResource(request.Params.URI, sessions)
+	t.runtime.observe(err)
+	return result, err
 }
 
 // The SDK supplies only the concrete URI, so readTemplated parses its variables.
@@ -103,8 +111,15 @@ func (t *tools) readTemplated(
 	ctx context.Context,
 	request *mcp.ReadResourceRequest,
 ) (*mcp.ReadResourceResult, error) {
-	result, err := t.readOne(ctx, request.Params.URI)
-	return result, resourceError(request.Params.URI, err)
+	requestCtx, acquired, err := t.acquireRequestRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer acquired.release()
+	result, err := t.readOne(requestCtx, request.Params.URI)
+	err = resourceError(request.Params.URI, err)
+	t.runtime.observe(err)
+	return result, err
 }
 
 // resourceError maps missing objects to MCP's resource-not-found JSON-RPC code.
@@ -177,7 +192,7 @@ func (t *tools) readWindowPanes(
 	ctx context.Context,
 	uri, id string,
 ) (*mcp.ReadResourceResult, error) {
-	window, err := t.tmux().Window(ctx, tmux.WindowID(id))
+	window, err := t.tmux(ctx).Window(ctx, tmux.WindowID(id))
 	if err != nil {
 		return nil, notFound(err, "window", id, "list_windows")
 	}
@@ -187,7 +202,11 @@ func (t *tools) readWindowPanes(
 	}
 	summaries := make([]listedPane, 0, len(panes))
 	for _, pane := range panes {
-		summaries = append(summaries, listedPane{paneSummary: t.summarize(ctx, pane)})
+		summary, err := t.summarize(ctx, pane)
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, listedPane{paneSummary: summary})
 	}
 	return jsonResource(uri, listPanesOutput{Panes: summaries, Total: len(panes)})
 }
@@ -209,11 +228,15 @@ func (t *tools) readWindow(ctx context.Context, uri, id string) (*mcp.ReadResour
 }
 
 func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
-	pane, err := t.tmux().Pane(ctx, tmux.PaneID(id))
+	pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(id))
 	if err != nil {
 		return nil, notFound(err, "pane", id, "list_panes")
 	}
-	return jsonResource(uri, t.summarize(ctx, pane))
+	summary, err := t.summarize(ctx, pane)
+	if err != nil {
+		return nil, err
+	}
+	return jsonResource(uri, summary)
 }
 
 func (t *tools) readPaneContent(

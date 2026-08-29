@@ -200,6 +200,10 @@ func (t *tools) captureSince(
 		return nil, captureSinceOutput{}, fmt.Errorf(
 			"the cursor belongs to pane %s, not %s", cursor.PaneID, pane.ID())
 	}
+	pane, err = t.processPane(ctx, pane)
+	if err != nil {
+		return nil, captureSinceOutput{}, err
+	}
 
 	read, err := t.readSince(ctx, pane, cursor)
 	if err != nil {
@@ -572,6 +576,18 @@ func lineHash(line string) string {
 
 // encodeCursor renders a cursor as one opaque string.
 func encodeCursor(paneID string, state paneState, read paneRead) string {
+	cursor := cursorForRead(paneID, state, read)
+	// Marshaling a value this package owns cannot fail, and there is nothing
+	// useful to say if it somehow did: a cursor that could not be built is
+	// reported as no cursor, which reads as a fresh start.
+	encoded, err := json.Marshal(cursor)
+	if err != nil {
+		return ""
+	}
+	return cursorPrefix + base64.RawURLEncoding.EncodeToString(encoded)
+}
+
+func cursorForRead(paneID string, state paneState, read paneRead) captureCursor {
 	cursor := captureCursor{
 		Version:     cursorVersion,
 		PaneID:      paneID,
@@ -592,14 +608,7 @@ func encodeCursor(paneID string, state paneState, read paneRead) string {
 			cursor.BelowHashes = append(cursor.BelowHashes, lineHash(row))
 		}
 	}
-	// Marshaling a value this package owns cannot fail, and there is nothing
-	// useful to say if it somehow did: a cursor that could not be built is
-	// reported as no cursor, which reads as a fresh start.
-	encoded, err := json.Marshal(cursor)
-	if err != nil {
-		return ""
-	}
-	return cursorPrefix + base64.RawURLEncoding.EncodeToString(encoded)
+	return cursor
 }
 
 // decodeCursor reads a cursor back, refusing anything this server did not

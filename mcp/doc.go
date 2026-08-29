@@ -8,11 +8,14 @@
 //		sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 //	)
 //
-// [NewServer] rejects an invalid tmux target, then returns an [Instance] that
-// owns its MCP sessions and background resources. Its managed Connect applies
-// handshake ordering and gives each client isolated consent, subscriptions,
-// waits, and detached jobs. Close the instance after serving. [Run] provides
-// the same lifecycle for the command-line server.
+// The MCP server requires tmux 3.6 or newer. [NewServer] validates a target
+// without performing I/O, then returns an [Instance] that owns its sessions
+// and background resources. Connect checks the tmux version before opening the
+// transport, applies handshake ordering, and gives each client isolated
+// consent, subscriptions, waits, and detached jobs. Custom transports must use
+// [AssumeResponseCommit] to assert that a successful write commits one response.
+// Close the instance after serving. [Run] provides the same lifecycle for the
+// command-line server.
 //
 // # Target and security boundary
 //
@@ -40,8 +43,9 @@
 // line-editor interpretation. It returns the command's output and exit status.
 // Detached commands return a job handle for later collection with get_job.
 //
-// wait_for_text consumes pane output as a stream instead of polling the visible
-// screen, so it does not mistake a shell's command echo for program output.
+// wait_for_text uses control notifications to observe output and advances a
+// gap-checked pane cursor, so output between attachment and observation is not
+// lost.
 // capture_since returns only output written after an opaque cursor from an
 // earlier call. capture_pane remains the direct visible-screen read.
 //

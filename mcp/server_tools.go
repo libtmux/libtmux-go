@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -64,18 +66,18 @@ func (t *tools) getServerInfo(
 			"includeMessages requires the content-read capability",
 		)
 	}
-	caller := t.callerIdentityFor(ctx)
+	caller := callerFromEnvironment()
 	output := getServerInfoOutput{
 		SafetyLevel:          string(t.level),
 		Capabilities:         t.capabilities.strings(),
 		RejectedCapabilities: RejectedCapabilityValues(),
 		CallerPaneID:         caller.paneID,
 	}
-	if version, err := t.tmux().Version(ctx); err == nil {
+	if version, err := t.tmux(ctx).Version(ctx); err == nil {
 		output.Version = version.String()
 	}
 	// An absent server is a valid result; a probe error is not.
-	alive, err := t.tmux().IsAlive(ctx)
+	alive, err := t.tmux(ctx).IsAlive(ctx)
 	if err != nil {
 		return nil, getServerInfoOutput{}, err
 	}
@@ -85,6 +87,11 @@ func (t *tools) getServerInfo(
 		output.AttachedClients = []attachedClient{}
 		return nil, output, nil
 	}
+	caller, err = t.callerIdentityFor(ctx)
+	if err != nil {
+		return nil, getServerInfoOutput{}, err
+	}
+	output.CallerPaneID = caller.paneID
 
 	socket := t.socketPath(ctx)
 	output.SocketPath = socket
@@ -92,7 +99,7 @@ func (t *tools) getServerInfo(
 		resolvePath(socket) == caller.socket
 
 	// One snapshot keeps all topology counts observationally consistent.
-	snapshot, err := t.tmux().Snapshot(ctx)
+	snapshot, err := t.tmux(ctx).Snapshot(ctx)
 	if err != nil {
 		return nil, getServerInfoOutput{}, err
 	}
@@ -103,8 +110,11 @@ func (t *tools) getServerInfo(
 	output.Clients = len(clients)
 	output.AttachedClients = summarizeClients(clients)
 	if input.IncludeMessages {
-		messages, err := t.tmux().ShowMessages(ctx, tmux.ShowMessagesRequest{})
+		messages, err := t.tmux(ctx).ShowMessages(ctx, tmux.ShowMessagesRequest{})
 		if err != nil {
+			if t.runtime.isTerminalError(err) {
+				return nil, getServerInfoOutput{}, err
+			}
 			// Preserve the otherwise complete reply when only messages fail.
 			output.MessagesUnavailable = err.Error()
 		} else {
@@ -170,6 +180,11 @@ type serverSummary struct {
 	Sessions   int    `json:"sessions"`
 }
 
+const (
+	serverProbeConcurrency = 16
+	serverProbeTimeout     = time.Second
+)
+
 type listServersOutput struct {
 	// Servers is always an array with the target first when present.
 	Servers []serverSummary `json:"servers"`
@@ -188,7 +203,11 @@ func (t *tools) listServers(
 	_ *mcp.CallToolRequest,
 	input listServersInput,
 ) (*mcp.CallToolResult, listServersOutput, error) {
-	binding := t.tmux()
+	binding, err := t.runtime.process(ctx)
+	if err != nil {
+		return nil, listServersOutput{}, err
+	}
+	targetProbe := t.tmux(ctx)
 	selection, err := binding.SocketSelection()
 	if err != nil {
 		return nil, listServersOutput{}, err
@@ -208,13 +227,14 @@ func (t *tools) listServers(
 	}
 	candidates := make([]candidate, 0, len(entries)+1)
 	for _, entry := range entries {
-		if entry.IsDir() {
+		info, infoErr := entry.Info()
+		if infoErr != nil || info.Mode()&os.ModeSocket == 0 {
 			continue
 		}
 		output.Total++
 		path := filepath.Join(directory, entry.Name())
 		isTarget := target != "" && resolvePath(path) == targetPath
-		probe := binding
+		probe := targetProbe
 		if !isTarget {
 			var err error
 			probe, err = binding.WithSocketPath(path)
@@ -230,46 +250,91 @@ func (t *tools) listServers(
 	if target != "" && !targetFound {
 		output.Total++
 		candidates = append(candidates, candidate{
-			path: target, name: filepath.Base(target), isTarget: true, probe: binding,
+			path: target, name: filepath.Base(target), isTarget: true, probe: targetProbe,
 		})
 	}
 
-	for _, candidate := range candidates {
+	type probeResult struct {
+		summary serverSummary
+		skipped bool
+		err     error
+	}
+	probe := func(candidate candidate) probeResult {
 		summary := serverSummary{
 			SocketPath: candidate.path,
 			Name:       candidate.name,
 			IsTarget:   candidate.isTarget,
 		}
 		if input.Name != "" && !containsFold(summary.Name, input.Name) {
-			output.Skipped++
-			continue
+			return probeResult{skipped: true}
 		}
-		alive, err := candidate.probe.IsAlive(ctx)
-		if err != nil && candidate.isTarget && errors.Is(err, tmux.ErrControlClosed) {
-			return nil, output, err
+		probeCtx := ctx
+		cancelProbe := func() {}
+		if !candidate.isTarget {
+			probeCtx, cancelProbe = context.WithTimeout(ctx, serverProbeTimeout)
+		}
+		defer cancelProbe()
+		alive, err := candidate.probe.IsAlive(probeCtx)
+		if err != nil && candidate.isTarget && t.runtime.isTerminalError(err) {
+			return probeResult{err: err}
 		}
 		if ctx.Err() != nil {
-			return nil, output, ctx.Err()
+			return probeResult{err: ctx.Err()}
 		}
 		if err == nil && alive {
 			summary.Alive = true
-			sessions, sessionsErr := candidate.probe.Sessions(ctx)
+			sessions, sessionsErr := candidate.probe.Sessions(probeCtx)
 			if sessionsErr != nil && candidate.isTarget &&
-				errors.Is(sessionsErr, tmux.ErrControlClosed) {
-				return nil, output, sessionsErr
+				t.runtime.isTerminalError(sessionsErr) {
+				return probeResult{err: sessionsErr}
 			}
 			if ctx.Err() != nil {
-				return nil, output, ctx.Err()
+				return probeResult{err: ctx.Err()}
 			}
 			if sessionsErr == nil {
 				summary.Sessions = len(sessions)
 			}
 		}
 		if !summary.Alive && !summary.IsTarget && !input.IncludeDead {
+			return probeResult{skipped: true}
+		}
+		return probeResult{summary: summary}
+	}
+
+	results := make([]probeResult, len(candidates))
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	for range min(serverProbeConcurrency, len(candidates)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				results[index] = probe(candidates[index])
+			}
+		}()
+	}
+sendCandidates:
+	for index := range candidates {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			break sendCandidates
+		}
+	}
+	close(jobs)
+	workers.Wait()
+	if ctx.Err() != nil {
+		return nil, output, ctx.Err()
+	}
+	for _, result := range results {
+		if result.err != nil {
+			return nil, output, result.err
+		}
+		if result.skipped {
 			output.Skipped++
 			continue
 		}
-		output.Servers = append(output.Servers, summary)
+		output.Servers = append(output.Servers, result.summary)
 	}
 	for _, found := range output.Servers {
 		if found.Alive && !found.IsTarget {

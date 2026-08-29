@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -26,43 +25,83 @@ const watchRetryInterval = time.Second
 // watchRebuildInterval paces retries after selecting a session set.
 const watchRebuildInterval = 10 * time.Millisecond
 
+// watchSubscriptionSpellingLimit bounds the SDK's retained subscription keys.
+// go-sdk v1.6.1 removes disconnected sessions from each key but does not prune
+// the empty keys themselves, so disconnects consume this Instance-wide budget;
+// a successful explicit unsubscribe reclaims its key.
+const watchSubscriptionSpellingLimit = 4096
+
+// watchShutdownWait is one global budget for the watcher generation and every
+// per-session delivery worker.
+const watchShutdownWait = time.Second
+
 type watchers struct {
-	server *mcp.Server
-	target tmux.Server
+	runtime *tmuxRuntime
 
 	mutex sync.Mutex
 	// subscribed counts subscribers per canonical URI.
 	subscribed map[string]int
-	// spelled retains exact client spellings because SDK routing uses them.
+	// spelled counts exact client spellings for admission and cleanup.
 	spelled map[string]map[string]int
-	owed    map[string]*time.Timer
-	// ready closes after the first watcher connection opens; a new pane
-	// subscription may replace it while rebuilding.
-	ready    chan struct{}
+	// admitted mirrors distinct SDK subscription keys for this Instance. A
+	// successful explicit unsubscribe prunes it; disconnect cleanup cannot,
+	// because the SDK retains that empty key.
+	admitted map[string]struct{}
+	owed     map[string]*time.Timer
 	notified map[string]time.Time
-	stop     func()
-	// rebuild reopens connections when a newly watched pane needs another session.
-	rebuild func()
-	closed  bool
-	wait    sync.WaitGroup
+	active   *watchGeneration
+	// nextReady belongs to subscriptions accepted while active is stopping.
+	nextReady       chan struct{}
+	routes          map[string]map[*watchDelivery]map[string]*watchRoute
+	deliveries      map[*sessionScope]*watchDelivery
+	deliveryWorkers map[*watchDelivery]struct{}
+	deliveryLimit   int
+	shutdownWait    time.Duration
+	shutdownBy      time.Time
+	closed          bool
 }
 
-func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
+type watchGeneration struct {
+	ctx       context.Context
+	cancel    context.CancelFunc
+	done      chan struct{}
+	ready     chan struct{}
+	rebuild   *watchRebuild
+	attaching int
+	restoring bool
+	stopping  bool
+}
+
+type watchRebuild struct {
+	cancel context.CancelFunc
+}
+
+func newWatchers(runtime *tmuxRuntime) *watchers {
 	return &watchers{
-		server:     server,
-		target:     target,
-		subscribed: map[string]int{},
-		spelled:    map[string]map[string]int{},
-		notified:   map[string]time.Time{},
-		owed:       map[string]*time.Timer{},
-		ready:      make(chan struct{}),
+		runtime:         runtime,
+		subscribed:      map[string]int{},
+		spelled:         map[string]map[string]int{},
+		admitted:        map[string]struct{}{},
+		notified:        map[string]time.Time{},
+		owed:            map[string]*time.Timer{},
+		routes:          map[string]map[*watchDelivery]map[string]*watchRoute{},
+		deliveries:      map[*sessionScope]*watchDelivery{},
+		deliveryWorkers: map[*watchDelivery]struct{}{},
+		deliveryLimit:   watchSubscriptionSpellingLimit,
+		shutdownWait:    watchShutdownWait,
 	}
 }
 
-// subscribe accepts static URIs because MCP has no separate result for a
-// subscription that will never emit.
+// subscribe accepts every served static URI shape because MCP has no separate
+// result for a subscription that will never emit.
 func (t *tools) subscribe(ctx context.Context, request *mcp.SubscribeRequest) error {
+	if request == nil || request.Params == nil || request.Session == nil {
+		return ErrInstanceClosed
+	}
 	uri := request.Params.URI
+	if !subscribableResourceURI(uri) {
+		return fmt.Errorf("%q is not a tmux resource this server serves", uri)
+	}
 	required := CapabilityMetadataRead
 	if _, content := paneOfContentURI(watchedURI(uri)); content {
 		required = CapabilityContentRead
@@ -70,14 +109,16 @@ func (t *tools) subscribe(ctx context.Context, request *mcp.SubscribeRequest) er
 	if !t.capabilities.permits(required) {
 		return fmt.Errorf("subscribing to %s requires the %s capability", uri, required)
 	}
-	if request == nil || request.Session == nil {
-		return ErrInstanceClosed
-	}
-	scope, err := t.instance.scope(request.Session)
+	_, acquired, err := t.acquireRequestRuntime(ctx)
 	if err != nil {
 		return err
 	}
-	ready, err := scope.subscribe(t.watchers, watchedURI(uri), uri)
+	acquired.release()
+	scope, connection, err := t.watchSession(request.Session)
+	if err != nil {
+		return err
+	}
+	ready, err := scope.subscribe(t.watchers, connection, watchedURI(uri), uri)
 	if err != nil {
 		return err
 	}
@@ -91,12 +132,47 @@ func (t *tools) subscribe(ctx context.Context, request *mcp.SubscribeRequest) er
 	return nil
 }
 
+func (t *tools) watchSession(
+	session *mcp.ServerSession,
+) (*sessionScope, *sessionReadyConnection, error) {
+	t.instance.mutex.Lock()
+	defer t.instance.mutex.Unlock()
+	if t.instance.closing {
+		return nil, nil, ErrInstanceClosed
+	}
+	tracked := t.instance.sessions[session]
+	if tracked == nil || tracked.connection == nil {
+		return nil, nil, ErrInstanceClosed
+	}
+	return tracked.scope, tracked.connection, nil
+}
+
+func subscribableResourceURI(uri string) bool {
+	if uri == resourceSessions {
+		return true
+	}
+	return resourceURISegment(uri, "tmux://sessions/", "/windows") ||
+		resourceURISegment(uri, "tmux://windows/", "/panes") ||
+		resourceURISegment(uri, "tmux://panes/", "/content") ||
+		resourceURISegment(uri, "tmux://sessions/", "") ||
+		resourceURISegment(uri, "tmux://windows/", "") ||
+		resourceURISegment(uri, "tmux://panes/", "")
+}
+
+func resourceURISegment(uri, prefix, suffix string) bool {
+	if !strings.HasPrefix(uri, prefix) || !strings.HasSuffix(uri, suffix) {
+		return false
+	}
+	segment := strings.TrimSuffix(strings.TrimPrefix(uri, prefix), suffix)
+	return segment != "" && !strings.ContainsAny(segment, "/?#")
+}
+
 func (t *tools) unsubscribe(_ context.Context, request *mcp.UnsubscribeRequest) error {
-	if request == nil || request.Session == nil {
+	if request == nil || request.Params == nil || request.Session == nil {
 		return ErrInstanceClosed
 	}
 	uri := request.Params.URI
-	scope, err := t.instance.scope(request.Session)
+	scope, _, err := t.watchSession(request.Session)
 	if err != nil {
 		return err
 	}
@@ -104,8 +180,8 @@ func (t *tools) unsubscribe(_ context.Context, request *mcp.UnsubscribeRequest) 
 	return nil
 }
 
-// watchedURI canonicalizes pane spellings while the original is retained for
-// SDK routing.
+// watchedURI canonicalizes pane spellings while retaining the exact client URI
+// for delivery.
 func watchedURI(uri string) string {
 	const prefix, suffix = "tmux://panes/", "/content"
 	if !strings.HasPrefix(uri, prefix) || !strings.HasSuffix(uri, suffix) {
@@ -116,13 +192,23 @@ func watchedURI(uri string) string {
 }
 
 // add records canonical and exact spellings and returns connection readiness.
-func (w *watchers) add(canonical, spelling string) <-chan struct{} {
+func (w *watchers) add(canonical, spelling string) (<-chan struct{}, error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	if w.closed {
-		ready := make(chan struct{})
-		close(ready)
-		return ready
+		return nil, ErrInstanceClosed
+	}
+	if w.admitted == nil {
+		w.admitted = map[string]struct{}{}
+	}
+	if _, seen := w.admitted[spelling]; !seen {
+		if len(w.admitted) >= watchSubscriptionSpellingLimit {
+			return nil, fmt.Errorf(
+				"resource subscription limit reached: at most %d distinct URI spellings per server instance",
+				watchSubscriptionSpellingLimit,
+			)
+		}
+		w.admitted[spelling] = struct{}{}
 	}
 	w.subscribed[canonical]++
 	if w.spelled[canonical] == nil {
@@ -130,27 +216,58 @@ func (w *watchers) add(canonical, spelling string) <-chan struct{} {
 	}
 	w.spelled[canonical][spelling]++
 	switch {
-	case w.stop == nil:
-		w.start()
-	case w.subscribed[canonical] == 1 && w.rebuild != nil:
-		// A new pane may require attaching to another session.
-		w.ready = make(chan struct{})
-		w.rebuild()
+	case w.active == nil:
+		w.startLocked(nil, false)
+	case w.active.stopping:
+		if w.nextReady == nil {
+			w.nextReady = make(chan struct{})
+		}
+		return w.nextReady, nil
+	case w.subscribed[canonical] == 1:
+		w.active.stopping = true
+		w.active.cancel()
+		if w.nextReady == nil {
+			w.nextReady = make(chan struct{})
+		}
+		return w.nextReady, nil
 	}
-	return w.ready
+	return w.active.ready, nil
 }
 
-func (w *watchers) attached() {
+func (w *watchers) attached(generation *watchGeneration) bool {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
-	select {
-	case <-w.ready:
-	default:
-		close(w.ready)
+	if w.active != generation || generation.stopping {
+		return false
 	}
+	if generation.attaching > 1 {
+		generation.attaching--
+		return false
+	}
+	generation.attaching = 0
+	select {
+	case <-generation.ready:
+	default:
+		close(generation.ready)
+	}
+	return true
 }
 
 func (w *watchers) remove(canonical, spelling string) {
+	w.removeSubscription(canonical, spelling, false)
+}
+
+// removeExplicit reclaims a spelling because the SDK removes its outer map key
+// after this handler succeeds. Disconnect cleanup uses remove instead: the SDK
+// leaves that empty key allocated.
+func (w *watchers) removeExplicit(canonical, spelling string) {
+	w.removeSubscription(canonical, spelling, true)
+}
+
+func (w *watchers) removeSubscription(
+	canonical, spelling string,
+	reclaim bool,
+) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	if spellings := w.spelled[canonical]; spellings != nil {
@@ -158,6 +275,9 @@ func (w *watchers) remove(canonical, spelling string) {
 			spellings[spelling]--
 		} else {
 			delete(spellings, spelling)
+			if reclaim {
+				delete(w.admitted, spelling)
+			}
 		}
 		if len(spellings) == 0 {
 			delete(w.spelled, canonical)
@@ -174,20 +294,35 @@ func (w *watchers) remove(canonical, spelling string) {
 		delete(w.owed, canonical)
 	}
 	delete(w.notified, canonical)
-	if len(w.subscribed) == 0 && w.stop != nil {
-		w.stop()
-		w.stop = nil
+	if w.active != nil && !w.active.stopping {
+		w.active.stopping = true
+		w.active.cancel()
+	}
+	if len(w.subscribed) == 0 {
+		if w.nextReady != nil {
+			close(w.nextReady)
+			w.nextReady = nil
+		}
 	}
 }
 
-// start requires w.mutex.
-func (w *watchers) start() {
-	ctx, cancel := context.WithCancel(context.Background())
-	w.stop = cancel
-	w.wait.Add(1)
+// startLocked requires w.mutex.
+func (w *watchers) startLocked(ready chan struct{}, restoring bool) {
+	if ready == nil {
+		ready = make(chan struct{})
+	}
+	ctx, cancel := context.WithCancel(w.runtime.ctx)
+	generation := &watchGeneration{
+		ctx:       ctx,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		ready:     ready,
+		restoring: restoring,
+	}
+	w.active = generation
 	go func() {
-		defer w.wait.Done()
-		w.watch(ctx)
+		w.watch(generation)
+		w.retire(generation)
 	}()
 }
 
@@ -195,269 +330,76 @@ func (w *watchers) close() {
 	w.mutex.Lock()
 	if !w.closed {
 		w.closed = true
-		if w.stop != nil {
-			w.stop()
+		w.shutdownDeadlineLocked()
+		if w.active != nil && !w.active.stopping {
+			w.active.stopping = true
+			w.active.cancel()
+		}
+		if w.nextReady != nil {
+			close(w.nextReady)
+			w.nextReady = nil
 		}
 		for uri, timer := range w.owed {
 			timer.Stop()
 			delete(w.owed, uri)
 		}
+		for delivery := range w.deliveryWorkers {
+			delivery.stopping = true
+			delivery.cancel()
+		}
 		clear(w.subscribed)
 		clear(w.spelled)
+		clear(w.admitted)
 		clear(w.notified)
+		clear(w.routes)
 	}
+	done := make([]<-chan struct{}, 0, len(w.deliveryWorkers)+1)
+	if w.active != nil {
+		done = append(done, w.active.done)
+	}
+	for delivery := range w.deliveryWorkers {
+		done = append(done, delivery.done)
+	}
+	shutdownBy := w.shutdownDeadlineLocked()
 	w.mutex.Unlock()
-	w.wait.Wait()
+	w.waitForShutdown(done, shutdownBy)
 }
 
-// watch retries initial and dropped connections until the last subscription
-// cancels it.
-func (w *watchers) watch(ctx context.Context) {
-	defer w.forget()
-	for built := false; ctx.Err() == nil; {
-		attended := w.follow(ctx, built)
-		built = built || attended
-		// Restore a previously live set sooner than an initial empty server.
-		wait := watchRetryInterval
-		if attended {
-			wait = watchRebuildInterval
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(wait):
-		}
-	}
-}
-
-func (w *watchers) forget() {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-	if len(w.subscribed) == 0 {
-		w.stop = nil
-	}
-}
-
-func (w *watchers) follow(ctx context.Context, rebuilt bool) bool {
-	// Watches need private long-lived connections; a stale pool must not make
-	// every retry fail against a replacement tmux server.
-	plain := w.target.WithEngine(w.target.SubprocessEngine())
-	sessions, err := w.attending(ctx, plain)
-	if err != nil || len(sessions) == 0 {
-		return false
-	}
-
-	// tmux reports pane output only to clients attached to the owning session.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	w.mutex.Lock()
-	w.rebuild = cancel
-	w.mutex.Unlock()
-	defer func() {
-		w.mutex.Lock()
-		w.rebuild = nil
-		w.mutex.Unlock()
-	}()
-
-	var attending sync.WaitGroup
-	for _, session := range sessions {
-		attending.Add(1)
-		go func() {
-			defer attending.Done()
-			// Any connection ending rebuilds the session set.
-			defer cancel()
-			w.followSession(ctx, plain, session, rebuilt)
-		}()
-	}
-	attending.Wait()
-	return true
-}
-
-// attending selects owning sessions. With no resolved owner, it keeps one
-// session attached for structural changes.
-func (w *watchers) attending(ctx context.Context, server tmux.Server) ([]tmux.Session, error) {
-	sessions, err := server.Sessions(ctx)
-	if err != nil || len(sessions) == 0 {
-		return nil, err
-	}
-	wanted := w.watchedPanes()
-	if len(wanted) == 0 {
-		return sessions[:1], nil
-	}
-	// Do not guess a watched pane's owning session.
-	panes, err := server.Panes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	owning := map[tmux.SessionID]struct{}{}
-	for _, pane := range panes {
-		if _, ok := wanted[pane.ID().String()]; ok {
-			owning[pane.SessionID()] = struct{}{}
-		}
-	}
-	if len(owning) == 0 {
-		return sessions[:1], nil
-	}
-	chosen := make([]tmux.Session, 0, len(owning))
-	for _, session := range sessions {
-		if _, ok := owning[session.ID()]; ok {
-			chosen = append(chosen, session)
-		}
-	}
-	return chosen, nil
-}
-
-func (w *watchers) watchedPanes() map[string]struct{} {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-	panes := map[string]struct{}{}
-	for uri := range w.subscribed {
-		if id, ok := paneOfContentURI(uri); ok {
-			panes[id] = struct{}{}
-		}
-	}
-	return panes
-}
-
-func (w *watchers) followSession(
-	ctx context.Context,
-	server tmux.Server,
-	session tmux.Session,
-	rebuilt bool,
+func (w *watchers) waitForShutdown(
+	done []<-chan struct{},
+	deadline time.Time,
 ) {
-	control, err := server.OpenControl(ctx, session)
-	if err != nil {
-		return
-	}
-	defer func() { _ = control.Close() }()
-	w.attached()
-	if rebuilt {
-		w.tellEveryone(ctx)
-	}
-
-	for {
-		notification, err := control.NextNotification(ctx)
-		if err != nil {
+	for _, joined := range done {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
 			return
 		}
-		// Rebuild so newly created sessions can gain a watcher.
-		if notification.Kind() == tmux.ControlNotificationSessionsChanged {
+		timer := time.NewTimer(remaining)
+		select {
+		case <-joined:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+		case <-timer.C:
 			return
 		}
-		for _, uri := range w.affected(notification) {
-			w.notify(ctx, uri)
-		}
 	}
 }
 
-func (w *watchers) affected(notification tmux.ControlNotification) []string {
-	switch notification.Kind() {
-	case tmux.ControlNotificationOutput, tmux.ControlNotificationExtendedOutput:
-		pane, _, ok := notification.Output()
-		if !ok {
-			return nil
+// shutdownDeadlineLocked returns the one deadline shared by the generation and
+// per-session delivery workers. It requires w.mutex.
+func (w *watchers) shutdownDeadlineLocked() time.Time {
+	if w.shutdownBy.IsZero() {
+		within := w.shutdownWait
+		if within <= 0 {
+			within = watchShutdownWait
 		}
-		return []string{paneContentURI(pane.String())}
-	case tmux.ControlNotificationPaneModeChanged:
-		arguments := notification.Arguments()
-		if len(arguments) == 0 {
-			return nil
-		}
-		// Copy mode changes pane content reads without pane output.
-		return []string{paneContentURI(arguments[0])}
-	case tmux.ControlNotificationLayoutChange,
-		tmux.ControlNotificationWindowAdd,
-		tmux.ControlNotificationWindowClose,
-		tmux.ControlNotificationWindowRenamed,
-		tmux.ControlNotificationWindowPaneChanged,
-		tmux.ControlNotificationUnlinkedWindowAdd,
-		tmux.ControlNotificationUnlinkedWindowClose,
-		tmux.ControlNotificationUnlinkedWindowRenamed,
-		tmux.ControlNotificationSessionsChanged,
-		tmux.ControlNotificationSessionRenamed,
-		tmux.ControlNotificationSessionChanged,
-		tmux.ControlNotificationSessionWindowChanged:
-		// Session-scoped resources require a lookup, so invalidate the root.
-		return []string{resourceSessions}
-	case tmux.ControlNotificationClientDetached,
-		tmux.ControlNotificationClientSessionChanged,
-		tmux.ControlNotificationConfigError,
-		tmux.ControlNotificationContinue,
-		tmux.ControlNotificationExit,
-		tmux.ControlNotificationMessage,
-		tmux.ControlNotificationPasteBufferChanged,
-		tmux.ControlNotificationPasteBufferDeleted,
-		tmux.ControlNotificationPause,
-		tmux.ControlNotificationSubscriptionChanged:
-		// These notifications do not change a subscribable resource.
-		return nil
-	default:
-		return nil
+		w.shutdownBy = time.Now().Add(within)
 	}
-}
-
-// notify defers the final update inside a coalescing interval rather than
-// dropping it.
-func (w *watchers) notify(ctx context.Context, uri string) {
-	w.mutex.Lock()
-	if w.closed {
-		w.mutex.Unlock()
-		return
-	}
-	watched := w.subscribed[uri] > 0
-	since := time.Since(w.notified[uri])
-	recent := since < watchNotifyInterval
-	var spellings []string
-	if watched && !recent {
-		w.notified[uri] = time.Now()
-		for spelling := range w.spelled[uri] {
-			spellings = append(spellings, spelling)
-		}
-	}
-	// One timer per canonical URI coalesces a burst.
-	if watched && recent && w.owed[uri] == nil {
-		var timer *time.Timer
-		timer = time.AfterFunc(watchNotifyInterval-since, func() {
-			w.mutex.Lock()
-			if w.owed[uri] != timer {
-				w.mutex.Unlock()
-				return
-			}
-			delete(w.owed, uri)
-			closed := w.closed
-			w.mutex.Unlock()
-			if !closed {
-				w.notify(context.WithoutCancel(ctx), uri)
-			}
-		})
-		w.owed[uri] = timer
-	}
-	w.mutex.Unlock()
-	if !watched || recent {
-		return
-	}
-	// Notify each exact spelling because SDK routing uses it. Transport failure
-	// from one client does not stop the watcher.
-	for _, spelling := range spellings {
-		_ = w.server.ResourceUpdated(ctx, &mcp.ResourceUpdatedNotificationParams{
-			URI: spelling,
-		})
-	}
-}
-
-// tellEveryone invalidates subscriptions after a rebuild and resets live-stream
-// coalescing so writes during the gap are not hidden.
-func (w *watchers) tellEveryone(ctx context.Context) {
-	w.mutex.Lock()
-	w.notified = map[string]time.Time{}
-	watched := make([]string, 0, len(w.subscribed))
-	for uri := range w.subscribed {
-		watched = append(watched, uri)
-	}
-	w.mutex.Unlock()
-	for _, uri := range watched {
-		w.notify(ctx, uri)
-	}
+	return w.shutdownBy
 }
 
 // paneContentURI omits the percent sigil, which begins a URI escape.

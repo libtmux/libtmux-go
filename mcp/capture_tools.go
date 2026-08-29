@@ -44,6 +44,10 @@ func (t *tools) capturePane(
 	if err != nil {
 		return nil, capturePaneOutput{}, err
 	}
+	pane, err = t.processPane(ctx, pane)
+	if err != nil {
+		return nil, capturePaneOutput{}, err
+	}
 
 	request := tmux.CapturePaneRequest{
 		JoinWrapped:     input.JoinWrapped,

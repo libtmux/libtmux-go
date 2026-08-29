@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,6 +38,10 @@ func mustMCPServer(t testing.TB, target tmux.Server) *tmuxmcp.Instance {
 	}
 	t.Cleanup(func() { _ = server.Close() })
 	return server
+}
+
+func assumeResponseCommit(transport sdk.Transport) sdk.Transport {
+	return tmuxmcp.AssumeResponseCommit(transport)
 }
 
 func TestMain(m *testing.M) {
@@ -72,7 +76,7 @@ func connectWith(
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	instance := mustMCPServer(t, target)
 	t.Cleanup(func() { _ = instance.Close() })
-	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	serverSession, err := instance.Connect(ctx, assumeResponseCommit(serverTransport), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,84 +382,6 @@ func TestKillSessionRefusesAnEmptyName(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestConnectPutsToolsOnAControlTransport(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	var mutex sync.Mutex
-	var processes int
-	counting := tmux.CommandRunnerFunc(func(
-		ctx context.Context,
-		request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		mutex.Lock()
-		processes++
-		mutex.Unlock()
-		return tmux.SubprocessRunner().Run(ctx, request)
-	})
-
-	target := mustTmuxServer(t, tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-		Runner:     counting,
-	})
-	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer killCancel()
-		_ = target.Kill(killCtx)
-	})
-	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "mcp"}); err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-
-	connected, pool := tmuxmcp.Connect(ctx, target)
-	if pool == nil {
-		t.Fatal("a server holding a session should have reached a control transport")
-	}
-	t.Cleanup(func() { _ = pool.Close() })
-
-	mutex.Lock()
-	processes = 0
-	mutex.Unlock()
-	for range 10 {
-		if _, err := connected.Snapshot(ctx); err != nil {
-			t.Fatalf("snapshot: %v", err)
-		}
-	}
-	mutex.Lock()
-	defer mutex.Unlock()
-	if processes != 0 {
-		t.Fatalf("ten snapshots over a connected server started %d processes, want 0", processes)
-	}
-}
-
-//libtmux:real-tmux
-func TestConnectLeavesAnEmptyServerAlone(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	target := mustTmuxServer(t, tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-	})
-	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer killCancel()
-		_ = target.Kill(killCtx)
-	})
-
-	_, pool := tmuxmcp.Connect(ctx, target)
-	if pool != nil {
-		_ = pool.Close()
-		t.Fatal("connecting to a server with no session must not open a pool")
-	}
-	// Connect must not have started the server it declined to connect to, so
-	// the socket still has nothing on it.
-	sessions, err := target.Sessions(ctx)
-	if !errors.Is(err, tmux.ErrNoServer) {
-		t.Fatalf("sessions after declining to connect: (%#v, %v), want ErrNoServer", sessions, err)
-	}
-}
-
-//libtmux:real-tmux
 func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -470,7 +396,9 @@ func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 	})
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,37 +456,6 @@ func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 	}
 	if info.AttachedClients == nil {
 		t.Error("attachedClients came back null, not an empty array")
-	}
-}
-
-//libtmux:real-tmux
-func TestConnectLeavesAChosenTransportAlone(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	target := mustTmuxServer(t, tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-	})
-	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer killCancel()
-		_ = target.Kill(killCtx)
-	})
-	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "chosen"}); err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-
-	_, pool := tmuxmcp.Connect(ctx, target.WithEngine(target.SubprocessEngine()))
-	if pool != nil {
-		_ = pool.Close()
-		t.Fatal("connecting overrode a transport the embedder chose")
-	}
-	clients, err := target.SearchClients(ctx, nil)
-	if err != nil {
-		t.Fatalf("search clients: %v", err)
-	}
-	if len(clients) != 0 {
-		t.Errorf("connecting attached %d clients despite a chosen transport", len(clients))
 	}
 }
 
@@ -1122,6 +1019,42 @@ func TestInstructionsNameTheCallersPane(t *testing.T) {
 		if !strings.Contains(instructions, expected) {
 			t.Errorf("instructions omit %q", expected)
 		}
+	}
+}
+
+//libtmux:real-tmux
+func TestBatchCanCreateTheFirstSessionThenReadIt(t *testing.T) {
+	session, _, ctx := connect(t)
+	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var batch struct {
+		Completed int `json:"completed"`
+		Results   []struct {
+			Tool   string         `json:"tool"`
+			Result map[string]any `json:"result"`
+			Error  string         `json:"error"`
+		} `json:"results"`
+	}
+	result := call(callCtx, t, session, "call_mutating_tools_batch", map[string]any{
+		"calls": []map[string]any{
+			{"tool": "create_session", "arguments": map[string]any{"name": "first-in-batch"}},
+			{"tool": "list_sessions"},
+		},
+	}, &batch)
+	if result.IsError {
+		t.Fatalf("first-session batch failed: %s", resultText(result))
+	}
+	if batch.Completed != 2 || len(batch.Results) != 2 {
+		t.Fatalf("batch = %#v, want two completed calls", batch)
+	}
+	for _, item := range batch.Results {
+		if item.Error != "" {
+			t.Fatalf("%s failed after first creation: %s", item.Tool, item.Error)
+		}
+	}
+	sessions, ok := batch.Results[1].Result["sessions"].([]any)
+	if !ok || len(sessions) != 1 {
+		t.Fatalf("list_sessions result = %#v, want the created session", batch.Results[1].Result)
 	}
 }
 
@@ -1739,8 +1672,7 @@ func TestEveryToolCarriesAnnotations(t *testing.T) {
 		"list_panes": true, "list_windows": true, "list_sessions": true,
 		"list_servers": true, "snapshot_pane": true, "search_panes": true,
 		"capture_pane": true, "capture_since": true,
-		"find_pane_by_position": true, "wait_for_text": true,
-		"wait_for_channel": true, "call_readonly_tools_batch": true,
+		"find_pane_by_position": true, "wait_for_text": true, "call_readonly_tools_batch": true,
 		"get_pane_info": true, "get_window_info": true, "get_session_info": true,
 		"get_server_info": true, "show_buffer": true,
 		"show_option": true, "show_environment": true, "show_hooks": true,
@@ -1787,7 +1719,9 @@ func TestNoNotificationsBeforeTheClientIsInitialized(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	serverSession, err := mustMCPServer(t, target).Connect(ctx, ordered, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(ordered), nil,
+	)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -1865,7 +1799,7 @@ func TestEveryChangingToolSaysWhetherRepeatingItCompounds(t *testing.T) {
 		"paste_text": true, "pipe_pane": true, "resize_pane": true,
 		"resize_window": true, "respawn_pane": true, "run_command": true,
 		"send_keys": true, "send_keys_batch": true, "signal_channel": true,
-		"split_window": true, "swap_pane": true,
+		"wait_for_channel": true, "split_window": true, "swap_pane": true,
 	}
 
 	for _, tool := range listed.Tools {
@@ -2376,7 +2310,9 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 
 	logged := make(chan *sdk.LoggingMessageParams, 8)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -2918,14 +2854,19 @@ func TestServerInfoDoesNotInventAHealthyEmptyServer(t *testing.T) {
 	unreachable := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
+			_ context.Context,
+			request tmux.CommandRequest,
 		) (tmux.CommandResult, error) {
+			if slices.Equal(request.Arguments, []string{"-V"}) {
+				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
+			}
 			return tmux.CommandResult{ExitCode: -1}, transportFailure
 		}),
 	})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(t, unreachable).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, unreachable).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3039,6 +2980,98 @@ func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 		"paneId": pane, "kill": true,
 	}, nil); result.IsError {
 		t.Errorf("respawn_pane with kill: %#v", result.Content)
+	}
+}
+
+//libtmux:real-tmux
+func TestCreateSessionReportsPartialIdentityAfterRefreshFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	backing := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	if _, err := backing.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "creation-anchor", Command: "sleep 300",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	refreshFailure := errors.New("injected post-creation refresh failure")
+	delegate := tmux.SubprocessRunner()
+	var created, failedRefresh atomic.Bool
+	target := mustTmuxServer(t, tmux.ServerOptions{
+		SocketPath:         backing.SocketPath(),
+		ConfigFile:         backing.ConfigFile(),
+		ProcessEnvironment: backing.ProcessEnvironment(),
+		Runner: tmux.CommandRunnerFunc(func(
+			ctx context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			containsCommand := func(command string) bool {
+				return slices.ContainsFunc(request.Arguments, func(argument string) bool {
+					return argument == command || strings.HasPrefix(argument, "'"+command+"' ")
+				})
+			}
+			if created.Load() && containsCommand("list-sessions") {
+				failedRefresh.Store(true)
+				return tmux.CommandResult{ExitCode: -1}, refreshFailure
+			}
+			result, err := delegate.Run(ctx, request)
+			if err == nil && result.ExitCode == 0 && containsCommand("new-session") {
+				created.Store(true)
+			}
+			return result, err
+		}),
+	})
+
+	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	instance := mustMCPServer(t, target)
+	serverSession, err := instance.Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := sdk.NewClient(&sdk.Implementation{Name: "partial-creation"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = clientSession.Close() })
+
+	result, err := clientSession.CallTool(ctx, &sdk.CallToolParams{
+		Name: "create_session",
+		Arguments: map[string]any{
+			"name": "partially-created", "command": "sleep 300",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v, want a classified tool failure", err)
+	}
+	if !failedRefresh.Load() {
+		t.Fatal("create_session did not reach the injected post-creation refresh failure")
+	}
+	if !result.IsError {
+		t.Fatal("post-creation refresh failure was reported as success")
+	}
+	var reported struct {
+		SessionID   string `json:"sessionId"`
+		SessionName string `json:"sessionName"`
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &reported); err != nil {
+		t.Fatal(err)
+	}
+	if reported.SessionID == "" {
+		t.Fatal("classified failure omitted the created session ID")
+	}
+	if reported.SessionName != "partially-created" {
+		t.Fatalf("sessionName = %q, want the requested name", reported.SessionName)
+	}
+	if !strings.Contains(resultText(result), refreshFailure.Error()) {
+		t.Fatalf("failure text = %q, want injected refresh failure", resultText(result))
 	}
 }
 
@@ -3257,7 +3290,7 @@ func TestEveryToolAgreesWithEverySafetyLevel(t *testing.T) {
 			// when it is called with nothing, which measures the clock rather
 			// than the level and spends the budget every later call needs.
 			waits := map[string]bool{"wait_for_text": true, "wait_for_channel": true}
-			for name := range offered {
+			for _, name := range slices.Sorted(maps.Keys(offered)) {
 				if waits[name] {
 					continue
 				}

@@ -14,7 +14,7 @@ import (
 // orientationSnapshot treats [tmux.ErrNoServer] as an empty topology; other
 // failures remain errors.
 func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, bool, error) {
-	snapshot, err := t.tmux().Snapshot(ctx)
+	snapshot, err := t.tmux(ctx).Snapshot(ctx)
 	if errors.Is(err, tmux.ErrNoServer) {
 		return tmux.Snapshot{}, false, nil
 	}
@@ -79,11 +79,17 @@ func (t *tools) listPanes(
 		return nil, listPanesOutput{Panes: []listedPane{}}, err
 	}
 
-	// Every pane in one snapshot belongs to the same server.
-	socket := t.socketPath(ctx)
-	caller := t.callerIdentityFor(ctx)
-
 	panes := snapshot.Panes()
+	// Every pane in one snapshot belongs to the same server. An empty snapshot
+	// needs no process-tree query, preserving the absent-server result.
+	socket := t.socketPath(ctx)
+	caller := callerIdentity{}
+	if len(panes) > 0 {
+		caller, err = t.callerIdentityFor(ctx)
+		if err != nil {
+			return nil, listPanesOutput{Panes: []listedPane{}}, err
+		}
+	}
 	summaries := make([]listedPane, 0, len(panes))
 	for _, pane := range panes {
 		summary := summarizePane(pane, caller, socket)
@@ -254,7 +260,7 @@ func (t *tools) selectWindow(
 	_ *mcp.CallToolRequest,
 	input selectWindowInput,
 ) (*mcp.CallToolResult, selectWindowOutput, error) {
-	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux(ctx).Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, selectWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
