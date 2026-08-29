@@ -2,8 +2,9 @@
 //
 // # Slices and sequences
 //
-// [Where], [First], and [ExactlyOne] query slices. Their Seq variants query
-// [iter.Seq] values lazily.
+// [Where], [First], and [ExactlyOne] query slices. [WhereSeq] returns a lazy
+// sequence; [FirstSeq] and [ExactlyOneSeq] consume only until they determine a
+// result.
 //
 // Every query passes a shallow copy of each examined value to its predicate,
 // and returns or yields shallow copies. Reference-bearing fields still alias

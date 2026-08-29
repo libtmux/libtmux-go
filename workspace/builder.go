@@ -10,12 +10,17 @@ import (
 
 // Build creates the workspace on server and returns the created session.
 //
-// Build is not atomic. On failure, it returns the session containing resources
-// already created. Command failures are returned rather than normalized.
+// Build is not atomic. A failure after session creation returns that session;
+// completed mutations remain in tmux. Command failures are not normalized.
 //
-// When server has no engine, Build uses a temporary control connection. It
-// appears as a tmux client and may fire attachment hooks; pass a server carrying
+// When server has no engine, Build attempts a temporary control pool and falls
+// back to subprocesses if the pool cannot open. The pool appears as a tmux
+// client and may fire attachment hooks; pass a server carrying
 // [tmux.Server.SubprocessEngine] to avoid it.
+//
+// Build closes a temporary pool before returning. A session returned from that
+// pool retains its closed engine; later calls fall back to subprocesses or
+// return [tmux.EngineFallbackError] when fallback is rejected.
 //
 // Each pane receives workspace, window, and pane CommandsBefore, then its own
 // Commands. Sleep values pause Build rather than the pane.
