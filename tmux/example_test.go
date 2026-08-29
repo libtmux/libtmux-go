@@ -1290,14 +1290,8 @@ func ExamplePoll() {
 		return
 	}
 
-	// tmux accepts the keys before the shell runs them, so the read is a wait.
-	// Poll stops when the condition holds or ctx expires, whichever is first.
-	//
-	// slices.Contains compares whole lines on purpose. The shell echoes the
-	// command, so the screen holds printf 'build ready\n' before the program
-	// runs; searching that screen for the substring "build ready" would match
-	// the echo and report success immediately. The echoed line carries the
-	// surrounding command and so never equals the output on its own.
+	// tmux accepts keys before the shell runs them, so poll for output. Match the
+	// whole line because a substring search would match the echoed command first.
 	err = tmux.Poll(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
 		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
 		if err != nil {

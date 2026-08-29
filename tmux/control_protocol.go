@@ -180,14 +180,9 @@ func parseControlGuard(
 	}, true, nil
 }
 
-// encodeControlCommand renders one control-mode command line. Every argument is
-// quoted, so a value needs no escaping to survive.
-//
-// commandList admits the one element that is syntax rather than a value: a bare
-// ";" separating two commands. Quoting that would hand tmux a literal semicolon
-// as an argument, which a command taking trailing operands accepts silently --
-// send-keys would type the rest of the list into a pane. It is therefore
-// written only when the caller says the argv carries a command list.
+// encodeControlCommand quotes every value. A bare semicolon is emitted only for
+// command lists; quoting it makes it an operand, and send-keys may type the
+// remaining commands into a pane.
 func encodeControlCommand(arguments []string, commandList bool) (string, error) {
 	if len(arguments) == 0 || arguments[0] == "" {
 		return "", invalidServerCommandRequest(

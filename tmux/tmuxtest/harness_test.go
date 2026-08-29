@@ -54,14 +54,8 @@ func TestMainShortensBothTemporaryRoots(t *testing.T) {
 	}
 }
 
-// TestMainKeepsANamedSocketInsideTheSuite covers the socket a test names rather
-// than one it gives a path.
-//
-// tmux resolves a name under TMUX_TMPDIR, so a test naming its own socket --
-// which is what an Example has to do, having no place to put a temporary path --
-// reaches the directory the person running the tests keeps their real sessions
-// in unless the harness redirects it. Nothing about such a test fails: it
-// passes, and leaves a socket behind next to theirs.
+// Named sockets resolve under TMUX_TMPDIR. The harness redirects it so examples
+// cannot leave sockets beside the user's real tmux sessions.
 func TestMainKeepsANamedSocketInsideTheSuite(t *testing.T) {
 	root := os.Getenv("TMPDIR")
 	if got := os.Getenv("TMUX_TMPDIR"); got != root {

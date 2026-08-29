@@ -114,19 +114,9 @@ func TestServerSessionsReportsAnUnresolvableBinaryInBothModes(t *testing.T) {
 	}
 }
 
-// TestServerSessionsReportsEveryUnusableSocket is the gate on list accessors
-// never answering a failure with an empty collection.
-//
-// Three of these four sockets are a misconfiguration rather than a server
-// holding nothing, and none of them can be told apart from an empty server by
-// its result alone. Answering any of them with no sessions would send a program
-// that builds an environment when it finds none on to build a second one beside
-// the environment it was given a wrong path to.
-//
-// [tmux.ErrNoServer] classifies all four, because tmux reaches no server in all
-// four and does not say which kind of nothing it found. The classification is
-// safe to act on because creating what was not found reports tmux's own refusal
-// rather than succeeding somewhere unintended, which the final case proves.
+// An unusable socket must return an error, not an empty collection. tmux cannot
+// distinguish these cases from an absent daemon, so [tmux.ErrNoServer] covers
+// all of them; creation must still fail rather than use another socket.
 func TestServerSessionsReportsEveryUnusableSocket(t *testing.T) {
 	directory := t.TempDir()
 
@@ -181,14 +171,8 @@ func TestServerSessionsReportsEveryUnusableSocket(t *testing.T) {
 	}
 }
 
-// TestErrNoServerCoversEveryWayTmuxSaysItIsGone pins the classification that a
-// real-tmux test can only reach by winning a race.
-//
-// Killing a server and reading from it immediately produces a connect failure
-// or a lost-connection message depending on whether the client had connected
-// first, and tmux 3.6 on a loaded machine produces the second. Classifying only
-// one of them would make "is anything running" depend on that timing, so both
-// are covered and this test states them without needing the race to land.
+// Server shutdown races between connect failure and lost-connection output.
+// ErrNoServer must classify both so liveness checks are timing-independent.
 func TestErrNoServerCoversEveryWayTmuxSaysItIsGone(t *testing.T) {
 	t.Parallel()
 

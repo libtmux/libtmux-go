@@ -8,18 +8,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// TestUnsupportedFeaturesAreRefusedByDefault is the gate on a request naming a
-// capability the running tmux does not have.
-//
-// Dropping the flag and running the reduced command reports success for
-// something else: a split asked to leave a pane empty starts a shell in it, a
-// run-shell asked for arguments runs without them, and a kill-session asked for
-// a session group takes one session instead of the group. None of those is
-// visible in the result, so the default refuses and names what it refused.
-//
-// Every case here runs against a tmux old enough to lack the capability, and
-// asserts that the command never reached tmux: the version probe is the only
-// request the runner sees.
+// Omitting an unsupported flag changes operation semantics while still
+// reporting success. The default rejects before executing the command.
 func TestUnsupportedFeaturesAreRefusedByDefault(t *testing.T) {
 	t.Parallel()
 
@@ -182,14 +172,8 @@ func TestUnsupportedFeaturesDegradeOnRequest(t *testing.T) {
 	}
 }
 
-// TestStaleRecordReportsPayingForProcesses is the gate on a record that
-// predates a control pool paying for a tmux process per command in silence.
-//
-// A record keeps the handle it was materialized on, so one obtained before the
-// pool was opened keeps starting processes. The results are correct, which is
-// why this reports rather than refuses -- but a cost this large should be told
-// rather than measured, which is what [WarningControlPoolClosed] already does
-// for the pool that has been closed.
+// Records retain their materializing handle. A record created before a control
+// pool therefore keeps using subprocesses and reports WarningControlPoolUnused.
 func TestStaleRecordReportsPayingForProcesses(t *testing.T) {
 	t.Parallel()
 

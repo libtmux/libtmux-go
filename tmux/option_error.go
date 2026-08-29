@@ -133,14 +133,8 @@ func classifyOptionError(stderr []string) error {
 	}
 }
 
-// optionTargetNotFound reports whether tmux failed an option operation
-// because its target did not resolve.
-//
-// tmux's option subsystem resolves targets itself rather than through
-// cmd_find_target, so it reports "no such <object>: <target>" where the rest
-// of tmux reports "can't find <object>". The three objects below are every one
-// options.c names, and all six sites carry the same wording in each supported
-// version from 3.2a through 3.7b.
+// optionTargetNotFound recognizes option-specific target errors. Option
+// commands use "no such <object>" instead of the usual "can't find <object>".
 func optionTargetNotFound(stderr []string) bool {
 	for _, line := range stderr {
 		for _, object := range [...]string{"session", "window", "pane"} {

@@ -233,21 +233,13 @@ func TestGoSurfaceDropsReceiverNounFromOperationNames(t *testing.T) {
 	}
 }
 
-// omittedGoNameExceptions records derived Go spellings that a Go-native API may
-// claim even though they collide with an omitted Python name. A Go operation
-// that genuinely belongs on its receiver is not a reintroduced Python API. Each
-// key needs a reason; the set is empty because no collision exists today.
+// omittedGoNameExceptions records justified Go-native collisions with omitted
+// Python names.
 var omittedGoNameExceptions = map[string]string{}
 
-// omittedGoCandidate derives the Go spelling a Python symbol would reappear
-// under, applying the same [goname.Exported] convention the format generator
-// uses so the guard cannot drift from the names this module actually produces.
-// It returns an empty string for dunder members, which have no Go spelling.
-//
-// A class member becomes a receiver-scoped candidate, so an unrelated operation
-// on another receiver is not mistaken for a reintroduction: omitting
-// libtmux.session.Session.kill_session guards tmux.Session.KillSession and
-// leaves the module's own tmux.Server.KillSession alone.
+// omittedGoCandidate applies the format generator's [goname.Exported]
+// convention and scopes class members to their receiver. Dunder members have
+// no Go spelling.
 func omittedGoCandidate(id string) string {
 	path, found := strings.CutPrefix(id, "libtmux.")
 	if !found {

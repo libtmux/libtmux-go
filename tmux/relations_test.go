@@ -531,14 +531,9 @@ func TestSelectingAnEngineOnARecordCarriesItsRelationsAcross(t *testing.T) {
 	}
 }
 
-// TestRelationsDistinguishUnknownFromEmpty is the gate on a relation accessor
-// never reporting no children for a record that simply did not list them.
-//
-// tmux destroys a window when its last pane closes and a session when its last
-// window closes, so neither an empty window nor an empty session exists. An
-// empty result from a record that carries relations is therefore impossible,
-// and one from a record that does not would be a traversal that silently
-// reaches nothing: the loop over it runs zero times and nothing says why.
+// tmux cannot have a window without panes or a session without windows.
+// Therefore an empty relation means it was not materialized, not that it has
+// no children.
 func TestRelationsDistinguishUnknownFromEmpty(t *testing.T) {
 	t.Parallel()
 
