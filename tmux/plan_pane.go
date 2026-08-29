@@ -1,10 +1,7 @@
 package tmux
 
-// Pane operations a [Plan] can record. Each mirrors the method that runs the
-// same tmux command immediately, takes the same request type, and returns a
-// [Ref] where the method returns a record. A plan is therefore written the way
-// the same work is written without one, and the two share the rendering, so a
-// flag cannot mean one thing when it runs and another when it is planned.
+// Pane plan operations share request types and argument rendering with their
+// immediate counterparts.
 
 // SplitPane records a split of the window or pane target names, and returns a
 // [Ref] to the pane it will create.

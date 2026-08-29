@@ -486,12 +486,9 @@ func (p *Plan) Run(ctx context.Context, server Server) (PlanResult, error) {
 	return p.RunWith(ctx, server, Folding{})
 }
 
-// RunWith runs the plan with planner deciding how operations are grouped.
-//
-// The results are the same whichever planner is used; only the number of tmux
-// invocations changes, which is what makes two planners comparable. Passing
-// [Sequential] is how a caller isolates a failure that grouping made ambiguous,
-// since a dispatch carrying one operation attributes exactly.
+// RunWith runs the plan with planner deciding dispatch grouping. Successful
+// execution produces planner-independent results, but a failed grouped dispatch
+// is attributed to its first operation. Use [Sequential] for exact attribution.
 func (p *Plan) RunWith(
 	ctx context.Context,
 	server Server,

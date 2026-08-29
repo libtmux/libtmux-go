@@ -268,16 +268,14 @@ type SplitPaneRequest struct {
 	Keep bool
 }
 
-// HasSession reports whether the configured tmux server has a matching
-// session without changing it. Pattern false answers for the name itself;
-// Pattern true preserves tmux's session-pattern semantics, where a target may
-// also name a session by identifier, by the tty of a client attached to it, by
-// unique prefix, or by glob. Completed nonzero exits are predicate misses.
+// HasSession reports whether Target selects a session. With Pattern false it
+// compares session names exactly; with Pattern true, tmux may resolve IDs,
+// client TTYs, unique prefixes, or globs. Pattern-mode completed nonzero exits
+// are misses. Exact-name lookup treats [ErrNoServer] as a miss and returns
+// other failures.
 //
-// The exact question is answered against the session list rather than by
-// tmux's exact-match marker, because that marker suppresses only the last two
-// rungs of tmux's ladder: "=$0" still resolves the identifier, and "=/dev/pts/3"
-// still resolves the client, so both report a session nothing is named.
+// Exact-name lookup lists sessions because tmux's exact-match marker still
+// resolves identifiers and client TTYs.
 func (s Server) HasSession(ctx context.Context, request HasSessionRequest) (bool, error) {
 	if err := validateServerCommandArgument(
 		"has-session", "Target", request.Target, true,
