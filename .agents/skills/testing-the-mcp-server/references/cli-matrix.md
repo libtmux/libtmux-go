@@ -1,9 +1,10 @@
 # CLI matrix
 
 Per-CLI isolation levers, cheapest proofs, and what each failure actually
-means. Verified 2026-08-20 by driving a local build of this server against a
-throwaway `mcp-target` socket. Flags drift — re-check with `<cli> --help`
-before trusting an invocation here.
+means. The full matrix was verified 2026-08-20 by driving a local build against
+a throwaway `mcp-target` socket. The Claude connection and Codex tool call were
+refreshed 2026-08-28 against the 58-tool surface. Flags drift — re-check with
+`<cli> --help` before trusting an invocation here.
 
 No CLI needs `mcp-swap` to be tested. Every one has a config lever that
 isolates a run, and using it leaves the person's own configuration alone.
@@ -28,12 +29,12 @@ socket holding two panes:
 
 Six of the seven call a tool for real. The seventh connects.
 
-- **claude** — `status: connected`, 53 tools, a model-driven `list_panes` then
+- **claude** — `status: connected`, 58 tools, a model-driven `list_panes` then
   `set_pane_title`; the socket showed the title afterwards.
 - **cursor** — returned the pane ids from a real tool call.
 - **codex** — `mcp: tmux/list_panes (completed)`, then the ids.
 - **grok** — the ids, and `mcp doctor` reports handshake OK at protocol
-  2025-11-25 with 53 tools.
+  2025-11-25 with the complete advertised tool list.
 - **antigravity** — returned the ids.
 - **opencode** — called `tmux_list_panes` and returned the ids.
 - **gemini** — `mcp list` reports the server **Connected**; the model call is

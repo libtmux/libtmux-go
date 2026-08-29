@@ -2,10 +2,10 @@
 name: testing-the-mcp-server
 description: >-
   Test the libtmux-go MCP server end to end — drive the real binary over raw
-  JSON-RPC, validate every reply against the schema it advertises, and point
-  installed agent CLIs (Claude, Codex, Cursor, Gemini, grok, agy, opencode) at
-  a local build. Use when verifying the server beyond `go test`, checking a
-  branch works in a real client, reproducing a client-reported bug, exercising
+  JSON-RPC, run the exhaustive advertised-schema gate, and point installed
+  agent CLIs (Claude, Codex, Cursor, Gemini, grok, agy, opencode) at a local
+  build. Use when verifying the server beyond `go test`, checking a branch
+  works in a real client, reproducing a client-reported bug, exercising
   approval or cancellation flows, or wiring a checkout into the CLIs with
   mcp-swap. Reach for it when asked to "test the MCP", "does this work in the
   agents", "probe every tool", or "check it across the CLIs".
@@ -73,8 +73,9 @@ $ ./references/drive.py "$(command -v libtmux-mcp)" TMUX_TMPDIR=/tmp/libtmux-go-
 ```
 
 It reports which advertised tools a plan never called, so a sweep can be grown
-until that list is empty, and flags a tool that declares an `outputSchema` and
-answers without one.
+until that list is empty. It also flags a tool that declares an `outputSchema`
+and answers without structured content. It does not interpret JSON Schema, so
+that flag is a presence check rather than schema validation.
 
 `references/compare.py` is its sibling for the question "how does this differ
 from another MCP server". It counts what a handshake declares and what a tool
@@ -99,10 +100,19 @@ Two rules decide whether it works:
   pane's window, session, and server as well as at the pane: a guard that knows
   one pane and not what holds it is reached one level up.
 
-The highest-yield check at this layer is free: every tool declares an
-`outputSchema`, so validate each reply's `structuredContent` against the tool's
-own advertised schema. A contract the server publishes and then breaks is a bug
-no assertion had to be written for.
+Pair the wire probe with the exhaustive schema gate:
+
+```console
+$ go -C mcp test \
+    -run '^TestEveryToolAnswersTheSchemaItPublishes$' \
+    -count=1 \
+    .
+```
+
+That real-tmux sweep calls every advertised tool, round-trips each structured
+reply through JSON, and validates it with `jsonschema-go`. Keep the claims
+separate: the driver proves process framing and the client environment; the Go
+test proves the complete advertised output contract.
 
 ### Layer 1 — a headless CLI, one shot
 
