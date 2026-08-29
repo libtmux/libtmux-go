@@ -14,7 +14,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -25,8 +24,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
-	"time"
 )
 
 const serverName = "tmux"
@@ -48,9 +45,6 @@ const (
 	modeInstalled buildMode = "installed"
 	modeReleased  buildMode = "released"
 )
-
-// preflightTimeout includes cold compilation or module download.
-const preflightTimeout = 180 * time.Second
 
 // client describes one supported global configuration.
 type client struct {
@@ -325,88 +319,6 @@ func compile(repository string) (string, error) {
 		return "", fmt.Errorf("go build failed: %s", strings.TrimSpace(string(output)))
 	}
 	return binary, nil
-}
-
-// preflight holds stdin open through initialize because EOF closes an MCP stdio
-// server before it can answer.
-func preflight(entry map[string]any) string {
-	process := exec.Command(entryCommand(entry), entryArguments(entry)...)
-	input, err := process.StdinPipe()
-	if err != nil {
-		return err.Error()
-	}
-	output, err := process.StdoutPipe()
-	if err != nil {
-		return err.Error()
-	}
-	var complaints synchronizedBuilder
-	process.Stderr = &complaints
-	if err := process.Start(); err != nil {
-		return fmt.Sprintf("could not launch %s: %v", entryCommand(entry), err)
-	}
-	defer func() {
-		_ = input.Close()
-		_ = process.Process.Kill()
-		_ = process.Wait()
-	}()
-
-	frame := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":` +
-		`{"protocolVersion":"2025-06-18","capabilities":{},` +
-		`"clientInfo":{"name":"mcp-swap-preflight","version":"1"}}}` + "\n"
-	if _, err := io.WriteString(input, frame); err != nil {
-		return fmt.Sprintf("%s closed its input: %v", entryCommand(entry), err)
-	}
-
-	answered := make(chan bool, 1)
-	go func() {
-		scanner := bufio.NewScanner(output)
-		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-		for scanner.Scan() {
-			var message struct {
-				ID     int             `json:"id"`
-				Result json.RawMessage `json:"result"`
-			}
-			if err := json.Unmarshal(scanner.Bytes(), &message); err != nil {
-				continue
-			}
-			if message.ID == 1 && len(message.Result) > 0 {
-				answered <- true
-				return
-			}
-		}
-		answered <- false
-	}()
-
-	select {
-	case ok := <-answered:
-		if ok {
-			return ""
-		}
-	case <-time.After(preflightTimeout):
-		return fmt.Sprintf("no MCP response within %s", preflightTimeout)
-	}
-	if tail := strings.TrimSpace(complaints.String()); tail != "" {
-		return tail
-	}
-	return "server exited without answering initialize"
-}
-
-type synchronizedBuilder struct {
-	mu      sync.Mutex
-	builder strings.Builder
-}
-
-func (b *synchronizedBuilder) Write(contents []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.builder.Write(contents)
-}
-
-func (b *synchronizedBuilder) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	// Clone aliased builder storage while holding the lock.
-	return strings.Clone(b.builder.String())
 }
 
 func entryCommand(entry map[string]any) string {

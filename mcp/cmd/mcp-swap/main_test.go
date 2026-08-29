@@ -199,31 +199,6 @@ func TestCommandNameExists(t *testing.T) {
 	}
 }
 
-func TestPreflightReportsACommandThatCannotLaunch(t *testing.T) {
-	t.Parallel()
-	entry := map[string]any{
-		"command": "libtmux-mcp-does-not-exist",
-		"args":    []any{},
-	}
-	if reason := preflight(entry); !strings.Contains(reason, "could not launch") {
-		t.Errorf("preflight said %q, want it to name the launch failure", reason)
-	}
-}
-
-func TestPreflightReadsStderrWhileTheProcessDrains(t *testing.T) {
-	t.Parallel()
-	entry := map[string]any{
-		"command": "sh",
-		"args": []any{"-c", `
-(exec 1>&-; i=0; while [ "$i" -lt 200 ]; do printf x >&2; sleep 0.001; i=$((i+1)); done) &
-sleep 0.02
-`},
-	}
-	if reason := preflight(entry); reason == "" {
-		t.Fatal("preflight accepted a process that never answered initialize")
-	}
-}
-
 func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	t.Parallel()
 	all := knownClients("/home/someone")
