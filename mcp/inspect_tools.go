@@ -469,8 +469,8 @@ func addInspectTools(server *mcp.Server, t *tools) {
 		Annotations: readOnly("Snapshot a tmux Pane"),
 		Description: "One pane's contents together with what it is, where it " +
 			"sits, and whether its process has exited. Prefer this to " +
-			"capture_pane followed by list_panes: one call, and the two halves " +
-			"cannot disagree.",
+			"capture_pane followed by get_pane_info when one response is enough. " +
+			"State and content are collected sequentially, not atomically.",
 	}, t.snapshotPane)
 	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "search_panes",

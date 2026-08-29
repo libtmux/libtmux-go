@@ -240,7 +240,7 @@ func diagnosePaneText(pane string) (summary, text string) {
 1. get_pane_info first. It says whether the process has exited and with what
    status, and whether the pane is in copy mode, which swallows keys you send
    and is a common reason a pane looks unresponsive.
-2. snapshot_pane for its contents and that state together. Add includeHistory
+2. snapshot_pane for its contents and state in one response. Add includeHistory
    if what went wrong has already scrolled off.
 3. If it is running something and you need to know when that ends, do not read
    the pane in a loop: wait_for_text watches what the pane writes, and stop
@@ -284,11 +284,9 @@ func followPaneText(pane string) (summary, text string) {
 4. If the pane produces more than its scrollback holds, pipe_pane writes every
    byte to a file as it happens and nothing depends on reading in time.
 
-Watching several panes at once is a listing rather than a capture each:
-list_panes with detail full reports every pane's history size, whether its
-process has exited and with what status, without reading any of their
-contents. Compare the history sizes against the last reading to see which
-panes wrote anything, and capture only those.
+Watching several panes at once needs one capture_since cursor or subscription
+per pane. list_panes with detail full reports process state without reading
+contents, but history size alone is not a change signal.
 
 Do not call capture_pane in a loop instead. It returns the whole screen every
 time, most of which you read last turn, and it cannot tell you whether anything

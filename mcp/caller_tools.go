@@ -220,20 +220,19 @@ take their own. Every reply says the total it selected from. On a machine
 carrying somebody else's tmux, asking for the pane running a command rather
 than for every pane is one answer instead of forty.
 
-PREFER THE WHOLE ANSWER. snapshot_pane reads a pane's contents and its state in
-one call; capture_pane followed by list_panes is two calls whose answers can
-disagree. search_panes finds which pane shows something, and the lines that
-showed it, without capturing each pane in turn. A batch runs several calls in
-one request.
+PREFER ONE RESPONSE. snapshot_pane returns a pane's contents and state together,
+avoiding a second protocol call. State and content are collected sequentially,
+not atomically. search_panes finds which pane shows something, and the lines
+that showed it, without capturing each pane in turn. A batch runs several calls
+in one request.
 
 LISTING TELLS YOU WHAT EXISTS, NOT WHAT IS IN IT. list_windows and list_panes
 report names, indexes, and positions; search_panes and capture_pane are what
 read the text a pane is showing. For state without contents, list_panes with
 detail full adds every matching pane's exit status, path, title, history size,
-and whether it is in a mode that swallows keys -- which is how to check on
-several panes in one call, capturing none of them, since a history size that
-has not moved means that pane wrote nothing. get_pane_info says the same about
-one pane you can name.
+and whether it is in a mode that swallows keys. Use capture_since or a resource
+subscription to detect new output; history size alone is not a change signal.
+get_pane_info reports the same state for one pane you can name.
 
 BEFORE YOU MOVE WHAT SOMEBODY IS LOOKING AT, get_server_info reports every
 attached client and the session each is watching, marking the ones that are
