@@ -74,6 +74,47 @@ func TestParseControlNotificationAgainstRealTmux(t *testing.T) {
 	}
 }
 
+//libtmux:real-tmux
+func TestNotificationStreamZeroOptionsRetainsStructureWithoutPaneOutput(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
+	}
+	stream, err := server.OpenNotifications(ctx, sessions[0], tmux.NotificationOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+
+	const marker = "notification-stream-no-pane-output"
+	sendRealPaneCommand(ctx, t, panes[0], "printf '"+marker+"\\n'")
+	waitForPaneCapture(ctx, t, panes[0], marker)
+	if _, err := sessions[0].Rename(ctx, "renamed"); err != nil {
+		t.Fatal(err)
+	}
+
+	for {
+		notification, err := stream.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if notification.Kind() == tmux.ControlNotificationOutput ||
+			notification.Kind() == tmux.ControlNotificationExtendedOutput {
+			t.Fatalf("zero options delivered %s", notification.Kind())
+		}
+		if notification.Kind() == tmux.ControlNotificationSessionRenamed {
+			return
+		}
+	}
+}
+
 func scanControlNotificationLines(
 	ctx context.Context,
 	control *tmuxtest.ControlMode,

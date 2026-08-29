@@ -19,11 +19,11 @@ const watchNotifyInterval = 250 * time.Millisecond
 // watchReadyWait bounds how long subscribe waits for watcher readiness.
 const watchReadyWait = 10 * time.Second
 
-// watchRetryInterval paces initial connection retries.
+// watchRetryInterval paces planning and connection retries.
 const watchRetryInterval = time.Second
 
-// watchRebuildInterval paces retries after selecting a session set.
-const watchRebuildInterval = 10 * time.Millisecond
+// watchDebounceInterval coalesces topology changes before replanning.
+const watchDebounceInterval = 10 * time.Millisecond
 
 // watchSubscriptionSpellingLimit bounds the SDK's retained subscription keys.
 // go-sdk v1.6.1 removes disconnected sessions from each key but does not prune
@@ -52,6 +52,9 @@ type watchers struct {
 	active   *watchGeneration
 	// nextReady belongs to subscriptions accepted while active is stopping.
 	nextReady       chan struct{}
+	revision        uint64
+	plan            watchPlanFunc
+	open            watchOpenFunc
 	routes          map[string]map[*watchDelivery]map[string]*watchRoute
 	deliveries      map[*sessionScope]*watchDelivery
 	deliveryWorkers map[*watchDelivery]struct{}
@@ -62,22 +65,25 @@ type watchers struct {
 }
 
 type watchGeneration struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	done      chan struct{}
-	ready     chan struct{}
-	rebuild   *watchRebuild
-	attaching int
-	restoring bool
-	stopping  bool
+	ctx      context.Context
+	cancel   context.CancelFunc
+	done     chan struct{}
+	ready    chan struct{}
+	changes  chan struct{}
+	current  *watchObserverSet
+	opening  *watchObserverSet
+	waiters  []watchRevisionReady
+	force    bool
+	stopping bool
 }
 
-type watchRebuild struct {
-	cancel context.CancelFunc
+type watchRevisionReady struct {
+	revision uint64
+	ready    chan struct{}
 }
 
 func newWatchers(runtime *tmuxRuntime) *watchers {
-	return &watchers{
+	watchers := &watchers{
 		runtime:         runtime,
 		subscribed:      map[string]int{},
 		spelled:         map[string]map[string]int{},
@@ -90,6 +96,9 @@ func newWatchers(runtime *tmuxRuntime) *watchers {
 		deliveryLimit:   watchSubscriptionSpellingLimit,
 		shutdownWait:    watchShutdownWait,
 	}
+	watchers.plan = watchers.planWithRuntime
+	watchers.open = watchers.openWithRuntime
+	return watchers
 }
 
 // subscribe accepts every served static URI shape because MCP has no separate
@@ -217,40 +226,27 @@ func (w *watchers) add(canonical, spelling string) (<-chan struct{}, error) {
 	w.spelled[canonical][spelling]++
 	switch {
 	case w.active == nil:
-		w.startLocked(nil, false)
+		w.revision++
+		w.startLocked(nil)
 	case w.active.stopping:
+		if w.subscribed[canonical] == 1 {
+			w.revision++
+		}
 		if w.nextReady == nil {
 			w.nextReady = make(chan struct{})
 		}
 		return w.nextReady, nil
 	case w.subscribed[canonical] == 1:
-		w.active.stopping = true
-		w.active.cancel()
-		if w.nextReady == nil {
-			w.nextReady = make(chan struct{})
-		}
-		return w.nextReady, nil
+		w.revision++
+		ready := make(chan struct{})
+		w.active.waiters = append(w.active.waiters, watchRevisionReady{
+			revision: w.revision,
+			ready:    ready,
+		})
+		w.signalLocked(w.active)
+		return ready, nil
 	}
 	return w.active.ready, nil
-}
-
-func (w *watchers) attached(generation *watchGeneration) bool {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-	if w.active != generation || generation.stopping {
-		return false
-	}
-	if generation.attaching > 1 {
-		generation.attaching--
-		return false
-	}
-	generation.attaching = 0
-	select {
-	case <-generation.ready:
-	default:
-		close(generation.ready)
-	}
-	return true
 }
 
 func (w *watchers) remove(canonical, spelling string) {
@@ -294,46 +290,72 @@ func (w *watchers) removeSubscription(
 		delete(w.owed, canonical)
 	}
 	delete(w.notified, canonical)
-	if w.active != nil && !w.active.stopping {
-		w.active.stopping = true
-		w.active.cancel()
-	}
 	if len(w.subscribed) == 0 {
+		if w.active != nil && !w.active.stopping {
+			w.active.stopping = true
+			w.active.cancel()
+		}
 		if w.nextReady != nil {
 			close(w.nextReady)
 			w.nextReady = nil
 		}
+		return
+	}
+	if w.active != nil && !w.active.stopping {
+		w.revision++
+		w.signalLocked(w.active)
 	}
 }
 
 // startLocked requires w.mutex.
-func (w *watchers) startLocked(ready chan struct{}, restoring bool) {
+func (w *watchers) startLocked(ready chan struct{}) {
 	if ready == nil {
 		ready = make(chan struct{})
 	}
 	ctx, cancel := context.WithCancel(w.runtime.ctx)
 	generation := &watchGeneration{
-		ctx:       ctx,
-		cancel:    cancel,
-		done:      make(chan struct{}),
-		ready:     ready,
-		restoring: restoring,
+		ctx:     ctx,
+		cancel:  cancel,
+		done:    make(chan struct{}),
+		ready:   ready,
+		changes: make(chan struct{}, 1),
 	}
+	generation.waiters = append(generation.waiters, watchRevisionReady{
+		revision: w.revision,
+		ready:    ready,
+	})
 	w.active = generation
+	w.signalLocked(generation)
 	go func() {
 		w.watch(generation)
 		w.retire(generation)
 	}()
 }
 
+// signalLocked requires w.mutex.
+func (w *watchers) signalLocked(generation *watchGeneration) {
+	if generation == nil || generation.changes == nil {
+		return
+	}
+	select {
+	case generation.changes <- struct{}{}:
+	default:
+	}
+}
+
 func (w *watchers) close() {
 	w.mutex.Lock()
+	var current, opening *watchObserverSet
 	if !w.closed {
 		w.closed = true
 		w.shutdownDeadlineLocked()
-		if w.active != nil && !w.active.stopping {
-			w.active.stopping = true
-			w.active.cancel()
+		if w.active != nil {
+			current = w.active.current
+			opening = w.active.opening
+			if !w.active.stopping {
+				w.active.stopping = true
+				w.active.cancel()
+			}
 		}
 		if w.nextReady != nil {
 			close(w.nextReady)
@@ -362,6 +384,8 @@ func (w *watchers) close() {
 	}
 	shutdownBy := w.shutdownDeadlineLocked()
 	w.mutex.Unlock()
+	current.signalStop()
+	opening.signalStop()
 	w.waitForShutdown(done, shutdownBy)
 }
 

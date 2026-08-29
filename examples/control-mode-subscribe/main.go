@@ -42,7 +42,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	stream, err := session.OpenNotifications(ctx)
+	// docs:watching
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
 	if err != nil {
 		return fmt.Errorf("open notification stream: %w", err)
 	}
@@ -53,7 +54,6 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("rename session: %w", err)
 	}
 
-	// docs:watching
 	for {
 		notification, err := stream.Next(ctx)
 		if err != nil {

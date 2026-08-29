@@ -10,6 +10,14 @@ import (
 type openNotificationsSignature func(
 	tmux.Session,
 	context.Context,
+	tmux.NotificationOptions,
+) (*tmux.NotificationStream, error)
+
+type openServerNotificationsSignature func(
+	tmux.Server,
+	context.Context,
+	tmux.Session,
+	tmux.NotificationOptions,
 ) (*tmux.NotificationStream, error)
 
 type nextNotificationStreamSignature func(
@@ -26,6 +34,7 @@ type closeNotificationStreamSignature func(*tmux.NotificationStream) error
 
 func TestNotificationStreamPublicSurfaceCompiles(_ *testing.T) {
 	var _ openNotificationsSignature = tmux.Session.OpenNotifications
+	var _ openServerNotificationsSignature = tmux.Server.OpenNotifications
 	var _ nextNotificationStreamSignature = (*tmux.NotificationStream).Next
 	var _ closeNotificationStreamContextSignature = (*tmux.NotificationStream).CloseContext
 	var _ closeNotificationStreamSignature = (*tmux.NotificationStream).Close

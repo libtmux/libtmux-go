@@ -151,21 +151,24 @@ func TestControlDialectAdaptsClientFlags(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		version string
-		mode    controlNotificationMode
+		profile controlClientProfile
 		want    []string
 	}{
-		{name: "3.2a notifications", version: "3.2a", mode: controlNotificationsRetained},
-		{name: "3.2a commands", version: "3.2a", mode: controlNotificationsDiscarded, want: []string{"no-output"}},
-		{name: "3.5 commands", version: "3.5", mode: controlNotificationsDiscarded, want: []string{"no-output"}},
-		{name: "3.6 notifications", version: "3.6", mode: controlNotificationsRetained, want: []string{"no-detach-on-destroy"}},
-		{name: "3.6 commands", version: "3.6", mode: controlNotificationsDiscarded, want: []string{"no-output", "no-detach-on-destroy"}},
-		{name: "3.7 commands", version: "3.7", mode: controlNotificationsDiscarded, want: []string{"no-output", "no-detach-on-destroy"}},
+		{name: "3.2a full notifications", version: "3.2a", profile: controlNotificationsFull},
+		{name: "3.2a notifications without pane output", version: "3.2a", profile: controlNotificationsNoPaneOutput, want: []string{"no-output"}},
+		{name: "3.2a commands", version: "3.2a", profile: controlCommands, want: []string{"no-output"}},
+		{name: "3.5 commands", version: "3.5", profile: controlCommands, want: []string{"no-output"}},
+		{name: "3.6 full notifications", version: "3.6", profile: controlNotificationsFull, want: []string{"no-detach-on-destroy"}},
+		{name: "3.6 notifications without pane output", version: "3.6", profile: controlNotificationsNoPaneOutput, want: []string{"no-output", "no-detach-on-destroy"}},
+		{name: "3.6 commands", version: "3.6", profile: controlCommands, want: []string{"no-output", "no-detach-on-destroy"}},
+		{name: "3.6 invalid profile", version: "3.6", profile: controlClientProfile(255), want: []string{"no-output", "no-detach-on-destroy"}},
+		{name: "3.7 commands", version: "3.7", profile: controlCommands, want: []string{"no-output", "no-detach-on-destroy"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			dialect := controlDialect{version: mustParseVersion(t, test.version)}
-			if got := dialect.clientFlags(test.mode); !slices.Equal(got, test.want) {
+			if got := dialect.clientFlags(test.profile); !slices.Equal(got, test.want) {
 				t.Fatalf("client flags = %#v, want %#v", got, test.want)
 			}
 		})

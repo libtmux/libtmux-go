@@ -14,12 +14,22 @@ import (
 
 const controlRegistrationPoll = 10 * time.Millisecond
 
-type controlNotificationMode uint8
+type controlClientProfile uint8
 
 const (
-	controlNotificationsRetained controlNotificationMode = iota
-	controlNotificationsDiscarded
+	controlCommands controlClientProfile = iota
+	controlNotificationsNoPaneOutput
+	controlNotificationsFull
 )
+
+func (profile controlClientProfile) retainsNotifications() bool {
+	return profile == controlNotificationsNoPaneOutput ||
+		profile == controlNotificationsFull
+}
+
+func (profile controlClientProfile) receivesPaneOutput() bool {
+	return profile == controlNotificationsFull
+}
 
 // OpenControl starts a control-mode client attached to session. The startup
 // context bounds process start, attach framing, and client registration but
@@ -29,13 +39,13 @@ func (s Server) OpenControl(
 	ctx context.Context,
 	session Session,
 ) (*ControlClient, error) {
-	return s.openControl(ctx, session, controlNotificationsRetained)
+	return s.openControl(ctx, session, controlNotificationsFull)
 }
 
 func (s Server) openControl(
 	ctx context.Context,
 	session Session,
-	mode controlNotificationMode,
+	profile controlClientProfile,
 ) (*ControlClient, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -68,7 +78,7 @@ func (s Server) openControl(
 	}
 
 	attach := []string{"attach-session"}
-	flags := (controlDialect{version: version}).clientFlags(mode)
+	flags := (controlDialect{version: version}).clientFlags(profile)
 	if len(flags) > 0 {
 		attach = append(attach, "-f", strings.Join(flags, ","))
 	}
@@ -81,7 +91,7 @@ func (s Server) openControl(
 	return s.startControl(
 		ctx,
 		session,
-		mode,
+		profile,
 		attach,
 		func(client *ControlClient) error {
 			return client.acceptAttach(ctx, guard)
@@ -95,7 +105,7 @@ func (s Server) openControl(
 func (s Server) startControl(
 	ctx context.Context,
 	session Session,
-	mode controlNotificationMode,
+	profile controlClientProfile,
 	startup []string,
 	accept func(*ControlClient) error,
 ) (*ControlClient, error) {
@@ -105,7 +115,7 @@ func (s Server) startControl(
 	}
 
 	var notifications *controlNotificationQueue
-	if mode == controlNotificationsRetained {
+	if profile.retainsNotifications() {
 		notifications = newControlNotificationQueue(defaultControlNotificationLimit)
 	}
 	arguments := s.commandArguments(startup)

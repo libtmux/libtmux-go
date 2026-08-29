@@ -218,8 +218,6 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	}
 
 	workspace(ctx, t, session, "session_name: late\nwindows:\n  - panes:\n      - {}\n")
-	pane := firstPane(ctx, t, session)
-	send(ctx, t, session, pane, "echo LATE-OUTPUT")
 
 	select {
 	case <-updated:
@@ -292,13 +290,19 @@ func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
 		call(ctx, t, session, "create_session", map[string]any{
 			"name": fmt.Sprintf("churn-%d", round), "command": "sleep 300",
 		}, nil)
-		// Long enough to be past the connection ending and inside the gap.
-		time.Sleep(150 * time.Millisecond)
+		select {
+		case <-updated: // the structural change, not pane-output evidence
+		case <-time.After(20 * time.Second):
+			t.Fatalf("round %d: session creation was never reported", round)
+		}
+		drain()
+		// Put the next write outside the structural update's coalescing window.
+		time.Sleep(300 * time.Millisecond)
 		send(ctx, t, session, pane, fmt.Sprintf("echo round-%d", round))
 		select {
 		case <-updated:
 		case <-time.After(20 * time.Second):
-			t.Fatalf("round %d: a write during a rebuild was never reported", round)
+			t.Fatalf("round %d: pane output after the handoff was never reported", round)
 		}
 	}
 }

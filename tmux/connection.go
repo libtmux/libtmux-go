@@ -31,9 +31,9 @@ type controlDialect struct {
 	version Version
 }
 
-func (dialect controlDialect) clientFlags(mode controlNotificationMode) []string {
+func (dialect controlDialect) clientFlags(profile controlClientProfile) []string {
 	flags := make([]string, 0, 2)
-	if mode == controlNotificationsDiscarded {
+	if !profile.receivesPaneOutput() {
 		flags = append(flags, "no-output")
 	}
 	if dialect.version.AtLeast(controlNoDetachVersion36) {
@@ -180,7 +180,7 @@ func (s Server) NewSessionConnection(
 	first, err := effective.startControl(
 		ctx,
 		Session{},
-		controlNotificationsDiscarded,
+		controlCommands,
 		append([]string{"-C"}, startup...),
 		func(client *ControlClient) error {
 			accepted, acceptErr := effective.acceptNewSessionFrame(
@@ -214,7 +214,7 @@ func (s Server) NewSessionConnection(
 		client, openErr := materialized.server.openControl(
 			ctx,
 			materialized,
-			controlNotificationsDiscarded,
+			controlCommands,
 		)
 		if openErr != nil {
 			return materialized, nil, errors.Join(openErr, closeControlClients(clients))
@@ -289,7 +289,7 @@ func newSessionConnectionArguments(
 		request,
 		formatTemplate(fields),
 		false,
-		strings.Join(dialect.clientFlags(controlNotificationsDiscarded), ","),
+		strings.Join(dialect.clientFlags(controlCommands), ","),
 	)
 	return arguments, fields, err
 }

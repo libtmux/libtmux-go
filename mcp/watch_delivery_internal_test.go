@@ -57,6 +57,7 @@ type resourceGateTransport struct {
 	started  chan struct{}
 	release  chan struct{}
 	calls    *atomic.Int64
+	armed    *atomic.Bool
 }
 
 func (t resourceGateTransport) Connect(ctx context.Context) (sdk.Connection, error) {
@@ -83,7 +84,7 @@ func (c *resourceGateConnection) Write(
 			return err
 		}
 		c.gate.observed <- resourceWireEvent{uri: params.URI, call: request.IsCall()}
-		if c.gate.release != nil && c.gate.calls.Add(1) == 1 {
+		if c.gate.release != nil && c.gate.armed.Load() && c.gate.calls.Add(1) == 1 {
 			close(c.gate.started)
 			<-c.gate.release
 		}
@@ -352,12 +353,25 @@ func TestResourceDeliveryIsOrderedAndIsolatedBySDKSession(t *testing.T) {
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 	})
 	instance := mustInternalMCPServer(t, target)
+	observer := newFakeWatchStream()
+	instance.tools.watchers.plan = func(context.Context, watchSelection) (watchPlan, error) {
+		return handoffTestPlan("$1"), nil
+	}
+	instance.tools.watchers.open = func(
+		_ context.Context,
+		_ watchPlan,
+		candidate *watchObserverSet,
+	) error {
+		candidate.add(watchObserver{stream: observer})
+		return nil
+	}
 
 	blockedGate := resourceGateTransport{
 		observed: make(chan resourceWireEvent, 4),
 		started:  make(chan struct{}),
 		release:  make(chan struct{}),
 		calls:    &atomic.Int64{},
+		armed:    &atomic.Bool{},
 	}
 	fastGate := resourceGateTransport{observed: make(chan resourceWireEvent, 4)}
 	blockedUpdates := make(chan string, 4)
@@ -400,36 +414,19 @@ func TestResourceDeliveryIsOrderedAndIsolatedBySDKSession(t *testing.T) {
 
 	subscribe := func(session *sdk.ClientSession, uri string) {
 		t.Helper()
-		done := make(chan error, 1)
-		go func() {
-			done <- session.Subscribe(ctx, &sdk.SubscribeParams{URI: uri})
-		}()
-		for {
-			select {
-			case err := <-done:
-				if err != nil {
-					t.Fatal(err)
-				}
-				return
-			default:
-			}
-			instance.tools.watchers.mutex.Lock()
-			generation := instance.tools.watchers.active
-			instance.tools.watchers.mutex.Unlock()
-			if generation != nil {
-				instance.tools.watchers.attached(generation)
-			}
-			select {
-			case <-ctx.Done():
-				t.Fatal(ctx.Err())
-			case <-time.After(time.Millisecond):
-			}
+		if err := session.Subscribe(ctx, &sdk.SubscribeParams{URI: uri}); err != nil {
+			t.Fatal(err)
 		}
 	}
 	for _, uri := range []string{first, second} {
 		subscribe(blocked, uri)
 		subscribe(fast, uri)
 	}
+	for len(blockedGate.observed) > 0 {
+		<-blockedGate.observed
+	}
+	drainResourceUpdates(blockedUpdates)
+	blockedGate.armed.Store(true)
 
 	instance.tools.watchers.notify(first)
 	awaitWireResource(t, blockedGate.observed, first)

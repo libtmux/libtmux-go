@@ -22,7 +22,8 @@
 //     [Pane.CaptureBytes].
 //   - Run arbitrary tmux commands with [Server.Cmd].
 //   - Bind a materialized session to owned control lanes with
-//     [Session.OpenControl], or receive notifications with [Server.OpenControl].
+//     [Session.OpenControl], or receive notifications with
+//     [Session.OpenNotifications] or [Server.OpenNotifications].
 //   - Batch dependent commands with [NewPlan].
 //
 // The tmuxtest package runs integration tests against an isolated real tmux.

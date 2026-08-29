@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,30 +35,6 @@ func TestStructuralNotificationInvalidatesEverySubscribedResource(t *testing.T) 
 		if _, ok := invalidated[uri]; !ok {
 			t.Errorf("structural update did not invalidate %q", uri)
 		}
-	}
-}
-
-func TestSessionSetChangeInvalidatesBeforeRebuild(t *testing.T) {
-	const uri = "tmux://sessions/work"
-	watchers := &watchers{
-		subscribed: map[string]int{uri: 1},
-		notified:   map[string]time.Time{},
-		owed:       map[string]*time.Timer{},
-	}
-	notification, err := tmux.ParseControlNotification([]byte("%sessions-changed"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	invalidated := false
-	rebuild := watchers.handleNotification(notification, func() {
-		invalidated = true
-		watchers.tellEveryone()
-	})
-	if !rebuild {
-		t.Fatal("session-set change did not request a watcher rebuild")
-	}
-	if !invalidated || watchers.at(uri).IsZero() {
-		t.Fatal("session-set change rebuilt before invalidating current resources")
 	}
 }
 
@@ -125,64 +102,6 @@ func TestUnsubscribingDropsThePanesRecord(t *testing.T) {
 	}
 }
 
-func TestResubscribeWaitsForTheSuccessorGeneration(t *testing.T) {
-	const uri = "tmux://panes/7/content"
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{SocketName: "generation-unused"})
-	runtimeCtx, cancelRuntime := context.WithCancel(t.Context())
-	t.Cleanup(cancelRuntime)
-	watchers := newWatchers(newRuntime(runtimeCtx, target, func(error) { cancelRuntime() }))
-	t.Cleanup(watchers.close)
-	oldCtx, cancelOld := context.WithCancel(runtimeCtx)
-	old := &watchGeneration{
-		ctx:      oldCtx,
-		cancel:   cancelOld,
-		done:     make(chan struct{}),
-		ready:    make(chan struct{}),
-		stopping: true,
-	}
-	watchers.active = old
-	cancelOld()
-
-	ready, err := watchers.add(uri, uri)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if watchers.active != old || watchers.nextReady != ready {
-		t.Fatal("a subscription started a successor before the old generation joined")
-	}
-	watchers.retire(old)
-	watchers.mutex.Lock()
-	successor := watchers.active
-	if successor != nil {
-		successorRebuild := &watchRebuild{cancel: func() {}}
-		successor.rebuild = successorRebuild
-		watchers.mutex.Unlock()
-		watchers.clearRebuild(old, &watchRebuild{cancel: func() {}})
-		watchers.mutex.Lock()
-		if successor.rebuild != successorRebuild {
-			watchers.mutex.Unlock()
-			t.Fatal("stale rebuild cleanup changed the successor generation")
-		}
-	}
-	watchers.mutex.Unlock()
-	if successor == nil || successor == old || successor.ready != ready {
-		t.Fatal("retiring generation did not transfer readiness to one successor")
-	}
-	if watchers.attached(old) {
-		t.Fatal("a stale generation attached after its successor started")
-	}
-	select {
-	case <-ready:
-		t.Fatal("a stale generation closed its successor's readiness")
-	default:
-	}
-	select {
-	case <-old.done:
-	default:
-		t.Fatal("retired generation did not close its done signal")
-	}
-}
-
 func TestRuntimeCancellationDoesNotRespawnAWatchGeneration(t *testing.T) {
 	runtimeCtx, cancelRuntime := context.WithCancel(t.Context())
 	watchers := newWatchers(&tmuxRuntime{ctx: runtimeCtx})
@@ -212,130 +131,17 @@ func TestRuntimeCancellationDoesNotRespawnAWatchGeneration(t *testing.T) {
 	}
 }
 
-func TestSuccessorRestoresAPreviouslyReadyGeneration(t *testing.T) {
-	const uri = "tmux://sessions/work"
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{SocketName: "restore-unused"})
-	runtimeCtx, cancelRuntime := context.WithCancel(t.Context())
-	t.Cleanup(cancelRuntime)
-	watchers := newWatchers(newRuntime(runtimeCtx, target, func(error) { cancelRuntime() }))
-	t.Cleanup(watchers.close)
-	oldCtx, cancelOld := context.WithCancel(runtimeCtx)
-	ready := make(chan struct{})
-	close(ready)
-	old := &watchGeneration{
-		ctx: oldCtx, cancel: cancelOld, done: make(chan struct{}), ready: ready, stopping: true,
-	}
-	watchers.subscribed[uri] = 1
-	watchers.spelled[uri] = map[string]int{uri: 1}
-	watchers.active = old
-	cancelOld()
-
-	watchers.retire(old)
-	watchers.mutex.Lock()
-	successor := watchers.active
-	watchers.mutex.Unlock()
-	if successor == nil || !successor.restoring {
-		t.Fatal("successor forgot that it must invalidate changes from the replacement gap")
-	}
-}
-
-func TestANewResourceRetiresTheSelectedGeneration(t *testing.T) {
-	const existing = "tmux://panes/7/content"
-	const added = "tmux://panes/8/content"
-	ctx, cancel := context.WithCancel(t.Context())
-	generation := &watchGeneration{
-		ctx:    ctx,
-		cancel: cancel,
-		done:   make(chan struct{}),
-		ready:  make(chan struct{}),
-	}
-	watchers := &watchers{
-		subscribed: map[string]int{existing: 1},
-		spelled: map[string]map[string]int{
-			existing: {existing: 1},
-		},
-		admitted: map[string]struct{}{existing: {}},
-		active:   generation,
-	}
-
-	ready, err := watchers.add(added, added)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !generation.stopping {
-		t.Fatal("the generation selected before the new resource remained active")
-	}
-	select {
-	case <-ctx.Done():
-	default:
-		t.Fatal("the generation selected before the new resource was not canceled")
-	}
-	if ready == generation.ready || ready != watchers.nextReady {
-		t.Fatal("the new resource inherited readiness from the stale selection")
-	}
-}
-
-func TestGenerationReadinessWaitsForEverySelectedSession(t *testing.T) {
-	generation := &watchGeneration{
-		done:      make(chan struct{}),
-		ready:     make(chan struct{}),
-		attaching: 2,
-	}
-	watchers := &watchers{active: generation}
-
-	if watchers.attached(generation) {
-		t.Fatal("the first selected session made the generation ready")
-	}
-	select {
-	case <-generation.ready:
-		t.Fatal("readiness closed before every selected session attached")
-	default:
-	}
-	if !watchers.attached(generation) {
-		t.Fatal("the last selected session did not make the generation ready")
-	}
-	select {
-	case <-generation.ready:
-	default:
-		t.Fatal("readiness remained open after every selected session attached")
-	}
-}
-
-func TestRemovingCanonicalResourceRetiresTheSelectedGeneration(t *testing.T) {
-	const removed = "tmux://panes/7/content"
-	const kept = "tmux://panes/8/content"
-	ctx, cancel := context.WithCancel(t.Context())
-	generation := &watchGeneration{
-		ctx: ctx, cancel: cancel, done: make(chan struct{}), ready: make(chan struct{}),
-	}
-	watchers := &watchers{
-		subscribed: map[string]int{removed: 1, kept: 1},
-		spelled: map[string]map[string]int{
-			removed: {removed: 1},
-			kept:    {kept: 1},
-		},
-		active:   generation,
-		notified: map[string]time.Time{},
-		owed:     map[string]*time.Timer{},
-	}
-
-	watchers.remove(removed, removed)
-	if !generation.stopping {
-		t.Fatal("generation retained an obsolete resource selection")
-	}
-	select {
-	case <-ctx.Done():
-	default:
-		t.Fatal("generation with an obsolete resource selection was not canceled")
-	}
-}
-
 //libtmux:real-tmux
-func TestWatcherSelectsSessionsNeededByItsResources(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+func TestWatcherHandsPaneOutputToItsNewSession(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	t.Cleanup(cancel)
 	target := tmuxtest.NewServer(ctx, t)
-	tmuxtest.NewSession(ctx, t, target, tmux.NewSessionRequest{Name: "zz-second"})
+	unselected := tmuxtest.NewSession(
+		ctx,
+		t,
+		target,
+		tmux.NewSessionRequest{Name: "zz-second"},
+	)
 	sessions, err := target.Sessions(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -343,36 +149,37 @@ func TestWatcherSelectsSessionsNeededByItsResources(t *testing.T) {
 	if len(sessions) != 2 {
 		t.Fatalf("sessions = %d, want 2", len(sessions))
 	}
-	unselected := sessions[1]
 	windows, err := target.Windows(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var secondWindow tmux.Window
+	var firstWindow, secondWindow tmux.Window
 	for _, window := range windows {
 		if window.SessionID() == unselected.ID() {
 			secondWindow = window
-			break
+		} else {
+			firstWindow = window
 		}
 	}
-	if secondWindow.ID() == "" {
-		t.Fatal("second session has no window")
+	if firstWindow.ID() == "" || secondWindow.ID() == "" {
+		t.Fatal("a session has no destination window")
 	}
-	if _, err := secondWindow.SplitPane(ctx, tmux.SplitPaneRequest{Command: "sleep 30"}); err != nil {
+	sleepPane, err := secondWindow.SplitPane(ctx, tmux.SplitPaneRequest{Command: "sleep 30"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	panes, err := target.Panes(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolvedPane := ""
+	var resolvedPane tmux.Pane
 	for _, pane := range panes {
-		if pane.SessionID() == unselected.ID() {
-			resolvedPane = pane.ID().String()
+		if pane.SessionID() == unselected.ID() && pane.ID() != sleepPane.ID() {
+			resolvedPane = pane
 			break
 		}
 	}
-	if resolvedPane == "" {
+	if resolvedPane.ID() == "" {
 		t.Fatal("second session has no pane")
 	}
 
@@ -398,73 +205,120 @@ func TestWatcherSelectsSessionsNeededByItsResources(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = clientSession.Close() })
 
-	metadata := "tmux://windows/" + strings.TrimPrefix(secondWindow.ID().String(), "@")
-	if err := clientSession.Subscribe(ctx, &sdk.SubscribeParams{URI: metadata}); err != nil {
+	realOpen := instance.tools.watchers.open
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	var openMutex sync.Mutex
+	var blockedOnce, releaseOnce sync.Once
+	opens := 0
+	instance.tools.watchers.open = func(
+		openCtx context.Context,
+		plan watchPlan,
+		candidate *watchObserverSet,
+	) error {
+		openMutex.Lock()
+		opens++
+		call := opens
+		openMutex.Unlock()
+		if call > 1 {
+			blockedOnce.Do(func() { close(blocked) })
+			select {
+			case <-release:
+			case <-openCtx.Done():
+				return context.Cause(openCtx)
+			}
+		}
+		return realOpen(openCtx, plan, candidate)
+	}
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+	keeper, err := target.OpenControl(ctx, unselected)
+	if err != nil {
 		t.Fatal(err)
 	}
-	drainResourceUpdates(updated)
-	assertWatcherAttends(ctx, t, instance.tools.watchers, target, unselected.ID())
-	if err := secondWindow.SelectLayout(ctx, tmux.SelectLayoutRequest{
-		Layout: "even-horizontal",
-	}); err != nil {
+	t.Cleanup(func() {
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), time.Second)
+		defer cancelCleanup()
+		_ = keeper.CloseContext(cleanupCtx)
+	})
+	version, err := target.Version(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	awaitResourceWrite(t, updated, metadata)
-	if err := clientSession.Unsubscribe(ctx, &sdk.UnsubscribeParams{URI: metadata}); err != nil {
+	minimumDestructionProof, err := tmux.ParseVersion("3.6")
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	unresolved := "tmux://panes/999999999/content"
-	if err := clientSession.Subscribe(ctx, &sdk.SubscribeParams{URI: unresolved}); err != nil {
-		t.Fatal(err)
+	proveSessionDestruction := version.AtLeast(minimumDestructionProof)
+	if proveSessionDestruction {
+		if err := unselected.SetDestroyUnattached(ctx, tmux.DestroyUnattachedOn); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// Replacing the metadata selection restores a previously live generation.
-	// Consume that invalidation so only the layout change can satisfy the next
-	// assertion.
-	awaitResourceWrite(t, updated, unresolved)
-	drainResourceUpdates(updated)
-	assertWatcherAttends(ctx, t, instance.tools.watchers, target, unselected.ID())
-	if err := secondWindow.SelectLayout(ctx, tmux.SelectLayoutRequest{
-		Layout: "even-vertical",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	awaitResourceWrite(t, updated, unresolved)
-	if err := clientSession.Unsubscribe(ctx, &sdk.UnsubscribeParams{URI: unresolved}); err != nil {
-		t.Fatal(err)
-	}
-
-	resolved := paneContentURI(resolvedPane)
+	resolved := paneContentURI(resolvedPane.ID().String())
 	if err := clientSession.Subscribe(ctx, &sdk.SubscribeParams{URI: resolved}); err != nil {
 		t.Fatal(err)
 	}
-	selected, err := instance.tools.watchers.attending(ctx, target)
+	drainResourceUpdates(updated)
+	moved, err := resolvedPane.Move(ctx, tmux.MovePaneRequest{TargetWindow: firstWindow})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(selected) != 1 || selected[0].ID() != unselected.ID() {
-		t.Fatalf("resolved pane selected sessions %v, want only %s", selected, unselected.ID())
-	}
-}
-
-func assertWatcherAttends(
-	ctx context.Context,
-	t *testing.T,
-	watchers *watchers,
-	server tmux.Server,
-	want tmux.SessionID,
-) {
-	t.Helper()
-	selected, err := watchers.attending(ctx, server)
-	if err != nil {
+	waitWatchSignal(t, blocked, "post-move candidate attachment")
+	awaitResourceWrite(t, updated, resolved)
+	gapCommand := "echo HANDOFF-GAP"
+	if err := moved.SendKeys(ctx, tmux.SendKeysRequest{Command: &gapCommand}); err != nil {
 		t.Fatal(err)
 	}
-	for _, session := range selected {
-		if session.ID() == want {
-			return
+	time.Sleep(watchNotifyInterval + 50*time.Millisecond)
+	drainResourceUpdates(updated)
+	if err := keeper.CloseContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	assertSessionGone := func() {
+		t.Helper()
+		for {
+			remaining, listErr := target.SearchSessions(ctx, nil)
+			present := false
+			for _, session := range remaining {
+				present = present || session.ID() == unselected.ID()
+			}
+			if listErr == nil && !present {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatalf("source session remained after publication: %v", listErr)
+			case <-time.After(10 * time.Millisecond):
+			}
 		}
 	}
-	t.Fatalf("watcher selected sessions %v, missing %s", selected, want)
+	remaining, err := target.SearchSessions(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourcePresent := false
+	for _, session := range remaining {
+		sourcePresent = sourcePresent || session.ID() == unselected.ID()
+	}
+	if !sourcePresent {
+		t.Fatal("source session was destroyed while candidate attachment was blocked")
+	}
+	releaseOnce.Do(func() { close(release) })
+	if proveSessionDestruction {
+		assertSessionGone()
+	}
+	awaitResourceWrite(t, updated, resolved)
+	lines, err := moved.Capture(ctx, tmux.CapturePaneRequest{})
+	if err != nil || !strings.Contains(strings.Join(lines, "\n"), "HANDOFF-GAP") {
+		t.Fatalf("gap marker capture = (%q, %v)", lines, err)
+	}
+	time.Sleep(watchNotifyInterval + 50*time.Millisecond)
+	drainResourceUpdates(updated)
+	outputCommand := "echo HANDOFF-OUTPUT"
+	if err := moved.SendKeys(ctx, tmux.SendKeysRequest{Command: &outputCommand}); err != nil {
+		t.Fatal(err)
+	}
+	awaitResourceWrite(t, updated, resolved)
 }
 
 func drainResourceUpdates(updates <-chan string) {

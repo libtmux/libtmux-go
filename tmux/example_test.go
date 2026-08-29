@@ -1681,6 +1681,34 @@ func ExamplePane_OpenObservation() {
 	// closed: true
 }
 
+func ExampleServer_OpenNotifications() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-server-notifications",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	stream, err := server.OpenNotifications(ctx, session, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	fmt.Println("opened")
+	// Output: opened
+}
+
 func ExampleSession_OpenNotifications() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
@@ -1700,7 +1728,7 @@ func ExampleSession_OpenNotifications() {
 	}
 
 	// The stream owns its observation-only control client. Close releases it.
-	stream, err := session.OpenNotifications(ctx)
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
 	if err != nil {
 		fmt.Println("open notifications:", err)
 		return

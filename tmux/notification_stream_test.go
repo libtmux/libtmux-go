@@ -69,12 +69,27 @@ func TestOpenNotificationsRejectsAnUnmaterializedSession(t *testing.T) {
 
 	runner := &versionQueueRunner{}
 	server := serverWithRunner(runner)
-	stream, err := (Session{server: server}).OpenNotifications(context.Background())
+	stream, err := (Session{server: server}).OpenNotifications(
+		context.Background(),
+		NotificationOptions{},
+	)
 	if stream != nil || !errors.Is(err, ErrInvalidServerCommandRequest) {
 		t.Fatalf("OpenNotifications() = (%p, %v), want nil request error", stream, err)
 	}
 	if calls := runner.callCount(); calls != 0 {
 		t.Fatalf("OpenNotifications() started %d processes, want none", calls)
+	}
+
+	stream, err = server.OpenNotifications(
+		context.Background(),
+		Session{server: server},
+		NotificationOptions{},
+	)
+	if stream != nil || !errors.Is(err, ErrInvalidServerCommandRequest) {
+		t.Fatalf("Server.OpenNotifications() = (%p, %v), want nil request error", stream, err)
+	}
+	if calls := runner.callCount(); calls != 0 {
+		t.Fatalf("Server.OpenNotifications() started %d processes, want none", calls)
 	}
 }
 

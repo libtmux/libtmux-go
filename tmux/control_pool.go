@@ -20,7 +20,7 @@ func (s Server) openControlLanePool(
 
 	clients := make([]*ControlClient, 0, count)
 	for range count {
-		client, err := s.openControl(ctx, session, controlNotificationsDiscarded)
+		client, err := s.openControl(ctx, session, controlCommands)
 		if err != nil {
 			return nil, errors.Join(err, closeControlClients(clients))
 		}
