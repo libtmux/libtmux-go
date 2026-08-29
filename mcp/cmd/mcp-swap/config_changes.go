@@ -37,9 +37,20 @@ func report(clients []client) error {
 
 // useLocal attempts every client and joins named failures.
 func useLocal(clients []client, entry map[string]any, dryRun bool) error {
+	return usePreparedLocal(clients, entryPlan{
+		configured: entry,
+		install:    func() error { return nil },
+		cleanup:    func() {},
+	}, dryRun, false)
+}
+
+// usePreparedLocal renders every client entry before preflight. This validates
+// the command, arguments, and environment that each client will actually use.
+func usePreparedLocal(clients []client, plan entryPlan, dryRun, check bool) error {
 	var failures []error
+	changes := make([]entryChange, 0, len(clients))
 	for _, c := range clients {
-		change, err := planEntryChange(c, entry)
+		change, err := planEntryChange(c, plan.configured)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -48,8 +59,25 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
+		changes = append(changes, change)
+	}
+
+	if check {
+		if err := preflightEntryChanges(changes, plan); err != nil {
+			failures = append(failures, err)
+			return errors.Join(failures...)
+		}
+	}
+	if !dryRun {
+		if err := plan.install(); err != nil {
+			return fmt.Errorf("install build: %w", err)
+		}
+	}
+
+	for _, change := range changes {
+		c := change.target
 		if dryRun {
-			fmt.Printf("%-12s would run %s\n", c.name, describe(entry))
+			fmt.Printf("%-12s would run %s\n", c.name, change.spec.describe())
 			continue
 		}
 		if err := change.apply(); err != nil {
@@ -57,9 +85,69 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
-		fmt.Printf("%-12s now runs %s\n", c.name, describe(entry))
+		fmt.Printf("%-12s now runs %s\n", c.name, change.spec.describe())
 	}
 	return errors.Join(failures...)
+}
+
+func preflightEntryChanges(changes []entryChange, plan entryPlan) error {
+	if len(changes) == 0 {
+		spec, err := processSpecFromEntry(plan.configured)
+		if err != nil {
+			return fmt.Errorf("preflight failed, nothing written: %w", err)
+		}
+		if plan.preflightCommand != "" {
+			spec.command = plan.preflightCommand
+		}
+		fmt.Fprintf(os.Stderr, "preflight: %s\n", spec.describe())
+		if reason := preflightSpec(spec); reason != "" {
+			return fmt.Errorf("preflight failed, nothing written: %s", reason)
+		}
+		return nil
+	}
+
+	var failures []error
+	for _, candidate := range distinctProcessSpecs(changes, plan.preflightCommand) {
+		fmt.Fprintf(os.Stderr, "preflight: %s: %s\n",
+			strings.Join(candidate.clients, ", "), candidate.spec.describe())
+		if reason := preflightSpec(candidate.spec); reason != "" {
+			failures = append(failures, fmt.Errorf(
+				"%s preflight failed, nothing written: %s",
+				strings.Join(candidate.clients, ", "), reason,
+			))
+		}
+	}
+	return errors.Join(failures...)
+}
+
+type clientProcessSpec struct {
+	clients []string
+	spec    processSpec
+}
+
+func distinctProcessSpecs(changes []entryChange, command string) []clientProcessSpec {
+	distinct := make([]clientProcessSpec, 0, len(changes))
+	for _, change := range changes {
+		spec := change.spec
+		if command != "" {
+			spec.command = command
+		}
+		matched := false
+		for index := range distinct {
+			if distinct[index].spec.equal(spec) {
+				distinct[index].clients = append(distinct[index].clients, change.target.name)
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			distinct = append(distinct, clientProcessSpec{
+				clients: []string{change.target.name},
+				spec:    spec,
+			})
+		}
+	}
+	return distinct
 }
 
 // revert attempts every backed-up client and joins named failures.
@@ -237,6 +325,7 @@ func openCodeEntry(entry map[string]any) map[string]any {
 type entryChange struct {
 	target            client
 	original, updated []byte
+	spec              processSpec
 }
 
 func planEntryChange(c client, entry map[string]any) (entryChange, error) {
@@ -251,10 +340,30 @@ func planEntryChange(c client, entry map[string]any) (entryChange, error) {
 	if _, err := regularFileExists(backupPath(c)); err != nil {
 		return entryChange{}, fmt.Errorf("inspect backup: %w", err)
 	}
-	return entryChange{target: c, original: contents, updated: updated}, nil
+	finalEntry, present, err := entryFromContents(c, updated)
+	if err != nil {
+		return entryChange{}, fmt.Errorf("read rendered entry: %w", err)
+	}
+	if !present {
+		return entryChange{}, errors.New("rendered configuration has no server entry")
+	}
+	spec, err := processSpecFromEntry(finalEntry)
+	if err != nil {
+		return entryChange{}, fmt.Errorf("rendered server entry: %w", err)
+	}
+	return entryChange{
+		target: c, original: contents, updated: updated, spec: spec,
+	}, nil
 }
 
 func (c entryChange) apply() error {
+	current, err := os.ReadFile(c.target.path)
+	if err != nil {
+		return fmt.Errorf("re-read configuration: %w", err)
+	}
+	if !bytes.Equal(current, c.original) {
+		return errors.New("configuration changed after it was planned")
+	}
 	return writeBesideBackup(c.target, c.original, c.updated)
 }
 

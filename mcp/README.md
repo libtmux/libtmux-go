@@ -506,11 +506,13 @@ swapping started, however many times you have swapped since.
 | `installed` | `libtmux-mcp` from `PATH` | whatever `go install` put there |
 | `released` | `go run <module>/cmd/libtmux-mcp@<ref>` | a published version; `--ref` picks one, default `latest` |
 
-Before writing anything, the chosen build is started once and asked to complete
-an MCP handshake. A build error, a missing binary, or a version the module
-proxy has never heard of otherwise lands in every config at once and shows up
-later as a server that will not start, separately, in each client. Pass
-`--no-preflight` to skip it when offline.
+Before writing anything, every distinct process the selected clients would run
+is started and asked to complete an MCP handshake. Identical entries share one
+check, while preserved client environment is checked separately. A build error,
+a missing binary, or a version the module proxy has never heard of otherwise
+lands in every config at once and shows up later as a server that will not
+start, separately, in each client. Pass `--no-preflight` to skip it when
+offline.
 
 `released` needs the Go module to be published under a tag the proxy can
 resolve. When one cannot be resolved — an unpublished version, or a proxy that

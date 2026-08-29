@@ -280,6 +280,52 @@ func TestPreflightMergesEntryEnvironment(t *testing.T) {
 	}
 }
 
+func TestUseLocalPreflightsTheFinalClientEnvironment(t *testing.T) {
+	t.Setenv("GORACE", "atexit_sleep_ms=0")
+	directory := t.TempDir()
+	helper := filepath.Join(directory, commandName)
+	testBinary, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(testBinary, helper); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(preflightHelperEnvironment, "valid")
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, ".claude.json")
+	original := []byte(`{"mcpServers":{"tmux":{"command":"old","env":{"MCP_SWAP_PREFLIGHT_HELPER":"wrong-name"}}}}`)
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err = run(options{
+		command: "use-local",
+		mode:    modeInstalled,
+		only:    []string{"claude"},
+	})
+	if err == nil {
+		t.Fatal("use-local accepted the process selected by the final client environment")
+	}
+	if message := err.Error(); !strings.Contains(message, "claude") ||
+		!strings.Contains(message, "preflight failed") {
+		t.Fatalf("use-local error = %q, want a named preflight failure", message)
+	}
+	after, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(after, original) {
+		t.Fatalf("failed preflight changed the config: %s", after)
+	}
+	if _, statErr := os.Stat(backupPath(client{path: path})); !os.IsNotExist(statErr) {
+		t.Fatalf("failed preflight created a backup: %v", statErr)
+	}
+}
+
 func TestPreflightDoesNotWaitForAStderrDescendant(t *testing.T) {
 	entry := preflightHelperEntry(t, "stderr-descendant")
 	started := time.Now()

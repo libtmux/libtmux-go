@@ -213,19 +213,7 @@ func run(chosen options) error {
 			return err
 		}
 		defer plan.cleanup()
-		// Preflight dry runs too so they validate the selected build.
-		if !chosen.noPreflight {
-			fmt.Fprintf(os.Stderr, "preflight: %s\n", describe(plan.configured))
-			if reason := preflight(plan.executable); reason != "" {
-				return fmt.Errorf("preflight failed, nothing written: %s", reason)
-			}
-		}
-		if !chosen.dryRun {
-			if err := plan.install(); err != nil {
-				return fmt.Errorf("install build: %w", err)
-			}
-		}
-		return useLocal(clients, plan.configured, chosen.dryRun)
+		return usePreparedLocal(clients, plan, chosen.dryRun, !chosen.noPreflight)
 	default:
 		return fmt.Errorf("%q is not a command", chosen.command)
 	}
@@ -272,10 +260,10 @@ func clientNames(clients []client) []string {
 }
 
 type entryPlan struct {
-	configured map[string]any
-	executable map[string]any
-	install    func() error
-	cleanup    func()
+	configured       map[string]any
+	preflightCommand string
+	install          func() error
+	cleanup          func()
 }
 
 func prepareEntry(chosen options, repository string) (entryPlan, error) {
@@ -285,7 +273,6 @@ func prepareEntry(chosen options, repository string) (entryPlan, error) {
 	}
 	plan := entryPlan{
 		configured: entry,
-		executable: entry,
 		install:    func() error { return nil },
 		cleanup:    func() {},
 	}
@@ -303,12 +290,7 @@ func prepareEntry(chosen options, repository string) (entryPlan, error) {
 		plan.cleanup()
 		return entryPlan{}, err
 	}
-	executable := make(map[string]any, len(entry))
-	for key, value := range entry {
-		executable[key] = value
-	}
-	executable["command"] = temporary
-	plan.executable = executable
+	plan.preflightCommand = temporary
 	if !chosen.dryRun {
 		plan.install = func() error {
 			contents, err := os.ReadFile(temporary)

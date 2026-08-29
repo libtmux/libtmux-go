@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,24 +26,65 @@ const (
 	preflightWaitDelay         = 250 * time.Millisecond
 )
 
-// preflight completes the same initialize, initialized, and ping exchange as a
-// real MCP client before it closes the server's input.
+type processSpec struct {
+	command string
+	args    []string
+	env     map[string]string
+}
+
+func processSpecFromEntry(entry map[string]any) (processSpec, error) {
+	command, ok := entry["command"].(string)
+	if !ok || strings.TrimSpace(command) == "" {
+		return processSpec{}, errors.New("command is empty or not a string")
+	}
+	arguments := entryArguments(entry)
+	environment := map[string]string{}
+	for name, value := range entryEnvironment(entry) {
+		environment[name] = fmt.Sprint(value)
+	}
+	return processSpec{command: command, args: arguments, env: environment}, nil
+}
+
+func (s processSpec) equal(other processSpec) bool {
+	return s.command == other.command &&
+		slices.Equal(s.args, other.args) && maps.Equal(s.env, other.env)
+}
+
+func (s processSpec) describe() string {
+	return strings.Join(append([]string{s.command}, s.args...), " ")
+}
+
+// preflight normalizes a raw entry for focused transport tests.
 func preflight(entry map[string]any) string {
 	return preflightWithin(entry, preflightTimeout)
 }
 
-func preflightWithin(entry map[string]any, timeout time.Duration) string {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return preflightContext(ctx, entry)
+// preflightSpec completes the same initialize, initialized, and ping exchange
+// as a real MCP client before it closes the server's input.
+func preflightSpec(spec processSpec) string {
+	return preflightSpecWithin(spec, preflightTimeout)
 }
 
-func preflightContext(ctx context.Context, entry map[string]any) (reason string) {
+func preflightWithin(entry map[string]any, timeout time.Duration) string {
+	spec, err := processSpecFromEntry(entry)
+	if err != nil {
+		return fmt.Sprintf("invalid process entry: %v", err)
+	}
+	return preflightSpecWithin(spec, timeout)
+}
+
+func preflightSpecWithin(spec processSpec, timeout time.Duration) string {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return preflightContext(ctx, spec)
+}
+
+func preflightContext(ctx context.Context, spec processSpec) (reason string) {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	process := exec.CommandContext(runCtx, entryCommand(entry), entryArguments(entry)...)
-	process.Env = mergedEnvironment(os.Environ(), entryEnvironment(entry))
+	process := exec.CommandContext(runCtx, spec.command, spec.args...)
+	process.Env = mergedEnvironment(os.Environ(), spec.env)
 	cleanupProcess := ownPreflightProcess(process)
 	defer func() {
 		if err := cleanupProcess(); err != nil {
@@ -71,7 +115,7 @@ func preflightContext(ctx context.Context, entry map[string]any) (reason string)
 		}
 		if process.Process == nil {
 			return preflightFailure(
-				fmt.Sprintf("could not launch %s", entryCommand(entry)), err, complaints)
+				fmt.Sprintf("could not launch %s", spec.command), err, complaints)
 		}
 		return preflightFailure("initialize MCP server", err, complaints)
 	}
@@ -165,7 +209,7 @@ func entryEnvironment(entry map[string]any) map[string]any {
 	return environment
 }
 
-func mergedEnvironment(inherited []string, overrides map[string]any) []string {
+func mergedEnvironment(inherited []string, overrides map[string]string) []string {
 	merged := append([]string(nil), inherited...)
 	indexes := make(map[string]int, len(merged))
 	for index, item := range merged {
@@ -174,7 +218,7 @@ func mergedEnvironment(inherited []string, overrides map[string]any) []string {
 		}
 	}
 	for name, value := range overrides {
-		item := name + "=" + fmt.Sprint(value)
+		item := name + "=" + value
 		if index, found := indexes[name]; found {
 			merged[index] = item
 		} else {

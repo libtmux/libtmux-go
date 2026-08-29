@@ -194,7 +194,7 @@ func TestDryRunBuildDoesNotReplaceThePersistentBinary(t *testing.T) {
 	if got := entryCommand(plan.configured); got != persistent {
 		t.Fatalf("configured binary = %q, want %q", got, persistent)
 	}
-	temporary := entryCommand(plan.executable)
+	temporary := plan.preflightCommand
 	if temporary == persistent {
 		t.Fatal("dry run preflight uses the persistent server binary")
 	}
