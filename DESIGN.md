@@ -683,8 +683,10 @@ validated request. Contexts are never stored.
 `Server.OpenControl` starts an attached `tmux -C` process and returns a
 production `ControlClient`. It validates `%begin`/`%end`/`%error` framing,
 serializes concurrent commands, correlates each reply by command number, and
-spools ordered notifications to disk so a slow consumer does not block tmux's
-stdout pipe. `%output` payloads are decoded to pane IDs and exact bytes.
+buffers ordered notifications in a bounded in-memory queue. On overflow it
+keeps draining tmux's stdout, preserves the queued prefix, and then reports a
+typed error. Command-only pools ask tmux not to send pane output. `%output`
+payloads are decoded to pane IDs and exact bytes.
 
 Command arguments are encoded without a shell. Single-quoted spans preserve
 printable bytes, adjacent quoted spans preserve literal single quotes, and
