@@ -7,8 +7,6 @@ import (
 )
 
 func TestJobsDoNotExposeStateWhileSettling(t *testing.T) {
-	t.Skip("known bug: find exposes mutable job state after unlocking")
-
 	jobs := newJobs()
 	jobs.keep(&job{id: "job", output: []string{"before"}})
 	entry, ok := jobs.find("job")

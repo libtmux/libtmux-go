@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -84,7 +85,9 @@ func newJobs() *jobs {
 func (j *jobs) keep(entry *job) {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
-	j.byID[entry.id] = entry
+	stored := *entry
+	stored.output = slices.Clone(entry.output)
+	j.byID[entry.id] = &stored
 	j.order = append(j.order, entry.id)
 	for len(j.order) > jobsRetained {
 		oldest := j.order[0]
@@ -97,11 +100,16 @@ func (j *jobs) keep(entry *job) {
 }
 
 // find reports the command a handle names.
-func (j *jobs) find(id string) (*job, bool) {
+func (j *jobs) find(id string) (job, bool) {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
 	entry, ok := j.byID[id]
-	return entry, ok
+	if !ok {
+		return job{}, false
+	}
+	result := *entry
+	result.output = slices.Clone(entry.output)
+	return result, true
 }
 
 // settle records how a command ended and releases the files it used, keeping
@@ -121,7 +129,7 @@ func (j *jobs) settle(
 	}
 	entry.finished = true
 	entry.exitStatus = status
-	entry.output = output
+	entry.output = slices.Clone(output)
 	entry.atCeiling = atCeiling
 	entry.ended = ended
 	_ = os.RemoveAll(entry.directory)
