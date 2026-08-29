@@ -22,16 +22,6 @@ var equivalenceFormats = []string{
 	"pane_current_command", "pane_title", "pane_pid", "pane_tty", "pane_dead",
 }
 
-// TestControlEngineMaterializesTheSameStateAsProcesses is the transport
-// equivalence gate.
-//
-// The control engine is only sound if a reply frame and a tmux process's stdout
-// decode to the same values. That was verified when the engine landed on one
-// tmux version, while the module supports 3.2a and newer. This test runs in CI
-// against every supported version, so a release that renders a reply
-// differently fails the build instead of silently returning different data on a
-// connected handle.
-//
 //libtmux:real-tmux
 func TestControlEngineMaterializesTheSameStateAsProcesses(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -93,15 +83,7 @@ func TestControlEngineMaterializesTheSameStateAsProcesses(t *testing.T) {
 	t.Logf("compared %d materialized format values across both transports", compared)
 }
 
-// TestTransportsAgreeOnLiteralValues compares what tmux ends up storing when a
-// typed operation carries an awkward value.
-//
-// The two transports protect a value in opposite ways. A tmux process hands its
-// argv to tmux's outer command parser, so a value ending in a semicolon is
-// escaped on the way there. A control connection quotes every argument instead,
-// where that escape is consumed by nothing and lands in the stored value. This
-// is the gate on that: the escape belongs to one transport, and every value
-// below round-trips identically through either.
+// Subprocess escaping and control-mode quoting must store identical literals.
 //
 //libtmux:real-tmux
 func TestTransportsAgreeOnLiteralValues(t *testing.T) {
@@ -159,15 +141,8 @@ func TestTransportsAgreeOnLiteralValues(t *testing.T) {
 	}
 }
 
-// TestTransportsAgreeOnCommandLists is the gate on [tmux.Server.Cmd] submitting
-// several commands in one call.
-//
-// tmux answers a command list with one reply frame per command, so a control
-// connection has more than one reply to read for a single request. Reading only
-// the first leaves the rest queued, and the next command then receives an
-// earlier command's reply -- a desync that persists for the life of the
-// connection. The trailing reads here are what catch that: they matter as much
-// as the list itself.
+// Control mode emits one reply frame per command in a list. Every frame must be
+// drained or the next request receives a stale reply.
 //
 //libtmux:real-tmux
 func TestTransportsAgreeOnCommandLists(t *testing.T) {
@@ -223,14 +198,8 @@ func TestTransportsAgreeOnCommandLists(t *testing.T) {
 	}
 }
 
-// TestCommandListStopsAtFirstFailure gates the abort semantics a chained plan
-// depends on, on both transports.
-//
-// tmux runs a command list until one command fails, drops the rest, and reports
-// the failure. A control connection additionally sends no frame at all for a
-// dropped command, so a reader that expects one reply per command in the list
-// waits for a frame that never arrives. The read after the failed list is what
-// proves it did not.
+// tmux drops commands after the first list failure and emits no control reply
+// for them. The reader must not wait for frames that will never arrive.
 //
 //libtmux:real-tmux
 func TestCommandListStopsAtFirstFailure(t *testing.T) {

@@ -11,14 +11,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// TestASessionNamedLikeAnIdentifierDoesNotReachAnotherSession covers a name a
-// caller may choose and tmux reads as something else.
-//
-// A target beginning with $, @ or % names an object by number, and the
-// exact-match marker does not suppress that: tmux resolves the identifier
-// before it considers the marker. So asking whether a session named "$0"
-// exists answers for whichever session holds identifier $0, and killing that
-// name kills that session.
+// Exact matching does not override tmux's $, @, and % identifier syntax, so a
+// name resembling an identifier must never resolve to another object.
 //
 //libtmux:real-tmux
 func TestASessionNamedLikeAnIdentifierDoesNotReachAnotherSession(t *testing.T) {

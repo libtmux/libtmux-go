@@ -38,23 +38,9 @@ var ownRequirement = regexp.MustCompile(
 	`(github\.com/libtmux/libtmux-go(?:/[a-z]+)?) (v\d\S*)`,
 )
 
-// TestEveryRequirementNamesTheNewestRelease gates a pin against the tag list
-// rather than against the other pins.
-//
-// The gate this replaces compared the require directives with each other, which
-// a uniformly stale set satisfies and did: all four named v0.0.1-alpha.1 for the
-// whole life of v0.0.1-alpha.2. That is invisible in three of them, where a
-// replace directive beside the require sends the go command next door instead.
-// It is not invisible in mcp, which carries no replace, so its require is the
-// one the go command resolves -- and it resolved a release the working tree had
-// left nineteen commits behind.
-//
-// Being behind is the only failure available. A require cannot name a release
-// that does not exist yet, so unlike the version a build reports there is no
-// legal state ahead of the tags.
-//
-// Documentation is not a source of versions; see
-// TestNoDocumentationPinsAModuleVersion for why it must not be one.
+// Consumer modules must require the newest published release. Comparing pins
+// only with each other misses a uniformly stale set, especially behind local
+// replace directives.
 func TestEveryRequirementNamesTheNewestRelease(t *testing.T) {
 	t.Parallel()
 
@@ -150,14 +136,8 @@ func TestEveryModuleResolvesWithoutAWorkspace(t *testing.T) {
 	}
 }
 
-// TestTheCoreKeepsItsPrivatePackagesToItself gates the boundary that moving
-// internal beneath the package bought.
-//
-// Go allows an internal package to be imported from anywhere under the parent
-// of its internal directory, and a module boundary does not narrow that. The
-// parent here is the tmux package, so the consumer modules are outside it and
-// the compiler refuses them. That is a property of where the directory sits,
-// which means moving it back would silently give the consumers access again.
+// Go internal visibility follows directory ancestry, not module boundaries.
+// Keeping internal beneath tmux prevents sibling consumer modules importing it.
 func TestTheCoreKeepsItsPrivatePackagesToItself(t *testing.T) {
 	root := repositoryRoot(t)
 	probe := filepath.Join(root, "mcp", "zz_internal_boundary_probe.go")
@@ -230,24 +210,8 @@ func moduleRootFrom(t *testing.T, directory string) string {
 	}
 }
 
-// TestNoDocumentationPinsAModuleVersion gates the treadmill rather than one
-// lap of it.
-//
-// A README that names a version to fetch is a copy of the tag list, and it went
-// stale exactly as a copy does: two of them told a reader to install
-// v0.0.1-alpha.1 for the whole life of v0.0.1-alpha.4, and that version is
-// retracted, so the command they were given refuses to run. The gate above did
-// not see it, because it read only the README at the repository root and
-// compared what it found against the other written-down values rather than
-// against the tags -- so a set that agreed with itself and with nothing else
-// passed.
-//
-// The rule that cannot rot is to pin nothing: @latest resolves whatever is
-// newest, and the alpha notice already tells a reader to pin an exact version
-// in their own go.mod, which is the file where a pin belongs and is checked.
-//
-// CHANGELOG.md is exempt. Naming released versions is the whole point of it,
-// and an entry describing a release is a record rather than an instruction.
+// Installation prose must not duplicate release pins. CHANGELOG.md is exempt
+// because released versions there are historical records.
 func TestNoDocumentationPinsAModuleVersion(t *testing.T) {
 	root := repositoryRoot(t)
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {

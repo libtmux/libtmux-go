@@ -31,14 +31,6 @@ var documentedFloorOnly = regexp.MustCompile(
 // measurements.
 var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?)\s*$`)
 
-// TestTheSupportedTmuxRangeIsTheOneTested gates a promise against the thing
-// that keeps it.
-//
-// The README says which tmux releases work and that every release in the range
-// is checked. Only the workflow's matrix does any checking, so it is what the
-// promise is read against: a range naming a release the matrix does not build
-// is a claim nothing stands behind, and a floor above the oldest one tested
-// tells a reader to upgrade for no reason.
 func TestTheSupportedTmuxRangeIsTheOneTested(t *testing.T) {
 	t.Parallel()
 

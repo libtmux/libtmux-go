@@ -1,11 +1,4 @@
-// Package integration holds the tests that drive a real tmux through the
-// public API.
-//
-// They live here rather than beside the package they exercise for one reason:
-// they import it the way any other program does, so nothing about them needs to
-// be in its directory. What is left at the root is what has to be — the tests
-// that reach unexported identifiers, and the files whose Example functions
-// pkg.go.dev renders on the package page.
+// Package integration tests the public tmux API against a real server.
 package integration
 
 import (

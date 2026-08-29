@@ -255,17 +255,9 @@ func requireCaptureCommandSuccess(
 	}
 }
 
-// TestCaptureShowsTheShellEchoBeforeTheOutput pins the reason the package
-// documentation tells a caller to compare whole lines rather than search the
-// screen. The shell echoes the command it was given, so the pattern is on the
-// screen before the program that produces it has run: a substring search
-// reports success while the answer is still far away, and an exact line
-// comparison does not.
-//
-// The command waits long enough that one capture lands inside that window
-// without racing it, because a test that has to catch the window is a test
-// that fails when the machine is busy rather than when the claim stops
-// holding.
+// The shell echoes a command before it produces output, so substring matches
+// can return early. The command delays output long enough to observe this
+// deterministically; whole-line matching distinguishes it.
 //
 //libtmux:real-tmux
 func TestCaptureShowsTheShellEchoBeforeTheOutput(t *testing.T) {

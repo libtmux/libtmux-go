@@ -1,17 +1,8 @@
 package integration
 
-// A truncated read must never look like an empty server.
-//
-// os/exec stops waiting for the output of a command that has already exited
-// once cmd.WaitDelay passes: it closes the pipe and keeps whatever arrived.
-// That delay is not optional here, because tmux commands such as new-session -d
-// leave a daemon holding the write end, and without it a read would wait for
-// that daemon rather than for tmux's answer.
-//
-// So the truncation is possible by construction, and the only question is what
-// a caller is told. Collection reads are lenient by default and report a server
-// they could not reach as no rows; reporting a partial answer the same way would
-// hand back a short listing as a confident complete one.
+// tmux daemons may inherit command output pipes, requiring exec.Cmd.WaitDelay.
+// If the forced close truncates output, lenient reads must report the error
+// rather than return an empty server.
 
 import (
 	"context"
@@ -25,8 +16,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// starvedRunner runs tmux with a wait delay far too short to drain a listing,
-// which makes an intermittent truncation a reliable one.
+// starvedRunner makes output truncation deterministic.
 func starvedRunner() tmux.CommandRunner {
 	return tmux.CommandRunnerFunc(
 		func(ctx context.Context, request tmux.CommandRequest) (tmux.CommandResult, error) {

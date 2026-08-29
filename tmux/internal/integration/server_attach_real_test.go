@@ -191,21 +191,8 @@ func TestAttachSessionRealHelper(t *testing.T) {
 	t.Fatalf("session %s is unavailable", target)
 }
 
-// detach ends the attached client, by its keyboard first and by the server if
-// that does not take.
-//
-// The keyboard is the path a person uses and is worth exercising, but it
-// cannot be relied on to land: tmux reports a client as attached before that
-// client is interpreting keys, and a prefix written into that gap reaches the
-// pane's shell instead. CI caught it twice on two tmux versions, with "^Bd"
-// echoed into the pty and the shell's bell beside it, after which the client
-// stayed and the test spent its whole budget waiting for a process that was
-// not going to exit.
-//
-// Asking the server does not go through the client's key handling at all, so
-// it is not subject to that race. Sending the key and then ending the client
-// if it did not take keeps the ordinary path covered while making the outcome
-// independent of a race this test is not about.
+// detach exercises the keyboard path, then asks the server if the client is not
+// yet reading keys; tmux can report attachment before key handling starts.
 func detach(
 	ctx context.Context,
 	t *testing.T,
