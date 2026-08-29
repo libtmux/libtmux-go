@@ -70,7 +70,7 @@ func (t *tools) getServerInfo(
 	output := getServerInfoOutput{
 		SafetyLevel:          string(t.level),
 		Capabilities:         t.capabilities.strings(),
-		RejectedCapabilities: RejectedCapabilityValues(),
+		RejectedCapabilities: slices.Clone(t.rejectedCapabilities),
 		CallerPaneID:         caller.paneID,
 	}
 	if version, err := t.tmux(ctx).Version(ctx); err == nil {

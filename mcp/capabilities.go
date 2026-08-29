@@ -94,10 +94,11 @@ func (set capabilitySet) list() []Capability {
 }
 
 func (set capabilitySet) strings() []string {
-	listed := set.list()
-	values := make([]string, 0, len(listed))
-	for _, capability := range listed {
-		values = append(values, string(capability))
+	values := make([]string, 0, len(set))
+	for _, capability := range allCapabilities {
+		if set.permits(capability) {
+			values = append(values, string(capability))
+		}
 	}
 	return values
 }

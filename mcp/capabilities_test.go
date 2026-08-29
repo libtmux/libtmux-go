@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -49,6 +50,29 @@ func TestUnknownCapabilitiesAreReportedWithoutWideningTheGrant(t *testing.T) {
 	wantRejected := []string{"shell-exec", "typo"}
 	if got := RejectedCapabilityValues(); !slices.Equal(got, wantRejected) {
 		t.Fatalf("RejectedCapabilityValues() = %v, want %v", got, wantRejected)
+	}
+}
+
+func TestServerInfoFreezesRejectedCapabilities(t *testing.T) {
+	t.Setenv(CapabilitiesEnvironmentVariable, "metadata-read,original-typo")
+	registry := newToolRegistry()
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "missing.sock"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry.runtime = newRuntime(t.Context(), target, nil)
+
+	t.Setenv(CapabilitiesEnvironmentVariable, "metadata-read,later-typo")
+	_, output, err := registry.getServerInfo(t.Context(), nil, getServerInfoInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"original-typo"}
+	if !slices.Equal(output.RejectedCapabilities, want) {
+		t.Fatalf("rejected capabilities = %v, want frozen %v",
+			output.RejectedCapabilities, want)
 	}
 }
 

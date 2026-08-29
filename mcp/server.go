@@ -256,13 +256,14 @@ func NewServer(target tmux.Server) (*Instance, error) {
 }
 
 func newToolRegistry() *tools {
-	capabilities, _ := capabilitiesFromEnvironment()
+	capabilities, rejected := capabilitiesFromEnvironment()
 	return &tools{
-		level:        safetyFromEnvironment(),
-		capabilities: capabilities,
-		dispatchers:  map[string]dispatcher{},
-		unbatchable:  map[string]struct{}{},
-		batchable:    true,
+		level:                safetyFromEnvironment(),
+		capabilities:         capabilities,
+		rejectedCapabilities: rejected,
+		dispatchers:          map[string]dispatcher{},
+		unbatchable:          map[string]struct{}{},
+		batchable:            true,
 	}
 }
 
@@ -287,9 +288,11 @@ type tools struct {
 	runtime      *tmuxRuntime
 	level        SafetyLevel
 	capabilities capabilitySet
-	watchers     *watchers
-	dispatchers  map[string]dispatcher
-	unbatchable  map[string]struct{}
+	// Rejected values are part of the configuration snapshot reported to clients.
+	rejectedCapabilities []string
+	watchers             *watchers
+	dispatchers          map[string]dispatcher
+	unbatchable          map[string]struct{}
 	// Batch tools set batchable false to prevent nested dispatch.
 	batchable bool
 	// A process cannot change its containing pane. Failed discovery is not
