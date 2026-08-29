@@ -37,6 +37,8 @@ func TestControlClientPublicSurfaceCompiles(_ *testing.T) {
 	_ = result.Failed
 	_ = tmux.ErrControlClosed
 	_ = tmux.ErrControlProtocol
+	_ = tmux.ErrControlNotificationOverflow
+	_ = &tmux.ControlNotificationOverflowError{}
 	var _ openControlSignature = tmux.Server.OpenControl
 	var _ controlCommandSignature = (*tmux.ControlClient).Cmd
 	var _ nextNotificationSignature = (*tmux.ControlClient).NextNotification

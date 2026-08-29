@@ -253,19 +253,14 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	spool, err := newControlRecordSpool()
-	if err != nil {
-		_ = command.Process.Kill()
-		_ = command.Wait()
-		t.Fatal(err)
-	}
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
 	writer := &controlSignalWriteCloser{wrote: make(chan struct{}, 1)}
 	client := &ControlClient{
 		command:       command,
 		stdin:         writer,
 		stdout:        io.NopCloser(strings.NewReader("")),
 		stderr:        &controlLockedBuffer{},
-		notifications: spool,
+		notifications: queue,
 		frames:        make(chan controlFrame),
 		requests:      make(chan controlRequest),
 		stopRequests:  make(chan struct{}),
@@ -284,7 +279,7 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 			t.Error("control helper process did not exit")
 		}
 		close(client.frames)
-		_ = spool.Close()
+		_ = queue.Close()
 	})
 
 	commandResult := make(chan error, 1)
@@ -315,18 +310,15 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 func TestControlClientNotificationReaderDrainsBeforeProtocolError(t *testing.T) {
 	t.Parallel()
 
-	spool, err := newControlRecordSpool()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = spool.Close() })
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
+	t.Cleanup(func() { _ = queue.Close() })
 	closing := make(chan struct{})
 	close(closing)
 	client := &ControlClient{
 		stdout: io.NopCloser(strings.NewReader(
 			"%session-renamed $1 renamed\n%end malformed\n",
 		)),
-		notifications: spool,
+		notifications: queue,
 		frames:        make(chan controlFrame, 1),
 		closing:       closing,
 		readDone:      make(chan struct{}),
@@ -345,7 +337,7 @@ func TestControlClientNotificationReaderDrainsBeforeProtocolError(t *testing.T) 
 func TestNotificationsReportAnUnreadableRecordAndKeepGoing(t *testing.T) {
 	t.Parallel()
 
-	client := newSpooledNotificationClient(t,
+	client := newQueuedNotificationClient(t,
 		"%session-renamed $1 first\n"+
 			"%not-a-notification-this-package-knows arguments\n"+
 			"%session-renamed $1 second\n",
@@ -372,7 +364,7 @@ func TestNotificationsReportAnUnreadableRecordAndKeepGoing(t *testing.T) {
 func TestNotificationsStopAtAnErrorThatEndedTheStream(t *testing.T) {
 	t.Parallel()
 
-	client := newSpooledNotificationClient(t,
+	client := newQueuedNotificationClient(t,
 		"%session-renamed $1 first\n%end malformed\n",
 	)
 
@@ -396,7 +388,7 @@ func TestNotificationsStopAtAnErrorThatEndedTheStream(t *testing.T) {
 func TestNotificationsLeaveTheRestOfTheQueueForTheNextReader(t *testing.T) {
 	t.Parallel()
 
-	client := newSpooledNotificationClient(t,
+	client := newQueuedNotificationClient(t,
 		"%session-renamed $1 first\n%session-renamed $1 second\n",
 	)
 
@@ -414,22 +406,19 @@ func TestNotificationsLeaveTheRestOfTheQueueForTheNextReader(t *testing.T) {
 	}
 }
 
-// newSpooledNotificationClient returns a control client whose notification
+// newQueuedNotificationClient returns a control client whose notification
 // queue holds what stream carries, without a tmux process: the stream is read
 // to its end before the client is returned.
-func newSpooledNotificationClient(t *testing.T, stream string) *ControlClient {
+func newQueuedNotificationClient(t *testing.T, stream string) *ControlClient {
 	t.Helper()
 
-	spool, err := newControlRecordSpool()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = spool.Close() })
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
+	t.Cleanup(func() { _ = queue.Close() })
 	closing := make(chan struct{})
 	close(closing)
 	client := &ControlClient{
 		stdout:        io.NopCloser(strings.NewReader(stream)),
-		notifications: spool,
+		notifications: queue,
 		frames:        make(chan controlFrame, 1),
 		closing:       closing,
 		readDone:      make(chan struct{}),

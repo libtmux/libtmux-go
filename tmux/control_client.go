@@ -24,6 +24,13 @@ const (
 	controlRegistrationPoll  = 10 * time.Millisecond
 )
 
+type controlNotificationMode uint8
+
+const (
+	controlNotificationsRetained controlNotificationMode = iota
+	controlNotificationsDiscarded
+)
+
 // ErrControlClosed identifies an operation attempted after a control client
 // began closing or lost its protocol stream.
 var ErrControlClosed = errors.New("tmux: control client is closed")
@@ -40,7 +47,7 @@ type ControlClient struct {
 	stdin         io.WriteCloser
 	stdout        io.ReadCloser
 	stderr        *controlLockedBuffer
-	notifications *controlRecordSpool
+	notifications *controlNotificationQueue
 	frames        chan controlFrame
 	requests      chan controlRequest
 	stopRequests  chan struct{}
@@ -120,6 +127,14 @@ func (s Server) OpenControl(
 	ctx context.Context,
 	session Session,
 ) (*ControlClient, error) {
+	return s.openControl(ctx, session, controlNotificationsRetained)
+}
+
+func (s Server) openControl(
+	ctx context.Context,
+	session Session,
+	mode controlNotificationMode,
+) (*ControlClient, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -141,9 +156,9 @@ func (s Server) OpenControl(
 		)
 	}
 
-	notifications, err := newControlRecordSpool()
-	if err != nil {
-		return nil, err
+	var notifications *controlNotificationQueue
+	if mode == controlNotificationsRetained {
+		notifications = newControlNotificationQueue(defaultControlNotificationLimit)
 	}
 	binary := state.options.Binary
 	if binary == "" {
@@ -156,9 +171,12 @@ func (s Server) OpenControl(
 			notifications.Close(),
 		)
 	}
-	arguments := s.commandArguments([]string{
-		"-C", "attach-session", "-t", session.ID().String(),
-	})
+	attach := []string{"-C", "attach-session"}
+	if mode == controlNotificationsDiscarded {
+		attach = append(attach, "-f", "no-output")
+	}
+	attach = append(attach, "-t", session.ID().String())
+	arguments := s.commandArguments(attach)
 	command := exec.Command(resolved, arguments...)
 	command.Env = state.options.ProcessEnvironment
 	command.WaitDelay = controlClientStopGrace
@@ -326,7 +344,8 @@ func countCommandListCommands(arguments []string, commandList bool) int {
 // one caller may execute it at a time. Natural process exit preserves queued
 // notifications until they drain through io.EOF; Close releases the queue and
 // makes subsequent reads report os.ErrClosed. A terminal reader error follows
-// notifications queued before that failure.
+// notifications queued before that failure. A full bounded queue likewise
+// drains before reporting [ControlNotificationOverflowError].
 func (c *ControlClient) NextNotification(
 	ctx context.Context,
 ) (ControlNotification, error) {
@@ -396,7 +415,7 @@ func (c *ControlClient) Server() Server { return c.server }
 func (c *ControlClient) Session() Session { return c.session }
 
 // Wait blocks until the control process exits or ctx ends. It does not close
-// the notification spool; callers may drain final notifications before Close.
+// the notification queue; callers may drain final notifications before Close.
 func (c *ControlClient) Wait(ctx context.Context) error {
 	select {
 	case <-c.done:
@@ -430,7 +449,7 @@ func (c *ControlClient) CloseContext(ctx context.Context) error {
 	}
 }
 
-// Close stops the control process and releases its notification spool. It is
+// Close stops the control process and releases its notification queue. It is
 // safe to call concurrently and more than once.
 func (c *ControlClient) Close() error {
 	ctx, cancel := context.WithTimeout(
@@ -544,6 +563,9 @@ func (c *ControlClient) readStream() {
 			}
 			if notification != nil {
 				if appendErr := c.notifications.append(notification); appendErr != nil {
+					if errors.Is(appendErr, ErrControlNotificationOverflow) {
+						continue
+					}
 					if c.isClosing() && errors.Is(appendErr, os.ErrClosed) {
 						return
 					}

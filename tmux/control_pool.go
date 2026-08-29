@@ -27,8 +27,8 @@ type ControlPoolRequest struct {
 	// Raise it only for concurrent callers, and treat the number as a cost
 	// rather than a tuning dial. Each connection is an attached tmux process
 	// that appears in list-clients output, participates in
-	// destroy-unattached and session-attached behavior, and receives its own
-	// copy of every notification tmux broadcasts to the session.
+	// destroy-unattached and session-attached behavior. Pane output is disabled
+	// on pooled clients because a pool exposes no notification stream.
 	Connections int
 }
 
@@ -104,7 +104,7 @@ func (s Server) OpenControlPool(
 	clients := make([]*ControlClient, 0, count)
 	free := make(chan *ControlClient, count)
 	for range count {
-		client, err := s.OpenControl(ctx, session)
+		client, err := s.openControl(ctx, session, controlNotificationsDiscarded)
 		if err != nil {
 			return Server{}, Session{}, nil, errors.Join(err, closeControlClients(clients))
 		}
@@ -157,7 +157,7 @@ func closeControlClients(clients []*ControlClient) error {
 // which connection carried which command is not a caller-visible property, so a
 // pooled connection's notifications are not a sequence a caller could reason
 // about. Open a control client of your own with [Server.OpenControl] to watch
-// tmux as it changes.
+// tmux as it changes. The pool disables pane-output notifications at attach.
 //
 // Every method is safe for concurrent use.
 type ControlPool struct {

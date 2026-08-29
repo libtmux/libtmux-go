@@ -606,7 +606,23 @@ func TestControlPoolServesConcurrentCallersWithoutProcesses(t *testing.T) {
 	if got := pool.Connections(); got != 4 {
 		t.Fatalf("pool holds %d connections, want 4", got)
 	}
-	_ = connected
+	clientFlags, err := connected.Cmd(ctx, "list-clients", "-F", "#{client_flags}")
+	if err != nil || clientFlags.ExitCode != 0 || len(clientFlags.Stdout) != 4 {
+		t.Fatalf("list pool client flags = (%#v, %v), want four clients", clientFlags, err)
+	}
+	for _, flags := range clientFlags.Stdout {
+		if !slices.Contains(strings.Split(flags, ","), "no-output") {
+			t.Fatalf("pool client flags = %q, want no-output", flags)
+		}
+	}
+	panes, err := live.SearchPanes(ctx, nil)
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("SearchPanes() = (%#v, %v), want one pane", panes, err)
+	}
+	burst := "i=0; while [ \"$i\" -lt 4096 ]; do printf 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\n'; i=$((i+1)); done"
+	if err := panes[0].SendKeys(ctx, tmux.SendKeysRequest{Command: &burst}); err != nil {
+		t.Fatalf("start pane output burst: %v", err)
+	}
 
 	mutex.Lock()
 	processes = 0
