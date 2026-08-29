@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -571,7 +572,9 @@ func lineLengths(lines []string) []int {
 
 //libtmux:real-tmux
 func TestRunCommandRefusesAPaneWhoseShellHasExited(t *testing.T) {
-	session, _, ctx := connect(t)
+	// A fixed shell leaves on the first "exit"; an inherited one may still be
+	// starting when the keys arrive, which is time this test spends waiting.
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
 	workspace(ctx, t, session, "session_name: exited\nwindows:\n  - panes:\n      - {}\n")
 	pane := firstPane(ctx, t, session)
 
