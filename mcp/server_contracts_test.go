@@ -499,3 +499,206 @@ func TestAnEmptyCollectionIsStillAnArray(t *testing.T) {
 		t.Errorf("attachedClients is %T rather than an array", clients)
 	}
 }
+
+//libtmux:real-tmux
+func TestANamedTargetThatIsGoneNamesTheCallThatFindsOne(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: named\nwindows:\n  - panes:\n      - {}\n")
+
+	for _, testCase := range []struct {
+		tool, argument, value, wants string
+	}{
+		{"capture_pane", "paneId", "%99999", "list_panes"},
+		{"get_pane_info", "paneId", "%99999", "list_panes"},
+		{"get_window_info", "windowId", "@99999", "list_windows"},
+		{"get_session_info", "sessionName", "no-such-session", "list_sessions"},
+		{"send_keys", "paneId", "%99999", "list_panes"},
+	} {
+		t.Run(testCase.tool+"/"+testCase.argument, func(t *testing.T) {
+			arguments := map[string]any{testCase.argument: testCase.value}
+			if testCase.tool == "send_keys" {
+				arguments["command"] = "true"
+			}
+			result := call(ctx, t, session, testCase.tool, arguments, nil)
+			if !result.IsError {
+				t.Fatalf("a target that does not exist was accepted")
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, testCase.wants) {
+				t.Errorf("the refusal does not name %s: %q", testCase.wants, said)
+			}
+			if strings.Contains(said, "snapshot object") {
+				t.Errorf("the refusal is tmux's wording, not this server's: %q", said)
+			}
+		})
+	}
+}
+
+//libtmux:real-tmux
+func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: scoped\nwindows:\n  - panes:\n      - {}\n")
+	pane := firstPane(ctx, t, session)
+
+	for _, testCase := range []struct {
+		name      string
+		tool      string
+		arguments map[string]any
+		refused   bool
+	}{
+		{
+			"a pane at session scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "session", "paneId": pane},
+			true,
+		},
+		{
+			"a window at server scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "server", "windowId": "@0"},
+			true,
+		},
+		{
+			"a pane at window scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "window", "paneId": pane},
+			true,
+		},
+		{
+			"setting one too", "set_option",
+			map[string]any{
+				"name": "history-limit", "value": "5000",
+				"scope": "session", "paneId": pane,
+			},
+			true,
+		},
+		{
+			"hooks too", "show_hooks",
+			map[string]any{"scope": "session", "paneId": pane},
+			true,
+		},
+		{
+			// Pane scope was the one that read nothing back: tmux walks
+			// pane, window, session, server from the pane it is given, so a
+			// caller who meant the window got the active pane's answer.
+			"a window at pane scope", "show_option",
+			map[string]any{"name": "history-limit", "scope": "pane", "windowId": "@0"},
+			true,
+		},
+		{
+			"a window at pane scope, setting one", "set_option",
+			map[string]any{
+				"name": "history-limit", "value": "5000",
+				"scope": "pane", "windowId": "@0",
+			},
+			true,
+		},
+		{
+			"a window at the default scope, which is pane", "show_hooks",
+			map[string]any{"windowId": "@0"},
+			true,
+		},
+		{
+			"a pane at pane scope is the point", "show_option",
+			map[string]any{"name": "history-limit", "scope": "pane", "paneId": pane},
+			false,
+		},
+		{
+			"naming no target is fine", "show_option",
+			map[string]any{"name": "history-limit", "scope": "session"},
+			false,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := call(ctx, t, session, testCase.tool, testCase.arguments, nil)
+			if result.IsError != testCase.refused {
+				t.Fatalf("isError = %v, want %v: %#v",
+					result.IsError, testCase.refused, result.Content)
+			}
+			if !testCase.refused {
+				return
+			}
+			said := ""
+			for _, content := range result.Content {
+				if text, ok := content.(*sdk.TextContent); ok {
+					said += text.Text
+				}
+			}
+			if !strings.Contains(said, "not read at") {
+				t.Errorf("the refusal does not say the argument is unread: %q", said)
+			}
+		})
+	}
+}
+
+//libtmux:real-tmux
+func TestAnIdThatNamesNothingSaysWhichListingFindsOne(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "destructive")
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: named\nwindows:\n  - panes:\n      - {}\n")
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One absent id per argument, with the listing that would have found one.
+	absent := map[string]struct{ value, lister string }{
+		"paneId":   {"%9000", "list_panes"},
+		"windowId": {"@9000", "list_windows"},
+	}
+	// A batch takes a list of calls rather than an id, and reports what the
+	// call inside it said; the tools it dispatches are covered on their own.
+	exempt := map[string]bool{
+		"call_readonly_tools_batch": true, "call_mutating_tools_batch": true,
+		"call_destructive_tools_batch": true,
+	}
+	// A listing reads an id as a criterion rather than a target: nothing
+	// matching it is an empty list and not a missing object, and the reply's
+	// total says what the criteria selected from.
+	criteria := map[string]bool{"list_panes": true, "list_windows": true}
+	asked := 0
+	for _, tool := range listed.Tools {
+		if exempt[tool.Name] {
+			continue
+		}
+		for argument, want := range absent {
+			if _, takes := schemaOf(t, tool).Properties[argument]; !takes {
+				continue
+			}
+			asked++
+			result, err := session.CallTool(ctx, &sdk.CallToolParams{
+				Name: tool.Name, Arguments: map[string]any{argument: want.value},
+			})
+			var said string
+			switch {
+			case err != nil:
+				said = err.Error()
+			case result.IsError:
+				said = resultText(result)
+			default:
+				if !criteria[tool.Name] {
+					t.Errorf("%s accepted %s %s", tool.Name, argument, want.value)
+				}
+				continue
+			}
+			// A tool may refuse for a reason of its own before it looks the id
+			// up -- a missing second argument, a guard. What it must not do is
+			// repeat tmux's own words for an id that is not there.
+			if strings.Contains(said, "snapshot object not found") {
+				t.Errorf("%s answers a missing %s with tmux's message: %s",
+					tool.Name, argument, said)
+			}
+			if strings.Contains(said, "no pane") || strings.Contains(said, "no window") {
+				if !strings.Contains(said, want.lister) {
+					t.Errorf("%s says %q without naming %s",
+						tool.Name, said, want.lister)
+				}
+			}
+		}
+	}
+	if asked < 20 {
+		t.Errorf("only %d tools take an id, which is fewer than this server has", asked)
+	}
+}
