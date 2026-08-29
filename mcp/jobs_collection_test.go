@@ -319,10 +319,15 @@ func TestATimedOutDetachedJobReportsNoRecordedStart(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		command string
+		timeout int
 		want    string
 	}{
-		{name: "a shell that has not read the keys", want: "recorded no start"},
-		{name: "a program holding the pane", command: "sleep 300", want: "respawn_pane"},
+		{name: "a shell that has not read the keys", timeout: 1, want: "recorded no start"},
+		{
+			name: "a program holding the pane", command: "sleep 300",
+			timeout: 1, want: "respawn_pane",
+		},
+		{name: "a poll that does not wait", want: "recorded no start"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -355,7 +360,7 @@ func TestATimedOutDetachedJobReportsNoRecordedStart(t *testing.T) {
 			}
 
 			_, output, err := instance.tools.getJob(ctx, request, getJobInput{
-				JobID: entry.id, TimeoutSeconds: 1,
+				JobID: entry.id, TimeoutSeconds: test.timeout,
 			})
 			if err != nil {
 				t.Fatal(err)

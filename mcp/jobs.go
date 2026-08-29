@@ -322,6 +322,10 @@ func (t *tools) getJob(
 		}
 		if ready {
 			output = pendingJobOutput(output, entry, status)
+		} else {
+			// A zero timeout answers from this process alone, so the reason
+			// comes from the job's own marks rather than from the pane.
+			output.OutputUnavailable = unstartedReason(entry.openedAt, "")
 		}
 		return nil, output, nil
 	}
@@ -346,6 +350,9 @@ func (t *tools) getJob(
 				return nil, finishJobOutput(output, latest, limits), nil
 			}
 			output.ElapsedSeconds = time.Since(entry.started).Seconds()
+			if describeErr := t.describeUnfinishedJob(ctx, entry, &output); describeErr != nil {
+				return nil, output, describeErr
+			}
 			return nil, output, nil
 		}
 		entry, leader, done, found := owned.beginCollection(input.JobID)
@@ -396,14 +403,9 @@ func (t *tools) getJob(
 			return nil, pendingJobOutput(output, entry, status), nil
 		}
 		output.ElapsedSeconds = time.Since(entry.started).Seconds()
-		// The wait context is spent, so naming what holds the pane needs the
-		// caller's own deadline.
-		if pane, paneErr := t.tmux(ctx).Pane(ctx, entry.paneID); paneErr == nil {
-			output.Running, _ = pane.Formats().PaneCurrentCommand()
-		} else if t.runtime.isTerminalError(paneErr) {
-			return nil, output, paneErr
+		if describeErr := t.describeUnfinishedJob(ctx, entry, &output); describeErr != nil {
+			return nil, output, describeErr
 		}
-		output.OutputUnavailable = unstartedReason(entry.openedAt, output.Running)
 		return nil, output, nil
 	}
 	if !ready {
@@ -460,6 +462,23 @@ func (t *tools) getJob(
 		return nil, getJobOutput{}, unknownJob(input.JobID)
 	}
 	return nil, finishJobOutput(output, settled, limits), nil
+}
+
+// describeUnfinishedJob names what holds the pane and why the command has not
+// started. The wait context is spent by the time a caller needs this, so it
+// runs on the caller's own deadline.
+func (t *tools) describeUnfinishedJob(
+	ctx context.Context,
+	entry job,
+	output *getJobOutput,
+) error {
+	if pane, err := t.tmux(ctx).Pane(ctx, entry.paneID); err == nil {
+		output.Running, _ = pane.Formats().PaneCurrentCommand()
+	} else if t.runtime.isTerminalError(err) {
+		return err
+	}
+	output.OutputUnavailable = unstartedReason(entry.openedAt, output.Running)
+	return nil
 }
 
 func pendingJobOutput(output getJobOutput, entry job, status int) getJobOutput {
