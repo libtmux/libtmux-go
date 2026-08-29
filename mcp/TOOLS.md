@@ -333,11 +333,9 @@ Splitting the pane is not one — finding your own pane and making room beside i
 is the ordinary opening move — and neither is `exit_copy_mode`, which is the
 way out of the one mode that is.
 
-A client that did not declare the elicitation capability gets the behaviour it
-had before — the write goes through with `isCaller` reported beside it. This is
-a guard rail, not a boundary: a caller with `send_keys` can run anything the
-user can, and refusing every write on every client that cannot be asked would
-break them all to enforce something that was never enforceable.
+A client that did not declare the elicitation capability is refused. This
+protects the caller pane rather than making the tools a sandbox: a caller with
+`send_keys` can still run anything the user can in another pane.
 
 ### Text, keys, and the difference
 

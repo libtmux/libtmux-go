@@ -31,13 +31,10 @@ import (
 // is the ordinary opening move -- and neither is exit_copy_mode, which is the
 // way out of the one mode that is.
 //
-// A client that cannot be asked is not blocked. Elicitation is negotiated at
-// initialize, so a client that did not declare it gets the behaviour it had
-// before, which is the write going through with isCaller reported beside it.
-// This is a guard rail rather than a boundary, and the package documentation
-// says plainly that the tools are not a sandbox: a caller with send_keys can
-// run anything the user can. Refusing every write on every client that cannot
-// answer would break them all to enforce something that was never enforceable.
+// A client that cannot be asked is refused. Elicitation is negotiated at
+// initialize, so the server knows before the write whether the person can
+// answer. This guard protects the caller pane; it does not make the tools a
+// sandbox, because a write to another pane can still run anything the user can.
 
 // callerWriteGuard is what a caller is told when the person says no.
 const callerWriteGuard = "the person declined: %s is the pane this server " +

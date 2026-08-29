@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 )
 
 // referenceRow matches a row of one of the reference's tables, capturing the
@@ -15,6 +17,29 @@ var referenceRow = regexp.MustCompile(`(?m)^\|([^|]*)\|`)
 // referenceName matches an identifier the reference marks as one, which is how
 // a tool or a prompt is written wherever it appears.
 var referenceName = regexp.MustCompile("`([a-z][a-z_]+)`")
+
+func TestOperationalNamesInDocumentationMatchTheBinary(t *testing.T) {
+	checks := []struct {
+		path       string
+		want       string
+		deprecated string
+	}{
+		{"PARITY.md", tmuxmcp.RecipeToolEnvironmentVariable, "LIBTMUX_MCP_RECIPE_TOOL"},
+		{"cmd/libtmux-mcp/README.md", "libtmux-mcp " + tmuxmcp.Version, ""},
+	}
+	for _, check := range checks {
+		contents, err := os.ReadFile(check.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", check.path, err)
+		}
+		if !strings.Contains(string(contents), check.want) {
+			t.Errorf("%s does not name %q", check.path, check.want)
+		}
+		if check.deprecated != "" && strings.Contains(string(contents), check.deprecated) {
+			t.Errorf("%s still names %q", check.path, check.deprecated)
+		}
+	}
+}
 
 // TestTheReferenceNamesEverythingTheServerOffers gates the tool reference
 // against the server rather than against the last time someone read both.

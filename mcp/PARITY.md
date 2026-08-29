@@ -54,7 +54,7 @@ Three tools are here and not there:
   how a build runs without spending the turn waiting for it.
 - `move_pane` moves a pane between windows, or breaks it out into its own.
 
-One is here behind `LIBTMUX_MCP_RECIPE_TOOL=1`: `get_recipe` offers the same
+One is here behind `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`: `get_recipe` offers the same
 text as the MCP prompts, for a client that reads tools and not prompts. The
 Python server has the same idea under `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`, which
 turns each prompt into a tool of its own.
@@ -88,7 +88,7 @@ This one refuses the same five, and also everything that types into that pane:
 that is hard to notice and impossible to undo — keystrokes land in the terminal
 the conversation is happening in, interrupting the client or answering a prompt
 nobody saw. Rather than refusing outright, it asks the person, through MCP
-elicitation, and only refuses when the client has not said it can be asked.
+elicitation. It refuses when the person declines or the client cannot ask.
 That refusal names the way out: another pane, `split_window`, or `list_panes`
 to find one where `isCaller` is false.
 

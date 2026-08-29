@@ -22,7 +22,7 @@ $ libtmux-mcp -version
 ```
 
 ```
-libtmux-mcp v0.0.1-alpha.5
+libtmux-mcp v0.0.1-alpha.7
 ```
 
 List every tool the server exposes, as a client would see them:
@@ -49,9 +49,9 @@ It then waits on stdin. Nothing is printed, because stdout is the protocol.
 
 ## Worth knowing
 
-**`context canceled` on exit is not a fault.** It is the server handling the
-SIGTERM it gets when a client tears the transport down, including when a
-client's connect timeout fires.
+**`libtmux-mcp: terminated signal received` is not a fault.** It is the server
+handling the SIGTERM it gets when a client tears the transport down, including
+when a client's connect timeout fires.
 
 **Give it the environment a client would.** A client starts its servers with a
 curated environment, not your shell's. Without a UTF-8 locale tmux rewrites

@@ -177,11 +177,9 @@ into it reaches the terminal you are talking to it through. A note in a reply is
 something a model with a task does not always read, so a write to that pane asks
 first, through MCP elicitation, and a decline fails the call.
 
-A client that did not declare the elicitation capability keeps the behaviour it
-had before. This is a guard rail rather than a boundary: a caller with
-`send_keys` can run anything you can, and refusing every write on every client
-that cannot be asked would break them all to enforce something that was never
-enforceable.
+A client that did not declare the elicitation capability is refused. This
+protects the caller pane rather than making the tools a sandbox: a caller with
+`send_keys` can still run anything you can in another pane.
 
 A write reached through a batch asks in the same way a direct one does. The
 question goes to the client that sent the batch, and declining fails that call
