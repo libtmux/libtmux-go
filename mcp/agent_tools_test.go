@@ -24,28 +24,6 @@ import (
 // cursor that survives the grid being renumbered, a bound that keeps the end
 // rather than the beginning, a pattern that stops a wait before its deadline.
 
-// workspace builds a session whose panes outlive the assertions made about
-// them. A pane running a command that exits takes its window, its session, and
-// then the tmux server with it, and a test asserting what survived would race
-// that teardown.
-func workspace(ctx context.Context, t *testing.T, session *sdk.ClientSession, document string) {
-	t.Helper()
-	result := call(ctx, t, session, "build_workspace", map[string]any{"document": document}, nil)
-	if result.IsError {
-		t.Fatalf("build_workspace: %#v", result.Content)
-	}
-}
-
-// firstPane reports the pane a freshly built workspace put a shell in.
-func firstPane(ctx context.Context, t *testing.T, session *sdk.ClientSession) string {
-	t.Helper()
-	panes := paneIDs(ctx, t, session)
-	if len(panes) == 0 {
-		t.Fatal("no panes")
-	}
-	return panes[0]
-}
-
 //libtmux:real-tmux
 func TestCaptureKeepsTheEndAndSaysWhatItDropped(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -630,30 +608,6 @@ func TestRunCommandReportsWhatTheCommandPrinted(t *testing.T) {
 	}, &failed)
 	if failed.ExitStatus == nil || *failed.ExitStatus != 3 {
 		t.Errorf("exit status = %v, want 3", failed.ExitStatus)
-	}
-}
-
-// run runs a command in a pane and waits for it, so what follows can assume it
-// finished rather than sleeping and hoping.
-func run(ctx context.Context, t *testing.T, session *sdk.ClientSession, pane, command string) {
-	t.Helper()
-	result := call(ctx, t, session, "run_command", map[string]any{
-		"paneId": pane, "command": command, "timeoutSeconds": 30,
-	}, nil)
-	if result.IsError {
-		t.Fatalf("run %q: %#v", command, result.Content)
-	}
-}
-
-// send types a command without waiting for it, for the cases that are about
-// what happens while it runs.
-func send(ctx context.Context, t *testing.T, session *sdk.ClientSession, pane, command string) {
-	t.Helper()
-	result := call(ctx, t, session, "send_keys", map[string]any{
-		"paneId": pane, "command": command,
-	}, nil)
-	if result.IsError {
-		t.Fatalf("send %q: %s", command, resultText(result))
 	}
 }
 

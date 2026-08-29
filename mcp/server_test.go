@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -19,121 +18,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-func mustTmuxServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
-	t.Helper()
-	server, err := tmux.NewServer(options)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return server
-}
-
-func mustMCPServer(t testing.TB, target tmux.Server) *tmuxmcp.Instance {
-	t.Helper()
-	server, err := tmuxmcp.NewServer(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = server.Close() })
-	return server
-}
-
-func assumeResponseCommit(transport sdk.Transport) sdk.Transport {
-	return tmuxmcp.AssumeResponseCommit(transport)
-}
-
-func TestMain(m *testing.M) {
-	runExecutableFixture()
-	if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "all"); err != nil {
-		panic(err)
-	}
-	os.Exit(tmuxtest.Main(m))
-}
-
-// connect starts the MCP server against a tmux server unique to the test and
-// returns a connected client session. Both are torn down with the test.
-func connect(t *testing.T) (*sdk.ClientSession, tmux.Server, context.Context) {
-	t.Helper()
-	return connectWith(t, tmuxtest.ServerOptions{})
-}
-
-// connectWith is connect against a server the test configures.
-//
-// FixedShell is the one worth knowing about: it gives every pane /bin/sh and a
-// one-character prompt, so a test about where the cursor sits measures the code
-// rather than whoever's shell configuration the suite inherited.
-func connectWith(
-	t *testing.T,
-	options tmuxtest.ServerOptions,
-) (*sdk.ClientSession, tmux.Server, context.Context) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	target := tmuxtest.NewServerWithOptions(ctx, t, options)
-
-	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	instance := mustMCPServer(t, target)
-	t.Cleanup(func() { _ = instance.Close() })
-	serverSession, err := instance.Connect(ctx, assumeResponseCommit(serverTransport), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = serverSession.Close() })
-
-	client := sdk.NewClient(&sdk.Implementation{Name: "test-client"}, nil)
-	clientSession, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = clientSession.Close() })
-	return clientSession, target, ctx
-}
-
-// resultText is every text part of a reply joined, which is what a failure
-// message needs. Printing the content slice prints pointers.
-func resultText(result *sdk.CallToolResult) string {
-	said := ""
-	for _, content := range result.Content {
-		if text, ok := content.(*sdk.TextContent); ok {
-			said += text.Text
-		}
-	}
-	return said
-}
-
-// call invokes one tool and decodes its structured result into value.
-func call(
-	ctx context.Context,
-	t *testing.T,
-	session *sdk.ClientSession,
-	name string,
-	arguments any,
-	value any,
-) *sdk.CallToolResult {
-	t.Helper()
-	result, err := session.CallTool(ctx, &sdk.CallToolParams{
-		Name:      name,
-		Arguments: arguments,
-	})
-	if err != nil {
-		t.Fatalf("%s: CallTool error = %v", name, err)
-	}
-	if result.IsError {
-		return result
-	}
-	if value != nil {
-		encoded, err := json.Marshal(result.StructuredContent)
-		if err != nil {
-			t.Fatalf("%s: marshal structured content: %v", name, err)
-		}
-		if err := json.Unmarshal(encoded, value); err != nil {
-			t.Fatalf("%s: decode structured content: %v", name, err)
-		}
-	}
-	return result
-}
 
 func TestServerAdvertisesItsTools(t *testing.T) {
 	// kill_session is offered only at the destructive level.
@@ -610,22 +494,6 @@ func TestWaitForTextReadsTheStreamRatherThanTheScreen(t *testing.T) {
 		t.Errorf("text that was never written reported found=%v outcome=%q",
 			missing.Found, missing.Outcome)
 	}
-}
-
-// paneIDs lists the panes the server reports, in tmux's order.
-func paneIDs(ctx context.Context, t *testing.T, session *sdk.ClientSession) []string {
-	t.Helper()
-	var listed struct {
-		Panes []struct {
-			ID string `json:"id"`
-		} `json:"panes"`
-	}
-	call(ctx, t, session, "list_panes", map[string]any{}, &listed)
-	ids := make([]string, 0, len(listed.Panes))
-	for _, pane := range listed.Panes {
-		ids = append(ids, pane.ID)
-	}
-	return ids
 }
 
 //libtmux:real-tmux
