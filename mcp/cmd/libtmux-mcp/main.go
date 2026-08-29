@@ -1,15 +1,9 @@
-// Command libtmux-mcp serves one tmux server to Model Context Protocol clients
-// over stdin and stdout.
-//
-// The tmux server is chosen at startup and cannot be changed by a client, so a
-// client reaches only the socket the operator selected. A flag says which;
-// LIBTMUX_SOCKET names the default when no flag does, which is how the Python
-// server is configured, so one entry serves both.
+// Command libtmux-mcp serves one fixed tmux target over MCP stdio. Flags select
+// the target; LIBTMUX_SOCKET provides the compatible default.
 //
 //	libtmux-mcp -socket-name my-application
 //
-// Three flags answer questions without a client, which is what a misconfigured
-// entry in somebody's agent CLI needs:
+// Diagnostic flags answer without starting an MCP client:
 //
 //	libtmux-mcp -version
 //	libtmux-mcp -tools -socket-name my-application
@@ -74,14 +68,10 @@ func main() {
 }
 
 func serve(target tmux.Server) error {
-	// Serve until the process is interrupted, so a client disconnect or a
-	// terminating signal both stop the server rather than only the first.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Fail at startup rather than on the first tool call when the configured
-	// binary does not exist. An unreachable server is not an error here: tmux
-	// starts one on demand.
+	// Validate the binary at startup; the selected server may start on demand.
 	if _, err := target.Version(ctx); err != nil {
 		return fmt.Errorf("resolve tmux: %w", endedBy(ctx, err))
 	}
@@ -91,13 +81,8 @@ func serve(target tmux.Server) error {
 	return nil
 }
 
-// endedBy replaces a context cancellation with the signal that caused it.
-// A client tearing the transport down sends one, and "context canceled" names
-// the mechanism rather than the reason, which reads as a fault in the server.
-//
-// The cause is compared by identity rather than with errors.Is because a
-// signal's cause wraps context.Canceled, so errors.Is holds for both it and a
-// plain cancellation and cannot tell them apart.
+// endedBy preserves a signal cause. Identity distinguishes it from plain
+// cancellation because errors.Is matches both.
 func endedBy(ctx context.Context, err error) error {
 	if !errors.Is(err, context.Canceled) {
 		return err
@@ -109,24 +94,11 @@ func endedBy(ctx context.Context, err error) error {
 	return cause
 }
 
-// codeServerClosing is the JSON-RPC code the SDK reports when the connection
-// is shutting down. It is defined in an internal package, so it is matched by
-// its number here; the number is part of the wire protocol and does not move.
+// codeServerClosing mirrors the SDK-internal shutdown error code.
 const codeServerClosing = -32004
 
-// isClientHangup reports whether an error is a client closing the connection.
-//
-// A stdio server ends when its client stops talking to it, which is how every
-// normal shutdown happens: the agent that started it exits, or a probe asks
-// one question and goes. Reporting that as a failure puts an error in the log
-// of whatever supervises this and makes an ordinary disconnect look like a
-// crash. Only a client that hangs up mid-handshake reached here — a completed
-// session already ends cleanly — which made the appearance arbitrary as well
-// as wrong.
-//
-// The underlying read error is io.EOF, but the SDK formats it into the message
-// rather than wrapping it, so errors.Is cannot see it and the shutdown is
-// recognised by its JSON-RPC code instead.
+// isClientHangup recognizes the SDK's unwrapped JSON-RPC shutdown code; normal
+// stdio disconnects must not be reported as server crashes.
 func isClientHangup(err error) bool {
 	if errors.Is(err, io.EOF) ||
 		errors.Is(err, context.Canceled) ||
@@ -137,9 +109,7 @@ func isClientHangup(err error) bool {
 	return errors.As(err, &wire) && wire.Code == codeServerClosing
 }
 
-// inspect connects a client to this server in memory, so the two reports below
-// ask exactly what a real client would and get exactly what it would get,
-// including whatever the safety level or capability allowlist withheld.
+// inspect uses an in-memory MCP client so reports honor advertised capabilities.
 func inspect(target tmux.Server) (context.Context, *sdk.ClientSession, func(), error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
@@ -163,11 +133,6 @@ func inspect(target tmux.Server) (context.Context, *sdk.ClientSession, func(), e
 	}, nil
 }
 
-// reportTools prints what a client would be offered.
-//
-// A shorter list than expected usually means the safety level or capability
-// allowlist withheld something, and reading both here beats inferring either
-// from a refusal.
 func reportTools(target tmux.Server) error {
 	ctx, session, done, err := inspect(target)
 	if err != nil {
@@ -220,8 +185,7 @@ func reportTools(target tmux.Server) error {
 	return nil
 }
 
-// reportDoctor says what this server can see, which is the first thing to
-// establish when a client says it cannot start or reaches the wrong tmux.
+// reportDoctor reports target selection and reachable tmux state.
 func reportDoctor(target tmux.Server, socketOrigin string) error {
 	ctx, session, done, err := inspect(target)
 	if err != nil {
@@ -309,7 +273,6 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 	return nil
 }
 
-// callInto runs one tool and decodes its structured result.
 func callInto(
 	ctx context.Context,
 	session *sdk.ClientSession,
@@ -330,8 +293,7 @@ func callInto(
 	return json.Unmarshal(encoded, into)
 }
 
-// firstSentence shortens a description to its first sentence, so a listing of
-// fifty tools stays a listing rather than becoming the manual.
+// firstSentence keeps a tool listing compact.
 func firstSentence(description string) string {
 	if index := strings.Index(description, ". "); index >= 0 {
 		return description[:index+1]
@@ -339,7 +301,6 @@ func firstSentence(description string) string {
 	return description
 }
 
-// orUnknown reports a value, or says it could not be read.
 func orUnknown(value string) string {
 	if value == "" {
 		return "unknown"
@@ -347,13 +308,7 @@ func orUnknown(value string) string {
 	return value
 }
 
-// resolveSocket reports the socket name to use and where it came from.
-//
-// A socket named in the environment is the default. An operator who wrote a
-// configuration for the Python server, which reads this variable, would
-// otherwise reach whatever sits on tmux's default socket with nothing said
-// about it. A flag still wins: typing one is being more specific than the
-// environment, and only the operator sets either -- a client cannot.
+// resolveSocket reports the selected socket and its operator-controlled source.
 func resolveSocket(name, path string) (resolved, origin string) {
 	switch {
 	case path != "":
@@ -370,13 +325,8 @@ func resolveSocket(name, path string) (resolved, origin string) {
 	return "", "tmux's default"
 }
 
-// socketPathFrom resolves the socket path, which the flag names and the
-// environment can too.
-//
-// The two are not interchangeable: a name is joined to the directory tmux
-// keeps sockets in, a path is taken as it stands. Reading a path out of the
-// variable that takes a name produced a doubled path and an error naming a
-// socket nobody asked for.
+// socketPathFrom keeps socket paths distinct from names, which tmux resolves
+// under its socket directory.
 func socketPathFrom(flagged string) string {
 	if flagged != "" {
 		return flagged
@@ -384,7 +334,6 @@ func socketPathFrom(flagged string) string {
 	return strings.TrimSpace(os.Getenv(tmuxmcp.SocketPathEnvironmentVariable))
 }
 
-// binaryFrom resolves the tmux executable from the flag or the environment.
 func binaryFrom(flagged string) string {
 	if flagged != "" {
 		return flagged

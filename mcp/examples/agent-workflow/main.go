@@ -1,14 +1,8 @@
-// Command agent-workflow drives the tmux MCP server the way an agent does.
+// Command agent-workflow demonstrates caller-pane discovery, pane creation,
+// command execution, waiting, and topology inspection.
 //
-// It does the four things an agent needs to do before it can be useful in
-// somebody's terminal: work out which pane it is itself running in, make room
-// beside it, run something there and wait for the result, and report the shape
-// of what it built.
-//
-// The client and the server are joined in memory rather than over a pipe, so
-// this is one program rather than two. Everything else — the tool names, their
-// arguments, the shape of what comes back — is exactly what a client speaking
-// to libtmux-mcp over stdin and stdout sees.
+// Its in-memory client uses the same tool names, arguments, and reply shapes as
+// a stdio client.
 //
 //	go run ./examples/agent-workflow -socket-name my-application
 package main

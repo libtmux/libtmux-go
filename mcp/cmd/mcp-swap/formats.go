@@ -10,45 +10,26 @@ import (
 	"strings"
 )
 
-// Three config formats, edited in place rather than rewritten.
-//
-// These files are somebody's, and they hold more than this server's entry:
-// other MCP servers, model settings, comments explaining why a thing is set
-// the way it is. Parsing one and writing it back reformats all of that — it is
-// how a swap of one entry silently dropped a neighbouring "enabled = true" and
-// a blank line.
-//
-// So each format is located rather than decoded: find the span the entry
-// occupies, replace exactly those bytes, and leave every other byte alone.
-// Reading is different — status only needs to describe what is there, so it
-// may decode freely.
+// TOML and JSONC writers splice only the target server entry so neighboring
+// bytes survive. Plain JSON is decoded and rendered again.
 
-// configFormat is how a client stores its servers.
 type configFormat int
 
 const (
-	// formatJSON is a plain JSON object, which most clients use.
 	formatJSON configFormat = iota
-	// formatTOML is codex's and grok's shape: a [mcp_servers.<slug>] table,
-	// with any environment in a [mcp_servers.<slug>.env] sub-table after it.
 	formatTOML
-	// formatJSONC is opencode's: JSON with comments, which have to survive.
 	formatJSONC
 )
 
-// entryDialect is the shape one client expects a server entry to take.
 type entryDialect int
 
 const (
-	// dialectStandard is command, args and env, which most clients read.
 	dialectStandard entryDialect = iota
 	// dialectOpencode packs argv into one array and calls the environment
-	// "environment". An "env" key here is dropped in silence and a scalar
-	// command is a decode error that takes the whole config down with it.
+	// "environment"; it rejects the standard shape.
 	dialectOpencode
 )
 
-// renderEntry converts the canonical entry into what a dialect expects.
 func renderEntry(entry map[string]any, dialect entryDialect) map[string]any {
 	if dialect != dialectOpencode {
 		return entry
@@ -63,10 +44,6 @@ func renderEntry(entry map[string]any, dialect entryDialect) map[string]any {
 	}
 	return rendered
 }
-
-// ---------------------------------------------------------------------------
-// TOML
-// ---------------------------------------------------------------------------
 
 // tomlTableSpan reports the byte span one table and its sub-tables occupy.
 //
@@ -247,10 +224,8 @@ func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	for name, value := range existing {
 		switch name {
 		case "command", "args", "type":
-			// What the swap is for.
 		case "env", "environment":
-			// Handled below, so an old environment and a new marker combine
-			// rather than one replacing the other.
+			// Merge both environment dialects below.
 		default:
 			if _, replaced := merged[name]; !replaced {
 				merged[name] = value
@@ -314,7 +289,6 @@ func tomlPreserved(text []byte, table string) map[string]any {
 // tomlRawValue keeps a value as written, since it is re-emitted verbatim.
 type tomlRawValue string
 
-// tomlEnvironment reads a table's environment sub-table.
 func tomlEnvironment(text []byte, table string) map[string]any {
 	start, end, found := tomlTableSpan(text, table)
 	if !found {
@@ -357,9 +331,7 @@ func renderTOMLTable(table, header string, entry map[string]any) string {
 		}
 		fmt.Fprintf(&out, "args = [%s]\n", strings.Join(rendered, ", "))
 	}
-	// Whatever the previous entry said that this tool does not write, in the
-	// form it was written, since re-rendering a value it does not understand
-	// would be guessing at its type.
+	// Preserve unknown values verbatim.
 	for _, name := range sortedKeys(entry) {
 		if raw, ok := entry[name].(tomlRawValue); ok {
 			fmt.Fprintf(&out, "%s = %s\n", name, string(raw))
@@ -379,7 +351,6 @@ func renderTOMLTable(table, header string, entry map[string]any) string {
 	return out.String()
 }
 
-// tomlString quotes a value as a TOML basic string.
 func tomlString(value string) string {
 	var out strings.Builder
 	out.WriteByte('"')
@@ -401,11 +372,7 @@ func tomlString(value string) string {
 	return out.String()
 }
 
-// readTOMLEntry reads back enough of a table to describe it.
-//
-// Deliberately shallow: status prints a command line, so the command and its
-// arguments are all this needs, and a hand-rolled reader that tried for more
-// would be a TOML parser with none of the testing one deserves.
+// readTOMLEntry parses only command, arguments, and environment for status.
 func readTOMLEntry(text []byte, table string) (map[string]any, bool) {
 	start, end, found := tomlTableSpan(text, table)
 	if !found {
@@ -432,9 +399,7 @@ func readTOMLEntry(text []byte, table string) (map[string]any, bool) {
 			}
 		}
 	}
-	// The environment lives in a sub-table, and status needs it: the marker
-	// this tool sets is in there, and without it a swapped entry reads as
-	// somebody else's.
+	// The environment contains the ownership marker reported by status.
 	if rawEnvironment := tomlEnvironment(text, table); rawEnvironment != nil {
 		environment := make(map[string]any, len(rawEnvironment))
 		for name, raw := range rawEnvironment {
@@ -468,10 +433,6 @@ func tomlStringValue(value string) (string, bool) {
 	}
 	return "", false
 }
-
-// ---------------------------------------------------------------------------
-// JSONC
-// ---------------------------------------------------------------------------
 
 // blankComments replaces every comment with spaces of the same length.
 //
@@ -529,20 +490,12 @@ func blankComments(text []byte) []byte {
 	return blanked
 }
 
-// jsoncSpan reports where a member's value sits, and where its object is.
-//
-// Both are needed: replacing an entry that exists is a splice over its value,
-// and adding one that does not is an insertion just inside its parent's brace.
+// jsoncSpan identifies a value replacement or insertion point.
 type jsoncSpan struct {
-	// valueStart and valueEnd bound the member's value, when it is present.
 	valueStart, valueEnd int
-	// present reports whether the member was there at all.
-	present bool
-	// objectStart is the byte after the parent object's opening brace.
-	objectStart int
-	// objectEmpty reports that the parent has no members, so an insertion
-	// needs no separating comma.
-	objectEmpty bool
+	present              bool
+	objectStart          int
+	objectEmpty          bool
 }
 
 // findJSONCMember walks a path of object keys and reports what it found.
@@ -699,16 +652,14 @@ func setJSONCMember(text []byte, path []string, value any, indent string) ([]byt
 	member := fmt.Sprintf("\n%s%q: %s",
 		strings.Repeat(indent, len(path)), path[len(path)-1], rendered)
 	out.Write(text[:span.objectStart])
-	// An empty parent has its closing brace right after the opening one, so
-	// the new member needs the newline the file would otherwise have had.
+	// Preserve the empty object's closing-brace indentation.
 	if span.objectEmpty {
 		out.WriteString(member)
 		out.WriteString("\n" + strings.Repeat(indent, len(path)-1))
 		out.Write(text[span.objectStart:])
 		return out.Bytes(), nil
 	}
-	// Otherwise it goes after the last existing member, which is just before
-	// the closing brace.
+	// Otherwise insert after the last existing member.
 	closing := span.objectStart
 	for {
 		next := endOfValueAfterMember(blanked, closing)
@@ -727,7 +678,6 @@ func setJSONCMember(text []byte, path []string, value any, indent string) ([]byt
 	return out.Bytes(), nil
 }
 
-// endOfValueAfterMember advances past one member, for finding the last.
 func endOfValueAfterMember(blanked []byte, offset int) int {
 	cursor := skipSpace(blanked, offset)
 	if cursor >= len(blanked) || blanked[cursor] != '"' {
@@ -791,7 +741,6 @@ func previousNonSpace(text []byte, offset int) int {
 	return -1
 }
 
-// readJSONC decodes a commented config, for reporting what is in it.
 func readJSONC(text []byte) (map[string]any, error) {
 	var decoded map[string]any
 	if err := json.Unmarshal(stripTrailingCommas(blankComments(text)), &decoded); err != nil {
@@ -800,7 +749,6 @@ func readJSONC(text []byte) (map[string]any, error) {
 	return decoded, nil
 }
 
-// stripTrailingCommas removes the commas JSONC allows and JSON does not.
 func stripTrailingCommas(blanked []byte) []byte {
 	out := make([]byte, len(blanked))
 	copy(out, blanked)
@@ -816,8 +764,7 @@ func stripTrailingCommas(blanked []byte) []byte {
 	return out
 }
 
-// sortedKeys returns a map's keys in a stable order, so a rewritten entry does
-// not change shape between runs for no reason.
+// sortedKeys stabilizes rendered entries across runs.
 func sortedKeys(values map[string]any) []string {
 	return slices.Sorted(maps.Keys(values))
 }

@@ -1,10 +1,5 @@
-// Command mcp-swap points the agent CLIs on this machine at a local build of
-// this server, and puts them back.
-//
-// An MCP server cannot be exercised without a client, so the development loop
-// is to rewrite every client's configuration to run the working tree, try it,
-// and restore what was there. Doing that by hand across half a dozen config
-// files is why it does not get done.
+// Command mcp-swap points supported agent CLIs at a selected libtmux-mcp build
+// and restores their prior entries.
 //
 //	mcp-swap status
 //	mcp-swap use-local --dry-run
@@ -13,33 +8,9 @@
 //	mcp-swap use-local --client claude
 //	mcp-swap revert
 //
-// --mode chooses which build the clients are pointed at. "dev" runs the
-// working tree, so an edit is live for the next call and nothing has to be
-// rebuilt. "build" compiles once and points at the binary, trading that for a
-// plain exec. "installed" points at whatever libtmux-mcp is on PATH. "released"
-// runs a published version out of the module cache, which is the one mode that
-// does not involve this checkout at all.
-//
-// --client narrows the swap to the clients named, given more than once or as
-// one comma-separated list. Without it every client is written, which is the
-// right default when they all run the same server; naming one is for a machine
-// where they do not.
-//
-// Before writing anything, the chosen build is started once and asked to
-// complete an MCP handshake. A build error, a missing binary, or a version the
-// module proxy has never heard of otherwise lands in every config at once and
-// surfaces later as a server that will not start, separately, in each client.
-//
-// A client whose configuration cannot be read is named and left exactly as it
-// is, and the others are still written: stopping at the first would leave the
-// clients before it swapped and the ones after it untouched, with nothing
-// saying which was which.
-//
-// It writes only global configuration, only the one server entry, and only
-// after copying the file beside itself. Swapping something already swapped
-// keeps the first backup, so revert lands on what was there before any of it,
-// and revert removes the backup so the next swap starts from the file as it is
-// then.
+// Unless --no-preflight is set, the selected server must complete an MCP
+// handshake before any write. Each config is backed up once; a write failure
+// for one client does not stop updates to the others.
 package main
 
 import (
@@ -58,63 +29,35 @@ import (
 	"time"
 )
 
-// serverName is the key this server is written under, which is what a person
-// types after the client's own prefix.
 const serverName = "tmux"
 
-// commandName is the command under cmd/, which is both the package go run is
-// given and the binary go build produces.
 const commandName = "libtmux-mcp"
 
-// buildDirectoryName is where --mode build puts its binary, under the user's
-// cache directory.
-//
-// Outside the repository on purpose. A config entry outlives this process, so
-// the path it names has to still hold a binary tomorrow, which rules out a
-// temporary directory; and the generate check lists untracked files without
-// excluding ignored ones, so a build artifact inside the tree fails it whether
-// or not it is git-ignored.
+// buildDirectoryName keeps configured binaries in the user cache so they
+// outlive this process without adding artifacts to repository generation checks.
 const buildDirectoryName = "libtmux-mcp"
 
-// modulePath is where a released build comes from. It is the module line of
-// this command's own go.mod, which cannot be read at runtime from an installed
-// binary, so it is written here and kept in step by a test.
+// modulePath is kept in step with this command's go.mod by a test.
 const modulePath = "github.com/libtmux/libtmux-go/mcp"
 
-// buildMode names which build of the server the clients are pointed at.
 type buildMode string
 
 const (
-	// modeDev runs the working tree; every launch compiles.
-	modeDev buildMode = "dev"
-	// modeBuild compiles once and points at the binary.
-	modeBuild buildMode = "build"
-	// modeInstalled points at libtmux-mcp on PATH.
+	modeDev       buildMode = "dev"
+	modeBuild     buildMode = "build"
 	modeInstalled buildMode = "installed"
-	// modeReleased runs a published version from the module cache.
-	modeReleased buildMode = "released"
+	modeReleased  buildMode = "released"
 )
 
-// preflightTimeout bounds the handshake. Generous, because a released mode
-// downloads a module and a cold dev mode compiles one.
+// preflightTimeout includes cold compilation or module download.
 const preflightTimeout = 180 * time.Second
 
-// client is one agent CLI's global configuration.
-//
-// Every CLI here is written by default, not only the ones keeping JSON: the
-// entry has one name across all of them, so swapping some by accident leaves
-// two different servers answering to it and nothing saying which client got
-// which. --client narrows it on purpose, which is what a machine running one
-// implementation in some clients and another elsewhere needs in order to try a
-// build in one of them without disturbing the rest.
+// client describes one supported global configuration.
 type client struct {
-	name string
-	path string
-	// key is the object holding the servers, which the CLIs spell differently.
-	key string
-	// format is how the file is written, and so how it has to be edited.
-	format configFormat
-	// dialect is the shape this CLI expects one entry to take.
+	name    string
+	path    string
+	key     string
+	format  configFormat
 	dialect entryDialect
 }
 
@@ -155,24 +98,17 @@ func main() {
 	}
 }
 
-// parseArguments reads the command and its flags in either order.
-//
-// Go's flag package stops at the first argument that is not a flag, so
-// "use-local --dry-run" would leave the flag unparsed and silently write the
-// configuration a person asked to preview. A tool whose whole job is editing
-// someone else's files cannot have a spelling that quietly means the opposite,
-// so anything unrecognised is refused rather than ignored.
-// options is what one invocation was asked to do.
 type options struct {
 	command     string
 	dryRun      bool
 	mode        buildMode
 	ref         string
 	noPreflight bool
-	// only narrows the swap to the clients named, empty meaning all of them.
-	only []string
+	only        []string
 }
 
+// parseArguments accepts flags after the command and rejects unknown tokens,
+// so --dry-run cannot silently become a write.
 func parseArguments(arguments []string) (options, error) {
 	chosen := options{mode: modeDev}
 	expecting := ""
@@ -206,8 +142,6 @@ func parseArguments(arguments []string) (options, error) {
 		case "--no-preflight", "-no-preflight":
 			chosen.noPreflight = true
 		case "--mode", "-mode", "--ref", "-ref", "--client", "-client":
-			// Both spellings, because a person who finds one form does not
-			// work reaches for the other rather than for the usage line.
 			expecting = "--" + strings.TrimLeft(argument, "-")
 			if assigned {
 				remembered := expecting
@@ -238,7 +172,6 @@ func parseArguments(arguments []string) (options, error) {
 	return chosen, nil
 }
 
-// assign applies one --flag=value pair.
 func assign(chosen *options, flagName, value string) error {
 	switch flagName {
 	case "--mode":
@@ -277,9 +210,7 @@ func run(chosen options) error {
 	case "revert":
 		return revert(clients, chosen.dryRun)
 	case "use-local":
-		// Only the modes that run this checkout need to find it. A released
-		// or installed swap is about a build that exists elsewhere, and
-		// refusing it outside the repo would be ceremony.
+		// Only checkout-backed modes require a repository root.
 		repository := ""
 		if chosen.mode == modeDev || chosen.mode == modeBuild {
 			if repository, err = repositoryRoot(); err != nil {
@@ -290,8 +221,7 @@ func run(chosen options) error {
 		if err != nil {
 			return err
 		}
-		// Runs under --dry-run too: starting the server once is the only
-		// signal a dry run can give about whether the swap would work.
+		// Preflight dry runs too so they validate the selected build.
 		if !chosen.noPreflight {
 			fmt.Fprintf(os.Stderr, "preflight: %s\n", describe(entry))
 			if reason := preflight(entry); reason != "" {
@@ -304,11 +234,7 @@ func run(chosen options) error {
 	}
 }
 
-// selected narrows the clients to the ones named, keeping the declared order so
-// what is written reads the same however the names were given.
-//
-// An unknown name is refused rather than skipped, because a typo would
-// otherwise report success having written nothing.
+// selected preserves declaration order and rejects unknown client names.
 func selected(clients []client, only []string) ([]client, error) {
 	if len(only) == 0 {
 		return clients, nil
@@ -340,7 +266,6 @@ func selected(clients []client, only []string) ([]client, error) {
 	return chosen, nil
 }
 
-// clientNames lists what --client accepts, for a refusal that says so.
 func clientNames(clients []client) []string {
 	names := make([]string, 0, len(clients))
 	for _, c := range clients {
@@ -349,15 +274,10 @@ func clientNames(clients []client) []string {
 	return names
 }
 
-// buildEntry produces the config entry for the chosen mode.
-//
-// The dev entry uses "go -C <module>" rather than a "cwd" key, because cwd is
-// not something every client honours and a working directory quietly ignored
-// starts the server in the wrong place rather than reporting anything.
+// buildEntry uses go -C for dev mode because not every client honors cwd.
 func buildEntry(chosen options, repository string) (map[string]any, error) {
 	entry := map[string]any{
-		// The marker is what revert and status recognise, since a command of
-		// "go" is not by itself proof this wrote the entry.
+		// Ownership marker for status and safe revert.
 		"env": map[string]any{"LIBTMUX_MCP_SWAP": string(chosen.mode)},
 	}
 	switch chosen.mode {
@@ -389,11 +309,7 @@ func buildEntry(chosen options, repository string) (map[string]any, error) {
 	return entry, nil
 }
 
-// compile builds the command and returns the binary's path.
-//
-// Built into the module rather than a temporary directory: a config entry
-// outlives this process, so the path it names has to still hold a binary
-// tomorrow.
+// compile writes a persistent binary because the config outlives this process.
 func compile(repository string) (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -411,14 +327,8 @@ func compile(repository string) (string, error) {
 	return binary, nil
 }
 
-// preflight starts the entry and completes one MCP handshake, returning an
-// empty string when the server answered.
-//
-// stdin is held open until the answer arrives rather than closed with the
-// frame. A stdio server is entitled to read end-of-input as its client hanging
-// up, and this one does: closing stdin first gets "server is closing: EOF" and
-// a nonzero exit instead of a reply, which would report every healthy server
-// as broken.
+// preflight holds stdin open through initialize because EOF closes an MCP stdio
+// server before it can answer.
 func preflight(entry map[string]any) string {
 	process := exec.Command(entryCommand(entry), entryArguments(entry)...)
 	input, err := process.StdinPipe()
@@ -495,12 +405,10 @@ func (b *synchronizedBuilder) Write(contents []byte) (int, error) {
 func (b *synchronizedBuilder) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	// Builder.String aliases the builder's storage. Clone while holding the
-	// lock so the caller can inspect a stable string after the lock is released.
+	// Clone aliased builder storage while holding the lock.
 	return strings.Clone(b.builder.String())
 }
 
-// entryCommand and entryArguments read an entry back as something runnable.
 func entryCommand(entry map[string]any) string {
 	command, _ := entry["command"].(string)
 	return command
@@ -515,8 +423,7 @@ func entryArguments(entry map[string]any) []string {
 	return arguments
 }
 
-// repositoryRoot finds the module this command was built from, so use-local
-// points at the checkout rather than at wherever it happens to be run.
+// repositoryRoot finds the MCP module containing the current directory.
 func repositoryRoot() (string, error) {
 	working, err := os.Getwd()
 	if err != nil {
@@ -558,13 +465,7 @@ func report(clients []client) error {
 	return nil
 }
 
-// useLocal points every installed client at the entry.
-//
-// One client that cannot be written does not stop the others. Returning at the
-// first failure left the clients before it swapped and the ones after it
-// untouched, and nothing said which was which: a CLI that was never reached
-// looks exactly like one that was. Every failure is collected and named
-// instead, so one run says everything that needs fixing.
+// useLocal attempts every client and joins named failures.
 func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 	var failures []error
 	for _, c := range clients {
@@ -591,11 +492,7 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 	return errors.Join(failures...)
 }
 
-// revert restores every client that has a backup.
-//
-// As with useLocal, one client that cannot be restored does not strand the
-// others: a half-reverted set is the state hardest to reason about, and the
-// one a person reaches for revert to get out of.
+// revert attempts every backed-up client and joins named failures.
 func revert(clients []client, dryRun bool) error {
 	var failures []error
 	for _, c := range clients {
@@ -645,11 +542,7 @@ func revert(clients []client, dryRun bool) error {
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
-		// Removed, so the next swap takes a backup of what is there then. A
-		// kept one is stale the moment the file is edited afterwards, and
-		// writeBesideBackup declines to replace an existing backup -- so
-		// leaving it means a later revert restores a version from before the
-		// edit and discards it.
+		// Remove the restored backup so the next swap captures current state.
 		if err := os.Remove(backup); err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s restored, but its backup remains: %v\n",
 				c.name, err)
@@ -661,10 +554,7 @@ func revert(clients []client, dryRun bool) error {
 	return errors.Join(failures...)
 }
 
-// entryOf reports the server entry a client currently holds.
-//
-// Reading may decode freely — nothing is written back from it — which is why
-// this is much shorter than the writing path.
+// entryOf may decode freely because it never writes the result back.
 func entryOf(c client) (map[string]any, bool, error) {
 	contents, err := os.ReadFile(c.path)
 	if err != nil {
@@ -711,9 +601,7 @@ func restoreEntry(c client, current, original []byte) ([]byte, error) {
 		if originallyPresent {
 			replacement = original[originalStart:originalEnd]
 		} else {
-			// writeEntry separates an appended table from the preceding
-			// configuration. That separator belongs to the table it added,
-			// so removing the table removes the separator as well.
+			// Remove the separator that writeEntry added with the table.
 			prefix := []byte("\n")
 			if !bytes.HasSuffix(original, []byte("\n")) {
 				prefix = []byte("\n\n")
@@ -751,8 +639,7 @@ func replaceBytes(text []byte, start, end int, replacement []byte) []byte {
 	return append(updated, text[end:]...)
 }
 
-// openCodeEntry turns opencode's array command back into the shape describe
-// and the swap marker expect.
+// openCodeEntry normalizes opencode's entry dialect.
 func openCodeEntry(entry map[string]any) map[string]any {
 	if entry == nil {
 		return nil
@@ -771,12 +658,7 @@ func openCodeEntry(entry map[string]any) map[string]any {
 	return flattened
 }
 
-// writeEntry puts one server entry into a client's config.
-//
-// The TOML and JSONC paths splice bytes rather than re-serializing the file,
-// because everything around the entry is somebody else's — other servers,
-// their settings, the comments explaining why. A decode-and-write loses all of
-// it, quietly.
+// writeEntry splices TOML and JSONC so unrelated settings and comments survive.
 func writeEntry(c client, entry map[string]any) error {
 	contents, err := os.ReadFile(c.path)
 	if err != nil {
@@ -848,11 +730,7 @@ func writeEntry(c client, entry map[string]any) error {
 	}
 }
 
-// writeBesideBackup keeps the first pre-swap copy and writes the new contents.
-//
-// The first copy rather than the latest: swapping something already swapped
-// should still leave revert landing on what was there before any of this,
-// which is the whole point of a tool that switches one entry back and forth.
+// writeBesideBackup retains the first pre-swap copy across repeated swaps.
 func writeBesideBackup(c client, original, updated []byte) error {
 	backup := backupPath(c)
 	exists, err := regularFileExists(backup)
@@ -954,14 +832,11 @@ func serverEntry(configuration map[string]any, key string) (map[string]any, bool
 	return entry, ok
 }
 
-// isLocal reports whether this tool wrote the entry.
 func isLocal(entry map[string]any) bool {
 	_, swapped := swapMode(entry)
 	return swapped
 }
 
-// swapMode reads the mode marker off an entry, which is also what status
-// reports so a person can see which build a client is on.
 func swapMode(entry map[string]any) (string, bool) {
 	environment, ok := entry["env"].(map[string]any)
 	if !ok {
