@@ -167,7 +167,10 @@ func TestATrimThatKeepsTheAnchorLosesNothing(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestATrimmedAnchorTakenAtTheTopIsStillReported(t *testing.T) {
-	session, _, ctx := connect(t)
+	// A fixed shell draws one short prompt, so the pane this takes a cursor on
+	// is at its first row with nothing in history: the state that carries no
+	// leading fingerprint.
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
 
 	workspace(ctx, t, session, "session_name: top-anchor\nwindows:\n  - panes:\n      - {}\n")
 	if result := call(ctx, t, session, "set_option", map[string]any{
@@ -185,10 +188,6 @@ func TestATrimmedAnchorTakenAtTheTopIsStillReported(t *testing.T) {
 		t.Fatalf("create_window: %#v", result.Content)
 	}
 	pane := made.PaneID
-
-	// clear leaves the prompt on the pane's first row, so the cursor taken next
-	// has nothing above it on screen.
-	run(ctx, t, session, pane, "clear")
 
 	var first struct {
 		Cursor string `json:"cursor"`

@@ -368,8 +368,15 @@ func locateAnchor(
 		if err != nil {
 			return nil, 0, false, err
 		}
-		if cursor.AnchorHash == "" || len(rows) == 0 ||
-			lineHash(rows[0]) != cursor.AnchorHash {
+		if state.historySize == 0 {
+			// Nothing has scrolled away, so the first row is still the anchor.
+			return rows, 0, true, nil
+		}
+		// Rows have moved into history since, and only an anchor that still
+		// reads the same proves this one was not among those discarded. A blank
+		// row proves nothing: every blank row hashes alike.
+		if len(rows) == 0 || strings.TrimSpace(rows[0]) == "" ||
+			cursor.AnchorHash == "" || lineHash(rows[0]) != cursor.AnchorHash {
 			return nil, 0, false, nil
 		}
 		return rows, 0, true, nil
