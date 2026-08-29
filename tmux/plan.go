@@ -95,8 +95,8 @@ type Op struct {
 	target Ref
 	// source is a command's optional -s object.
 	source Ref
-	// build renders without I/O from resolved targets and the tmux version.
-	build func(target, source string, version Version) ([]string, error)
+	// build renders without I/O from resolved targets and the run-local context.
+	build func(target, source string, render planRenderContext) ([]string, error)
 	// creates means stdout contains an ID for later Refs.
 	creates   bool
 	captures  bool
@@ -125,11 +125,14 @@ func (o Op) chainable() bool { return !o.captures && !o.creates }
 // A Plan is not safe for concurrent use.
 type Plan struct {
 	ops []Op
-	// unsupported is the policy the run applies to a step naming a capability
-	// the running tmux does not have. [Plan.RunWith] sets it from the server it
-	// was given; [Plan.Preview] leaves the zero value, so a preview refuses
-	// what a default server would refuse, which is what a preview is for.
-	unsupported UnsupportedPolicy
+}
+
+// planRenderContext freezes the inputs that may change how an operation is
+// rendered. Passing it by value keeps one run's policy out of the recorded plan.
+type planRenderContext struct {
+	version        Version
+	unsupported    UnsupportedPolicy
+	warningHandler WarningHandler
 }
 
 // NewPlan returns an empty [Plan].
@@ -178,7 +181,7 @@ func (p *Plan) resolve(ref Ref, created map[int]string, step int) (string, error
 func (p *Plan) render(
 	index int,
 	created map[int]string,
-	version Version,
+	render planRenderContext,
 ) ([]string, error) {
 	op := p.ops[index]
 	if op.build == nil {
@@ -200,7 +203,7 @@ func (p *Plan) render(
 		}
 		source = resolved
 	}
-	argv, err := op.build(target, source, version)
+	argv, err := op.build(target, source, render)
 	if err != nil {
 		// Add the step here while preserving the request builder's typed error.
 		return nil, fmt.Errorf("step %d: %s: %w", index, op.name, err)
@@ -339,12 +342,13 @@ func (p *Plan) ExplainWith(planner Planner) []Dispatch {
 // Other render failures return the entries completed before the error. Preview
 // catches them before a non-atomic run can partially mutate tmux.
 func (p *Plan) Preview(version Version) ([][]string, error) {
+	render := planRenderContext{version: version}
 	rendered := make([][]string, len(p.ops))
 	for index := range p.ops {
 		if p.awaitsEarlierStep(index) {
 			continue
 		}
-		argv, err := p.render(index, nil, version)
+		argv, err := p.render(index, nil, render)
 		if err != nil {
 			return rendered, err
 		}
@@ -466,7 +470,6 @@ func (p *Plan) RunWith(
 	if err != nil {
 		return PlanResult{Ops: results}, err
 	}
-	p.unsupported = state.config.unsupported
 	if len(p.ops) == 0 {
 		return PlanResult{Ops: results}, nil
 	}
@@ -486,6 +489,11 @@ func (p *Plan) RunWith(
 		}
 		version = probed
 	}
+	render := planRenderContext{
+		version:        version,
+		unsupported:    state.config.unsupported,
+		warningHandler: state.config.warningHandler,
+	}
 
 	dispatches := planner.Plan(p.Ops())
 	if err := p.checkGrouping(dispatches); err != nil {
@@ -494,7 +502,7 @@ func (p *Plan) RunWith(
 
 	created := map[int]string{}
 	for _, dispatch := range dispatches {
-		argv, err := p.renderDispatch(dispatch, created, version)
+		argv, err := p.renderDispatch(dispatch, created, render)
 		if err != nil {
 			return PlanResult{Ops: results}, err
 		}
@@ -580,17 +588,17 @@ func (s Server) dispatchCommandList(
 func (p *Plan) renderDispatch(
 	dispatch Dispatch,
 	created map[int]string,
-	version Version,
+	render planRenderContext,
 ) ([]string, error) {
 	if len(dispatch.Ops) == 1 {
-		return p.render(dispatch.Ops[0], created, version)
+		return p.render(dispatch.Ops[0], created, render)
 	}
 	var argv []string
 	for position, index := range dispatch.Ops {
 		if err := p.refuseIfGrouped(index); err != nil {
 			return nil, err
 		}
-		rendered, err := p.render(index, created, version)
+		rendered, err := p.render(index, created, render)
 		if err != nil {
 			return nil, err
 		}
@@ -713,7 +721,7 @@ func rawOp(target Ref, captures bool, args []string) Op {
 		target:    target,
 		captures:  captures,
 		untargets: target == Ref{},
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if len(arguments) == 0 {
 				return nil, ErrMissingSubcommand
 			}

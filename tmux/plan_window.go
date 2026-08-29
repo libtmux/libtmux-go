@@ -15,7 +15,7 @@ func (p *Plan) NewWindow(target Ref, request NewWindowRequest) Ref {
 		name:    "new-window",
 		target:  target,
 		creates: true,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if request.SelectExisting {
 				return nil, invalidLifecycleRequest(
 					"SelectExisting reads an existing window's name before creating, " +
@@ -32,7 +32,7 @@ func (p *Plan) KillWindow(target Ref) {
 	p.add(Op{
 		name:   "kill-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-window", resolved)
 		},
 	})
@@ -44,7 +44,7 @@ func (p *Plan) KillOtherWindows(target Ref) {
 	p.add(Op{
 		name:   "kill-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-window", resolved, "-a")
 		},
 	})
@@ -55,7 +55,7 @@ func (p *Plan) RenameWindow(target Ref, name string) {
 	p.add(Op{
 		name:   "rename-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateServerCommandArgument(
 				"rename-window", "Name", name, true,
 			); err != nil {
@@ -72,7 +72,7 @@ func (p *Plan) SelectWindow(target Ref) {
 	p.add(Op{
 		name:   "select-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("select-window", resolved)
 		},
 	})
@@ -83,8 +83,8 @@ func (p *Plan) SelectLayout(target Ref, request SelectLayoutRequest) {
 	p.add(Op{
 		name:   "select-layout",
 		target: target,
-		build: func(resolved, _ string, version Version) ([]string, error) {
-			return selectLayoutArguments(resolved, request, version)
+		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
+			return selectLayoutArguments(resolved, request, render.version)
 		},
 	})
 }
@@ -94,7 +94,7 @@ func (p *Plan) NextLayout(target Ref) {
 	p.add(Op{
 		name:   "next-layout",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("next-layout", resolved)
 		},
 	})
@@ -106,7 +106,7 @@ func (p *Plan) PreviousLayout(target Ref) {
 	p.add(Op{
 		name:   "previous-layout",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("previous-layout", resolved)
 		},
 	})
@@ -117,7 +117,7 @@ func (p *Plan) ResizeWindow(target Ref, request ResizeWindowRequest) {
 	p.add(Op{
 		name:   "resize-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return resizeWindowArguments(resolved, request)
 		},
 	})
@@ -129,7 +129,7 @@ func (p *Plan) RotateWindow(target Ref, request RotateWindowRequest) {
 	p.add(Op{
 		name:   "rotate-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return rotateWindowArguments(resolved, request)
 		},
 	})
@@ -141,7 +141,7 @@ func (p *Plan) RespawnWindow(target Ref, request RespawnRequest) {
 	p.add(Op{
 		name:   "respawn-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return respawnArguments("respawn-window", resolved, request)
 		},
 	})
@@ -153,7 +153,7 @@ func (p *Plan) LastPane(target Ref) {
 	p.add(Op{
 		name:   "last-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("last-pane", resolved)
 		},
 	})
@@ -169,7 +169,7 @@ func (p *Plan) LinkWindow(target, source Ref, request LinkWindowRequest) {
 		name:   "link-window",
 		target: target,
 		source: source,
-		build: func(resolved, from string, _ Version) ([]string, error) {
+		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
 			return linkWindowArguments(resolved, from, request)
 		},
 	})
@@ -181,7 +181,7 @@ func (p *Plan) UnlinkWindow(target Ref, request UnlinkWindowRequest) {
 	p.add(Op{
 		name:   "unlink-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			arguments := []string{"unlink-window"}
 			if request.KillIfLast {
 				arguments = append(arguments, "-k")
@@ -200,7 +200,7 @@ func (p *Plan) MoveWindow(target, source Ref, request MoveWindowRequest) {
 		name:   "move-window",
 		target: target,
 		source: source,
-		build: func(resolved, from string, _ Version) ([]string, error) {
+		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
 			return moveWindowArguments(resolved, from, request)
 		},
 	})
@@ -213,7 +213,7 @@ func (p *Plan) SwapWindow(target, source Ref, detach bool) {
 		name:   "swap-window",
 		target: target,
 		source: source,
-		build: func(resolved, from string, _ Version) ([]string, error) {
+		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
 			arguments, err := targetedArguments("swap-window", resolved, "-s", from)
 			if err != nil {
 				return nil, err

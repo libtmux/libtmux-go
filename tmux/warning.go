@@ -173,23 +173,30 @@ func (s Server) reportUnsupported(warnings []Warning) error {
 	return nil
 }
 
-// reportUnsupported applies the run's policy to the warnings one step's argv
-// renderer produced. It mirrors the [Server] method so that a step refuses
-// exactly what the same request refuses when issued directly.
-func (p *Plan) reportUnsupported(warnings []Warning) error {
-	if p.unsupported == DegradeUnsupported {
-		return nil
-	}
+// reportUnsupported applies one run's policy to the warnings an operation's
+// renderer produced. It mirrors the [Server] method so a planned operation
+// refuses or reports exactly what the same request does when issued directly.
+func (c planRenderContext) reportUnsupported(warnings []Warning) error {
 	for _, warning := range warnings {
 		if warning.Kind != WarningUnsupportedFeature {
+			c.warn(warning)
 			continue
 		}
-		return &VersionTooLowError{
-			Current:    warning.CurrentVersion,
-			Minimum:    warning.RequiredVersion,
-			Subcommand: warning.Subcommand,
-			Feature:    warning.Feature,
+		if c.unsupported == FailUnsupported {
+			return &VersionTooLowError{
+				Current:    warning.CurrentVersion,
+				Minimum:    warning.RequiredVersion,
+				Subcommand: warning.Subcommand,
+				Feature:    warning.Feature,
+			}
 		}
+		c.warn(warning)
 	}
 	return nil
+}
+
+func (c planRenderContext) warn(warning Warning) {
+	if c.warningHandler != nil {
+		c.warningHandler(warning)
+	}
 }

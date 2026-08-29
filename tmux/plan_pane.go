@@ -19,12 +19,12 @@ func (p *Plan) SplitPane(target Ref, request SplitPaneRequest) Ref {
 		target:       target,
 		creates:      true,
 		needsVersion: splitPaneRequiresVersion(request),
-		build: func(resolved, _ string, version Version) ([]string, error) {
-			arguments, warnings, err := splitPaneArguments(resolved, request, version)
+		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
+			arguments, warnings, err := splitPaneArguments(resolved, request, render.version)
 			if err != nil {
 				return nil, err
 			}
-			if err := p.reportUnsupported(warnings); err != nil {
+			if err := render.reportUnsupported(warnings); err != nil {
 				return nil, err
 			}
 			return arguments, nil
@@ -45,8 +45,8 @@ func (p *Plan) SendKeys(target Ref, request SendKeysRequest) {
 		name:         "send-keys",
 		target:       target,
 		needsVersion: sendKeysRequiresVersion(request),
-		build: func(resolved, _ string, version Version) ([]string, error) {
-			arguments, _, err := sendKeysArguments(resolved, request, version)
+		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
+			arguments, _, err := sendKeysArguments(resolved, request, render.version)
 			return arguments, err
 		},
 	})
@@ -54,7 +54,7 @@ func (p *Plan) SendKeys(target Ref, request SendKeysRequest) {
 		p.add(Op{
 			name:   "send-keys",
 			target: target,
-			build: func(resolved, _ string, _ Version) ([]string, error) {
+			build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 				return enterArguments(resolved)
 			},
 		})
@@ -72,7 +72,7 @@ func (p *Plan) DisplayMessage(target Ref, format string) {
 		target:    target,
 		captures:  true,
 		untargets: target == Ref{},
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if resolved == "" {
 				return untargetedArguments("display-message", "-p", format)
 			}
@@ -86,7 +86,7 @@ func (p *Plan) KillPane(target Ref) {
 	p.add(Op{
 		name:   "kill-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-pane", resolved)
 		},
 	})
@@ -98,7 +98,7 @@ func (p *Plan) KillOtherPanes(target Ref) {
 	p.add(Op{
 		name:   "kill-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-pane", resolved, "-a")
 		},
 	})
@@ -109,7 +109,7 @@ func (p *Plan) SelectPane(target Ref, request PaneSelectRequest) {
 	p.add(Op{
 		name:   "select-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return paneSelectArguments(resolved, request)
 		},
 	})
@@ -120,7 +120,7 @@ func (p *Plan) ResizePane(target Ref, request ResizePaneRequest) {
 	p.add(Op{
 		name:   "resize-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return resizePaneArguments(resolved, request)
 		},
 	})
@@ -131,7 +131,7 @@ func (p *Plan) SetPaneTitle(target Ref, title string) {
 	p.add(Op{
 		name:   "select-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("select-pane", resolved, "-T", title)
 		},
 	})
@@ -143,8 +143,8 @@ func (p *Plan) ClearHistory(target Ref, request ClearHistoryRequest) {
 		name:         "clear-history",
 		target:       target,
 		needsVersion: request.ResetHyperlinks,
-		build: func(resolved, _ string, version Version) ([]string, error) {
-			arguments, _, err := clearHistoryArguments(resolved, request, version)
+		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
+			arguments, _, err := clearHistoryArguments(resolved, request, render.version)
 			return arguments, err
 		},
 	})
@@ -155,7 +155,7 @@ func (p *Plan) SendPrefix(target Ref, key PrefixKey) {
 	p.add(Op{
 		name:   "send-prefix",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return sendPrefixArguments(resolved, key)
 		},
 	})
@@ -167,7 +167,7 @@ func (p *Plan) PipePane(target Ref, request PipePaneRequest) {
 	p.add(Op{
 		name:   "pipe-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return pipePaneArguments(resolved, request)
 		},
 	})
@@ -178,7 +178,7 @@ func (p *Plan) RespawnPane(target Ref, request RespawnRequest) {
 	p.add(Op{
 		name:   "respawn-pane",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return respawnArguments("respawn-pane", resolved, request)
 		},
 	})
@@ -193,7 +193,7 @@ func (p *Plan) SwapPane(target, source Ref, detach, keepZoom bool) {
 		name:   "swap-pane",
 		target: target,
 		source: source,
-		build: func(resolved, from string, _ Version) ([]string, error) {
+		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
 			arguments, err := targetedArguments("swap-pane", resolved, "-s", from)
 			if err != nil {
 				return nil, err
@@ -218,7 +218,7 @@ func (p *Plan) JoinPane(target, source Ref, horizontal, detach bool) {
 		name:   "join-pane",
 		target: target,
 		source: source,
-		build: func(resolved, from string, _ Version) ([]string, error) {
+		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
 			return joinPaneArguments("join-pane", resolved, from, horizontal, detach)
 		},
 	})
@@ -231,7 +231,7 @@ func (p *Plan) MovePane(target, source Ref, horizontal, detach bool) {
 		name:   "move-pane",
 		target: target,
 		source: source,
-		build: func(resolved, from string, _ Version) ([]string, error) {
+		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
 			return joinPaneArguments("move-pane", resolved, from, horizontal, detach)
 		},
 	})
