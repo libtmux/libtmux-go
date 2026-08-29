@@ -278,3 +278,135 @@ func liveLookupError(object, identifier string, matches int) *SnapshotLookupErro
 		Matches:    matches,
 	}
 }
+
+func refreshExactActivePane(ctx context.Context, window Window) (Pane, error) {
+	refreshed, err := refreshExactWindow(ctx, window)
+	if err != nil {
+		return Pane{}, err
+	}
+	pane, ok := refreshed.ActivePane()
+	if !ok {
+		return Pane{}, &SnapshotLookupError{
+			Object: "active pane", Identifier: window.sessionID.String() + ":" + window.windowID.String(),
+		}
+	}
+	return pane, nil
+}
+
+func refreshExactWindow(ctx context.Context, window Window) (Window, error) {
+	snapshot, err := window.server.Snapshot(ctx)
+	if err != nil {
+		return Window{}, err
+	}
+	return exactWindowFromSnapshot(snapshot, window)
+}
+
+func refreshCreatedWindow(
+	ctx context.Context,
+	server Server,
+	sessionID SessionID,
+	windowID WindowID,
+) (Window, error) {
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		return Window{}, err
+	}
+	return createdWindowFromSnapshot(snapshot, sessionID, windowID)
+}
+
+func refreshExactPane(ctx context.Context, pane Pane) (Pane, error) {
+	snapshot, err := pane.server.Snapshot(ctx)
+	if err != nil {
+		return Pane{}, err
+	}
+	return exactPaneFromSnapshot(snapshot, pane)
+}
+
+func refreshExactWindowSwap(
+	ctx context.Context,
+	result WindowSwapResult,
+) (WindowSwapResult, error) {
+	snapshot, err := result.Window.server.Snapshot(ctx)
+	if err != nil {
+		return WindowSwapResult{}, err
+	}
+	result.Window, err = exactWindowFromSnapshot(snapshot, result.Window)
+	if err != nil {
+		return WindowSwapResult{}, err
+	}
+	result.Target, err = exactWindowFromSnapshot(snapshot, result.Target)
+	return result, err
+}
+
+func refreshExactPaneSwap(ctx context.Context, result PaneSwapResult) (PaneSwapResult, error) {
+	snapshot, err := result.Pane.server.Snapshot(ctx)
+	if err != nil {
+		return PaneSwapResult{}, err
+	}
+	result.Pane, err = exactPaneFromSnapshot(snapshot, result.Pane)
+	if err != nil || result.Target.paneID == "" {
+		return result, err
+	}
+	result.Target, err = exactPaneFromSnapshot(snapshot, result.Target)
+	return result, err
+}
+
+func exactWindowFromSnapshot(snapshot Snapshot, window Window) (Window, error) {
+	identifier, err := validateWindowView(window)
+	if err != nil {
+		return Window{}, err
+	}
+	key := winlinkKey{
+		sessionID: window.sessionID,
+		windowID:  window.windowID,
+		index:     window.windowIndex,
+	}
+	return lookupSnapshotValue(
+		snapshot.state.windows,
+		snapshot.state.windowsByWinlink[key],
+		"window",
+		identifier,
+	)
+}
+
+func exactPaneFromSnapshot(snapshot Snapshot, pane Pane) (Pane, error) {
+	identifier, err := validatePaneView(pane)
+	if err != nil {
+		return Pane{}, err
+	}
+	key := paneViewKey{
+		winlinkKey: winlinkKey{
+			sessionID: pane.sessionID,
+			windowID:  pane.windowID,
+			index:     pane.windowIndex,
+		},
+		paneID: pane.paneID,
+	}
+	return lookupSnapshotValue(
+		snapshot.state.panes,
+		snapshot.state.panesByView[key],
+		"pane",
+		identifier,
+	)
+}
+
+func createdWindowFromSnapshot(
+	snapshot Snapshot,
+	sessionID SessionID,
+	windowID WindowID,
+) (Window, error) {
+	matches := make([]Window, 0, 1)
+	for _, window := range snapshot.WindowsByID(windowID) {
+		if window.sessionID == sessionID {
+			matches = append(matches, window)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	return Window{}, &SnapshotLookupError{
+		Object:     "window",
+		Identifier: sessionID.String() + ":" + windowID.String(),
+		Matches:    len(matches),
+	}
+}
