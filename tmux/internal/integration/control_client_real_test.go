@@ -132,6 +132,40 @@ func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testin
 }
 
 //libtmux:real-tmux
+func TestControlClientSurvivesItsStartupSession(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	requireTerminalConnection(t, server)
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	startup := sessions[0]
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "survivor"}); err != nil {
+		t.Fatal(err)
+	}
+	client, err := server.OpenControl(ctx, startup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	if err := startup.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.Cmd(ctx, "display-message", "-p", "still-connected")
+	if err != nil || result.Failed || string(result.RawStdout) != "still-connected\n" {
+		t.Fatalf("Cmd() after startup session destruction = (%#v, %v)", result, err)
+	}
+	if client.Session().ID() != startup.ID() {
+		t.Fatalf("client session identity changed from %s to %s",
+			startup.ID(), client.Session().ID())
+	}
+}
+
+//libtmux:real-tmux
 func TestControlClientReplyFenceAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

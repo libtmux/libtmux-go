@@ -124,7 +124,8 @@
 // [Server.OpenControlPool] opens several command-carrying clients and returns a
 // server and session already bound to the pool. Control connections appear as
 // attached tmux clients, affect session_attached and hooks, and must be closed
-// by their owner.
+// by their owner. Terminal [Connection] values require tmux 3.6 so destroying
+// their initial session moves them to another session when one exists.
 //
 // Records retain the [Server] that materialized them. A record obtained before
 // selecting an engine continues to use its old transport; use [Pane.WithEngine]

@@ -136,6 +136,60 @@ func TestNewSessionConnectionRejectsBeforeStartingTmux(t *testing.T) {
 	}
 }
 
+func TestConnectionRequiresTmux36(t *testing.T) {
+	t.Parallel()
+	minimum, err := ParseVersion("3.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFloor := func(t *testing.T, err error, calls int) {
+		t.Helper()
+		var tooLow *VersionTooLowError
+		if !errors.Is(err, ErrVersionTooLow) || !errors.As(err, &tooLow) {
+			t.Fatalf("connection error = %v, want VersionTooLowError", err)
+		}
+		if tooLow.Current.String() != "3.5" || tooLow.Minimum.Compare(minimum) != 0 {
+			t.Fatalf("version floor = %s -> %s, want 3.5 -> 3.6",
+				tooLow.Current, tooLow.Minimum)
+		}
+		if calls != 1 {
+			t.Fatalf("runner calls = %d, want only tmux -V", calls)
+		}
+	}
+	response := versionResponse{result: tmuxcmd.Result{
+		Stdout: []string{"tmux 3.5"}, ExitCode: 0,
+	}}
+
+	t.Run("existing session", func(t *testing.T) {
+		runner := &versionQueueRunner{responses: []versionResponse{response}}
+		server := serverWithRunner(runner)
+		session := Session{server: server, sessionID: "$1"}
+		connection, openErr := session.OpenControl(context.Background(), ConnectionOptions{})
+		if connection != nil {
+			_ = connection.Close()
+			t.Fatal("OpenControl() returned a connection below tmux 3.6")
+		}
+		assertFloor(t, openErr, runner.callCount())
+	})
+
+	t.Run("new session", func(t *testing.T) {
+		runner := &versionQueueRunner{responses: []versionResponse{response}}
+		server := serverWithRunner(runner)
+		created, connection, createErr := server.NewSessionConnection(
+			context.Background(),
+			NewSessionRequest{},
+			ConnectionOptions{},
+		)
+		if created.ID() != "" || connection != nil {
+			if connection != nil {
+				_ = connection.Close()
+			}
+			t.Fatalf("NewSessionConnection() = (%#v, %#v), want zero and nil", created, connection)
+		}
+		assertFloor(t, createErr, runner.callCount())
+	})
+}
+
 func TestNewSessionFrameNormalizesOpenBSDIdentityVersion(t *testing.T) {
 	t.Parallel()
 

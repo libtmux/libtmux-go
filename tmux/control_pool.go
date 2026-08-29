@@ -106,7 +106,9 @@ func closeControlClients(clients []*ControlClient) error {
 // ControlPool owns the control-mode connections behind a connected [Server].
 // It leases one connection per command, bounding concurrency. It suppresses
 // pane output and exposes no notification stream; use [Server.OpenControl] to
-// watch tmux changes. Close it when done. Every method is safe for concurrent use.
+// watch tmux changes. On tmux 3.6 or later its clients move to another session
+// when their initial session is destroyed and another exists. Close it when
+// done. Every method is safe for concurrent use.
 type ControlPool struct {
 	session Session
 	clients []*ControlClient

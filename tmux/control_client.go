@@ -216,10 +216,21 @@ func (s Server) openControl(
 	if s.connection != nil {
 		return nil, s.connection.routeError(ctx, CommandProcess)
 	}
+	version, err := s.Version(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	attach := []string{"attach-session"}
+	flags := make([]string, 0, 2)
 	if mode == controlNotificationsDiscarded {
-		attach = append(attach, "-f", "no-output")
+		flags = append(flags, "no-output")
+	}
+	if version.AtLeast(controlNoDetachVersion36) {
+		flags = append(flags, "no-detach-on-destroy")
+	}
+	if len(flags) > 0 {
+		attach = append(attach, "-f", strings.Join(flags, ","))
 	}
 	attach = append(attach, "-t", session.ID().String())
 	attach, guard, err := s.guardCommand(attach, false)

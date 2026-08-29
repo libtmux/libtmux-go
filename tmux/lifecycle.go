@@ -997,12 +997,14 @@ func (s Server) KillSession(ctx context.Context, target string) error {
 	return requireServerCommandNoStderr("kill-session", result, err)
 }
 
-// Kill destroys the receiver session, removes its winlinks, and detaches every
-// client attached to it. A window with no remaining links and all of that
-// window's panes are also destroyed. The materialized receiver is not
-// refreshed. Only stderr makes a completed command a [CommandError]; nonzero
-// exits without stderr are ignored. Transport errors are delivery-ambiguous.
-// Kill is equivalent to [Session.KillWith] with a zero [SessionKillRequest].
+// Kill destroys the receiver session and removes its winlinks. Ordinary
+// attached clients detach; on tmux 3.6 or later, clients carrying
+// no-detach-on-destroy move to another session when one exists. A window with
+// no remaining links and all of that window's panes are also destroyed. The
+// materialized receiver is not refreshed. Only stderr makes a completed
+// command a [CommandError]; nonzero exits without stderr are ignored.
+// Transport errors are delivery-ambiguous. Kill is equivalent to
+// [Session.KillWith] with a zero [SessionKillRequest].
 func (s Session) Kill(ctx context.Context) error {
 	return s.KillWith(ctx, SessionKillRequest{})
 }
@@ -1012,10 +1014,10 @@ func (s Session) Kill(ctx context.Context) error {
 // other session while preserving the receiver and its current window;
 // ClearAlerts only clears alerts in windows linked to the receiver and leaves
 // sessions, winlinks, panes, client attachments, and current-window selections
-// unchanged. Destroying a session detaches its clients and removes its
-// winlinks; windows left without links and their panes are also destroyed.
-// Group destroys the receiver's group and requires tmux 3.7; on older versions
-// it follows [UnsupportedPolicy].
+// unchanged. Destroying a session handles clients as [Session.Kill] describes
+// and removes its winlinks; windows left without links and their panes are
+// also destroyed. Group destroys the receiver's group and requires tmux 3.7;
+// on older versions it follows [UnsupportedPolicy].
 //
 // The three modes are mutually exclusive. Only stderr makes a completed command
 // a [CommandError]; nonzero exits without stderr are ignored. Transport errors
@@ -1073,7 +1075,7 @@ func (s Session) KillWith(ctx context.Context, request SessionKillRequest) error
 // window is removed from every session and its panes are destroyed. Affected
 // sessions preserve their current selection unless this window was current,
 // in which case they select another. A session left without windows is
-// destroyed and its clients are detached.
+// destroyed; [Session.Kill] describes how tmux handles its clients.
 //
 // Target and Index are mutually exclusive. The receiver is not refreshed. Only
 // stderr makes a completed command a [CommandError]; nonzero exits without
@@ -1110,9 +1112,10 @@ func (s Session) KillWindow(ctx context.Context, request KillWindowRequest) erro
 // Kill destroys the stable window selected by the receiver's WindowID,
 // removes all of its winlinks, and destroys its panes. Affected sessions
 // preserve their current selection unless this window was current, in which
-// case they select another. A session left without windows is destroyed and
-// its clients are detached. The receiver is not refreshed. Only stderr makes a
-// completed command a [CommandError]; nonzero exits without stderr are ignored.
+// case they select another. A session left without windows is destroyed;
+// [Session.Kill] describes how tmux handles its clients. The receiver is not
+// refreshed. Only stderr makes a completed command a [CommandError]; nonzero
+// exits without stderr are ignored.
 func (w Window) Kill(ctx context.Context) error {
 	result, err := w.literalCmd(ctx, "kill-window")
 	return requireServerCommandNoStderr("kill-window", result, err)
@@ -1124,9 +1127,10 @@ func (w Window) Kill(ctx context.Context) error {
 // they share the receiver's [WindowID], but every selected stable window is
 // removed from all sessions. Other affected sessions preserve their current
 // selection unless a destroyed window was current, in which case they select
-// another. A session left without windows is destroyed and detaches its
-// clients. The receiver is not refreshed. Only stderr makes a completed command
-// a [CommandError]; nonzero exits without stderr are ignored.
+// another. A session left without windows is destroyed; [Session.Kill]
+// describes how tmux handles its clients. The receiver is not refreshed. Only
+// stderr makes a completed command a [CommandError]; nonzero exits without
+// stderr are ignored.
 func (w Window) KillOthers(ctx context.Context) error {
 	target, err := exactWindowTarget(w)
 	if err != nil {
@@ -1141,9 +1145,9 @@ func (w Window) KillOthers(ctx context.Context) error {
 // If this was the last pane, tmux also destroys the window and removes all of
 // its winlinks. Affected sessions preserve their current selection unless the
 // destroyed window was current, in which case they select another. A session
-// left without windows is destroyed and detaches its clients. The receiver is
-// not refreshed. Only stderr makes a completed command a [CommandError]; nonzero
-// exits without stderr are ignored.
+// left without windows is destroyed; [Session.Kill] describes how tmux handles
+// its clients. The receiver is not refreshed. Only stderr makes a completed
+// command a [CommandError]; nonzero exits without stderr are ignored.
 func (p Pane) Kill(ctx context.Context) error {
 	result, err := p.literalCmd(ctx, "kill-pane")
 	return requireServerCommandNoStderr("kill-pane", result, err)

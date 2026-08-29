@@ -13,6 +13,21 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
+func requireTerminalConnection(t *testing.T, server tmux.Server) {
+	t.Helper()
+	version, err := server.Version(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	minimum, err := tmux.ParseVersion("3.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !version.AtLeast(minimum) {
+		t.Skipf("terminal connections require tmux 3.6; installed %s", version)
+	}
+}
+
 //libtmux:real-tmux
 func TestNewSessionConnectionKeepsTheCreatingControlProcess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -35,6 +50,7 @@ func TestNewSessionConnectionKeepsTheCreatingControlProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	requireTerminalConnection(t, server)
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -86,6 +102,7 @@ func TestNewSessionConnectionRetainsGuardedCreator(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	server := tmuxtest.NewServer(ctx, t)
+	requireTerminalConnection(t, server)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {
@@ -130,6 +147,7 @@ func TestConnectionOwnsTerminalControlLanes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	server := tmuxtest.NewServer(ctx, t)
+	requireTerminalConnection(t, server)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {
@@ -175,10 +193,92 @@ func TestConnectionOwnsTerminalControlLanes(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestConnectionSurvivesAttachedSessionDestruction(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	requireTerminalConnection(t, server)
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	attached := sessions[0]
+	survivor, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "survivor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection, err := attached.OpenControl(ctx, tmux.ConnectionOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+
+	if err := attached.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := connection.Server().Session(ctx, survivor.ID())
+	if err != nil {
+		t.Fatalf("connection after attached session destruction: %v", err)
+	}
+	if name, ok := refreshed.Name(); !ok || name != "survivor" {
+		t.Fatalf("surviving session name = (%q, %t), want (survivor, true)", name, ok)
+	}
+}
+
+//libtmux:real-tmux
+func TestNewSessionConnectionSurvivesCreatedSessionDestruction(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireTerminalConnection(t, server)
+	created, connection, err := server.NewSessionConnection(
+		ctx,
+		tmux.NewSessionRequest{Name: "created"},
+		tmux.ConnectionOptions{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = connection.Close()
+		_ = server.Kill(context.Background())
+	})
+	survivor, err := connection.Server().NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "survivor"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := created.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := connection.Server().Session(ctx, survivor.ID())
+	if err != nil {
+		t.Fatalf("creator connection after session destruction: %v", err)
+	}
+	if name, ok := refreshed.Name(); !ok || name != "survivor" {
+		t.Fatalf("surviving session name = (%q, %t), want (survivor, true)", name, ok)
+	}
+	if connection.Session().ID() != created.ID() {
+		t.Fatalf("connection session identity changed from %s to %s",
+			created.ID(), connection.Session().ID())
+	}
+}
+
+//libtmux:real-tmux
 func TestConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	server := tmuxtest.NewServer(ctx, t)
+	requireTerminalConnection(t, server)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {
@@ -236,6 +336,7 @@ func TestNewSessionConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	server := tmuxtest.NewServer(ctx, t)
+	requireTerminalConnection(t, server)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {

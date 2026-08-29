@@ -1801,7 +1801,8 @@ func ExamplePane_CaptureToFile() {
 }
 
 // ExampleSession_OpenControl binds ordinary model values to owned control-mode
-// lanes, so their commands start no additional tmux processes.
+// lanes on tmux 3.6 or later. The fallback keeps the example runnable across
+// the package's older subprocess-only support range.
 func ExampleSession_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
@@ -1821,6 +1822,15 @@ func ExampleSession_OpenControl() {
 	}
 
 	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
+	if errors.Is(err, tmux.ErrVersionTooLow) {
+		windows, fallbackErr := session.SearchWindows(ctx, nil)
+		if fallbackErr != nil {
+			fmt.Println("search windows:", fallbackErr)
+			return
+		}
+		fmt.Println("windows:", len(windows))
+		return
+	}
 	if err != nil {
 		fmt.Println("open control connection:", err)
 		return
@@ -1832,6 +1842,6 @@ func ExampleSession_OpenControl() {
 		fmt.Println("search windows:", err)
 		return
 	}
-	fmt.Println("windows read over the connection:", len(windows))
-	// Output: windows read over the connection: 1
+	fmt.Println("windows:", len(windows))
+	// Output: windows: 1
 }

@@ -13,6 +13,8 @@ var ErrConnectionRequiresProcess = errors.New(
 	"tmux: operation requires a process outside the connection",
 )
 
+var controlNoDetachVersion36 = Version{raw: "3.6", major: 3, minor: 6}
+
 // ConnectionOptions configures the control-mode lanes owned by a
 // [Connection].
 type ConnectionOptions struct {
@@ -25,7 +27,9 @@ type ConnectionOptions struct {
 // materialized its session. Values obtained from Server or Session retain the
 // connection. Closing is terminal: they neither reconnect nor fall back to a
 // subprocess. Its lanes are attached tmux clients; closing the last client can
-// trigger tmux's destroy-unattached or exit-unattached policy.
+// trigger tmux's destroy-unattached or exit-unattached policy. On tmux 3.6 or
+// later, destroying its initial session moves the clients to another session
+// when one exists; the retained Session value keeps its original identity.
 type Connection struct {
 	server  Server
 	session Session
@@ -39,7 +43,9 @@ func (s Server) ConnectionBound() bool { return s.connection != nil }
 
 // OpenControl opens terminal control-mode transport to the receiver's daemon.
 // The returned connection owns its lanes and must be closed. A receiver already
-// bound to a connection cannot be rebound.
+// bound to a connection cannot be rebound. Terminal connections require tmux
+// 3.6 or later so their lanes survive destruction of the initial session when
+// another session exists.
 func (s Session) OpenControl(
 	ctx context.Context,
 	options ConnectionOptions,
@@ -49,6 +55,9 @@ func (s Session) OpenControl(
 	}
 	if s.server.connection != nil {
 		return nil, s.server.connection.routeError(ctx, CommandProcess)
+	}
+	if err := s.server.RequireVersion(ctx, controlNoDetachVersion36); err != nil {
+		return nil, err
 	}
 	_, _, pool, err := s.server.OpenControlPool(ctx, s, ControlPoolRequest{
 		Connections: options.Lanes,
@@ -64,8 +73,10 @@ func (s Session) OpenControl(
 // it creates an attached session. If tmux reports a valid session ID before
 // later setup fails, the returned partial session retains that ID and server.
 // Cleanup closes the attached creator, so tmux policy may make the partial
-// session no longer live. KillExisting is rejected because removing an existing
-// session cannot be rolled back if later connection setup fails.
+// session no longer live. It requires tmux 3.6 or later so the retained client
+// survives destruction of this initial session when another session exists.
+// KillExisting is rejected because removing an existing session cannot be
+// rolled back if later connection setup fails.
 func (s Server) NewSessionConnection(
 	ctx context.Context,
 	request NewSessionRequest,
@@ -102,6 +113,9 @@ func (s Server) NewSessionConnection(
 	}
 	effective, err := newSessionCommandServer(s)
 	if err != nil {
+		return Session{}, nil, err
+	}
+	if err := effective.RequireVersion(ctx, controlNoDetachVersion36); err != nil {
 		return Session{}, nil, err
 	}
 	arguments, fields, err := newSessionConnectionArguments(request)
@@ -234,7 +248,7 @@ func newSessionConnectionArguments(
 		request,
 		formatTemplate(fields),
 		false,
-		"no-output",
+		"no-output,no-detach-on-destroy",
 	)
 	return arguments, fields, err
 }
