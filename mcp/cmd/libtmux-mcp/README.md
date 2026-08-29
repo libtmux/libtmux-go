@@ -46,6 +46,9 @@ $ libtmux-mcp -socket-name my-application
 ```
 
 It then waits on stdin. Nothing is printed, because stdout is the protocol.
+With no access configuration it exposes topology metadata only. Set
+`LIBTMUX_MCP_CAPABILITIES=operate` in the client-managed environment for the
+ordinary content, pane, workspace, layout, and settings tools.
 
 ## Worth knowing
 

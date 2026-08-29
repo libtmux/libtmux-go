@@ -22,6 +22,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "all"); err != nil {
+		panic(err)
+	}
 	os.Exit(tmuxtest.Main(m))
 }
 
@@ -1876,6 +1879,9 @@ func TestEveryToolCarriesAnnotations(t *testing.T) {
 		}
 		if tool.Annotations.Title == "" {
 			t.Errorf("%s carries no title", tool.Name)
+		}
+		if capability, ok := tool.Meta[tmuxmcp.CapabilityMetaKey].(string); !ok || capability == "" {
+			t.Errorf("%s carries no capability metadata", tool.Name)
 		}
 		if got := tool.Annotations.ReadOnlyHint; got != readers[tool.Name] {
 			t.Errorf("%s readOnlyHint = %v, want %v", tool.Name, got, readers[tool.Name])

@@ -29,6 +29,12 @@ import (
 func main() {
 	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default")
 	flag.Parse()
+	if _, set := os.LookupEnv(tmuxmcp.CapabilitiesEnvironmentVariable); !set {
+		if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "operate"); err != nil {
+			fmt.Fprintln(os.Stderr, "agent-workflow:", err)
+			os.Exit(1)
+		}
+	}
 
 	if err := run(*socketName); err != nil {
 		fmt.Fprintln(os.Stderr, "agent-workflow:", err)

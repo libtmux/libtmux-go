@@ -102,6 +102,10 @@ type getServerInfoOutput struct {
 	// SafetyLevel is what the operator allowed, which explains a shorter tool
 	// list than a client expected.
 	SafetyLevel string `json:"safetyLevel"`
+	// Capabilities are the independent access classes this server grants.
+	Capabilities []string `json:"capabilities"`
+	// RejectedCapabilities names misspelled or unknown configured grants.
+	RejectedCapabilities []string `json:"rejectedCapabilities,omitempty"`
 	// truncation reports what the message log lost to the bounds, in the same
 	// fields every other bounded reply here uses.
 	truncation
@@ -118,10 +122,17 @@ func (t *tools) getServerInfo(
 	_ *mcp.CallToolRequest,
 	input getServerInfoInput,
 ) (*mcp.CallToolResult, getServerInfoOutput, error) {
+	if input.IncludeMessages && !t.capabilities.permits(CapabilityContentRead) {
+		return nil, getServerInfoOutput{}, errors.New(
+			"includeMessages requires the content-read capability",
+		)
+	}
 	caller := t.callerIdentityFor(ctx)
 	output := getServerInfoOutput{
-		SafetyLevel:  string(t.level),
-		CallerPaneID: caller.paneID,
+		SafetyLevel:          string(t.level),
+		Capabilities:         t.capabilities.strings(),
+		RejectedCapabilities: RejectedCapabilityValues(),
+		CallerPaneID:         caller.paneID,
 	}
 	if version, err := t.tmux().Version(ctx); err == nil {
 		output.Version = version.String()
@@ -448,7 +459,7 @@ func (t *tools) displayMessage(
 
 // addServerTools advertises the tools about the server itself.
 func addServerTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "get_server_info",
 		Annotations: readOnly("Describe the tmux Server"),
 		Description: "Which tmux socket these tools address, its version, how " +
@@ -456,7 +467,7 @@ func addServerTools(server *mcp.Server, t *tools) {
 			"of its panes. Ask this first: insideThisServer true means a pane " +
 			"you act on may be the terminal this is running in.",
 	}, t.getServerInfo)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "list_servers",
 		Annotations: readOnly("List tmux Servers"),
 		Description: "The tmux servers running on this machine, with the one " +
@@ -466,7 +477,7 @@ func addServerTools(server *mcp.Server, t *tools) {
 			"be pointed at another one, which is decided when this server is " +
 			"started.",
 	}, t.listServers)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "display_message",
 		Annotations: mutating("Expand a tmux Format"),
 		Description: "Expand a tmux format; tmux's #() syntax runs a shell " +

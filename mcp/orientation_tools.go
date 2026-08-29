@@ -382,7 +382,7 @@ func (t *tools) selectWindow(
 // addOrientationTools advertises the tools a client uses to find its way
 // around before it does anything.
 func addOrientationTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "list_panes",
 		Annotations: readOnly("List tmux Panes"),
 		Description: "List tmux panes with their session, window, index, and " +
@@ -394,21 +394,21 @@ func addOrientationTools(server *mcp.Server, t *tools) {
 			"to check on several panes without capturing any of them. Returns an " +
 			"empty list when the server is not running.",
 	}, t.listPanes)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "list_windows",
 		Annotations: readOnly("List tmux Windows"),
 		Description: "Windows with their session, name, index, pane count, and " +
 			"whether each is its session's current one. Narrow with sessionName, " +
 			"name, or active.",
 	}, t.listWindows)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "list_sessions",
 		Annotations: readOnly("List tmux Sessions"),
 		Description: "Sessions with their name, window count, and how many " +
 			"clients are attached. Narrow with name, or with attached to find " +
 			"which sessions somebody is actually looking at.",
 	}, t.listSessions)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "select_window",
 		Annotations: settling("Select a tmux Window"),
 		Description: "Make one window its session's current window, which is what " +

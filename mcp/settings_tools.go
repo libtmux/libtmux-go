@@ -592,7 +592,7 @@ func hookBaseName(name string) string {
 
 // addSettingsTools advertises the tools for options, environment, and hooks.
 func addSettingsTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_option",
 		Annotations: readOnly("Read a tmux Option"),
 		Description: "Read one tmux option at server, session, window, or pane " +
@@ -600,27 +600,27 @@ func addSettingsTools(server *mcp.Server, t *tools) {
 			"history-limit is why scrollback stopped, remain-on-exit is why a " +
 			"dead pane is still there.",
 	}, t.showOption)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "set_option",
 		Annotations: settling("Set a tmux Option"),
 		Description: "Set one tmux option. Pane scope by default, which affects " +
 			"that pane and nothing else; server scope changes every session the " +
 			"person has open.",
 	}, t.setOption)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_environment",
 		Annotations: readOnly("Read a Session's Environment"),
 		Description: "What new processes in a session will inherit. Panes " +
 			"already running keep the environment they started with, so this is " +
 			"what the next pane gets rather than what the current one has.",
 	}, t.showEnvironment)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "set_environment",
 		Annotations: settling("Set a Session's Environment"),
 		Description: "Set or remove a variable for processes a session starts " +
 			"from now on. It changes nothing already running.",
 	}, t.setEnvironment)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_hooks",
 		Annotations: readOnly("Read tmux Hooks"),
 		Description: "The commands tmux will run on its own at a given scope. " +

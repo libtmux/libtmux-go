@@ -57,8 +57,9 @@ and windows tmux has, narrowing to a session once one is chosen. Prompt
 arguments complete the same way. MCP has no completion for tool arguments, so
 this reaches the resources and prompts only.
 
-Every resource only reads, so `LIBTMUX_SAFETY` never withholds one: a server
-offering no tool that changes tmux can still be browsed.
+Topology resources require the `metadata-read` capability. Pane-content
+resources and subscriptions require `content-read`, so a metadata-only server
+cannot read terminal contents through the resource protocol.
 
 A client that can subscribe may subscribe to any of these instead of re-reading
 them. tmux already publishes what a subscription needs — a control-mode
@@ -73,7 +74,8 @@ a build log does not become a notification per line.
 Every tool carries MCP annotations, so a client can act on what a call does
 without reading its description: a title, `readOnlyHint`, `destructiveHint`,
 `idempotentHint`, and `openWorldHint`. The safety level is derived from them, so
-a tool that declares itself destructive is governed by having said so.
+a tool that declares itself destructive is governed by having said so. A
+separate capability declared at registration must also be granted.
 
 Most tools take an optional `paneId`, `windowId`, or `sessionName`. Omitting it
 means the active pane, the current window, or the only session — refused rather
@@ -609,6 +611,8 @@ when to reach for what; this says exactly what each one takes and returns.
 
 Create a session from a tmuxp-style YAML workspace document: windows, panes, layouts, and the command each pane runs, in one call.
 
+Requires the `workspace-create` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -623,6 +627,8 @@ Changes tmux by a step. Repeating it compounds.
 ### `call_destructive_tools_batch`
 
 Run several tools in one request, in order, including the ones that end something.
+
+Requires the `tmux-destroy` capability.
 
 **Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
 
@@ -642,6 +648,8 @@ Run several tools in one request, in order, including the ones that end somethin
 
 Run several tools in one request, in order, including ones that change tmux.
 
+Requires the `pane-control` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -660,6 +668,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Run several reading tools in one request, in order.
 
+Requires the `metadata-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -677,6 +687,8 @@ Reads only. Repeating it changes nothing.
 ### `capture_pane`
 
 Read what one pane holds: its visible screen, or its scrollback too with includeHistory.
+
+Requires the `content-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -704,6 +716,8 @@ Reads only. Repeating it changes nothing.
 
 Read only what a pane wrote since the cursor a previous call returned, and get a cursor for next time.
 
+Requires the `content-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -728,6 +742,8 @@ Reads only. Repeating it changes nothing.
 
 Clear a pane's screen, and its scrollback when asked.
 
+Requires the `pane-control` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -745,6 +761,8 @@ Changes tmux to a state. Repeating it is safe.
 
 Start one detached session and return its id and name.
 
+Requires the `workspace-create` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -761,6 +779,8 @@ Changes tmux by a step. Repeating it compounds.
 ### `create_window`
 
 Add one window to a session and return its id and the id of the pane tmux made with it.
+
+Requires the `workspace-create` capability.
 
 Changes tmux by a step. Repeating it compounds.
 
@@ -780,6 +800,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Remove a buffer this server staged, once nothing else will paste it.
 
+Requires the `tmux-settings` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -793,6 +815,8 @@ Changes tmux to a state. Repeating it is safe.
 ### `display_message`
 
 Expand a tmux format; tmux's #() syntax runs a shell command, so treat the format as operator-powerful.
+
+Requires the `pane-control` capability.
 
 Changes tmux by a step. Repeating it compounds.
 
@@ -811,6 +835,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Put a pane into tmux's copy mode, where keys scroll and select rather than reaching the program in the pane.
 
+Requires the `pane-control` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -828,6 +854,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Return a pane from copy mode to passing keys to the program running in it.
 
+Requires the `pane-control` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -843,6 +871,8 @@ Changes tmux to a state. Repeating it is safe.
 ### `find_pane_by_position`
 
 Report the pane bordering one side of another: above, below, left, or right.
+
+Requires the `metadata-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -861,6 +891,8 @@ Reads only. Repeating it changes nothing.
 ### `get_job`
 
 Collect a command started with run_command and detach.
+
+Requires the `content-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -891,6 +923,8 @@ Reads only. Repeating it changes nothing.
 
 One pane's state without its contents: what it runs, its process id, whether that process has exited and with what status, how much scrollback there is, and whether the pane is in a mode that will eat the keys you send it.
 
+Requires the `metadata-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -915,6 +949,8 @@ Reads only. Repeating it changes nothing.
 
 Which tmux socket these tools address, its version, how much it holds, and whether this MCP server is itself running in one of its panes.
 
+Requires the `metadata-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -927,6 +963,7 @@ Reads only. Repeating it changes nothing.
 | --- | --- |
 | `alive` **required** | boolean |
 | `attachedClients` **required** | array |
+| `capabilities` **required** | array |
 | `clients` **required** | integer |
 | `insideThisServer` **required** | boolean |
 | `panes` **required** | integer |
@@ -939,12 +976,15 @@ Reads only. Repeating it changes nothing.
 | `callerPaneId` | string |
 | `messages` | array |
 | `messagesUnavailable` | string |
+| `rejectedCapabilities` | array |
 | `truncatedBytes` | integer |
 | `truncatedLines` | integer |
 
 ### `get_session_info`
 
 One session's windows, working directory, and when it was created.
+
+Requires the `metadata-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -963,6 +1003,8 @@ Reads only. Repeating it changes nothing.
 ### `get_window_info`
 
 One window's size, layout string, and panes.
+
+Requires the `metadata-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -984,6 +1026,8 @@ Reads only. Repeating it changes nothing.
 
 End one pane and the program running in it.
 
+Requires the `tmux-destroy` capability.
+
 **Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
 
 | Argument | Type | |
@@ -999,6 +1043,8 @@ End one pane and the program running in it.
 
 End the whole tmux server: every session, every window, every program.
 
+Requires the `tmux-destroy` capability.
+
 **Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
 
 | Argument | Type | |
@@ -1012,6 +1058,8 @@ End the whole tmux server: every session, every window, every program.
 ### `kill_session`
 
 End one session by its exact name, and every window and program in it.
+
+Requires the `tmux-destroy` capability.
 
 **Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
 
@@ -1027,6 +1075,8 @@ End one session by its exact name, and every window and program in it.
 
 End one window and its panes.
 
+Requires the `tmux-destroy` capability.
+
 **Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
 
 | Argument | Type | |
@@ -1041,6 +1091,8 @@ End one window and its panes.
 ### `list_panes`
 
 List tmux panes with their session, window, index, and current command.
+
+Requires the `metadata-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -1065,6 +1117,8 @@ Reads only. Repeating it changes nothing.
 
 The tmux servers running on this machine, with the one these tools address marked.
 
+Requires the `metadata-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -1085,6 +1139,8 @@ Reads only. Repeating it changes nothing.
 
 Sessions with their name, window count, and how many clients are attached.
 
+Requires the `metadata-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -1102,6 +1158,8 @@ Reads only. Repeating it changes nothing.
 ### `list_windows`
 
 Windows with their session, name, index, pane count, and whether each is its session's current one.
+
+Requires the `metadata-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -1122,6 +1180,8 @@ Reads only. Repeating it changes nothing.
 
 Put text into a named tmux buffer, ready to paste into a pane once or several times.
 
+Requires the `tmux-settings` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1137,6 +1197,8 @@ Changes tmux by a step. Repeating it compounds.
 ### `move_pane`
 
 Move a pane into another window, or break it out into a window of its own by naming no destination.
+
+Requires the `tmux-layout` capability.
 
 Changes tmux by a step. Repeating it compounds.
 
@@ -1159,6 +1221,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Move a window to another index, or into another session.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -1177,6 +1241,8 @@ Changes tmux to a state. Repeating it is safe.
 
 Deliver a staged buffer into a pane as text, with no tmux key names read.
 
+Requires the `pane-control` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1194,6 +1260,8 @@ Changes tmux by a step. Repeating it compounds.
 ### `paste_text`
 
 Deliver text into a pane exactly, with no tmux key names read.
+
+Requires the `pane-control` capability.
 
 Changes tmux by a step. Repeating it compounds.
 
@@ -1214,6 +1282,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Send everything a pane writes to a shell command as well as to the screen, such as "cat >> /tmp/build.log".
 
+Requires the `pane-control` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1231,6 +1301,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Give a session a name a person will recognise.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -1246,6 +1318,8 @@ Changes tmux to a state. Repeating it is safe.
 ### `rename_window`
 
 Name a window, which also stops tmux renaming it after whatever is running in it.
+
+Requires the `tmux-layout` capability.
 
 Changes tmux to a state. Repeating it is safe.
 
@@ -1263,6 +1337,8 @@ Changes tmux to a state. Repeating it is safe.
 ### `resize_pane`
 
 Set one pane's width or height in cells, or toggle it between its layout size and the whole window.
+
+Requires the `tmux-layout` capability.
 
 Changes tmux by a step. Repeating it compounds.
 
@@ -1284,6 +1360,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Set a window's size in cells.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1303,6 +1381,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Restart what a pane runs, keeping the pane and its place in the layout.
 
+Requires the `workspace-create` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1320,6 +1400,8 @@ Changes tmux by a step. Repeating it compounds.
 ### `run_command`
 
 Run a shell command in one pane, wait for it to finish, and return its exit status and its output.
+
+Requires the `pane-control` capability.
 
 Changes tmux by a step. Repeating it compounds.
 
@@ -1355,6 +1437,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Find which panes show some text, and what they showed.
 
+Requires the `content-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -1376,6 +1460,8 @@ Reads only. Repeating it changes nothing.
 
 Arrange a window's panes with one of tmux's presets (even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, and the mirrored pair from tmux 3.5), spread them evenly, or restore a layout string read from get_window_info.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -1394,6 +1480,8 @@ Changes tmux to a state. Repeating it is safe.
 
 Make one pane its window's active pane, which is where a person's keystrokes go.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -1408,6 +1496,8 @@ Changes tmux to a state. Repeating it is safe.
 
 Make one window its session's current window, which is what puts a person in front of a window this client created.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -1421,6 +1511,8 @@ Changes tmux to a state. Repeating it is safe.
 ### `send_keys`
 
 Type into one pane and press Enter.
+
+Requires the `pane-control` capability.
 
 Changes tmux by a step. Repeating it compounds.
 
@@ -1440,6 +1532,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Send several tmux key names to a pane in order, with no Enter appended.
 
+Requires the `pane-control` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1457,6 +1551,8 @@ Changes tmux by a step. Repeating it compounds.
 ### `set_environment`
 
 Set or remove a variable for processes a session starts from now on.
+
+Requires the `tmux-settings` capability.
 
 Changes tmux to a state. Repeating it is safe.
 
@@ -1476,6 +1572,8 @@ Changes tmux to a state. Repeating it is safe.
 ### `set_option`
 
 Set one tmux option.
+
+Requires the `tmux-settings` capability.
 
 Changes tmux to a state. Repeating it is safe.
 
@@ -1498,6 +1596,8 @@ Changes tmux to a state. Repeating it is safe.
 
 Set the title tmux draws on a pane's border, which is how to label which pane is which in a layout someone else will read.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux to a state. Repeating it is safe.
 
 | Argument | Type | |
@@ -1514,6 +1614,8 @@ Changes tmux to a state. Repeating it is safe.
 ### `show_buffer`
 
 Read back a buffer this server staged.
+
+Requires the `content-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -1534,6 +1636,8 @@ Reads only. Repeating it changes nothing.
 ### `show_environment`
 
 What new processes in a session will inherit.
+
+Requires the `content-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -1557,6 +1661,8 @@ Reads only. Repeating it changes nothing.
 
 The commands tmux will run on its own at a given scope.
 
+Requires the `content-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -1575,6 +1681,8 @@ Reads only. Repeating it changes nothing.
 ### `show_option`
 
 Read one tmux option at server, session, window, or pane scope.
+
+Requires the `content-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -1597,6 +1705,8 @@ Reads only. Repeating it changes nothing.
 
 Signal a tmux wait-for channel, releasing whoever waits on it.
 
+Requires the `pane-control` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1610,6 +1720,8 @@ Changes tmux by a step. Repeating it compounds.
 ### `snapshot_pane`
 
 One pane's contents together with what it is, where it sits, and whether its process has exited.
+
+Requires the `content-read` capability.
 
 Reads only. Repeating it changes nothing.
 
@@ -1635,6 +1747,8 @@ Reads only. Repeating it changes nothing.
 
 Divide one pane in two, placing the new one below, above, to the right of, or to the left of it, and return the new pane's id.
 
+Requires the `workspace-create` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1654,6 +1768,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Exchange two panes' positions.
 
+Requires the `tmux-layout` capability.
+
 Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
@@ -1671,6 +1787,8 @@ Changes tmux by a step. Repeating it compounds.
 
 Wait until something signals a tmux wait-for channel.
 
+Requires the `metadata-read` capability.
+
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
@@ -1685,6 +1803,8 @@ Reads only. Repeating it changes nothing.
 ### `wait_for_text`
 
 Wait until a pane writes one of several patterns, reading what the pane produces rather than its screen.
+
+Requires the `content-read` capability.
 
 Reads only. Repeating it changes nothing.
 

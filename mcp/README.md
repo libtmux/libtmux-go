@@ -32,6 +32,11 @@ $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 That puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client launches it as
 a subprocess and speaks to it over stdin and stdout.
 
+The default server exposes topology metadata only. Set
+`LIBTMUX_MCP_CAPABILITIES=operate` in the server's environment to enable the
+ordinary workspace, pane, content, layout, and settings tools. Destruction
+also requires `LIBTMUX_SAFETY=destructive` and the `tmux-destroy` capability.
+
 ### Claude Code
 
 ```console
@@ -59,7 +64,8 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "tmux": {
       "command": "libtmux-mcp",
-      "args": ["-socket-name", "my-application"]
+      "args": ["-socket-name", "my-application"],
+      "env": {"LIBTMUX_MCP_CAPABILITIES": "operate"}
     }
   }
 }
@@ -84,7 +90,7 @@ config entry that will not start actually needs:
 | Flag | Answers |
 | --- | --- |
 | `-version` | which build this is |
-| `-tools` | what a client would be offered, and how the safety level changed it |
+| `-tools` | what a client would be offered, and how safety and capabilities changed it |
 | `-doctor` | which socket it reaches, what is on it, and whether it is running inside that tmux itself |
 
 ```console
@@ -97,6 +103,7 @@ libtmux-mcp doctor
   socket:  /tmp/tmux-1000/my-application (from -socket-name)
   holds:   1 sessions, 1 windows, 1 panes, 0 clients attached
   safety:  mutating
+  access:  metadata-read
   caller:  pane %1 of this very server — acting on it acts on
            the terminal this process is running in
 ```
@@ -187,7 +194,27 @@ and stops the batch there.
 
 ## Limiting what a client can do
 
-`LIBTMUX_SAFETY` bounds the tools this server advertises:
+Two independent checks bound what the server advertises. A tool must pass both.
+
+`LIBTMUX_MCP_CAPABILITIES` selects the kinds of access granted. Empty or unset
+is `metadata-read` only. It accepts a comma-separated list:
+
+| Capability | Grants |
+| --- | --- |
+| `metadata-read` | identities, topology, process state, and geometry, but no pane contents or configuration values |
+| `content-read` | pane output, buffers, option values, hooks, environment values, jobs, and tmux messages |
+| `pane-control` | pane input and tmux features that may run shell commands, including arbitrary format expansion |
+| `workspace-create` | session, window, pane, and workspace creation, including programs they start |
+| `tmux-layout` | selection, movement, resizing, layouts, and names |
+| `tmux-settings` | buffers, environment variables, and options |
+| `tmux-destroy` | ending panes, windows, sessions, or the server |
+
+Three profiles save spelling: `inspect` is both read capabilities, `operate`
+is every capability except `tmux-destroy`, and `all` is every capability. An
+unknown value is reported and grants nothing; if no value is recognized, the
+server falls back to `metadata-read`.
+
+`LIBTMUX_SAFETY` is the independent operation ceiling:
 
 | Value | Offers |
 | --- | --- |
@@ -200,18 +227,20 @@ An unset or empty variable takes the default. A value naming no level takes
 typo in it must not widen one; `-tools` reports the level in force rather than
 the string that was rejected.
 
-A tool above the level is never advertised, so no prompt reaches it, and a
-batch cannot reach around the level either. The active level is stated in the
-server instructions, so a client meeting a shorter tool list knows tools were
-withheld rather than missing. The level is derived from each tool's own
-annotations, so a tool declaring itself destructive is governed by having said
-so.
+A tool above the level or outside the capability allowlist is never advertised,
+so no prompt reaches it, and a batch cannot reach around either bound. Pane
+content resources and subscriptions require `content-read`; metadata resources
+require `metadata-read`. The active bounds are stated in the server
+instructions, so a shorter tool list is explainable. Safety is derived from
+each tool's annotations, while its capability is declared beside its
+registration.
 
 ## Everything else an operator can set
 
 | Variable | Does |
 | --- | --- |
 | `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
+| `LIBTMUX_MCP_CAPABILITIES` | allowlists independent access classes; defaults to `metadata-read` |
 | `LIBTMUX_SOCKET` | names the tmux socket when no `-socket-name` or `-socket-path` says; a flag wins |
 | `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
 | `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
@@ -307,9 +336,9 @@ $ libtmux-mcp -doctor -socket-name my-application
 command from your client's config by hand: a bad `-binary`, or a path that is
 not on the client's `PATH`, fails at startup and says so.
 
-**Tools are missing rather than failing.** `LIBTMUX_SAFETY` withheld them.
-`-tools` prints what is actually offered and at which level; the level is also
-stated in the server instructions the client already received.
+**Tools are missing rather than failing.** `LIBTMUX_SAFETY` or
+`LIBTMUX_MCP_CAPABILITIES` withheld them. `-tools` prints the surface and both
+bounds; both are also stated in the server instructions the client received.
 
 **It reaches the wrong tmux.** `-doctor` names the socket it addresses and
 lists the others on the machine. A client's environment is not your shell's:
@@ -436,8 +465,8 @@ They hold other servers, other settings, and comments explaining why something
 is set the way it is; a decode-and-write reformats all of that. So the entry's
 bytes are located and replaced, and every other byte is left alone. Keys this
 tool does not write survive — grok's `enabled`, for instance — and so does the
-entry's environment, because `LIBTMUX_SAFETY` is configuration rather than a
-choice of build.
+entry's environment, because `LIBTMUX_SAFETY` and
+`LIBTMUX_MCP_CAPABILITIES` are configuration rather than a choice of build.
 
 Each config is copied beside itself before the first change. The first copy is
 kept rather than the latest, so `revert` lands on what was there before any

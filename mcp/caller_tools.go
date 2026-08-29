@@ -267,6 +267,8 @@ program reports success or failure by colouring a word rather than saying so,
 capture_pane with styles keeps the colour a capture strips.
 `)
 	text.WriteString("\n" + safetyFromEnvironment().describe() + "\n")
+	capabilities, _ := capabilitiesFromEnvironment()
+	text.WriteString(capabilities.describe() + "\n")
 
 	caller := callerFromEnvironment()
 	if !caller.inside {

@@ -127,7 +127,7 @@ func bordersOn(direction string, from, at paneGeometry) bool {
 
 // addPositionTools advertises the tool that answers where a pane sits.
 func addPositionTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "find_pane_by_position",
 		Annotations: readOnly("Find a Neighbouring Pane"),
 		Description: "Report the pane bordering one side of another: above, " +

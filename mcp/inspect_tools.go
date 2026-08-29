@@ -464,7 +464,7 @@ func (t *tools) getSessionInfo(
 
 // addInspectTools advertises the tools that describe what tmux holds.
 func addInspectTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "snapshot_pane",
 		Annotations: readOnly("Snapshot a tmux Pane"),
 		Description: "One pane's contents together with what it is, where it " +
@@ -472,14 +472,14 @@ func addInspectTools(server *mcp.Server, t *tools) {
 			"capture_pane followed by list_panes: one call, and the two halves " +
 			"cannot disagree.",
 	}, t.snapshotPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "search_panes",
 		Annotations: readOnly("Search tmux Panes"),
 		Description: "Find which panes show some text, and what they showed. " +
 			"Answers \"which pane has the failing test\" in one call, where " +
 			"capturing each pane in turn costs one per pane.",
 	}, t.searchPanes)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "get_pane_info",
 		Annotations: readOnly("Describe a tmux Pane"),
 		Description: "One pane's state without its contents: what it runs, its " +
@@ -487,14 +487,14 @@ func addInspectTools(server *mcp.Server, t *tools) {
 			"how much scrollback there is, and whether the pane is in a mode " +
 			"that will eat the keys you send it.",
 	}, t.getPaneInfo)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "get_window_info",
 		Annotations: readOnly("Describe a tmux Window"),
 		Description: "One window's size, layout string, and panes. The layout " +
 			"string is what select_layout accepts back, so a layout worth " +
 			"keeping can be read here and applied later.",
 	}, t.getWindowInfo)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "get_session_info",
 		Annotations: readOnly("Describe a tmux Session"),
 		Description: "One session's windows, working directory, and when it was " +

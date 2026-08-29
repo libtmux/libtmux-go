@@ -691,7 +691,7 @@ func decodeCursor(value string) (captureCursor, error) {
 
 // addCaptureTools advertises the tools that read a pane's text.
 func addCaptureTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "capture_pane",
 		Annotations: readOnly("Capture a tmux Pane"),
 		Description: "Read what one pane holds: its visible screen, or its " +
@@ -701,7 +701,7 @@ func addCaptureTools(server *mcp.Server, t *tools) {
 			"strips. Use capture_since instead to read a pane repeatedly without " +
 			"paying for the same screen each time.",
 	}, t.capturePane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "capture_since",
 		Annotations: readOnly("Read What a Pane Wrote Since"),
 		Description: "Read only what a pane wrote since the cursor a previous " +
@@ -711,13 +711,13 @@ func addCaptureTools(server *mcp.Server, t *tools) {
 			"linesMissed reports that tmux discarded scrollback in between, so " +
 			"the reply is the current screen rather than everything since.",
 	}, t.captureSince)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "clear_pane",
 		Annotations: settling("Clear a tmux Pane"),
 		Description: "Clear a pane's screen, and its scrollback when asked. " +
 			"Clearing what has already been read keeps later captures small.",
 	}, t.clearPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "pipe_pane",
 		Annotations: mutating("Pipe a Pane's Output"),
 		Description: "Send everything a pane writes to a shell command as well " +

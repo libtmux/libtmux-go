@@ -25,6 +25,7 @@ func TestOperationalNamesInDocumentationMatchTheBinary(t *testing.T) {
 		deprecated string
 	}{
 		{"PARITY.md", tmuxmcp.RecipeToolEnvironmentVariable, "LIBTMUX_MCP_RECIPE_TOOL"},
+		{"README.md", tmuxmcp.CapabilitiesEnvironmentVariable, ""},
 		{"cmd/libtmux-mcp/README.md", "libtmux-mcp " + tmuxmcp.Version, ""},
 	}
 	for _, check := range checks {

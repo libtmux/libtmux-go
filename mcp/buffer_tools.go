@@ -262,27 +262,27 @@ func ownBufferName(requested string) (string, error) {
 
 // addBufferTools advertises the tools for tmux's paste buffers.
 func addBufferTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "load_buffer",
 		Annotations: mutating("Stage Text in a tmux Buffer"),
 		Description: "Put text into a named tmux buffer, ready to paste into a " +
 			"pane once or several times. paste_text is the shorter road when the " +
 			"text goes into one pane once.",
 	}, t.loadBuffer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "paste_buffer",
 		Annotations: mutating("Paste a tmux Buffer"),
 		Description: "Deliver a staged buffer into a pane as text, with no tmux " +
 			"key names read. The name load_buffer returned reaches the buffer, " +
 			"and so does the short one passed to it.",
 	}, t.pasteBuffer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_buffer",
 		Annotations: readOnly("Read a tmux Buffer"),
 		Description: "Read back a buffer this server staged. Only those: tmux's " +
 			"other buffers hold whatever a person copied.",
 	}, t.showBuffer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "delete_buffer",
 		Annotations: settling("Delete a tmux Buffer"),
 		Description: "Remove a buffer this server staged, once nothing else " +

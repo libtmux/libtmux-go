@@ -340,7 +340,7 @@ type sendKeysOutput struct {
 
 // addInputTools advertises the tools that put something into a pane.
 func addInputTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "send_keys",
 		Annotations: mutating("Send Keys to a Pane"),
 		Description: "Type into one pane and press Enter. tmux key names are " +
@@ -349,21 +349,21 @@ func addInputTools(server *mcp.Server, t *tools) {
 			"paste_text for content you did not write by hand, and run_command " +
 			"when you want the exit status.",
 	}, t.sendKeys)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "send_keys_batch",
 		Annotations: mutating("Send a Sequence of Keys"),
 		Description: "Send several tmux key names to a pane in order, with no " +
 			"Enter appended. This is how to drive a program that reads keys " +
 			"rather than lines: quit a pager, answer a prompt, leave an editor.",
 	}, t.sendKeysBatch)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "paste_text",
 		Annotations: mutating("Paste Text into a Pane"),
 		Description: "Deliver text into a pane exactly, with no tmux key names " +
 			"read. Use this for anything you did not write by hand: a word like " +
 			"\"Escape\" in the middle of it would otherwise be sent as that key.",
 	}, t.pasteText)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "enter_copy_mode",
 		Annotations: mutating("Enter Copy Mode"),
 		Description: "Put a pane into tmux's copy mode, where keys scroll and " +
@@ -371,7 +371,7 @@ func addInputTools(server *mcp.Server, t *tools) {
 			"exit_copy_mode: keys sent to a pane still in copy mode do not reach " +
 			"the shell.",
 	}, t.enterCopyMode)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "exit_copy_mode",
 		Annotations: settling("Leave Copy Mode"),
 		Description: "Return a pane from copy mode to passing keys to the " +

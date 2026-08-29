@@ -167,21 +167,21 @@ func (t *tools) buildWorkspace(
 
 // addCreationTools advertises the tools that make something new.
 func addCreationTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "create_window",
 		Annotations: mutating("Create a tmux Window"),
 		Description: "Add one window to a session and return its id and the id " +
 			"of the pane tmux made with it. Use build_workspace instead when a " +
 			"whole session is being laid out from a document.",
 	}, t.createWindow)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "create_session",
 		Annotations: mutating("Create a tmux Session"),
 		Description: "Start one detached session and return its id and name. " +
 			"Detached because this server is not a terminal; a person or another " +
 			"client attaches to it.",
 	}, t.createSession)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "build_workspace",
 		Annotations: mutating("Build a tmuxp Workspace"),
 		Description: "Create a session from a tmuxp-style YAML workspace document: " +

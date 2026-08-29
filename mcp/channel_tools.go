@@ -112,14 +112,14 @@ func validChannel(name string) (string, error) {
 
 // addChannelTools advertises the tools that use tmux's own coordination.
 func addChannelTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "wait_for_channel",
 		Annotations: readOnly("Wait on a tmux Channel"),
 		Description: "Wait until something signals a tmux wait-for channel. Use " +
 			"it to coordinate with anything that signals one, including a script " +
 			"or another client; run_command covers commands this client starts.",
 	}, t.waitForChannel)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "signal_channel",
 		Annotations: mutating("Signal a tmux Channel"),
 		Description: "Signal a tmux wait-for channel, releasing whoever waits on it.",

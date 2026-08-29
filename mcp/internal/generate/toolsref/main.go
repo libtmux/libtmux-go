@@ -58,6 +58,9 @@ func run(output string) error {
 	if err := os.Setenv(tmuxmcp.SafetyEnvironmentVariable, "destructive"); err != nil {
 		return err
 	}
+	if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "all"); err != nil {
+		return err
+	}
 	tools, err := listTools()
 	if err != nil {
 		return err
@@ -127,6 +130,9 @@ func render(tools []*sdk.Tool) string {
 
 	for _, tool := range tools {
 		fmt.Fprintf(&out, "\n### `%s`\n\n%s\n", tool.Name, sentence(tool.Description))
+		if capability, ok := tool.Meta[tmuxmcp.CapabilityMetaKey].(string); ok {
+			fmt.Fprintf(&out, "\nRequires the `%s` capability.\n", capability)
+		}
 		if kind := classify(tool); kind != "" {
 			fmt.Fprintf(&out, "\n%s\n", kind)
 		}

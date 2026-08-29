@@ -43,6 +43,8 @@ type recipe struct {
 	// read-only server should not offer: it would be advice it cannot carry
 	// out.
 	mutates bool
+	// capabilities are every grant the recipe's steps require.
+	capabilities []Capability
 	// build writes the recipe for one argument, and says what it is.
 	build func(argument string) (summary, text string)
 }
@@ -55,6 +57,7 @@ var recipes = []recipe{
 		description:  "Work out what a pane is doing and why it is stuck or failing.",
 		argument:     "pane",
 		argumentHelp: "The pane id to look at, such as %1. Omit to be told how to find it.",
+		capabilities: []Capability{CapabilityMetadataRead, CapabilityContentRead},
 		build:        diagnosePaneText,
 	},
 	{
@@ -64,6 +67,7 @@ var recipes = []recipe{
 			"you have already read.",
 		argument:     "pane",
 		argumentHelp: "The pane id to follow, such as %1. Omit to be told how to find it.",
+		capabilities: []Capability{CapabilityMetadataRead, CapabilityContentRead},
 		build:        followPaneText,
 	},
 	{
@@ -73,7 +77,10 @@ var recipes = []recipe{
 		argument:     "pane",
 		argumentHelp: "The pane that is not answering, such as %1. Omit to be told how to find it.",
 		mutates:      true,
-		build:        recoverPaneText,
+		capabilities: []Capability{
+			CapabilityMetadataRead, CapabilityContentRead, CapabilityPaneControl,
+		},
+		build: recoverPaneText,
 	},
 	{
 		name:         "set_up_workspace",
@@ -82,14 +89,17 @@ var recipes = []recipe{
 		argument:     "task",
 		argumentHelp: "What the workspace is for, such as \"the api and its tests\".",
 		mutates:      true,
-		build:        setUpWorkspaceText,
+		capabilities: []Capability{
+			CapabilityMetadataRead, CapabilityWorkspaceCreate, CapabilityTmuxLayout,
+		},
+		build: setUpWorkspaceText,
 	},
 }
 
 // addPrompts advertises the recipes through the prompts protocol.
-func addPrompts(server *mcp.Server, level SafetyLevel) {
+func addPrompts(server *mcp.Server, t *tools) {
 	for _, offered := range recipes {
-		if offered.mutates && level == SafetyReadOnly {
+		if !t.permitsRecipe(offered) {
 			continue
 		}
 		server.AddPrompt(&mcp.Prompt{
@@ -102,6 +112,18 @@ func addPrompts(server *mcp.Server, level SafetyLevel) {
 			}},
 		}, promptFor(offered))
 	}
+}
+
+func (t *tools) permitsRecipe(offered recipe) bool {
+	if offered.mutates && t.level == SafetyReadOnly {
+		return false
+	}
+	for _, capability := range offered.capabilities {
+		if !t.capabilities.permits(capability) {
+			return false
+		}
+	}
+	return true
 }
 
 // promptFor answers one prompt from the recipe behind it.
@@ -163,9 +185,9 @@ func (t *tools) getRecipe(
 		if offered.name != input.Name {
 			continue
 		}
-		if offered.mutates && t.level == SafetyReadOnly {
+		if !t.permitsRecipe(offered) {
 			return nil, getRecipeOutput{}, fmt.Errorf(
-				"%s tells you to change tmux, which this server is not allowed to do",
+				"%s needs tools this server has withheld",
 				offered.name)
 		}
 		summary, text := offered.build(input.Argument)
@@ -191,7 +213,7 @@ func addRecipeTools(server *mcp.Server, t *tools) {
 	if os.Getenv(RecipeToolEnvironmentVariable) != "1" {
 		return
 	}
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "get_recipe",
 		Annotations: readOnly("Read a tmux Recipe"),
 		Description: "How to do one of the jobs this server is for, in the order " +

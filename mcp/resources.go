@@ -46,20 +46,20 @@ const (
 	templatePaneContent    = "tmux://panes/{pane}/content"
 )
 
-// addResources advertises the readable hierarchy.
-//
-// Every resource here only reads, so the safety level never withholds one: a
-// server offering no tools that change tmux can still be browsed.
+// addResources advertises the parts of the hierarchy the capability allowlist
+// permits. Pane content is separate from topology because it may hold secrets.
 func addResources(server *mcp.Server, t *tools) {
-	server.AddResource(&mcp.Resource{
-		URI:         resourceSessions,
-		Name:        "tmux sessions",
-		Title:       "Every tmux Session",
-		Description: "Every session on this tmux server, with its windows and panes.",
-		MIMEType:    "application/json",
-	}, t.readSessions)
+	if t.capabilities.permits(CapabilityMetadataRead) {
+		server.AddResource(&mcp.Resource{
+			URI:         resourceSessions,
+			Name:        "tmux sessions",
+			Title:       "Every tmux Session",
+			Description: "Every session on this tmux server, with its windows and panes.",
+			MIMEType:    "application/json",
+		}, t.readSessions)
+	}
 
-	for _, template := range []struct {
+	metadata := []struct {
 		uri, name, title, description string
 	}{
 		{
@@ -83,18 +83,26 @@ func addResources(server *mcp.Server, t *tools) {
 			"One pane's identity, position, and what it is running, addressed " +
 				"by pane id without its sigil, so %1 is written 1.",
 		},
-		{
-			templatePaneContent, "tmux pane content", "Contents of One Pane",
-			"What one pane is showing, as text, addressed by pane id without " +
-				"its sigil, so %1 is written 1.",
-		},
-	} {
+	}
+	if t.capabilities.permits(CapabilityMetadataRead) {
+		for _, template := range metadata {
+			server.AddResourceTemplate(&mcp.ResourceTemplate{
+				URITemplate: template.uri,
+				Name:        template.name,
+				Title:       template.title,
+				Description: template.description,
+				MIMEType:    "application/json",
+			}, t.readTemplated)
+		}
+	}
+	if t.capabilities.permits(CapabilityContentRead) {
 		server.AddResourceTemplate(&mcp.ResourceTemplate{
-			URITemplate: template.uri,
-			Name:        template.name,
-			Title:       template.title,
-			Description: template.description,
-			MIMEType:    "application/json",
+			URITemplate: templatePaneContent,
+			Name:        "tmux pane content",
+			Title:       "Contents of One Pane",
+			Description: "What one pane is showing, as text, addressed by pane id without " +
+				"its sigil, so %1 is written 1.",
+			MIMEType: "application/json",
 		}, t.readTemplated)
 	}
 }

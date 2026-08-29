@@ -173,7 +173,9 @@ sign begins an escape in a URI and an index changes when a window moves.
 
 Both read `LIBTMUX_SAFETY`, with the same three levels — `readonly`,
 `mutating`, `destructive` — meaning the same things, so an operator running
-both writes one policy.
+both can keep the same operation ceiling. The Go server adds
+`LIBTMUX_MCP_CAPABILITIES` as an independent allowlist and defaults it to
+metadata-only; the Python server has no equivalent capability partition.
 
 ## Testing the server
 

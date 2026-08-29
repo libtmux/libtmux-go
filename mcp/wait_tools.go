@@ -1144,7 +1144,7 @@ func firstMatch(matchers []namedMatcher, text string) (string, bool) {
 
 // addWaitTools advertises the tools that wait instead of polling.
 func addWaitTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "run_command",
 		Annotations: mutating("Run a Command in a Pane"),
 		Description: "Run a shell command in one pane, wait for it to finish, and " +
@@ -1156,7 +1156,7 @@ func addWaitTools(server *mcp.Server, t *tools) {
 			"answer to yet, such as a build: it returns a jobId at once, you do " +
 			"other work, and get_job collects the status and the output later.",
 	}, t.runCommand)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "get_job",
 		Annotations: readOnly("Collect a Detached Command"),
 		Description: "Collect a command started with run_command and detach. " +
@@ -1165,7 +1165,7 @@ func addWaitTools(server *mcp.Server, t *tools) {
 			"one it waits that long. A finished job reports its exit status and " +
 			"its output, and answers the same way however often you ask.",
 	}, t.getJob)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "wait_for_text",
 		Annotations: readOnly("Wait for Pane Output"),
 		Description: "Wait until a pane writes one of several patterns, reading " +

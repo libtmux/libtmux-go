@@ -422,31 +422,31 @@ func (t *tools) setPaneTitle(
 
 // addLifecycleTools advertises the tools that end or rename something.
 func addLifecycleTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_session",
 		Annotations: destructive("Kill a tmux Session"),
 		Description: "End one session by its exact name, and every window and " +
 			"program in it. Nothing brings it back.",
 	}, t.killSession)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_window",
 		Annotations: destructive("Kill a tmux Window"),
 		Description: "End one window and its panes. A window that was its " +
 			"session's last takes the session with it, which the reply says.",
 	}, t.killWindow)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_pane",
 		Annotations: destructive("Kill a tmux Pane"),
 		Description: "End one pane and the program running in it. A pane that " +
 			"was its window's last takes the window with it, which the reply says.",
 	}, t.killPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_server",
 		Annotations: destructive("Kill the tmux Server"),
 		Description: "End the whole tmux server: every session, every window, " +
 			"every program. Requires confirm to be true.",
 	}, t.killServer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "respawn_pane",
 		Annotations: mutating("Restart a Pane's Program"),
 		Description: "Restart what a pane runs, keeping the pane and its place " +
@@ -456,19 +456,19 @@ func addLifecycleTools(server *mcp.Server, t *tools) {
 			"set remain-on-exit on the window first to keep it as a dead pane " +
 			"list_panes can report.",
 	}, t.respawnPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "rename_session",
 		Annotations: settling("Rename a tmux Session"),
 		Description: "Give a session a name a person will recognise. Its id does " +
 			"not change.",
 	}, t.renameSession)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "rename_window",
 		Annotations: settling("Rename a tmux Window"),
 		Description: "Name a window, which also stops tmux renaming it after " +
 			"whatever is running in it.",
 	}, t.renameWindow)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "set_pane_title",
 		Annotations: settling("Title a tmux Pane"),
 		Description: "Set the title tmux draws on a pane's border, which is how " +

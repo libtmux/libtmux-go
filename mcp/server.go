@@ -129,12 +129,17 @@ func constrain(name string, schema *jsonschema.Schema) {
 func register[In, Out any](
 	server *mcp.Server,
 	t *tools,
+	capability Capability,
 	tool *mcp.Tool,
 	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
 ) {
-	if !t.level.permits(tool.Annotations) {
+	if !t.level.permits(tool.Annotations) || !t.capabilities.permits(capability) {
 		return
 	}
+	if tool.Meta == nil {
+		tool.Meta = mcp.Meta{}
+	}
+	tool.Meta[CapabilityMetaKey] = string(capability)
 	handler = recovering(t, handler)
 	// Inferred here rather than left to the SDK, so the closed sets above can
 	// be written into it before anything validates against it.
@@ -236,23 +241,31 @@ func (i *Instance) Close() error {
 // NewServer returns a closeable MCP instance exposing target.
 func NewServer(target tmux.Server) *Instance {
 	level := safetyFromEnvironment()
+	capabilities, _ := capabilitiesFromEnvironment()
 	tools := &tools{
-		level:       level,
-		dispatchers: map[string]dispatcher{},
-		unbatchable: map[string]struct{}{},
-		batchable:   true,
-		jobs:        newJobs(),
+		level:        level,
+		capabilities: capabilities,
+		dispatchers:  map[string]dispatcher{},
+		unbatchable:  map[string]struct{}{},
+		batchable:    true,
+		jobs:         newJobs(),
 	}
 	tools.reaching.Store(&target)
+	serverOptions := &mcp.ServerOptions{
+		Instructions: callerInstructions(),
+	}
+	if capabilities.permits(CapabilityMetadataRead) {
+		serverOptions.CompletionHandler = completionFor(target)
+	}
+	if capabilities.permits(CapabilityMetadataRead) ||
+		capabilities.permits(CapabilityContentRead) {
+		serverOptions.SubscribeHandler = tools.subscribe
+		serverOptions.UnsubscribeHandler = tools.unsubscribe
+	}
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "libtmux",
 		Version: Version,
-	}, &mcp.ServerOptions{
-		Instructions:       callerInstructions(),
-		CompletionHandler:  completionFor(target),
-		SubscribeHandler:   tools.subscribe,
-		UnsubscribeHandler: tools.unsubscribe,
-	})
+	}, serverOptions)
 	tools.watchers = newWatchers(server, target)
 	// The backstop wraps everything the tools produce; the record, when an
 	// operator asked for one, wraps the backstop so a refused reply is
@@ -267,7 +280,7 @@ func NewServer(target tmux.Server) *Instance {
 		add(server, tools)
 	}
 	addResources(server, tools)
-	addPrompts(server, level)
+	addPrompts(server, tools)
 
 	return &Instance{Server: server, tools: tools, audit: auditOwner}
 }
@@ -335,9 +348,10 @@ type tools struct {
 	// that is replaced rather than a value that is written, because a pooled
 	// control connection is retired from whichever call first finds it dead
 	// while others are in flight.
-	reaching atomic.Pointer[tmux.Server]
-	level    SafetyLevel
-	watchers *watchers
+	reaching     atomic.Pointer[tmux.Server]
+	level        SafetyLevel
+	capabilities capabilitySet
+	watchers     *watchers
 	// consented names the panes a session allowed for the rest of it, and
 	// consentMutex guards it: calls arrive concurrently.
 	consented    map[*mcp.ServerSession]map[string]bool

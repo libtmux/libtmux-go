@@ -139,7 +139,7 @@ func isClientHangup(err error) bool {
 
 // inspect connects a client to this server in memory, so the two reports below
 // ask exactly what a real client would and get exactly what it would get,
-// including whatever the safety level withheld.
+// including whatever the safety level or capability allowlist withheld.
 func inspect(target tmux.Server) (context.Context, *sdk.ClientSession, func(), error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
@@ -165,9 +165,9 @@ func inspect(target tmux.Server) (context.Context, *sdk.ClientSession, func(), e
 
 // reportTools prints what a client would be offered.
 //
-// The point is the safety level: a shorter list than expected is the usual
-// reason a client cannot do what someone asked it to, and reading it here
-// beats inferring it from a refusal.
+// A shorter list than expected usually means the safety level or capability
+// allowlist withheld something, and reading both here beats inferring either
+// from a refusal.
 func reportTools(target tmux.Server) error {
 	ctx, session, done, err := inspect(target)
 	if err != nil {
@@ -190,6 +190,20 @@ func reportTools(target tmux.Server) error {
 		level += fmt.Sprintf(" (%s is not a level, so the lowest was taken)", asked)
 	}
 	fmt.Printf("%d tools at safety level %s\n\n", len(listed.Tools), level)
+	capabilities := tmuxmcp.ResolvedCapabilities()
+	capabilityNames := make([]string, 0, len(capabilities))
+	for _, capability := range capabilities {
+		capabilityNames = append(capabilityNames, string(capability))
+	}
+	capabilityLabel := strings.Join(capabilityNames, ", ")
+	if strings.TrimSpace(os.Getenv(tmuxmcp.CapabilitiesEnvironmentVariable)) == "" {
+		capabilityLabel += " (default)"
+	}
+	fmt.Printf("capabilities: %s\n", capabilityLabel)
+	if rejected := tmuxmcp.RejectedCapabilityValues(); len(rejected) > 0 {
+		fmt.Printf("rejected capabilities: %s\n", strings.Join(rejected, ", "))
+	}
+	fmt.Println()
 	for _, tool := range listed.Tools {
 		kind := "changes tmux"
 		switch {
@@ -199,7 +213,9 @@ func reportTools(target tmux.Server) error {
 		case tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint:
 			kind = "ends something"
 		}
-		fmt.Printf("  %-28s %-14s %s\n", tool.Name, kind, firstSentence(tool.Description))
+		capability, _ := tool.Meta[tmuxmcp.CapabilityMetaKey].(string)
+		fmt.Printf("  %-28s %-16s %-14s %s\n",
+			tool.Name, capability, kind, firstSentence(tool.Description))
 	}
 	return nil
 }
@@ -214,16 +230,18 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 	defer done()
 
 	var info struct {
-		SocketPath       string `json:"socketPath"`
-		Version          string `json:"version"`
-		Alive            bool   `json:"alive"`
-		Sessions         int    `json:"sessions"`
-		Windows          int    `json:"windows"`
-		Panes            int    `json:"panes"`
-		Clients          int    `json:"clients"`
-		InsideThisServer bool   `json:"insideThisServer"`
-		CallerPaneID     string `json:"callerPaneId"`
-		SafetyLevel      string `json:"safetyLevel"`
+		SocketPath           string   `json:"socketPath"`
+		Version              string   `json:"version"`
+		Alive                bool     `json:"alive"`
+		Sessions             int      `json:"sessions"`
+		Windows              int      `json:"windows"`
+		Panes                int      `json:"panes"`
+		Clients              int      `json:"clients"`
+		InsideThisServer     bool     `json:"insideThisServer"`
+		CallerPaneID         string   `json:"callerPaneId"`
+		SafetyLevel          string   `json:"safetyLevel"`
+		Capabilities         []string `json:"capabilities"`
+		RejectedCapabilities []string `json:"rejectedCapabilities"`
 	}
 	if err := callInto(ctx, session, "get_server_info", &info); err != nil {
 		return err
@@ -243,6 +261,12 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 	if rejected := tmuxmcp.RejectedSafetyValue(); rejected != "" {
 		fmt.Printf("           %s is %q, which is not a level; the lowest was taken\n",
 			tmuxmcp.SafetyEnvironmentVariable, rejected)
+	}
+	fmt.Printf("  access:  %s\n", strings.Join(info.Capabilities, ", "))
+	if len(info.RejectedCapabilities) > 0 {
+		fmt.Printf("           rejected %s values: %s\n",
+			tmuxmcp.CapabilitiesEnvironmentVariable,
+			strings.Join(info.RejectedCapabilities, ", "))
 	}
 
 	switch {

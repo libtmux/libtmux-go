@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -105,6 +106,13 @@ func newWatchers(server *mcp.Server, target tmux.Server) *watchers {
 // that subscribed to everything it listed fail on the parts that are static.
 func (t *tools) subscribe(ctx context.Context, request *mcp.SubscribeRequest) error {
 	uri := request.Params.URI
+	required := CapabilityMetadataRead
+	if _, content := paneOfContentURI(watchedURI(uri)); content {
+		required = CapabilityContentRead
+	}
+	if !t.capabilities.permits(required) {
+		return fmt.Errorf("subscribing to %s requires the %s capability", uri, required)
+	}
 	ready := t.watchers.add(watchedURI(uri), uri)
 	// A subscription that returns before anything is watching loses whatever
 	// the pane writes next, and a pane that writes once never mentions it

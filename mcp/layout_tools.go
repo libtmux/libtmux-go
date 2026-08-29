@@ -547,26 +547,26 @@ func (t *tools) moveWindow(
 
 // addLayoutTools advertises the tools that arrange what exists.
 func addLayoutTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "split_window",
 		Annotations: mutating("Split a tmux Pane"),
 		Description: "Divide one pane in two, placing the new one below, above, " +
 			"to the right of, or to the left of it, and return the new pane's id.",
 	}, t.splitWindow)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "resize_pane",
 		Annotations: mutating("Resize a tmux Pane"),
 		Description: "Set one pane's width or height in cells, or toggle it " +
 			"between its layout size and the whole window. Reports the size tmux " +
 			"settled on, which a layout may constrain.",
 	}, t.resizePane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "select_pane",
 		Annotations: settling("Select a tmux Pane"),
 		Description: "Make one pane its window's active pane, which is where a " +
 			"person's keystrokes go.",
 	}, t.selectPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "select_layout",
 		Annotations: settling("Arrange a Window's Panes"),
 		Description: "Arrange a window's panes with one of tmux's presets " +
@@ -575,13 +575,13 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 			"or restore a layout string read from " +
 			"get_window_info.",
 	}, t.selectLayout)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "swap_pane",
 		Annotations: mutating("Swap Two tmux Panes"),
 		Description: "Exchange two panes' positions. Both keep their ids, so " +
 			"anything addressing them still can.",
 	}, t.swapPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "move_pane",
 		Annotations: mutating("Move a tmux Pane"),
 		Description: "Move a pane into another window, or break it out into a " +
@@ -589,14 +589,14 @@ func addLayoutTools(server *mcp.Server, t *tools) {
 			"and whatever it is running, which killing and splitting again does " +
 			"not. Moving a window's last pane destroys that window.",
 	}, t.movePane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "resize_window",
 		Annotations: mutating("Resize a tmux Window"),
 		Description: "Set a window's size in cells. Worth doing before running " +
 			"something whose output is laid out in columns, since a window no " +
 			"client is attached to is whatever size tmux guessed.",
 	}, t.resizeWindow)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "move_window",
 		Annotations: settling("Move a tmux Window"),
 		Description: "Move a window to another index, or into another session. " +
