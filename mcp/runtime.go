@@ -11,9 +11,9 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// ErrRuntimeTargetBound identifies a target that already owns an execution
-// transport. An MCP runtime must be the only owner of its terminal transport.
-var ErrRuntimeTargetBound = errors.New("libtmux MCP target already owns execution transport")
+// ErrRuntimeTargetBound identifies a target already bound to a terminal
+// Connection. An MCP runtime must own the connection it creates.
+var ErrRuntimeTargetBound = errors.New("libtmux MCP target is already connection-bound")
 
 // runtimeSetupTimeout bounds selector probes and control registration even
 // when an MCP request has no deadline.

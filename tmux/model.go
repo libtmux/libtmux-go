@@ -44,13 +44,6 @@ func (s Session) ID() SessionID { return s.sessionID }
 // Server returns the immutable configured handle that produced the session.
 func (s Session) Server() Server { return s.server }
 
-// WithEngine returns a copy whose operations run through engine. It preserves
-// the server selector, performs no I/O, and carries the engine to relations
-// read from the copy.
-func (s Session) WithEngine(engine Engine) Session {
-	return s.withServer(s.server.WithEngine(engine))
-}
-
 func (s Session) withServer(server Server) Session {
 	s.server = server
 	return s
@@ -114,13 +107,6 @@ func (w Window) Index() int { return w.windowIndex }
 
 // Server returns the configured handle that produced the window.
 func (w Window) Server() Server { return w.server }
-
-// WithEngine returns a copy whose operations run through engine. It preserves
-// the server selector, performs no I/O, and carries the engine to relations
-// read from the copy.
-func (w Window) WithEngine(engine Engine) Window {
-	return w.withServer(w.server.WithEngine(engine))
-}
 
 func (w Window) withServer(server Server) Window {
 	w.server = server
@@ -192,13 +178,6 @@ func (p Pane) Index() int { return p.paneIndex }
 // Server returns the configured handle that produced the pane.
 func (p Pane) Server() Server { return p.server }
 
-// WithEngine returns a copy whose operations run through engine. It preserves
-// the server selector, performs no I/O, and carries the engine to relations
-// read from the copy.
-func (p Pane) WithEngine(engine Engine) Pane {
-	return p.withServer(p.server.WithEngine(engine))
-}
-
 func (p Pane) withServer(server Server) Pane {
 	p.server = server
 	return p
@@ -254,13 +233,6 @@ type clientAttachment struct {
 
 // Server returns the configured handle that produced the client.
 func (c Client) Server() Server { return c.server }
-
-// WithEngine returns a copy whose operations run through engine. It preserves
-// the server selector, performs no I/O, and carries the engine to relations
-// read from the copy.
-func (c Client) WithEngine(engine Engine) Client {
-	return c.withServer(c.server.WithEngine(engine))
-}
 
 func (c Client) withServer(server Server) Client {
 	c.server = server

@@ -1,12 +1,11 @@
-// Command build-workspace builds an embedded tmuxp-style workspace over control
-// mode, then reports the topology and tmux process count.
+// Command build-workspace builds an embedded tmuxp-style workspace, then
+// reports its topology.
 package main
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -49,19 +48,8 @@ func run() error {
 		return fmt.Errorf("parse: %w", err)
 	}
 
-	var mutex sync.Mutex
-	var processes int
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-build-workspace",
-		Runner: tmux.CommandRunnerFunc(func(
-			ctx context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			mutex.Lock()
-			processes++
-			mutex.Unlock()
-			return tmux.SubprocessRunner().Run(ctx, request)
-		}),
 	})
 	if err != nil {
 		return fmt.Errorf("construct tmux server: %w", err)
@@ -85,12 +73,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("search windows: %w", err)
 	}
-	mutex.Lock()
-	started := processes
-	mutex.Unlock()
-
-	fmt.Printf("built %q with %d windows, using %d tmux processes\n",
-		described.SessionName, len(windows), started)
+	fmt.Printf("built %q with %d windows\n", described.SessionName, len(windows))
 	for _, window := range windows {
 		name, _ := window.Formats().WindowName()
 		index, _ := window.Formats().WindowIndex()

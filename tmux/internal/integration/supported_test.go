@@ -12,7 +12,8 @@ import (
 )
 
 // workflowTmuxVersions matches the tmux releases the tests workflow builds and
-// runs everything against, which is a YAML flow sequence of quoted versions.
+// runs compatible module coverage against. It is a YAML flow sequence of
+// quoted versions.
 var workflowTmuxVersions = regexp.MustCompile(`(?m)^\s+tmux-version:\s*\[([^\]]+)\]`)
 
 // documentedRange matches a supported range stated to a reader. Whitespace
@@ -31,7 +32,7 @@ var documentedFloorOnly = regexp.MustCompile(
 // measurements.
 var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?)\s*$`)
 
-func TestTheSupportedTmuxRangeIsTheOneTested(t *testing.T) {
+func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
@@ -56,6 +57,20 @@ func TestTheSupportedTmuxRangeIsTheOneTested(t *testing.T) {
 	}
 	slices.SortFunc(tested, tmux.Version.Compare)
 	oldest, newest := tested[0].String(), tested[len(tested)-1].String()
+	connectionFloor := tmux.MinimumConnectionVersion
+	if !slices.ContainsFunc(tested, func(version tmux.Version) bool {
+		return version.String() == connectionFloor
+	}) {
+		t.Fatalf("the workflow matrix omits the connection floor %s", connectionFloor)
+	}
+	allowedRanges := map[[2]string]bool{
+		{oldest, newest}:          true,
+		{connectionFloor, newest}: true,
+	}
+	allowedFloors := map[string]bool{
+		oldest:          true,
+		connectionFloor: true,
+	}
 
 	for _, document := range markdownFiles(t, root) {
 		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(document)))
@@ -63,15 +78,16 @@ func TestTheSupportedTmuxRangeIsTheOneTested(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, match := range documentedRange.FindAllStringSubmatch(string(content), -1) {
-			if match[1] != oldest || match[2] != newest {
-				t.Errorf("%s promises tmux %s through %s and the workflow runs "+
-					"%s through %s", document, match[1], match[2], oldest, newest)
+			if !allowedRanges[[2]string{match[1], match[2]}] {
+				t.Errorf("%s promises untested tmux range %s through %s; "+
+					"tested module ranges are %s-%s and %s-%s",
+					document, match[1], match[2], oldest, newest, connectionFloor, newest)
 			}
 		}
 		for _, match := range documentedFloorOnly.FindAllStringSubmatch(string(content), -1) {
-			if match[1] != oldest {
-				t.Errorf("%s asks for tmux %s or newer and the oldest one "+
-					"tested is %s", document, match[1], oldest)
+			if !allowedFloors[match[1]] {
+				t.Errorf("%s asks for untested tmux floor %s; tested floors are %s and %s",
+					document, match[1], oldest, connectionFloor)
 			}
 		}
 	}

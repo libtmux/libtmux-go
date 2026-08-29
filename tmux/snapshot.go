@@ -314,9 +314,9 @@ func (s Snapshot) ClientByName(name ClientName) (Client, error) {
 // Failures remain errors rather than empty snapshots; cancellation may occur after
 // earlier listings completed.
 //
-// Identity probes reject a daemon replacement during collection. An
-// [InstanceBoundEngine] skips the closing probe; the opening probe still selects
-// version-specific fields.
+// Identity probes reject a daemon replacement during subprocess collection.
+// A connection is already bound to the exact daemon and skips the closing
+// probe; the opening probe still selects version-specific fields.
 func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	identity, err := s.probeSnapshotIdentity(ctx)
 	if err != nil {

@@ -54,43 +54,6 @@ func (c *countingRunner) total() int {
 	return c.count
 }
 
-// countingEngine omits [tmux.InstanceBoundEngine] so boundEngine can isolate
-// the effect of that property.
-type countingEngine struct {
-	inner tmux.Engine
-	mu    sync.Mutex
-	count int
-}
-
-func (e *countingEngine) Supports(kind tmux.CommandKind) bool { return e.inner.Supports(kind) }
-
-func (e *countingEngine) Run(
-	ctx context.Context,
-	kind tmux.CommandKind,
-	request tmux.CommandRequest,
-) (tmux.CommandResult, error) {
-	e.mu.Lock()
-	e.count++
-	e.mu.Unlock()
-	return e.inner.Run(ctx, kind, request)
-}
-
-func (e *countingEngine) reset() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.count = 0
-}
-
-func (e *countingEngine) total() int {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.count
-}
-
-type boundEngine struct{ *countingEngine }
-
-func (boundEngine) InstanceBound() bool { return true }
-
 type harness struct {
 	server    tmux.Server
 	session   tmux.Session
@@ -195,6 +158,12 @@ func buildPlanned(ctx context.Context, handle tmux.Server, window tmux.Window) e
 
 type build func(context.Context, tmux.Server, tmux.Window) error
 
+type measurement struct {
+	mode        string
+	connections int
+	run         build
+}
+
 func measureBuild(
 	ctx context.Context,
 	mode string,
@@ -214,15 +183,15 @@ func measureBuild(
 
 	handle := h.server
 	if connections >= 0 {
-		connected, _, pool, err := h.server.OpenControlPool(
-			ctx, h.session, tmux.ControlPoolRequest{Connections: connections},
+		connection, err := h.session.OpenControl(
+			ctx, tmux.ConnectionOptions{Lanes: connections},
 		)
 		if err != nil {
-			return row{}, fmt.Errorf("%s: open control pool: %w", mode, err)
+			return row{}, fmt.Errorf("%s: open control connection: %w", mode, err)
 		}
-		defer func() { _ = pool.Close() }()
-		handle = connected
-		refreshed, err := connected.Window(ctx, window.ID())
+		defer func() { _ = connection.Close() }()
+		handle = connection.Server()
+		refreshed, err := handle.Window(ctx, window.ID())
 		if err != nil {
 			return row{}, fmt.Errorf("%s: resolve window: %w", mode, err)
 		}
@@ -268,82 +237,24 @@ func searchAnswer(ctx context.Context, handle tmux.Server) (string, error) {
 	return fmt.Sprintf("%d panes on the server %v", len(panes), indexes), nil
 }
 
-// measureSnapshot compares ordinary and instance-bound snapshot reads. It counts
-// commands because both paths share one connection and start no processes.
-func measureSnapshot(ctx context.Context, bound bool) (row, error) {
-	mode := "snapshot"
-	if bound {
-		mode = "snapshot, bound"
+// measureAll runs compatible rows in display order. Negative connections
+// selects subprocesses; zero opens one connection lane. Terminal connections
+// require tmux 3.6, so older releases retain the process and planned rows.
+func measureAll(ctx context.Context, version tmux.Version) ([]row, error) {
+	measurements := []measurement{{"process", -1, buildDirect}}
+	if supportsOwnedConnections(version) {
+		measurements = append(measurements,
+			measurement{"connection", 0, buildDirect},
+			measurement{"concurrent x4", 4, buildDirect},
+		)
 	}
-	h, err := newHarness(ctx)
-	if err != nil {
-		return row{}, err
+	measurements = append(measurements, measurement{"chained", -1, buildPlanned})
+	if supportsOwnedConnections(version) {
+		measurements = append(measurements, measurement{"chained + connection", 0, buildPlanned})
 	}
-	defer h.close()
 
-	if _, err := h.session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
-		return row{}, fmt.Errorf("%s: create window: %w", mode, err)
-	}
-	client, err := h.server.OpenControl(ctx, h.session)
-	if err != nil {
-		return row{}, fmt.Errorf("%s: open control: %w", mode, err)
-	}
-	defer func() { _ = client.Close() }()
-
-	counter := &countingEngine{inner: client.Engine()}
-	var engine tmux.Engine = counter
-	if bound {
-		engine = boundEngine{countingEngine: counter}
-	}
-	handle := h.server.WithEngine(engine)
-
-	// Warm the version cache so the measurement isolates snapshot reads.
-	if _, err := handle.Snapshot(ctx); err != nil {
-		return row{}, fmt.Errorf("%s: warm snapshot: %w", mode, err)
-	}
-	counter.reset()
-	start := time.Now()
-	snapshot, err := handle.Snapshot(ctx)
-	if err != nil {
-		return row{}, fmt.Errorf("%s: snapshot: %w", mode, err)
-	}
-	elapsed := time.Since(start)
-	commands := counter.total()
-
-	clients, err := handle.Clients(ctx)
-	if err != nil {
-		return row{}, fmt.Errorf("%s: list clients: %w", mode, err)
-	}
-	panes := snapshot.Panes()
-	indexes := make([]string, 0, len(panes))
-	for _, pane := range panes {
-		index, _ := pane.Formats().Raw("pane_index")
-		indexes = append(indexes, index)
-	}
-	return row{
-		mode:      mode,
-		elapsed:   elapsed,
-		processes: commands,
-		clients:   len(clients),
-		answer:    fmt.Sprintf("%d panes on the server %v", len(panes), indexes),
-	}, nil
-}
-
-// measureAll runs rows in display order. Negative connections selects
-// subprocesses; zero uses the pool default.
-func measureAll(ctx context.Context) ([]row, error) {
-	rows := make([]row, 0, 7)
-	for _, measurement := range []struct {
-		mode        string
-		connections int
-		run         build
-	}{
-		{"process", -1, buildDirect},
-		{"control mode", 0, buildDirect},
-		{"concurrent x4", 4, buildDirect},
-		{"chained", -1, buildPlanned},
-		{"chained + control", 0, buildPlanned},
-	} {
+	rows := make([]row, 0, len(measurements))
+	for _, measurement := range measurements {
 		measured, err := measureBuild(
 			ctx, measurement.mode, measurement.connections, measurement.run,
 		)
@@ -352,12 +263,9 @@ func measureAll(ctx context.Context) ([]row, error) {
 		}
 		rows = append(rows, measured)
 	}
-	for _, bound := range []bool{false, true} {
-		measured, err := measureSnapshot(ctx, bound)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, measured)
-	}
 	return rows, nil
+}
+
+func supportsOwnedConnections(version tmux.Version) bool {
+	return version.Major() > 3 || version.Major() == 3 && version.Minor() >= 6
 }

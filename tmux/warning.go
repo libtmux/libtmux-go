@@ -58,16 +58,6 @@ const (
 	// WarningCommandStderr reports stderr from a completed command whose Python
 	// API treats the diagnostic as nonfatal.
 	WarningCommandStderr
-	// WarningControlPoolClosed reports a command that started a tmux process
-	// because the control pool carrying it had been closed. The command ran
-	// and its result is unchanged; only its cost is.
-	WarningControlPoolClosed
-	// WarningControlPoolUnused reports a command that started a tmux process
-	// while a control pool was open on the same configuration, which happens
-	// when the record issuing it was materialized before the pool existed and
-	// so kept the handle it was made on. The command ran and its result is
-	// unchanged; only its cost is.
-	WarningControlPoolUnused
 )
 
 // Warning describes one nonfatal compatibility decision delivered to a
@@ -113,35 +103,6 @@ func (s Server) warn(warning Warning) {
 	if handler != nil {
 		handler(warning)
 	}
-}
-
-func newControlPoolClosedWarning(kind CommandKind) Warning {
-	return Warning{
-		Kind: WarningControlPoolClosed,
-		Message: "control pool is closed: " + kind.String() +
-			" started a tmux process instead",
-	}
-}
-
-func newControlPoolUnusedWarning() Warning {
-	return Warning{
-		Kind: WarningControlPoolUnused,
-		Message: "a control pool is open on this server, but this command " +
-			"started a tmux process: the record issuing it predates the pool; " +
-			"move it with WithEngine",
-	}
-}
-
-// warnIfPoolUnused reports a server command using a subprocess while a usable
-// pool is open. Intentional exact-byte subprocesses are excluded.
-func (s Server) warnIfPoolUnused(kind CommandKind) {
-	if kind != CommandServer || s.engineless {
-		return
-	}
-	if s.state == nil || s.state.shared == nil || s.state.shared.pools.Load() == 0 {
-		return
-	}
-	s.warn(newControlPoolUnusedWarning())
 }
 
 func newCommandStderrWarning(subcommand string, stderr []string) Warning {

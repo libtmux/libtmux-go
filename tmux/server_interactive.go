@@ -553,7 +553,7 @@ func (s Server) streamingLiteralCmd(
 	if err := validateLiteralCommandArguments(args); err != nil {
 		return CommandResult{ExitCode: -1}, err
 	}
-	result, err := s.runCommand(ctx, CommandProcess, args, &stdio, false)
+	result, err := s.runCommand(ctx, commandProcess, args, &stdio, false)
 	commandResult := CommandResult{
 		Command:  slices.Clone(result.Command),
 		ExitCode: result.ExitCode,

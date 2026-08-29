@@ -3,24 +3,10 @@ package tmux
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
-
-func TestConnectionDoesNotRetainLegacyControlPool(t *testing.T) {
-	t.Parallel()
-
-	connectionType := reflect.TypeFor[Connection]()
-	legacyPoolType := reflect.TypeFor[*ControlPool]()
-	for index := range connectionType.NumField() {
-		field := connectionType.Field(index)
-		if field.Type == legacyPoolType {
-			t.Fatalf("Connection field %q retains legacy ControlPool", field.Name)
-		}
-	}
-}
 
 func TestConnectionBoundServerCannotEscapeToAProcess(t *testing.T) {
 	t.Parallel()
@@ -39,7 +25,7 @@ func TestConnectionBoundServerCannotEscapeToAProcess(t *testing.T) {
 		"streaming command": func(bound Server) error {
 			_, err := bound.runCommand(
 				context.Background(),
-				CommandProcess,
+				commandProcess,
 				[]string{"attach-session"},
 				&tmuxcmd.Stdio{},
 				false,
@@ -48,21 +34,6 @@ func TestConnectionBoundServerCannotEscapeToAProcess(t *testing.T) {
 		},
 		"exact argv": func(bound Server) error {
 			_, err := bound.runExactArgv(context.Background(), []string{"-V"})
-			return err
-		},
-		"engine reset": func(bound Server) error {
-			_, err := bound.WithEngine(nil).runExactArgv(
-				context.Background(),
-				[]string{"-V"},
-			)
-			return err
-		},
-		"subprocess engine": func(bound Server) error {
-			_, err := bound.SubprocessEngine().Run(
-				context.Background(),
-				CommandProcess,
-				CommandRequest{Arguments: []string{"-V"}},
-			)
 			return err
 		},
 		"socket retarget": func(bound Server) error {
@@ -132,19 +103,6 @@ func TestControlLaneCountValidationNamesTheCallerField(t *testing.T) {
 	}
 	if calls := runner.callCount(); calls != 0 {
 		t.Fatalf("runner calls = %d, want validation before tmux I/O", calls)
-	}
-
-	_, _, pool, err := server.OpenControlPool(
-		context.Background(),
-		session,
-		ControlPoolRequest{Connections: -1},
-	)
-	if pool != nil {
-		_ = pool.Close()
-		t.Fatal("OpenControlPool() returned a pool for negative connections")
-	}
-	if !errors.As(err, &requestError) || requestError.Field != "Connections" {
-		t.Fatalf("OpenControlPool() error = %#v, want rejected Connections field", err)
 	}
 }
 
@@ -301,7 +259,7 @@ func TestClosedConnectionBoundServerFailsClosed(t *testing.T) {
 	server.connection = connection
 	connection.server = server
 
-	if _, err := server.WithEngine(nil).Cmd(
+	if _, err := server.Cmd(
 		context.Background(),
 		"display-message",
 		"late",

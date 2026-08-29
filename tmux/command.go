@@ -101,8 +101,8 @@ type CommandRequest struct {
 	// CommandList reports that Arguments contains tmux command-list syntax, where
 	// a bare ";" separates commands. Zero means one command of literal values.
 	//
-	// Engines must preserve literal trailing semicolons when false and leave bare
-	// separators unquoted when true; subprocess and control transports parse
+	// Dispatch must preserve literal trailing semicolons when false and leave
+	// bare separators unquoted when true; subprocess and control commands parse
 	// these forms differently.
 	CommandList bool
 }

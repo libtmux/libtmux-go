@@ -24,10 +24,11 @@ func TestFastPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
+	exampletest.RequireTmux(t, ctx, tmuxtest.NewServer(ctx, t), "3.6")
 	options := tmux.ServerOptions{SocketPath: filepath.Join(t.TempDir(), "tmux.sock")}
 	printed := exampletest.Output(t, func() error { return run(ctx, options) })
 
-	// Counts vary by tmux version; control mode must still start fewer processes.
+	// Counts vary by tmux version; the connection must still start fewer processes.
 	overProcesses := countStarted(t, printed, "over tmux processes")
 	overConnection := countStarted(t, printed, "over a connection")
 	if overProcesses == 0 {

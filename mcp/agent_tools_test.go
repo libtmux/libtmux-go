@@ -2098,7 +2098,7 @@ func TestServerInfoTellsWhoIsWatching(t *testing.T) {
 	if err != nil || len(sessions) == 0 {
 		t.Fatalf("sessions: %v", err)
 	}
-	control, err := target.WithEngine(target.SubprocessEngine()).OpenControl(ctx, sessions[0])
+	control, err := target.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatalf("open a control client: %v", err)
 	}

@@ -1307,87 +1307,6 @@ func ExampleSession_SetBellAction() {
 	// Output: none true
 }
 
-func ExampleServer_WithEngine() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-with-engine",
-	})
-	if err != nil {
-		fmt.Println("new server:", err)
-		return
-	}
-	defer killExampleServer(server)
-
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
-	if err != nil {
-		fmt.Println("create session:", err)
-		return
-	}
-
-	// A control-mode client is one persistent tmux process. Selecting its
-	// engine makes the operations below reuse that connection instead of
-	// starting a tmux process each.
-	client, err := server.OpenControl(ctx, session)
-	if err != nil {
-		fmt.Println("open control:", err)
-		return
-	}
-	defer func() { _ = client.Close() }()
-	connected := server.WithEngine(client.Engine())
-
-	window, err := connected.Session(ctx, session.ID())
-	if err != nil {
-		fmt.Println("look up session:", err)
-		return
-	}
-	name, _ := window.Name()
-	fmt.Println(name)
-	// Output: build
-}
-
-func ExampleControlClient_Engine() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-client-engine",
-	})
-	if err != nil {
-		fmt.Println("new server:", err)
-		return
-	}
-	defer killExampleServer(server)
-
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
-	if err != nil {
-		fmt.Println("create session:", err)
-		return
-	}
-	client, err := server.OpenControl(ctx, session)
-	if err != nil {
-		fmt.Println("open control:", err)
-		return
-	}
-	defer func() { _ = client.Close() }()
-
-	// The engine borrows the client; closing the client stops the process, and
-	// SubprocessEngine returns a handle to starting one per command again.
-	connected := server.WithEngine(client.Engine())
-	forking := connected.WithEngine(server.SubprocessEngine())
-
-	for _, handle := range []tmux.Server{connected, forking} {
-		sessions, err := handle.Sessions(ctx)
-		if err != nil {
-			fmt.Println("list sessions:", err)
-			return
-		}
-		fmt.Println(len(sessions))
-	}
-	// Output:
-	// 1
-	// 1
-}
-
 func ExampleControlClient_Call() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1553,10 +1472,9 @@ func ExamplePoll() {
 	// Output: build ready
 }
 
-// ExampleSubprocessRunner counts the requests that become tmux processes,
-// which is how a caller confirms an engine is carrying work. The wrapper
-// delegates execution, so it stays correct without knowing what a result
-// has to look like.
+// ExampleSubprocessRunner counts the requests that become tmux processes. The
+// wrapper delegates execution, so it stays correct without knowing what a
+// result has to look like.
 func ExampleSubprocessRunner() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1653,87 +1571,6 @@ func ExampleControlClient_NextNotification() {
 	// Output: the pane reported it was ready
 }
 
-// ExamplePane_WithEngine counts what a record costs before and after it is
-// moved onto a connected handle. The counter is there because the failure it
-// prevents is silent: a record made before the engine existed keeps starting a
-// tmux process for every command and reports nothing wrong while doing so.
-func ExamplePane_WithEngine() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	var mutex sync.Mutex
-	var processes int
-	counting := tmux.CommandRunnerFunc(func(
-		ctx context.Context,
-		request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		mutex.Lock()
-		processes++
-		mutex.Unlock()
-		return tmux.SubprocessRunner().Run(ctx, request)
-	})
-	count := func() int {
-		mutex.Lock()
-		defer mutex.Unlock()
-		return processes
-	}
-
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-with-server",
-		Runner:     counting,
-	})
-	if err != nil {
-		fmt.Println("new server:", err)
-		return
-	}
-	defer killExampleServer(server)
-
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
-	if err != nil {
-		fmt.Println("create session:", err)
-		return
-	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
-		return
-	}
-	// tmux -V is a client-global option rather than a command, so no engine can
-	// carry it. Reading it once now keeps that one process out of the counts.
-	if _, err := server.Version(ctx); err != nil {
-		fmt.Println("read version:", err)
-		return
-	}
-	client, err := server.OpenControl(ctx, session)
-	if err != nil {
-		fmt.Println("open control:", err)
-		return
-	}
-	defer func() { _ = client.Close() }()
-	connected := server.WithEngine(client.Engine())
-
-	before := count()
-	if _, err := pane.Refresh(ctx); err != nil {
-		fmt.Println("refresh the held record:", err)
-		return
-	}
-	fmt.Println("processes for the record made before the engine:", count() > before)
-
-	// The move is a value operation: the pane's handle is configuration, so
-	// nothing is looked up again and no command is sent.
-	pane = pane.WithEngine(connected.Engine())
-
-	before = count()
-	if _, err := pane.Refresh(ctx); err != nil {
-		fmt.Println("refresh the moved record:", err)
-		return
-	}
-	fmt.Println("processes for the same record after the move:", count()-before)
-	// Output:
-	// processes for the record made before the engine: true
-	// processes for the same record after the move: 0
-}
-
 // ExamplePane_CaptureToFile watches a pane on a connected handle. Every tmux
 // command it sends prints nothing, so the loop reuses the control connection
 // instead of starting a tmux process per round the way Pane.Capture does.
@@ -1764,18 +1601,17 @@ func ExamplePane_CaptureToFile() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
+	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
+	if err != nil {
+		fmt.Println("open connection:", err)
+		return
+	}
+	defer func() { _ = connection.Close() }()
+	pane, ok, err := connection.Session().ResolveActivePane(ctx)
 	if err != nil || !ok {
 		fmt.Println("resolve pane:", ok, err)
 		return
 	}
-	client, err := server.OpenControl(ctx, session)
-	if err != nil {
-		fmt.Println("open control:", err)
-		return
-	}
-	defer func() { _ = client.Close() }()
-	pane = pane.WithEngine(client.Engine())
 
 	command := "printf 'build ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {

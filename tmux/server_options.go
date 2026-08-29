@@ -61,7 +61,7 @@ type ServerOptions struct {
 	//
 	// Runner does not replace executable discovery, and Server.OpenControl
 	// starts the resolved tmux -C process directly. Registration and version
-	// probes use the server's normal Engine/Runner routing.
+	// probes use the server's configured command runner.
 	Runner CommandRunner
 }
 
@@ -105,8 +105,8 @@ func NewServer(options ServerOptions) (Server, error) {
 // WithSocketPath returns a server using path and the receiver's frozen
 // executable, environment, working directory, and server-option policy. Empty
 // clears explicit socket selectors and leaves endpoint selection to tmux. The
-// result has fresh daemon-scoped coordination and resets engine and fallback
-// selection because either may belong to the receiver's daemon.
+// result has fresh daemon-scoped coordination. A connection-bound receiver is
+// rejected because its transport belongs to the original daemon.
 func (s Server) WithSocketPath(path string) (Server, error) {
 	state, err := s.stateForUse()
 	if err != nil {
@@ -116,7 +116,7 @@ func (s Server) WithSocketPath(path string) (Server, error) {
 		return Server{}, invalidServerOptions(err)
 	}
 	if s.connection != nil {
-		return Server{}, s.connection.terminalError(CommandProcess)
+		return Server{}, s.connection.terminalError(commandProcess)
 	}
 	config := state.config
 	config.socketName = ""

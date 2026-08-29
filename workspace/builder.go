@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -29,14 +30,11 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 // Build is not atomic. A failure after session creation returns that session;
 // completed mutations remain in tmux. Command failures are not normalized.
 //
-// When server has no engine, Build attempts a temporary control pool and falls
-// back to subprocesses if the pool cannot open. The pool appears as a tmux
-// client and may fire attachment hooks; pass a server carrying
-// [tmux.Server.SubprocessEngine] to avoid it.
-//
-// Build closes a temporary pool before returning. A session returned from that
-// pool retains its closed engine; later calls fall back to subprocesses or
-// return [tmux.EngineFallbackError] when fallback is rejected.
+// On tmux 3.6 or later, Build creates the session and an attached control
+// connection in one process, uses that connection for the build, and closes it
+// before returning. The returned Session is not bound to the closed connection.
+// On older tmux releases, Build creates and populates the session through
+// subprocesses. An attached connection may fire client hooks and policies.
 //
 // Each pane receives workspace, window, and pane CommandsBefore, then its own
 // Commands. Sleep values pause Build rather than the pane.
@@ -45,28 +43,34 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 	if err != nil {
 		return tmux.Session{}, err
 	}
-	session, err := server.NewSession(ctx, request)
+	created, connection, err := server.NewSessionConnection(
+		ctx,
+		request,
+		tmux.ConnectionOptions{},
+	)
 	if err != nil {
-		return session, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
+		if !errors.Is(err, tmux.ErrVersionTooLow) {
+			return created, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
+		}
+		created, err = server.NewSession(ctx, request)
+		if err != nil {
+			return created, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
+		}
+		if err := BuildInto(ctx, created, workspace); err != nil {
+			return created, err
+		}
+		return created, nil
 	}
 
-	// Preserve a caller-selected engine. When Build opens the pool, it closes
-	// with this call while the returned session keeps its pooled engine. After
-	// close, EngineFallbackAllow permits subprocess fallback;
-	// EngineFallbackReject returns a tmux.EngineFallbackError instead.
-	if server.Engine() == nil {
-		_, live, pool, poolErr := server.OpenControlPool(
-			ctx, session, tmux.ControlPoolRequest{},
-		)
-		if poolErr == nil {
-			defer func() { _ = pool.Close() }()
-			session = live
-		}
+	buildErr := BuildInto(ctx, connection.Session(), workspace)
+	closeErr := connection.Close()
+	if closeErr != nil {
+		closeErr = fmt.Errorf("close workspace connection: %w", closeErr)
 	}
-	if err := BuildInto(ctx, session, workspace); err != nil {
-		return session, err
+	if err := errors.Join(buildErr, closeErr); err != nil {
+		return created, err
 	}
-	return session, nil
+	return created, nil
 }
 
 // BuildInto populates the initial session described by workspace. The session

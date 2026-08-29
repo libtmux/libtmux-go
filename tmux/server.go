@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"sync/atomic"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
@@ -16,15 +15,9 @@ import (
 // shares version-cache coordination; only the documented concurrent operations
 // are safe to share.
 type Server struct {
-	state          *serverState
-	connection     *Connection
-	daemon         *snapshotServerIdentity
-	engine         Engine
-	engineFallback EngineFallbackPolicy
-	// engineless records that this handle gave up its engine deliberately, so
-	// that a command it sends through a tmux process is expected rather than
-	// the cost of a record that predates the connection.
-	engineless bool
+	state      *serverState
+	connection *Connection
+	daemon     *snapshotServerIdentity
 	// requiresProcess marks exact-output and interactive operations that cannot
 	// cross a persistent control connection.
 	requiresProcess bool
@@ -36,14 +29,10 @@ type serverState struct {
 	shared   *serverShared
 }
 
-// serverShared coordinates version caching and pool state across handles that
-// address the same daemon with different process environments.
+// serverShared coordinates version caching across handles that address the
+// same daemon with different process environments.
 type serverShared struct {
 	version versionCache
-	// pools counts the control pools open on this tmux server. A record
-	// materialized before a pool keeps the handle it was made on and pays for a
-	// process per command; this is how that handle can tell.
-	pools atomic.Int64
 }
 
 // coordination returns the daemon-scoped shared state.
@@ -202,7 +191,7 @@ func (s Server) dispatch(
 	commandList bool,
 	args ...string,
 ) (CommandResult, []byte, error) {
-	result, err := s.runCommand(ctx, CommandServer, args, nil, commandList)
+	result, err := s.runCommand(ctx, commandServer, args, nil, commandList)
 	commandResult := cloneCommandResult(CommandResult{
 		Command:   result.Command,
 		Stdout:    result.Stdout,

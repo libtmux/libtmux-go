@@ -88,14 +88,15 @@ therefore a naming and view-type problem rather than a packaging one, which is
 why format values live behind `Formats` instead of on each receiver.
 
 A dependency analysis over the root package -- asking each used object where it
-was declared -- found `control`, `filter` and `search` reachable in one direction
-only, and `plan` reachable once one shared argument builder moves. They stay
-anyway. Extracting `control` would strand `Server.OpenControl` and
-`Server.OpenControlPool`, whose discoverability from `server.` is the point of
-the mode table; extracting `search` would strand the eight methods that are its
-API; and `filter` is a cycle in practice, because the search signatures name
-filter types while the filter predicates name the model. The finding is recorded
-so the question does not have to be reopened from scratch.
+was declared -- found `control`, `filter` and `search` reachable in one
+direction only, and `plan` reachable once one shared argument builder moves.
+They stay anyway. Extracting `control` would strand `Session.OpenControl`,
+`Server.NewSessionConnection`, and `Session.OpenNotifications` from the models
+whose daemon identity they retain. Extracting `search` would strand the eight
+methods that are its API; and `filter` is a cycle in practice, because the
+search signatures name filter types while the filter predicates name the model.
+The finding is recorded so the question does not have to be reopened from
+scratch.
 
 `Plan` follows that rule for a reason of its own. A recorded operation and the
 method that runs the same command share one argv builder, which is what stops a
@@ -431,130 +432,85 @@ sensitive when their own command operands contain secrets.
 `SnapshotDecodeError` identifies the object, record, and field but redacts the
 malformed field value.
 
-`Engine` is the seam that decides whether a process happens at all; see
-"Engines" below. `ServerOptions.Runner` replaces dispatched process execution
-after construction and remains underneath engine fallback. It neither skips
-executable resolution nor starts `OpenControl`'s direct process. Pure private
-request builders can also seed a future deferred operation graph. An exported
-operation hierarchy is deferred until a real downstream consumer fixes its
-required identity, batching, and error semantics.
+`ServerOptions.Runner` replaces subprocess execution after construction. It
+does not skip executable resolution or start a connection's direct `tmux -C`
+process. Pure private request builders can also seed a future deferred operation
+graph. An exported operation hierarchy is deferred until a real downstream
+consumer fixes its required identity, batching, and error semantics.
 
-## Engines
+## Execution bindings
 
-An `Engine` is a transport plus the set of request kinds it can carry:
+`NewServer` creates one plain binding. It freezes the absolute tmux executable,
+environment, working directory, configuration, and socket selection, and every
+record derived from it keeps that binding. Ordinary operations start the frozen
+subprocess runner. There is no generic transport selector on `Server`.
 
-```go
-type Engine interface {
-	Supports(kind CommandKind) bool
-	Run(ctx context.Context, kind CommandKind, request CommandRequest) (CommandResult, error)
-}
-```
+`Session.OpenControl` creates an owned `Connection` bound to the exact daemon
+that materialized the session. `Server.NewSessionConnection` creates a session
+and retains its creating control process as the first lane. Each connection
+owns one or more internal command lanes and exposes bound `Server` and `Session`
+values. Records derived from those values retain the same owner.
 
-A record materialized before a connection keeps the handle it was made on and
-pays for a tmux process per command. Measured: three reads on a stale record
-cost nine processes and on the same record using `WithEngine`, none. That
-is reported as a `WarningControlPoolUnused`, completing `WarningControlPoolClosed`
-which reported the same symptom for a pool that had been closed; covering one
-and not the other left the commoner case to be measured rather than told. It
-warns rather than refuses because the results are unchanged and only the cost
-differs.
+Plain and connection-bound records may coexist. A record materialized before a
+connection remains plain; obtaining a connection does not mutate or rebind it.
+Callers use `Connection.Server` or `Connection.Session` when they want the
+connected path. This makes the subprocess cost and connection lifetime visible
+in the value being used.
 
-Reporting it needs the pool count to be reachable from the handle that is
-paying, which is why `serverState` separates the handle's configuration from
-the tmux server's coordination. `NewSession` runs on a handle with TMUX removed
-from its environment, so a program started inside a pane does not create a
-session against the server it is running in, and the session it returns keeps
-that handle. Those are different options and so a different `serverState`, but
-the same tmux: sharing the coordination also stops each created session
-re-probing a version the creating handle already held, which was one tmux
-process per session.
+The connection binding is terminal. After close, operations return
+`ErrControlClosed`. An exact-byte read, interactive attachment, or other
+operation that needs a separate process returns
+`ErrConnectionRequiresProcess`. A bound value cannot retarget its socket, open
+another connection, or fall back to the plain runner. These refusals keep one
+value on one verified daemon and prevent a transport failure from turning into
+an unobserved second execution.
 
-`Server.WithEngine(Engine) Server` selects one, as an immutable handle copy.
-Selection is a method rather than a
-`ServerOptions` field because the control-mode engine cannot exist before its
-server does: `OpenControl` needs a materialized session to attach to.
-`ControlClient.Engine()` adapts a live client, and `Server.SubprocessEngine()`
-returns the process transport as a value so a derived handle can go back.
+Dispatch still classifies argv internally. A server command carries only the
+tmux command over a lane; process work includes the frozen client selectors and
+may own stdio. The library classifies requests where it builds them rather than
+re-parsing flat argv and duplicating tmux's client-level `getopt` grammar.
 
-`CommandKind` is a closed enum with two members. `CommandServer` is a command
-addressed to the running server; its argv carries the tmux command alone,
-because a transport that serves this kind is already connected and the
-configured `-L`/`-S`/`-f`/`-2` selectors would be a parse error on the wire.
-`CommandProcess` needs a tmux process of its own; its argv is complete and its
-`Stdio` may stream. Interactive attachment and the `tmux -V` probe are the two
-operations that declare it.
+Completed command failures retain the same nonzero `ExitCode` and `Stderr`
+through both bindings, so `CommandError`, missing-target classification, and
+list policy do not depend on the route. A transport failure remains a Go error.
+`Connection.Close` owns lane shutdown; copyable `Server` and model values do
+not close shared state.
 
-The `Server`, not the engine, routes around what an engine cannot carry. An
-engine author writes one transport and gets the fallback; the fallback honors
-`ServerOptions.Runner`, so a substituted transport intercepts every fallback
-request; and every engine gets identical behavior for the kinds it declines.
-The cost is that an engine cannot implement a smarter fallback of its own.
-
-Argv is classified, never re-parsed. The library already knows, at each of its
-call sites, which selectors it added and what the request needs; deriving that
-back out of a flat argv would mean emulating tmux's client-level `getopt`
-grammar in a second place.
-
-The library also declares when an operation's own result contract requires a
-process, independently of any engine's capabilities. A printed `capture-pane`
-and `show-buffer` return tmux's exact stdout bytes through `Pane.CaptureBytes`
-and `Server.ShowBufferBytes`, while a control frame carries tmux's control
-rendering of a reply, which this package does not normalize. Those reads drop
-to the process transport on any handle. A capture into a tmux buffer prints
-nothing and keeps using the engine.
-
-Errors cross the seam unchanged. An engine reports a completed tmux command
-failure as a nonzero `ExitCode` with tmux's message in `Stderr`, which is what
-the same failure looks like through a process, so `CommandError`, its
-missing-target classification, and list leniency behave identically through
-either transport. Only transport failures are Go errors.
-
-An engine does not own its own shutdown. A `Server` is an immutable handle that
-callers copy, so it cannot be the value that closes a transport; whoever created
-the transport closes it, and `ControlClient.Close` stops the process behind
-`ControlClient.Engine`. `Engine` therefore has no `Close`.
-
-Engines are values from constructors, not a name-keyed registry. A registry
-would be a mutable package-level map behind a mutex that turns an unknown engine
-into a runtime error, retains every engine in every binary, and still could not
-construct the control engine, whose inputs are a context, a server, and a
-session rather than keyword arguments. A configuration edge that selects a
-transport by string writes a switch. Concrete engines implement `fmt.Stringer`
-for diagnostics; `Engine` does not require it.
-
-`Engine.Run` is one blocking call per command, so concurrency is the caller's
-goroutines, which is also why there is no async engine type: `ctx` plus
-goroutines is Go's async story. A pipelined engine that keeps several commands
-in flight and matches replies by the command number `ControlCommandResult.Number`
-already carries is a change inside `ControlClient` and needs no interface
-change. Batching several requests in one call is the one extension the
-interface does not express; an engine that wants it can declare an optional
-interface and a caller can discover it with a type assertion, the way
-`io.WriterTo` is discovered. Nothing in the object API produces a batch today,
-so that interface is not declared.
-
-An engine costs a caller who wants none of it nothing: `Engine` is nil on every
-handle returned by a successful `NewServer`, and routing adds one nil check
-before the same request the runner always received.
+The rejected generic engine made transport capability, daemon identity,
+fallback policy, rebinding, and borrowed lifetime independent optional states.
+Most combinations were invalid. Two concrete bindings express the actual
+contract: a frozen subprocess server or an owned, fail-closed connection.
+`CommandRunner` remains a subprocess instrumentation seam, not a transport
+selector.
 
 ## Core API signatures
 
 `NewServer(ServerOptions) (Server, error)` validates and freezes one immutable
-binding without starting tmux. It snapshots the effective environment and
-working directory, resolves one absolute executable with them, and shares that
-path and environment across process and control transports. It also freezes the
-effective socket path; named and default selectors receive a canonical
-`TMUX_TMPDIR`, while an inherited `TMUX` path becomes explicit before lifecycle
-code scrubs that variable. Invalid options, an unavailable executable, or a
-failed working-directory snapshot return an error. The zero `Server` is invalid;
-operations return `ErrInvalidServer`. Policy copies share private coordination
-and copy only immutable handle fields. Representative signatures are:
+subprocess binding without starting tmux. It snapshots the effective
+environment and working directory, resolves one absolute executable with them,
+and uses that path and environment when it later starts subprocesses or control
+clients. It also freezes the effective socket path; named and default selectors
+receive a canonical `TMUX_TMPDIR`, while an inherited `TMUX` path becomes
+explicit before lifecycle code scrubs that variable. Invalid options, an
+unavailable executable, or a failed working-directory snapshot return an
+error. The zero `Server` is invalid; operations return `ErrInvalidServer`.
+Policy copies share private coordination and copy only immutable handle fields.
+Representative signatures are:
 
 ```go
 func NewServer(options ServerOptions) (Server, error)
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error)
 func (s Server) Sessions(ctx context.Context) ([]Session, error)
 func (s Server) IsAlive(ctx context.Context) (bool, error)
+func (s Session) OpenControl(
+	ctx context.Context,
+	options ConnectionOptions,
+) (*Connection, error)
+func (s Server) NewSessionConnection(
+	ctx context.Context,
+	request NewSessionRequest,
+	options ConnectionOptions,
+) (Session, *Connection, error)
 func (f PaneFilter) Predicate() (func(*Pane) bool, error)
 ```
 
@@ -698,7 +654,7 @@ recursive filter structure. Requests copy pointer and map inputs before any
 version query or subprocess call that could let caller mutation change a
 validated request. Contexts are never stored.
 
-## Control-mode client and operation engines
+## Control-mode connections
 
 `Session.OpenControl` is the ownership boundary for ordinary object operations.
 It opens one or more control-mode command lanes under the materialized
@@ -708,7 +664,7 @@ record. Terminal connections require tmux 3.6 and set
 `no-detach-on-destroy`, so destroying the initial session moves their clients
 to another session when one exists without changing the retained session
 record. The binding is terminal: close makes later operations return
-`ErrControlClosed`, and selecting another engine, retargeting the socket, or
+`ErrControlClosed`, and retargeting the socket, opening another connection, or
 requesting an operation that needs a separate process cannot detach it.
 Exact-byte reads and interactive attachment return
 `ErrConnectionRequiresProcess`; no fallback is attempted.
@@ -721,12 +677,17 @@ calibrating request boundaries. `Connection.CloseContext` always begins
 shutdown and uses its context only to bound the join.
 
 `Server.OpenControl` starts an attached `tmux -C` process and returns a
-production `ControlClient`. It validates `%begin`/`%end`/`%error` framing,
-serializes concurrent commands, correlates each reply by command number, and
-buffers ordered notifications in a bounded in-memory queue. On overflow it
-keeps draining tmux's stdout, preserves the queued prefix, and then reports a
-typed error. Command-only pools ask tmux not to send pane output. `%output`
-payloads are decoded to pane IDs and exact bytes.
+low-level `ControlClient`. It exposes commands and notifications on one client;
+it is not a transport selector for model values. `Reconnect` explicitly closes
+that client and returns a new identity. It never hides recovery behind command
+fallback.
+
+The client validates `%begin`/`%end`/`%error` framing, serializes concurrent
+commands, correlates each reply by command number, and buffers ordered
+notifications in a bounded in-memory queue. On overflow it keeps draining
+tmux's stdout, preserves the queued prefix, and then reports a typed error.
+High-level command lanes ask tmux not to send pane output. `%output` payloads
+are decoded to pane IDs and exact bytes.
 
 Command arguments are encoded without a shell. Single-quoted spans preserve
 printable bytes, adjacent quoted spans preserve literal single quotes, and
@@ -739,8 +700,7 @@ returns promptly, but the request loop drains that reply before writing the next
 command. Natural exit preserves queued notifications through `io.EOF`.
 Reader failures surface after earlier notifications drain. `CloseContext`
 rejects unaccepted requests, gives an accepted command a bounded frame-drain
-window, and is idempotent and retryable. `Reconnect` creates a new identity and
-never replays commands.
+window, and is idempotent and retryable.
 
 `ControlCommandResult.RawStdout` preserves the control frame payload exactly.
 That payload is tmux's version-specific control rendering and is not normalized
@@ -748,16 +708,18 @@ into the byte-exact pane and buffer semantics of `Pane.CaptureBytes` and
 `Server.ShowBufferBytes`.
 
 The `tmuxtest.ControlMode` raw-stream fixture remains available for parser and
-transport tests. `ControlClient.Engine` connects the client to the object API.
+transport tests.
 `ControlClient.Notifications` is `NextNotification` as an `iter.Seq2`: it ends
 at `io.EOF` without an error because the end of a stream is not a failure, and
 continues past a record it could not parse because a tmux sending a
 notification kind this package does not know must not end a watcher.
+`Session.OpenNotifications` wraps the same protocol in an owned,
+observation-only `NotificationStream` whose `Next` preserves wire order.
 
 ## Recorded operations
 
 `Plan` records tmux commands as `Op` values and runs them together. It is
-independent of the transport: the same plan means the same thing over a tmux
+independent of the binding: the same plan means the same thing over a tmux
 process and over a control connection, and the switch matrix asserts that on
 every supported tmux rather than claiming it.
 
@@ -901,7 +863,7 @@ two of these. That is the trade, taken deliberately.
 | Problem | Selected approach | Rejected approaches |
 | --- | --- | --- |
 | Execution | Private one-method runner plus concrete request/result values | Subprocess calls spread through objects; an exported operation hierarchy |
-| Transport selection | `Engine` with a two-member `CommandKind`, selected per handle, routed by the `Server` | A bare `CommandRunner` with no capability report; a name-keyed engine registry; argv re-parsed by each engine |
+| Execution binding | Frozen subprocess `Server` values and owned exact-daemon `Connection` values | An exported `Engine`/`CommandKind` selector with fallback; a name-keyed registry; argv re-parsed by each transport |
 | Queries | Generated criteria with explicit validation and predicate compilation | Regex work inside every match; forcing filters through a generic matcher interface |
 | Test isolation | Per-test explicit `-S` socket with two-layer cleanup | Named `-L` sockets; a shared suite server |
 | Batching | Recorded `Op` values, a forward-reference `Ref`, and planners as values | A name-keyed planner registry; attributing a merged stdout to grouped operations by position; a `Result` interface or a type parameter per operation kind |
@@ -926,10 +888,10 @@ one-shot tmux client, because the job is filed under that client's job tree and
 control-mode client, which is what the MCP server holds open whenever the tmux
 server has a session. Passing a caller's filter through would therefore have
 made every listing tool an execution vector while it still reported
-`readOnlyHint: true`, and would have done so only on the transport the server
-prefers. Compiling typed criteria into `-f` was rejected for the same reason one
-level removed: the pushdown it buys is a local pipe carrying a few kilobytes,
-and it puts a format assembler on the boundary for good.
+`readOnlyHint: true`, and only while the persistent client was present.
+Compiling typed criteria into `-f` was rejected for the same reason one level
+removed: the pushdown it buys is a local pipe carrying a few kilobytes, and it
+puts a format assembler on the boundary for good.
 
 The detached-command bakeoff settled two things. A handle that carried the paths
 it needs would be a caller-supplied path this server later reads, so the state

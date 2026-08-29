@@ -83,13 +83,14 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	}
 	fmt.Printf("over tmux processes: %d started\n", processes.total())
 
-	// Keep the connected record; the original still starts subprocesses.
+	// Keep the connection-bound record; the original still starts subprocesses.
 	// docs:control-pool
-	_, connected, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
+	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
-		return fmt.Errorf("open control pool: %w", err)
+		return fmt.Errorf("open control connection: %w", err)
 	}
-	defer func() { _ = pool.Close() }()
+	defer func() { _ = connection.Close() }()
+	connected := connection.Session()
 	// docs:end
 
 	processes.reset()
@@ -98,11 +99,15 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	}
 	fmt.Printf("over a connection:   %d started\n", processes.total())
 
-	// Arbitrary pane output can end a control frame, so exact capture stages
-	// through a buffer and file instead.
-	pane, ok, err := connected.ResolveActivePane(ctx)
+	// Arbitrary pane output can end a control frame. Exact printed capture needs
+	// the original subprocess handle; file staging stays on the connection.
+	processPane, ok, err := session.ResolveActivePane(ctx)
 	if err != nil || !ok {
-		return fmt.Errorf("resolve pane: %w", err)
+		return fmt.Errorf("resolve process pane: %w", err)
+	}
+	connectedPane, ok, err := connected.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		return fmt.Errorf("resolve connected pane: %w", err)
 	}
 	directory, err := os.MkdirTemp("", "fast-path")
 	if err != nil {
@@ -111,13 +116,13 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	defer func() { _ = os.RemoveAll(directory) }()
 
 	processes.reset()
-	if _, err := pane.Capture(ctx, tmux.CapturePaneRequest{}); err != nil {
+	if _, err := processPane.Capture(ctx, tmux.CapturePaneRequest{}); err != nil {
 		return fmt.Errorf("capture: %w", err)
 	}
 	printed := processes.total()
 
 	processes.reset()
-	if _, err := pane.CaptureToFile(
+	if _, err := connectedPane.CaptureToFile(
 		ctx, filepath.Join(directory, "pane.txt"), tmux.CapturePaneRequest{},
 	); err != nil {
 		return fmt.Errorf("capture to file: %w", err)

@@ -7,38 +7,38 @@ $ go -C benchmarks run .
 ```
 
 ```
-building a 6-pane window, tmux 3.7b
+building a 6-pane window, tmux 3.7c
 12th Gen Intel(R) Core(TM) i7-12700H, 20 threads, linux, go1.26.5
 
-mode                     wall   processes  clients  query answer
---------------------------------------------------------------------------------------
-process                 619ms          44        0  7 panes on the server [0 0 1 2 3 4 5]
-control mode            127ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4           165ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                 111ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + control        21ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-snapshot                 11ms           6        1  2 panes on the server [0 0]
-snapshot, bound          11ms           5        1  2 panes on the server [0 0]
+path                       wall   processes  clients  query answer
+----------------------------------------------------------------------------------------
+process                   188ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 68ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              79ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    62ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       16ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## Reading it
 
-**The last column checks equivalence within each workload.** The five build rows
-run one `SearchPanes` query against the same six-pane topology. The two snapshot
-rows read the same two-pane topology through ordinary and instance-bound
-engines. Only cost should differ within either group.
+**The last column checks equivalence.** Every row runs one `SearchPanes` query
+against the same six-pane topology. Only cost should differ.
+
+The connection rows require tmux 3.6 or newer. Earlier releases retain the
+process and chained rows instead of pretending the terminal connection can
+provide weaker lifecycle guarantees.
 
 **Count invocations, not milliseconds.** Wall clock moves with the machine and
 what else is running. The process column does not.
 
-The same measurement runs as a test and fails if lanes within either workload
-answer differently:
+The same measurement runs as a test and fails if compatible lanes answer
+differently:
 
 ```console
 $ go -C benchmarks test ./...
 ```
 
-That stops a cost comparison within either group from measuring different work.
+That stops a cost comparison from measuring different work.
 
 ## See also
 

@@ -340,13 +340,10 @@ func TestANegativeTimeoutFollowerIsRejectedWithoutWaiting(t *testing.T) {
 	}
 }
 
-type blockingPaneLookupEngine struct{}
+type blockingPaneLookupRunner struct{}
 
-func (blockingPaneLookupEngine) Supports(tmux.CommandKind) bool { return true }
-
-func (blockingPaneLookupEngine) Run(
+func (blockingPaneLookupRunner) Run(
 	ctx context.Context,
-	_ tmux.CommandKind,
 	_ tmux.CommandRequest,
 ) (tmux.CommandResult, error) {
 	<-ctx.Done()
@@ -376,8 +373,18 @@ func TestACommittedJobStaysFinishedWhenPaneLookupReachesTheDeadline(t *testing.T
 	if err := serverSession.scope.jobs.keep(&entry); err != nil {
 		t.Fatal(err)
 	}
+	blockedTarget, err := tmux.NewServer(tmux.ServerOptions{
+		Binary:             target.Executable(),
+		SocketPath:         target.SocketPath(),
+		ConfigFile:         target.ConfigFile(),
+		ProcessEnvironment: target.ProcessEnvironment(),
+		Runner:             blockingPaneLookupRunner{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := withAcquiredServer(t.Context(), &runtimeAcquisition{
-		server:  target.WithEngine(blockingPaneLookupEngine{}),
+		server:  blockedTarget,
 		runtime: instance.runtime,
 		unbound: true,
 	})

@@ -349,7 +349,7 @@ func TestStreamingDaemonGuardClassifiesAReplacement(t *testing.T) {
 
 	result, err := server.runCommand(
 		context.Background(),
-		CommandProcess,
+		commandProcess,
 		[]string{"attach-session", "-t", "$0"},
 		&tmuxcmd.Stdio{},
 		false,

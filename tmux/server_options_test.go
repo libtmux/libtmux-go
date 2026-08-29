@@ -371,10 +371,7 @@ func TestServerWithSocketPathPreservesFrozenExecutionBinding(t *testing.T) {
 		SocketName:         "original",
 		ProcessEnvironment: []string{"PATH=/frozen"},
 	}, runner)
-	connected := base.WithEngine(base.SubprocessEngine()).
-		WithEngineFallback(EngineFallbackReject)
-
-	derived, err := connected.WithSocketPath("/tmp/sibling.sock")
+	derived, err := base.WithSocketPath("/tmp/sibling.sock")
 	if err != nil {
 		t.Fatalf("WithSocketPath() error = %v", err)
 	}
@@ -399,10 +396,6 @@ func TestServerWithSocketPathPreservesFrozenExecutionBinding(t *testing.T) {
 	if base.SocketPath() == "" || base.state.config.socketName != "original" {
 		t.Fatalf("WithSocketPath() mutated base selector: %s", base)
 	}
-	if derived.Engine() != nil || derived.EngineFallback() != EngineFallbackAllow {
-		t.Fatal("WithSocketPath() retained a transport bound to the original daemon")
-	}
-
 	if _, err := derived.Cmd(context.Background(), "list-sessions"); err != nil {
 		t.Fatalf("derived Cmd() error = %v", err)
 	}

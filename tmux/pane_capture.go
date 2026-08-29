@@ -166,9 +166,9 @@ var captureFileSequence atomic.Uint64
 // and the file at path, returning the same lines [Pane.Capture] returns.
 //
 // Printed captures cannot safely cross a control connection, so [Pane.Capture]
-// and [Pane.CaptureBytes] use a subprocess or reject fallback. CaptureToFile
-// stages through a scratch buffer so capture, save, and cleanup remain
-// engine-eligible; unsupported engines follow fallback.
+// and [Pane.CaptureBytes] use a subprocess or reject a connection. CaptureToFile
+// stages through a scratch buffer so capture, save, and cleanup can all use the
+// connection's command lanes.
 //
 // path must name a file the tmux server can write and this process can read.
 // It is replaced and left for the caller. Concurrent calls must use distinct
@@ -348,7 +348,7 @@ func (p Pane) capturePane(
 		// Control mode does not escape command stdout. Pane content matching a
 		// closing guard could truncate the reply and desynchronize later commands,
 		// so printed captures always use a subprocess.
-		p.server = p.server.withoutEngine()
+		p.server = p.server.requireProcess()
 	}
 	return p.literalCmd(ctx, arguments...)
 }

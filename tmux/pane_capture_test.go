@@ -360,8 +360,8 @@ func TestCaptureToFileUsesOnlyCommandsThatPrintNothing(t *testing.T) {
 	if len(requests) != 3 {
 		t.Fatalf("runner requests = %#v, want capture, save, and delete", requests)
 	}
-	// tmux prints a reply for none of these three, which is what lets an engine
-	// carry them where a printed capture-pane cannot go.
+	// tmux prints a reply for none of these three, which lets a control
+	// connection carry them where a printed capture-pane cannot go.
 	buffer := requests[0].Arguments[4]
 	if !strings.HasPrefix(buffer, "libtmux-go-capture-") {
 		t.Fatalf("capture buffer = %q, want a name owned by this package", buffer)

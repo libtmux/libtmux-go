@@ -42,11 +42,11 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	control, err := server.OpenControl(ctx, session)
+	stream, err := session.OpenNotifications(ctx)
 	if err != nil {
-		return fmt.Errorf("open control connection: %w", err)
+		return fmt.Errorf("open notification stream: %w", err)
 	}
-	defer func() { err = errors.Join(err, control.Close()) }()
+	defer func() { err = errors.Join(err, stream.Close()) }()
 
 	// Rename after subscribing; notifications do not include earlier changes.
 	if _, err := session.Rename(ctx, "control-example"); err != nil {
@@ -54,7 +54,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 
 	// docs:watching
-	for notification, err := range control.Notifications(ctx) {
+	for {
+		notification, err := stream.Next(ctx)
 		if err != nil {
 			return fmt.Errorf("read notification: %w", err)
 		}
@@ -65,5 +66,4 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		}
 	}
 	// docs:end
-	return errors.New("control stream ended before the rename it was watching for")
 }

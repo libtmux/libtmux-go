@@ -112,43 +112,52 @@ panes, err := server.SearchPanes(ctx, &filter)
 
 Runnable: [`examples/filter-query`](examples/filter-query).
 
-## Choosing a mode
+## Choosing an execution path
 
-Every command starts a tmux process unless you turn something on. Each switch is
-one line to turn on, one to take back, and independent of the others:
+A plain `Server` uses the executable, environment, working directory, and
+socket selection frozen by `NewServer`. Values derived from it retain that
+subprocess binding.
 
-| Mode | Turn it on | Cost | Reach for it |
+| Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
-| process | nothing, the default | a tmux process each | one-shot commands |
-| control | `OpenControlPool` | one tmux client | more than a few commands |
-| concurrent | `Connections: N` | N tmux clients | parallel readers |
-| chained | `NewPlan` then `Run` | no records back | builds and layouts |
-| streaming | `Notifications` | a connection | watching what a pane does |
+| process | `NewServer` | one tmux process per operation | one-shot commands |
+| connection | `Session.OpenControl` | one tmux client per lane | repeated commands on tmux 3.6+ |
+| concurrent | `ConnectionOptions{Lanes: N}` | N tmux clients | parallel readers |
+| chained | `NewPlan` then `Run` | fewer process starts | builds and layouts |
+| streaming | `Session.OpenNotifications` | one tmux client | watching what tmux does |
 
-Each row changes how a command reaches tmux and none changes what it means,
-which is the property the benchmark table gates on. One switch is deliberately
-not a row, because it does change meaning: `ServerOptions.Unsupported` decides
-whether a request naming a flag the running tmux does not have is refused —
-the default — or carried out without it and reported to a warning handler.
+Plans run over either a plain server or a connection-bound server. Unsupported
+capability policy is separate: `ServerOptions.Unsupported` decides whether a
+request naming an unavailable tmux flag is refused — the default — or carried
+out without it and reported to a warning handler.
 
-A control connection carries commands without starting a process for each. It is
-a tmux client while open — it appears in `list-clients` and counts toward
-`session_attached` — which is why it is chosen rather than automatic:
+A connection carries commands without starting a process for each. It appears
+in `list-clients` and counts toward `session_attached`, which is why opening one
+is explicit:
 
 <!-- docs:control-pool -->
 
 ```go
-_, connected, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
+connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 if err != nil {
-	return fmt.Errorf("open control pool: %w", err)
+	return fmt.Errorf("open control connection: %w", err)
 }
-defer func() { _ = pool.Close() }()
+defer func() { _ = connection.Close() }()
+connected := connection.Session()
 ```
 
 <!-- docs:end -->
 
-The pool returns the session bound to the connection. The one passed in still
-starts a process per command, so the returned value is the one to keep.
+`connection.Server()` and `connection.Session()` are bound to the exact daemon
+that materialized the original session. Values derived from them retain that
+owner. The binding is terminal: closing the connection makes later operations
+return `ErrControlClosed`, and an operation that needs a separate process
+returns `ErrConnectionRequiresProcess`. It never falls back or rebinds. The
+original session remains on its frozen subprocess binding.
+
+`Server.NewSessionConnection` creates a session and retains its creating
+control process as the first lane. It returns the ordinary created session and
+an owned connection; use `connection.Session()` for connected operations.
 
 A plan records commands instead of running them, sends the ones needing no
 answer together, and hands back a reference to what a step *will* create — so a
@@ -169,18 +178,20 @@ plan.DisplayMessage(editor, "#{pane_title}")
 
 Runnable: [`examples/fast-path`](examples/fast-path) and
 [`examples/planned-build`](examples/planned-build).
-[`BENCHMARKS.md`](BENCHMARKS.md) is what each mode costs, measured on every
+[`BENCHMARKS.md`](BENCHMARKS.md) is what each path costs, measured on every
 supported tmux.
 
 ## Watching tmux
 
-tmux pushes what happens down an open connection, so a change is heard once,
-when it happens, rather than found by a poll that has to guess how often to ask:
+`Session.OpenNotifications` returns an owned stream. tmux pushes changes down
+its client once, when they happen, rather than making a poll guess how often to
+ask:
 
 <!-- docs:watching -->
 
 ```go
-for notification, err := range control.Notifications(ctx) {
+for {
+	notification, err := stream.Next(ctx)
 	if err != nil {
 		return fmt.Errorf("read notification: %w", err)
 	}

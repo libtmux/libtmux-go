@@ -19,8 +19,10 @@ func TestControlModeSubscribe(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	server := tmuxtest.NewServer(ctx, t)
+	exampletest.RequireTmux(t, ctx, server, "3.6")
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t))
+		return run(ctx, server)
 	})
 
 	// run returns only after receiving the rename notification.

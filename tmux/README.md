@@ -123,7 +123,7 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 
 The package documentation is the reference and is written to be read start to
 finish. It covers the task index, method-naming rules, snapshots and identity,
-the transport modes, plans, engines, filters, and the compatibility window.
+execution bindings, plans, filters, and the compatibility window.
 
 | | |
 | --- | --- |

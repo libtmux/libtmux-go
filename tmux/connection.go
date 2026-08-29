@@ -13,7 +13,9 @@ var ErrConnectionRequiresProcess = errors.New(
 	"tmux: operation requires a process outside the connection",
 )
 
-var controlNoDetachVersion36 = Version{raw: "3.6", major: 3, minor: 6}
+var controlNoDetachVersion36 = Version{
+	raw: MinimumConnectionVersion, major: 3, minor: 6,
+}
 
 // ConnectionOptions configures the control-mode lanes owned by a
 // [Connection].
@@ -54,7 +56,7 @@ func (s Session) OpenControl(
 		return nil, err
 	}
 	if s.server.connection != nil {
-		return nil, s.server.connection.routeError(ctx, CommandProcess)
+		return nil, s.server.connection.routeError(ctx, commandProcess)
 	}
 	if options.Lanes < 0 {
 		return nil, invalidServerCommandRequest(
@@ -115,7 +117,7 @@ func (s Server) NewSessionConnection(
 		return Session{}, nil, err
 	}
 	if s.connection != nil {
-		return Session{}, nil, s.connection.routeError(ctx, CommandProcess)
+		return Session{}, nil, s.connection.routeError(ctx, commandProcess)
 	}
 	effective, err := newSessionCommandServer(s)
 	if err != nil {
@@ -187,7 +189,7 @@ func (s Server) NewSessionConnection(
 		}
 		clients = append(clients, client)
 	}
-	pool := newControlLanePool(materialized.server, clients)
+	pool := newControlLanePool(clients)
 	return materialized, bindControlConnection(materialized, pool), nil
 }
 
@@ -291,7 +293,7 @@ func (c *Connection) Call(
 	ctx context.Context,
 	args ...string,
 ) ([]ControlCommandResult, error) {
-	if err := c.routeError(ctx, CommandServer); err != nil {
+	if err := c.routeError(ctx, commandServer); err != nil {
 		return nil, err
 	}
 	return c.pool.call(ctx, args, false)
@@ -315,14 +317,14 @@ func (c *Connection) Close() error {
 	return c.pool.close()
 }
 
-func (c *Connection) routeError(ctx context.Context, kind CommandKind) error {
+func (c *Connection) routeError(ctx context.Context, kind commandKind) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return c.terminalError(kind)
 }
 
-func (c *Connection) terminalError(kind CommandKind) error {
+func (c *Connection) terminalError(kind commandKind) error {
 	if c == nil || c.pool == nil {
 		return ErrControlClosed
 	}
@@ -331,7 +333,7 @@ func (c *Connection) terminalError(kind CommandKind) error {
 		return ErrControlClosed
 	default:
 	}
-	if kind != CommandServer {
+	if kind != commandServer {
 		return ErrConnectionRequiresProcess
 	}
 	return nil
@@ -339,7 +341,7 @@ func (c *Connection) terminalError(kind CommandKind) error {
 
 func (c *Connection) run(
 	ctx context.Context,
-	kind CommandKind,
+	kind commandKind,
 	arguments []string,
 	commandList bool,
 ) (CommandResult, error) {

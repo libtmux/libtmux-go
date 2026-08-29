@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -163,34 +164,128 @@ func TestBuildIntoRequiresAMaterializedSession(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestBuildCreatesTheSessionOnItsOwnedConnection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invocations := filepath.Join(t.TempDir(), "invocations")
+	proxy := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+transport=process
+operation=other
+for argument do
+    if [ "$argument" = -C ]; then transport=control; fi
+    if [ "$argument" = new-session ]; then operation=creation; fi
+done
+printf '%s %s\n' "$transport" "$operation" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
+`), 0o700); err != nil {
+		t.Fatalf("write tmux proxy: %v", err)
+	}
+	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		Binary: proxy,
+		ProcessEnvironment: append(os.Environ(),
+			"LIBTMUX_WORKSPACE_INVOCATIONS="+invocations,
+			"LIBTMUX_WORKSPACE_REAL_TMUX="+realBinary,
+		),
+	})
+
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	described := workspace.Workspace{
+		SessionName: "owned-connection",
+		Windows: []workspace.Window{
+			{Name: "editor", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+			{Name: "shell", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+		},
+	}
+	session, err := workspace.Build(ctx, server, described)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	recorded, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("read tmux invocations: %v", err)
+	}
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if version.AtLeast(minimum) {
+		if !slices.Contains(lines, "control creation") {
+			t.Fatalf("tmux invocations = %q, want control-mode session creation", lines)
+		}
+		if slices.Contains(lines, "process creation") {
+			t.Fatalf("tmux invocations = %q, want no process session creation", lines)
+		}
+	} else if !slices.Contains(lines, "process creation") {
+		t.Fatalf("tmux invocations = %q, want process fallback on tmux %s", lines, version)
+	}
+	if session.Server().ConnectionBound() {
+		t.Fatal("Build() returned a session bound to its closed connection")
+	}
+	windows, err := session.SearchWindows(ctx, nil)
+	if err != nil {
+		t.Fatalf("returned Session.SearchWindows() error = %v", err)
+	}
+	if len(windows) != 2 {
+		t.Fatalf("returned session has %d windows, want 2", len(windows))
+	}
+	clients, err := server.SearchClients(ctx, nil)
+	if err != nil {
+		t.Fatalf("SearchClients() error = %v", err)
+	}
+	if len(clients) != 0 {
+		t.Fatalf("Build() left %d owned clients open", len(clients))
+	}
+}
+
+//libtmux:real-tmux
 func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := filepath.Join(t.TempDir(), "tmux")
+	if err := os.Symlink(realBinary, proxy); err != nil {
+		t.Fatalf("link tmux proxy: %v", err)
+	}
 	configuration := filepath.Join(t.TempDir(), "tmux.conf")
 	if err := os.WriteFile(configuration, nil, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	var mutex sync.Mutex
-	processes := 0
 	server := mustNewServer(t, tmux.ServerOptions{
+		Binary:     proxy,
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		ConfigFile: configuration,
-		Runner: tmux.CommandRunnerFunc(func(
-			ctx context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			mutex.Lock()
-			processes++
-			mutex.Unlock()
-			return tmux.SubprocessRunner().Run(ctx, request)
-		}),
 	})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !version.AtLeast(minimum) {
+		t.Skipf("terminal connections require tmux 3.6; installed %s", version)
+	}
 
 	described := workspace.Workspace{
 		SessionName: "continued",
@@ -213,17 +308,18 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = connection.Close() })
 
-	mutex.Lock()
-	processes = 0
-	mutex.Unlock()
+	disabled := proxy + ".disabled"
+	if err := os.Rename(proxy, disabled); err != nil {
+		t.Fatalf("disable tmux proxy: %v", err)
+	}
+	proxyDisabled := true
+	t.Cleanup(func() {
+		if proxyDisabled {
+			_ = os.Rename(disabled, proxy)
+		}
+	})
 	if err := workspace.BuildInto(ctx, connection.Session(), described); err != nil {
 		t.Fatalf("BuildInto() error = %v", err)
-	}
-	mutex.Lock()
-	started := processes
-	mutex.Unlock()
-	if started != 0 {
-		t.Fatalf("BuildInto() started %d tmux processes, want none", started)
 	}
 
 	windows, err := connection.Session().SearchWindows(ctx, nil)
@@ -233,6 +329,10 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	if len(windows) != 2 {
 		t.Fatalf("BuildInto() left %d windows, want 2", len(windows))
 	}
+	if err := os.Rename(disabled, proxy); err != nil {
+		t.Fatalf("restore tmux proxy: %v", err)
+	}
+	proxyDisabled = false
 }
 
 // Long-lived pane commands prevent teardown from racing topology assertions.
@@ -633,35 +733,6 @@ func TestARefusedFieldReadsDifferentlyFromATypo(t *testing.T) {
 				t.Errorf("error %q does not say %q", err, testCase.want)
 			}
 		})
-	}
-}
-
-// TestBuildLeavesAChosenTransportAlone covers declining the control client.
-func TestBuildLeavesAChosenTransportAlone(t *testing.T) {
-	server, ctx := testServer(t)
-	described, err := workspace.Parse([]byte(
-		"session_name: chosen\nwindows:\n  - window_name: w\n    panes:\n      - {}\n",
-	))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-
-	onProcesses := server.WithEngine(server.SubprocessEngine())
-	session, err := workspace.Build(ctx, onProcesses, described)
-	if err != nil {
-		t.Fatalf("build: %v", err)
-	}
-
-	clients, err := server.SearchClients(ctx, nil)
-	if err != nil {
-		t.Fatalf("search clients: %v", err)
-	}
-	if len(clients) != 0 {
-		t.Errorf("build attached %d clients despite a chosen transport", len(clients))
-	}
-	attached, ok := session.Formats().SessionAttached()
-	if ok && attached != 0 {
-		t.Errorf("session_attached = %d after the build, want 0", attached)
 	}
 }
 

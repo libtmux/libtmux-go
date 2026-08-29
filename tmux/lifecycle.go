@@ -1364,9 +1364,6 @@ func newSessionCommandServer(server Server) (Server, error) {
 		},
 		connection:      server.connection,
 		daemon:          server.daemon,
-		engine:          server.engine,
-		engineFallback:  server.engineFallback,
-		engineless:      server.engineless,
 		requiresProcess: server.requiresProcess,
 	}, nil
 }

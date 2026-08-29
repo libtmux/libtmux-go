@@ -307,14 +307,14 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 	if err != nil || len(sessions) == 0 {
 		t.Fatalf("Sessions() = (%d, %v), want at least one", len(sessions), err)
 	}
-	client, err := server.OpenControl(ctx, sessions[0])
+	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
-	connected := server.WithEngine(client.Engine())
+	t.Cleanup(func() { _ = connection.Close() })
+	connected := connection.Server()
 
-	build := func(handle tmux.Server, name string) []string {
+	build := func(handle tmux.Server, transport, name string) []string {
 		t.Helper()
 		window, err := sessions[0].NewWindow(ctx, tmux.NewWindowRequest{Name: tmux.Ptr(name)})
 		if err != nil {
@@ -328,16 +328,16 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 
 		result, err := plan.Run(ctx, handle)
 		if err != nil {
-			t.Fatalf("Run() over %v error = %v", handle.Engine(), err)
+			t.Fatalf("Run() over %s error = %v", transport, err)
 		}
 		if !result.OK() {
-			t.Fatalf("Run() over %v did not complete: %v", handle.Engine(), result.Err())
+			t.Fatalf("Run() over %s did not complete: %v", transport, result.Err())
 		}
 		return result.Ops[3].Stdout
 	}
 
-	viaProcess := build(server, "process")
-	viaControl := build(connected, "control")
+	viaProcess := build(server, "process", "process")
+	viaControl := build(connected, "connection", "control")
 
 	if len(viaProcess) != 1 || len(viaControl) != 1 {
 		t.Fatalf("process = %q, control = %q", viaProcess, viaControl)

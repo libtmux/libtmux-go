@@ -13,30 +13,6 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type inertRuntimeEngine struct{}
-
-func (inertRuntimeEngine) Supports(tmux.CommandKind) bool { return true }
-
-func (inertRuntimeEngine) Run(
-	context.Context,
-	tmux.CommandKind,
-	tmux.CommandRequest,
-) (tmux.CommandResult, error) {
-	return tmux.CommandResult{}, nil
-}
-
-func TestNewServerRejectsASecondExecutionOwner(t *testing.T) {
-	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "runtime-engine-unused"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	instance, err := NewServer(target.WithEngine(inertRuntimeEngine{}))
-	if instance != nil || !errors.Is(err, ErrRuntimeTargetBound) {
-		t.Fatalf("NewServer() = (%p, %v), want (nil, ErrRuntimeTargetBound)", instance, err)
-	}
-}
-
 func TestNewServerRejectsAConnectionBoundTarget(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -90,14 +66,14 @@ func TestRuntimeOwnsOneCommandConnection(t *testing.T) {
 		t.Fatalf("command connection session = %s, want original %s",
 			commandConnection.Session().ID(), original.ID())
 	}
-	if command.Engine() != nil {
-		t.Fatal("terminal command server exposed a second engine owner")
+	if !command.ConnectionBound() {
+		t.Fatal("terminal command server is not bound to the runtime connection")
 	}
 	process, err := runtime.process(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if process.Engine() != nil {
+	if process.ConnectionBound() {
 		t.Fatal("process acquisition inherited a terminal connection")
 	}
 }
@@ -158,7 +134,7 @@ func TestAbsentRuntimeStaysUnboundUntilAtomicCreation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if process.Engine() != nil {
+	if process.ConnectionBound() {
 		t.Fatal("absent acquisition invented a connection")
 	}
 	runtime.mutex.Lock()
@@ -188,7 +164,7 @@ func TestAbsentRuntimeStaysUnboundUntilAtomicCreation(t *testing.T) {
 		_ = runtime.Close()
 		_ = target.Kill(context.Background())
 	})
-	if created.ID() == "" || created.Server().Engine() != nil {
+	if created.ID() == "" || !created.Server().ConnectionBound() {
 		t.Fatalf("created session = %#v, want a command-bound session", created)
 	}
 	runtime.mutex.Lock()
@@ -296,7 +272,7 @@ func TestDiscoveryWaitsForAnUnboundRequestToDrain(t *testing.T) {
 	}()
 	waitForRuntimeState(t, runtime, runtimeBinding)
 
-	if process, processErr := runtime.process(leasedCtx); processErr != nil || process.Engine() != nil {
+	if process, processErr := runtime.process(leasedCtx); processErr != nil || process.ConnectionBound() {
 		t.Fatalf("leased process during drain = (%#v, %v), want original process handle", process, processErr)
 	}
 	select {

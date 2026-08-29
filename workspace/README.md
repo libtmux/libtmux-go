@@ -50,11 +50,12 @@ is classified with the tmux package's own sentinels. `Build` uses strict
 errors regardless of the server it is handed, because a workspace that half
 exists is never what the caller wanted.
 
-`Build` runs over a control connection, so a workspace costs a handful of tmux
-processes rather than one per command. That connection is a tmux client while
-the build runs: it shows in `list-clients`, counts toward `session_attached`,
-and fires a `client-attached` hook. Pass a server carrying
-`SubprocessEngine()` to build on processes instead.
+On tmux 3.6 or later, `Build` creates the session and a temporary control
+connection in one process, then uses that connection for the rest of the build.
+The connection is a tmux client while the build runs: it shows in
+`list-clients`, counts toward `session_attached`, and can trigger client policy.
+`Build` closes it before returning an ordinary session handle. Older tmux
+releases use subprocesses for the complete build.
 
 `Build` is not atomic. tmux has no transaction, so a failure partway through
 leaves what it already created in place; the returned session identifies it, so

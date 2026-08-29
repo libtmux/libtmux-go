@@ -19,9 +19,9 @@ var Version = buildVersion()
 
 const fallbackVersion = "v0.0.1-alpha.7"
 
-// minimumTmuxVersion is the MCP floor. The core supports older tmux releases,
-// but terminal connections need 3.6 to survive destruction of their session.
-const minimumTmuxVersion = "3.6"
+// minimumTmuxVersion is the MCP floor because every runtime owns a terminal
+// connection.
+const minimumTmuxVersion = tmux.MinimumConnectionVersion
 
 func (i *Instance) requireTmuxVersion(ctx context.Context) error {
 	minimum, err := tmux.ParseVersion(minimumTmuxVersion)
@@ -211,7 +211,7 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	if _, err := target.SocketSelection(); err != nil {
 		return nil, fmt.Errorf("construct MCP server: %w", err)
 	}
-	if target.Engine() != nil || target.ConnectionBound() {
+	if target.ConnectionBound() {
 		return nil, ErrRuntimeTargetBound
 	}
 

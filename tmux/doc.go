@@ -114,28 +114,17 @@
 // [Server.NewSessionConnection] creates one and keeps the creating control
 // process as its first lane.
 //
-// The default transport starts one tmux process per command. [Engine] lets a
-// [Server] carry supported commands another way without changing their meaning.
-// Unsupported engine operations normally fall back to subprocesses;
-// [Server.WithEngineFallback] with [EngineFallbackReject] makes fallback an
-// error.
-//
-// [Server.OpenControl] opens one persistent control-mode client.
-// [Server.OpenControlPool] opens several command-carrying clients and returns a
-// server and session already bound to the pool. Control connections appear as
-// attached tmux clients, affect session_attached and hooks, and must be closed
-// by their owner. Terminal [Connection] values require tmux 3.6 so destroying
-// their initial session moves them to another session when one exists.
-//
-// Records retain the [Server] that materialized them. A record obtained before
-// selecting an engine continues to use its old transport; use [Pane.WithEngine]
-// and its counterparts or use the session returned by [Server.OpenControlPool].
-// [WarningControlPoolUnused] reports this behavior when a pool can detect it.
+// A plain [Server] starts one tmux process per operation. A [Connection] owns
+// persistent command lanes and returns model values already bound to them.
+// Control connections appear as attached tmux clients, affect session_attached
+// and hooks, and must be closed by their owner. They require tmux 3.6 so
+// destroying their initial session moves them to another session when one
+// exists.
 //
 // Printed captures remain subprocess operations because control-mode replies
 // do not preserve the same byte contract. [Pane.CaptureToFile] keeps its
-// commands engine-eligible by staging through a tmux buffer and caller-supplied
-// file. A control-backed server avoids those processes; other engines may not.
+// commands suitable for a connection by staging through a tmux buffer and
+// caller-supplied file. A connection-backed server avoids those processes.
 //
 // [ControlClient.NextNotification] waits for pane output as a stream.
 // [Server.WaitFor] waits for an explicit tmux channel signal. Polling

@@ -2,6 +2,7 @@ package workspace_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -55,8 +56,8 @@ windows:
 	// Output: review 2
 }
 
-// Create the initial session and its transport together, then populate the
-// rest of the workspace without reconnecting it.
+// Create the initial session, prefer a retained connection where tmux supports
+// one, then populate the rest of the workspace through that session.
 func ExampleBuildInto() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -86,13 +87,21 @@ func ExampleBuildInto() {
 		request,
 		tmux.ConnectionOptions{},
 	)
+	var session tmux.Session
+	switch {
+	case err == nil:
+		defer func() { _ = connection.Close() }()
+		session = connection.Session()
+	case errors.Is(err, tmux.ErrVersionTooLow):
+		session, err = server.NewSession(ctx, request)
+	default:
+		fmt.Println("create:", err)
+		return
+	}
 	if err != nil {
 		fmt.Println("create:", err)
 		return
 	}
-	defer func() { _ = connection.Close() }()
-
-	session := connection.Session()
 	if err := workspace.BuildInto(ctx, session, described); err != nil {
 		fmt.Println("build:", err)
 		return

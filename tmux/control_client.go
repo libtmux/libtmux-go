@@ -214,7 +214,7 @@ func (s Server) openControl(
 		s = s.withDaemon(*session.server.daemon)
 	}
 	if s.connection != nil {
-		return nil, s.connection.routeError(ctx, CommandProcess)
+		return nil, s.connection.routeError(ctx, commandProcess)
 	}
 	version, err := s.Version(ctx)
 	if err != nil {

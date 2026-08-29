@@ -1,6 +1,6 @@
 // Command benchmarks compares subprocess, control-mode, and planned tmux work.
-// Build lanes share one SearchPanes workload; snapshot lanes compare ordinary
-// and instance-bound reads. TestMatrixAnswersAgree guards each group.
+// Every compatible lane shares one SearchPanes workload, and
+// TestMatrixAnswersAgree guards their equivalence.
 //
 //	go -C benchmarks run .
 package main
@@ -32,7 +32,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	rows, err := measureAll(ctx)
+	rows, err := measureAll(ctx, version)
 	if err != nil {
 		return err
 	}
@@ -54,11 +54,11 @@ func table(rows []row, version tmux.Version, machine string) string {
 	var out strings.Builder
 	fmt.Fprintf(&out, "\nbuilding a %d-pane window, tmux %s\n", panesPerWindow, version)
 	fmt.Fprintf(&out, "%s\n\n", machine)
-	fmt.Fprintf(&out, "%-18s %10s %11s %8s  %s\n",
-		"mode", "wall", "processes", "clients", "query answer")
-	fmt.Fprintln(&out, strings.Repeat("-", 86))
+	fmt.Fprintf(&out, "%-20s %10s %11s %8s  %s\n",
+		"path", "wall", "processes", "clients", "query answer")
+	fmt.Fprintln(&out, strings.Repeat("-", 88))
 	for _, r := range rows {
-		fmt.Fprintf(&out, "%-18s %10s %11d %8d  %s\n",
+		fmt.Fprintf(&out, "%-20s %10s %11d %8d  %s\n",
 			r.mode, r.elapsed.Round(time.Millisecond), r.processes, r.clients, r.answer)
 	}
 	return out.String()
