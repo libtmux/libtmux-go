@@ -87,9 +87,13 @@ type formatValues struct {
 	values  map[string]string
 }
 
-// FormatValues is a read-only view of the tmux format expansions materialized
-// with a Session, Window, Pane, or Client record. Its methods do not query tmux.
-// The zero value is usable and reports every field as absent.
+// FormatValues is a read-only view of format expansions materialized with a
+// Session, Window, Pane, or Client. Its methods do not query tmux. Projected
+// cross-scope fields do not imply that the referenced record was materialized.
+//
+// Typed accessors return ok == false for an absent, empty, or malformed value;
+// [FormatValues.Raw] distinguishes absent from present empty expansions. The
+// zero value reports every field as absent.
 type FormatValues struct {
 	values formatValues
 }

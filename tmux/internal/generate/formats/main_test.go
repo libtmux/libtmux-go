@@ -36,13 +36,11 @@ func TestCheckedInFormatAccessorsAreScopedAndUnique(t *testing.T) {
 	}
 	seenOverrides := make(map[string]bool, len(wantOverrides))
 	seenMethods := make(map[string]string)
-	directCounts := make(map[string]int, len(accessorReceivers))
 	for _, receiver := range accessorReceivers {
 		for _, field := range spec.Fields {
 			if !generateRecordAccessor(receiver.typeName, field) {
 				continue
 			}
-			directCounts[receiver.typeName]++
 			want := accessorNameForReceiver(receiver.typeName, field)
 			key := receiver.typeName + "." + want
 			if previous, found := seenMethods[key]; found {
@@ -62,12 +60,10 @@ func TestCheckedInFormatAccessorsAreScopedAndUnique(t *testing.T) {
 			}
 		}
 	}
-	viewCount := 0
 	for _, field := range spec.Fields {
 		if !generateFormatValuesAccessor(field) {
 			continue
 		}
-		viewCount++
 		accessor := accessorName(field.Name)
 		key := "FormatValues." + accessor
 		if previous, found := seenMethods[key]; found {
@@ -99,22 +95,8 @@ func TestCheckedInFormatAccessorsAreScopedAndUnique(t *testing.T) {
 			t.Errorf("checked-in format spec is missing collision override for %s", name)
 		}
 	}
-	wantDirectCounts := map[string]int{
-		"Session": 27,
-		"Window":  32,
-		"Pane":    77,
-		"Client":  24,
-	}
-	for receiver, want := range wantDirectCounts {
-		if got := directCounts[receiver]; got != want {
-			t.Errorf("%s direct format accessors = %d, want %d", receiver, got, want)
-		}
-	}
-	if viewCount != 181 {
-		t.Errorf("FormatValues accessors = %d, want 181", viewCount)
-	}
-	if len(methods) != 341 {
-		t.Fatalf("generated format accessors = %d, want 341", len(methods))
+	if len(methods) != len(seenMethods) {
+		t.Fatalf("generated format accessors = %d, derived from spec = %d", len(methods), len(seenMethods))
 	}
 	for _, absent := range []string{
 		"Session.WindowWidth", "Window.SessionName", "Pane.WindowName",
@@ -659,7 +641,7 @@ func TestCheckedInFormatSpecGeneratesCheckedInOutput(t *testing.T) {
 	}
 }
 
-func TestGeneratedFormatAccessorsDocumentSnapshotContracts(t *testing.T) {
+func TestGeneratedFormatAccessorsStaySearchableAndCompact(t *testing.T) {
 	t.Parallel()
 
 	spec, err := readFormatSpec("spec.json")
@@ -692,14 +674,8 @@ func TestGeneratedFormatAccessorsDocumentSnapshotContracts(t *testing.T) {
 			"#{" + field.Name + "}",
 			field.Scope + "-scoped",
 			"tmux " + field.Since + " or later",
-			"a materialized hierarchy record",
-			"typed " + accessorKinds[field.Kind].returnType + " value and an ok result",
-			"not a live tmux read",
-			"[Server.Snapshot]",
-			"projected cross-scope fields do not guarantee that the referenced object is present in the same snapshot",
-			"ok == false means the field was absent, empty, or malformed",
-			"[FormatValues.Raw]",
-			"exact materialized expansion",
+			"as " + accessorKinds[field.Kind].returnType,
+			"materialized",
 		} {
 			if !strings.Contains(doc, required) {
 				t.Errorf("generated accessor %s documentation does not contain %q: %q", key, required, doc)
@@ -727,13 +703,7 @@ func TestGeneratedFormatAccessorsDocumentSnapshotContracts(t *testing.T) {
 				field.Scope + "-scoped",
 				"tmux " + field.Since + " or later",
 				"this " + receiver.typeName + "'s materialized",
-				"typed " + accessorKinds[field.Kind].returnType + " value and an ok result",
-				"not a live tmux read",
-				"[Server.Snapshot]",
-				"[" + receiver.typeName + ".Formats]",
-				"ok == false means the field was absent, empty, or malformed",
-				"[FormatValues.Raw]",
-				"exact materialized expansion",
+				"as " + accessorKinds[field.Kind].returnType,
 			} {
 				if !strings.Contains(doc, required) {
 					t.Errorf("generated accessor %s documentation does not contain %q: %q", key, required, doc)
@@ -741,11 +711,17 @@ func TestGeneratedFormatAccessorsDocumentSnapshotContracts(t *testing.T) {
 			}
 		}
 	}
-	if wantAccessors != 341 {
-		t.Fatalf("generated format accessors = %d, want 341", wantAccessors)
-	}
 	if len(documentation) != wantAccessors {
 		t.Errorf("documented generated accessors = %d, want %d", len(documentation), wantAccessors)
+	}
+	for _, repeated := range []string{
+		"projected cross-scope fields do not guarantee",
+		"ok == false means the field was absent",
+		"See [Server.Snapshot] for a fresh hierarchy",
+	} {
+		if strings.Contains(string(generated), repeated) {
+			t.Errorf("generated accessor documentation repeats shared contract %q", repeated)
+		}
 	}
 }
 

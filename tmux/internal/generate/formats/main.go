@@ -278,15 +278,13 @@ func generateFormats(spec formatSpec) ([]byte, error) {
 		kind := accessorKinds[field.Kind]
 		fmt.Fprintf(
 			&output,
-			"// %s returns a typed %s value and an ok result parsed from tmux #{%s} in a materialized hierarchy record's %s-scoped fields (tmux %s or later), not a live tmux read.\n",
+			"// %s returns tmux #{%s} as %s from materialized %s-scoped fields (tmux %s or later).\n",
 			accessor,
-			kind.returnType,
 			field.Name,
+			kind.returnType,
 			field.Scope,
 			field.Since,
 		)
-		output.WriteString("// See [Server.Snapshot] for a fresh hierarchy; projected cross-scope fields do not guarantee that the referenced object is present in the same snapshot.\n")
-		output.WriteString("// ok == false means the field was absent, empty, or malformed; use [FormatValues.Raw] to inspect the exact materialized expansion.\n")
 		fmt.Fprintf(
 			&output,
 			"func (v FormatValues) %s() (%s, bool) { return v.values.%s(%s) }\n\n",
@@ -306,16 +304,14 @@ func generateFormats(spec formatSpec) ([]byte, error) {
 			kind := accessorKinds[field.Kind]
 			fmt.Fprintf(
 				&output,
-				"// %s returns a typed %s value and an ok result parsed from tmux #{%s} in this %s's materialized %s-scoped record (tmux %s or later), not a live tmux read.\n",
+				"// %s returns tmux #{%s} as %s from this %s's materialized %s-scoped fields (tmux %s or later).\n",
 				accessor,
-				kind.returnType,
 				field.Name,
+				kind.returnType,
 				receiver.typeName,
 				field.Scope,
 				field.Since,
 			)
-			fmt.Fprintf(&output, "// See [Server.Snapshot] for a fresh hierarchy and [%s.Formats] for projected fields.\n", receiver.typeName)
-			output.WriteString("// ok == false means the field was absent, empty, or malformed; use [FormatValues.Raw] to inspect the exact materialized expansion.\n")
 			fmt.Fprintf(
 				&output,
 				"func (%s %s) %s() (%s, bool) { return %s.formats.%s(%s) }\n\n",
