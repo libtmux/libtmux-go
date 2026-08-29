@@ -210,6 +210,20 @@ func TestPreflightReportsACommandThatCannotLaunch(t *testing.T) {
 	}
 }
 
+func TestPreflightReadsStderrWhileTheProcessDrains(t *testing.T) {
+	t.Parallel()
+	entry := map[string]any{
+		"command": "sh",
+		"args": []any{"-c", `
+(exec 1>&-; i=0; while [ "$i" -lt 200 ]; do printf x >&2; sleep 0.001; i=$((i+1)); done) &
+sleep 0.02
+`},
+	}
+	if reason := preflight(entry); reason == "" {
+		t.Fatal("preflight accepted a process that never answered initialize")
+	}
+}
+
 // TestSelectedNarrowsToTheClientsNamed covers trying a build in one client on a
 // machine where the others deliberately run a different server.
 func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {

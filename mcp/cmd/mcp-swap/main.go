@@ -54,6 +54,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -428,7 +429,7 @@ func preflight(entry map[string]any) string {
 	if err != nil {
 		return err.Error()
 	}
-	var complaints strings.Builder
+	var complaints synchronizedBuilder
 	process.Stderr = &complaints
 	if err := process.Start(); err != nil {
 		return fmt.Sprintf("could not launch %s: %v", entryCommand(entry), err)
@@ -478,6 +479,25 @@ func preflight(entry map[string]any) string {
 		return tail
 	}
 	return "server exited without answering initialize"
+}
+
+type synchronizedBuilder struct {
+	mu      sync.Mutex
+	builder strings.Builder
+}
+
+func (b *synchronizedBuilder) Write(contents []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.builder.Write(contents)
+}
+
+func (b *synchronizedBuilder) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	// Builder.String aliases the builder's storage. Clone while holding the
+	// lock so the caller can inspect a stable string after the lock is released.
+	return strings.Clone(b.builder.String())
 }
 
 // entryCommand and entryArguments read an entry back as something runnable.
