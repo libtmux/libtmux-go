@@ -28,6 +28,11 @@ var documentedFloorOnly = regexp.MustCompile(
 	`(?:tmux|version)\s+(\d+\.\d+[a-z]?)\s+or\s+(?:newer|later)`,
 )
 
+// documentedNamedFloor matches a tmux or MCP floor stated as an attribute.
+var documentedNamedFloor = regexp.MustCompile(
+	`(?:tmux|MCP(?:\s+consumer)?)\s+has\s+a\s+(\d+\.\d+[a-z]?)\s+floor`,
+)
+
 // benchmarkSection matches the heading BENCHMARKS.md gives one tmux release's
 // measurements.
 var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?)\s*$`)
@@ -84,10 +89,12 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 					document, match[1], match[2], oldest, newest, connectionFloor, newest)
 			}
 		}
-		for _, match := range documentedFloorOnly.FindAllStringSubmatch(string(content), -1) {
-			if !allowedFloors[match[1]] {
-				t.Errorf("%s asks for untested tmux floor %s; tested floors are %s and %s",
-					document, match[1], oldest, connectionFloor)
+		for _, matcher := range []*regexp.Regexp{documentedFloorOnly, documentedNamedFloor} {
+			for _, match := range matcher.FindAllStringSubmatch(string(content), -1) {
+				if !allowedFloors[match[1]] {
+					t.Errorf("%s asks for untested tmux floor %s; tested floors are %s and %s",
+						document, match[1], oldest, connectionFloor)
+				}
 			}
 		}
 	}
