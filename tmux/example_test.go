@@ -1198,6 +1198,46 @@ func ExampleControlClient_Engine() {
 	// 1
 }
 
+func ExampleControlClient_Call() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	server := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-control-call",
+	})
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	alias := "go-two=display-message -p one ; display-message -p two"
+	configured, err := server.Cmd(ctx, "set-option", "-s", "command-alias[80]", alias)
+	if err != nil || configured.ExitCode != 0 {
+		fmt.Println("set alias:", err)
+		return
+	}
+	client, err := server.OpenControl(ctx, session)
+	if err != nil {
+		fmt.Println("open control:", err)
+		return
+	}
+	defer func() { _ = client.Close() }()
+
+	// Call preserves every reply from an alias; Cmd requires exactly one.
+	results, err := client.Call(ctx, "go-two")
+	if err != nil {
+		fmt.Println("call alias:", err)
+		return
+	}
+	fmt.Println(
+		len(results),
+		string(bytes.TrimSpace(results[0].RawStdout)),
+		string(bytes.TrimSpace(results[1].RawStdout)),
+	)
+	// Output: 2 one two
+}
+
 func ExampleServer_WaitFor() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -85,16 +86,6 @@ func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testin
 	if err != nil || guardPayload.Failed || string(guardPayload.RawStdout) != "%end 1 2 3\n" {
 		t.Fatalf("Cmd(guard-shaped payload) = (%#v, %v)", guardPayload, err)
 	}
-	canceledCtx, cancelClose := context.WithCancel(context.Background())
-	cancelClose()
-	if err := client.CloseContext(canceledCtx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("CloseContext(canceled) error = %v, want context canceled", err)
-	}
-	afterCanceledClose, err := client.Cmd(ctx, "display-message", "-p", "still open")
-	if err != nil || afterCanceledClose.Failed || string(afterCanceledClose.RawStdout) != "still open\n" {
-		t.Fatalf("Cmd(after canceled close) = (%#v, %v)", afterCanceledClose, err)
-	}
-
 	const renamed = "control-client-renamed"
 	if _, err := sessions[0].Rename(ctx, renamed); err != nil {
 		t.Fatalf("Rename() error = %v", err)
@@ -125,6 +116,181 @@ func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testin
 	result, err = client.Cmd(ctx, "display-message", "-p", "reconnected")
 	if err != nil || result.Failed || string(result.RawStdout) != "reconnected\n" {
 		t.Fatalf("reconnected Cmd() = (%#v, %v)", result, err)
+	}
+
+	canceledCtx, cancelClose := context.WithCancel(context.Background())
+	cancelClose()
+	if err := client.CloseContext(canceledCtx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("CloseContext(canceled) error = %v, want context canceled", err)
+	}
+	if _, err := client.Cmd(ctx, "display-message", "-p", "closed"); !errors.Is(err, tmux.ErrControlClosed) {
+		t.Fatalf("Cmd(after canceled close) error = %v, want ErrControlClosed", err)
+	}
+	if err := client.CloseContext(ctx); err != nil {
+		t.Fatalf("CloseContext(resume wait) error = %v", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestControlClientReplyFenceAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	emptyAliasFloor, err := tmux.ParseVersion("3.3")
+	if err != nil {
+		t.Fatalf("ParseVersion(3.3) error = %v", err)
+	}
+	type commandAlias struct {
+		index int
+		value string
+	}
+	aliases := []commandAlias{
+		{80, "go-two=display-message -p one ; display-message -p two"},
+		{81, `go-fence-a=\400`},
+	}
+	if version.AtLeast(emptyAliasFloor) {
+		aliases = append(aliases, commandAlias{82, "go-empty="})
+	}
+	for _, alias := range aliases {
+		result, err := server.Cmd(ctx, "set-option", "-s", fmt.Sprintf("command-alias[%d]", alias.index), alias.value)
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("set command alias %d = (%#v, %v)", alias.index, result, err)
+		}
+	}
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	client, err := server.OpenControl(ctx, sessions[0])
+	if err != nil {
+		t.Fatalf("OpenControl() error = %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	results, err := client.Call(ctx, "go-two")
+	if err != nil || len(results) != 2 || string(results[0].RawStdout) != "one\n" ||
+		string(results[1].RawStdout) != "two\n" {
+		t.Fatalf("Call(go-two) = (%#v, %v), want two frames", results, err)
+	}
+
+	results, err = client.Call(ctx, "go-fence-a")
+	if err != nil || len(results) != 1 || !results[0].Failed {
+		t.Fatalf("Call(go-fence-a) = (%#v, %v), want one failed frame", results, err)
+	}
+	results, err = client.Call(ctx, "display-message", "-p", "after overlap")
+	if err != nil || len(results) != 1 || string(results[0].RawStdout) != "after overlap\n" {
+		t.Fatalf("Call(after overlap) = (%#v, %v), want aligned reply", results, err)
+	}
+	if version.AtLeast(emptyAliasFloor) {
+		results, err = client.Call(ctx, "go-empty")
+		if err != nil || len(results) != 0 {
+			t.Fatalf("Call(go-empty) = (%#v, %v), want no frames", results, err)
+		}
+	}
+}
+
+//libtmux:real-tmux
+func TestControlClientCanceledCallDrainsBeforeReuseAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const (
+		enteredOption = "@go-control-entered"
+		releaseToken  = "go-control-release"
+	)
+	alias := "go-block=set-option -g " + enteredOption + " yes ; wait-for " + releaseToken
+	setAlias, err := server.Cmd(ctx, "set-option", "-s", "command-alias[83]", alias)
+	if err != nil || setAlias.ExitCode != 0 {
+		t.Fatalf("set blocking command alias = (%#v, %v)", setAlias, err)
+	}
+	defer func() {
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), time.Second)
+		defer releaseCancel()
+		_, _ = server.Cmd(releaseCtx, "wait-for", "-S", releaseToken)
+	}()
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	client, err := server.OpenControl(ctx, sessions[0])
+	if err != nil {
+		t.Fatalf("OpenControl() error = %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	callCtx, cancelCall := context.WithCancel(ctx)
+	blocked := make(chan error, 1)
+	go func() {
+		_, err := client.Call(callCtx, "go-block")
+		blocked <- err
+	}()
+
+	for {
+		entered, err := server.Cmd(ctx, "show-options", "-gqv", enteredOption)
+		if err != nil {
+			t.Fatalf("observe blocking alias: %v", err)
+		}
+		if entered.ExitCode == 0 && slices.Equal(entered.Stdout, []string{"yes"}) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("blocking alias did not start: %v", ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	cancelCall()
+	select {
+	case err := <-blocked:
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, tmux.ErrOutcomeUnknown) {
+			t.Fatalf("Call(go-block) error = %v, want canceled unknown outcome", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled Call(go-block) did not return")
+	}
+
+	nextStarted := make(chan struct{})
+	next := make(chan struct {
+		results []tmux.ControlCommandResult
+		err     error
+	}, 1)
+	go func() {
+		close(nextStarted)
+		results, err := client.Call(ctx, "display-message", "-p", "aligned")
+		next <- struct {
+			results []tmux.ControlCommandResult
+			err     error
+		}{results: results, err: err}
+	}()
+	<-nextStarted
+	select {
+	case result := <-next:
+		t.Fatalf("next Call completed before canceled command drained: (%#v, %v)",
+			result.results, result.err)
+	case <-time.After(30 * time.Millisecond):
+	}
+
+	released, err := server.Cmd(ctx, "wait-for", "-S", releaseToken)
+	if err != nil || released.ExitCode != 0 {
+		t.Fatalf("release blocked control command = (%#v, %v)", released, err)
+	}
+	select {
+	case result := <-next:
+		if result.err != nil || len(result.results) != 1 ||
+			string(result.results[0].RawStdout) != "aligned\n" {
+			t.Fatalf("next Call() = (%#v, %v), want aligned reply", result.results, result.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("next Call did not finish after canceled command drained")
 	}
 }
 

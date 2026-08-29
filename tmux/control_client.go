@@ -22,6 +22,9 @@ const (
 	controlClientStopGrace   = 250 * time.Millisecond
 	controlClientStopTimeout = 2 * time.Second
 	controlRegistrationPoll  = 10 * time.Millisecond
+	// Two distinct parser failures delimit a request whose alias may produce
+	// any number of frames. Startup records tmux's version-specific replies.
+	controlReplyFenceInput = "\\400\n\\uZZZZ\n"
 )
 
 type controlNotificationMode uint8
@@ -34,6 +37,14 @@ const (
 // ErrControlClosed identifies an operation attempted after a control client
 // began closing or lost its protocol stream.
 var ErrControlClosed = errors.New("tmux: control client is closed")
+
+// ErrOutcomeUnknown identifies a command whose write began but whose reply
+// boundary was not observed. The operation may have changed tmux.
+var ErrOutcomeUnknown = errors.New("tmux: command outcome is unknown")
+
+// ErrControlReplyCount identifies a call to [ControlClient.Cmd] for a command
+// that produced zero or multiple reply frames.
+var ErrControlReplyCount = errors.New("tmux: control command did not return exactly one reply")
 
 // ControlClient is one attached tmux control-mode process. Create one with
 // [Server.OpenControl]. Concurrent Cmd, Wait, and close calls are supported;
@@ -49,7 +60,7 @@ type ControlClient struct {
 	stderr        *controlLockedBuffer
 	notifications *controlNotificationQueue
 	frames        chan controlFrame
-	requests      chan controlRequest
+	requests      chan *controlRequest
 	stopRequests  chan struct{}
 	requestDone   chan struct{}
 	closing       chan struct{}
@@ -64,8 +75,9 @@ type ControlClient struct {
 	closeRequested atomic.Bool
 	closeOnce      sync.Once
 	closeErr       error
+	replyFence     controlReplyFence
 
-	// dispatching excludes the attach frame before matching later command replies.
+	// dispatching excludes flags-0 frames after the attach reply.
 	dispatching atomic.Bool
 }
 
@@ -78,17 +90,72 @@ func (f controlFrame) ownReply() bool {
 type controlRequest struct {
 	ctx context.Context
 	// command is the request's original argument vector.
-	command []string
-	// commands is how many tmux commands line carries. tmux answers a command
-	// list with one frame per command, so this is how many replies to expect.
-	commands int
+	command  []string
 	line     string
 	response chan controlResponse
+	state    atomic.Uint32
 }
 
 type controlResponse struct {
 	results []ControlCommandResult
 	err     error
+}
+
+type controlRequestState uint32
+
+const (
+	controlRequestPending controlRequestState = iota
+	controlRequestAccepted
+	controlRequestWriting
+	controlRequestFinished
+	controlRequestCanceled
+)
+
+type controlFrameFingerprint struct {
+	flags     int
+	rawStdout string
+}
+
+func (f controlFrameFingerprint) matches(frame controlFrame) bool {
+	return frame.failed && frame.flags == f.flags && string(frame.rawStdout) == f.rawStdout
+}
+
+type controlReplyFence struct {
+	first  controlFrameFingerprint
+	second controlFrameFingerprint
+}
+
+func newControlReplyFence(first, second controlFrame) (controlReplyFence, error) {
+	if !first.failed || !second.failed || !first.ownReply() || !second.ownReply() {
+		return controlReplyFence{}, errors.New("control reply fence calibration did not fail")
+	}
+	fence := controlReplyFence{
+		first:  controlFrameFingerprint{flags: first.flags, rawStdout: string(first.rawStdout)},
+		second: controlFrameFingerprint{flags: second.flags, rawStdout: string(second.rawStdout)},
+	}
+	if fence.first == fence.second {
+		return controlReplyFence{}, errors.New("control reply fence calibration is not distinct")
+	}
+	return fence, nil
+}
+
+type outcomeUnknownError struct {
+	cause error
+}
+
+func (e *outcomeUnknownError) Error() string {
+	return ErrOutcomeUnknown.Error() + ": " + e.cause.Error()
+}
+
+func (e *outcomeUnknownError) Unwrap() []error {
+	return []error{ErrOutcomeUnknown, e.cause}
+}
+
+func outcomeUnknown(cause error) error {
+	if cause == nil {
+		return ErrOutcomeUnknown
+	}
+	return &outcomeUnknownError{cause: cause}
 }
 
 type controlLockedBuffer struct {
@@ -196,7 +263,7 @@ func (s Server) openControl(
 		stderr:        stderr,
 		notifications: notifications,
 		frames:        make(chan controlFrame, 1),
-		requests:      make(chan controlRequest),
+		requests:      make(chan *controlRequest),
 		stopRequests:  make(chan struct{}),
 		requestDone:   make(chan struct{}),
 		closing:       make(chan struct{}),
@@ -240,30 +307,51 @@ func (s Server) openControl(
 			strings.TrimSpace(string(frame.rawStdout)),
 		))
 	}
+	client.dispatching.Store(true)
+	if err := client.calibrateReplyFence(ctx); err != nil {
+		return nil, client.failStartup(err)
+	}
 	clientName, err := client.waitForRegistration(ctx)
 	if err != nil {
 		return nil, client.failStartup(err)
 	}
 	client.clientName = clientName
-	client.dispatching.Store(true)
 	go client.runRequests()
 	return client, nil
 }
 
-// Cmd executes one safely encoded tmux command through the control client.
-// A %error frame is returned as ControlCommandResult with Failed set. If ctx
-// ends after the command is written, Cmd returns the context error while the
-// client drains that reply before writing a later command. Closing rejects an
-// unaccepted request and gives an accepted request a bounded drain window.
+// Cmd executes one safely encoded tmux command through the control client. It
+// requires exactly one reply frame and returns [ErrControlReplyCount]
+// otherwise. Use [ControlClient.Call] for aliases that may produce zero or
+// multiple frames.
 func (c *ControlClient) Cmd(
 	ctx context.Context,
 	args ...string,
 ) (ControlCommandResult, error) {
-	results, err := c.cmd(ctx, false, args...)
-	if err != nil || len(results) == 0 {
+	results, err := c.Call(ctx, args...)
+	if err != nil {
 		return ControlCommandResult{}, err
 	}
+	if len(results) != 1 {
+		return ControlCommandResult{}, fmt.Errorf(
+			"%w: got %d; use ControlClient.Call",
+			ErrControlReplyCount,
+			len(results),
+		)
+	}
 	return results[0], nil
+}
+
+// Call executes one safely encoded tmux command and returns all its reply
+// frames. Cancellation after writing returns [ErrOutcomeUnknown] with the
+// context error while the client drains through the boundary before reuse. A
+// transport failure returns any frames proven before the failure together with
+// [ErrOutcomeUnknown].
+func (c *ControlClient) Call(
+	ctx context.Context,
+	args ...string,
+) ([]ControlCommandResult, error) {
+	return c.cmd(ctx, false, args...)
 }
 
 // cmd returns one result per executed command in a command list. A failed list
@@ -281,10 +369,9 @@ func (c *ControlClient) cmd(
 	if err != nil {
 		return nil, err
 	}
-	request := controlRequest{
+	request := &controlRequest{
 		ctx:      ctx,
 		command:  command,
-		commands: countCommandListCommands(command, commandList),
 		line:     line,
 		response: make(chan controlResponse, 1),
 	}
@@ -300,25 +387,35 @@ func (c *ControlClient) cmd(
 	case <-c.stopRequests:
 		return nil, ErrControlClosed
 	}
+	return request.await(ctx)
+}
+
+func (r *controlRequest) await(ctx context.Context) ([]ControlCommandResult, error) {
 	select {
-	case response := <-request.response:
+	case response := <-r.response:
 		return response.results, response.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		if r.cancelBeforeWrite() {
+			return nil, ctx.Err()
+		}
+		if controlRequestState(r.state.Load()) == controlRequestFinished {
+			response := <-r.response
+			return response.results, response.err
+		}
+		return nil, outcomeUnknown(ctx.Err())
 	}
 }
 
-func countCommandListCommands(arguments []string, commandList bool) int {
-	if !commandList {
-		return 1
-	}
-	commands := 1
-	for _, argument := range arguments {
-		if argument == ";" {
-			commands++
+func (r *controlRequest) cancelBeforeWrite() bool {
+	for {
+		state := controlRequestState(r.state.Load())
+		if state != controlRequestPending && state != controlRequestAccepted {
+			return state == controlRequestCanceled
+		}
+		if r.state.CompareAndSwap(uint32(state), uint32(controlRequestCanceled)) {
+			return true
 		}
 	}
-	return commands
 }
 
 // NextNotification returns the next ordered control-mode notification. Exactly
@@ -401,19 +498,17 @@ func (c *ControlClient) Wait(ctx context.Context) error {
 }
 
 // CloseContext starts idempotent control-client shutdown and waits within ctx.
-// An already-ended context does not start shutdown; shutdown continues after a
-// context that ends while waiting, so a later call may retry the wait. Shutdown
-// rejects unaccepted commands and gives an accepted frame a bounded drain
-// window before process-stop escalation.
+// The context bounds only the wait: an already-ended context still starts
+// shutdown, and a later call may resume waiting for the same close.
 func (c *ControlClient) CloseContext(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	c.closeOnce.Do(func() {
 		c.closeRequested.Store(true)
 		close(c.stopRequests)
 		go c.closeAfterRequests()
 	})
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	select {
 	case <-c.closeDone:
 		return c.closeErr
@@ -447,7 +542,15 @@ func (c *ControlClient) runRequests() {
 	for {
 		select {
 		case request := <-c.requests:
+			if !request.state.CompareAndSwap(
+				uint32(controlRequestPending),
+				uint32(controlRequestAccepted),
+			) {
+				request.response <- controlResponse{err: request.ctx.Err()}
+				continue
+			}
 			if c.closeRequested.Load() {
+				request.state.Store(uint32(controlRequestFinished))
 				request.response <- controlResponse{err: ErrControlClosed}
 				return
 			}
@@ -463,28 +566,77 @@ func (c *ControlClient) runRequests() {
 }
 
 func (c *ControlClient) executeControlRequest(
-	request controlRequest,
+	request *controlRequest,
 ) (controlResponse, bool) {
 	if err := request.ctx.Err(); err != nil {
+		request.state.Store(uint32(controlRequestCanceled))
 		return controlResponse{err: err}, true
 	}
-	if _, err := io.WriteString(c.stdin, request.line+"\n"); err != nil {
-		return controlResponse{err: c.classifyOperationError(err)}, false
+	if !request.state.CompareAndSwap(
+		uint32(controlRequestAccepted),
+		uint32(controlRequestWriting),
+	) {
+		return controlResponse{err: request.ctx.Err()}, true
 	}
-	// A list ends at its first %error or after one %end per command. Reading too
-	// few frames skews the next reply; waiting for a dropped command hangs.
-	results := make([]ControlCommandResult, 0, request.commands)
-	for range request.commands {
-		frame, err := c.nextFrame(context.Background())
+	if _, err := io.WriteString(c.stdin, request.line+"\n"+controlReplyFenceInput); err != nil {
+		return request.finish(
+			controlResponse{err: outcomeUnknown(c.classifyOperationError(err))},
+			false,
+		)
+	}
+	results := make([]ControlCommandResult, 0, 1)
+	// A request can itself fail with the first fence's fingerprint. Hold that
+	// frame until the next one distinguishes request A,A,B from boundary A,B.
+	var pendingFirst *controlFrame
+	for {
+		frame, err := c.nextOwnFrame(context.Background())
 		if err != nil {
-			return controlResponse{err: err}, false
+			return request.finish(
+				controlResponse{results: results, err: outcomeUnknown(err)},
+				false,
+			)
+		}
+		if pendingFirst != nil {
+			if c.replyFence.second.matches(frame) {
+				return request.finish(controlResponse{results: results}, true)
+			}
+			results = append(results, pendingFirst.result(request.command))
+			pendingFirst = nil
+		}
+		if c.replyFence.first.matches(frame) {
+			pendingFirst = &frame
+			continue
 		}
 		results = append(results, frame.result(request.command))
-		if frame.failed {
-			break
-		}
 	}
-	return controlResponse{results: results}, true
+}
+
+func (r *controlRequest) finish(
+	response controlResponse,
+	keepRunning bool,
+) (controlResponse, bool) {
+	r.state.Store(uint32(controlRequestFinished))
+	return response, keepRunning
+}
+
+func (c *ControlClient) calibrateReplyFence(ctx context.Context) error {
+	if _, err := io.WriteString(c.stdin, controlReplyFenceInput); err != nil {
+		return fmt.Errorf("calibrate control reply fence: %w", err)
+	}
+	first, err := c.nextOwnFrame(ctx)
+	if err != nil {
+		return fmt.Errorf("calibrate first control reply fence: %w", err)
+	}
+	second, err := c.nextOwnFrame(ctx)
+	if err != nil {
+		return fmt.Errorf("calibrate second control reply fence: %w", err)
+	}
+	fence, err := newControlReplyFence(first, second)
+	if err != nil {
+		return err
+	}
+	c.replyFence = fence
+	return nil
 }
 
 func (c *ControlClient) closeAfterRequests() {
@@ -576,6 +728,15 @@ func (c *ControlClient) nextFrame(ctx context.Context) (controlFrame, error) {
 		return controlFrame{}, ctx.Err()
 	case <-c.closing:
 		return controlFrame{}, ErrControlClosed
+	}
+}
+
+func (c *ControlClient) nextOwnFrame(ctx context.Context) (controlFrame, error) {
+	for {
+		frame, err := c.nextFrame(ctx)
+		if err != nil || frame.ownReply() {
+			return frame, err
+		}
 	}
 }
 
