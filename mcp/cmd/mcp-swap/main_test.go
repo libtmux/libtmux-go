@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -322,6 +323,74 @@ func TestWriteRefusesAnUninspectableBackup(t *testing.T) {
 	}
 	if got := readFile(t, target.path); got != original {
 		t.Fatalf("write changed the config without a usable backup: %s", got)
+	}
+}
+
+func TestWriteReplacesTheConfigAtomically(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.json")
+	target := client{name: "atomic", path: path}
+	const original = `{"before":true}`
+	const updated = `{"after":true}`
+	if err := os.WriteFile(path, []byte(original), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	oldFile, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = oldFile.Close() })
+
+	if err := writeBesideBackup(target, []byte(original), []byte(updated)); err != nil {
+		t.Fatal(err)
+	}
+	oldContents, err := io.ReadAll(oldFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(oldContents) != original {
+		t.Fatalf("the open pre-write file changed to %s; the write was not an atomic replacement", oldContents)
+	}
+	if got := readFile(t, path); got != updated {
+		t.Fatalf("replacement contains %s, want %s", got, updated)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Fatalf("replacement mode = %o, want 640", got)
+	}
+}
+
+func TestWritePreservesAConfigSymlink(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	stored := filepath.Join(directory, "stored.json")
+	linked := filepath.Join(directory, "config.json")
+	const original = `{"before":true}`
+	const updated = `{"after":true}`
+	if err := os.WriteFile(stored, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(stored), linked); err != nil {
+		t.Fatal(err)
+	}
+	target := client{name: "linked", path: linked}
+
+	if err := writeBesideBackup(target, []byte(original), []byte(updated)); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(linked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("write replaced the config symlink instead of its target")
+	}
+	if got := readFile(t, stored); got != updated {
+		t.Fatalf("symlink target contains %s, want %s", got, updated)
 	}
 }
 

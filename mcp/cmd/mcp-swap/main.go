@@ -580,13 +580,13 @@ func revert(clients []client, dryRun bool) error {
 	var failures []error
 	for _, c := range clients {
 		backup := backupPath(c)
-		_, err := os.Stat(backup)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
+		exists, err := regularFileExists(backup)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
+		}
+		if !exists {
 			continue
 		}
 		if dryRun {
@@ -620,7 +620,7 @@ func revert(clients []client, dryRun bool) error {
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
-		if err := os.WriteFile(c.path, restored, 0o600); err != nil {
+		if err := atomicWriteFile(c.path, restored, 0o600); err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
@@ -828,18 +828,95 @@ func writeEntry(c client, entry map[string]any) error {
 // which is the whole point of a tool that switches one entry back and forth.
 func writeBesideBackup(c client, original, updated []byte) error {
 	backup := backupPath(c)
-	_, err := os.Stat(backup)
-	if errors.Is(err, os.ErrNotExist) {
-		if err := os.WriteFile(backup, original, 0o600); err != nil {
-			return err
-		}
-	} else if err != nil {
+	exists, err := regularFileExists(backup)
+	if err != nil {
 		return fmt.Errorf("inspect backup: %w", err)
 	}
-	return os.WriteFile(c.path, updated, 0o600)
+	if !exists {
+		if err := atomicWriteFile(backup, original, 0o600); err != nil {
+			return err
+		}
+	}
+	return atomicWriteFile(c.path, updated, 0o600)
 }
 
 func backupPath(c client) string { return c.path + ".mcp-swap-backup" }
+
+func regularFileExists(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.Mode().IsRegular() {
+		return false, fmt.Errorf("%s is not a regular file", filepath.Base(path))
+	}
+	return true, nil
+}
+
+// atomicWriteFile replaces path only after its complete contents are durable
+// in a sibling temporary file. Existing symlinks continue to point at their
+// targets rather than being replaced by the rename.
+func atomicWriteFile(path string, contents []byte, defaultMode os.FileMode) error {
+	target := path
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		target = resolved
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("resolve destination: %w", err)
+	} else if info, lstatErr := os.Lstat(path); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("destination is a dangling symlink")
+	} else if lstatErr != nil && !errors.Is(lstatErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect destination: %w", lstatErr)
+	}
+
+	mode := defaultMode
+	if info, statErr := os.Stat(target); statErr == nil {
+		if !info.Mode().IsRegular() {
+			return errors.New("destination is not a regular file")
+		}
+		mode = info.Mode().Perm()
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect destination: %w", statErr)
+	}
+
+	temporary, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".mcp-swap-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	removeTemporary := true
+	defer func() {
+		_ = temporary.Close()
+		if removeTemporary {
+			_ = os.Remove(temporaryPath)
+		}
+	}()
+
+	if err := temporary.Chmod(mode); err != nil {
+		return err
+	}
+	written, err := temporary.Write(contents)
+	if err != nil {
+		return err
+	}
+	if written != len(contents) {
+		return io.ErrShortWrite
+	}
+	if err := temporary.Sync(); err != nil {
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryPath, target); err != nil {
+		return err
+	}
+	removeTemporary = false
+	return nil
+}
 
 func serverEntry(configuration map[string]any, key string) (map[string]any, bool) {
 	servers, ok := configuration[key].(map[string]any)
