@@ -3,6 +3,7 @@ package tmux
 import (
 	"bytes"
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 
@@ -11,12 +12,12 @@ import (
 
 // CommandKind names what one tmux request needs from the transport that runs
 // it. A [Server] asks its [Engine] whether it supports a request's kind and
-// falls back to a tmux process when it does not, so selecting an engine never
-// removes an operation from the API.
+// normally falls back to a tmux process when it does not. A handle using
+// [EngineFallbackReject] refuses that fallback instead.
 //
 // An engine must report a kind it does not recognize as unsupported. Later
 // kinds are therefore additive: an engine written before one existed keeps
-// routing it to a tmux process, which is always correct.
+// routing it to a tmux process under the default fallback policy.
 type CommandKind int
 
 const (
@@ -52,8 +53,9 @@ func (k CommandKind) String() string {
 // Engine executes tmux commands for a [Server] over one transport, and
 // declares which [CommandKind] values that transport can carry. Selecting one
 // with [Server.WithEngine] changes how commands reach tmux without changing
-// what any operation means: a request the engine does not support runs as a
-// tmux process instead, using the same [ServerOptions.Runner] it always did.
+// what any operation means. By default, a request the engine does not support
+// runs as a tmux process through [ServerOptions.Runner];
+// [Server.WithEngineFallback] can reject that route.
 //
 // An engine does not own its own shutdown. A [Server] is an immutable handle
 // that callers copy freely, so it cannot be the value that closes a transport;
@@ -79,15 +81,47 @@ type Engine interface {
 	Run(ctx context.Context, kind CommandKind, request CommandRequest) (CommandResult, error)
 }
 
+// EngineFallbackPolicy selects what a handle does when its engine cannot
+// carry a command or an operation requires exact subprocess output.
+type EngineFallbackPolicy int
+
+const (
+	// EngineFallbackAllow runs the command through a tmux process. It is the
+	// zero value and preserves the full object API for partial engines.
+	EngineFallbackAllow EngineFallbackPolicy = iota
+	// EngineFallbackReject returns an EngineFallbackError without starting a
+	// process. It lets a caller enforce a transport boundary.
+	EngineFallbackReject
+)
+
+// ErrEngineFallback matches a command refused because subprocess fallback is
+// disabled. Use errors.As with [EngineFallbackError] for the command kind.
+var ErrEngineFallback = errors.New("tmux: subprocess fallback is disabled")
+
+// EngineFallbackError reports which command kind would have started a tmux
+// process after the selected engine was unable to carry it.
+type EngineFallbackError struct {
+	// Kind is the command route the engine could not carry.
+	Kind CommandKind
+}
+
+// Error implements error.
+func (e *EngineFallbackError) Error() string {
+	return ErrEngineFallback.Error() + " for " + e.Kind.String() + " command"
+}
+
+// Unwrap makes errors.Is(err, ErrEngineFallback) true.
+func (e *EngineFallbackError) Unwrap() error { return ErrEngineFallback }
+
 // WithEngine returns a handle whose supported commands run through engine
 // rather than through a tmux process. A nil engine restores process execution.
 // The returned handle shares immutable configuration and version-cache
 // coordination with s; derived sessions, windows, and panes keep the engine.
 //
 // The engine is not adopted: s keeps forking, and closing the engine's
-// transport is the caller's job. Operations the engine does not support, and
-// the reads that promise tmux's exact stdout bytes, keep running as tmux
-// processes on the returned handle.
+// transport is the caller's job. Under the default fallback policy, operations
+// the engine does not support and reads that promise exact stdout bytes keep
+// running as tmux processes on the returned handle.
 //
 // A record carries the handle that produced it, so sessions, windows, and
 // panes obtained before this call keep forking and report no error while doing
@@ -95,8 +129,27 @@ type Engine interface {
 // [Server.Window], or [Server.Pane], to move it onto the engine.
 func (s Server) WithEngine(engine Engine) Server {
 	s.engine = engine
+	s.engineless = false
 	return s
 }
+
+// WithEngineFallback returns a handle using policy when its selected engine
+// cannot carry a command. The zero policy starts a tmux process, preserving
+// access to operations a partial engine does not support. EngineFallbackReject
+// returns an [EngineFallbackError] instead.
+//
+// The policy also covers operations such as [Pane.CaptureBytes] and
+// [Server.ShowBufferBytes] that require exact subprocess stdout. It is active
+// only while an engine is selected; [Server.WithEngine] with nil restores
+// ordinary process execution.
+func (s Server) WithEngineFallback(policy EngineFallbackPolicy) Server {
+	s.engineFallback = policy
+	return s
+}
+
+// EngineFallback reports what this handle does when its selected engine
+// cannot carry an operation.
+func (s Server) EngineFallback() EngineFallbackPolicy { return s.engineFallback }
 
 // Engine returns the engine this handle routes through, or nil when every
 // command starts a tmux process.
@@ -208,20 +261,26 @@ type engineDecliner interface {
 }
 
 // commandEngine returns the engine that will carry kind, or nil for a process.
-func (s Server) commandEngine(kind CommandKind) Engine {
+func (s Server) commandEngine(kind CommandKind) (Engine, error) {
 	if s.engine == nil {
+		if s.engineless && s.engineFallback == EngineFallbackReject {
+			return nil, &EngineFallbackError{Kind: kind}
+		}
 		s.warnIfPoolUnused(kind)
-		return nil
+		return nil, nil
 	}
 	if !s.engine.Supports(kind) {
+		if s.engineFallback == EngineFallbackReject {
+			return nil, &EngineFallbackError{Kind: kind}
+		}
 		if decliner, ok := s.engine.(engineDecliner); ok {
 			if warning, worth := decliner.declined(kind); worth {
 				s.warn(warning)
 			}
 		}
-		return nil
+		return nil, nil
 	}
-	return s.engine
+	return s.engine, nil
 }
 
 // runCommand routes one tmux command. args holds the tmux command; the
@@ -240,7 +299,11 @@ func (s Server) runCommand(
 	commandList bool,
 ) (tmuxcmd.Result, error) {
 	state := s.connectionState()
-	if engine := s.commandEngine(kind); engine != nil {
+	engine, err := s.commandEngine(kind)
+	if err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
+	if engine != nil {
 		arguments := args
 		if kind != CommandServer {
 			arguments = s.commandArguments(args)
@@ -266,7 +329,11 @@ func (s Server) runExactArgv(
 	arguments []string,
 ) (tmuxcmd.Result, error) {
 	state := s.connectionState()
-	if engine := s.commandEngine(CommandProcess); engine != nil {
+	engine, err := s.commandEngine(CommandProcess)
+	if err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
+	if engine != nil {
 		// An exact argv is already what tmux should receive, so nothing here
 		// re-escapes it.
 		return runEngine(ctx, engine, CommandProcess, state.options, arguments, nil, true)

@@ -205,7 +205,7 @@ func TestStaleRecordReportsPayingForProcesses(t *testing.T) {
 
 	// No pool open: paying for a process is the documented default and is not
 	// worth reporting.
-	stale.commandEngine(CommandServer)
+	_, _ = stale.commandEngine(CommandServer)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings with no pool open = %#v, want none", warnings)
 	}
@@ -213,21 +213,21 @@ func TestStaleRecordReportsPayingForProcesses(t *testing.T) {
 	// A pool opened on another handle sharing this tmux server.
 	state.coordination().pools.Add(1)
 
-	stale.commandEngine(CommandServer)
+	_, _ = stale.commandEngine(CommandServer)
 	if len(warnings) != 1 || warnings[0].Kind != WarningControlPoolUnused {
 		t.Fatalf("warnings with a pool open = %#v, want one unused-pool warning", warnings)
 	}
 
 	// A command that needs its own process needs one whatever is open.
 	warnings = nil
-	stale.commandEngine(CommandProcess)
+	_, _ = stale.commandEngine(CommandProcess)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings for a process command = %#v, want none", warnings)
 	}
 
 	// A handle that gave up its engine on purpose, for a read whose result is
 	// tmux's exact stdout bytes, is not paying for anything it did not choose.
-	stale.withoutEngine().commandEngine(CommandServer)
+	_, _ = stale.withoutEngine().commandEngine(CommandServer)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings for a deliberate process = %#v, want none", warnings)
 	}

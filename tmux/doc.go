@@ -391,6 +391,9 @@
 // Every operation means the same thing on the returned handle. Only the
 // transport changes, so the code above is the whole difference between forking
 // a tmux process per command and reusing one control-mode connection.
+// [Server.WithEngineFallback] with [EngineFallbackReject] turns any operation
+// the engine cannot carry into a typed error instead of silently starting a
+// process.
 //
 // A record carries the handle that produced it, so a session, window, pane, or
 // client obtained before that call keeps starting a tmux process for every

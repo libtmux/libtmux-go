@@ -129,6 +129,62 @@ func TestWithEngineKeepsUnsupportedKindsOnATmuxProcess(t *testing.T) {
 	}
 }
 
+func TestWithEngineCanRejectSubprocessFallback(t *testing.T) {
+	t.Parallel()
+
+	engine := &recordingEngine{
+		supports: map[tmux.CommandKind]bool{tmux.CommandServer: true},
+		result:   tmux.CommandResult{Stdout: []string{"ok"}},
+	}
+	runner := &recordingRunner{
+		result: tmux.CommandResult{Stdout: []string{"tmux 3.7b"}},
+	}
+	server := tmux.NewServer(tmux.ServerOptions{Runner: runner}).
+		WithEngine(engine).
+		WithEngineFallback(tmux.EngineFallbackReject)
+
+	if got := server.EngineFallback(); got != tmux.EngineFallbackReject {
+		t.Fatalf("EngineFallback() = %v, want reject", got)
+	}
+	if _, err := server.Cmd(context.Background(), "display-message", "ok"); err != nil {
+		t.Fatalf("supported command error = %v", err)
+	}
+	_, err := server.Version(context.Background())
+	if !errors.Is(err, tmux.ErrEngineFallback) {
+		t.Fatalf("Version() error = %v, want ErrEngineFallback", err)
+	}
+	var fallback *tmux.EngineFallbackError
+	if !errors.As(err, &fallback) || fallback.Kind != tmux.CommandProcess {
+		t.Fatalf("Version() error = %#v, want process fallback details", err)
+	}
+	if _, err := server.ShowBufferBytes(context.Background(), nil); !errors.Is(err, tmux.ErrEngineFallback) {
+		t.Fatalf("ShowBufferBytes() error = %v, want ErrEngineFallback", err)
+	}
+	if started := runner.recorded(); len(started) != 0 {
+		t.Fatalf("strict engine started %d tmux processes", len(started))
+	}
+}
+
+func TestWithEngineNilDisablesStrictFallbackPolicy(t *testing.T) {
+	t.Parallel()
+
+	runner := &recordingRunner{}
+	engine := &recordingEngine{
+		supports: map[tmux.CommandKind]bool{tmux.CommandServer: true},
+	}
+	server := tmux.NewServer(tmux.ServerOptions{Runner: runner}).
+		WithEngine(engine).
+		WithEngineFallback(tmux.EngineFallbackReject).
+		WithEngine(nil)
+
+	if _, err := server.Cmd(context.Background(), "list-sessions"); err != nil {
+		t.Fatalf("Cmd() error = %v", err)
+	}
+	if started := runner.recorded(); len(started) != 1 {
+		t.Fatalf("WithEngine(nil) started %d processes, want one", len(started))
+	}
+}
+
 func TestSubprocessEngineRestoresClientSelectorsAndProcessExecution(t *testing.T) {
 	t.Parallel()
 

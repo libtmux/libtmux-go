@@ -70,8 +70,9 @@ type ServerOptions struct {
 // Copying a Server preserves its configuration and shares version-cache
 // coordination; only the documented concurrent operations are safe to share.
 type Server struct {
-	state  *serverState
-	engine Engine
+	state          *serverState
+	engine         Engine
+	engineFallback EngineFallbackPolicy
 	// engineless records that this handle gave up its engine deliberately, so
 	// that a command it sends through a tmux process is expected rather than
 	// the cost of a record that predates the connection.

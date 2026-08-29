@@ -171,10 +171,11 @@ var captureFileSequence atomic.Uint64
 //
 // It exists because a printed capture cannot cross a control-mode connection,
 // so [Pane.Capture] and [Pane.CaptureBytes] start a tmux process even on a
-// handle that selected an [Engine]. Every tmux command this issues prints
-// nothing, so all of them ride the engine and a watch loop built on it starts no
-// process at all. That is the trade in full: on a handle with no engine this is
-// three tmux processes where [Pane.Capture] is one.
+// handle that selected an [Engine], or return [ErrEngineFallback] under the
+// rejecting policy. Every tmux command this issues prints nothing, so all of
+// them ride the engine and a watch loop built on it starts no process at all.
+// That is the trade in full: on a handle with no engine this is three tmux
+// processes where [Pane.Capture] is one.
 //
 // It returns the lines it captured, where [Pane.CaptureToBuffer] returns only
 // an error, because a tmux buffer needs a further command to read while this
