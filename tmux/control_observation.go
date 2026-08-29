@@ -27,6 +27,18 @@ type PaneObservation struct {
 	sessionID SessionID
 	after     uint64
 	baseline  []string
+	state     *paneObservationState
+}
+
+type paneObservationState struct {
+	readToken chan struct{}
+	loss      error
+}
+
+func newPaneObservationState() *paneObservationState {
+	state := &paneObservationState{readToken: make(chan struct{}, 1)}
+	state.releaseReadToken()
+	return state
 }
 
 // PaneID returns the pane selected at the observation boundary.
@@ -47,34 +59,80 @@ func (o *PaneObservation) Baseline() []string {
 }
 
 // NextNotification returns the next notification strictly after the pane
-// baseline. Notifications queued before that boundary are discarded. Exactly
-// one caller may use this method at a time.
+// baseline. Notifications queued before that boundary are discarded.
+// Concurrent calls are serialized. Once the observation reports
+// [ErrPaneObservationLost], later calls report the same loss without consuming
+// more notifications. A caller context error affects only that call.
 func (o *PaneObservation) NextNotification(
 	ctx context.Context,
 ) (ControlNotification, error) {
 	if o == nil || o.client == nil {
 		return ControlNotification{}, ErrControlClosed
 	}
+	state := o.state
+	if state == nil {
+		return ControlNotification{}, ErrControlClosed
+	}
+	if err := state.acquireReadToken(ctx); err != nil {
+		return ControlNotification{}, err
+	}
+	defer state.releaseReadToken()
+	if state.loss != nil {
+		return ControlNotification{}, state.loss
+	}
 	notification, err := o.client.nextNotificationAfter(ctx, o.after)
 	if err != nil {
-		return ControlNotification{}, err
+		return ControlNotification{}, state.classifyReadError(ctx, err)
 	}
 	arguments := notification.Arguments()
 	if notification.Kind() == ControlNotificationUnlinkedWindowClose &&
 		len(arguments) != 0 && WindowID(arguments[0]) == o.windowID {
-		return ControlNotification{}, fmt.Errorf(
+		state.loss = fmt.Errorf(
 			"%w: observed window is no longer linked into the attached session",
 			ErrPaneObservationLost,
 		)
+		return ControlNotification{}, state.loss
 	}
 	if notification.Kind() == ControlNotificationSessionChanged &&
 		len(arguments) != 0 && SessionID(arguments[0]) != o.sessionID {
-		return ControlNotification{}, fmt.Errorf(
+		state.loss = fmt.Errorf(
 			"%w: control client changed sessions",
 			ErrPaneObservationLost,
 		)
+		return ControlNotification{}, state.loss
 	}
 	return notification, nil
+}
+
+func (s *paneObservationState) acquireReadToken(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.readToken:
+		if err := ctx.Err(); err != nil {
+			s.releaseReadToken()
+			return err
+		}
+		return nil
+	}
+}
+
+func (s *paneObservationState) releaseReadToken() {
+	s.readToken <- struct{}{}
+}
+
+func (s *paneObservationState) classifyReadError(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+		return err
+	}
+	if errors.Is(err, os.ErrClosed) {
+		return err
+	}
+	if _, ok := errors.AsType[*ControlNotificationError](err); ok {
+		return err
+	}
+	s.loss = fmt.Errorf("%w: %w", ErrPaneObservationLost, err)
+	return s.loss
 }
 
 // Close stops the dedicated control client. It is safe to call more than once.
@@ -222,6 +280,7 @@ func (c *ControlClient) observePane(
 		sessionID: c.session.ID(),
 		after:     results[2].notificationSequence,
 		baseline:  tmuxcmd.SplitStdout(contents),
+		state:     newPaneObservationState(),
 	}, nil
 }
 

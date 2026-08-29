@@ -170,6 +170,11 @@ func TestPaneObservationOwnsLinkedSessionAndDetectsUnlink(t *testing.T) {
 			t.Fatalf("NextNotification() error = %v, want ErrPaneObservationLost", err)
 		}
 	}
+	retryCtx, retryCancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	defer retryCancel()
+	if _, err := observation.NextNotification(retryCtx); !errors.Is(err, tmux.ErrPaneObservationLost) {
+		t.Fatalf("second NextNotification() error = %v, want terminal ErrPaneObservationLost", err)
+	}
 }
 
 func writePaneMarker(ctx context.Context, t *testing.T, pane tmux.Pane, command string) {

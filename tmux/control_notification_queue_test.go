@@ -86,12 +86,10 @@ func TestPaneObservationOwnsBaselineAndWireBoundary(t *testing.T) {
 	if err := queue.append(4, []byte("%output %1 after")); err != nil {
 		t.Fatal(err)
 	}
-	client := &ControlClient{notifications: queue}
 	baseline := []string{"visible"}
-	observation := &PaneObservation{
-		client: client, paneID: "%1", windowID: "@1", sessionID: "$1",
-		after: 3, baseline: baseline,
-	}
+	observation := newTestPaneObservation(queue)
+	observation.after = 3
+	observation.baseline = baseline
 	gotBaseline := observation.Baseline()
 	gotBaseline[0] = "also mutated"
 	if again := observation.Baseline(); !slices.Equal(again, []string{"visible"}) {
@@ -126,14 +124,177 @@ func TestPaneObservationReportsTopologyLoss(t *testing.T) {
 			if err := queue.append(4, []byte(test.record)); err != nil {
 				t.Fatal(err)
 			}
-			observation := &PaneObservation{
-				client: &ControlClient{notifications: queue},
-				paneID: "%1", windowID: "@1", sessionID: "$1", after: 3,
+			if err := queue.append(5, []byte("%output %1 must-not-escape")); err != nil {
+				t.Fatal(err)
 			}
-			if _, err := observation.NextNotification(context.Background()); !errors.Is(err, ErrPaneObservationLost) {
-				t.Fatalf("NextNotification() error = %v, want ErrPaneObservationLost", err)
+			observation := newTestPaneObservation(queue)
+			observation.after = 3
+			copied := *observation
+			for read, reader := range []*PaneObservation{observation, &copied} {
+				if _, err := reader.NextNotification(context.Background()); !errors.Is(err, ErrPaneObservationLost) {
+					t.Fatalf("NextNotification() read %d error = %v, want terminal ErrPaneObservationLost", read+1, err)
+				}
 			}
 		})
+	}
+}
+
+func TestPaneObservationSerializesReadersAtLoss(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(128)
+	t.Cleanup(func() { _ = queue.Close() })
+	for sequence, record := range []string{
+		"%unlinked-window-close @1",
+		"%output %1 must-not-escape",
+	} {
+		if err := queue.append(uint64(sequence+1), []byte(record)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	observation := newTestPaneObservation(queue)
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var readers sync.WaitGroup
+	for range 2 {
+		readers.Go(func() {
+			<-start
+			_, err := observation.NextNotification(context.Background())
+			results <- err
+		})
+	}
+	close(start)
+	readers.Wait()
+	close(results)
+	for err := range results {
+		if !errors.Is(err, ErrPaneObservationLost) {
+			t.Fatalf("NextNotification() error = %v, want shared ErrPaneObservationLost", err)
+		}
+	}
+}
+
+func TestPaneObservationReaderCancellationIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(128)
+	t.Cleanup(func() { _ = queue.Close() })
+	observation := newTestPaneObservation(queue)
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := observation.NextNotification(firstCtx)
+		firstDone <- err
+	}()
+	select {
+	case err := <-firstDone:
+		t.Fatalf("first reader returned before cancellation: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	secondCtx, cancelSecond := context.WithCancel(context.Background())
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := observation.NextNotification(secondCtx)
+		secondDone <- err
+	}()
+	select {
+	case err := <-secondDone:
+		t.Fatalf("second reader returned before cancellation: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	cancelSecond()
+	select {
+	case err := <-secondDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("second reader error = %v, want context canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued reader did not honor context cancellation")
+	}
+	cancelFirst()
+	if err := <-firstDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("first reader error = %v, want context canceled", err)
+	}
+	if err := queue.append(1, []byte("%output %1 retry")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := observation.NextNotification(context.Background()); err != nil {
+		t.Fatalf("NextNotification() after cancellation error = %v, want retry", err)
+	}
+}
+
+func TestPaneObservationClassifiesTerminalStreamLoss(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		finish error
+		cause  error
+	}{
+		{name: "clean stream end", cause: io.EOF},
+		{
+			name:   "protocol failure",
+			finish: controlProtocolError("stream", "reader failed"),
+			cause:  ErrControlProtocol,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			queue := newControlNotificationQueue(128)
+			t.Cleanup(func() { _ = queue.Close() })
+			queue.finish(test.finish)
+			observation := newTestPaneObservation(queue)
+			for read := range 2 {
+				_, err := observation.NextNotification(context.Background())
+				if !errors.Is(err, ErrPaneObservationLost) || !errors.Is(err, test.cause) {
+					t.Fatalf("NextNotification() read %d error = %v, want observation loss and %v", read+1, err, test.cause)
+				}
+			}
+		})
+	}
+}
+
+func TestPaneObservationKeepsNotificationErrorsRetryable(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(128)
+	t.Cleanup(func() { _ = queue.Close() })
+	for sequence, record := range []string{
+		"%future-notification argument",
+		"%output %1 retry",
+	} {
+		if err := queue.append(uint64(sequence+1), []byte(record)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	observation := newTestPaneObservation(queue)
+	if _, err := observation.NextNotification(context.Background()); !errors.Is(err, ErrUnknownControlNotification) || errors.Is(err, ErrPaneObservationLost) {
+		t.Fatalf("NextNotification() error = %v, want retryable unknown notification", err)
+	}
+	if _, err := observation.NextNotification(context.Background()); err != nil {
+		t.Fatalf("NextNotification() after parse error = %v, want retry", err)
+	}
+}
+
+func TestPaneObservationCloseIsNotLoss(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(128)
+	if err := queue.Close(); err != nil {
+		t.Fatal(err)
+	}
+	observation := newTestPaneObservation(queue)
+	if _, err := observation.NextNotification(context.Background()); !errors.Is(err, os.ErrClosed) || errors.Is(err, ErrPaneObservationLost) {
+		t.Fatalf("NextNotification() error = %v, want closed without observation loss", err)
+	}
+}
+
+func newTestPaneObservation(queue *controlNotificationQueue) *PaneObservation {
+	return &PaneObservation{
+		client: &ControlClient{notifications: queue},
+		paneID: "%1", windowID: "@1", sessionID: "$1",
+		state: newPaneObservationState(),
 	}
 }
 
