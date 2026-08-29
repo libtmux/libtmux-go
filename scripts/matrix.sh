@@ -10,11 +10,9 @@
 #
 # It is separate from the ordinary gate because it is slow -- five modules
 # against nine tmux builds -- and because it needs a matrix of tmux builds a
-# checkout does not come with. MCP rejects tmux older than 3.6, so those lanes
-# run its floor test instead of its full suite. Point LIBTMUX_TMUX_MATRIX at a
-# directory holding <version>/bin/tmux, or let it look where the matrix is
-# usually built. Narrow what runs with LIBTMUX_MATRIX_MODULES and
-# LIBTMUX_MATRIX_VERSIONS.
+# checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
+# <version>/bin/tmux, or let it look where the matrix is usually built. Narrow
+# what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS.
 
 set -uo pipefail
 
@@ -79,21 +77,8 @@ for version in "${versions[@]}"; do
     for module in ${LIBTMUX_MATRIX_MODULES:-. examples workspace mcp benchmarks}; do
         directory="$repository_root/$module"
         [[ -f "$directory/go.mod" ]] || continue
-        test_command=(go test -count=1 ./...)
-        test_label=ok
-        case "$version:$module" in
-            3.2a:mcp|3.3a:mcp|3.4:mcp|3.5:mcp)
-                test_command=(
-                    go test
-                    -count=1
-                    -run '^TestInstanceConnectRejectsInstalledTmuxBelowMCPFloor$'
-                    .
-                )
-                test_label='floor rejection ok'
-                ;;
-        esac
-        if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" "${test_command[@]}" > "$log" 2>&1); then
-            printf '  %-14s %s\n' "$module" "$test_label"
+        if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" go test -count=1 ./... > "$log" 2>&1); then
+            printf '  %-14s ok\n' "$module"
         else
             printf '  %-14s FAILED\n' "$module"
             grep -E '^(---|\s+[a-z_]+_test)' "$log" | head -8

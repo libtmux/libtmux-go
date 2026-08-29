@@ -275,18 +275,6 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})
-	version, err := server.Version(ctx)
-	if err != nil {
-		t.Fatalf("Version() error = %v", err)
-	}
-	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !version.AtLeast(minimum) {
-		t.Skipf("terminal connections require tmux 3.6; installed %s", version)
-	}
-
 	described := workspace.Workspace{
 		SessionName: "continued",
 		Windows: []workspace.Window{

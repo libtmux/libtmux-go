@@ -11,10 +11,8 @@ client, which the Go tests do not provide.
 
 ## Getting set up
 
-You need Go 1.26 or newer and tmux 3.2a or newer on `PATH`. MCP development
-needs tmux 3.6 or newer because its retained control clients use
-`no-detach-on-destroy`. Nothing else — the core module has no runtime
-dependencies.
+You need Go 1.26 or newer and tmux 3.2a or newer on `PATH`. Nothing else — the
+core module has no runtime dependencies.
 
 Give tmux a socket directory of its own before running anything, and drop the
 inherited pane. Sibling checkouts run their suites on the same machine, and a
@@ -135,11 +133,9 @@ version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
 `-p` flag that 3.3a and 3.5 both take. Everything above runs against whichever
 tmux is on `PATH`, so run the supported releases before anything ships.
 `scripts/matrix.sh` runs every compatible module suite, given a directory of
-tmux builds with `<version>/bin/tmux` inside it. The tmux, examples, workspace,
-and benchmark modules run across the whole 3.2a-through-3.7c range. MCP runs its
-startup-refusal test below 3.6 and its full suite from 3.6 onward. With no matrix
-directory, the script skips with an explanation rather than reporting a pass it
-did not earn:
+tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
+whole 3.2a-through-3.7c range. With no matrix directory, the script skips with
+an explanation rather than reporting a pass it did not earn:
 
 ```console
 $ bash scripts/matrix.sh

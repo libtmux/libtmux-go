@@ -46,32 +46,6 @@ jobs:
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install --yes tmux
 
-      - name: Cache tmux 3.6 for MCP
-        if: matrix.module == 'mcp'
-        id: mcp-tmux-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/tmux-builds/tmux-3.6
-          key: tmux-3.6
-
-      - name: Build tmux 3.6 for MCP
-        if: matrix.module == 'mcp' && steps.mcp-tmux-cache.outputs.cache-hit != 'true'
-        env:
-          TMUX_VERSION: '3.6'
-        run: |
-          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
-            libutempter-dev bison autoconf automake pkg-config
-          git clone --depth 1 --branch "$TMUX_VERSION" \
-            https://github.com/tmux/tmux.git ~/tmux-src
-          cd ~/tmux-src
-          sh autogen.sh
-          ./configure --prefix="$HOME/tmux-builds/tmux-$TMUX_VERSION"
-          make && make install
-
-      - name: Select tmux 3.6 for MCP
-        if: matrix.module == 'mcp'
-        run: echo "$HOME/tmux-builds/tmux-3.6/bin" >> "$GITHUB_PATH"
-
       - name: Create the tmux socket directory
         run: mkdir -p "$TMUX_TMPDIR"
 
@@ -333,15 +307,6 @@ jobs:
           tmux -V
           mkdir -p "$TMUX_TMPDIR"
           for module in . examples workspace mcp benchmarks; do
-            case "$TMUX_VERSION:$module" in
-              3.2a:mcp|3.3a:mcp|3.4:mcp|3.5:mcp)
-                echo "--- $module: expected floor rejection ---"
-                (cd "$module" && go test -count=1 \
-                  -run '^TestInstanceConnectRejectsInstalledTmuxBelowMCPFloor$' .)
-                ;;
-              *)
-                echo "--- $module: full suite ---"
-                (cd "$module" && go test -count=1 ./...)
-                ;;
-            esac
+            echo "--- $module: full suite ---"
+            (cd "$module" && go test -count=1 ./...)
           done

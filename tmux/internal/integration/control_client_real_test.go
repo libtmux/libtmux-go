@@ -136,7 +136,7 @@ func TestControlClientSurvivesItsStartupSession(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	requireTerminalConnection(t, server)
+	requireNoDetachOnDestroy(t, server)
 
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {

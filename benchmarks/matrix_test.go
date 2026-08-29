@@ -58,6 +58,16 @@ func TestProcessCounterForwardsAndCountsRealTmux(t *testing.T) {
 	}
 }
 
+func TestMinimumSupportedTmuxHasConnectionRows(t *testing.T) {
+	version, err := tmux.ParseVersion(tmux.MinimumSupportedVersion)
+	if err != nil {
+		t.Fatalf("ParseVersion(%q) error = %v", tmux.MinimumSupportedVersion, err)
+	}
+	if !supportsOwnedConnections(version) {
+		t.Fatalf("tmux %s omitted connection rows", version)
+	}
+}
+
 // TestMatrixAnswersAgree requires equivalent results within each workload.
 //
 //libtmux:real-tmux

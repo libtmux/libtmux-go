@@ -222,13 +222,7 @@ func (s Server) openControl(
 	}
 
 	attach := []string{"attach-session"}
-	flags := make([]string, 0, 2)
-	if mode == controlNotificationsDiscarded {
-		flags = append(flags, "no-output")
-	}
-	if version.AtLeast(controlNoDetachVersion36) {
-		flags = append(flags, "no-detach-on-destroy")
-	}
+	flags := (controlDialect{version: version}).clientFlags(mode)
 	if len(flags) > 0 {
 		attach = append(attach, "-f", strings.Join(flags, ","))
 	}

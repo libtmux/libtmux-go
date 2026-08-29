@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
@@ -144,46 +145,105 @@ func TestNewSessionConnectionRejectsBeforeStartingTmux(t *testing.T) {
 	}
 }
 
-func TestConnectionRequiresTmux36(t *testing.T) {
+func TestControlDialectAdaptsClientFlags(t *testing.T) {
 	t.Parallel()
-	minimum, err := ParseVersion("3.6")
-	if err != nil {
-		t.Fatal(err)
+
+	for _, test := range []struct {
+		name    string
+		version string
+		mode    controlNotificationMode
+		want    []string
+	}{
+		{name: "3.2a notifications", version: "3.2a", mode: controlNotificationsRetained},
+		{name: "3.2a commands", version: "3.2a", mode: controlNotificationsDiscarded, want: []string{"no-output"}},
+		{name: "3.5 commands", version: "3.5", mode: controlNotificationsDiscarded, want: []string{"no-output"}},
+		{name: "3.6 notifications", version: "3.6", mode: controlNotificationsRetained, want: []string{"no-detach-on-destroy"}},
+		{name: "3.6 commands", version: "3.6", mode: controlNotificationsDiscarded, want: []string{"no-output", "no-detach-on-destroy"}},
+		{name: "3.7 commands", version: "3.7", mode: controlNotificationsDiscarded, want: []string{"no-output", "no-detach-on-destroy"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			dialect := controlDialect{version: mustParseVersion(t, test.version)}
+			if got := dialect.clientFlags(test.mode); !slices.Equal(got, test.want) {
+				t.Fatalf("client flags = %#v, want %#v", got, test.want)
+			}
+		})
 	}
+}
+
+func TestNewSessionConnectionArgumentsUseControlDialect(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		version string
+		want    string
+	}{
+		{version: "3.2a", want: "-fno-output"},
+		{version: "3.5", want: "-fno-output"},
+		{version: "3.6", want: "-fno-output,no-detach-on-destroy"},
+	} {
+		t.Run(test.version, func(t *testing.T) {
+			t.Parallel()
+
+			arguments, _, err := newSessionConnectionArguments(
+				NewSessionRequest{},
+				controlDialect{version: mustParseVersion(t, test.version)},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Contains(arguments, test.want) {
+				t.Fatalf("new-session arguments = %#v, want %q", arguments, test.want)
+			}
+		})
+	}
+}
+
+func TestConnectionRejectsTmuxBeforeSupportedFloor(t *testing.T) {
+	t.Parallel()
+
+	response := versionResponse{result: tmuxcmd.Result{
+		Stdout: []string{"tmux 3.1"}, ExitCode: 0,
+	}}
 	assertFloor := func(t *testing.T, err error, calls int) {
 		t.Helper()
 		var tooLow *VersionTooLowError
 		if !errors.Is(err, ErrVersionTooLow) || !errors.As(err, &tooLow) {
 			t.Fatalf("connection error = %v, want VersionTooLowError", err)
 		}
-		if tooLow.Current.String() != "3.5" || tooLow.Minimum.Compare(minimum) != 0 {
-			t.Fatalf("version floor = %s -> %s, want 3.5 -> 3.6",
-				tooLow.Current, tooLow.Minimum)
+		if tooLow.Current.String() != "3.1" ||
+			tooLow.Minimum.String() != MinimumConnectionVersion {
+			t.Fatalf(
+				"version floor = %s -> %s, want 3.1 -> %s",
+				tooLow.Current,
+				tooLow.Minimum,
+				MinimumConnectionVersion,
+			)
 		}
 		if calls != 1 {
 			t.Fatalf("runner calls = %d, want only tmux -V", calls)
 		}
 	}
-	response := versionResponse{result: tmuxcmd.Result{
-		Stdout: []string{"tmux 3.5"}, ExitCode: 0,
-	}}
 
 	t.Run("existing session", func(t *testing.T) {
 		runner := &versionQueueRunner{responses: []versionResponse{response}}
 		server := serverWithRunner(runner)
-		session := Session{server: server, sessionID: "$1"}
-		connection, openErr := session.OpenControl(context.Background(), ConnectionOptions{})
+		connection, err := (Session{server: server, sessionID: "$1"}).OpenControl(
+			context.Background(),
+			ConnectionOptions{},
+		)
 		if connection != nil {
 			_ = connection.Close()
-			t.Fatal("OpenControl() returned a connection below tmux 3.6")
+			t.Fatal("OpenControl() returned a connection below the supported floor")
 		}
-		assertFloor(t, openErr, runner.callCount())
+		assertFloor(t, err, runner.callCount())
 	})
 
 	t.Run("new session", func(t *testing.T) {
 		runner := &versionQueueRunner{responses: []versionResponse{response}}
 		server := serverWithRunner(runner)
-		created, connection, createErr := server.NewSessionConnection(
+		created, connection, err := server.NewSessionConnection(
 			context.Background(),
 			NewSessionRequest{},
 			ConnectionOptions{},
@@ -194,7 +254,7 @@ func TestConnectionRequiresTmux36(t *testing.T) {
 			}
 			t.Fatalf("NewSessionConnection() = (%#v, %#v), want zero and nil", created, connection)
 		}
-		assertFloor(t, createErr, runner.callCount())
+		assertFloor(t, err, runner.callCount())
 	})
 }
 
@@ -210,7 +270,10 @@ func TestNewSessionFrameNormalizesOpenBSDIdentityVersion(t *testing.T) {
 		}, ExitCode: 0}},
 	}}
 	server := serverWithRunner(runner)
-	arguments, fields, err := newSessionConnectionArguments(NewSessionRequest{})
+	arguments, fields, err := newSessionConnectionArguments(
+		NewSessionRequest{},
+		controlDialect{version: mustParseVersion(t, "3.5")},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

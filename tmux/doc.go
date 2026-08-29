@@ -117,9 +117,10 @@
 // A plain [Server] starts one tmux process per operation. A [Connection] owns
 // persistent command lanes and returns model values already bound to them.
 // Control connections appear as attached tmux clients, affect session_attached
-// and hooks, and must be closed by their owner. They require tmux 3.6 so
-// destroying their initial session moves them to another session when one
-// exists.
+// and hooks, and must be closed by their owner. On tmux 3.6 and later, their
+// clients move to another session when the initial session is destroyed. On
+// earlier releases, destruction follows the session's detach-on-destroy policy
+// and may close the connection.
 //
 // Printed captures remain subprocess operations because control-mode replies
 // do not preserve the same byte contract. [Pane.CaptureToFile] keeps its

@@ -3,8 +3,7 @@
 The same ten reads run through a plain server and an owned connection. The
 example then shows which exact-capture operations each path supports.
 
-The connection path requires tmux 3.6 or newer. The ordinary process path in
-the core library retains its tmux 3.2a floor.
+Both paths support tmux 3.2a through 3.7c.
 
 ## Running it
 

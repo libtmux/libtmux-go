@@ -20,10 +20,9 @@ built "example-project" with 2 windows
 
 ## What to look at
 
-**The builder owns its temporary connection.** On tmux 3.6 or later, session
-creation and every build command use one retained control connection. The
-builder closes it before returning an ordinary session handle. Older releases
-use subprocesses instead.
+**The builder owns its temporary connection.** Session creation and every build
+command use one retained control connection. The builder closes it before
+returning an ordinary session handle.
 
 **What it reports is what tmux made, not what the file asked for.** The windows
 and panes listed are read back from tmux after the build, so a pane the file

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // ErrConnectionRequiresProcess identifies an operation refused because a
@@ -13,8 +14,32 @@ var ErrConnectionRequiresProcess = errors.New(
 	"tmux: operation requires a process outside the connection",
 )
 
-var controlNoDetachVersion36 = Version{
-	raw: MinimumConnectionVersion, major: 3, minor: 6,
+var (
+	controlMinimumVersion32a = Version{
+		raw: MinimumConnectionVersion, major: 3, minor: 2,
+	}
+	controlNoDetachVersion36 = Version{
+		raw: "3.6", major: 3, minor: 6,
+	}
+)
+
+// controlDialect keeps version differences at the process boundary instead of
+// making them different public transports. tmux 3.6 added a per-client
+// no-detach-on-destroy flag; earlier control clients retain the session's
+// detach-on-destroy policy.
+type controlDialect struct {
+	version Version
+}
+
+func (dialect controlDialect) clientFlags(mode controlNotificationMode) []string {
+	flags := make([]string, 0, 2)
+	if mode == controlNotificationsDiscarded {
+		flags = append(flags, "no-output")
+	}
+	if dialect.version.AtLeast(controlNoDetachVersion36) {
+		flags = append(flags, "no-detach-on-destroy")
+	}
+	return flags
 }
 
 // ConnectionOptions configures the control-mode lanes owned by a
@@ -45,9 +70,9 @@ func (s Server) ConnectionBound() bool { return s.connection != nil }
 
 // OpenControl opens terminal control-mode transport to the receiver's daemon.
 // The returned connection owns its lanes and must be closed. A receiver already
-// bound to a connection cannot be rebound. Terminal connections require tmux
-// 3.6 or later so their lanes survive destruction of the initial session when
-// another session exists.
+// bound to a connection cannot be rebound. Before tmux 3.6, destroying the
+// attached session follows that session's detach-on-destroy policy and may end
+// the connection.
 func (s Session) OpenControl(
 	ctx context.Context,
 	options ConnectionOptions,
@@ -66,7 +91,7 @@ func (s Session) OpenControl(
 			"must not be negative",
 		)
 	}
-	if err := s.server.RequireVersion(ctx, controlNoDetachVersion36); err != nil {
+	if err := s.server.RequireVersion(ctx, controlMinimumVersion32a); err != nil {
 		return nil, err
 	}
 	pool, err := s.server.openControlLanePool(ctx, s, options.Lanes)
@@ -81,8 +106,8 @@ func (s Session) OpenControl(
 // it creates an attached session. If tmux reports a valid session ID before
 // later setup fails, the returned partial session retains that ID and server.
 // Cleanup closes the attached creator, so tmux policy may make the partial
-// session no longer live. It requires tmux 3.6 or later so the retained client
-// survives destruction of this initial session when another session exists.
+// session no longer live. Before tmux 3.6, destroying the created session
+// follows its detach-on-destroy policy and may end the connection.
 // KillExisting is rejected because removing an existing session cannot be
 // rolled back if later connection setup fails.
 func (s Server) NewSessionConnection(
@@ -123,10 +148,17 @@ func (s Server) NewSessionConnection(
 	if err != nil {
 		return Session{}, nil, err
 	}
-	if err := effective.RequireVersion(ctx, controlNoDetachVersion36); err != nil {
+	if err := effective.RequireVersion(ctx, controlMinimumVersion32a); err != nil {
 		return Session{}, nil, err
 	}
-	arguments, fields, err := newSessionConnectionArguments(request)
+	version, err := effective.Version(ctx)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	arguments, fields, err := newSessionConnectionArguments(
+		request,
+		controlDialect{version: version},
+	)
 	if err != nil {
 		return Session{}, nil, err
 	}
@@ -247,6 +279,7 @@ func (s Server) acceptNewSessionFrame(
 
 func newSessionConnectionArguments(
 	request NewSessionRequest,
+	dialect controlDialect,
 ) ([]string, []formatField, error) {
 	fields := append(
 		[]formatField{{name: "session_id", scope: formatScopeSession, kind: formatKindSessionID}},
@@ -256,7 +289,7 @@ func newSessionConnectionArguments(
 		request,
 		formatTemplate(fields),
 		false,
-		"no-output,no-detach-on-destroy",
+		strings.Join(dialect.clientFlags(controlNotificationsDiscarded), ","),
 	)
 	return arguments, fields, err
 }

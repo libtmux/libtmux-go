@@ -1,8 +1,8 @@
 # What each execution path costs
 
 Building one six-pane window through every path compatible with the running
-tmux. Releases before 3.6 have process and chained rows; tmux 3.6 and newer also
-have one-lane, four-lane, and chained connection rows. Regenerate with:
+tmux. Every supported release has process, one-lane connection, four-lane
+connection, chained, and chained connection rows. Regenerate with:
 
 ```console
 $ go -C benchmarks run .
@@ -22,8 +22,11 @@ Each table below contains the same workload on a different tmux.
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   414ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-chained                   124ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+process                   177ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 48ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              53ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    54ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       14ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.3a
@@ -31,8 +34,11 @@ chained                   124ms          10        0  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   439ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-chained                    91ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+process                   191ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 57ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              67ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    59ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       11ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.4
@@ -40,8 +46,11 @@ chained                    91ms          10        0  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   336ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-chained                    70ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+process                   187ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 66ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              63ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    55ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       12ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.5
@@ -49,8 +58,11 @@ chained                    70ms          10        0  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   288ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-chained                    93ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+process                   202ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 71ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              76ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    72ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       18ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.6
@@ -58,11 +70,11 @@ chained                    93ms          10        0  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   226ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                 97ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4             125ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    82ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       21ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                   183ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 61ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              67ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    59ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       14ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.7
@@ -70,11 +82,11 @@ chained + connection       21ms           0        1  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   253ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                104ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4              94ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    61ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       27ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                   200ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 69ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              76ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    56ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       18ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.7a
@@ -82,11 +94,11 @@ chained + connection       27ms           0        1  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   271ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                160ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4             125ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    95ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       18ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                   184ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 66ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              74ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    72ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       11ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.7b
@@ -94,11 +106,11 @@ chained + connection       18ms           0        1  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   210ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                 72ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4              90ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    62ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       16ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                   197ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 58ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              66ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    55ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       14ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## tmux 3.7c
@@ -106,11 +118,11 @@ chained + connection       16ms           0        1  7 panes on the server [0 0
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   188ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                 68ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4              79ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    62ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       16ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                   195ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 72ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              70ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    69ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       13ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## What one MCP call costs
@@ -193,8 +205,10 @@ step is choosing the direct API knowingly, and the 32 includes what that costs.
 
 **A control connection is a tmux client.** That is the clients column, and it is
 why `Session.OpenControl` is explicit rather than the default: a configuration
-keyed on `session_attached` sees it. The rows begin at tmux 3.6 because the
-owned connection's terminal daemon binding relies on `no-detach-on-destroy`.
+keyed on `session_attached` sees it. On tmux before 3.6, destroying the attached
+session follows that session's `detach-on-destroy` policy and may end the
+connection. That lifecycle difference does not change the control protocol or
+the rows measured here.
 
 **Chaining pays on processes, less on a connection.** Grouping removes a process
 per command, which is the whole win over a tmux process. Over a connection there

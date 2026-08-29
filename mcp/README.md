@@ -23,7 +23,12 @@ runtime dependency; speaking MCP needs one, so this lives in its own module and
 
 ## Installing it
 
-**Requirements:** Go 1.26+, and tmux 3.6 or newer on `$PATH`.
+**Requirements:** Go 1.26+, and tmux 3.2a or newer on `$PATH`.
+
+On supported releases before 3.6, the initially attached session's
+`detach-on-destroy` setting applies. Destroying that session can end the MCP
+runtime; tmux 3.6 and later can move its control client to another remaining
+session.
 
 ```console
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest

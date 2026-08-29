@@ -2,7 +2,6 @@ package workspace_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -87,21 +86,12 @@ func ExampleBuildInto() {
 		request,
 		tmux.ConnectionOptions{},
 	)
-	var session tmux.Session
-	switch {
-	case err == nil:
-		defer func() { _ = connection.Close() }()
-		session = connection.Session()
-	case errors.Is(err, tmux.ErrVersionTooLow):
-		session, err = server.NewSession(ctx, request)
-	default:
-		fmt.Println("create:", err)
-		return
-	}
 	if err != nil {
 		fmt.Println("create:", err)
 		return
 	}
+	defer func() { _ = connection.Close() }()
+	session := connection.Session()
 	if err := workspace.BuildInto(ctx, session, described); err != nil {
 		fmt.Println("build:", err)
 		return

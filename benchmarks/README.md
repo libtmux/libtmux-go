@@ -12,11 +12,11 @@ building a 6-pane window, tmux 3.7c
 
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   188ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                 68ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4              79ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    62ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       16ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                   195ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 72ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              70ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    69ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       13ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## Reading it
@@ -24,9 +24,9 @@ chained + connection       16ms           0        1  7 panes on the server [0 0
 **The last column checks equivalence.** Every row runs one `SearchPanes` query
 against the same six-pane topology. Only cost should differ.
 
-The connection rows require tmux 3.6 or newer. Earlier releases retain the
-process and chained rows instead of pretending the terminal connection can
-provide weaker lifecycle guarantees.
+Every supported tmux release has every row. Before tmux 3.6, destroying the
+session attached to a connection follows that session's `detach-on-destroy`
+policy and may end the connection; this workload keeps its attached session.
 
 **Count invocations, not milliseconds.** Wall clock moves with the machine and
 what else is running. The process column does not.

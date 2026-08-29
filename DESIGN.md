@@ -658,10 +658,11 @@ validated request. Contexts are never stored.
 It opens one or more control-mode command lanes under the materialized
 session's daemon predicate and returns a `Connection`. Its `Server` and
 `Session` values retain a private pointer to that owner through every derived
-record. Terminal connections require tmux 3.6 and set
-`no-detach-on-destroy`, so destroying the initial session moves their clients
-to another session when one exists without changing the retained session
-record. The binding is terminal: close makes later operations return
+record. On tmux 3.6 and later, lanes set `no-detach-on-destroy`, so destroying
+the initial session moves their clients to another session when one exists
+without changing the retained session record. Earlier releases use the same
+control protocol and inherit the session's `detach-on-destroy` policy. The
+binding is terminal: close makes later operations return
 `ErrControlClosed`, and retargeting the socket, opening another connection, or
 requesting an operation that needs a separate process cannot detach it.
 Exact-byte reads and interactive attachment return

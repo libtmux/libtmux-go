@@ -8,7 +8,7 @@
 //		sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 //	)
 //
-// The MCP server requires tmux 3.6 or newer. [NewServer] validates a target
+// The MCP server requires tmux 3.2a or newer. [NewServer] validates a target
 // without performing I/O, then returns an [Instance] that owns its sessions
 // and background resources. Connect checks the tmux version before opening the
 // transport, applies handshake ordering, and gives each client isolated
@@ -16,6 +16,11 @@
 // [AssumeResponseCommit] to assert that a successful write commits one response.
 // Close the instance after serving. [Run] provides the same lifecycle for the
 // command-line server.
+//
+// On tmux 3.2a through 3.5, destroying the session that supplied the runtime's
+// control client follows that session's detach-on-destroy policy and may end
+// the runtime. tmux 3.6 or newer can move the client to another remaining
+// session.
 //
 // # Target and security boundary
 //

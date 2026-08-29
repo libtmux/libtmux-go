@@ -7,7 +7,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Connect starts and tracks one client session. It requires tmux 3.6 or newer
+// Connect starts and tracks one client session. It requires tmux 3.2a or newer
 // and rejects an opaque transport unless [AssumeResponseCommit] marks its
 // response-write contract. Incoming messages remain gated until the SDK
 // session has an installed scope.

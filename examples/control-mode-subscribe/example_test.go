@@ -20,7 +20,6 @@ func TestControlModeSubscribe(t *testing.T) {
 	defer cancel()
 
 	server := tmuxtest.NewServer(ctx, t)
-	exampletest.RequireTmux(t, ctx, server, "3.6")
 	printed := exampletest.Output(t, func() error {
 		return run(ctx, server)
 	})

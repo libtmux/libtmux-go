@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	fixtureVersion35   = "version-3.5"
+	fixtureVersion31   = "version-3.1"
+	fixtureVersion32a  = "version-3.2a"
 	fixtureVersion36   = "version-3.6"
 	fixtureUnavailable = "unavailable"
 	fixtureNoServer    = "no-server"

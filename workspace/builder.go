@@ -30,11 +30,10 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 // Build is not atomic. A failure after session creation returns that session;
 // completed mutations remain in tmux. Command failures are not normalized.
 //
-// On tmux 3.6 or later, Build creates the session and an attached control
-// connection in one process, uses that connection for the build, and closes it
-// before returning. The returned Session is not bound to the closed connection.
-// On older tmux releases, Build creates and populates the session through
-// subprocesses. An attached connection may fire client hooks and policies.
+// Build creates the session and an attached control connection in one process,
+// uses that connection for the build, and closes it before returning. The
+// returned Session is not bound to the closed connection. An attached
+// connection may fire client hooks and policies.
 //
 // Each pane receives workspace, window, and pane CommandsBefore, then its own
 // Commands. Sleep values pause Build rather than the pane.
@@ -49,17 +48,7 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 		tmux.ConnectionOptions{},
 	)
 	if err != nil {
-		if !errors.Is(err, tmux.ErrVersionTooLow) {
-			return created, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
-		}
-		created, err = server.NewSession(ctx, request)
-		if err != nil {
-			return created, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
-		}
-		if err := BuildInto(ctx, created, workspace); err != nil {
-			return created, err
-		}
-		return created, nil
+		return created, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
 	}
 
 	buildErr := BuildInto(ctx, connection.Session(), workspace)

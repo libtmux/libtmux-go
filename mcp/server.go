@@ -19,8 +19,8 @@ var Version = buildVersion()
 
 const fallbackVersion = "v0.0.1-alpha.7"
 
-// minimumTmuxVersion is the MCP floor because every runtime owns a terminal
-// connection.
+// minimumTmuxVersion follows the terminal Connection capability floor because
+// every MCP runtime owns one.
 const minimumTmuxVersion = tmux.MinimumConnectionVersion
 
 func (i *Instance) requireTmuxVersion(ctx context.Context) error {

@@ -13,7 +13,8 @@ import (
 const executableFixtureEnvironment = "LIBTMUX_MCP_TEST_EXECUTABLE"
 
 const (
-	fixtureVersion35   = "version-3.5"
+	fixtureVersion31   = "version-3.1"
+	fixtureVersion32a  = "version-3.2a"
 	fixtureVersion36   = "version-3.6"
 	fixtureUnavailable = "unavailable"
 	fixtureNoServer    = "no-server"
@@ -27,8 +28,11 @@ func runExecutableFixture() {
 	}
 	if slices.Equal(os.Args[1:], []string{"-V"}) {
 		version := "3.6"
-		if mode == fixtureVersion35 {
-			version = "3.5"
+		switch mode {
+		case fixtureVersion31:
+			version = "3.1"
+		case fixtureVersion32a:
+			version = "3.2a"
 		}
 		fmt.Println("tmux " + version)
 		os.Exit(0)

@@ -1582,8 +1582,7 @@ func ExamplePane_CaptureToFile() {
 }
 
 // ExampleSession_OpenControl binds ordinary model values to owned control-mode
-// lanes on tmux 3.6 or later. The fallback keeps the example runnable across
-// the package's older subprocess-only support range.
+// lanes.
 func ExampleSession_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
@@ -1603,15 +1602,6 @@ func ExampleSession_OpenControl() {
 	}
 
 	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
-	if errors.Is(err, tmux.ErrVersionTooLow) {
-		windows, fallbackErr := session.SearchWindows(ctx, nil)
-		if fallbackErr != nil {
-			fmt.Println("search windows:", fallbackErr)
-			return
-		}
-		fmt.Println("windows:", len(windows))
-		return
-	}
 	if err != nil {
 		fmt.Println("open control connection:", err)
 		return

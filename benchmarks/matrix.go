@@ -215,8 +215,7 @@ func searchAnswer(ctx context.Context, handle tmux.Server) (string, error) {
 }
 
 // measureAll runs compatible rows in display order. Negative connections
-// selects subprocesses; zero opens one connection lane. Terminal connections
-// require tmux 3.6, so older releases retain the process and planned rows.
+// selects subprocesses; zero opens one connection lane.
 func measureAll(ctx context.Context, version tmux.Version) ([]row, error) {
 	measurements := []measurement{{"process", -1, buildDirect}}
 	if supportsOwnedConnections(version) {
@@ -244,5 +243,6 @@ func measureAll(ctx context.Context, version tmux.Version) ([]row, error) {
 }
 
 func supportsOwnedConnections(version tmux.Version) bool {
-	return version.Major() > 3 || version.Major() == 3 && version.Minor() >= 6
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+	return err == nil && version.AtLeast(minimum)
 }

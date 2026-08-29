@@ -12,9 +12,8 @@ option and hook as a typed accessor, and errors classified by what tmux actually
 refused.
 
 - **No runtime dependencies.** The core module imports only the standard library.
-- **Go 1.26+**. The core tmux module supports **tmux 3.2a through 3.7c**;
-  the MCP server requires **tmux 3.6+** so its control clients survive session
-  destruction. The compatibility matrix checks every release in the core range.
+- **Go 1.26+**, tmux **3.2a through 3.7c** across the core, workspace, and MCP
+  modules. The compatibility matrix checks every release in that range.
   The Go floor tracks upstream's support window, which covers the two most
   recent releases.
 - **Records never refresh behind you.** A `Session` you hold is what tmux said
@@ -121,7 +120,7 @@ subprocess binding.
 | Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
 | process | `NewServer` | one tmux process per operation | one-shot commands |
-| connection | `Session.OpenControl` | one tmux client per lane | repeated commands on tmux 3.6+ |
+| connection | `Session.OpenControl` | one tmux client per lane | repeated commands |
 | concurrent | `ConnectionOptions{Lanes: N}` | N tmux clients | parallel readers |
 | chained | `NewPlan` then `Run` | fewer process starts | builds and layouts |
 | streaming | `Session.OpenNotifications` | one tmux client | watching what tmux does |
