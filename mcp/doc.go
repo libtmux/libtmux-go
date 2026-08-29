@@ -9,8 +9,10 @@
 //	)
 //
 // [NewServer] rejects an invalid tmux target, then returns an [Instance] that
-// owns its MCP server and background resources. Close the instance after
-// serving. [Run] provides the same lifecycle for the command-line server.
+// owns its MCP sessions and background resources. Its managed Connect applies
+// handshake ordering and gives each client isolated consent, subscriptions,
+// waits, and detached jobs. Close the instance after serving. [Run] provides
+// the same lifecycle for the command-line server.
 //
 // # Target and security boundary
 //

@@ -213,37 +213,32 @@ func (t *tools) askAboutTheCaller(
 	return nil
 }
 
-// rememberedSessions bounds how many clients' answers are kept at once.
-//
-// Nothing tells this server that a session has gone -- the SDK offers no
-// closed hook -- so the map would otherwise grow for the life of a hosted
-// server. A stdio server has one session and never reaches this; exceeding it
-// costs one client being asked again, which is the safe direction.
-const rememberedSessions = 32
-
 // allowed reports a pane this session already said yes to for the rest of it.
 func (t *tools) allowed(request *mcp.CallToolRequest, pane string) bool {
-	t.consentMutex.Lock()
-	defer t.consentMutex.Unlock()
-	return t.consented[request.Session][pane]
+	if request == nil || request.Session == nil {
+		return false
+	}
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return false
+	}
+	scope.mutex.Lock()
+	defer scope.mutex.Unlock()
+	return !scope.closed && scope.consent[pane]
 }
 
 // remember keeps one session's yes about one pane.
 func (t *tools) remember(request *mcp.CallToolRequest, pane string) {
-	t.consentMutex.Lock()
-	defer t.consentMutex.Unlock()
-	if t.consented == nil {
-		t.consented = map[*mcp.ServerSession]map[string]bool{}
+	if request == nil || request.Session == nil {
+		return
 	}
-	if _, known := t.consented[request.Session]; !known &&
-		len(t.consented) >= rememberedSessions {
-		// Forgetting everything rather than choosing whose answer to drop:
-		// the choice would need an ordering nothing here keeps, and the cost
-		// of being wrong is one question asked again.
-		clear(t.consented)
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return
 	}
-	if t.consented[request.Session] == nil {
-		t.consented[request.Session] = map[string]bool{}
+	scope.mutex.Lock()
+	defer scope.mutex.Unlock()
+	if !scope.closed {
+		scope.consent[pane] = true
 	}
-	t.consented[request.Session][pane] = true
 }

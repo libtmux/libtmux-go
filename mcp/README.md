@@ -412,10 +412,13 @@ defer instance.Close()
 session, err := instance.Connect(ctx, transport, nil)
 ```
 
-`tmuxmcp.NewServer` returns an `Instance` embedding the SDK's `*sdk.Server`, so
-the usual SDK methods remain available. It rejects an invalid tmux target
-before allocating instance-owned resources. Close the instance after its
-sessions to release job files, watcher connections, timers, and an owned audit file.
+`tmuxmcp.NewServer` returns an `Instance` with managed `Connect` and `Run`
+methods. It keeps the SDK server private so every client receives an isolated
+lifecycle scope and the handshake-ordering fix. It rejects an invalid tmux
+target before allocating instance-owned resources. Closing a session releases
+that client's consent, subscriptions, and job files. Closing the instance
+rejects new clients, cancels the remaining sessions, and then releases shared
+watchers, timers, and an owned audit file.
 This package is named `mcp` and so is the SDK's, so a file using both has to
 rename one of them.
 

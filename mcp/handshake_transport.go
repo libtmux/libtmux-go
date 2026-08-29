@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -32,6 +33,7 @@ func (t handshakeOrderedTransport) Connect(ctx context.Context) (mcp.Connection,
 
 type handshakeOrderedConnection struct {
 	inner       mcp.Connection
+	mutex       sync.Mutex
 	initialized bool
 	held        []jsonrpc.Message
 }
@@ -43,19 +45,24 @@ func (c *handshakeOrderedConnection) Read(ctx context.Context) (jsonrpc.Message,
 	}
 	if request, ok := message.(*jsonrpc.Request); ok &&
 		request.Method == "notifications/initialized" {
+		c.mutex.Lock()
 		c.initialized = true
 		held := c.held
 		c.held = nil
 		for _, delayed := range held {
 			if writeErr := c.inner.Write(ctx, delayed); writeErr != nil {
+				c.mutex.Unlock()
 				return nil, writeErr
 			}
 		}
+		c.mutex.Unlock()
 	}
 	return message, nil
 }
 
 func (c *handshakeOrderedConnection) Write(ctx context.Context, message jsonrpc.Message) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if !c.initialized {
 		if request, ok := message.(*jsonrpc.Request); ok &&
 			request.Method == notificationToolListChanged {
@@ -69,3 +76,64 @@ func (c *handshakeOrderedConnection) Write(ctx context.Context, message jsonrpc.
 func (c *handshakeOrderedConnection) Close() error { return c.inner.Close() }
 
 func (c *handshakeOrderedConnection) SessionID() string { return c.inner.SessionID() }
+
+// sessionReadyTransport prevents the SDK reader from observing a request
+// before Instance has installed the new session's scope.
+type sessionReadyTransport struct {
+	inner      mcp.Transport
+	ready      <-chan struct{}
+	onTerminal func()
+}
+
+func (t sessionReadyTransport) Connect(ctx context.Context) (mcp.Connection, error) {
+	connection, err := t.inner.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &sessionReadyConnection{
+		inner: connection, ready: t.ready, onTerminal: t.onTerminal,
+	}, nil
+}
+
+type sessionReadyConnection struct {
+	inner        mcp.Connection
+	ready        <-chan struct{}
+	onTerminal   func()
+	terminalOnce sync.Once
+}
+
+func (c *sessionReadyConnection) Read(ctx context.Context) (jsonrpc.Message, error) {
+	select {
+	case <-c.ready:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	message, err := c.inner.Read(ctx)
+	if err != nil {
+		c.terminate()
+	}
+	return message, err
+}
+
+func (c *sessionReadyConnection) Write(ctx context.Context, message jsonrpc.Message) error {
+	err := c.inner.Write(ctx, message)
+	if err != nil {
+		c.terminate()
+	}
+	return err
+}
+
+func (c *sessionReadyConnection) Close() error {
+	c.terminate()
+	return c.inner.Close()
+}
+
+func (c *sessionReadyConnection) SessionID() string { return c.inner.SessionID() }
+
+func (c *sessionReadyConnection) terminate() {
+	c.terminalOnce.Do(func() {
+		if c.onTerminal != nil {
+			c.onTerminal()
+		}
+	})
+}

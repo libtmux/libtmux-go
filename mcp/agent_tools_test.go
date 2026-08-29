@@ -1909,31 +1909,18 @@ func TestAJobAnswersTheSameWayTwice(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestAHandleFromAnotherRunSaysSo(t *testing.T) {
+func TestUnknownJobHandlesDoNotRevealAnotherScope(t *testing.T) {
 	session, _, ctx := connect(t)
 	workspace(ctx, t, session, "session_name: handles\nwindows:\n  - panes:\n      - {}\n")
 
-	// A handle shaped like this server's, issued by a process that is not it.
-	foreign := fmt.Sprintf("libtmux-mcp-%d-1", os.Getpid()+1)
+	foreign := "libtmux-mcp-opaque-foreign-handle"
 	result := call(ctx, t, session, "get_job", map[string]any{"jobId": foreign}, nil)
 	if !result.IsError {
-		t.Fatal("a handle from another process was accepted")
+		t.Fatal("an unknown handle was accepted")
 	}
 	text, ok := result.Content[0].(*sdk.TextContent)
-	if !ok || !strings.Contains(text.Text, "different run") {
-		t.Errorf("the refusal did not name the reason: %#v", result.Content)
-	}
-
-	// One this server could have issued and simply does not hold.
-	mine := fmt.Sprintf("libtmux-mcp-%d-99999", os.Getpid())
-	result = call(ctx, t, session, "get_job", map[string]any{"jobId": mine}, nil)
-	if !result.IsError {
-		t.Fatal("an unheld handle was accepted")
-	}
-	text, ok = result.Content[0].(*sdk.TextContent)
-	if !ok || strings.Contains(text.Text, "different run") {
-		t.Errorf("a handle this server could have issued was blamed on a restart: %#v",
-			result.Content)
+	if !ok || !strings.Contains(text.Text, "not a job owned by this MCP session") {
+		t.Errorf("the refusal disclosed or misclassified the handle: %#v", result.Content)
 	}
 }
 
@@ -2511,7 +2498,7 @@ func TestRunCommandSaysWhyThereIsNoOutput(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
+func TestToolsRejectAReplacementTmuxDaemon(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)
 	// A socket of its own, not the shared harness's: this test kills the tmux
@@ -2567,101 +2554,13 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 		t.Fatalf("start a replacement tmux server: %v", err)
 	}
 
-	// The call that finds the connection dead reports it: a wait opens one of
-	// its own and ends with the same error, so a retry here cannot tell the
-	// two apart. What must not happen is every later call failing too.
+	// The call that discovers the dead connection may have an uncertain
+	// outcome. Every later call must remain terminal rather than adopt the
+	// replacement daemon at the same socket.
 	call(ctx, t, session, "list_panes", map[string]any{}, nil)
-
-	var listed struct {
-		Panes []struct {
-			ID string `json:"id"`
-		} `json:"panes"`
-	}
-	result := call(ctx, t, session, "list_panes", map[string]any{}, &listed)
-	if result.IsError {
-		t.Fatalf("list_panes stayed broken after the restart: %#v", result.Content)
-	}
-	if len(listed.Panes) == 0 {
-		t.Error("the replacement server's pane was not reported")
-	}
-
-	// And the server's own account of itself has to agree that tmux is up.
-	var info struct {
-		Alive bool `json:"alive"`
-	}
-	call(ctx, t, session, "get_server_info", map[string]any{}, &info)
-	if !info.Alive {
-		t.Error("get_server_info reports the tmux server dead after it came back")
-	}
-
-	// Watching has to come back too. It holds a connection of its own and
-	// retries when one drops, but it was reaching tmux through the handle it
-	// was built with, and the pool inside that handle is the one the restart
-	// killed. A subscription made afterwards was accepted and never delivered,
-	// which is the same silence as having no watcher at all.
-	pane := listed.Panes[0].ID
-	uri := "tmux://panes/" + strings.TrimPrefix(pane, "%") + "/content"
-	updated := make(chan string, 8)
-	watchClient := sdk.NewClient(&sdk.Implementation{Name: "restart-watch"}, &sdk.ClientOptions{
-		ResourceUpdatedHandler: func(_ context.Context, r *sdk.ResourceUpdatedNotificationRequest) {
-			select {
-			case updated <- r.Params.URI:
-			default:
-			}
-		},
-	})
-	watchTransport, watchServer := sdk.NewInMemoryTransports()
-	watchSession, err := mustMCPServer(t, connected).Connect(ctx, watchServer, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = watchSession.Close() })
-	watching, err := watchClient.Connect(ctx, watchTransport, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = watching.Close() })
-	subscribeStarted := time.Now()
-	if err := watching.Subscribe(ctx, &sdk.SubscribeParams{URI: uri}); err != nil {
-		t.Fatalf("subscribe after the restart: %v", err)
-	}
-	// How long that took says whether the watch ever attached: it answers as
-	// soon as a connection is carrying notifications, and only runs out the
-	// bound when none arrives.
-	subscribeTook := time.Since(subscribeStarted)
-	// run_command rather than send_keys, because this has to know the pane
-	// actually wrote. Keys are handed to whatever is reading the pane, and a
-	// shell that has only just been restarted is not reading yet -- they were
-	// swallowed, the pane stayed at its prompt, and the silence read as a
-	// watch that had not attached. run_command waits for the command it typed
-	// to finish, so reaching the assertion means there was something to be
-	// told about.
-	write := func() *sdk.CallToolResult {
-		return call(ctx, t, watching, "run_command", map[string]any{
-			"paneId": pane, "command": "echo watched-after-restart", "timeoutSeconds": 20,
-		}, nil)
-	}
-	// The pool retires a connection the restart killed on the call that finds
-	// it, and deliberately does not run that call again -- so the first tool
-	// call through this handle reports the restart. Retrying is what a client
-	// does, and what the fix above promises will then work.
-	written := write()
-	if written.IsError {
-		written = write()
-	}
-	if written.IsError {
-		t.Fatalf("run_command after the restart, twice: %s", resultText(written))
-	}
-	select {
-	case <-updated:
-	case <-time.After(20 * time.Second):
-		var shown struct {
-			Lines []string `json:"lines"`
-		}
-		captured := call(ctx, t, watching, "capture_pane", map[string]any{"paneId": pane}, &shown)
-		t.Errorf("a pane written after the restart told no subscriber; "+
-			"subscribe took %s, the pane shows error=%t lines=%q",
-			subscribeTook.Round(time.Millisecond), captured.IsError, shown.Lines)
+	result := call(ctx, t, session, "list_panes", map[string]any{}, nil)
+	if !result.IsError {
+		t.Fatal("the MCP session adopted a replacement tmux daemon")
 	}
 }
 

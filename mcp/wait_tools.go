@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -71,8 +71,6 @@ func resolveWaitTimeout(requested int) (timeout time.Duration, clamped bool) {
 	}
 	return timeout, false
 }
-
-var runCommandSequence atomic.Int64
 
 // runCommandInput runs one command in a pane and waits for it to finish.
 type runCommandInput struct {
@@ -159,6 +157,13 @@ func (t *tools) runCommand(
 	if err != nil {
 		return nil, runCommandOutput{}, err
 	}
+	var owned *jobs
+	if input.Detach {
+		owned, err = t.sessionJobs(request)
+		if err != nil {
+			return nil, runCommandOutput{}, err
+		}
+	}
 	started, err := t.startCommand(ctx, request, input)
 	if err != nil {
 		return nil, runCommandOutput{}, err
@@ -168,7 +173,10 @@ func (t *tools) runCommand(
 	// A detached run is finished here. The handle is what collects it, and the
 	// directory it records itself in outlives this call because of that.
 	if input.Detach {
-		t.jobs.keep(started)
+		if !owned.keep(started) {
+			_ = os.RemoveAll(started.directory)
+			return nil, output, ErrInstanceClosed
+		}
 		output.JobID = started.id
 		output.Detached = true
 		return nil, output, nil
@@ -231,12 +239,9 @@ func (t *tools) startCommand(
 		return nil, err
 	}
 
-	// The channel names the process as well as the command, so that two of
-	// these servers driving one tmux cannot signal each other's waits, and so
-	// that a handle from a previous run is recognisable as one rather than
-	// looking like a handle this run has forgotten.
-	channel := fmt.Sprintf("libtmux-mcp-%d-%d",
-		os.Getpid(), runCommandSequence.Add(1))
+	// The random channel is also the session-local job handle. It prevents
+	// another server driving the same tmux from guessing and signalling it.
+	channel := "libtmux-mcp-" + rand.Text()
 	statusPath := filepath.Join(directory, "status")
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")

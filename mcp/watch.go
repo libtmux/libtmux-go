@@ -70,7 +70,17 @@ func (t *tools) subscribe(ctx context.Context, request *mcp.SubscribeRequest) er
 	if !t.capabilities.permits(required) {
 		return fmt.Errorf("subscribing to %s requires the %s capability", uri, required)
 	}
-	ready := t.watchers.add(watchedURI(uri), uri)
+	if request == nil || request.Session == nil {
+		return ErrInstanceClosed
+	}
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return err
+	}
+	ready, err := scope.subscribe(t.watchers, watchedURI(uri), uri)
+	if err != nil {
+		return err
+	}
 	// Wait briefly for a watcher connection. An unavailable watcher is accepted
 	// so it can attach after a session appears.
 	select {
@@ -82,8 +92,15 @@ func (t *tools) subscribe(ctx context.Context, request *mcp.SubscribeRequest) er
 }
 
 func (t *tools) unsubscribe(_ context.Context, request *mcp.UnsubscribeRequest) error {
+	if request == nil || request.Session == nil {
+		return ErrInstanceClosed
+	}
 	uri := request.Params.URI
-	t.watchers.remove(watchedURI(uri), uri)
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return err
+	}
+	scope.unsubscribe(t.watchers, watchedURI(uri), uri)
 	return nil
 }
 

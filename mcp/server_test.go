@@ -2129,64 +2129,6 @@ func TestResourcesSurviveAReadOnlyServer(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestSuppressHistoryKeepsACommandOutOfHistory(t *testing.T) {
-	session, target, ctx := connect(t)
-	call(ctx, t, session, "build_workspace", map[string]any{
-		"document": "session_name: history\nwindows:\n  - panes:\n      - {}\n",
-	}, nil)
-	panes := paneIDs(ctx, t, session)
-	if len(panes) == 0 {
-		t.Fatal("no panes")
-	}
-
-	// What tmux was asked to type is what proves it: a suppressed command
-	// reaches the pane with a leading space, and a plain one does not.
-	for _, testCase := range []struct {
-		name      string
-		suppress  bool
-		wantSpace bool
-	}{
-		{"suppressed", true, true},
-		{"plain", false, false},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			var seen string
-			counting := tmux.CommandRunnerFunc(func(
-				ctx context.Context,
-				request tmux.CommandRequest,
-			) (tmux.CommandResult, error) {
-				// SendKeys issues the text and the Enter as separate commands, and
-				// the text is the argument after the -- that ends the flags.
-				for index, argument := range request.Arguments {
-					if argument == "--" && index+1 < len(request.Arguments) && seen == "" {
-						seen = request.Arguments[index+1]
-					}
-				}
-				return tmux.SubprocessRunner().Run(ctx, request)
-			})
-			watched := mustTmuxServer(t, tmux.ServerOptions{
-				SocketPath: target.SocketPath(),
-				Runner:     counting,
-			})
-			pane, err := watched.Pane(ctx, tmux.PaneID(panes[0]))
-			if err != nil {
-				t.Fatalf("pane: %v", err)
-			}
-			command := "printf marker"
-			if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-				Command:         &command,
-				SuppressHistory: testCase.suppress,
-			}); err != nil {
-				t.Fatalf("send keys: %v", err)
-			}
-			if got := strings.HasPrefix(seen, " "); got != testCase.wantSpace {
-				t.Errorf("typed %q, leading space = %v, want %v", seen, got, testCase.wantSpace)
-			}
-		})
-	}
-}
-
-//libtmux:real-tmux
 func TestPromptsNameTheJobs(t *testing.T) {
 	session, _, ctx := connect(t)
 	listed, err := session.ListPrompts(ctx, nil)

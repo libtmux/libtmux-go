@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"runtime/debug"
 	"slices"
 	"sync"
@@ -157,33 +156,6 @@ var toolGroups = []func(*mcp.Server, *tools){
 	addBatchTools,
 }
 
-// Instance owns an MCP server and the resources its tools allocate. The
-// embedded SDK server keeps its methods available directly.
-type Instance struct {
-	*mcp.Server
-	tools *tools
-	audit io.Closer
-
-	closeOnce sync.Once
-	closeErr  error
-}
-
-// Close stops watchers, removes detached-job files, and closes an owned audit
-// file. It does not close an Engine supplied through target.
-func (i *Instance) Close() error {
-	if i == nil {
-		return nil
-	}
-	i.closeOnce.Do(func() {
-		i.tools.watchers.close()
-		i.tools.jobs.close()
-		if i.audit != nil {
-			i.closeErr = i.audit.Close()
-		}
-	})
-	return i.closeErr
-}
-
 // NewServer returns a closeable MCP instance exposing target. It rejects an
 // invalid target before allocating instance-owned resources.
 func NewServer(target tmux.Server) (*Instance, error) {
@@ -191,8 +163,9 @@ func NewServer(target tmux.Server) (*Instance, error) {
 		return nil, fmt.Errorf("construct MCP server: %w", err)
 	}
 
+	instance := newInstance()
 	tools := newToolRegistry()
-	tools.jobs = newJobs()
+	tools.instance = instance
 	tools.reaching.Store(&target)
 	serverOptions := &mcp.ServerOptions{
 		Instructions: callerInstructions(),
@@ -209,6 +182,8 @@ func NewServer(target tmux.Server) (*Instance, error) {
 		Name:    "libtmux",
 		Version: Version,
 	}, serverOptions)
+	instance.server = server
+	instance.tools = tools
 	tools.watchers = newWatchers(server, target)
 	// Audit wraps the backstop so oversized refusals are recorded.
 	server.AddReceivingMiddleware(backstop())
@@ -216,12 +191,14 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	if writer != nil {
 		server.AddReceivingMiddleware(audit(writer))
 	}
+	server.AddReceivingMiddleware(instance.scoped)
 
 	registerToolGroups(server, tools)
 	addResources(server, tools)
 	addPrompts(server, tools)
 
-	return &Instance{Server: server, tools: tools, audit: auditOwner}, nil
+	instance.audit = auditOwner
+	return instance, nil
 }
 
 func newToolRegistry() *tools {
@@ -252,7 +229,7 @@ func Run(ctx context.Context, target tmux.Server) error {
 		return err
 	}
 	defer func() { _ = instance.Close() }()
-	return instance.Run(ctx, handshakeOrderedTransport{inner: stdio()})
+	return instance.Run(ctx, stdio())
 }
 
 // Connect opens a control pool only when target has no engine and has a session.
@@ -284,14 +261,12 @@ func Connect(ctx context.Context, target tmux.Server) (tmux.Server, *tmux.Contro
 const connectTimeout = 5 * time.Second
 
 type tools struct {
+	instance *Instance
 	// reaching is replaced atomically when a concurrent call retires the pool.
 	reaching     atomic.Pointer[tmux.Server]
 	level        SafetyLevel
 	capabilities capabilitySet
 	watchers     *watchers
-	// consentMutex guards per-session caller-pane consent.
-	consented    map[*mcp.ServerSession]map[string]bool
-	consentMutex sync.Mutex
 	dispatchers  map[string]dispatcher
 	unbatchable  map[string]struct{}
 	// Batch tools set batchable false to prevent nested dispatch.
@@ -299,7 +274,6 @@ type tools struct {
 	// A process cannot change its containing pane, so caller is resolved once.
 	caller     callerIdentity
 	callerOnce sync.Once
-	jobs       *jobs
 }
 
 func (t *tools) tmux() tmux.Server { return *t.reaching.Load() }

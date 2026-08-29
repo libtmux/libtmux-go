@@ -45,16 +45,20 @@ type jobs struct {
 	mutex sync.Mutex
 	byID  map[string]*job
 	// order is oldest first for eviction.
-	order []string
+	order  []string
+	closed bool
 }
 
 func newJobs() *jobs {
 	return &jobs{byID: map[string]*job{}}
 }
 
-func (j *jobs) keep(entry *job) {
+func (j *jobs) keep(entry *job) bool {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
+	if j.closed {
+		return false
+	}
 	stored := *entry
 	stored.output = slices.Clone(entry.output)
 	j.byID[entry.id] = &stored
@@ -67,6 +71,7 @@ func (j *jobs) keep(entry *job) {
 			_ = os.RemoveAll(dropped.directory)
 		}
 	}
+	return true
 }
 
 func (j *jobs) find(id string) (job, bool) {
@@ -106,6 +111,7 @@ func (j *jobs) settle(
 func (j *jobs) close() {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
+	j.closed = true
 	for id, entry := range j.byID {
 		delete(j.byID, id)
 		_ = os.RemoveAll(entry.directory)
@@ -113,35 +119,11 @@ func (j *jobs) close() {
 	j.order = nil
 }
 
-// unknownJob recognizes handles from earlier server processes; every other
-// miss uses the retention diagnostic.
 func unknownJob(id string) error {
-	if issuer, ok := jobIssuer(id); ok && issuer != os.Getpid() {
-		return fmt.Errorf(
-			"%q was issued by a different run of this server, which has since "+
-				"restarted; a handle does not outlive the process that made it, "+
-				"and the command it named may still be running in its pane", id)
-	}
 	return fmt.Errorf(
-		"%q is not a job this server is holding: only the last %d are kept, "+
-			"and older ones are dropped as newer commands are started",
+		"%q is not a job owned by this MCP session: only its last %d are "+
+			"kept, and older ones are dropped as newer commands are started",
 		id, jobsRetained)
-}
-
-func jobIssuer(id string) (int, bool) {
-	rest, ok := strings.CutPrefix(id, "libtmux-mcp-")
-	if !ok {
-		return 0, false
-	}
-	issuer, _, ok := strings.Cut(rest, "-")
-	if !ok {
-		return 0, false
-	}
-	pid, err := strconv.Atoi(issuer)
-	if err != nil {
-		return 0, false
-	}
-	return pid, true
 }
 
 type getJobInput struct {
@@ -178,7 +160,11 @@ func (t *tools) getJob(
 	if err != nil {
 		return nil, getJobOutput{}, err
 	}
-	entry, ok := t.jobs.find(input.JobID)
+	owned, err := t.sessionJobs(request)
+	if err != nil {
+		return nil, getJobOutput{}, err
+	}
+	entry, ok := owned.find(input.JobID)
 	if !ok {
 		return nil, getJobOutput{}, unknownJob(input.JobID)
 	}
@@ -234,11 +220,22 @@ func (t *tools) getJob(
 			bounds{lines: ceilingMaxLines, bytes: ceilingMaxBytes}, &collected)
 	}
 	ended := time.Now()
-	t.jobs.settle(entry.id, status, collected.Output, collected.truncation, ended)
+	owned.settle(entry.id, status, collected.Output, collected.truncation, ended)
 	output.ElapsedSeconds = ended.Sub(entry.started).Seconds()
 	output.Output, output.truncation = limits.apply(collected.Output)
 	output.truncation = addTruncation(output.truncation, collected.truncation)
 	return nil, output, nil
+}
+
+func (t *tools) sessionJobs(request *mcp.CallToolRequest) (*jobs, error) {
+	if request == nil || request.Session == nil {
+		return nil, ErrInstanceClosed
+	}
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return nil, err
+	}
+	return scope.jobs, nil
 }
 
 // addTruncation combines loss from collection and caller-specific bounds.
