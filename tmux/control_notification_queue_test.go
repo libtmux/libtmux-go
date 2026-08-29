@@ -113,14 +113,25 @@ func TestPaneObservationReportsTopologyLoss(t *testing.T) {
 	tests := []struct {
 		name   string
 		record string
+		lost   bool
 	}{
-		{name: "window unlinked", record: "%unlinked-window-close @1"},
-		{name: "session changed", record: "%session-changed $2 other"},
+		{name: "window unlinked", record: "%unlinked-window-close @1", lost: true},
+		{name: "session changed", record: "%session-changed $2 other", lost: true},
+		{
+			name:   "pane gone from the arrangement",
+			record: "%layout-change @1 ae5d,80x24,0,0,0 ae5d,80x24,0,0,0 *",
+			lost:   true,
+		},
+		{
+			name: "pane still arranged",
+			record: "%layout-change @1 b25e,80x24,0,0[80x12,0,0,0,80x11,0,13,1] " +
+				"b25e,80x24,0,0[80x12,0,0,0,80x11,0,13,1] *",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			queue := newControlNotificationQueue(128)
+			queue := newControlNotificationQueue(512)
 			t.Cleanup(func() { _ = queue.Close() })
 			if err := queue.append(4, []byte(test.record)); err != nil {
 				t.Fatal(err)
@@ -130,6 +141,12 @@ func TestPaneObservationReportsTopologyLoss(t *testing.T) {
 			}
 			observation := newTestPaneObservation(queue)
 			observation.after = 3
+			if !test.lost {
+				if _, err := observation.NextNotification(context.Background()); err != nil {
+					t.Fatalf("NextNotification() = %v, want the arrangement itself", err)
+				}
+				return
+			}
 			copied := *observation
 			for read, reader := range []*PaneObservation{observation, &copied} {
 				if _, err := reader.NextNotification(context.Background()); !errors.Is(err, ErrPaneObservationLost) {

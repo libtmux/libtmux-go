@@ -112,6 +112,18 @@ func (o *PaneObservation) NextNotification(
 		)
 		return ControlNotification{}, state.loss
 	}
+	// tmux has no pane-close notification: a pane that ends while its window
+	// survives is only visible as the window's new arrangement, which no longer
+	// lists it.
+	if notification.Kind() == ControlNotificationLayoutChange &&
+		len(arguments) > 1 && WindowID(arguments[0]) == o.windowID &&
+		!layoutListsPane(arguments[1], o.paneID) {
+		state.loss = fmt.Errorf(
+			"%w: the observed pane left its window's arrangement",
+			ErrPaneObservationLost,
+		)
+		return ControlNotification{}, state.loss
+	}
 	return notification, nil
 }
 

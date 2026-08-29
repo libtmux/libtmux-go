@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"regexp"
+	"slices"
 )
 
 // SelectLayoutRequest selects one layout operation. Its zero value reapplies
@@ -72,6 +73,24 @@ var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 // #{window_layout} reports and select-layout accepts back. It begins with a
 // checksum, which is what makes it distinguishable from a name.
 var layoutStringPattern = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
+
+// layoutPanePattern matches one layout cell that holds a pane. tmux dumps such
+// a cell as width x height, offsets, and the pane's own number; cells that only
+// arrange other cells stop after the offsets.
+var layoutPanePattern = regexp.MustCompile(`[0-9]+x[0-9]+,-?[0-9]+,-?[0-9]+,([0-9]+)`)
+
+// layoutListsPane reports whether layout still arranges pane. A layout holding
+// no readable cell reports true, so an arrangement this does not recognise is
+// never mistaken for a pane that closed.
+func layoutListsPane(layout string, pane PaneID) bool {
+	cells := layoutPanePattern.FindAllStringSubmatch(layout, -1)
+	if len(cells) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(cells, func(cell []string) bool {
+		return PaneID("%"+cell[1]) == pane
+	})
+}
 
 // tmux 3.3a exits the server for an unknown layout instead of returning an
 // error, so reject names that are neither presets nor layout strings.
