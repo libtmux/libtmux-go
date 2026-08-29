@@ -250,7 +250,7 @@ func measureBuild(
 	}, nil
 }
 
-// searchAnswer lets the matrix verify that every lane measured equivalent work.
+// searchAnswer verifies equivalent results across the build lanes.
 func searchAnswer(ctx context.Context, handle tmux.Server) (string, error) {
 	panes, err := handle.SearchPanes(ctx, nil)
 	if err != nil {

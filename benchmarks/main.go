@@ -1,6 +1,6 @@
 // Command benchmarks compares subprocess, control-mode, and planned tmux work.
-// Every mode builds the same window and runs the same SearchPanes query.
-// BENCHMARKS.md records the output; TestMatrixAnswersAgree guards equivalence.
+// Build lanes share one SearchPanes workload; snapshot lanes compare ordinary
+// and instance-bound reads. TestMatrixAnswersAgree guards each group.
 //
 //	go -C benchmarks run .
 package main

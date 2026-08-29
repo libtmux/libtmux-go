@@ -23,21 +23,22 @@ snapshot, bound          11ms           5        1  2 panes on the server [0 0]
 
 ## Reading it
 
-**The last column is the point.** It is one `SearchPanes` query asked of every
-mode. It is identical in every row, on every supported tmux — everything else on
-the page is cost, and cost is the only thing a caller changes by picking a mode.
+**The last column checks equivalence within each workload.** The five build rows
+run one `SearchPanes` query against the same six-pane topology. The two snapshot
+rows read the same two-pane topology through ordinary and instance-bound
+engines. Only cost should differ within either group.
 
 **Count invocations, not milliseconds.** Wall clock moves with the machine and
 what else is running. The process column does not.
 
-The same measurement runs as a test, and fails if the modes ever answer
-differently:
+The same measurement runs as a test and fails if lanes within either workload
+answer differently:
 
 ```console
 $ go -C benchmarks test ./...
 ```
 
-That is what stops the table from quietly comparing two different things.
+That stops a cost comparison within either group from measuring different work.
 
 ## See also
 

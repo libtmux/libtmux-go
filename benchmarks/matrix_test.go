@@ -8,7 +8,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// TestMatrixAnswersAgree requires equivalent results from every measured lane.
+// TestMatrixAnswersAgree requires equivalent results within each workload.
 //
 //libtmux:real-tmux
 func TestMatrixAnswersAgree(t *testing.T) {

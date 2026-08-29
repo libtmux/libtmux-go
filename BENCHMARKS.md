@@ -1,6 +1,6 @@
 # What each mode costs
 
-Building one 6-pane window, four ways, plus the two snapshot reads. Regenerate
+Building one six-pane window through five lanes, plus two snapshot reads. Regenerate
 with:
 
 ```console
@@ -9,13 +9,13 @@ $ go -C benchmarks run .
 
 The `benchmarks` module is the source of these numbers and also the gate on
 them. The command above prints the table; `go -C benchmarks test ./...` runs the
-same measurement and fails if the modes answer one query differently, so the
-table cannot quietly start comparing two different things. CI runs both and
+same measurement and fails if lanes within either workload answer differently,
+so a cost comparison cannot quietly measure different work. CI runs both and
 publishes what it printed, so these can be checked against a run other than the
 one they were recorded on.
 
 Recorded on a 12th Gen Intel Core i7-12700H, 20 threads, Linux, go1.26.5.
-Each table below is the same workload on a different tmux.
+Each table below contains the same two workloads on a different tmux.
 
 ## tmux 3.2a
 
@@ -193,9 +193,9 @@ before.
 
 ## Reading it
 
-**The answer column is the point.** It is identical in every row, on every
-version above. Everything else on this page is cost, and cost is the only thing
-a caller changes by picking a mode.
+**The answer column checks equivalence within each workload.** The build rows
+share one six-pane `SearchPanes` workload; the snapshot rows share one two-pane
+`Snapshot` workload. Only cost changes within either group.
 
 **Count invocations, not milliseconds.** Wall clock moves with the machine, the
 tmux version, and what else is running. The process column does not: every
