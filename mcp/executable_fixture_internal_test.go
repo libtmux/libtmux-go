@@ -30,6 +30,7 @@ func executableFixtureOptions(
 	options.ProcessEnvironment = append(
 		options.ProcessEnvironment,
 		"LIBTMUX_MCP_TEST_EXECUTABLE="+mode,
+		"GOCOVERDIR="+t.TempDir(),
 	)
 	return options
 }

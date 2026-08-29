@@ -64,6 +64,7 @@ func executableFixtureOptions(
 	options.ProcessEnvironment = append(
 		options.ProcessEnvironment,
 		executableFixtureEnvironment+"="+mode,
+		"GOCOVERDIR="+t.TempDir(),
 	)
 	return options
 }

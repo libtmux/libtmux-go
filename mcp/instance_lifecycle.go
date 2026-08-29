@@ -151,7 +151,11 @@ func (s *ServerSession) Wait() error {
 
 func (s *ServerSession) finish(err error) {
 	s.finishOnce.Do(func() {
-		s.waitErr = errors.Join(err, s.scope.terminalCause())
+		var connectionErr error
+		if s.connection != nil {
+			connectionErr = s.connection.connectionTerminalError()
+		}
+		s.waitErr = errors.Join(err, connectionErr, s.scope.terminalCause())
 		s.instance.dropSession(s)
 		close(s.done)
 	})
