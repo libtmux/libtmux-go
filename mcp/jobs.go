@@ -22,8 +22,8 @@ const (
 	// jobsRetained bounds retained handles and results. Adding a job evicts the
 	// oldest retained job and removes any remaining temporary files.
 	jobsRetained = 32
-	// jobCompletionPollInterval covers coalesced tmux wait-for signals without
-	// turning a detached job's requested deadline into its response latency.
+	// jobCompletionPollInterval bounds how long collection waits to observe a
+	// command's atomically published completion files.
 	jobCompletionPollInterval = 50 * time.Millisecond
 )
 

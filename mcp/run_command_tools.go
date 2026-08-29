@@ -21,8 +21,8 @@ type runCommandInput struct {
 	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id to run the command in; empty uses the active pane"`
 	// SessionName picks the session when PaneID is empty.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to run in when paneId is empty"`
-	// Command is the shell command to run.
-	Command string `json:"command" jsonschema:"the shell command to run"`
+	// Command is the POSIX-compatible shell command to run.
+	Command string `json:"command" jsonschema:"the POSIX-compatible shell command to run"`
 	// TimeoutSeconds bounds the non-detached operation. Zero uses a default.
 	TimeoutSeconds int `json:"timeoutSeconds,omitempty" jsonschema:"how long to wait before giving up"`
 	// SuppressHistory keeps the command out of the shell's history, as it does
@@ -192,6 +192,13 @@ func (t *tools) startCommand(
 	if err != nil {
 		return nil, err
 	}
+	if shell := incompatibleRunCommandShell(pane); shell != "" {
+		return nil, fmt.Errorf(
+			"run_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
+				"use send_keys or respawn_pane with a compatible shell",
+			pane.ID(), shell,
+		)
+	}
 
 	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil {
@@ -234,13 +241,25 @@ func (t *tools) startCommand(
 	// because shells apply redirections left to right. Command stderr remains
 	// captured.
 	script := fmt.Sprintf(
-		"{ %s > %s && command mv %s %s; } 2>/dev/null; ( . %s ); "+
-			"{ printf %%s $? > %s && command mv %s %s; } 2>/dev/null; "+
-			"{ %s > %s && command mv %s %s; } 2>/dev/null\n",
+		"(\n"+
+			"case $- in *e*) __libtmux_errexit=1 ;; *) __libtmux_errexit=0 ;; esac\n"+
+			"set +e\n"+
+			"{ %s > %s && command mv %s %s; } 2>/dev/null\n"+
+			"if [ \"$__libtmux_errexit\" -eq 1 ]; then\n"+
+			"  ( set -e; . %s )\n"+
+			"else\n"+
+			"  ( set +e; . %s )\n"+
+			"fi\n"+
+			"__libtmux_status=$?\n"+
+			"{ printf %%s \"$__libtmux_status\" > %s && command mv %s %s; } 2>/dev/null\n"+
+			"{ %s > %s && command mv %s %s; } 2>/dev/null\n"+
+			"exit 0\n"+
+			")\n",
 		mark,
 		shellQuote(openedTemp),
 		shellQuote(openedTemp),
 		shellQuote(openedPath),
+		shellQuote(commandPath),
 		shellQuote(commandPath),
 		shellQuote(statusTemp),
 		shellQuote(statusTemp),
@@ -291,6 +310,22 @@ func (t *tools) startCommand(
 		return nil, err
 	}
 	return started, nil
+}
+
+// Unknown commands retain the public busy-pane timeout behavior. Only shells
+// whose syntax is known to reject the wrapper fail before delivery.
+func incompatibleRunCommandShell(pane tmux.Pane) string {
+	command, ok := pane.Formats().PaneCurrentCommand()
+	if !ok || command == "" {
+		return ""
+	}
+	name := strings.ToLower(strings.TrimPrefix(filepath.Base(command), "-"))
+	switch name {
+	case "csh", "elvish", "fish", "nu", "nushell", "powershell", "pwsh", "tcsh":
+		return command
+	default:
+		return ""
+	}
 }
 
 // awaiting is what a wait for one command needs to know, gathered so that the

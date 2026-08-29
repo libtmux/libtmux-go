@@ -44,9 +44,10 @@
 //
 // # Pane I/O
 //
-// run_command stages a command as a file for the pane shell to source, avoiding
-// line-editor interpretation. It returns the command's output and exit status.
-// Detached commands return a job handle for later collection with get_job.
+// run_command stages a POSIX-compatible command as a file for the pane shell
+// to source, avoiding line-editor interpretation. Known incompatible shells
+// fail before delivery. It returns the command's output and exit status;
+// detached commands return a job handle for later collection with get_job.
 //
 // wait_for_text uses control notifications to observe output and advances a
 // gap-checked pane cursor, so output between attachment and observation is not

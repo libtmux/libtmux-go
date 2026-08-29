@@ -273,6 +273,139 @@ func TestRunCommandCannotEscapeItsBookkeepingSubshell(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestRunCommandPreservesPaneShellErrexit(t *testing.T) {
+	shells := []struct {
+		name string
+		args string
+	}{
+		{name: "bash", args: "--noprofile --norc -i"},
+		{name: "zsh", args: "-f -i"},
+	}
+	for _, shell := range shells {
+		path, err := exec.LookPath(shell.name)
+		if err != nil {
+			t.Run(shell.name, func(t *testing.T) { t.Skipf("%s is not installed", shell.name) })
+			continue
+		}
+		for _, enabled := range []bool{false, true} {
+			for _, detached := range []bool{false, true} {
+				name := fmt.Sprintf("%s/errexit=%t/detached=%t", shell.name, enabled, detached)
+				t.Run(name, func(t *testing.T) {
+					ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+					defer cancel()
+					target := tmuxtest.NewServer(ctx, t)
+					command := "exec env ENV= BASH_ENV= PS1='libtmux-test$ ' " +
+						shellQuote(path) + " " + shell.args
+					created, err := target.NewSession(ctx, tmux.NewSessionRequest{
+						Name: "errexit", Command: command,
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					pane, ok, err := created.ResolveActivePane(ctx)
+					if err != nil || !ok {
+						t.Fatalf("resolve active pane = (%v, %t, %v)", pane, ok, err)
+					}
+					tmuxtest.WaitForShellReady(ctx, t, pane)
+					setting := "set +e"
+					if enabled {
+						setting = "set -e"
+					}
+					tmuxtest.TypeAndWait(ctx, t, pane, setting)
+
+					instance, _, request := connectJobSession(ctx, t, target)
+					input := runCommandInput{
+						PaneID:         pane.ID().String(),
+						Command:        "printf 'BEFORE\\n'; false; printf 'AFTER\\n'",
+						TimeoutSeconds: 3,
+						Detach:         detached,
+					}
+					_, ran, err := instance.tools.runCommand(ctx, request, input)
+					if err != nil {
+						t.Fatal(err)
+					}
+					status, output := ran.ExitStatus, ran.Output
+					if detached {
+						_, collected, collectErr := instance.tools.getJob(ctx, request, getJobInput{
+							JobID: ran.JobID, TimeoutSeconds: 3,
+						})
+						if collectErr != nil {
+							t.Fatal(collectErr)
+						}
+						if !collected.Finished {
+							t.Fatalf("detached command did not finish: %+v", collected)
+						}
+						status, output = collected.ExitStatus, collected.Output
+					}
+					wantStatus := 0
+					if enabled {
+						wantStatus = 1
+					}
+					if status == nil {
+						t.Fatalf("exit status is absent, want %d", wantStatus)
+					}
+					if *status != wantStatus {
+						t.Fatalf("exit status = %d, want %d", *status, wantStatus)
+					}
+					joined := strings.Join(output, "\n")
+					if !strings.Contains(joined, "BEFORE") ||
+						strings.Contains(joined, "AFTER") != !enabled {
+						t.Fatalf("output under errexit=%t = %q", enabled, joined)
+					}
+					fresh, err := pane.Refresh(ctx)
+					if err != nil {
+						t.Fatalf("pane shell exited: %v", err)
+					}
+					if dead, _ := fresh.Dead(); dead {
+						t.Fatal("pane shell exited")
+					}
+					tmuxtest.TypeAndWait(ctx, t, fresh, "printf 'SHELL-ALIVE\\n'")
+				})
+			}
+		}
+	}
+}
+
+//libtmux:real-tmux
+func TestRunCommandRejectsFishBeforeDelivery(t *testing.T) {
+	path, err := exec.LookPath("fish")
+	if err != nil {
+		t.Skip("fish is not installed")
+	}
+	for _, detached := range []bool{false, true} {
+		t.Run(fmt.Sprintf("detached=%t", detached), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			target := tmuxtest.NewServer(ctx, t)
+			created, err := target.NewSession(ctx, tmux.NewSessionRequest{
+				Name: "fish", Command: "exec " + shellQuote(path) + " --no-config -i",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			pane, ok, err := created.ResolveActivePane(ctx)
+			if err != nil || !ok {
+				t.Fatalf("resolve active pane = (%v, %t, %v)", pane, ok, err)
+			}
+			tmuxtest.WaitForShellReady(ctx, t, pane)
+			instance, _, request := connectJobSession(ctx, t, target)
+			started := time.Now()
+			_, _, err = instance.tools.runCommand(ctx, request, runCommandInput{
+				PaneID: pane.ID().String(), Command: "printf 'MUST-NOT-RUN\\n'",
+				TimeoutSeconds: 1, Detach: detached,
+			})
+			if err == nil || !strings.Contains(err.Error(), "POSIX-compatible") ||
+				!strings.Contains(err.Error(), "fish") {
+				t.Fatalf("runCommand() error = %v, want a fish compatibility refusal", err)
+			}
+			if elapsed := time.Since(started); elapsed >= time.Second {
+				t.Fatalf("fish refusal took %v, want pre-delivery failure", elapsed)
+			}
+		})
+	}
+}
+
+//libtmux:real-tmux
 func TestRunCommandBookkeepingUsesTheConfiguredTmuxExecutable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the bookkeeping wrapper is a POSIX shell script")

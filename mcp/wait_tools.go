@@ -69,7 +69,8 @@ func addWaitTools(server *mcp.Server, t *tools) {
 	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "run_command",
 		Annotations: mutating("Run a Command in a Pane"),
-		Description: "Run a shell command in one pane, wait for it to finish, and " +
+		Description: "Run a POSIX-compatible shell command in one pane, wait for it to " +
+			"finish, and " +
 			"return its exit status and its output. Prefer this to send_keys " +
 			"followed by capture_pane: it does not read the screen to decide the " +
 			"command is done, so the shell's echo of the command cannot be " +
