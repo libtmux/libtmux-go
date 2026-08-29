@@ -168,7 +168,7 @@ func (s *paneObservationState) classifyReadError(
 		return os.ErrClosed
 	}
 	if s.exitReason != "" {
-		s.loss = fmt.Errorf("%w: tmux ended the stream: %s: %w",
+		s.loss = fmt.Errorf("%w: server ended the stream: %s: %w",
 			ErrPaneObservationLost, s.exitReason, err)
 		return s.loss
 	}
