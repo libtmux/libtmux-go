@@ -75,6 +75,7 @@ func (n *terminalTextNormalizer) appendByte(dst []byte, value byte) []byte {
 	}
 
 	switch n.state {
+	case terminalTextGround:
 	case terminalTextEscape:
 		switch {
 		case value == 0x1b:
@@ -178,6 +179,8 @@ func (n *terminalTextNormalizer) appendRune(dst []byte, decoded rune, encoded []
 		return dst
 	}
 	switch n.state {
+	case terminalTextGround, terminalTextEscape,
+		terminalTextEscapeIntermediate, terminalTextCSI:
 	case terminalTextOSCEscape:
 		n.state = terminalTextOSC
 		return dst

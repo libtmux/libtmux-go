@@ -281,7 +281,7 @@ func (c *sessionReadyConnection) writeNotification(
 			return context.DeadlineExceeded
 		}
 	}
-	completionErr, expired := c.notificationCompletionError(
+	expired, completionErr := c.notificationCompletionError(
 		ctx, result.err, result.completed, deadline,
 	)
 	if expired {
@@ -349,18 +349,18 @@ func (c *sessionReadyConnection) notificationCompletionError(
 	writeErr error,
 	completed time.Time,
 	deadline time.Time,
-) (error, bool) {
+) (bool, error) {
 	cancellationErr := c.notificationCancellation(ctx)
 	if notificationDeadlineExceeded(completed, deadline) {
 		if cancellationErr != nil {
-			return cancellationErr, true
+			return true, cancellationErr
 		}
-		return context.DeadlineExceeded, true
+		return true, context.DeadlineExceeded
 	}
 	if cancellationErr != nil {
-		return errors.Join(cancellationErr, writeErr), false
+		return false, errors.Join(cancellationErr, writeErr)
 	}
-	return writeErr, false
+	return false, writeErr
 }
 
 func (c *sessionReadyConnection) releaseWriteSlot() { <-c.writeSlot }
@@ -551,9 +551,9 @@ func writeBreaksConnection(ctx context.Context, err error) bool {
 }
 
 func writeErrorIsNonfatal(ctx context.Context, err error) bool {
-	switch wrapped := err.(type) {
-	case interface{ Unwrap() []error }:
-		children := wrapped.Unwrap()
+	var joined interface{ Unwrap() []error }
+	if errors.As(err, &joined) {
+		children := joined.Unwrap()
 		if len(children) == 0 {
 			return false
 		}
@@ -563,7 +563,9 @@ func writeErrorIsNonfatal(ctx context.Context, err error) bool {
 			}
 		}
 		return true
-	case interface{ Unwrap() error }:
+	}
+	var wrapped interface{ Unwrap() error }
+	if errors.As(err, &wrapped) {
 		if child := wrapped.Unwrap(); child != nil {
 			return writeErrorIsNonfatal(ctx, child)
 		}

@@ -326,17 +326,13 @@ func (t *tools) getJob(
 		return nil, output, nil
 	}
 
-	waitCtx := ctx
-	stopWait := func() {}
-	if input.TimeoutSeconds > 0 {
-		timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
-		output.EffectiveTimeoutSeconds = int(timeout.Seconds())
-		output.TimeoutClamped = clamped
-		waitCtx, stopWait = context.WithTimeout(ctx, timeout)
-		defer stopWait()
-		reporter := newProgressReporter(ctx, request, timeout, "waiting for the command to finish")
-		defer reporter.stop()
-	}
+	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+	output.TimeoutClamped = clamped
+	waitCtx, stopWait := context.WithTimeout(ctx, timeout)
+	defer stopWait()
+	reporter := newProgressReporter(ctx, request, timeout, "waiting for the command to finish")
+	defer reporter.stop()
 
 	var collectionDone chan struct{}
 	for {

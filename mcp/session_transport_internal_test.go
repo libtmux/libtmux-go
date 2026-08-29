@@ -265,7 +265,7 @@ func TestNotificationCancellationWinsReturnAtLateCompletion(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	deadline := time.Now().Add(-time.Second)
-	err, expired := connection.notificationCompletionError(
+	expired, err := connection.notificationCompletionError(
 		ctx, nil, deadline.Add(time.Nanosecond), deadline,
 	)
 	if !errors.Is(err, context.Canceled) {
@@ -274,7 +274,7 @@ func TestNotificationCancellationWinsReturnAtLateCompletion(t *testing.T) {
 	if !expired {
 		t.Fatal("late physical completion escaped the transport deadline")
 	}
-	err, expired = connection.notificationCompletionError(
+	expired, err = connection.notificationCompletionError(
 		ctx, io.ErrClosedPipe, deadline.Add(-time.Nanosecond), deadline,
 	)
 	if !errors.Is(err, context.Canceled) || !errors.Is(err, io.ErrClosedPipe) {
