@@ -251,16 +251,22 @@ func TestASecondSwapBacksUpWhatIsThereBySecondTime(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	target := client{name: "probe", path: filepath.Join(directory, "config.json")}
-	const original = `{"one":1}`
-	const edited = `{"one":1,"added":"after the revert"}`
+	target := client{
+		name: "probe", path: filepath.Join(directory, "config.json"),
+		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+	}
+	const original = `{"one":1,"mcpServers":{"tmux":{"command":"old"}}}`
+	const edited = `{"one":1,"added":"after the revert","mcpServers":{"tmux":{"command":"old"}}}`
 	if err := os.WriteFile(target.path, []byte(original), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	swap := func(from string) {
 		t.Helper()
-		if err := writeBesideBackup(target, []byte(from), []byte(`{"swapped":true}`)); err != nil {
+		updated := strings.Replace(from,
+			`{"command":"old"}`,
+			`{"command":"go","env":{"LIBTMUX_MCP_SWAP":"dev"}}`, 1)
+		if err := writeBesideBackup(target, []byte(from), []byte(updated)); err != nil {
 			t.Fatal(err)
 		}
 	}

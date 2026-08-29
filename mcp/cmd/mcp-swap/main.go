@@ -587,7 +587,28 @@ func revert(clients []client, dryRun bool) error {
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
-		if err := os.WriteFile(c.path, contents, 0o600); err != nil {
+		current, err := os.ReadFile(c.path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
+		}
+		entry, present, err := entryFromContents(c, current)
+		if err != nil || !present || !isLocal(entry) {
+			if err == nil {
+				err = errors.New("the current server entry is no longer the one mcp-swap wrote")
+			}
+			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
+		}
+		restored, err := restoreEntry(c, current, contents)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
+			continue
+		}
+		if err := os.WriteFile(c.path, restored, 0o600); err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
@@ -617,6 +638,10 @@ func entryOf(c client) (map[string]any, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	return entryFromContents(c, contents)
+}
+
+func entryFromContents(c client, contents []byte) (map[string]any, bool, error) {
 	switch c.format {
 	case formatTOML:
 		entry, found := readTOMLEntry(contents, c.key+"."+serverName)
@@ -638,6 +663,60 @@ func entryOf(c client) (map[string]any, bool, error) {
 		entry, found := serverEntry(decoded, c.key)
 		return entry, found, nil
 	}
+}
+
+func restoreEntry(c client, current, original []byte) ([]byte, error) {
+	path := []string{c.key, serverName}
+	switch c.format {
+	case formatTOML:
+		table := c.key + "." + serverName
+		currentStart, currentEnd, found := tomlTableSpan(current, table)
+		if !found {
+			return nil, fmt.Errorf("current configuration has no %s table", table)
+		}
+		originalStart, originalEnd, originallyPresent := tomlTableSpan(original, table)
+		replacement := []byte(nil)
+		if originallyPresent {
+			replacement = original[originalStart:originalEnd]
+		} else {
+			// writeEntry separates an appended table from the preceding
+			// configuration. That separator belongs to the table it added,
+			// so removing the table removes the separator as well.
+			prefix := []byte("\n")
+			if !bytes.HasSuffix(original, []byte("\n")) {
+				prefix = []byte("\n\n")
+			}
+			if currentStart >= len(prefix) &&
+				bytes.Equal(current[currentStart-len(prefix):currentStart], prefix) {
+				currentStart -= len(prefix)
+			}
+		}
+		return replaceBytes(current, currentStart, currentEnd, replacement), nil
+	case formatJSONC, formatJSON:
+		currentSpan, ok := findJSONCMember(blankComments(current), path)
+		if !ok || !currentSpan.present {
+			return nil, errors.New("current configuration has no server entry")
+		}
+		originalSpan, ok := findJSONCMember(blankComments(original), path)
+		if ok && originalSpan.present {
+			return replaceBytes(
+				current,
+				currentSpan.valueStart,
+				currentSpan.valueEnd,
+				original[originalSpan.valueStart:originalSpan.valueEnd],
+			), nil
+		}
+		return removeJSONCMember(current, currentSpan)
+	default:
+		return nil, fmt.Errorf("unknown configuration format %d", c.format)
+	}
+}
+
+func replaceBytes(text []byte, start, end int, replacement []byte) []byte {
+	updated := make([]byte, 0, len(text)-(end-start)+len(replacement))
+	updated = append(updated, text[:start]...)
+	updated = append(updated, replacement...)
+	return append(updated, text[end:]...)
 }
 
 // openCodeEntry turns opencode's array command back into the shape describe

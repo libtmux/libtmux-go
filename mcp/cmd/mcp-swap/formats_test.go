@@ -246,6 +246,136 @@ func TestSwapThenRevertIsByteIdentical(t *testing.T) {
 	}
 }
 
+func TestRevertPreservesChangesOutsideTheServerEntry(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name        string
+		contents    string
+		before      string
+		after       string
+		wantCommand string
+		client      client
+	}{
+		{
+			"toml", codexConfig, `model = "gpt-5"`, `model = "gpt-5.1"`, "uv",
+			client{key: "mcp_servers", format: formatTOML, dialect: dialectStandard},
+		},
+		{
+			"jsonc", opencodeConfig, `"theme": "system"`, `"theme": "changed"`, "uvx",
+			client{key: "mcp", format: formatJSONC, dialect: dialectOpencode},
+		},
+		{
+			"json", `{"theme":"system","mcpServers":{"tmux":{"command":"old"}}}`,
+			`"theme": "system"`, `"theme": "changed"`, "old",
+			client{key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			path := writeTemp(t, "config."+test.name, test.contents)
+			target := test.client
+			target.name, target.path = test.name, path
+
+			if err := writeEntry(target, devEntry()); err != nil {
+				t.Fatal(err)
+			}
+			changed := strings.Replace(readFile(t, path), test.before, test.after, 1)
+			if changed == readFile(t, path) {
+				t.Fatalf("the fixture has no %q to edit", test.before)
+			}
+			if err := os.WriteFile(path, []byte(changed), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := revert([]client{target}, false); err != nil {
+				t.Fatal(err)
+			}
+			if after := readFile(t, path); !strings.Contains(after, test.after) {
+				t.Fatalf("revert discarded the neighbouring edit:\n%s", after)
+			}
+			entry, present, err := entryOf(target)
+			if err != nil || !present || entryCommand(entry) != test.wantCommand {
+				t.Fatalf("restored entry = (%v, %t, %v), want command %q",
+					entry, present, err, test.wantCommand)
+			}
+		})
+	}
+}
+
+func TestRevertRemovesAnEntryThatDidNotExistBeforeTheSwap(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		contents string
+		client   client
+	}{
+		{
+			"toml", "model = \"gpt-5\"\n",
+			client{key: "mcp_servers", format: formatTOML, dialect: dialectStandard},
+		},
+		{
+			"jsonc", "{\n  // keep this\n  \"mcp\": {\"other\": {\"command\": \"keep\"}}\n}\n",
+			client{key: "mcp", format: formatJSONC, dialect: dialectOpencode},
+		},
+		{
+			"json", `{"theme":"system","mcpServers":{"other":{"command":"keep"}}}`,
+			client{key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			path := writeTemp(t, "config."+test.name, test.contents)
+			target := test.client
+			target.name, target.path = test.name, path
+
+			if err := writeEntry(target, devEntry()); err != nil {
+				t.Fatal(err)
+			}
+			if err := revert([]client{target}, false); err != nil {
+				t.Fatal(err)
+			}
+			if entry, present, err := entryOf(target); err != nil || present {
+				t.Fatalf("entry after revert = (%v, %t, %v), want absent", entry, present, err)
+			}
+			after := readFile(t, path)
+			if !strings.Contains(after, "keep") && !strings.Contains(after, `model = "gpt-5"`) {
+				t.Fatalf("revert discarded the neighbouring configuration:\n%s", after)
+			}
+			if test.name == "toml" && after != test.contents {
+				t.Fatalf("revert left the appended table's separator:\n%q", after)
+			}
+		})
+	}
+}
+
+func TestRevertRefusesAnEntryWithoutItsSwapMarker(t *testing.T) {
+	t.Parallel()
+	const original = `{"mcpServers":{"tmux":{"command":"old"}}}`
+	path := writeTemp(t, "config.json", original)
+	target := client{
+		name: "changed", path: path, key: "mcpServers",
+		format: formatJSON, dialect: dialectStandard,
+	}
+	if err := writeEntry(target, devEntry()); err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(readFile(t, path),
+		`"LIBTMUX_MCP_SWAP": "dev"`, `"OWNER": "manual"`, 1)
+	if err := os.WriteFile(path, []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := revert([]client{target}, false); err == nil {
+		t.Fatal("revert accepted an entry that no longer carries its swap marker")
+	}
+	if after := readFile(t, path); after != changed {
+		t.Fatalf("revert overwrote the changed entry:\n%s", after)
+	}
+	if _, err := os.Stat(backupPath(target)); err != nil {
+		t.Fatalf("revert removed the backup after refusing the restore: %v", err)
+	}
+}
+
 // Reading is separate from writing, and status depends on it alone.
 func TestEveryFormatReadsBackWhatItWrote(t *testing.T) {
 	t.Parallel()
