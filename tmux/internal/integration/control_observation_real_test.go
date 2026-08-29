@@ -15,7 +15,11 @@ import (
 
 //libtmux:real-tmux
 func TestPaneObservationLinearizesBaselineAndOutput(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t)
+	initial := tmux.NewSessionRequest{Name: "work"}
+	server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{
+		InitialSession: &initial,
+		FixedShell:     true,
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
