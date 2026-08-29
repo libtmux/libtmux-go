@@ -27,9 +27,11 @@ type ConfirmBeforeRequest struct {
 	Command string
 	// Prompt replaces tmux's prompt when nonnil.
 	Prompt *string
-	// ConfirmKey selects the affirmative key; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// ConfirmKey selects the affirmative key and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	ConfirmKey *string
-	// DefaultYes selects yes by default; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// DefaultYes selects yes by default and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	DefaultYes bool
 	// TargetClient selects the stable client that displays the prompt.
 	TargetClient ClientName
@@ -59,11 +61,14 @@ type CommandPromptRequest struct {
 	Type PromptType
 	// ExpandFormat expands formats in the prompt result.
 	ExpandFormat bool
-	// Literal disables key-name parsing; tmux before 3.6 refuses it; see UnsupportedPolicy.
+	// Literal disables key-name parsing and requires tmux 3.6; see
+	// UnsupportedPolicy.
 	Literal bool
-	// BackspaceExit exits on backspace; tmux before 3.7 refuses it; see UnsupportedPolicy.
+	// BackspaceExit exits on backspace and requires tmux 3.7; see
+	// UnsupportedPolicy.
 	BackspaceExit bool
-	// NoFreeze leaves the pane unfrozen; tmux before 3.7 refuses it; see UnsupportedPolicy.
+	// NoFreeze leaves the pane unfrozen and requires tmux 3.7; see
+	// UnsupportedPolicy.
 	NoFreeze bool
 }
 
@@ -98,17 +103,21 @@ type DisplayMenuRequest struct {
 	X *string
 	// Y is tmux's vertical position expression.
 	Y *string
-	// StartingChoice selects the initial item; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// StartingChoice selects the initial item and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	StartingChoice *string
-	// BorderLines selects border glyphs; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// BorderLines selects border glyphs and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	BorderLines *string
-	// Style selects menu style; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// Style selects menu style and requires tmux 3.4; see UnsupportedPolicy.
 	Style *string
-	// BorderStyle selects border style; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// BorderStyle selects border style and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	BorderStyle *string
-	// SelectedStyle selects highlighted-item style; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// SelectedStyle selects highlighted-item style and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	SelectedStyle *string
-	// Mouse enables mouse selection; tmux before 3.5 refuses it; see UnsupportedPolicy.
+	// Mouse enables mouse selection and requires tmux 3.5; see UnsupportedPolicy.
 	Mouse bool
 	// StayOpen keeps the menu visible after selecting an item.
 	StayOpen bool
@@ -222,10 +231,9 @@ type attachSessionValues struct {
 
 // ConfirmBefore asks tmux to display a background confirmation prompt and
 // returns after tmux accepts it, not after the user answers or Command runs.
-// It requires tmux 3.3. ConfirmKey and DefaultYes require tmux 3.4 and are
-// synchronously reported to [WarningHandler] before the reduced command runs
-// on older supported versions. Completed stderr is an error; cancellation does
-// not prove prompt delivery or later command execution did not occur.
+// It requires tmux 3.3. ConfirmKey and DefaultYes require tmux 3.4 and follow
+// [UnsupportedPolicy]. Completed stderr is an error; cancellation does not
+// prove prompt delivery or later command execution did not occur.
 func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest) error {
 	values, err := captureConfirmBeforeRequest(request)
 	if err != nil {
@@ -272,9 +280,8 @@ func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest)
 
 // CommandPrompt asks tmux to display a background command prompt and returns
 // after tmux accepts it, not after input is submitted or Template runs. It
-// requires tmux 3.3. Unsupported later flags synchronously reach
-// [WarningHandler] before the reduced command runs. Completed stderr is an
-// error; cancellation does not prove prompt delivery or later execution did not occur.
+// requires tmux 3.3. Later flags follow [UnsupportedPolicy]. Completed stderr
+// is an error; cancellation does not prove prompt delivery or later execution.
 func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest) error {
 	values, err := captureCommandPromptRequest(request)
 	if err != nil {
@@ -352,9 +359,9 @@ func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest)
 // DisplayMenu displays a menu and waits until tmux closes it. The target
 // client must own a TTY; control-mode clients cannot render menu overlays.
 // It returns no selected value and does not establish whether an item command
-// ran. Unsupported optional flags synchronously reach [WarningHandler] before
-// the reduced command runs; completed stderr is an error, and cancellation
-// does not prove menu delivery or any selected command's effect.
+// ran. Unsupported optional flags follow [UnsupportedPolicy]. Completed stderr
+// is an error, and cancellation does not prove menu delivery or a selected
+// command's effect.
 func (s Server) DisplayMenu(ctx context.Context, request DisplayMenuRequest) error {
 	values, err := captureDisplayMenuRequest(request)
 	if err != nil {
@@ -459,15 +466,10 @@ func (s Server) DisplayMenu(ctx context.Context, request DisplayMenuRequest) err
 // server is already running. Completed stderr is an error; cancellation does
 // not prove that a daemon was not started.
 //
-// tmux's exit-empty default ends a server that holds no sessions, so a server
-// started with nothing in it can be gone before the next command reaches it,
-// and Start still reports success. Create a session to keep one running, or
-// turn exit-empty off in [ServerOptions.ConfigFile], which tmux reads as the
-// server starts. It cannot be turned off by a later command, because that
-// command needs the server the setting exists to keep alive. A later command
-// against a server that has already
-// exited reports the failing tmux command rather than the missing server; use
-// [Server.IsAlive] or [Server.RaiseIfDead] to ask directly.
+// With tmux's exit-empty default, a server holding no sessions may exit before
+// the next command even though Start succeeded. Create a session or disable
+// exit-empty in [ServerOptions.ConfigFile] before startup. Use [Server.IsAlive]
+// or [Server.RaiseIfDead] to check it.
 func (s Server) Start(ctx context.Context) error {
 	result, err := s.literalCmd(ctx, "start-server")
 	return requireServerCommandNoStderr("start-server", result, err)

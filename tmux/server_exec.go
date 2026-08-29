@@ -69,11 +69,14 @@ type RunShellRequest struct {
 	AsTmuxCommand bool
 	// TargetPane selects a stable pane target; its zero value leaves target selection to tmux.
 	TargetPane PaneID
-	// StartDirectory selects the job directory; nil omits it and tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// StartDirectory selects the job directory; nil omits it. It requires tmux
+	// 3.4; see UnsupportedPolicy.
 	StartDirectory *string
-	// ShowStderr requests job stderr; tmux before 3.6 refuses it; see UnsupportedPolicy.
+	// ShowStderr requests job stderr and requires tmux 3.6; see
+	// UnsupportedPolicy.
 	ShowStderr bool
-	// Args are extra job arguments copied before tmux runs; tmux before 3.7 refuses it; see UnsupportedPolicy.
+	// Args are extra job arguments copied before tmux runs. They require tmux
+	// 3.7; see UnsupportedPolicy.
 	Args []string
 }
 
@@ -134,11 +137,10 @@ type SourceFileRequest struct {
 }
 
 // RunShell executes a shell command through tmux and returns an owned stdout
-// slice. A background request returns nil after tmux accepts the job. On older
-// supported tmux versions, unsupported optional flags synchronously reach the
-// caller-goroutine [WarningHandler] before the reduced command runs. A completed
-// stderr result is an error; context cancellation can be observed with
-// [errors.Is] but does not establish that tmux did not start the job.
+// slice. A background request returns nil after tmux accepts the job.
+// Unsupported optional flags follow [UnsupportedPolicy]. A completed stderr
+// result is an error; context cancellation can be observed with [errors.Is] but
+// does not establish that tmux did not start the job.
 func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string, error) {
 	request.Delay = copyOptionalString(request.Delay)
 	request.StartDirectory = copyOptionalString(request.StartDirectory)

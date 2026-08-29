@@ -73,15 +73,8 @@ var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 // checksum, which is what makes it distinguishable from a name.
 var layoutStringPattern = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
 
-// validateLayout rejects a layout that is neither a preset nor one of tmux's
-// layout strings.
-//
-// This is checked here rather than left to tmux because tmux 3.3a does not
-// reject it: an unrecognised layout crashes the server, taking every session on
-// the socket with it, including sessions that have nothing to do with the
-// caller. Every other supported version returns an error, so refusing here
-// costs those versions nothing but the message, and it is the only place a
-// caller can be told before the damage.
+// tmux 3.3a exits the server for an unknown layout instead of returning an
+// error, so reject names that are neither presets nor layout strings.
 func validateLayout(layout string, version Version) error {
 	if layout == "" || layoutPresets[layout] || layoutStringPattern.MatchString(layout) {
 		return nil

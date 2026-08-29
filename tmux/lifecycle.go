@@ -24,8 +24,6 @@ var (
 
 // HasSessionRequest selects exact or tmux-pattern session matching on tmux
 // 3.2a or later. Its zero value is invalid because Target is required.
-// Pattern is checked after local target validation and before execution; the
-// request contains no retained caller-owned storage.
 type HasSessionRequest struct {
 	// Target is the required session name or tmux session pattern.
 	Target string
@@ -39,8 +37,7 @@ type HasSessionRequest struct {
 // instead, while ClearAlerts is non-destructive. AllExcept, ClearAlerts, and
 // Group are mutually exclusive because tmux applies a hidden precedence when
 // more than one mode is supplied; the package rejects those combinations
-// before execution. The request contains no retained caller-owned storage.
-// Group's compatibility behavior is documented on that field.
+// before execution. Group's compatibility behavior is documented on that field.
 type SessionKillRequest struct {
 	// AllExcept terminates every other session and detaches their clients while
 	// preserving the receiver session.
@@ -49,8 +46,7 @@ type SessionKillRequest struct {
 	// to the receiver without destroying a session or detaching its clients.
 	ClearAlerts bool
 	// Group terminates every session in the receiver's group and detaches their
-	// clients on tmux 3.7 or newer. Older versions warn synchronously and omit
-	// the unsupported flag, so only the receiver is terminated.
+	// clients. It requires tmux 3.7; see UnsupportedPolicy.
 	Group bool
 }
 
@@ -69,21 +65,14 @@ type KillWindowRequest struct {
 	Index *int
 }
 
-// NewSessionRequest configures detached session creation on tmux 3.2a or
-// later. Its zero value creates an automatically named detached session with
-// tmux defaults. Zero Width and Height omit those flags; nonzero values must
-// be between 1 and 65535. KillExisting requires Name. Local
-// validation completes before tmux is mutated, except that a named request
-// probes for an existing session and KillExisting may remove it before later
-// creation fails.
+// NewSessionRequest configures detached session creation. Its zero value uses
+// tmux defaults. Width and Height are either zero or 1 through 65535;
+// KillExisting requires Name. KillExisting may remove a session before a later
+// creation failure.
 //
-// [Server.NewSession] copies Environment before validation and the existence
-// probe, then retains none of the caller's request storage. The caller may
-// mutate the map after the copy completes, but mutation during the copy is not
-// race-safe. Foreground attach requires a stdio/control
-// transport and is not represented by this blocking subprocess API. tmux
-// consumes -D, -X, and -f only while attaching a client, including
-// new-session -A, so this always-detached request does not expose them.
+// [Server.NewSession] copies Environment before validation and retains no map
+// storage; concurrent mutation during the copy is unsafe. Foreground-only tmux
+// flags are not exposed by this detached API.
 type NewSessionRequest struct {
 	// Name selects the new session name; empty lets tmux generate one.
 	Name string
@@ -158,17 +147,11 @@ func newSessionArguments(request NewSessionRequest) ([]string, error) {
 // value uses inherited defaults; placement behavior depends on the receiver.
 // [Session.NewWindow] uses tmux's next free index. [Window.NewWindow] instead
 // targets the receiver's occupied index and normally returns a command error;
-// with KillExisting, tmux destroys and replaces that target if it is still
-// occupied. Nil pointer fields omit their options; nonnil pointers are
-// explicit, including an empty Name. Window.NewWindow rejects Index because
-// its receiver already supplies the exact winlink. Other invalid values are
-// rejected before creation; SelectExisting's name-expansion probes can run
-// before the create command.
+// KillExisting may replace it. [Window.NewWindow] rejects Index. SelectExisting
+// may run name-expansion probes before creation.
 //
-// [Session.NewWindow] and [Window.NewWindow] copy Name, Index, and Environment
-// before validation or later probes and retain none of that storage. Mutation
-// after the copy completes cannot affect the call, but mutation during the
-// copy is not race-safe.
+// Pointer fields are explicit when nonnil. Methods copy them and Environment
+// before I/O; concurrent mutation during the copy is unsafe.
 type NewWindowRequest struct {
 	// Name is omitted when nil. A nonnil empty string remains an explicit
 	// -n operand. The value is copied before tmux is called.
@@ -242,14 +225,9 @@ const (
 // Percentage are mutually exclusive. Invalid values are rejected before tmux
 // is mutated.
 //
-// [Window.SplitPane] and [Pane.Split] copy every pointer and Environment
-// before validation or a compatibility probe and retain none of that storage.
-// Mutation after the copy completes cannot affect the call, but mutation
-// during the copy is not race-safe. Empty and the style, border, message, and
-// Keep group require tmux 3.7. On older supported versions each requested
-// group synchronously reaches [WarningHandler] and is omitted. Empty and
-// Command are checked for mutual exclusion after that probe, so an unsupported
-// Empty can be omitted while Command still runs.
+// Methods copy pointer and map values before I/O; concurrent mutation is unsafe.
+// Empty, styles, Message, and Keep require tmux 3.7 and follow
+// [UnsupportedPolicy]. Empty and Command conflict only when Empty is supported.
 type SplitPaneRequest struct {
 	// Attach lets the created pane become active in the exact target winlink;
 	// false preserves its active pane.
@@ -295,8 +273,6 @@ type SplitPaneRequest struct {
 // Pattern true preserves tmux's session-pattern semantics, where a target may
 // also name a session by identifier, by the tty of a client attached to it, by
 // unique prefix, or by glob. Completed nonzero exits are predicate misses.
-// Local validation errors match [ErrInvalidServerCommandRequest] or
-// [ErrInvalidRequest]; transport and context failures remain errors.
 //
 // The exact question is answered against the session list rather than by
 // tmux's exact-match marker, because that marker suppresses only the last two
@@ -350,20 +326,14 @@ func (s Server) sessionNamed(ctx context.Context, name string) (SessionID, error
 }
 
 // NewSession creates a detached session, then returns a newly materialized
-// live [Session]. It never changes client focus. KillExisting may destroy the
-// old named session before a later creation failure; no rollback is
-// attempted. A transport or context error can be delivery-ambiguous.
+// [Session]. It never changes client focus. KillExisting is not rolled back;
+// transport and context failures may be delivery-ambiguous.
 //
-// The returned Session is a session-only point lookup, so its [Session.Windows]
-// and [Session.Panes] relations are empty even though tmux creates an initial
-// window and pane. Use [Session.ResolveActiveWindow], [Session.ResolveActivePane],
-// or [Server.Snapshot] when those related records are needed.
+// The returned record has unmaterialized [Session.Windows] and [Session.Panes]
+// relations. Use the resolvers or [Server.Snapshot] when relations are needed.
 //
-// When tmux prints a valid stable identity before a transport failure, or
-// creation succeeds but the live lookup fails, NewSession returns a partial
-// Session containing its creating [Server] and [SessionID] with the error.
-// Other failures return a zero Session. See [ErrSessionExists],
-// [ErrInvalidCommandOutput], [ErrInvalidRequest], and [CommandError].
+// If tmux reports an ID before a transport or refresh failure, the returned
+// partial Session contains its [Server] and [SessionID]. Other failures return zero.
 func (s Server) NewSession(ctx context.Context, request NewSessionRequest) (Session, error) {
 	request = captureNewSessionRequest(request)
 	if err := validateServerCommandArguments(
@@ -442,12 +412,9 @@ func (s Server) NewSession(ctx context.Context, request NewSessionRequest) (Sess
 // SelectExisting no-output recovery is available only when Index is nil. It
 // expands Name with tmux's version-specific rules and requires exactly one
 // matching window name in the receiver session. An explicit Index has no such
-// recovery. A transport or context error can be delivery-ambiguous and no
-// rollback is attempted. If tmux printed a valid WindowID before that error,
-// or exact refresh fails after creation, NewWindow returns a partial Window
-// containing the receiver SessionID and new WindowID with an Index of -1;
-// other failures return a zero Window. See [ErrInvalidCommandOutput] and
-// [CommandError].
+// recovery. If tmux reports a WindowID before a transport or refresh failure,
+// the partial result contains that ID and the receiver SessionID with Index -1.
+// Other failures return zero; creation is not rolled back.
 func (s Session) NewWindow(ctx context.Context, request NewWindowRequest) (Window, error) {
 	request = captureNewWindowRequest(request)
 	target := s.sessionID.String()
@@ -467,12 +434,9 @@ func (s Session) NewWindow(ctx context.Context, request NewWindowRequest) (Windo
 // has no no-output recovery on this exact-target form; tmux must print the
 // created WindowID.
 //
-// The returned [Window] is freshly materialized in the receiver SessionID.
-// A transport or context error can be delivery-ambiguous and no rollback is
-// attempted. If tmux printed a valid identity before that error, or exact
-// refresh fails after creation, NewWindow returns the receiver SessionID and
-// new WindowID as a partial Window with an Index of -1; other failures return
-// a zero Window.
+// If tmux reports an ID before a transport or refresh failure, the partial result
+// contains it and the receiver SessionID with Index -1. Other failures return
+// zero; creation is not rolled back.
 func (w Window) NewWindow(ctx context.Context, request NewWindowRequest) (Window, error) {
 	request = captureNewWindowRequest(request)
 	if request.Index != nil {
@@ -697,12 +661,9 @@ func selectedExistingWindow(
 // client-focus guarantee. The returned [Pane] is freshly materialized in the
 // receiver SessionID and WindowID rather than by canonical ID-only refresh.
 //
-// A transport or context error can be delivery-ambiguous and no rollback is
-// attempted. If tmux printed a valid [PaneID] before that error, or exact
-// refresh fails after creation, SplitPane returns a partial Pane containing
-// the receiver SessionID and WindowID and the new PaneID. Other failures return
-// a zero Pane. See [SplitPaneRequest], [WarningHandler],
-// [ErrInvalidCommandOutput], and [CommandError].
+// If tmux reports a [PaneID] before a transport or refresh failure, the partial
+// result also contains the receiver SessionID and WindowID. Other failures
+// return zero; creation is not rolled back.
 func (w Window) SplitPane(ctx context.Context, request SplitPaneRequest) (Pane, error) {
 	request = captureSplitPaneRequest(request)
 	target, err := exactWindowTarget(w)
@@ -717,12 +678,9 @@ func (w Window) SplitPane(ctx context.Context, request SplitPaneRequest) (Pane, 
 // a global client-focus guarantee. The returned [Pane] is freshly materialized
 // in the receiver SessionID and WindowID.
 //
-// A transport or context error can be delivery-ambiguous and no rollback is
-// attempted. If tmux printed a valid [PaneID] before that error, or exact
-// refresh fails after creation, Split returns a partial Pane containing the
-// receiver SessionID and WindowID and the new PaneID. Other failures return a
-// zero Pane. See [SplitPaneRequest], [WarningHandler], and
-// [ErrInvalidCommandOutput].
+// If tmux reports a [PaneID] before a transport or refresh failure, the partial
+// result also contains the receiver SessionID and WindowID. Other failures
+// return zero; creation is not rolled back.
 func (p Pane) Split(ctx context.Context, request SplitPaneRequest) (Pane, error) {
 	request = captureSplitPaneRequest(request)
 	target, err := exactPaneTarget(p)
@@ -1012,9 +970,7 @@ func (s Server) Kill(ctx context.Context) error {
 
 // KillSession terminates the session selected by tmux target syntax. Pattern
 // and prefix matching are deliberately left to tmux. Completed nonzero exits
-// without stderr are ignored by this operation's source contract. A transport
-// or context error can be delivery-ambiguous; the void result cannot carry
-// partial identity and no rollback is attempted.
+// without stderr are ignored. Transport and context errors are delivery-ambiguous.
 func (s Server) KillSession(ctx context.Context, target string) error {
 	if err := validateServerCommandArgument(
 		"kill-session", "Target", target, true,
@@ -1028,11 +984,8 @@ func (s Server) KillSession(ctx context.Context, target string) error {
 // Kill destroys the receiver session, removes its winlinks, and detaches every
 // client attached to it. A window with no remaining links and all of that
 // window's panes are also destroyed. The materialized receiver is not
-// refreshed and no longer represents a live session. A completed command is
-// treated as an error only when tmux writes stderr, which returns a
-// [CommandError]; a nonzero exit without stderr is ignored. A transport or
-// context error can be delivery-ambiguous; the void result cannot carry
-// partial identity and no rollback is attempted.
+// refreshed. Only stderr makes a completed command a [CommandError]; nonzero
+// exits without stderr are ignored. Transport errors are delivery-ambiguous.
 // Kill is equivalent to [Session.KillWith] with a zero [SessionKillRequest].
 func (s Session) Kill(ctx context.Context) error {
 	return s.KillWith(ctx, SessionKillRequest{})
@@ -1045,15 +998,12 @@ func (s Session) Kill(ctx context.Context) error {
 // sessions, winlinks, panes, client attachments, and current-window selections
 // unchanged. Destroying a session detaches its clients and removes its
 // winlinks; windows left without links and their panes are also destroyed.
-// Group destroys the receiver's group on tmux 3.7 or later. On older versions,
-// Group synchronously reaches [WarningHandler], is omitted, and the receiver
-// alone is destroyed.
+// Group destroys the receiver's group and requires tmux 3.7; on older versions
+// it follows [UnsupportedPolicy].
 //
-// AllExcept, ClearAlerts, and Group are rejected as mutually exclusive before
-// execution. A completed command is treated as an error only when tmux writes
-// stderr, which returns a [CommandError]; a nonzero exit without stderr is
-// ignored. A transport or context error can be delivery-ambiguous; the void
-// result cannot carry partial identity and no rollback is attempted.
+// The three modes are mutually exclusive. Only stderr makes a completed command
+// a [CommandError]; nonzero exits without stderr are ignored. Transport errors
+// are delivery-ambiguous.
 func (s Session) KillWith(ctx context.Context, request SessionKillRequest) error {
 	modes := 0
 	if request.AllExcept {
@@ -1109,12 +1059,9 @@ func (s Session) KillWith(ctx context.Context, request SessionKillRequest) error
 // in which case they select another. A session left without windows is
 // destroyed and its clients are detached.
 //
-// Target and Index are rejected together before execution. The materialized
-// receiver is not refreshed. A completed command is treated as an error only
-// when tmux writes stderr, which returns a [CommandError]; a nonzero exit
-// without stderr is ignored. A transport or context error can be
-// delivery-ambiguous; the void result cannot carry partial identity and no
-// rollback is attempted.
+// Target and Index are mutually exclusive. The receiver is not refreshed. Only
+// stderr makes a completed command a [CommandError]; nonzero exits without
+// stderr are ignored. Transport errors are delivery-ambiguous.
 func (s Session) KillWindow(ctx context.Context, request KillWindowRequest) error {
 	if request.Target != nil && request.Index != nil {
 		return invalidLifecycleRequest("Target and Index are mutually exclusive")
@@ -1148,12 +1095,8 @@ func (s Session) KillWindow(ctx context.Context, request KillWindowRequest) erro
 // removes all of its winlinks, and destroys its panes. Affected sessions
 // preserve their current selection unless this window was current, in which
 // case they select another. A session left without windows is destroyed and
-// its clients are detached. The materialized receiver is not refreshed and no
-// longer represents a live window. A completed command is treated as an error
-// only when tmux writes stderr, which returns a [CommandError]; a nonzero exit
-// without stderr is ignored. A transport or context error can be
-// delivery-ambiguous; the void result cannot carry partial identity and no
-// rollback is attempted.
+// its clients are detached. The receiver is not refreshed. Only stderr makes a
+// completed command a [CommandError]; nonzero exits without stderr are ignored.
 func (w Window) Kill(ctx context.Context) error {
 	result, err := w.literalCmd(ctx, "kill-window")
 	return requireServerCommandNoStderr("kill-window", result, err)
@@ -1166,11 +1109,8 @@ func (w Window) Kill(ctx context.Context) error {
 // removed from all sessions. Other affected sessions preserve their current
 // selection unless a destroyed window was current, in which case they select
 // another. A session left without windows is destroyed and detaches its
-// clients. The receiver is not refreshed. A completed command is treated as
-// an error only when tmux writes stderr, which returns a [CommandError]; a
-// nonzero exit without stderr is ignored. A transport or context error can be
-// delivery-ambiguous; the void result cannot carry partial identity and no
-// rollback is attempted.
+// clients. The receiver is not refreshed. Only stderr makes a completed command
+// a [CommandError]; nonzero exits without stderr are ignored.
 func (w Window) KillOthers(ctx context.Context) error {
 	target, err := exactWindowTarget(w)
 	if err != nil {
@@ -1186,10 +1126,8 @@ func (w Window) KillOthers(ctx context.Context) error {
 // its winlinks. Affected sessions preserve their current selection unless the
 // destroyed window was current, in which case they select another. A session
 // left without windows is destroyed and detaches its clients. The receiver is
-// not refreshed. A completed command is treated as an error only when tmux
-// writes stderr, which returns a [CommandError]; a nonzero exit without stderr
-// is ignored. A transport or context error can be delivery-ambiguous; the void
-// result cannot carry partial identity and no rollback is attempted.
+// not refreshed. Only stderr makes a completed command a [CommandError]; nonzero
+// exits without stderr are ignored.
 func (p Pane) Kill(ctx context.Context) error {
 	result, err := p.literalCmd(ctx, "kill-pane")
 	return requireServerCommandNoStderr("kill-pane", result, err)
@@ -1198,11 +1136,8 @@ func (p Pane) Kill(ctx context.Context) error {
 // KillOthers destroys every other pane in the receiver's stable window and
 // leaves the receiver as its sole active pane. It does not select the exact
 // winlink as its session's current window or promise client focus, and it does
-// not destroy a window or session. The receiver is not refreshed. A completed
-// command is treated as an error only when tmux writes stderr, which returns a
-// [CommandError]; a nonzero exit without stderr is ignored. A transport or
-// context error can be delivery-ambiguous; the void result cannot carry
-// partial identity and no rollback is attempted.
+// not destroy a window or session. The receiver is not refreshed. Only stderr
+// makes a completed command a [CommandError]; nonzero exits without stderr are ignored.
 func (p Pane) KillOthers(ctx context.Context) error {
 	result, err := p.literalCmd(ctx, "kill-pane", "-a")
 	return requireServerCommandNoStderr("kill-pane", result, err)

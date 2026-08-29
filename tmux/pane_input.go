@@ -7,10 +7,8 @@ import (
 
 var paneInputVersion34 = Version{raw: "3.4", major: 3, minor: 4}
 
-// SendKeysRequest configures tmux key input. Command and CopyModeCommand are
-// read and copied before any version probe or command, and the call retains
-// none of the caller's storage. Callers must not mutate those values
-// concurrently.
+// SendKeysRequest configures tmux key input. Pointer values are copied before
+// I/O and must not be mutated concurrently.
 //
 // Command must be nonnil unless Reset, Repeat, or CopyModeCommand is set. A
 // nonnil empty Command is an explicit key operand and is followed by Enter
@@ -52,18 +50,13 @@ type SendKeysRequest struct {
 // SendKeys invokes tmux send-keys with the receiver's exact linked
 // session-window-pane target. This is tmux key input, not shell execution:
 // Literal only changes tmux key parsing, and any delivered text may still be
-// interpreted by the application running in the pane. In KeyName mode, tmux
-// instead routes the keys through the selected client's key table; the pane
-// target does not imply pane delivery.
+// interpreted by the pane's application. KeyName routes through a client's key
+// table instead of delivering to the pane.
 //
-// KeyName and TargetClient require tmux 3.4. On older versions SendKeys emits
-// synchronous unsupported-feature warnings and omits the corresponding flags.
-// A version-probe error stops execution.
+// KeyName and TargetClient require tmux 3.4 and follow [UnsupportedPolicy].
 //
 // Completed exit status and stderr are ignored. Transport and context errors
-// are returned and remain detectable with [errors.Is]. Delivery is ambiguous on
-// such errors, including between the Command and separate Enter invocations,
-// and cancellation cannot revoke keys already accepted by tmux.
+// are delivery-ambiguous, including between Command and the separate Enter.
 func (p Pane) SendKeys(ctx context.Context, request SendKeysRequest) error {
 	request = captureSendKeysRequest(request)
 	if err := validateSendKeysRequest(p, request); err != nil {
@@ -98,26 +91,17 @@ func (p Pane) SendKeys(ctx context.Context, request SendKeysRequest) error {
 	return p.Enter(ctx)
 }
 
-// sendKeysRequiresVersion reports whether a request asks for a flag this
-// package gates on the tmux version, and so cannot be rendered without probing
-// it. Most requests ask for none, which is why the probe is conditional.
+// sendKeysRequiresVersion avoids a probe for requests with no gated flags.
 func sendKeysRequiresVersion(request SendKeysRequest) bool {
 	return request.KeyName || request.TargetClient != ""
 }
 
-// sendKeysNeedsEnter reports whether a request sends a command that tmux still
-// has to be told to submit. Enter is a second tmux command, which is why a
-// [Plan] records it as a step of its own.
+// Enter is a separate command and therefore a separate [Plan] step.
 func sendKeysNeedsEnter(request SendKeysRequest) bool {
 	return request.CopyModeCommand == nil && request.Command != nil && !request.SkipEnter
 }
 
-// sendKeysArguments renders one send-keys argument vector for target, together
-// with the warnings that rendering it produced. It performs no I/O, so a [Plan]
-// can render keys it has not sent.
-//
-// version is consulted only for the flags [sendKeysRequiresVersion] reports, so
-// a caller that skipped the probe may pass the zero Version.
+// sendKeysArguments renders without I/O and returns compatibility warnings.
 func sendKeysArguments(
 	target string,
 	request SendKeysRequest,
@@ -178,16 +162,13 @@ func sendKeysArguments(
 }
 
 // Enter sends the Enter key to the receiver's exact linked pane. Completed
-// exit status and stderr are ignored. Transport and context errors remain
-// detectable with [errors.Is], but delivery may already have occurred.
+// exit status and stderr are ignored; transport errors are delivery-ambiguous.
 func (p Pane) Enter(ctx context.Context) error {
 	_, err := p.literalCmd(ctx, "send-keys", "--", "Enter")
 	return err
 }
 
-// enterArguments renders the send-keys argument vector that submits what was
-// typed into target. It is what [Pane.Enter] sends, addressed explicitly rather
-// than through the receiver, so a [Plan] can record it as a step.
+// enterArguments renders [Pane.Enter] for a [Plan] without I/O.
 func enterArguments(target string) ([]string, error) {
 	if err := validateServerCommandArgument(
 		"send-keys", "Target", target, true,
@@ -197,8 +178,7 @@ func enterArguments(target string) ([]string, error) {
 	return []string{"send-keys", "-t", target, "--", "Enter"}, nil
 }
 
-// sendPrefixArguments renders one send-prefix argument vector. It performs no
-// I/O, so a [Plan] can render a prefix it has not sent.
+// sendPrefixArguments renders a prefix for a [Plan] without I/O.
 func sendPrefixArguments(target string, key PrefixKey) ([]string, error) {
 	arguments, err := targetedArguments("send-prefix", target)
 	if err != nil {
@@ -230,9 +210,8 @@ const (
 // SendPrefix sends a tmux prefix key to the receiver's exact linked pane.
 // Unsupported PrefixKey values fail before execution. A completed command
 // produces a [CommandError] only when tmux writes stderr; the library-created
-// error retains only the exit code. A nonzero exit without stderr is ignored.
-// Transport and context errors remain detectable with [errors.Is], but
-// delivery may already have occurred.
+// error retains only the exit code. Nonzero exits without stderr are ignored;
+// transport errors are delivery-ambiguous.
 func (p Pane) SendPrefix(ctx context.Context, key PrefixKey) error {
 	if err := validateTypedTarget(
 		"send-prefix", "Pane", "pane", p.paneID.String(),
@@ -254,17 +233,15 @@ func (p Pane) SendPrefix(ctx context.Context, key PrefixKey) error {
 // ClearHistoryRequest configures pane history clearing. Its zero value clears
 // scrollback without requesting hyperlink cleanup.
 type ClearHistoryRequest struct {
-	// ResetHyperlinks also removes hyperlinks on tmux 3.4 or newer. Older
-	// versions emit a synchronous warning and omit the unsupported flag.
+	// ResetHyperlinks also removes hyperlinks. It requires tmux 3.4; see
+	// UnsupportedPolicy.
 	ResetHyperlinks bool
 }
 
 // ClearHistory removes scrollback from the receiver's exact linked pane.
 // ResetHyperlinks triggers a version probe before mutation. A completed
-// command produces a [CommandError] only when tmux writes stderr; the
-// library-created error retains only the exit code. A nonzero exit without
-// stderr is ignored. Transport and context errors remain detectable with
-// [errors.Is], but accepted history changes are not rolled back.
+// command produces a redacted [CommandError] only for stderr; nonzero exits
+// without stderr are ignored. Accepted changes are not rolled back.
 func (p Pane) ClearHistory(ctx context.Context, request ClearHistoryRequest) error {
 	if err := validateTypedTarget(
 		"clear-history", "Pane", "pane", p.paneID.String(),
@@ -294,9 +271,7 @@ func (p Pane) ClearHistory(ctx context.Context, request ClearHistoryRequest) err
 	return requireRedactedServerCommandNoStderr("clear-history", result, err)
 }
 
-// clearHistoryArguments renders one clear-history argument vector and the
-// warnings rendering it produced. It performs no I/O, so a [Plan] can render a
-// clear it has not run. version is consulted only when ResetHyperlinks is set.
+// clearHistoryArguments renders without I/O and returns compatibility warnings.
 func clearHistoryArguments(
 	target string,
 	request ClearHistoryRequest,
@@ -321,20 +296,15 @@ func clearHistoryArguments(
 
 // Clear sends the text "reset" and then Enter to the receiver's exact linked
 // pane. The pane's current application interprets that input; Clear does not
-// execute a shell directly. Completed exit status and stderr from either tmux
-// invocation are ignored. A transport or context error may leave the text
-// delivered without Enter and remains detectable with [errors.Is].
+// invoke a shell itself. A transport error may leave the text delivered without Enter.
 func (p Pane) Clear(ctx context.Context) error {
 	command := "reset"
 	return p.SendKeys(ctx, SendKeysRequest{Command: &command})
 }
 
 // Reset submits one tmux command list that resets terminal state and then
-// clears history for the receiver's exact linked pane. Each subcommand carries
-// the exact target. The two mutations are not atomic: terminal state or history
-// may be only partially reset. Completed exit status and stderr are ignored.
-// Transport and context errors remain detectable with [errors.Is], but an
-// accepted command list cannot be revoked.
+// clears history for the exact linked pane. The mutations are not atomic and
+// may be partial. Completed exit status and stderr are ignored.
 func (p Pane) Reset(ctx context.Context) error {
 	target, err := exactPaneTarget(p)
 	if err != nil {

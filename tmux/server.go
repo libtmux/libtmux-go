@@ -41,7 +41,7 @@ type ServerOptions struct {
 	ProcessEnvironment []string
 	// Unsupported selects what happens when a request needs an optional tmux
 	// capability the running server does not have. The zero value refuses the
-	// request; see [UnsupportedPolicy].
+	// request; see UnsupportedPolicy.
 	Unsupported UnsupportedPolicy
 	// WarningHandler receives nonfatal compatibility warnings. Nil discards
 	// warnings. See WarningHandler for delivery and concurrency semantics.
@@ -50,7 +50,7 @@ type ServerOptions struct {
 	// uses the local tmux subprocess runner. The server retains Runner, which
 	// must support concurrent calls when the server is used concurrently.
 	//
-	// [Server.OpenControl] starts its tmux -C process directly. Registration and
+	// Server.OpenControl starts its tmux -C process directly. Registration and
 	// version probes use the server's normal Engine/Runner routing.
 	Runner CommandRunner
 }

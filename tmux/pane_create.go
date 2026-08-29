@@ -13,14 +13,11 @@ var newPaneVersion37 = Version{raw: "3.7", major: 3, minor: 7}
 // position, styles, and command. Nil pointer fields omit their options;
 // nonnil pointers are explicit, including empty style or message strings.
 // Width and Height must be nonnegative. Empty and Command are mutually
-// exclusive and are rejected before the hard version check; unsupported tmux
-// versions return a [VersionTooLowError] matching [ErrVersionTooLow] rather
-// than omitting requested features.
+// exclusive. Unsupported tmux versions return [VersionTooLowError] rather than
+// omitting fields.
 //
-// [Window.NewPane] and [Pane.NewPane] copy every pointer and Environment
-// before validation or the version probe and retain none of that storage.
-// Mutation after the copy completes cannot affect the call, but mutation
-// during the copy is not race-safe.
+// Methods copy pointers and Environment before I/O; concurrent mutation during
+// the copy is unsafe.
 type NewPaneRequest struct {
 	// Attach lets the created pane become active in the exact target winlink;
 	// false preserves its active pane.
@@ -62,12 +59,9 @@ type NewPaneRequest struct {
 // client-focus guarantee. The returned [Pane] is freshly materialized in the
 // receiver SessionID and WindowID rather than by canonical ID-only refresh.
 //
-// A transport or context error can be delivery-ambiguous and no rollback is
-// attempted. If tmux printed a valid [PaneID] before that error, or exact
-// refresh fails after creation, NewPane returns a partial Pane containing the
-// receiver SessionID and WindowID and the new PaneID. Other failures return a
-// zero Pane. See [NewPaneRequest], [ErrVersionTooLow],
-// [ErrInvalidCommandOutput], and [CommandError].
+// If tmux reports a [PaneID] before a transport or refresh failure, the partial
+// result includes the receiver SessionID and WindowID. Other failures return
+// zero; creation is not rolled back.
 func (w Window) NewPane(ctx context.Context, request NewPaneRequest) (Pane, error) {
 	request = captureNewPaneRequest(request)
 	target, err := exactWindowTarget(w)
@@ -82,11 +76,9 @@ func (w Window) NewPane(ctx context.Context, request NewPaneRequest) (Pane, erro
 // winlink; it is not a global client-focus guarantee. The returned [Pane] is
 // freshly materialized in the receiver SessionID and WindowID.
 //
-// A transport or context error can be delivery-ambiguous and no rollback is
-// attempted. If tmux printed a valid [PaneID] before that error, or exact
-// refresh fails after creation, NewPane returns a partial Pane containing the
-// receiver SessionID and WindowID and the new PaneID. Other failures return a
-// zero Pane. See [NewPaneRequest] and [ErrVersionTooLow].
+// If tmux reports a [PaneID] before a transport or refresh failure, the partial
+// result includes the receiver SessionID and WindowID. Other failures return
+// zero; creation is not rolled back.
 func (p Pane) NewPane(ctx context.Context, request NewPaneRequest) (Pane, error) {
 	request = captureNewPaneRequest(request)
 	target, err := exactPaneTarget(p)

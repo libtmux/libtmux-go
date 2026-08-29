@@ -27,7 +27,8 @@ type DisplayMessageRequest struct {
 	AllFormats bool
 	// Verbose requests verbose tmux output.
 	Verbose bool
-	// NoExpand disables format expansion; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// NoExpand disables format expansion and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	NoExpand bool
 	// TargetClient selects the stable client receiving the display; zero omits -c.
 	TargetClient ClientName
@@ -42,7 +43,8 @@ type DisplayMessageRequest struct {
 type PaneDisplayMessageRequest struct {
 	// DisplayMessageRequest supplies the shared display options.
 	DisplayMessageRequest
-	// UpdatePane updates pane state; tmux before 3.6 refuses it; see UnsupportedPolicy.
+	// UpdatePane updates pane state and requires tmux 3.6; see
+	// UnsupportedPolicy.
 	UpdatePane bool
 }
 
@@ -64,9 +66,9 @@ type displayMessageValues struct {
 // DisplayMessage displays or prints a server-scoped tmux message. Print
 // returns an owned stdout slice even when tmux exits nonzero; completed stderr
 // is delivered synchronously through [WarningCommandStderr], not returned as a
-// completed-error classification. Unsupported flags and completed stderr reach
-// the caller-goroutine [WarningHandler] before this call returns. Cancellation
-// does not prove display did not occur.
+// completed-error classification. Unsupported flags follow [UnsupportedPolicy].
+// Any warnings run on the caller goroutine before return. Cancellation does not
+// prove display did not occur.
 func (s Server) DisplayMessage(
 	ctx context.Context,
 	request DisplayMessageRequest,
@@ -80,9 +82,8 @@ func (s Server) DisplayMessage(
 
 // DisplayMessage displays or prints a message at this window's exact target.
 // Print returns an owned stdout slice even on a completed nonzero exit;
-// completed stderr synchronously reaches the caller-goroutine [WarningHandler]
-// as [WarningCommandStderr]. NoExpand may synchronously reach that handler
-// before the reduced command runs and before this call returns; context
+// completed stderr reaches [WarningHandler] as [WarningCommandStderr]. NoExpand
+// follows [UnsupportedPolicy]. Warnings run synchronously before return; context
 // cancellation does not prove display did not occur.
 func (w Window) DisplayMessage(
 	ctx context.Context,
@@ -101,11 +102,10 @@ func (w Window) DisplayMessage(
 
 // DisplayMessage displays or prints a message at this pane's exact target.
 // Embedded NoExpand requires tmux 3.4 and UpdatePane requires tmux 3.6; each
-// otherwise synchronously reaches the caller-goroutine [WarningHandler] before
-// its reduced command runs and before this call returns. Print returns an owned
-// stdout slice even on a completed nonzero exit. Completed stderr synchronously
-// reaches that handler as [WarningCommandStderr], not an error; cancellation
-// does not prove display or pane update did not occur.
+// follows [UnsupportedPolicy]. Print returns an owned stdout slice even on a
+// completed nonzero exit. Completed stderr synchronously reaches
+// [WarningHandler] as [WarningCommandStderr], not an error; cancellation does
+// not prove display or pane update did not occur.
 func (p Pane) DisplayMessage(
 	ctx context.Context,
 	request PaneDisplayMessageRequest,

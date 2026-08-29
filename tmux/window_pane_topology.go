@@ -62,8 +62,7 @@ const (
 // Target must be a complete pane handle in the receiver's exact winlink and
 // must be proven to share a daemon through connection state or the same
 // nonempty SocketPath; matching socket names alone are insufficient. Invalid
-// values are rejected before execution. The request is copied for the call,
-// retained nowhere, and is supported on tmux 3.2a or later.
+// values are rejected before execution.
 type WindowSelectPaneRequest struct {
 	// Target selects one exact pane in the receiver winlink; a zero Pane omits
 	// this choice.
@@ -79,9 +78,7 @@ type WindowSelectPaneRequest struct {
 // enums prevent conflicting direction, mark, and input flags. Its zero value
 // selects the receiver. Mark rejects every other option. Input rejects
 // Direction and KeepZoom because changing input does not select a pane. These
-// combinations and enum ranges are validated before execution. The request
-// contains no retained caller-owned storage and is supported on tmux 3.2a or
-// later.
+// combinations and enum ranges are validated before execution.
 type PaneSelectRequest struct {
 	// Direction selects a pane relative to the receiver; zero selects the
 	// receiver unless Mark or Input is set.
@@ -99,8 +96,7 @@ type PaneSelectRequest struct {
 // LastPaneRequest configures last-pane on tmux 3.2a or later. Its zero value
 // selects the previously active pane. Input and KeepZoom are mutually
 // exclusive and are validated before execution; an Input mode changes the
-// previous pane's input state without selecting it. The request contains no
-// retained caller-owned storage.
+// previous pane's input state without selecting it.
 type LastPaneRequest struct {
 	// Input changes the previous pane's input state; zero performs selection.
 	Input PaneInputMode
@@ -122,9 +118,8 @@ const (
 	RotateWindowDown
 )
 
-// RotateWindowRequest configures rotate-window on tmux 3.2a or later. Its zero
-// value uses tmux's default rotation. Enum range validation happens
-// before execution; the request contains no retained caller-owned storage.
+// RotateWindowRequest configures rotate-window. Its zero value uses tmux's
+// default rotation; enum validation happens before execution.
 type RotateWindowRequest struct {
 	// Direction selects the rotation direction; zero uses tmux's default.
 	Direction RotateWindowDirection
@@ -136,8 +131,7 @@ type RotateWindowRequest struct {
 // tmux 3.2a or later. Its zero value is invalid because Target must be a
 // complete Window handle. The endpoints must be proven to share a daemon
 // through connection state or the same nonempty SocketPath; matching socket
-// names alone are insufficient. Handles are copied for the call and retained
-// nowhere. Validation completes before execution.
+// names alone are insufficient. Validation completes before execution.
 type SwapWindowRequest struct {
 	// Target is the exact other winlink to swap with the receiver.
 	Target Window
@@ -147,8 +141,6 @@ type SwapWindowRequest struct {
 
 // WindowSwapResult contains both original stable window identities in their
 // post-swap exact winlink views. Its zero value contains no usable endpoints.
-// Returned models are newly materialized snapshots; the result owns its value
-// fields and is supported on tmux 3.2a or later.
 type WindowSwapResult struct {
 	// Window is the receiver's original WindowID at its post-swap exact winlink.
 	Window Window
@@ -163,9 +155,8 @@ type WindowSwapResult struct {
 // insufficient. Size and Percentage are mutually exclusive. Invalid enum,
 // target, size, and percentage values are rejected before execution.
 //
-// Pointer values are read during the call and retained nowhere; nil omits a
-// size mode, a nonnil pointer is explicit, and callers must not mutate it
-// concurrently. Other request values are copied for the call and not retained.
+// Size pointers are read during the call and not retained; nil omits the mode
+// and nonnil is explicit. Do not mutate them concurrently.
 type MovePaneRequest struct {
 	// TargetPane selects an exact destination pane; a zero Pane omits it.
 	TargetPane Pane
@@ -183,16 +174,8 @@ type MovePaneRequest struct {
 	Percentage *int
 }
 
-// JoinPaneRequest configures join-pane on tmux 3.2a or later. Its zero value is
-// invalid: exactly one complete TargetPane or TargetWindow handle is required.
-// Cross-object handles must be proven to share a daemon through connection
-// state or the same nonempty SocketPath; matching socket names alone are
-// insufficient. Size and Percentage are mutually exclusive. Invalid enum,
-// target, size, and percentage values are rejected before execution.
-//
-// Pointer values are read during the call and retained nowhere; nil omits a
-// size mode, a nonnil pointer is explicit, and callers must not mutate it
-// concurrently. Other request values are copied for the call and not retained.
+// JoinPaneRequest configures join-pane with the same target, cross-daemon,
+// sizing, validation, and pointer-ownership rules as [MovePaneRequest].
 type JoinPaneRequest struct {
 	// TargetPane selects an exact destination pane; a zero Pane omits it.
 	TargetPane Pane
@@ -213,8 +196,7 @@ type JoinPaneRequest struct {
 // BreakPaneRequest configures break-pane on tmux 3.2a or later. Its zero value
 // moves the receiver to a detached new window with tmux's default name, except
 // for the documented raw-version 3.7 workaround in [Pane.BreakPane]. Empty
-// Name cannot be distinguished from omission. Name is validated before the
-// version probe; request values are copied for the call and retained nowhere.
+// Name means omission and is validated before the version probe.
 type BreakPaneRequest struct {
 	// Attach lets the new winlink become current in the receiver session.
 	Attach bool
@@ -241,8 +223,7 @@ const (
 // Direction is required. An explicit Target must differ from the receiver and
 // must be proven to share a daemon through connection state or the same
 // nonempty SocketPath; matching socket names alone are insufficient. Invalid
-// choices are rejected before execution. Request values are copied for the
-// call and retained nowhere.
+// choices are rejected before execution.
 type SwapPaneRequest struct {
 	// Target selects an exact other pane; a zero Pane omits it.
 	Target Pane
@@ -257,8 +238,7 @@ type SwapPaneRequest struct {
 // PaneSwapResult contains original stable pane identities in their post-swap
 // exact linked-pane views. Its zero value contains no usable endpoints. Target
 // is zero for a directional swap because tmux does not report the adjacent
-// pane identity. Returned models are newly materialized snapshots; the result
-// owns its value fields and is supported on tmux 3.2a or later.
+// pane identity.
 type PaneSwapResult struct {
 	// Pane is the receiver's original PaneID at its post-swap exact view.
 	Pane Pane
@@ -273,10 +253,8 @@ type PaneSwapResult struct {
 // view. The returned [Pane] is the freshly materialized active pane in the
 // receiver context, not a canonical ID-only view.
 //
-// A transport or context error can be delivery-ambiguous and no rollback is
-// attempted. Command or refresh failure returns a zero Pane because active-pane
-// selection cannot return reliable partial identity. Invalid requests match
-// [ErrInvalidRequest].
+// Command or refresh failures return zero because active-pane selection has no
+// reliable partial identity. Transport errors are delivery-ambiguous.
 func (w Window) SelectPane(
 	ctx context.Context,
 	request WindowSelectPaneRequest,
@@ -329,9 +307,7 @@ func (w Window) SelectPane(
 // input state without selection. None of these modes selects the window in its
 // session or promises client focus.
 //
-// If the command succeeds but exact refresh fails, Select returns the receiver
-// with that error; other command failures return a zero Pane. A transport or
-// context error can be delivery-ambiguous and no rollback is attempted.
+// A refresh failure returns the receiver with the error; earlier failures return zero.
 func (p Pane) Select(ctx context.Context, request PaneSelectRequest) (Pane, error) {
 	target, err := exactPaneTarget(p)
 	if err != nil {
@@ -358,9 +334,7 @@ func (p Pane) Select(ctx context.Context, request PaneSelectRequest) (Pane, erro
 // selecting it; the returned [Pane] is still the freshly materialized active
 // pane in the receiver context.
 //
-// A transport or context error can be delivery-ambiguous and no rollback is
-// attempted. Command or refresh failure returns a zero Pane because the active
-// view cannot be identified reliably without refresh.
+// Command or refresh failures return zero because the active view needs refresh.
 func (w Window) LastPane(ctx context.Context, request LastPaneRequest) (Pane, error) {
 	target, err := exactWindowTarget(w)
 	if err != nil {
@@ -394,9 +368,7 @@ func (w Window) LastPane(ctx context.Context, request LastPaneRequest) (Pane, er
 // selecting the window or promising client focus. It returns a freshly
 // materialized exact [Window] preserving the receiver SessionID, rather than
 // a canonical ID-only view. If the command succeeds but refresh fails, Rotate
-// returns the receiver with that error; other command failures return a zero
-// Window. A transport or context error can be delivery-ambiguous and no
-// rollback is attempted.
+// returns the receiver with that error; earlier failures return zero.
 func (w Window) Rotate(ctx context.Context, request RotateWindowRequest) (Window, error) {
 	target, err := exactWindowTarget(w)
 	if err != nil {
@@ -505,9 +477,7 @@ func rotateWindowArguments(
 // Swap returns both freshly materialized exact endpoint views. If exact
 // refresh fails after the command, it returns a predicted [WindowSwapResult]
 // carrying both stable IDs and post-swap session/index contexts with the
-// error. Other failures return a zero result. A transport or context error can
-// be delivery-ambiguous and no rollback is attempted. See [SwapWindowRequest]
-// and [ErrInvalidRequest].
+// error. Earlier failures return zero; transport errors are delivery-ambiguous.
 func (w Window) Swap(ctx context.Context, request SwapWindowRequest) (WindowSwapResult, error) {
 	receiverTarget, err := exactWindowTarget(w)
 	if err != nil {
@@ -564,8 +534,7 @@ func (w Window) Swap(ctx context.Context, request SwapWindowRequest) (WindowSwap
 //
 // If exact refresh fails after the command, Move returns a partial Pane with
 // the receiver PaneID and predicted destination context. Other failures return
-// a zero Pane. A transport or context error can be delivery-ambiguous and no
-// rollback is attempted. See [MovePaneRequest] and [ErrInvalidRequest].
+// zero. Transport errors are delivery-ambiguous and no rollback is attempted.
 func (p Pane) Move(ctx context.Context, request MovePaneRequest) (Pane, error) {
 	return p.relocate(ctx, "move-pane", paneRelocateRequestFromValues(
 		request.TargetPane,
@@ -578,21 +547,8 @@ func (p Pane) Move(ctx context.Context, request MovePaneRequest) (Pane, error) {
 	))
 }
 
-// Join relocates the receiver pane into one exact destination with tmux's
-// join-pane command. Unless Attach is set, the destination's active-pane
-// selection remains unchanged; Attach is not a global client-focus guarantee.
-// The returned [Pane] is freshly materialized in the destination SessionID and
-// WindowID rather than by canonical ID-only refresh.
-//
-// Removing the sole pane destroys the emptied source window and all of its
-// winlinks. Affected source sessions preserve their current selection unless
-// that window was current, in which case they select another. A session left
-// without windows is destroyed and detaches its clients.
-//
-// If exact refresh fails after the command, Join returns a partial Pane with
-// the receiver PaneID and predicted destination context. Other failures return
-// a zero Pane. A transport or context error can be delivery-ambiguous and no
-// rollback is attempted. See [JoinPaneRequest] and [ErrInvalidRequest].
+// Join relocates the receiver with join-pane. Its selection, source-destruction,
+// partial-result, and delivery behavior matches [Pane.Move].
 func (p Pane) Join(ctx context.Context, request JoinPaneRequest) (Pane, error) {
 	return p.relocate(ctx, "join-pane", paneRelocateRequestFromValues(
 		request.TargetPane,
@@ -610,20 +566,14 @@ func (p Pane) Join(ctx context.Context, request JoinPaneRequest) (Pane, error) {
 // client-focus guarantee. The returned [Window] is freshly materialized in the
 // receiver SessionID rather than by canonical ID-only refresh.
 //
-// Before tmux 3.6, breaking the sole pane can produce no printed identity and
-// relink the pane while retaining its old WindowID; BreakPane recognizes that
-// exact branch and refreshes the old identity. Only a raw version string equal
-// to "3.7" uses the placeholder-and-rename workaround. On exactly 3.7, empty
-// Name can leave the new window named "libtmux". A nonempty Name requires a
-// second rename, which may fail after the window was created. Versions such as
-// 3.7a, 3.7b and 3.7c do not take this workaround.
+// Before tmux 3.6, the sole-pane path may print no ID and retain WindowID; this
+// method refreshes that identity. Raw version "3.7" alone uses a placeholder
+// name and optional second rename; with an empty Name, the window may remain
+// named "libtmux". Suffixed 3.7 releases do not use the workaround.
 //
-// If tmux prints a valid WindowID before a transport error, a 3.7 rename fails,
-// or exact refresh fails, BreakPane returns the known or predicted window
-// identity and receiver session with an Index of -1 and the error. Other
-// failures return a zero Window. A transport or context error can be
-// delivery-ambiguous and no rollback is attempted. See
-// [ErrInvalidCommandOutput] and [CommandError].
+// After a reported ID, rename failure, or refresh failure, the partial result
+// carries the known WindowID and receiver session with Index -1. Earlier
+// failures return zero; no mutation is rolled back.
 func (p Pane) BreakPane(ctx context.Context, request BreakPaneRequest) (Window, error) {
 	if err := validateServerCommandArgument("break-pane", "Name", request.Name, true); err != nil {
 		return Window{}, err
@@ -707,9 +657,8 @@ func (p Pane) BreakPane(ctx context.Context, request BreakPaneRequest) (Window, 
 //
 // An explicit swap returns freshly materialized exact views for both original
 // PaneIDs. If exact refresh fails after the command, Swap returns a predicted
-// result carrying every identity it can know with the error. Other failures
-// return a zero result. A transport or context error can be delivery-ambiguous
-// and no rollback is attempted. See [SwapPaneRequest] and [ErrInvalidRequest].
+// result carrying every known identity with the error. Earlier failures return
+// zero; transport errors are delivery-ambiguous.
 func (p Pane) Swap(ctx context.Context, request SwapPaneRequest) (PaneSwapResult, error) {
 	receiverTarget, err := exactPaneTarget(p)
 	if err != nil {

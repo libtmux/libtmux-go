@@ -169,9 +169,8 @@ func (w Window) Unlink(ctx context.Context, request UnlinkWindowRequest) error {
 //
 // Move returns a canonical freshly materialized [Window], which may use a
 // different linked session than the destination. If the command succeeds but
-// refresh fails, it returns the receiver with that error. Other command errors
-// return a zero Window. A transport or context error can be delivery-ambiguous
-// and no rollback is attempted.
+// refresh fails, it returns the receiver with that error. Earlier failures
+// return zero; transport errors are delivery-ambiguous.
 func (w Window) Move(ctx context.Context, request MoveWindowRequest) (Window, error) {
 	source, err := exactWindowTarget(w)
 	if err != nil {

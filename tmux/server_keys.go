@@ -41,7 +41,8 @@ type UnbindKeyRequest struct {
 type ListKeysRequest struct {
 	// KeyTable limits output to one key table.
 	KeyTable *string
-	// Format selects output format; tmux before 3.7 refuses it; see UnsupportedPolicy.
+	// Format selects output format and requires tmux 3.7; see
+	// UnsupportedPolicy.
 	Format *string
 }
 
@@ -138,9 +139,7 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 }
 
 // ListKeys returns an owned snapshot of raw tmux key-binding lines. Format
-// requires tmux 3.7 or newer; older versions synchronously deliver a warning to
-// the caller-goroutine [WarningHandler] before running the reduced command with
-// tmux's default format.
+// requires tmux 3.7 and follows [UnsupportedPolicy].
 // tmux 3.7, 3.7a, 3.7b, and 3.7c redirect a table's sole matching binding to a
 // client status message, leaving stdout empty; this method preserves that
 // upstream and Python behavior. Development tmux has corrected the issue.

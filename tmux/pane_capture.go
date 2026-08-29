@@ -64,10 +64,9 @@ func CaptureLine(line int) CapturePosition {
 }
 
 // CapturePaneRequest configures pane capture. Its zero value captures the
-// visible screen with tmux's default text handling. Version-gated flags are
-// checked synchronously: unsupported flags are omitted and reported through
-// the server's [WarningHandler]. [CaptureBoundary] selects the start of history
-// for Start and the end of the visible pane for End.
+// visible screen with tmux's default text handling. Version-gated flags follow
+// [UnsupportedPolicy]. [CaptureBoundary] selects the start of history for Start
+// and the end of the visible pane for End.
 type CapturePaneRequest struct {
 	// Start selects the first captured line. Empty uses tmux's visible-screen
 	// default; CaptureBoundary selects the start of history.
@@ -86,26 +85,26 @@ type CapturePaneRequest struct {
 	// PreserveTrailing preserves trailing spaces at each line end.
 	PreserveTrailing bool
 	// TrimTrailing omits trailing positions without characters. It requires
-	// tmux 3.4; older versions warn and omit the flag.
+	// tmux 3.4; see UnsupportedPolicy.
 	TrimTrailing bool
 	// AlternateScreen captures the alternate screen without history.
 	AlternateScreen bool
 	// Quiet suppresses tmux's error when AlternateScreen is requested but no
 	// alternate screen exists.
 	Quiet bool
-	// ModeScreen captures the active mode screen. It requires tmux 3.6; older
-	// versions warn and omit the flag.
+	// ModeScreen captures the active mode screen. It requires tmux 3.6; see
+	// UnsupportedPolicy.
 	ModeScreen bool
 	// Pending captures only the beginning of an incomplete escape sequence.
 	Pending bool
-	// Hyperlinks captures hyperlink metadata for the selected lines. It
-	// requires tmux 3.7; older versions warn and omit the flag.
+	// Hyperlinks captures hyperlink metadata for the selected lines. It requires
+	// tmux 3.7; see UnsupportedPolicy.
 	Hyperlinks bool
 	// LineNumbers prefixes each line with its tmux line number. It requires
-	// tmux 3.7; older versions warn and omit the flag.
+	// tmux 3.7; see UnsupportedPolicy.
 	LineNumbers bool
 	// LineFlags prefixes each line with tmux line metadata flags. It requires
-	// tmux 3.7; older versions warn and omit the flag.
+	// tmux 3.7; see UnsupportedPolicy.
 	LineFlags bool
 }
 
@@ -113,14 +112,13 @@ type CapturePaneRequest struct {
 // It returns a caller-owned slice. A completed nonzero exit or stderr does not
 // become a [CommandError]; any stdout is returned without an error.
 //
-// The result is the pane's visible screen rather than a stream, and includes a
-// shell's echo of whatever [Pane.SendKeys] typed. Compare whole lines when
-// waiting for output; see "Reading a pane back" in the package documentation.
+// This is a point-in-time capture rather than a stream; the zero request reads
+// the visible screen. It may include a shell's echo of [Pane.SendKeys] input.
+// Compare whole lines when polling; use [ControlClient.NextNotification] or
+// [Server.WaitFor] when the application exposes a stream or explicit signal.
 //
-// Noncanonical positions return a [CaptureRequestError] before execution. A
-// version probe may fail before capture when a gated option is requested.
-// Transport and context failures return any caller-owned partial stdout with
-// the error; context cancellation remains detectable with [errors.Is].
+// Invalid positions fail before execution. Transport and context failures return
+// any partial stdout with the error.
 func (p Pane) Capture(
 	ctx context.Context,
 	request CapturePaneRequest,
@@ -133,9 +131,8 @@ func (p Pane) Capture(
 // as caller-owned stdout bytes. It preserves tmux's output delimiters and
 // trailing newlines after tmux has interpreted the pane's terminal contents.
 //
-// Its request, completed-exit, stderr, version, transport, and context behavior
-// matches [Pane.Capture]. A transport or context error returns any captured
-// partial stdout bytes with the error.
+// Its validation and failure behavior match [Pane.Capture], including returning
+// partial bytes with transport or context errors.
 func (p Pane) CaptureBytes(
 	ctx context.Context,
 	request CapturePaneRequest,
@@ -149,9 +146,8 @@ func (p Pane) CaptureBytes(
 // printed output is returned. A completed nonzero exit or stderr does not
 // become a [CommandError].
 //
-// Invalid requests fail before execution. Transport and context errors remain
-// detectable with [errors.Is] but are delivery-ambiguous: the buffer may already
-// have changed when the local wait is canceled.
+// Invalid requests fail before execution. Transport and context errors are
+// delivery-ambiguous: the buffer may already have changed.
 func (p Pane) CaptureToBuffer(
 	ctx context.Context,
 	buffer string,
@@ -169,32 +165,18 @@ var captureFileSequence atomic.Uint64
 // CaptureToFile captures the receiver's exact linked pane through a tmux buffer
 // and the file at path, returning the same lines [Pane.Capture] returns.
 //
-// It exists because a printed capture cannot cross a control-mode connection,
-// so [Pane.Capture] and [Pane.CaptureBytes] start a tmux process even on a
-// handle that selected an [Engine], or return [ErrEngineFallback] under the
-// rejecting policy. Every tmux command this issues prints nothing, so all of
-// them ride the engine and a watch loop built on it starts no process at all.
-// That is the trade in full: on a handle with no engine this is three tmux
-// processes where [Pane.Capture] is one.
-//
-// It returns the lines it captured, where [Pane.CaptureToBuffer] returns only
-// an error, because a tmux buffer needs a further command to read while this
-// has already read the file. That makes it usable where [Pane.Capture] was.
+// Printed captures cannot safely cross a control connection, so [Pane.Capture]
+// and [Pane.CaptureBytes] use a subprocess or reject fallback. This method's
+// three tmux commands remain engine-eligible; a control engine carries them,
+// while other engines follow the fallback policy. With no engine it costs three
+// processes.
 //
 // path must name a file the tmux server can write and this process can read.
-// tmux writes it, so a path only this process can reach fails in tmux rather
-// than here. It is replaced on every call and left behind on return: the caller
-// owns it, and its exact bytes are what [Pane.CaptureBytes] would have returned.
-// The tmux buffer is this package's own and is deleted before returning, though
-// a failure after the capture can leave one named for this process.
+// It is replaced and left for the caller. Concurrent calls must use distinct
+// paths. The scratch tmux buffer is deleted before return when possible.
 //
-// Concurrent calls sharing one path race for its contents. Give each caller its
-// own path.
-//
-// Its request validation, version gating, and context behavior match
-// [Pane.Capture]. Its failures do not: a printed capture hands back whatever
-// tmux printed before failing, while this reports a failure of any of its three
-// commands, or of the read, as an error with no lines.
+// Validation and version gating match [Pane.Capture]. Capture, save, and
+// file-read failures return an error with no lines; buffer cleanup is best effort.
 func (p Pane) CaptureToFile(
 	ctx context.Context,
 	path string,
@@ -364,14 +346,9 @@ func (p Pane) capturePane(
 		return CommandResult{ExitCode: -1}, err
 	}
 	if !toBuffer {
-		// A printed capture is arbitrary pane content on tmux's stdout, and
-		// control mode does not escape a command's output the way it escapes
-		// %output. A pane holding a line identical to the frame's closing
-		// guard therefore closes the frame early: this read is truncated, and
-		// tmux's real guard then arrives with no frame open and fails the
-		// connection for every later command on it. So a printed capture stays
-		// on a tmux process whatever engine the handle selected. A capture into
-		// a tmux buffer prints nothing and carries no pane content.
+		// Control mode does not escape command stdout. Pane content matching a
+		// closing guard could truncate the reply and desynchronize later commands,
+		// so printed captures always use a subprocess.
 		p.server = p.server.withoutEngine()
 	}
 	return p.literalCmd(ctx, arguments...)
