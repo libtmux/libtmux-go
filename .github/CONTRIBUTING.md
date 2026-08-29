@@ -118,8 +118,16 @@ too, quoted from programs that compile and run, so a snippet cannot drift from
 the code it came from. The markers, and what happens when one of them is wrong,
 are in [examples/README.md](../examples/README.md):
 
+Run generators in every module that owns them:
+
 ```console
-$ go generate ./... && git diff --exit-code
+$ for module in . mcp; do (cd "$module" && go generate ./...) || break; done
+```
+
+Then confirm that regeneration changed nothing:
+
+```console
+$ git diff --exit-code
 ```
 
 The race detector is not optional before anything ships:

@@ -91,15 +91,19 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
-          cache-dependency-path: go.mod
+          cache-dependency-path: |
+            go.mod
+            mcp/go.mod
 
       - name: Regenerate
-        run: go generate ./...
+        run: |
+          go generate ./...
+          go -C mcp generate ./...
 
       - name: Report anything regenerating changed
         run: |
           if ! git diff --exit-code; then
-            echo "::error::generated files are out of date; run 'go generate ./...'" >&2
+            echo "::error::generated files are out of date; run both module generators" >&2
             exit 1
           fi
 

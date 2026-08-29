@@ -19,6 +19,59 @@ const tmuxModulePath = "github.com/libtmux/libtmux-go"
 // modules are every module in this repository, by directory.
 var modules = []string{".", "examples", "workspace", "mcp", "benchmarks"}
 
+func TestGeneratedJobCoversEveryModuleWithGenerators(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "tests.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, module := range modules {
+		if !moduleHasGenerator(t, root, module) {
+			continue
+		}
+		command := "go generate ./..."
+		if module != "." {
+			command = "go -C " + filepath.ToSlash(module) + " generate ./..."
+		}
+		if !strings.Contains(string(workflow), command) {
+			t.Errorf("generated job does not run %q for module %s", command, module)
+		}
+	}
+}
+
+func moduleHasGenerator(t *testing.T, root, module string) bool {
+	t.Helper()
+
+	directory := filepath.Join(root, module)
+	found := false
+	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && path != directory {
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if found || filepath.Ext(path) != ".go" {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		found = strings.Contains(string(content), "//go:"+"generate ")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
+
 // publishedModules maps a module of this repository that is tagged and
 // consumed to the directory holding it. examples and benchmarks are neither.
 var publishedModules = map[string]string{
