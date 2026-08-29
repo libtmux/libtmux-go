@@ -194,7 +194,7 @@ func tomlEnvironment(text []byte, table string) map[string]any {
 			continue
 		}
 		if name, value, ok := strings.Cut(trimmed, "="); ok {
-			environment[strings.TrimSpace(name)] = strings.Trim(strings.TrimSpace(value), `"`)
+			environment[strings.TrimSpace(name)] = tomlRawValue(strings.TrimSpace(value))
 		}
 	}
 	if len(environment) == 0 {
@@ -234,6 +234,10 @@ func renderTOMLTable(table string, entry map[string]any) string {
 	if len(environment) > 0 {
 		fmt.Fprintf(&out, "\n[%s.env]\n", table)
 		for _, name := range sortedKeys(environment) {
+			if raw, ok := environment[name].(tomlRawValue); ok {
+				fmt.Fprintf(&out, "%s = %s\n", name, string(raw))
+				continue
+			}
 			fmt.Fprintf(&out, "%s = %s\n", name, tomlString(fmt.Sprint(environment[name])))
 		}
 	}
@@ -283,7 +287,9 @@ func readTOMLEntry(text []byte, table string) (map[string]any, bool) {
 		value = strings.TrimSpace(value)
 		switch name {
 		case "command":
-			entry["command"] = strings.Trim(value, `"`)
+			if decoded, ok := tomlStringValue(value); ok {
+				entry["command"] = decoded
+			}
 		case "args":
 			var arguments []any
 			if err := json.Unmarshal([]byte(value), &arguments); err == nil {
@@ -294,10 +300,38 @@ func readTOMLEntry(text []byte, table string) (map[string]any, bool) {
 	// The environment lives in a sub-table, and status needs it: the marker
 	// this tool sets is in there, and without it a swapped entry reads as
 	// somebody else's.
-	if environment := tomlEnvironment(text, table); environment != nil {
+	if rawEnvironment := tomlEnvironment(text, table); rawEnvironment != nil {
+		environment := make(map[string]any, len(rawEnvironment))
+		for name, raw := range rawEnvironment {
+			value := string(raw.(tomlRawValue))
+			if decoded, ok := tomlStringValue(value); ok {
+				environment[name] = decoded
+			} else {
+				environment[name] = value
+			}
+		}
 		entry["env"] = environment
 	}
 	return entry, true
+}
+
+func tomlStringValue(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) < 2 {
+		return "", false
+	}
+	switch value[0] {
+	case '\'':
+		if end := strings.IndexByte(value[1:], '\''); end >= 0 {
+			return value[1 : end+1], true
+		}
+	case '"':
+		var decoded string
+		if err := json.NewDecoder(strings.NewReader(value)).Decode(&decoded); err == nil {
+			return decoded, true
+		}
+	}
+	return "", false
 }
 
 // ---------------------------------------------------------------------------

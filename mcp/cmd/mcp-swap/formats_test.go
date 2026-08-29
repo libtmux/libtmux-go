@@ -95,6 +95,37 @@ func TestATOMLSwapAddsATableWhenThereIsNone(t *testing.T) {
 	}
 }
 
+func TestATOMLSwapPreservesEnvironmentValueSyntax(t *testing.T) {
+	t.Parallel()
+	const config = `[mcp_servers.tmux]
+command = "old"
+
+[mcp_servers.tmux.env]
+BASIC = "tab\\tquote\\\"slash\\\\"
+LITERAL = 'C:\Users\name'
+COMMENTED = "readonly" # why this is restricted
+`
+	path := writeTemp(t, "config.toml", config)
+	target := client{
+		name: "codex", path: path, key: "mcp_servers",
+		format: formatTOML, dialect: dialectStandard,
+	}
+
+	if err := writeEntry(target, devEntry()); err != nil {
+		t.Fatal(err)
+	}
+	after := readFile(t, path)
+	for _, line := range []string{
+		`BASIC = "tab\\tquote\\\"slash\\\\"`,
+		`LITERAL = 'C:\Users\name'`,
+		`COMMENTED = "readonly" # why this is restricted`,
+	} {
+		if !strings.Contains(after, line) {
+			t.Errorf("the swap changed %q:\n%s", line, after)
+		}
+	}
+}
+
 const opencodeConfig = `{
   // Why this file looks the way it does.
   "$schema": "https://opencode.ai/config.json",
