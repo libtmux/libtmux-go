@@ -1401,8 +1401,11 @@ func ExampleServer_WaitFor_paneCompletion() {
 	}
 
 	// The command signals the channel itself, so the wait ends when the work
-	// ends rather than when a matching line happens to reach the screen.
-	command := "printf 'building\n'; tmux -L " + socket + " wait-for -S built"
+	// ends rather than when a matching line happens to reach the screen. It
+	// names the server's own binary because a pane's PATH may hold another
+	// tmux, and a client cannot signal a server built from a different release.
+	command := "printf 'building\n'; " +
+		server.Executable() + " -L " + socket + " wait-for -S built"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
