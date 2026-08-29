@@ -1,5 +1,5 @@
 // Package tmux provides a typed, context-aware API for tmux 3.2a through
-// tmux 3.7b.
+// tmux 3.7c.
 //
 //	import "github.com/libtmux/libtmux-go/tmux"
 //

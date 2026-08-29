@@ -12,7 +12,7 @@ const (
 	// MinimumSupportedVersion is the oldest tmux feature level supported by this package.
 	MinimumSupportedVersion = "3.2a"
 	// MaximumTestedVersion is the newest numbered tmux feature level covered by
-	// this package's tests. That feature level is tested against tmux 3.7b.
+	// this package's tests. That feature level is tested against tmux 3.7c.
 	MaximumTestedVersion = "3.7"
 
 	latestTestedMajor = 3

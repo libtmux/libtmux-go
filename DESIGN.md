@@ -12,8 +12,10 @@ This document defines the architecture of the Go module.
   routine, and the syntax it unlocks is taken rather than left on the table. No
   runtime dependency is accepted without a measured need and a focused bakeoff;
   the implementation is standard library only.
-- The tmux floor remains 3.2a. Format fields and command flags retain the same
-  version gates as the Python library.
+- The core tmux floor remains 3.2a. Format fields and command flags retain the
+  same version gates as the Python library. The MCP consumer has a 3.6 floor:
+  its retained control clients require `no-detach-on-destroy` to stay bound to
+  the same daemon after their startup session is destroyed.
 - Operations that may wait for or execute tmux take `context.Context` first.
   Contexts are never stored in objects.
 - Ordinary APIs block. Callers decide whether to start goroutines.

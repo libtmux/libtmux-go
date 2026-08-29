@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run every module's tests against every tmux release this repository supports.
+# Run each module's compatible tests against the tmux releases it supports.
 #
 # The ordinary gate runs against whichever tmux is on PATH, which is one
 # version, and version-specific breakage is not hypothetical: tmux 3.4 stopped
@@ -9,10 +9,12 @@
 # either.
 #
 # It is separate from the ordinary gate because it is slow -- five modules
-# against eight tmux builds -- and because it needs a matrix of tmux builds a
-# checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
-# <version>/bin/tmux, or let it look where the matrix is usually built. Narrow
-# what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS.
+# against nine tmux builds -- and because it needs a matrix of tmux builds a
+# checkout does not come with. MCP rejects tmux older than 3.6, so those lanes
+# run its floor test instead of its full suite. Point LIBTMUX_TMUX_MATRIX at a
+# directory holding <version>/bin/tmux, or let it look where the matrix is
+# usually built. Narrow what runs with LIBTMUX_MATRIX_MODULES and
+# LIBTMUX_MATRIX_VERSIONS.
 
 set -uo pipefail
 
@@ -28,7 +30,7 @@ Set LIBTMUX_TMUX_MATRIX to a directory holding one subdirectory per version,
 each with bin/tmux inside it:
 
     \$LIBTMUX_TMUX_MATRIX/3.2a/bin/tmux
-    \$LIBTMUX_TMUX_MATRIX/3.7b/bin/tmux
+    \$LIBTMUX_TMUX_MATRIX/3.7c/bin/tmux
 
 Skipping rather than failing: a checkout without a matrix can still run every
 other gate, and reporting a pass this did not earn would be worse than saying
@@ -77,8 +79,21 @@ for version in "${versions[@]}"; do
     for module in ${LIBTMUX_MATRIX_MODULES:-. examples workspace mcp benchmarks}; do
         directory="$repository_root/$module"
         [[ -f "$directory/go.mod" ]] || continue
-        if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" go test ./... > "$log" 2>&1); then
-            printf '  %-14s ok\n' "$module"
+        test_command=(go test -count=1 ./...)
+        test_label=ok
+        case "$version:$module" in
+            3.2a:mcp|3.3a:mcp|3.4:mcp|3.5:mcp)
+                test_command=(
+                    go test
+                    -count=1
+                    -run '^TestInstanceConnectRejectsInstalledTmuxBelowMCPFloor$'
+                    .
+                )
+                test_label='floor rejection ok'
+                ;;
+        esac
+        if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" "${test_command[@]}" > "$log" 2>&1); then
+            printf '  %-14s %s\n' "$module" "$test_label"
         else
             printf '  %-14s FAILED\n' "$module"
             grep -E '^(---|\s+[a-z_]+_test)' "$log" | head -8

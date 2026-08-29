@@ -5,6 +5,8 @@ stdout.
 
 Which tmux server it serves is chosen by flags at startup and cannot be changed
 by a client, so a client reaches only the socket the operator selected.
+It requires tmux 3.6 or newer and refuses an older binary before the MCP
+transport starts.
 
 ## Installing it
 

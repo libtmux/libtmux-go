@@ -815,7 +815,7 @@ func splitPaneArguments(
 		// "-l N%" rather than "-p N". tmux deprecated -p in 3.1 when -l
 		// learned percentages, and 3.4 stopped accepting it outright: a
 		// percentage split there fails with "size missing". The percentage
-		// form of -l works on every version this supports, 3.2a through 3.7b,
+		// form of -l works on every version this supports, 3.2a through 3.7c,
 		// so there is nothing to gate on.
 		arguments = append(arguments, "-l"+strconv.Itoa(*request.Percentage)+"%")
 	}
