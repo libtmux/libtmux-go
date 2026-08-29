@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
@@ -222,7 +223,7 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	tools.instance = instance
 	tools.runtime = runtime
 	serverOptions := &mcp.ServerOptions{
-		Instructions: callerInstructions(),
+		Instructions: tools.callerInstructions(),
 	}
 	if tools.capabilities.permits(CapabilityMetadataRead) {
 		serverOptions.CompletionHandler = tools.completeObserved
@@ -261,6 +262,7 @@ func newToolRegistry() *tools {
 		level:                safetyFromEnvironment(),
 		capabilities:         capabilities,
 		rejectedCapabilities: rejected,
+		waitCeiling:          waitCeilingFromEnvironment(),
 		dispatchers:          map[string]dispatcher{},
 		unbatchable:          map[string]struct{}{},
 		batchable:            true,
@@ -290,6 +292,7 @@ type tools struct {
 	capabilities capabilitySet
 	// Rejected values are part of the configuration snapshot reported to clients.
 	rejectedCapabilities []string
+	waitCeiling          time.Duration
 	watchers             *watchers
 	dispatchers          map[string]dispatcher
 	unbatchable          map[string]struct{}

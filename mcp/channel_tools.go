@@ -59,7 +59,7 @@ func (t *tools) waitForChannel(
 	if input.TimeoutSeconds < 0 {
 		return nil, waitForChannelOutput{}, errors.New("timeoutSeconds must not be negative")
 	}
-	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
 	output := waitForChannelOutput{
 		EffectiveTimeoutSeconds: int(timeout.Seconds()),
 		TimeoutClamped:          clamped,

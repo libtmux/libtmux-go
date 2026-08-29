@@ -110,7 +110,7 @@ func (t *tools) runCommand(
 	output := runCommandOutput{}
 	runCtx := ctx
 	if !input.Detach {
-		timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+		timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
 		output.EffectiveTimeoutSeconds = int(timeout.Seconds())
 		output.TimeoutClamped = clamped
 		var runCancel context.CancelFunc

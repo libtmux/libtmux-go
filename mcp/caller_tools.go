@@ -144,7 +144,7 @@ func (c callerIdentity) isCaller(pane tmux.Pane, socket string) *bool {
 
 // callerInstructions distinguishes tmux objects from similarly named UI
 // objects and directs clients to non-polling workflows.
-func callerInstructions() string {
+func (t *tools) callerInstructions() string {
 	var text strings.Builder
 	text.WriteString(`Drive one tmux server: sessions, windows, and panes.
 
@@ -235,9 +235,8 @@ changing tools are enabled. A tmux format may run a shell command through #(). I
 program reports success or failure by colouring a word rather than saying so,
 capture_pane with styles keeps the colour a capture strips.
 `)
-	text.WriteString("\n" + safetyFromEnvironment().describe() + "\n")
-	capabilities, _ := capabilitiesFromEnvironment()
-	text.WriteString(capabilities.describe() + "\n")
+	text.WriteString("\n" + t.level.describe() + "\n")
+	text.WriteString(t.capabilities.describe() + "\n")
 
 	caller := callerFromEnvironment()
 	if !caller.inside {

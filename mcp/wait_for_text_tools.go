@@ -139,7 +139,7 @@ func (t *tools) waitForText(
 		return nil, waitForTextOutput{}, err
 	}
 
-	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
 	started := time.Now()
 	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
 	defer waitCancel()

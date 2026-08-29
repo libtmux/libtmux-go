@@ -326,7 +326,7 @@ func (t *tools) getJob(
 		return nil, output, nil
 	}
 
-	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
 	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
 	output.TimeoutClamped = clamped
 	waitCtx, stopWait := context.WithTimeout(ctx, timeout)

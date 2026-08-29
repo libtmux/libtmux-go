@@ -27,9 +27,8 @@ const (
 // so an operator configuring both writes one thing.
 const WaitCeilingEnvironmentVariable = "LIBTMUX_MCP_WAIT_MAX_SECONDS"
 
-// waitCeiling bounds caller latency without blocking other requests. Oversized
-// waits are clamped, and each reply reports the effective timeout.
-func waitCeiling() time.Duration {
+// waitCeilingFromEnvironment resolves the per-server wait bound once.
+func waitCeilingFromEnvironment() time.Duration {
 	raw := strings.TrimSpace(os.Getenv(WaitCeilingEnvironmentVariable))
 	if raw == "" {
 		return waitCeilingDefault
@@ -46,8 +45,11 @@ func waitCeiling() time.Duration {
 
 // resolveWaitTimeout reports clamping only when the caller's explicit timeout
 // exceeded the ceiling.
-func resolveWaitTimeout(requested int) (timeout time.Duration, clamped bool) {
-	ceiling := waitCeiling()
+func (t *tools) resolveWaitTimeout(requested int) (timeout time.Duration, clamped bool) {
+	ceiling := t.waitCeiling
+	if ceiling <= 0 {
+		ceiling = waitCeilingDefault
+	}
 	timeout = time.Duration(requested) * time.Second
 	if timeout <= 0 {
 		return min(runCommandDefaultTimeout, ceiling), false

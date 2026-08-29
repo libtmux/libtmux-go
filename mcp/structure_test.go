@@ -178,6 +178,36 @@ func TestSafetyDescriptionsStateTheirBoundary(t *testing.T) {
 	}
 }
 
+func TestToolRegistryFreezesEnvironmentConfiguration(t *testing.T) {
+	t.Setenv(SafetyEnvironmentVariable, "readonly")
+	t.Setenv(CapabilitiesEnvironmentVariable, "metadata-read")
+	t.Setenv(WaitCeilingEnvironmentVariable, "7")
+	registry := newToolRegistry()
+
+	t.Setenv(SafetyEnvironmentVariable, "destructive")
+	t.Setenv(CapabilitiesEnvironmentVariable, "all")
+	t.Setenv(WaitCeilingEnvironmentVariable, "1")
+
+	instructions := registry.callerInstructions()
+	for _, frozen := range []string{
+		SafetyReadOnly.describe(),
+		newCapabilitySet([]Capability{CapabilityMetadataRead}).describe(),
+	} {
+		if !strings.Contains(instructions, frozen) {
+			t.Errorf("instructions do not use frozen configuration: %q", instructions)
+		}
+	}
+	if strings.Contains(instructions, SafetyDestructive.describe()) {
+		t.Errorf("instructions use the changed safety level: %q", instructions)
+	}
+
+	timeout, clamped := registry.resolveWaitTimeout(9)
+	if timeout.Seconds() != 7 || !clamped {
+		t.Fatalf("resolved wait = (%v, %t), want frozen seven-second ceiling",
+			timeout, clamped)
+	}
+}
+
 func TestBufferToolDescriptionsStateTheNamespaceBoundary(t *testing.T) {
 	t.Setenv(SafetyEnvironmentVariable, "destructive")
 	t.Setenv(CapabilitiesEnvironmentVariable, "all")
