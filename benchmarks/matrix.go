@@ -12,12 +12,9 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// panesPerWindow is the workload size. It is small enough to stay quick under
-// the version matrix and large enough that a per-command process cost shows up
-// against the noise.
+// panesPerWindow balances matrix runtime against visible per-command costs.
 const panesPerWindow = 6
 
-// row is one line of the table: a mode, what it spent, and what it answered.
 type row struct {
 	mode      string
 	elapsed   time.Duration
@@ -26,18 +23,12 @@ type row struct {
 	answer    string
 }
 
-// countingRunner counts the tmux processes a server starts, by wrapping the
-// runner it would have used anyway.
-//
-// Wrapping rather than replacing is what the package documentation asks for:
-// the result shape is what the rest of the package reads, and reimplementing
-// execution to count it would be measuring something else.
+// countingRunner delegates to the default runner while counting tmux processes.
 type countingRunner struct {
 	mu    sync.Mutex
 	count int
 }
 
-// runner returns a [tmux.CommandRunner] that counts and then delegates.
 func (c *countingRunner) runner() tmux.CommandRunner {
 	inner := tmux.SubprocessRunner()
 	return tmux.CommandRunnerFunc(func(
@@ -51,33 +42,28 @@ func (c *countingRunner) runner() tmux.CommandRunner {
 	})
 }
 
-// reset starts a new measurement.
 func (c *countingRunner) reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.count = 0
 }
 
-// total reports how many tmux processes have been started since the last reset.
 func (c *countingRunner) total() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.count
 }
 
-// countingEngine counts the tmux commands an engine carried. It deliberately
-// does not forward [tmux.InstanceBoundEngine]; boundEngine is the half that
-// does, and the pair is what isolates what that property saves.
+// countingEngine omits [tmux.InstanceBoundEngine] so boundEngine can isolate
+// the effect of that property.
 type countingEngine struct {
 	inner tmux.Engine
 	mu    sync.Mutex
 	count int
 }
 
-// Supports reports what the wrapped engine supports.
 func (e *countingEngine) Supports(kind tmux.CommandKind) bool { return e.inner.Supports(kind) }
 
-// Run counts one command and passes it to the wrapped engine.
 func (e *countingEngine) Run(
 	ctx context.Context,
 	kind tmux.CommandKind,
@@ -89,28 +75,22 @@ func (e *countingEngine) Run(
 	return e.inner.Run(ctx, kind, request)
 }
 
-// reset starts a new measurement.
 func (e *countingEngine) reset() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.count = 0
 }
 
-// total reports how many commands have been carried since the last reset.
 func (e *countingEngine) total() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.count
 }
 
-// boundEngine is countingEngine plus the property it withholds.
 type boundEngine struct{ *countingEngine }
 
-// InstanceBound reports that consecutive commands reached one tmux server,
-// which staying connected is what proves.
 func (boundEngine) InstanceBound() bool { return true }
 
-// harness is one throwaway tmux server and the counter watching it.
 type harness struct {
 	server    tmux.Server
 	session   tmux.Session
@@ -118,13 +98,7 @@ type harness struct {
 	directory string
 }
 
-// newHarness starts a tmux server of this benchmark's own and creates the
-// session the workload runs in.
-//
-// The socket path and the configuration file are both this program's, so the
-// numbers do not move with whatever the person running it has configured, and
-// the inherited tmux variables are dropped so running this from inside a pane
-// does not reach the server hosting it.
+// newHarness isolates the socket, configuration, and inherited tmux variables.
 func newHarness(ctx context.Context) (*harness, error) {
 	root := os.Getenv("TMUX_TMPDIR")
 	if root == "" {
@@ -162,7 +136,6 @@ func newHarness(ctx context.Context) (*harness, error) {
 	}, nil
 }
 
-// close ends the tmux server and removes what it left behind.
 func (h *harness) close() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -170,8 +143,7 @@ func (h *harness) close() {
 	_ = os.RemoveAll(h.directory)
 }
 
-// cleanEnvironment is this process's environment without the three variables
-// that would point tmux at a server this program does not own.
+// cleanEnvironment removes variables that could select an external tmux server.
 func cleanEnvironment() []string {
 	environment := os.Environ()
 	kept := make([]string, 0, len(environment))
@@ -185,16 +157,13 @@ func cleanEnvironment() []string {
 	return kept
 }
 
-// buildDirect creates the window's panes one command at a time, which is what
-// the object API does: every call returns the record it changed.
+// buildDirect creates panes one object-API call at a time.
 func buildDirect(ctx context.Context, _ tmux.Server, window tmux.Window) error {
 	for range panesPerWindow - 1 {
 		if _, err := window.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
 			return err
 		}
-		// The layout is reapplied between splits because a pane halved five
-		// times has no room left to split; it is part of the workload rather
-		// than decoration.
+		// Reapply the layout so repeated splits do not exhaust one pane's width.
 		if err := window.SelectLayout(
 			ctx, tmux.SelectLayoutRequest{Layout: "tiled"},
 		); err != nil {
@@ -205,8 +174,7 @@ func buildDirect(ctx context.Context, _ tmux.Server, window tmux.Window) error {
 	return err
 }
 
-// buildPlanned records the same window and sends it, which is the same API
-// shape taking the same requests.
+// buildPlanned records and sends the same requests as buildDirect.
 func buildPlanned(ctx context.Context, handle tmux.Server, window tmux.Window) error {
 	plan := tmux.NewPlan()
 	for range panesPerWindow - 1 {
@@ -221,11 +189,8 @@ func buildPlanned(ctx context.Context, handle tmux.Server, window tmux.Window) e
 	return result.Err()
 }
 
-// build is one way of creating the window every row creates.
 type build func(context.Context, tmux.Server, tmux.Window) error
 
-// measureBuild runs one build row: it times the work, counts what it started,
-// and then asks the same question every other row is asked.
 func measureBuild(
 	ctx context.Context,
 	mode string,
@@ -260,7 +225,6 @@ func measureBuild(
 		window = refreshed
 	}
 
-	// Setup is done; only the build below is measured.
 	h.processes.reset()
 	start := time.Now()
 	if err := run(ctx, handle, window); err != nil {
@@ -286,9 +250,7 @@ func measureBuild(
 	}, nil
 }
 
-// searchAnswer is the one query every row is asked. It is the column that
-// matters: if it ever differs between rows, they are not measuring the same
-// thing.
+// searchAnswer lets the matrix verify that every lane measured equivalent work.
 func searchAnswer(ctx context.Context, handle tmux.Server) (string, error) {
 	panes, err := handle.SearchPanes(ctx, nil)
 	if err != nil {
@@ -302,17 +264,8 @@ func searchAnswer(ctx context.Context, handle tmux.Server) (string, error) {
 	return fmt.Sprintf("%d panes on the server %v", len(panes), indexes), nil
 }
 
-// measureSnapshot is the read half of the table.
-//
-// A snapshot proves everything it read describes one tmux server by reading the
-// server's identity on each side of its listing. A transport that reports
-// [tmux.InstanceBoundEngine] has already proved it by staying connected, so the
-// closing read is dropped. The opening one stays, because the listing formats
-// are chosen from the version it reports.
-//
-// These rows count tmux commands rather than processes, because both run over
-// one connection and start none: a process count would read zero for both and
-// show nothing.
+// measureSnapshot compares ordinary and instance-bound snapshot reads. It counts
+// commands because both paths share one connection and start no processes.
 func measureSnapshot(ctx context.Context, bound bool) (row, error) {
 	mode := "snapshot"
 	if bound {
@@ -340,8 +293,7 @@ func measureSnapshot(ctx context.Context, bound bool) (row, error) {
 	}
 	handle := h.server.WithEngine(engine)
 
-	// A first snapshot warms the version cache, so the measured one counts the
-	// reads a snapshot makes rather than the probe behind it.
+	// Warm the version cache so the measurement isolates snapshot reads.
 	if _, err := handle.Snapshot(ctx); err != nil {
 		return row{}, fmt.Errorf("%s: warm snapshot: %w", mode, err)
 	}
@@ -373,11 +325,8 @@ func measureSnapshot(ctx context.Context, bound bool) (row, error) {
 	}, nil
 }
 
-// measureAll runs every row of the table, in the order the table prints them.
-//
-// A connections value below zero means the row runs over tmux processes; zero
-// or more opens a control pool of that size, where zero is the pool's own
-// default of one connection.
+// measureAll runs rows in display order. Negative connections selects
+// subprocesses; zero uses the pool default.
 func measureAll(ctx context.Context) ([]row, error) {
 	rows := make([]row, 0, 7)
 	for _, measurement := range []struct {

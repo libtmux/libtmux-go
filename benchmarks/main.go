@@ -1,19 +1,8 @@
-// Command benchmarks prints what each way of reaching tmux costs.
-//
-// A caller choosing between a tmux process, a control connection, and a plan is
-// choosing cost. This builds one window every way and prints what each way
-// spent, so the choice can be read rather than guessed:
+// Command benchmarks compares subprocess, control-mode, and planned tmux work.
+// Every mode builds the same window and runs the same SearchPanes query.
+// BENCHMARKS.md records the output; TestMatrixAnswersAgree guards equivalence.
 //
 //	go -C benchmarks run .
-//
-// The last column is the point. It is one SearchPanes query, asked of every
-// mode, printed beside what that mode cost. It has to be identical everywhere,
-// because a table comparing modes that answer differently is comparing nothing;
-// TestMatrixAnswersAgree in this package is what holds it to that.
-//
-// The output is what BENCHMARKS.md holds, one table per supported tmux. CI
-// runs this on each of them so the checked-in numbers can be compared against a
-// version they were not recorded on.
 package main
 
 import (
@@ -35,7 +24,6 @@ func main() {
 	}
 }
 
-// run measures every row and prints the table.
 func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -52,8 +40,7 @@ func run() error {
 	return nil
 }
 
-// probeVersion asks a throwaway server which tmux is on PATH, so the table says
-// what it was measured against rather than leaving the reader to guess.
+// probeVersion uses an isolated server to record the tmux binary on PATH.
 func probeVersion(ctx context.Context) (tmux.Version, error) {
 	h, err := newHarness(ctx)
 	if err != nil {
@@ -63,7 +50,6 @@ func probeVersion(ctx context.Context) (tmux.Version, error) {
 	return h.server.Version(ctx)
 }
 
-// table renders the measured rows.
 func table(rows []row, version tmux.Version, machine string) string {
 	var out strings.Builder
 	fmt.Fprintf(&out, "\nbuilding a %d-pane window, tmux %s\n", panesPerWindow, version)
@@ -78,15 +64,12 @@ func table(rows []row, version tmux.Version, machine string) string {
 	return out.String()
 }
 
-// describeMachine names what the numbers were measured on, because wall clock
-// means nothing without it.
+// describeMachine supplies context for wall-clock measurements.
 func describeMachine() string {
 	return fmt.Sprintf("%s, %d threads, %s, %s",
 		processorName(), runtime.NumCPU(), runtime.GOOS, runtime.Version())
 }
 
-// processorName reads the processor model where the OS exposes one, and says so
-// plainly where it does not rather than inventing a name.
 func processorName() string {
 	file, err := os.Open("/proc/cpuinfo")
 	if err != nil {

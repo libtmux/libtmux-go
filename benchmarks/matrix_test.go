@@ -8,15 +8,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// TestMatrixAnswersAgree is the claim the whole table rests on.
-//
-// Cost may differ between modes; the answer may not. A table whose rows answered
-// the same query differently would be comparing two different things while
-// presenting them as alternatives, so this asks every row the one question and
-// fails if any of them disagrees.
-//
-// It measures once and asserts against that, rather than measuring a second
-// time: the point is that these particular numbers came from runs that agreed.
+// TestMatrixAnswersAgree requires equivalent results from every measured lane.
 //
 //libtmux:real-tmux
 func TestMatrixAnswersAgree(t *testing.T) {
@@ -32,9 +24,7 @@ func TestMatrixAnswersAgree(t *testing.T) {
 	}
 	t.Log(table(rows, probedVersion(ctx, t), describeMachine()))
 
-	// The five build rows built the same window and are compared with each
-	// other. The two snapshot rows read a server built differently, so they are
-	// compared with each other instead.
+	// Compare build and snapshot workloads within their own topology.
 	builds, snapshots := rows[:5], rows[5:]
 	for _, r := range builds[1:] {
 		if r.answer != builds[0].answer {
@@ -48,9 +38,7 @@ func TestMatrixAnswersAgree(t *testing.T) {
 	}
 }
 
-// TestMatrixCostsDifferAsDocumented gates what each row is supposed to
-// demonstrate, rather than leaving a reader to infer it from numbers that move
-// between machines.
+// TestMatrixCostsDifferAsDocumented guards the lane-specific cost claims.
 //
 //libtmux:real-tmux
 func TestMatrixCostsDifferAsDocumented(t *testing.T) {
@@ -66,9 +54,7 @@ func TestMatrixCostsDifferAsDocumented(t *testing.T) {
 		byMode[r.mode] = r
 	}
 
-	// A control connection carries commands without starting anything, and is
-	// an attached tmux client for as long as it is open. Both halves matter:
-	// the second is why connecting is a choice rather than a default.
+	// Control mode starts no subprocesses but appears as an attached client.
 	if got := byMode["control mode"].processes; got != 0 {
 		t.Errorf("control mode started %d tmux processes, want 0", got)
 	}
@@ -83,9 +69,7 @@ func TestMatrixCostsDifferAsDocumented(t *testing.T) {
 			byMode["chained"].processes, byMode["process"].processes)
 	}
 
-	// A snapshot over a bound transport skips the identity read that closes its
-	// listing, because staying connected already proves what that read asks.
-	// That is one fewer command, and it is why the row is in the table.
+	// A bound transport skips the snapshot's closing identity read.
 	got := byMode["snapshot"].processes - byMode["snapshot, bound"].processes
 	if want := 1; got != want {
 		t.Errorf("InstanceBoundEngine saved %d tmux commands, want exactly %d (%d vs %d)",
@@ -93,7 +77,6 @@ func TestMatrixCostsDifferAsDocumented(t *testing.T) {
 	}
 }
 
-// probedVersion reports the tmux the table was measured against.
 func probedVersion(ctx context.Context, t *testing.T) tmux.Version {
 	t.Helper()
 	version, err := probeVersion(ctx)
