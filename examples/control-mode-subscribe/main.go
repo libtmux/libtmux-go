@@ -1,9 +1,5 @@
-// Command control-mode-subscribe watches what a tmux server does, rather than
-// asking it repeatedly.
-//
-// A control-mode connection is a tmux client that stays open. tmux pushes what
-// happens down it, so a change is heard once, when it happens, instead of being
-// discovered by a poll that has to guess how often to ask.
+// Command control-mode-subscribe watches a persistent tmux control client
+// receive changes without polling.
 package main
 
 import (
@@ -22,9 +18,7 @@ func main() {
 	}
 }
 
-// start owns the context and the server, so that main does nothing but
-// report a failure. log.Fatal exits without running deferred calls, and the
-// cancel below has to run.
+// start owns cleanup because log.Fatal skips deferred calls in main.
 func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -33,9 +27,7 @@ func start() error {
 	return run(ctx, server)
 }
 
-// run holds the example itself, so that main runs it against a socket of this
-// example's own and the test beside it runs the same code against a server the
-// test harness throws away.
+// run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-control"})
 	if err != nil {
@@ -53,9 +45,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	defer func() { err = errors.Join(err, control.Close()) }()
 
-	// Renamed after the connection is open, so the notification it causes is one
-	// this connection is there to hear. A rename done first would be history the
-	// stream never mentions.
+	// Rename after subscribing; notifications do not include earlier changes.
 	if _, err := session.Rename(ctx, "control-example"); err != nil {
 		return fmt.Errorf("rename session: %w", err)
 	}

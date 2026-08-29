@@ -1,11 +1,5 @@
-// Command planned-build shows the chained mode: tmux commands recorded rather
-// than run, read before they are sent, then sent together.
-//
-// Two things make it worth the indirection. A step can name what an earlier
-// step is going to create, so a build is written in one pass instead of
-// stopping at each split to learn a pane ID. And the commands that need no
-// answer travel in one tmux command list, so the window below is built in
-// fewer invocations than it has operations.
+// Command planned-build records tmux commands, uses forward references, and
+// groups compatible operations into fewer invocations.
 package main
 
 import (
@@ -25,9 +19,7 @@ func main() {
 	}
 }
 
-// start owns the context and the server, so that main does nothing but
-// report a failure. log.Fatal exits without running deferred calls, and the
-// cancel below has to run.
+// start owns cleanup because log.Fatal skips deferred calls in main.
 func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -36,9 +28,7 @@ func start() error {
 	return run(ctx, server)
 }
 
-// run holds the example itself, so that main runs it against a socket of this
-// example's own and the test beside it runs the same code against a server the
-// test harness throws away.
+// run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-planned"})
 	if err != nil {
@@ -55,10 +45,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("create window: %w", err)
 	}
 
-	// The whole build, recorded in one pass. The split has not run, so the pane
-	// it returns does not exist -- but it can already be named, which is what
-	// lets the steps after it be written here rather than after a round trip
-	// that learns its ID.
+	// The split's forward reference is usable before tmux reports its pane ID.
 	// docs:planning
 	plan := tmux.NewPlan()
 	plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
@@ -68,11 +55,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	plan.DisplayMessage(editor, "#{pane_title}")
 	// docs:end
 
-	// Nothing has been sent yet. Preview renders the argument vectors, leaving
-	// a step nil when it names a pane no earlier step has created here -- which
-	// is every step that named the split. Anything else it cannot render is a
-	// mistake in the plan, and comes back as an error rather than a nil entry,
-	// which is the point of reading a plan before sending it.
+	// Preview leaves unresolved forward-reference steps nil; other rendering
+	// failures return an error.
 	preview, err := plan.Preview(tmux.Version{})
 	if err != nil {
 		return fmt.Errorf("preview: %w", err)
@@ -85,10 +69,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Printf("step %d: tmux %s\n", index, strings.Join(argv, " "))
 	}
 
-	// Explain reports the grouping ahead of time, and why each group ends. Two
-	// reasons end one early: a command whose new object's ID a later step needs,
-	// and a command whose output the caller reads. tmux answers a command list
-	// with one merged stdout, so neither can share it.
+	// Groups end when later steps need a created ID or when merged stdout would
+	// prevent result attribution.
 	dispatches := plan.Explain()
 	for _, dispatch := range dispatches {
 		fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
@@ -108,12 +90,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("plan did not complete: %w", result.Err())
 	}
 
-	// One result per recorded operation, whatever it shared an invocation with.
-	// There are more of them than there were calls above: SendKeys with a
-	// command records the keys and the Enter that submits them, because that is
-	// the two tmux commands Pane.SendKeys sends.
-	//
-	// The split reports the pane it created; the read reports what it printed.
+	// Results remain per operation even when operations share an invocation.
 	for index, op := range result.Ops {
 		fmt.Printf("step %d %-16s %-8s created %q stdout %q\n",
 			index, op.Command, op.Status, op.Created, op.Stdout)

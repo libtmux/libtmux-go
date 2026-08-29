@@ -1,9 +1,5 @@
-// Command fast-path demonstrates driving tmux without starting a tmux process
-// per command, and reading a pane without starting one at all.
-//
-// It counts the processes it starts so the difference is visible rather than
-// asserted: the same work is done twice, once over tmux processes and once
-// over a control-mode connection.
+// Command fast-path compares subprocess and control-mode execution by counting
+// the tmux processes each path starts.
 package main
 
 import (
@@ -24,9 +20,7 @@ func main() {
 	}
 }
 
-// start owns the context and the server, so that main does nothing but
-// report a failure. log.Fatal exits without running deferred calls, and the
-// cancel below has to run.
+// start owns cleanup because log.Fatal skips deferred calls in main.
 func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -34,9 +28,7 @@ func start() error {
 	return run(ctx, tmux.ServerOptions{SocketName: "libtmux-go-example-fast-path"})
 }
 
-// counter records how many tmux processes a server started, by wrapping the
-// runner a server uses when ServerOptions.Runner is nil. Wrapping rather than
-// replacing keeps the result shape the rest of the package reads.
+// counter wraps the default runner and counts tmux processes.
 type counter struct {
 	mutex   sync.Mutex
 	started int
@@ -66,10 +58,7 @@ func (c *counter) total() int {
 	return c.started
 }
 
-// run holds the example itself. It takes the options rather than a built server
-// because the counting runner has to be installed before the server exists,
-// which lets main run it on a socket of this example's own and the test beside
-// it run the same code on a socket path the test owns.
+// run accepts options so tests can isolate the server before installing the counter.
 func run(ctx context.Context, options tmux.ServerOptions) error {
 	processes := &counter{}
 	options.Runner = processes.runner()
@@ -85,16 +74,13 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 		return fmt.Errorf("create session: %w", err)
 	}
 
-	// Ten reads the ordinary way: each one starts a tmux process.
 	processes.reset()
 	if err := readTenTimes(ctx, session); err != nil {
 		return err
 	}
 	fmt.Printf("over tmux processes: %d started\n", processes.total())
 
-	// The same ten reads over a control-mode connection. The pool returns the
-	// session on the connected handle; the one passed in still starts a
-	// process per command, so the returned value is the one to keep.
+	// Keep the connected record; the original still starts subprocesses.
 	// docs:control-pool
 	_, connected, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
 	if err != nil {
@@ -109,9 +95,8 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	}
 	fmt.Printf("over a connection:   %d started\n", processes.total())
 
-	// A printed capture starts a process whatever handle it runs on, because
-	// tmux does not escape a command's output and pane content could end the
-	// connection's frame. Staging through a buffer and a file avoids that.
+	// Arbitrary pane output can end a control frame, so exact capture stages
+	// through a buffer and file instead.
 	pane, ok, err := connected.ResolveActivePane(ctx)
 	if err != nil || !ok {
 		return fmt.Errorf("resolve pane: %w", err)
