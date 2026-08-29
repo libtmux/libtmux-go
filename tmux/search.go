@@ -20,8 +20,7 @@ const (
 
 // SearchSessions returns a newly materialized snapshot projection of sessions
 // selected by tmux's live -f expression. A nil filter omits -f; a nonnil empty
-// filter remains an explicit empty expression. The result is bounded by
-// opening and closing identity probes, not a live collection.
+// filter remains an explicit empty expression.
 func (s Server) SearchSessions(
 	ctx context.Context,
 	filter *TmuxFilter,
@@ -39,8 +38,7 @@ func (s Server) SearchSessions(
 // selected by tmux's live -f expression. A nil filter omits -f and requests the
 // unfiltered listing on every supported tmux version. A nonnil filter,
 // including an empty expression, requires tmux 3.4 or newer and otherwise
-// returns [VersionTooLowError]. The result is bounded by opening and closing
-// identity probes, not a live collection.
+// returns [VersionTooLowError].
 func (s Server) SearchClients(
 	ctx context.Context,
 	filter *TmuxFilter,
@@ -56,8 +54,7 @@ func (s Server) SearchClients(
 
 // SearchWindows returns a newly materialized snapshot projection of winlinks
 // selected by tmux's live -f expression. A nil filter omits -f and a nonnil
-// empty filter sends an explicit expression. It is bounded by opening and
-// closing identity probes, not a live collection.
+// empty filter sends an explicit expression.
 func (s Server) SearchWindows(
 	ctx context.Context,
 	filter *TmuxFilter,
@@ -73,8 +70,7 @@ func (s Server) SearchWindows(
 
 // SearchPanes returns a newly materialized snapshot projection of pane views
 // selected by tmux's live -f expression. A nil filter omits -f and a nonnil
-// empty filter sends an explicit expression. It is bounded by opening and
-// closing identity probes, not a live collection.
+// empty filter sends an explicit expression.
 func (s Server) SearchPanes(
 	ctx context.Context,
 	filter *TmuxFilter,
@@ -90,9 +86,7 @@ func (s Server) SearchPanes(
 
 // SearchWindows returns this session's winlinks selected by tmux's live -f
 // expression. A nil filter omits -f and a nonnil empty filter sends an
-// explicit expression. The handle's stable session identity limits the
-// projection. Opening and closing identity probes bound the result, which is a
-// newly materialized snapshot rather than a live collection.
+// explicit expression. The session's stable identity limits the projection.
 func (s Session) SearchWindows(
 	ctx context.Context,
 	filter *TmuxFilter,
@@ -119,9 +113,7 @@ func (s Session) SearchWindows(
 
 // SearchPanes returns this session's pane views selected by tmux's live -f
 // expression. A nil filter omits -f and a nonnil empty filter sends an
-// explicit expression. The handle's stable session identity limits the
-// projection. Opening and closing identity probes bound the result, which is a
-// newly materialized snapshot rather than a live collection.
+// explicit expression. The session's stable identity limits the projection.
 func (s Session) SearchPanes(
 	ctx context.Context,
 	filter *TmuxFilter,
@@ -148,9 +140,7 @@ func (s Session) SearchPanes(
 
 // SearchPanes returns this window's pane views selected by tmux's live -f
 // expression. A nil filter omits -f and a nonnil empty filter sends an
-// explicit expression. Stable session and window identities limit the
-// projection. Opening and closing identity probes bound the result, which is a
-// newly materialized snapshot rather than a live collection.
+// explicit expression. Stable session and window identities limit the projection.
 func (w Window) SearchPanes(
 	ctx context.Context,
 	filter *TmuxFilter,
@@ -225,8 +215,6 @@ func (s Server) searchSnapshot(
 	if !sameSnapshotIdentity(identity, closing) {
 		return Snapshot{}, snapshotIdentityChangeError(closing)
 	}
-	// A search lists one kind, so a relation reached from a record it returns
-	// is unknown rather than empty.
 	return newSnapshotWithIdentity(
 		s,
 		identity.version,
@@ -265,7 +253,6 @@ func matchingSearchRows(rows []formatValues, matches []searchRowMatch) []formatV
 	return matching
 }
 
-// searchListedCollection names the one kind a search materializes.
 func searchListedCollection(collection searchCollection) snapshotCollections {
 	switch collection {
 	case searchSessions:

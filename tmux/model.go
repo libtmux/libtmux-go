@@ -60,12 +60,8 @@ func (s Session) withServer(server Server) Session {
 // winlink views, and reports whether the receiver carries relations at all.
 //
 // It never queries tmux. [Server.Snapshot] and the resolvers carry relations; a
-// targeted point lookup, [Session.Refresh], and [Server.NewSession] do not, and
-// report false rather than no windows. The distinction is not decoration: tmux
-// destroys a session when its last window closes, so a materialized session
-// with no windows does not exist, and reporting one would be a record that
-// silently traverses to nothing. Use [Session.SearchWindows] with a nil filter
-// for the session's current windows.
+// targeted lookup, refresh, or creation reports false rather than an empty
+// relation. Use [Session.SearchWindows] for current live windows.
 func (s Session) Windows() ([]Window, bool) {
 	if s.snapshot == nil || !s.snapshot.listed.holds(listedWindows) {
 		return nil, false
@@ -81,9 +77,8 @@ func (s Session) Windows() ([]Window, bool) {
 // views, and reports whether the receiver carries relations at all.
 //
 // It never queries tmux. [Server.Snapshot] and the resolvers carry relations; a
-// targeted point lookup, [Session.Refresh], and [Server.NewSession] do not, and
-// report false rather than no panes. Use [Session.SearchPanes] with a nil
-// filter for the session's current panes.
+// targeted lookup, refresh, or creation reports false rather than an empty
+// relation. Use [Session.SearchPanes] for current live panes.
 func (s Session) Panes() ([]Pane, bool) {
 	if s.snapshot == nil || !s.snapshot.listed.holds(listedPanes) {
 		return nil, false
@@ -149,12 +144,8 @@ func (w Window) Session() (Session, bool) {
 // and reports whether the receiver carries relations at all.
 //
 // It never queries tmux. [Server.Snapshot], the resolvers, and
-// [Session.NewWindow] carry relations; a targeted point lookup and
-// [Window.Refresh] do not, and report false rather than no panes. tmux destroys
-// a window when its last pane closes, so a materialized window with no panes
-// does not exist: false is the only thing an empty result could honestly mean,
-// and this is where it is said. Use [Window.SearchPanes] with a nil filter for
-// the window's current panes.
+// [Session.NewWindow] carry relations; a targeted lookup or refresh reports
+// false instead. Use [Window.SearchPanes] for current live panes.
 func (w Window) Panes() ([]Pane, bool) {
 	if w.snapshot == nil || !w.snapshot.listed.holds(listedPanes) {
 		return nil, false
@@ -331,11 +322,7 @@ func (c Client) AttachedPane() (Pane, bool) {
 	return pane.withServer(c.server), true
 }
 
-// boundTo moves every value onto server through the model's own withServer
-// method expression. Relation accessors read records out of a snapshot the
-// handle that built it owns, so without this a record selecting another engine
-// would hand back children still bound to the handle it was moved off, which is
-// the trap the record WithEngine methods close.
+// boundTo keeps relations on the server handle selected by the parent record.
 func boundTo[T any](values []T, bind func(T, Server) T, server Server) []T {
 	for index := range values {
 		values[index] = bind(values[index], server)

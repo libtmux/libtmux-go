@@ -62,6 +62,8 @@
 // [Snapshot] is observational, not transactional. It verifies the server
 // identity around collection but cannot make several tmux commands atomic.
 // Relationship accessors return new slices of shallow copies.
+// Search methods use the same opening and closing identity probes and fail if
+// the tmux daemon changes during their listing.
 //
 // Record relationship methods such as [Session.Windows] and [Window.Panes]
 // return a bool because targeted lookups do not materialize relations. False

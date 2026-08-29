@@ -58,10 +58,6 @@ func (w Window) ActivePane() (Pane, bool) {
 // LinkedSessions returns newly allocated shallow copies of materialized
 // sessions containing this window, and reports whether the receiver carries
 // relations at all. It never queries tmux.
-//
-// A winlink belongs to at least the session it is linked into, so a
-// materialized window with no sessions does not exist; false is what an empty
-// result would otherwise have to mean.
 func (w Window) LinkedSessions() ([]Session, bool) {
 	if w.snapshot == nil || !w.snapshot.listed.holds(listedSessions|listedWindows) {
 		return nil, false
@@ -84,8 +80,6 @@ func (w Window) LinkedSessions() ([]Session, bool) {
 
 // ResolveActiveWindow snapshots live tmux state and returns this session's sole
 // exact active winlink. It returns [SnapshotLookupError] cardinality errors.
-// Canceling ctx stops this read-only snapshot wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (s Session) ResolveActiveWindow(ctx context.Context) (Window, error) {
 	live, err := s.resolveLive(ctx)
 	if err != nil {
@@ -96,8 +90,6 @@ func (s Session) ResolveActiveWindow(ctx context.Context) (Window, error) {
 
 // ResolveActivePane snapshots live tmux state and returns the active pane in
 // this session's exact active window. A missing active pane returns ok false.
-// Canceling ctx stops this read-only snapshot wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (s Session) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
 	live, err := s.resolveLive(ctx)
 	if err != nil {
@@ -113,8 +105,6 @@ func (s Session) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
 
 // ResolveSession snapshots live tmux state and returns this exact winlink's
 // parent session. It returns [SnapshotLookupError] cardinality errors.
-// Canceling ctx stops this read-only snapshot wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (w Window) ResolveSession(ctx context.Context) (Session, error) {
 	live, err := w.resolveLive(ctx)
 	if err != nil {
@@ -129,9 +119,7 @@ func (w Window) ResolveSession(ctx context.Context) (Session, error) {
 }
 
 // ResolveActivePane snapshots live tmux state and returns the first active pane
-// in this exact winlink view. A missing active pane returns ok false. Canceling
-// ctx stops this read-only snapshot wait; errors.Is can detect context.Canceled
-// or context.DeadlineExceeded as applicable.
+// in this exact winlink view. A missing active pane returns ok false.
 func (w Window) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
 	live, err := w.resolveLive(ctx)
 	if err != nil {
@@ -143,8 +131,6 @@ func (w Window) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
 
 // ResolveWindow snapshots live tmux state and returns the exact winlink
 // containing this pane view. It returns [SnapshotLookupError] cardinality errors.
-// Canceling ctx stops this read-only snapshot wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (p Pane) ResolveWindow(ctx context.Context) (Window, error) {
 	live, err := p.resolveLive(ctx)
 	if err != nil {
@@ -155,8 +141,6 @@ func (p Pane) ResolveWindow(ctx context.Context) (Window, error) {
 
 // ResolveSession snapshots live tmux state and returns the parent session of
 // this pane's exact winlink. It returns [SnapshotLookupError] cardinality errors.
-// Canceling ctx stops this read-only snapshot wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (p Pane) ResolveSession(ctx context.Context) (Session, error) {
 	live, err := p.resolveLive(ctx)
 	if err != nil {

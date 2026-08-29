@@ -144,13 +144,7 @@ type snapshotRecords struct {
 	clients  []formatValues
 }
 
-// snapshotCollections names the object kinds a snapshot listed.
-//
-// A kind that was not listed is unknown rather than empty, and the two are not
-// the same answer: tmux destroys a window when its last pane closes, so a
-// window with no panes does not exist, and reporting one from a record built by
-// a targeted lookup would be a traversal that silently reaches nothing. The
-// relation accessors report which of the two they hold.
+// snapshotCollections distinguishes materialized relations from unknown ones.
 type snapshotCollections uint8
 
 const (
@@ -315,23 +309,14 @@ func (s Snapshot) ClientByName(name ClientName) (Client, error) {
 	return lookupSnapshotValue(s.state.clients, s.state.clientsByName[name], "client", name.String())
 }
 
-// Snapshot materializes sessions, winlinks, panes, and clients. Its commands
-// run sequentially, so the result is observational rather than an atomic tmux
-// transaction. A tmux command or transport failure is returned rather than
-// answered with an empty snapshot, and [ErrNoServer] classifies a server that
-// was not reached; context, decode, version, and identity-change failures are
-// errors of their own. Canceling ctx stops the current tmux
-// command wait; earlier listings may already have completed.
+// Snapshot materializes sessions, winlinks, panes, and clients. Its sequential
+// commands produce an observationally consistent result, not an atomic transaction.
+// Failures remain errors rather than empty snapshots; cancellation may occur after
+// earlier listings completed.
 //
-// The result is proven to describe one tmux server. A server that exits and is
-// replaced on the same socket mid-read would otherwise be reported as a single
-// coherent state assembled from two, so the server's identity is read around
-// the listing and a change between them is an error rather than a result. That
-// costs a tmux command on each side of the listing, which is what a read of
-// this shape spends beyond the listing itself. A transport implementing
-// [InstanceBoundEngine] proves the same thing by staying connected, so it skips
-// the closing read. The opening one stays: it reports the server's version as
-// well as its identity, and the listing formats are chosen from that.
+// Identity probes reject a daemon replacement during collection. An
+// [InstanceBoundEngine] skips the closing probe; the opening probe still selects
+// version-specific fields.
 func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	identity, err := s.probeSnapshotIdentity(ctx)
 	if err != nil {
@@ -382,10 +367,8 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	return newSnapshotWithIdentity(s, identity.version, records, listedEverything, &identity)
 }
 
-// snapshotAfterListingFailure reports why a listing failed, and says so
-// alongside a server identity change when the server was also replaced. The
-// identity probe is allowed to fail: a server that has gone is the likeliest
-// reason the listing failed, and the listing error is the one worth reporting.
+// Preserve the listing error if the closing identity cannot be read; otherwise
+// join it with any detected daemon replacement.
 func (s Server) snapshotAfterListingFailure(
 	ctx context.Context,
 	opening snapshotServerIdentity,
@@ -432,12 +415,8 @@ func snapshotIdentityFields() []formatField {
 	}
 }
 
-// probeClosingIdentity re-reads the server's identity to prove that the
-// listing between the two probes came from one tmux server instance.
-//
-// A transport that cannot outlive its server has already proven it, so the
-// opening identity is returned unchanged rather than paying a second tmux
-// command for an answer the connection guarantees.
+// probeClosingIdentity verifies one daemon produced the listing. A bound
+// transport already proves this and reuses the opening identity.
 func (s Server) probeClosingIdentity(
 	ctx context.Context,
 	opening snapshotServerIdentity,

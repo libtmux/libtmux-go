@@ -7,15 +7,11 @@ import (
 
 // Session performs a canonical live lookup of id and returns a newly
 // materialized record. Use [Session.Refresh] when beginning from a record.
-// Canceling ctx stops this read-only lookup's local wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (s Server) Session(ctx context.Context, id SessionID) (Session, error) {
 	values, version, identity, err := s.livePoint(ctx, "session", "session_id", id.String(), "list-sessions", false)
 	if err != nil {
 		return Session{}, err
 	}
-	// A point lookup lists one kind, so a relation reached from the record it
-	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		sessions: []formatValues{values},
 	}, listedSessions, &identity)
@@ -27,16 +23,12 @@ func (s Server) Session(ctx context.Context, id SessionID) (Session, error) {
 
 // Window performs a canonical live lookup of id using tmux's canonical session
 // and returns a newly materialized record. It does not preserve a linked-session
-// view; use [Window.ResolveSession] for that exact relationship. Canceling ctx
-// stops this read-only lookup's local wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
+// view; use [Window.ResolveSession] for that exact relationship.
 func (s Server) Window(ctx context.Context, id WindowID) (Window, error) {
 	values, version, identity, err := s.livePoint(ctx, "window", "window_id", id.String(), "list-windows", true)
 	if err != nil {
 		return Window{}, err
 	}
-	// A point lookup lists one kind, so a relation reached from the record it
-	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		windows: []formatValues{values},
 	}, listedWindows, &identity)
@@ -48,16 +40,12 @@ func (s Server) Window(ctx context.Context, id WindowID) (Window, error) {
 
 // Pane performs a canonical live lookup of id using tmux's canonical session
 // and returns a newly materialized record. It does not preserve a linked-session
-// view; use [Pane.ResolveWindow] for that exact relationship. Canceling ctx
-// stops this read-only lookup's local wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
+// view; use [Pane.ResolveWindow] for that exact relationship.
 func (s Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
 	values, version, identity, err := s.livePoint(ctx, "pane", "pane_id", id.String(), "list-panes", true)
 	if err != nil {
 		return Pane{}, err
 	}
-	// A point lookup lists one kind, so a relation reached from the record it
-	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		panes: []formatValues{values},
 	}, listedPanes, &identity)
@@ -67,16 +55,12 @@ func (s Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
 	return snapshot.PaneByID(id)
 }
 
-// Client performs a canonical live lookup of name and returns a newly
-// materialized record. Canceling ctx stops this read-only lookup's local wait;
-// errors.Is can detect context.Canceled or context.DeadlineExceeded as applicable.
+// Client performs a canonical live lookup of name and returns a new record.
 func (s Server) Client(ctx context.Context, name ClientName) (Client, error) {
 	values, version, identity, err := s.livePoint(ctx, "client", "client_name", name.String(), "list-clients", false)
 	if err != nil {
 		return Client{}, err
 	}
-	// A point lookup lists one kind, so a relation reached from the record it
-	// returns is unknown rather than empty.
 	snapshot, err := newSnapshotWithIdentity(s, version, snapshotRecords{
 		clients: []formatValues{values},
 	}, listedClients, &identity)
@@ -86,10 +70,7 @@ func (s Server) Client(ctx context.Context, name ClientName) (Client, error) {
 	return snapshot.ClientByName(name)
 }
 
-// Refresh performs a canonical live lookup for the session's stable ID and
-// returns a new record without mutating the receiver. Canceling ctx stops this
-// read-only lookup's local wait; errors.Is can detect context.Canceled or
-// context.DeadlineExceeded as applicable.
+// Refresh performs a canonical live lookup without mutating the receiver.
 func (s Session) Refresh(ctx context.Context) (Session, error) {
 	return s.server.Session(ctx, s.sessionID)
 }
@@ -97,8 +78,6 @@ func (s Session) Refresh(ctx context.Context) (Session, error) {
 // Refresh performs a canonical live lookup for the window's stable ID and
 // returns a new record without mutating the receiver. It does not preserve a
 // linked-session view; use [Window.ResolveSession] for exact relationships.
-// Canceling ctx stops this read-only lookup's local wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (w Window) Refresh(ctx context.Context) (Window, error) {
 	return w.server.Window(ctx, w.windowID)
 }
@@ -106,16 +85,11 @@ func (w Window) Refresh(ctx context.Context) (Window, error) {
 // Refresh performs a canonical live lookup for the pane's stable ID and
 // returns a new record without mutating the receiver. It does not preserve a
 // linked-session view; use [Pane.ResolveWindow] for exact relationships.
-// Canceling ctx stops this read-only lookup's local wait; errors.Is can detect
-// context.Canceled or context.DeadlineExceeded as applicable.
 func (p Pane) Refresh(ctx context.Context) (Pane, error) {
 	return p.server.Pane(ctx, p.paneID)
 }
 
-// Refresh performs a canonical live lookup for the client's stable name and
-// returns a new record without mutating the receiver. Canceling ctx stops this
-// read-only lookup's local wait; errors.Is can detect context.Canceled or
-// context.DeadlineExceeded as applicable.
+// Refresh performs a canonical live lookup without mutating the receiver.
 func (c Client) Refresh(ctx context.Context) (Client, error) {
 	return c.server.Client(ctx, c.clientName)
 }
