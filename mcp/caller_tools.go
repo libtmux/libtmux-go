@@ -105,8 +105,8 @@ func parentPID(pid int) (int, bool) {
 	return parent, true
 }
 
-// resolvePath follows symlinks for socket comparison and fails closed to the
-// cleaned spelling.
+// resolvePath follows symlinks when possible and otherwise returns the cleaned
+// spelling.
 func resolvePath(path string) string {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {

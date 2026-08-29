@@ -214,7 +214,7 @@ func (t *tools) getJob(
 	output.ElapsedSeconds = time.Since(entry.started).Seconds()
 	recorded, readErr := os.ReadFile(entry.statusAt)
 	if readErr != nil {
-		// A missing status is the ordinary unfinished case.
+		// Status read failures take the unfinished path.
 		if pane, paneErr := t.tmux().Pane(ctx, entry.paneID); paneErr == nil {
 			output.Running, _ = pane.Formats().PaneCurrentCommand()
 		}

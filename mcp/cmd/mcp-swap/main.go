@@ -423,7 +423,7 @@ func entryArguments(entry map[string]any) []string {
 	return arguments
 }
 
-// repositoryRoot finds the MCP module containing the current directory.
+// repositoryRoot finds the nearest ancestor with a go.mod whose path ends in mcp.
 func repositoryRoot() (string, error) {
 	working, err := os.Getwd()
 	if err != nil {

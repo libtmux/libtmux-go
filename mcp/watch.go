@@ -23,7 +23,7 @@ const watchReadyWait = 10 * time.Second
 // watchRetryInterval paces initial connection retries.
 const watchRetryInterval = time.Second
 
-// watchRebuildInterval paces replacement of previously live connections.
+// watchRebuildInterval paces retries after selecting a session set.
 const watchRebuildInterval = 10 * time.Millisecond
 
 type watchers struct {
@@ -36,8 +36,8 @@ type watchers struct {
 	// spelled retains exact client spellings because SDK routing uses them.
 	spelled map[string]map[string]int
 	owed    map[string]*time.Timer
-	// ready closes after the first watcher connection opens and is replaced on
-	// rebuild; it does not guarantee every watched pane has coverage.
+	// ready closes after the first watcher connection opens; a new pane
+	// subscription may replace it while rebuilding.
 	ready    chan struct{}
 	notified map[string]time.Time
 	stop     func()
