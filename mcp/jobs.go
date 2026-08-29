@@ -396,6 +396,7 @@ func (t *tools) getJob(
 			return nil, pendingJobOutput(output, entry, status), nil
 		}
 		output.ElapsedSeconds = time.Since(entry.started).Seconds()
+		output.OutputUnavailable = unstartedReason(entry.openedAt, output.Running)
 		return nil, output, nil
 	}
 	if !ready {

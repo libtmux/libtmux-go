@@ -401,8 +401,8 @@ func finishRunCommandDeadline(
 		output.Running = running
 	}
 	output.OutputUnavailable = "the effective timeout ended before pane output was collected"
-	if _, openedErr := readMark(completion.openedAt); errors.Is(openedErr, os.ErrNotExist) {
-		output.OutputUnavailable = commandNeverRanReason(running)
+	if reason := unstartedReason(completion.openedAt, running); reason != "" {
+		output.OutputUnavailable = reason
 	}
 	return nil, output, nil
 }
@@ -611,12 +611,23 @@ func (t *tools) markMissing(ctx context.Context, pane tmux.Pane, err error) (str
 
 func commandNeverRanReason(running string) string {
 	if running == "" {
-		return "the pane never ran the command: it went to whatever the pane " +
-			"is running as that program's input rather than to a shell"
+		return "the command recorded no start: the pane has not read the keys. " +
+			"A shell that is still starting reads them late; a program holding " +
+			"the pane never does"
 	}
 	return fmt.Sprintf("the pane never ran the command: it is running %s, "+
 		"which took the text as its own input rather than running it; "+
 		"respawn_pane gives the pane a shell again", running)
+}
+
+// unstartedReason explains a job whose wrapper recorded no opening mark. It is
+// empty once the wrapper has run, so a caller can tell a slow command from one
+// the pane never took.
+func unstartedReason(openedAt, running string) string {
+	if _, err := readMark(openedAt); !errors.Is(err, os.ErrNotExist) {
+		return ""
+	}
+	return commandNeverRanReason(running)
 }
 
 // readMark parses one cursor position recorded by the wrapper.

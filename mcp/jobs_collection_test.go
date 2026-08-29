@@ -315,6 +315,45 @@ func TestACommittedJobStaysFinishedWhenOutputCaptureReachesTheDeadline(t *testin
 	}
 }
 
+func TestATimedOutDetachedJobReportsNoRecordedStart(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	created, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "job-never-started"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane, ok, err := created.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		t.Fatalf("resolve active pane = (%v, %t, %v)", pane, ok, err)
+	}
+	instance, serverSession, request := connectJobSession(ctx, t, target)
+	// No marks at all: the keys were delivered but the pane never ran them.
+	directory := t.TempDir()
+	entry := job{
+		id:        "job",
+		paneID:    pane.ID(),
+		directory: directory,
+		openedAt:  filepath.Join(directory, "opened"),
+		statusAt:  filepath.Join(directory, "status"),
+		closedAt:  filepath.Join(directory, "closed"),
+		started:   time.Now(),
+	}
+	if err := serverSession.scope.jobs.keep(&entry); err != nil {
+		t.Fatal(err)
+	}
+
+	_, output, err := instance.tools.getJob(ctx, request, getJobInput{
+		JobID: entry.id, TimeoutSeconds: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Finished || !strings.Contains(output.OutputUnavailable, "recorded no start") {
+		t.Fatalf("timed-out detached get_job = %+v, want an unstarted reason", output)
+	}
+}
+
 func TestAZeroTimeoutCommittedFollowerReturnsPendingBeforeSettlement(t *testing.T) {
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "job-follower-unused"})
 	if err != nil {
