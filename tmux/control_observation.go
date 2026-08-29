@@ -19,7 +19,8 @@ var ErrPaneObservationLost = errors.New("tmux: pane observation lost")
 
 // PaneObservation is one visible pane baseline followed by the exact control
 // notification stream after that baseline. Create one with
-// [Pane.OpenObservation] and close it when finished.
+// [Pane.OpenObservation] and close it when finished. Copies share notification
+// reader ownership and terminal loss.
 type PaneObservation struct {
 	client    *ControlClient
 	paneID    PaneID

@@ -728,6 +728,13 @@ protocol in an owned, observation-only `NotificationStream` whose `Next`
 preserves wire order. Before tmux 3.6, destroying the attached session follows
 that session's `detach-on-destroy` policy and may end the stream.
 
+`Pane.OpenObservation` linearizes a visible baseline with its dedicated
+notification stream. Copies of a `PaneObservation` share one serialized reader
+and terminal state. Caller cancellation, an individual
+`ControlNotificationError`, and explicit close do not become observation loss.
+Topology loss, `io.EOF`, or a terminal reader failure permanently returns
+`ErrPaneObservationLost` while preserving the underlying cause.
+
 ## Recorded operations
 
 `Plan` records tmux commands as `Op` values and runs them together. It is
