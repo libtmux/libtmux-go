@@ -130,11 +130,9 @@ jobs:
             exit 1
           fi
 
-      # verify is off here and run once below. It fetches a JSON schema over
-      # the network, and every module in this matrix shares the one
-      # .golangci.yml at the root, so leaving it on checks the same file five
-      # times and takes five chances that golangci-lint.run is slow. It has
-      # already spent one of them.
+      # verify is off here and run explicitly below. Each module has its own
+      # configuration, including module-specific directive policy, so each one
+      # must be checked from the directory where lint selects it.
       # Must be built with a Go at least as new as the one set up above:
       # golangci-lint typechecks against the toolchain's own export data.
       - uses: golangci/golangci-lint-action@v9
@@ -147,7 +145,7 @@ jobs:
       # configuration key it does not recognise and reports no issues, so a
       # misspelled linter setting silently does nothing without this.
       - name: Verify the lint configuration
-        if: matrix.module == '.'
+        working-directory: ${{ matrix.module }}
         run: golangci-lint config verify
 
       - name: Report known vulnerabilities

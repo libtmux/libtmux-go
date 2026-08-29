@@ -148,11 +148,11 @@ $ LIBTMUX_MATRIX_REQUIRED=1 bash scripts/matrix.sh
 
 The floor tracks upstream's support window, so it moves. Five places state it
 and all five have to agree: the `go` directive in each module's `go.mod`, the
-one in `go.work`, `run.go` in `.golangci.yml`, the version matrix in the tests
-workflow, and the claim README.md makes. `go build` will not catch a
-disagreement — the `go` directive does not gate standard library APIs. `go vet`
-does, reporting `X requires goN.M or later`, which is why vet runs ahead of the
-tests in CI.
+one in `go.work`, `run.go` in every module's `.golangci.yml`, the version matrix
+in the tests workflow, and the claim README.md makes. `go build` will not catch
+a disagreement — the `go` directive does not gate standard library APIs.
+`go vet` does, reporting `X requires goN.M or later`, which is why vet runs
+ahead of the tests in CI.
 
 Raising the floor unlocks syntax, and two tools find it. Neither alone is
 enough.

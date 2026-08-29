@@ -51,9 +51,9 @@ func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 
 	for _, module := range modules {
 		state(filepath.ToSlash(filepath.Join(module, "go.mod")), goDirective)
+		state(filepath.ToSlash(filepath.Join(module, ".golangci.yml")), lintGoVersion)
 	}
 	state("go.work", goDirective)
-	state(".golangci.yml", lintGoVersion)
 	state(".github/workflows/tests.yml", workflowGoVersions)
 
 	// The workflow names a range, and only its oldest entry claims anything
