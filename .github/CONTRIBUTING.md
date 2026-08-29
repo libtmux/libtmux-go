@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. This repository holds four Go modules, and the gates below
+Thanks for looking. This repository holds five Go modules, and the gates below
 are what a change has to pass.
 
 This file is how we work. For how we write — doc comments, `CHANGELOG.md`,

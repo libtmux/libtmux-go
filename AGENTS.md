@@ -10,13 +10,14 @@ was asked for.
 
 ## What is here
 
-Four Go modules, each with its own `go.mod`:
+Five Go modules, each with its own `go.mod`:
 
 | Path | Module | What it is |
 | --- | --- | --- |
 | `.` | the tmux module | Server, sessions, windows, panes, options, hooks, formats, filters, snapshots, engines, and plans. Zero runtime dependencies. |
 | `workspace/` | consumer | Loads tmuxp-style YAML workspaces and builds them |
 | `mcp/` | consumer | Serves one tmux server to Model Context Protocol clients |
+| `examples/` | consumer | Compiles the examples quoted in generated documentation |
 | `benchmarks/` | tool | Prints what each way of reaching tmux costs |
 
 Inside the tmux module, `tmuxq` holds model-free generics, `tmuxtest` gives
