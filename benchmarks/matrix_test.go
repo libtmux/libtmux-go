@@ -2,11 +2,61 @@ package main
 
 import (
 	"context"
+	"errors"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
+
+// TestProcessCounterForwardsAndCountsRealTmux catches a proxy that records an
+// invocation without preserving the selected tmux executable's behavior.
+func TestProcessCounterForwardsAndCountsRealTmux(t *testing.T) {
+	counter, err := newProcessCounter(t.TempDir())
+	if errors.Is(err, errProcessCounterUnsupported) {
+		t.Skip(err)
+	}
+	if err != nil {
+		t.Fatalf("newProcessCounter() error = %v", err)
+	}
+
+	direct := exec.Command(counter.executable, "-V")
+	direct.Env = cleanEnvironment()
+	want, err := direct.CombinedOutput()
+	if err != nil {
+		t.Fatalf("real tmux -V error = %v; output = %q", err, want)
+	}
+
+	proxied := exec.Command(counter.proxy, "-V")
+	proxied.Env = counter.environment(cleanEnvironment())
+	got, err := proxied.CombinedOutput()
+	if err != nil {
+		t.Fatalf("proxied tmux -V error = %v; output = %q", err, got)
+	}
+	if strings.TrimSpace(string(got)) != strings.TrimSpace(string(want)) {
+		t.Errorf("proxied tmux -V = %q, want %q", got, want)
+	}
+
+	count, err := counter.total()
+	if err != nil {
+		t.Fatalf("total() error = %v", err)
+	}
+	if count != 1 {
+		t.Errorf("proxy recorded %d invocations, want 1", count)
+	}
+	if err := counter.reset(); err != nil {
+		t.Fatalf("reset() error = %v", err)
+	}
+	count, err = counter.total()
+	if err != nil {
+		t.Fatalf("total() after reset error = %v", err)
+	}
+	if count != 0 {
+		t.Errorf("proxy recorded %d invocations after reset, want 0", count)
+	}
+}
 
 // TestMatrixAnswersAgree requires equivalent results within each workload.
 //
@@ -55,6 +105,12 @@ func TestMatrixCostsDifferAsDocumented(t *testing.T) {
 	}
 
 	// Chaining removes a tmux process per command it groups.
+	if got := byMode["process"].processes; got == 0 {
+		t.Error("process path recorded no tmux invocations")
+	}
+	if got := byMode["chained"].processes; got == 0 {
+		t.Error("chained path recorded no tmux invocations")
+	}
 	if byMode["chained"].processes >= byMode["process"].processes {
 		t.Errorf("chaining did not reduce tmux invocations: %d vs %d",
 			byMode["chained"].processes, byMode["process"].processes)
@@ -77,6 +133,9 @@ func TestMatrixCostsDifferAsDocumented(t *testing.T) {
 func probedVersion(ctx context.Context, t *testing.T) tmux.Version {
 	t.Helper()
 	version, err := probeVersion(ctx)
+	if errors.Is(err, errProcessCounterUnsupported) {
+		t.Skip(err)
+	}
 	if err != nil {
 		t.Fatalf("probeVersion() error = %v", err)
 	}

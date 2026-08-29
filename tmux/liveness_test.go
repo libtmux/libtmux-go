@@ -150,50 +150,6 @@ func TestServerSessionsReportsEveryUnusableSocket(t *testing.T) {
 	}
 }
 
-// Server shutdown races between connect failure and lost-connection output.
-// ErrNoServer must classify both so liveness checks are timing-independent.
-func TestErrNoServerCoversEveryWayTmuxSaysItIsGone(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name   string
-		stderr string
-		want   bool
-	}{
-		{name: "connection refused", stderr: "no server running on /tmp/s", want: true},
-		{name: "socket absent", stderr: "error connecting to /tmp/s (No such file or directory)", want: true},
-		{name: "socket unreadable", stderr: "error connecting to /tmp/s (Permission denied)", want: true},
-		{name: "socket uncreatable", stderr: "error creating /tmp/s (Permission denied)", want: true},
-		{name: "connection lost", stderr: "server exited unexpectedly", want: true},
-		{name: "server shut down", stderr: "server exited", want: true},
-		{name: "a missing target", stderr: "can't find window: @99", want: false},
-		{name: "a client detaching", stderr: "detached (from session $0)", want: false},
-		{name: "a lost terminal", stderr: "lost tty", want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			runner := tmux.CommandRunnerFunc(func(
-				context.Context, tmux.CommandRequest,
-			) (tmux.CommandResult, error) {
-				return tmux.CommandResult{Stderr: []string{test.stderr}, ExitCode: 1}, nil
-			})
-			server := mustNewServer(t, tmux.ServerOptions{
-				Binary: testExecutable(t),
-				Runner: runner,
-			})
-
-			_, err := server.Sessions(context.Background())
-			if err == nil {
-				t.Fatal("Sessions() error = nil, want a reported failure")
-			}
-			if got := errors.Is(err, tmux.ErrNoServer); got != test.want {
-				t.Fatalf("errors.Is(%q, ErrNoServer) = %t, want %t", test.stderr, got, test.want)
-			}
-		})
-	}
-}
-
 func TestServerVersionMatchesConfiguredTmuxBinary(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -240,4 +196,13 @@ func TestServerVersionRedactsMalformedProxyOutput(t *testing.T) {
 			t.Fatalf("Server.Version() error retained proxy output: %s", representation)
 		}
 	}
+}
+
+func mustNewServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	return server
 }

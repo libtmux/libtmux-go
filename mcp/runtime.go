@@ -55,6 +55,7 @@ type tmuxRuntime struct {
 	base       tmux.Server
 	ctx        context.Context
 	onTerminal func(error)
+	deps       mcpDependencies
 
 	mutex               sync.Mutex
 	state               runtimeState
@@ -104,6 +105,7 @@ func newRuntime(
 		base:              base,
 		ctx:               ctx,
 		onTerminal:        onTerminal,
+		deps:              defaultMCPDependencies(),
 		state:             runtimeUnbound,
 		connectionsClosed: make(chan struct{}),
 	}
@@ -375,10 +377,8 @@ func (r *tmuxRuntime) bootstrap(
 ) (tmux.Session, error) {
 	operationCtx, cancel := r.operationContext(ctx)
 	defer cancel()
-	original, commandConnection, err := r.base.NewSessionConnection(
-		operationCtx,
-		request,
-		tmux.ConnectionOptions{},
+	original, commandConnection, err := r.deps.newSessionConnection(
+		operationCtx, r.base, request,
 	)
 	if err != nil {
 		r.failBinding(original, commandConnection, err, true)
@@ -414,14 +414,7 @@ func (r *tmuxRuntime) bind(
 func (r *tmuxRuntime) probeSessions(ctx context.Context) ([]tmux.Session, error) {
 	operationCtx, cancel := r.operationContext(ctx)
 	defer cancel()
-	alive, err := r.base.IsAlive(operationCtx)
-	if err != nil {
-		return nil, err
-	}
-	if !alive {
-		return nil, tmux.ErrNoServer
-	}
-	return r.base.Sessions(operationCtx)
+	return r.deps.probeSessions(operationCtx, r.base)
 }
 
 func (r *tmuxRuntime) operationContext(ctx context.Context) (context.Context, context.CancelFunc) {

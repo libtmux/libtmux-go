@@ -26,8 +26,8 @@
 //   - Batch dependent commands with [NewPlan].
 //
 // The tmuxtest package runs integration tests against an isolated real tmux.
-// [ServerOptions.Runner] intercepts dispatched subprocess commands after
-// construction. It does not replace executable discovery or control startup.
+// Tests of process behavior can point [ServerOptions.Binary] at an executable
+// fixture; construction still resolves and freezes it.
 //
 // # Naming and call shapes
 //

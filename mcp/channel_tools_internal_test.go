@@ -17,18 +17,22 @@ func TestWaitForChannelRejectsNegativeTimeout(t *testing.T) {
 	runs := 0
 	target := mustInternalTmuxServer(t, tmux.ServerOptions{
 		SocketName: "negative-channel-timeout-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			runs++
-			return tmux.CommandResult{ExitCode: -1}, errors.New("runtime reached")
-		}),
 	})
 	instance := mustInternalMCPServer(t, target)
+	instance.runtime.deps.waitForChannel = func(
+		context.Context,
+		tmux.Server,
+		tmux.WaitForRequest,
+	) error {
+		runs++
+		return errors.New("runtime reached")
+	}
+	ctx := withAcquiredServer(t.Context(), &runtimeAcquisition{
+		server: target, runtime: instance.runtime, unbound: true,
+	})
 
 	_, _, err := instance.tools.waitForChannel(
-		t.Context(), nil,
+		ctx, nil,
 		waitForChannelInput{Channel: "negative-timeout", TimeoutSeconds: -1},
 	)
 	if err == nil || !strings.Contains(err.Error(), "timeoutSeconds") {
@@ -54,14 +58,14 @@ func TestWaitForChannelSchemaRejectsNegativeTimeouts(t *testing.T) {
 func TestWaitForChannelSurfacesAnIndependentSetupDeadline(t *testing.T) {
 	target := mustInternalTmuxServer(t, tmux.ServerOptions{
 		SocketName: "channel-independent-deadline-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			return tmux.CommandResult{ExitCode: -1}, context.DeadlineExceeded
-		}),
 	})
 	instance := mustInternalMCPServer(t, target)
+	instance.runtime.deps.probeSessions = func(
+		context.Context,
+		tmux.Server,
+	) ([]tmux.Session, error) {
+		return nil, context.DeadlineExceeded
+	}
 
 	_, _, err := instance.tools.waitForChannel(
 		t.Context(), nil,
@@ -75,14 +79,15 @@ func TestWaitForChannelSurfacesAnIndependentSetupDeadline(t *testing.T) {
 func TestWaitForChannelSurfacesAnIndependentCommandDeadline(t *testing.T) {
 	target := mustInternalTmuxServer(t, tmux.ServerOptions{
 		SocketName: "channel-command-deadline-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			return tmux.CommandResult{ExitCode: -1}, context.DeadlineExceeded
-		}),
 	})
 	instance := mustInternalMCPServer(t, target)
+	instance.runtime.deps.waitForChannel = func(
+		context.Context,
+		tmux.Server,
+		tmux.WaitForRequest,
+	) error {
+		return context.DeadlineExceeded
+	}
 	ctx := withAcquiredServer(t.Context(), &runtimeAcquisition{
 		server: target, runtime: instance.runtime, unbound: true,
 	})
@@ -98,21 +103,9 @@ func TestWaitForChannelSurfacesAnIndependentCommandDeadline(t *testing.T) {
 
 func TestWaitForChannelBoundsColdRuntimeAcquisition(t *testing.T) {
 	t.Setenv(WaitCeilingEnvironmentVariable, "1")
-	longSetup := errors.New("runtime acquisition outlived the wait ceiling")
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+	target := mustInternalTmuxServer(t, executableFixtureOptions(t, fixtureHang, tmux.ServerOptions{
 		SocketName: "cold-channel-timeout-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			ctx context.Context,
-			_ tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			deadline, ok := ctx.Deadline()
-			if !ok || time.Until(deadline) > 2*time.Second {
-				return tmux.CommandResult{ExitCode: -1}, longSetup
-			}
-			<-ctx.Done()
-			return tmux.CommandResult{ExitCode: -1}, ctx.Err()
-		}),
-	})
+	}))
 	instance := mustInternalMCPServer(t, target)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

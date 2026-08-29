@@ -416,19 +416,14 @@ func waitForRuntimeState(t *testing.T, runtime *tmuxRuntime, want runtimeState) 
 
 func TestTerminalProbeFailurePoisonsRuntime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	target, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "runtime-probe-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			return tmux.CommandResult{ExitCode: -1}, tmux.ErrDaemonReplaced
-		}),
-	})
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "runtime-probe-unused"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime.deps.probeSessions = func(context.Context, tmux.Server) ([]tmux.Session, error) {
+		return nil, tmux.ErrDaemonReplaced
+	}
 
 	if _, err := runtime.command(context.Background()); !errors.Is(err, tmux.ErrDaemonReplaced) {
 		t.Fatalf("command error = %v, want ErrDaemonReplaced", err)

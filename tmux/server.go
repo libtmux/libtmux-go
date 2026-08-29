@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -42,77 +41,6 @@ func (s *serverState) coordination() *serverShared {
 
 type commandRunner interface {
 	Run(context.Context, tmuxcmd.Request) (tmuxcmd.Result, error)
-}
-
-type commandRunnerAdapter struct {
-	runner CommandRunner
-}
-
-func configuredCommandRunner(runner CommandRunner) commandRunner {
-	if runner == nil {
-		return tmuxcmd.Runner{}
-	}
-	return commandRunnerAdapter{runner: runner}
-}
-
-func (adapter commandRunnerAdapter) Run(
-	ctx context.Context,
-	request tmuxcmd.Request,
-) (tmuxcmd.Result, error) {
-	result, err := adapter.runner.Run(ctx, CommandRequest{
-		Binary:      request.Binary,
-		Arguments:   slices.Clone(request.Arguments),
-		Environment: slices.Clone(request.Environment),
-		Directory:   request.Directory,
-		Stdio:       exportCommandStdio(request.Stdio),
-	})
-	return tmuxcmd.Result{
-		Command:   slices.Clone(result.Command),
-		Stdout:    slices.Clone(result.Stdout),
-		RawStdout: bytes.Clone(result.RawStdout),
-		Stderr:    slices.Clone(result.Stderr),
-		ExitCode:  result.ExitCode,
-	}, err
-}
-
-// SubprocessRunner returns the default [CommandRunner]. It preserves completed
-// nonzero exits, decoded output lines, and exact RawStdout for wrapping runners.
-func SubprocessRunner() CommandRunner {
-	return subprocessRunner(0)
-}
-
-// subprocessRunner exposes the transport wait delay for tests; zero uses its default.
-func subprocessRunner(waitDelay time.Duration) CommandRunner {
-	return CommandRunnerFunc(func(
-		ctx context.Context,
-		request CommandRequest,
-	) (CommandResult, error) {
-		result, err := tmuxcmd.Runner{WaitDelay: waitDelay}.Run(ctx, tmuxcmd.Request{
-			Binary:      request.Binary,
-			Arguments:   slices.Clone(request.Arguments),
-			Environment: slices.Clone(request.Environment),
-			Directory:   request.Directory,
-			Stdio:       importCommandStdio(request.Stdio),
-		})
-		return CommandResult{
-			Command:   slices.Clone(result.Command),
-			Stdout:    slices.Clone(result.Stdout),
-			RawStdout: bytes.Clone(result.RawStdout),
-			Stderr:    slices.Clone(result.Stderr),
-			ExitCode:  result.ExitCode,
-		}, err
-	})
-}
-
-func exportCommandStdio(stdio *tmuxcmd.Stdio) *CommandStdio {
-	if stdio == nil {
-		return nil
-	}
-	return &CommandStdio{
-		Stdin:  stdio.Stdin,
-		Stdout: stdio.Stdout,
-		Stderr: stdio.Stderr,
-	}
 }
 
 // SocketPath returns the absolute socket path selected when the server was
@@ -160,10 +88,10 @@ func (s Server) Executable() string {
 // submit a command list. tmux runs a list until a command fails and drops the
 // rest, and answers with one merged stdout, so a caller that needs to know
 // which command produced which line submits them separately. A list means the
-// same thing through every transport.
+// same thing through either execution binding.
 //
 // Only a standalone ";" separates commands. Other semicolons follow the selected
-// transport's parsing; typed operations keep values literal across transports.
+// binding's parsing; typed operations keep values literal across bindings.
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error) {
 	result, _, err := s.dispatch(ctx, true, args...)
 	return result, err

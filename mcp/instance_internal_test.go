@@ -72,22 +72,17 @@ func (t *versionGateTransport) Connect(context.Context) (sdk.Connection, error) 
 func TestInstanceConnectChecksTheMCPVersionBeforeTransport(t *testing.T) {
 	for _, test := range []struct {
 		version   string
+		fixture   string
 		wantCalls int32
 		wantError error
 	}{
-		{version: "3.5", wantError: tmux.ErrVersionTooLow},
-		{version: "3.6", wantCalls: 1, wantError: errVersionGateTransportReached},
+		{version: "3.5", fixture: fixtureVersion35, wantError: tmux.ErrVersionTooLow},
+		{version: "3.6", fixture: fixtureVersion36, wantCalls: 1, wantError: errVersionGateTransportReached},
 	} {
 		t.Run(test.version, func(t *testing.T) {
-			target := mustInternalTmuxServer(t, tmux.ServerOptions{
+			target := mustInternalTmuxServer(t, executableFixtureOptions(t, test.fixture, tmux.ServerOptions{
 				SocketName: "version-gate-unused",
-				Runner: tmux.CommandRunnerFunc(func(
-					context.Context,
-					tmux.CommandRequest,
-				) (tmux.CommandResult, error) {
-					return tmux.CommandResult{Stdout: []string{"tmux " + test.version}}, nil
-				}),
-			})
+			}))
 			instance := mustInternalMCPServer(t, target)
 			transport := &versionGateTransport{}
 			_, err := instance.Connect(
@@ -146,15 +141,9 @@ func TestInstanceConnectRejectsInstalledTmuxBelowMCPFloor(t *testing.T) {
 }
 
 func TestInstanceRejectsAnUnknownResponseCommitBeforeTransport(t *testing.T) {
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+	target := mustInternalTmuxServer(t, executableFixtureOptions(t, fixtureVersion36, tmux.ServerOptions{
 		SocketName: "response-commit-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-		}),
-	})
+	}))
 	instance := mustInternalMCPServer(t, target)
 	transport := &versionGateTransport{}
 	_, err := instance.Connect(t.Context(), transport, nil)

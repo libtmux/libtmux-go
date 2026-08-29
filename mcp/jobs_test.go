@@ -340,16 +340,6 @@ func TestANegativeTimeoutFollowerIsRejectedWithoutWaiting(t *testing.T) {
 	}
 }
 
-type blockingPaneLookupRunner struct{}
-
-func (blockingPaneLookupRunner) Run(
-	ctx context.Context,
-	_ tmux.CommandRequest,
-) (tmux.CommandResult, error) {
-	<-ctx.Done()
-	return tmux.CommandResult{ExitCode: -1}, ctx.Err()
-}
-
 func TestACommittedJobStaysFinishedWhenPaneLookupReachesTheDeadline(t *testing.T) {
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "job-capture-deadline-unused"})
 	if err != nil {
@@ -373,13 +363,11 @@ func TestACommittedJobStaysFinishedWhenPaneLookupReachesTheDeadline(t *testing.T
 	if err := serverSession.scope.jobs.keep(&entry); err != nil {
 		t.Fatal(err)
 	}
-	blockedTarget, err := tmux.NewServer(tmux.ServerOptions{
-		Binary:             target.Executable(),
+	blockedTarget, err := tmux.NewServer(executableFixtureOptions(t, fixtureHang, tmux.ServerOptions{
 		SocketPath:         target.SocketPath(),
 		ConfigFile:         target.ConfigFile(),
 		ProcessEnvironment: target.ProcessEnvironment(),
-		Runner:             blockingPaneLookupRunner{},
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,19 +389,16 @@ func TestACommittedJobStaysFinishedWhenPaneLookupReachesTheDeadline(t *testing.T
 	}
 }
 
-type blockingCaptureRunner struct{ next tmux.CommandRunner }
-
-func (r blockingCaptureRunner) Run(
-	ctx context.Context,
-	request tmux.CommandRequest,
-) (tmux.CommandResult, error) {
-	for _, argument := range request.Arguments {
-		if strings.Contains(argument, "capture-pane") {
-			<-ctx.Done()
-			return tmux.CommandResult{ExitCode: -1}, ctx.Err()
-		}
+func blockingCaptureExecutable(t testing.TB, executable string) string {
+	t.Helper()
+	proxy := filepath.Join(t.TempDir(), "tmux-blocking-capture")
+	script := "#!/bin/sh\nfor argument in \"$@\"; do\n" +
+		"  case \"$argument\" in *capture-pane*) exec /bin/sleep 3600;; esac\n" +
+		"done\nexec " + shellQuote(executable) + " \"$@\"\n"
+	if err := os.WriteFile(proxy, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
 	}
-	return r.next.Run(ctx, request)
+	return proxy
 }
 
 //libtmux:real-tmux
@@ -453,13 +438,10 @@ func TestACommittedJobStaysFinishedWhenOutputCaptureReachesTheDeadline(t *testin
 		t.Fatal(err)
 	}
 	blockedTarget, err := tmux.NewServer(tmux.ServerOptions{
-		Binary:             target.Executable(),
+		Binary:             blockingCaptureExecutable(t, target.Executable()),
 		SocketPath:         target.SocketPath(),
 		ConfigFile:         target.ConfigFile(),
 		ProcessEnvironment: target.ProcessEnvironment(),
-		Runner: blockingCaptureRunner{
-			next: tmux.SubprocessRunner(),
-		},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -55,14 +55,6 @@ type ServerOptions struct {
 	// WarningHandler receives nonfatal compatibility warnings. Nil discards
 	// warnings. See WarningHandler for delivery and concurrency semantics.
 	WarningHandler WarningHandler
-	// Runner intercepts subprocess execution after NewServer resolves Binary.
-	// Nil uses the local tmux subprocess runner. The server retains Runner,
-	// which must support concurrent calls when the server is used concurrently.
-	//
-	// Runner does not replace executable discovery, and Server.OpenControl
-	// starts the resolved tmux -C process directly. Registration and version
-	// probes use the server's configured command runner.
-	Runner CommandRunner
 }
 
 type serverConfig struct {
@@ -179,10 +171,6 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 		return Server{}, errors.New("resolve tmux executable: resolver returned a relative path")
 	}
 
-	executor := dependencies.executor
-	if options.Runner != nil {
-		executor = configuredCommandRunner(options.Runner)
-	}
 	config := serverConfig{
 		executable:         filepath.Clean(executable),
 		directory:          filepath.Clean(cwd),
@@ -201,7 +189,7 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 	freezeNamedSocketEnvironment(&config)
 	return Server{state: &serverState{
 		config:   config,
-		executor: executor,
+		executor: dependencies.executor,
 		shared:   &serverShared{},
 	}}, nil
 }

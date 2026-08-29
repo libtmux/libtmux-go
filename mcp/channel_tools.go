@@ -80,7 +80,9 @@ func (t *tools) waitForChannel(
 		}
 		return nil, output, err
 	}
-	if err := waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: channel}); err != nil {
+	if err := t.runtime.deps.waitForChannel(
+		waitCtx, waiter, tmux.WaitForRequest{Channel: channel},
+	); err != nil {
 		if isOwnWaitDeadline(ctx, waitCtx, err) {
 			return nil, output, nil
 		}

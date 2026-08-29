@@ -281,9 +281,10 @@ func TestSomething(t *testing.T) {
 `NewServer` snapshots its effective environment and working directory, resolves
 one absolute executable, and returns an error before starting tmux when
 configuration or resolution fails. Later environment and directory changes do
-not retarget the handle, and the zero `Server` is invalid. Tests without tmux
-can point `ServerOptions.Binary` at an executable fixture and supply a `Runner`
-for ordinary process calls; construction still resolves `Binary`.
+not retarget the handle, and the zero `Server` is invalid. Tests of process
+behavior can point `ServerOptions.Binary` at an executable fixture;
+construction still resolves and freezes it. Use `tmuxtest` when the behavior
+belongs to a real tmux daemon.
 
 ## Documentation
 

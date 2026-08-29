@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -972,33 +971,19 @@ func ExamplePane_Capture() {
 	// Output: build ready
 }
 
-func ExampleServerOptions_Runner() {
-	// Runner intercepts dispatched subprocess commands after construction.
-	fake := tmux.CommandRunnerFunc(
-		func(_ context.Context, request tmux.CommandRequest) (tmux.CommandResult, error) {
-			return tmux.CommandResult{
-				Command: request.Arguments,
-				Stdout:  []string{"tmux 3.7b"},
-			}, nil
-		},
-	)
+func ExampleServerOptions_Binary() {
 	executable, err := os.Executable()
 	if err != nil {
 		fmt.Println("test executable:", err)
 		return
 	}
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		Binary: executable,
-		Runner: fake,
-	})
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: executable})
 	if err != nil {
 		fmt.Println("new server:", err)
 		return
 	}
-
-	version, err := server.Version(context.Background())
-	fmt.Println(version, err)
-	// Output: 3.7b <nil>
+	fmt.Println(filepath.IsAbs(server.Executable()))
+	// Output: true
 }
 
 func ExampleServer_Session() {
@@ -1470,46 +1455,6 @@ func ExamplePoll() {
 	}
 	fmt.Println("build ready")
 	// Output: build ready
-}
-
-// ExampleSubprocessRunner counts the requests that become tmux processes. The
-// wrapper delegates execution, so it stays correct without knowing what a
-// result has to look like.
-func ExampleSubprocessRunner() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	var mutex sync.Mutex
-	var processes int
-	counting := tmux.CommandRunnerFunc(func(
-		ctx context.Context,
-		request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		mutex.Lock()
-		processes++
-		mutex.Unlock()
-		return tmux.SubprocessRunner().Run(ctx, request)
-	})
-
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-subprocess-runner",
-		Runner:     counting,
-	})
-	if err != nil {
-		fmt.Println("new server:", err)
-		return
-	}
-	defer killExampleServer(server)
-
-	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"}); err != nil {
-		fmt.Println("create session:", err)
-		return
-	}
-	mutex.Lock()
-	counted := processes > 0
-	mutex.Unlock()
-	fmt.Println("requests became processes:", counted)
-	// Output: requests became processes: true
 }
 
 // ExampleControlClient_NextNotification waits for a pane's output without

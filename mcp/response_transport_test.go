@@ -179,15 +179,9 @@ func knownTransportReader(t *testing.T, transport sdk.Transport) io.Reader {
 func TestInstanceConnectRejectsATwoCallIOBatch(t *testing.T) {
 	const batch = `[{"jsonrpc":"2.0","id":1,"method":"tools/list"},` +
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}]`
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+	target := mustInternalTmuxServer(t, executableFixtureOptions(t, fixtureVersion36, tmux.ServerOptions{
 		SocketName: "batch-connect-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-		}),
-	})
+	}))
 	instance := mustInternalMCPServer(t, target)
 	var replies bytes.Buffer
 	session, err := instance.Connect(t.Context(), &sdk.IOTransport{

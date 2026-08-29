@@ -224,6 +224,30 @@ func TestClassifyRunErrorPreservesWaitDelayFailure(t *testing.T) {
 	}
 }
 
+func TestRunnerReportsWaitDelayWhenDescendantHoldsOutputPipeAfterExit(t *testing.T) {
+	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
+	request := helperRequest("exit-with-orphan-output-pipe")
+	request.Arguments = append(request.Arguments, pidPath)
+
+	result, err := (Runner{WaitDelay: time.Millisecond}).Run(
+		context.Background(),
+		request,
+	)
+	if pidBytes, readErr := os.ReadFile(pidPath); readErr == nil {
+		if pid, parseErr := strconv.Atoi(string(pidBytes)); parseErr == nil {
+			if process, findErr := os.FindProcess(pid); findErr == nil {
+				_ = process.Kill()
+			}
+		}
+	}
+	if !errors.Is(err, exec.ErrWaitDelay) {
+		t.Fatalf("Run() error = %v, want exec.ErrWaitDelay", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("Run() exit code = %d, want the parent process's successful exit", result.ExitCode)
+	}
+}
+
 func TestClassifyRunErrorPreservesUnattributedSignalAfterCancellation(t *testing.T) {
 	t.Parallel()
 
@@ -348,6 +372,29 @@ func TestRunnerHelperProcess(t *testing.T) {
 			t.Fatalf("parse exit code: %v", err)
 		}
 		os.Exit(exitCode)
+	case "exit-with-orphan-output-pipe":
+		if separator+2 >= len(os.Args) {
+			t.Fatal("descendant pid path is missing")
+		}
+		child := exec.Command(
+			os.Args[0],
+			"-test.run=^TestRunnerHelperProcess$",
+			"--",
+			"hold-output-pipe",
+		)
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Start(); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(
+			os.Args[separator+2],
+			[]byte(strconv.Itoa(child.Process.Pid)),
+			0o600,
+		); err != nil {
+			t.Fatal(err)
+		}
+		os.Exit(0)
 	case "orphan-output-pipe":
 		child := exec.Command(
 			os.Args[0],

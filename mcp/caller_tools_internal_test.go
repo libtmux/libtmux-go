@@ -3,8 +3,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"slices"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,57 +16,42 @@ func TestCallerIdentityRetriesTmuxFailure(t *testing.T) {
 	transportFailure := errors.New("caller discovery transport failed")
 
 	tests := []struct {
-		name string
-		run  func(tmux.CommandRequest) (tmux.CommandResult, error)
-		want error
+		name      string
+		transport bool
+		want      error
 	}{
-		{
-			name: "transport failure",
-			run: func(tmux.CommandRequest) (tmux.CommandResult, error) {
-				return tmux.CommandResult{ExitCode: -1}, transportFailure
-			},
-			want: transportFailure,
-		},
-		{
-			name: "completed failure",
-			run: func(request tmux.CommandRequest) (tmux.CommandResult, error) {
-				if slices.Contains(request.Arguments, "-V") {
-					return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-				}
-				return tmux.CommandResult{
-					ExitCode: 1,
-					Stderr:   []string{"no server running on test socket"},
-				}, nil
-			},
-			want: tmux.ErrCommand,
-		},
+		{name: "transport failure", transport: true, want: transportFailure},
+		{name: "completed failure", want: tmux.ErrCommand},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var calls atomic.Int32
-			target, err := tmux.NewServer(tmux.ServerOptions{
+			options := tmux.ServerOptions{
 				SocketName: "caller-retry-unused",
-				Runner: tmux.CommandRunnerFunc(func(
-					_ context.Context,
-					request tmux.CommandRequest,
-				) (tmux.CommandResult, error) {
-					calls.Add(1)
-					return test.run(request)
-				}),
-			})
-			if err != nil {
-				t.Fatal(err)
 			}
+			if !test.transport {
+				options = executableFixtureOptions(t, fixtureUnavailable, options)
+			}
+			target := mustInternalTmuxServer(t, options)
 			registry := &tools{runtime: newRuntime(t.Context(), target, nil)}
+			calls := 0
+			if test.transport {
+				registry.runtime.deps.probeSessions = func(
+					context.Context,
+					tmux.Server,
+				) ([]tmux.Session, error) {
+					calls++
+					return nil, transportFailure
+				}
+			}
 
 			for attempt := range 2 {
 				if _, err := registry.callerIdentityFor(t.Context()); !errors.Is(err, test.want) {
 					t.Fatalf("attempt %d error = %v, want %v", attempt+1, err, test.want)
 				}
 			}
-			if calls.Load() < 2 {
-				t.Fatalf("two discoveries made %d runner calls, want at least two", calls.Load())
+			if test.transport && calls != 2 {
+				t.Fatalf("two discoveries made %d probes, want 2", calls)
 			}
 			registry.callerMutex.Lock()
 			cached := registry.callerCached

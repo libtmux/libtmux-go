@@ -3,9 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,34 +38,34 @@ func TestCreateWindowPreservesIdentityAfterPostCreationFailure(t *testing.T) {
 			if test.terminal {
 				failure = errors.Join(tmux.ErrDaemonReplaced, injected)
 			}
-			delegate := tmux.SubprocessRunner()
-			var created atomic.Bool
-			var refreshes atomic.Int32
 			target := mustInternalTmuxServer(t, tmux.ServerOptions{
 				SocketPath:         backing.SocketPath(),
 				ConfigFile:         backing.ConfigFile(),
 				ProcessEnvironment: backing.ProcessEnvironment(),
-				Runner: tmux.CommandRunnerFunc(func(
-					ctx context.Context,
-					request tmux.CommandRequest,
-				) (tmux.CommandResult, error) {
-					contains := func(command string) bool {
-						return slices.ContainsFunc(request.Arguments, func(argument string) bool {
-							return argument == command || strings.HasPrefix(argument, "'"+command+"' ")
-						})
-					}
-					if created.Load() && contains("list-windows") &&
-						refreshes.Add(1) == test.failedRefresh {
-						return tmux.CommandResult{ExitCode: -1}, failure
-					}
-					result, err := delegate.Run(ctx, request)
-					if err == nil && result.ExitCode == 0 && contains("new-window") {
-						created.Store(true)
-					}
-					return result, err
-				}),
 			})
 			instance := mustInternalMCPServer(t, target)
+			defaults := instance.runtime.deps
+			if test.failedRefresh == 1 {
+				instance.runtime.deps.newWindow = func(
+					ctx context.Context,
+					session tmux.Session,
+					request tmux.NewWindowRequest,
+				) (tmux.Window, error) {
+					window, err := defaults.newWindow(ctx, session, request)
+					if err != nil {
+						return window, err
+					}
+					return window, failure
+				}
+			} else {
+				instance.runtime.deps.refreshWindow = func(
+					context.Context,
+					tmux.Server,
+					tmux.WindowID,
+				) (tmux.Window, error) {
+					return tmux.Window{}, failure
+				}
+			}
 			callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 
 			result, output, err := instance.tools.createWindow(
@@ -90,6 +88,52 @@ func TestCreateWindowPreservesIdentityAfterPostCreationFailure(t *testing.T) {
 				t.Fatalf("failure text = %q, want injected refresh failure", callToolResultText(result))
 			}
 		})
+	}
+}
+
+//libtmux:real-tmux
+func TestCreateSessionReportsPartialIdentityAfterRefreshFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	instance := mustInternalMCPServer(t, target)
+	refreshFailure := errors.New("injected post-creation refresh failure")
+	create := instance.runtime.deps.newSessionConnection
+	failedRefresh := false
+	instance.runtime.deps.newSessionConnection = func(
+		ctx context.Context,
+		server tmux.Server,
+		request tmux.NewSessionRequest,
+	) (tmux.Session, *tmux.Connection, error) {
+		session, connection, err := create(ctx, server, request)
+		if err != nil {
+			return session, connection, err
+		}
+		failedRefresh = true
+		return session, connection, refreshFailure
+	}
+
+	result, output, err := instance.tools.createSession(
+		ctx, nil,
+		createSessionInput{Name: "partially-created", Command: "sleep 300"},
+	)
+	if err != nil {
+		t.Fatalf("createSession() error = %v, want a classified tool failure", err)
+	}
+	if !failedRefresh {
+		t.Fatal("create_session did not reach the injected post-creation refresh failure")
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("createSession() result = %#v, want classified failure", result)
+	}
+	if output.SessionID == "" || output.SessionName != "partially-created" {
+		t.Fatalf("createSession() output = %+v, want the created session identity", output)
+	}
+	if !strings.Contains(callToolResultText(result), refreshFailure.Error()) {
+		t.Fatalf("failure text = %q, want injected refresh failure", callToolResultText(result))
+	}
+	if _, err := target.Session(ctx, tmux.SessionID(output.SessionID)); err != nil {
+		t.Fatalf("created session %s did not survive its setup failure: %v", output.SessionID, err)
 	}
 }
 

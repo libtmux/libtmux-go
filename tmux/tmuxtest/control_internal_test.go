@@ -73,29 +73,46 @@ func TestControlCommandPrefixPinsTheEffectiveSocketPath(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
+	record := filepath.Join(root, "arguments")
+	proxy := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"
+`), 0o700); err != nil {
+		t.Fatalf("write tmux proxy: %v", err)
+	}
 	server := mustNewTmuxServer(t, tmux.ServerOptions{
-		Binary:             os.Args[0],
-		SocketName:         "named",
-		ConfigFile:         "relative.conf",
-		Colors:             tmux.Color256,
-		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
-		Runner: tmux.CommandRunnerFunc(func(
-			_ context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			return tmux.CommandResult{
-				Command:  append([]string{request.Binary}, request.Arguments...),
-				ExitCode: 0,
-			}, nil
-		}),
+		Binary:     proxy,
+		SocketName: "named",
+		ConfigFile: "relative.conf",
+		Colors:     tmux.Color256,
+		ProcessEnvironment: []string{
+			"TMUX_TMPDIR=" + root,
+			"LIBTMUX_CONTROL_PREFIX_ARGUMENTS=" + record,
+		},
 	})
 	prefix, err := controlCommandPrefix(context.Background(), server)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{os.Args[0], "-2", "-S" + server.SocketPath()}
+	want := []string{proxy, "-2", "-S" + server.SocketPath()}
 	if !slices.Equal(prefix, want) {
 		t.Fatalf("controlCommandPrefix() = %#v, want %#v", prefix, want)
+	}
+	recorded, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatalf("read proxy arguments: %v", err)
+	}
+	wantArguments := []string{
+		"-2",
+		"-frelative.conf",
+		"-Lnamed",
+		"display-message",
+		"-p",
+		"#{pid}",
+	}
+	arguments := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if !slices.Equal(arguments, wantArguments) {
+		t.Fatalf("tmux proxy arguments = %#v, want %#v", arguments, wantArguments)
 	}
 }
 

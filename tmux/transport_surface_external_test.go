@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestLegacyEngineSurfaceIsAbsent(t *testing.T) {
+func TestLegacyTransportSurfaceIsAbsent(t *testing.T) {
 	t.Parallel()
 
 	forbidden := map[string]bool{
@@ -32,6 +32,12 @@ func TestLegacyEngineSurfaceIsAbsent(t *testing.T) {
 		"OpenControlPool":          true,
 		"WarningControlPoolClosed": true,
 		"WarningControlPoolUnused": true,
+		"CommandRunner":            true,
+		"CommandRunnerFunc":        true,
+		"CommandRequest":           true,
+		"CommandStdio":             true,
+		"SubprocessRunner":         true,
+		"Runner":                   true,
 	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -56,6 +62,12 @@ func TestLegacyEngineSurfaceIsAbsent(t *testing.T) {
 					t.Errorf("%s exports legacy transport identifier %s", file, declaration.Name)
 				}
 			case *ast.ValueSpec:
+				for _, name := range declaration.Names {
+					if forbidden[name.Name] {
+						t.Errorf("%s exports legacy transport identifier %s", file, name)
+					}
+				}
+			case *ast.Field:
 				for _, name := range declaration.Names {
 					if forbidden[name.Name] {
 						t.Errorf("%s exports legacy transport identifier %s", file, name)

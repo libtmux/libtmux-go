@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,6 +44,7 @@ func assumeResponseCommit(transport sdk.Transport) sdk.Transport {
 }
 
 func TestMain(m *testing.M) {
+	runExecutableFixture()
 	if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "all"); err != nil {
 		panic(err)
 	}
@@ -2850,19 +2850,9 @@ func TestServerInfoDoesNotInventAHealthyEmptyServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	transportFailure := errors.New("tmux transport is unavailable")
-	unreachable := mustTmuxServer(t, tmux.ServerOptions{
+	unreachable := mustTmuxServer(t, executableFixtureOptions(t, fixtureUnavailable, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-		Runner: tmux.CommandRunnerFunc(func(
-			_ context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			if slices.Equal(request.Arguments, []string{"-V"}) {
-				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-			}
-			return tmux.CommandResult{ExitCode: -1}, transportFailure
-		}),
-	})
+	}))
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	serverSession, err := mustMCPServer(t, unreachable).Connect(
 		ctx, assumeResponseCommit(serverTransport), nil,
@@ -2980,98 +2970,6 @@ func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 		"paneId": pane, "kill": true,
 	}, nil); result.IsError {
 		t.Errorf("respawn_pane with kill: %#v", result.Content)
-	}
-}
-
-//libtmux:real-tmux
-func TestCreateSessionReportsPartialIdentityAfterRefreshFailure(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-	backing := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
-	if _, err := backing.NewSession(ctx, tmux.NewSessionRequest{
-		Name: "creation-anchor", Command: "sleep 300",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	refreshFailure := errors.New("injected post-creation refresh failure")
-	delegate := tmux.SubprocessRunner()
-	var created, failedRefresh atomic.Bool
-	target := mustTmuxServer(t, tmux.ServerOptions{
-		SocketPath:         backing.SocketPath(),
-		ConfigFile:         backing.ConfigFile(),
-		ProcessEnvironment: backing.ProcessEnvironment(),
-		Runner: tmux.CommandRunnerFunc(func(
-			ctx context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			containsCommand := func(command string) bool {
-				return slices.ContainsFunc(request.Arguments, func(argument string) bool {
-					return argument == command || strings.HasPrefix(argument, "'"+command+"' ")
-				})
-			}
-			if created.Load() && containsCommand("list-sessions") {
-				failedRefresh.Store(true)
-				return tmux.CommandResult{ExitCode: -1}, refreshFailure
-			}
-			result, err := delegate.Run(ctx, request)
-			if err == nil && result.ExitCode == 0 && containsCommand("new-session") {
-				created.Store(true)
-			}
-			return result, err
-		}),
-	})
-
-	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	instance := mustMCPServer(t, target)
-	serverSession, err := instance.Connect(
-		ctx, assumeResponseCommit(serverTransport), nil,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = serverSession.Close() })
-	client := sdk.NewClient(&sdk.Implementation{Name: "partial-creation"}, nil)
-	clientSession, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = clientSession.Close() })
-
-	result, err := clientSession.CallTool(ctx, &sdk.CallToolParams{
-		Name: "create_session",
-		Arguments: map[string]any{
-			"name": "partially-created", "command": "sleep 300",
-		},
-	})
-	if err != nil {
-		t.Fatalf("CallTool() error = %v, want a classified tool failure", err)
-	}
-	if !failedRefresh.Load() {
-		t.Fatal("create_session did not reach the injected post-creation refresh failure")
-	}
-	if !result.IsError {
-		t.Fatal("post-creation refresh failure was reported as success")
-	}
-	var reported struct {
-		SessionID   string `json:"sessionId"`
-		SessionName string `json:"sessionName"`
-	}
-	encoded, err := json.Marshal(result.StructuredContent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(encoded, &reported); err != nil {
-		t.Fatal(err)
-	}
-	if reported.SessionID == "" {
-		t.Fatal("classified failure omitted the created session ID")
-	}
-	if reported.SessionName != "partially-created" {
-		t.Fatalf("sessionName = %q, want the requested name", reported.SessionName)
-	}
-	if !strings.Contains(resultText(result), refreshFailure.Error()) {
-		t.Fatalf("failure text = %q, want injected refresh failure", resultText(result))
 	}
 }
 

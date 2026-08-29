@@ -150,14 +150,3 @@ func (s Server) runExactArgv(
 		Directory:   state.config.directory,
 	})
 }
-
-func importCommandStdio(stdio *CommandStdio) *tmuxcmd.Stdio {
-	if stdio == nil {
-		return nil
-	}
-	return &tmuxcmd.Stdio{
-		Stdin:  stdio.Stdin,
-		Stdout: stdio.Stdout,
-		Stderr: stdio.Stderr,
-	}
-}

@@ -133,22 +133,23 @@ func TestInstanceRejectsConnectAfterShutdownStarts(t *testing.T) {
 	}
 }
 
+func terminalFailureInstance(t testing.TB, socketName string) *Instance {
+	t.Helper()
+	target := mustInternalTmuxServer(t, tmux.ServerOptions{SocketName: socketName})
+	instance := mustInternalMCPServer(t, target)
+	instance.runtime.deps.probeSessions = func(
+		context.Context,
+		tmux.Server,
+	) ([]tmux.Session, error) {
+		return nil, tmux.ErrDaemonReplaced
+	}
+	return instance
+}
+
 func TestTerminalToolFailureReachesCallerBeforeRunStops(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{
-		SocketName: "terminal-run-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			_ context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			if len(request.Arguments) == 1 && request.Arguments[0] == "-V" {
-				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-			}
-			return tmux.CommandResult{ExitCode: -1}, tmux.ErrDaemonReplaced
-		}),
-	})
-	instance := mustInternalMCPServer(t, target)
+	instance := terminalFailureInstance(t, "terminal-run-unused")
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	armed := make(chan struct{})
 	release := make(chan struct{})
@@ -226,19 +227,7 @@ func TestTerminalResponseWriteFailureClosesTheSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	writeErr := errors.New("response write failed")
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{
-		SocketName: "terminal-write-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			_ context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			if len(request.Arguments) == 1 && request.Arguments[0] == "-V" {
-				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-			}
-			return tmux.CommandResult{ExitCode: -1}, tmux.ErrDaemonReplaced
-		}),
-	})
-	instance := mustInternalMCPServer(t, target)
+	instance := terminalFailureInstance(t, "terminal-write-unused")
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	armed := make(chan struct{})
 	gate := &responseGateTransport{
@@ -290,19 +279,7 @@ func TestTerminalResponseWriteFailureClosesTheSession(t *testing.T) {
 func TestTerminalResponseDrainTimeoutClosesAStuckWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{
-		SocketName: "terminal-stuck-write-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			_ context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			if len(request.Arguments) == 1 && request.Arguments[0] == "-V" {
-				return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-			}
-			return tmux.CommandResult{ExitCode: -1}, tmux.ErrDaemonReplaced
-		}),
-	})
-	instance := mustInternalMCPServer(t, target)
+	instance := terminalFailureInstance(t, "terminal-stuck-write-unused")
 	instance.drainWait = 10 * time.Millisecond
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	armed := make(chan struct{})

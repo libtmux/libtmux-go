@@ -3,9 +3,11 @@ package integration
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +21,7 @@ func requireTerminalConnection(t *testing.T, server tmux.Server) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	minimum, err := tmux.ParseVersion("3.6")
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,20 +34,32 @@ func requireTerminalConnection(t *testing.T, server tmux.Server) {
 func TestNewSessionConnectionKeepsTheCreatingControlProcess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	var mutex sync.Mutex
-	var requests [][]string
-	runner := tmux.CommandRunnerFunc(func(
-		ctx context.Context,
-		request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		mutex.Lock()
-		requests = append(requests, append([]string(nil), request.Arguments...))
-		mutex.Unlock()
-		return tmux.SubprocessRunner().Run(ctx, request)
-	})
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invocations := filepath.Join(t.TempDir(), "invocations")
+	proxy := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+transport=process
+operation=other
+for argument do
+    if [ "$argument" = -C ]; then transport=control; fi
+    if [ "$argument" = new-session ]; then operation=creation; fi
+done
+printf '%s %s\n' "$transport" "$operation" >> "$LIBTMUX_CONNECTION_INVOCATIONS"
+exec "$LIBTMUX_CONNECTION_REAL_TMUX" "$@"
+`), 0o700); err != nil {
+		t.Fatalf("write tmux proxy: %v", err)
+	}
 	server, err := tmux.NewServer(tmux.ServerOptions{
+		Binary:     proxy,
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-		Runner:     runner,
+		ProcessEnvironment: append(
+			os.Environ(),
+			"LIBTMUX_CONNECTION_INVOCATIONS="+invocations,
+			"LIBTMUX_CONNECTION_REAL_TMUX="+realBinary,
+		),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -75,15 +89,16 @@ func TestNewSessionConnectionKeepsTheCreatingControlProcess(t *testing.T) {
 		t.Fatalf("connected session name = (%q, %t), want (bootstrap, true)", name, ok)
 	}
 
-	mutex.Lock()
-	captured := append([][]string(nil), requests...)
-	mutex.Unlock()
-	for _, arguments := range captured {
-		for _, argument := range arguments {
-			if argument == "new-session" {
-				t.Fatalf("session creation escaped to a subprocess: %q", arguments)
-			}
-		}
+	recorded, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("read tmux proxy invocations: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if !slices.Contains(lines, "control creation") {
+		t.Fatalf("tmux proxy invocations = %q, want control-mode session creation", lines)
+	}
+	if slices.Contains(lines, "process creation") {
+		t.Fatalf("tmux proxy invocations = %q, want no process session creation", lines)
 	}
 	if err := connection.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)

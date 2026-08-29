@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -23,41 +22,10 @@ type row struct {
 	answer    string
 }
 
-// countingRunner delegates to the default runner while counting tmux processes.
-type countingRunner struct {
-	mu    sync.Mutex
-	count int
-}
-
-func (c *countingRunner) runner() tmux.CommandRunner {
-	inner := tmux.SubprocessRunner()
-	return tmux.CommandRunnerFunc(func(
-		ctx context.Context,
-		request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		c.mu.Lock()
-		c.count++
-		c.mu.Unlock()
-		return inner.Run(ctx, request)
-	})
-}
-
-func (c *countingRunner) reset() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.count = 0
-}
-
-func (c *countingRunner) total() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.count
-}
-
 type harness struct {
 	server    tmux.Server
 	session   tmux.Session
-	processes *countingRunner
+	processes *processCounter
 	directory string
 }
 
@@ -79,12 +47,16 @@ func newHarness(ctx context.Context) (*harness, error) {
 		return nil, fmt.Errorf("write tmux configuration: %w", err)
 	}
 
-	processes := &countingRunner{}
+	processes, err := newProcessCounter(directory)
+	if err != nil {
+		_ = os.RemoveAll(directory)
+		return nil, err
+	}
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath:         filepath.Join(directory, "s.sock"),
 		ConfigFile:         config,
-		Runner:             processes.runner(),
-		ProcessEnvironment: cleanEnvironment(),
+		Binary:             processes.proxy,
+		ProcessEnvironment: processes.environment(cleanEnvironment()),
 	})
 	if err != nil {
 		_ = os.RemoveAll(directory)
@@ -198,13 +170,18 @@ func measureBuild(
 		window = refreshed
 	}
 
-	h.processes.reset()
+	if err := h.processes.reset(); err != nil {
+		return row{}, fmt.Errorf("%s: %w", mode, err)
+	}
 	start := time.Now()
 	if err := run(ctx, handle, window); err != nil {
 		return row{}, fmt.Errorf("%s: build: %w", mode, err)
 	}
 	elapsed := time.Since(start)
-	processes := h.processes.total()
+	processes, err := h.processes.total()
+	if err != nil {
+		return row{}, fmt.Errorf("%s: %w", mode, err)
+	}
 
 	answer, err := searchAnswer(ctx, handle)
 	if err != nil {

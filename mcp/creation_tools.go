@@ -41,7 +41,7 @@ func (t *tools) createWindow(
 		name := input.Name
 		request.Name = &name
 	}
-	window, err := session.NewWindow(ctx, request)
+	window, err := t.runtime.deps.newWindow(ctx, session, request)
 	created := createWindowOutput{WindowID: window.ID().String()}
 	if err != nil {
 		if created.WindowID == "" {
@@ -49,7 +49,7 @@ func (t *tools) createWindow(
 		}
 		return t.partialWindowFailure(created, err)
 	}
-	fresh, lookupErr := server.Window(ctx, window.ID())
+	fresh, lookupErr := t.runtime.deps.refreshWindow(ctx, server, window.ID())
 	if lookupErr != nil {
 		return t.partialWindowFailure(created, lookupErr)
 	}

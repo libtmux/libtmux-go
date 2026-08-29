@@ -274,6 +274,18 @@ func (t *tools) listServers(
 			probeCtx, cancelProbe = context.WithTimeout(ctx, serverProbeTimeout)
 		}
 		defer cancelProbe()
+		if !candidate.isTarget {
+			alive, sessions := t.runtime.deps.probeSibling(probeCtx, candidate.probe)
+			if ctx.Err() != nil {
+				return probeResult{err: ctx.Err()}
+			}
+			summary.Alive = alive
+			summary.Sessions = sessions
+			if !summary.Alive && !input.IncludeDead {
+				return probeResult{skipped: true}
+			}
+			return probeResult{summary: summary}
+		}
 		alive, err := candidate.probe.IsAlive(probeCtx)
 		if err != nil && candidate.isTarget && t.runtime.isTerminalError(err) {
 			return probeResult{err: err}

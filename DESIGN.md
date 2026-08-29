@@ -432,18 +432,16 @@ sensitive when their own command operands contain secrets.
 `SnapshotDecodeError` identifies the object, record, and field but redacts the
 malformed field value.
 
-`ServerOptions.Runner` replaces subprocess execution after construction. It
-does not skip executable resolution or start a connection's direct `tmux -C`
-process. Pure private request builders can also seed a future deferred operation
-graph. An exported operation hierarchy is deferred until a real downstream
-consumer fixes its required identity, batching, and error semantics.
+Pure private request builders can seed a future deferred operation graph. An
+exported operation hierarchy is deferred until a real downstream consumer fixes
+its required identity, batching, and error semantics.
 
 ## Execution bindings
 
 `NewServer` creates one plain binding. It freezes the absolute tmux executable,
 environment, working directory, configuration, and socket selection, and every
 record derived from it keeps that binding. Ordinary operations start the frozen
-subprocess runner. There is no generic transport selector on `Server`.
+executable. There is no generic transport selector on `Server`.
 
 `Session.OpenControl` creates an owned `Connection` bound to the exact daemon
 that materialized the session. `Server.NewSessionConnection` creates a session
@@ -479,9 +477,9 @@ not close shared state.
 The rejected generic engine made transport capability, daemon identity,
 fallback policy, rebinding, and borrowed lifetime independent optional states.
 Most combinations were invalid. Two concrete bindings express the actual
-contract: a frozen subprocess server or an owned, fail-closed connection.
-`CommandRunner` remains a subprocess instrumentation seam, not a transport
-selector.
+contract: a frozen subprocess server or an owned, fail-closed connection. The
+subprocess executor is private; tests that need process fidelity use executable
+fixtures, while package tests inject the private boundary.
 
 ## Core API signatures
 

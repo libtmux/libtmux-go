@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
@@ -23,10 +25,12 @@ func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.Executable() error = %v", err)
 	}
-	server := mustNewServer(ServerOptions{
-		Binary: executable,
-		Runner: subprocessRunner(drainStandInOutput),
-	})
+	dependencies := defaultServerDependencies()
+	dependencies.executor = tmuxcmd.Runner{WaitDelay: drainStandInOutput}
+	server, err := newServer(ServerOptions{Binary: executable}, dependencies)
+	if err != nil {
+		t.Fatalf("newServer() error = %v", err)
+	}
 
 	// Command startup speed is not under test, but a hung command must stay bounded.
 	const perCommand = 60 * time.Second

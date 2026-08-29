@@ -108,31 +108,6 @@ removing its socket.
   confirms *that* daemon died, rather than trusting a PID recorded at startup
   which may have been reused.
 
-## Testing without tmux installed
-
-`tmux.NewServer` resolves `Binary` even when a `Runner` is supplied. A test on
-a machine without tmux can bind the server to its own executable, then replace
-ordinary process commands with a runner. `OpenControl` still starts the
-resolved executable directly.
-
-```go
-binary, err := os.Executable()
-if err != nil {
-	t.Fatal(err)
-}
-server, err := tmux.NewServer(tmux.ServerOptions{
-	Binary: binary,
-	Runner: tmux.CommandRunnerFunc(func(
-		ctx context.Context, request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		return tmux.CommandResult{Stdout: []string{"$1"}}, nil
-	}),
-})
-if err != nil {
-	t.Fatal(err)
-}
-```
-
 ## Keeping your suite to itself
 
 Sibling checkouts running their own suites on the same machine will fight over

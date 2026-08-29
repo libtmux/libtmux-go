@@ -304,15 +304,9 @@ func TestProgressReporterCoalescesBlockedUpdatesToLatest(t *testing.T) {
 }
 
 func TestProgressWriteTimeoutBoundsToolAndInstanceShutdown(t *testing.T) {
-	target := mustInternalTmuxServer(t, tmux.ServerOptions{
+	target := mustInternalTmuxServer(t, executableFixtureOptions(t, fixtureVersion36, tmux.ServerOptions{
 		SocketName: "progress-lifecycle-unused",
-		Runner: tmux.CommandRunnerFunc(func(
-			context.Context,
-			tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			return tmux.CommandResult{Stdout: []string{"tmux 3.6"}}, nil
-		}),
-	})
+	}))
 	instance := mustInternalMCPServer(t, target)
 	finish := make(chan struct{})
 	sdk.AddTool(instance.server, &sdk.Tool{Name: "blocked_progress"}, func(

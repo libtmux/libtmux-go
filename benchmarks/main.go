@@ -1,4 +1,4 @@
-// Command benchmarks compares subprocess, control-mode, and planned tmux work.
+// Command benchmarks compares process, connection, and planned tmux work.
 // Every compatible lane shares one SearchPanes workload, and
 // TestMatrixAnswersAgree guards their equivalence.
 //

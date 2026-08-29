@@ -31,6 +31,11 @@ provide weaker lifecycle guarantees.
 **Count invocations, not milliseconds.** Wall clock moves with the machine and
 what else is running. The process column does not.
 
+The harness freezes a small POSIX proxy as the server executable. The proxy
+records one invocation, removes its bookkeeping variables, and `exec`s the
+real tmux selected at harness creation with the original arguments and standard
+streams. It does not interpret tmux commands.
+
 The same measurement runs as a test and fails if compatible lanes answer
 differently:
 

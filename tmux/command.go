@@ -2,10 +2,8 @@ package tmux
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -73,68 +71,6 @@ type CommandResult struct {
 	// before tmux answered. A negative code is therefore never tmux's opinion
 	// of the request, and an error carrying one has a reason of its own.
 	ExitCode int
-}
-
-// CommandRequest describes one tmux process invocation passed to a
-// [CommandRunner]. The runner owns Arguments and Environment and may modify
-// them. Stdio retains caller-owned files; neither the runner nor the library
-// closes them.
-type CommandRequest struct {
-	// Binary is the executable. A Server supplies the absolute path resolved at
-	// construction. A request passed directly to SubprocessRunner may leave it
-	// empty to resolve "tmux" through PATH.
-	Binary string
-	// Arguments contains the complete tmux argv after global socket, config,
-	// and color arguments are applied.
-	Arguments []string
-	// Environment is the child environment. A Server supplies its private
-	// constructor snapshot. A request passed directly to SubprocessRunner may
-	// leave it nil to inherit the current process environment.
-	Environment []string
-	// Directory is the child working directory. A Server supplies the absolute
-	// directory frozen at construction. A request passed directly to
-	// SubprocessRunner may leave it empty to inherit the current directory.
-	Directory string
-	// Stdio selects direct streaming. Nil requests captured output; nil files
-	// within a non-nil value inherit the corresponding process stream.
-	Stdio *CommandStdio
-	// CommandList reports that Arguments contains tmux command-list syntax, where
-	// a bare ";" separates commands. Zero means one command of literal values.
-	//
-	// Dispatch must preserve literal trailing semicolons when false and leave
-	// bare separators unquoted when true; subprocess and control commands parse
-	// these forms differently.
-	CommandList bool
-}
-
-// CommandStdio supplies caller-owned files for a streaming [CommandRequest].
-type CommandStdio struct {
-	// Stdin is the child standard input. Nil inherits os.Stdin.
-	Stdin *os.File
-	// Stdout is the child standard output. Nil inherits os.Stdout.
-	Stdout *os.File
-	// Stderr is the child standard error. Nil inherits os.Stderr.
-	Stderr *os.File
-}
-
-// CommandRunner executes tmux process requests for a [Server]. Run may be
-// called concurrently. Completed nonzero exits should remain CommandResult
-// data; execution, transport, and context failures should be returned as
-// errors. Returned slices are copied before they reach the caller.
-type CommandRunner interface {
-	// Run executes one command request.
-	Run(context.Context, CommandRequest) (CommandResult, error)
-}
-
-// CommandRunnerFunc adapts a function to [CommandRunner].
-type CommandRunnerFunc func(context.Context, CommandRequest) (CommandResult, error)
-
-// Run invokes function with ctx and request.
-func (function CommandRunnerFunc) Run(
-	ctx context.Context,
-	request CommandRequest,
-) (CommandResult, error) {
-	return function(ctx, request)
 }
 
 type commandTransportError struct {
