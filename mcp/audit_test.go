@@ -6,12 +6,8 @@ import (
 	"testing"
 )
 
-// The record has to be useful to an operator and useless to anyone who steals
-// it. Everything below is one of those two claims.
-
 func TestPayloadsAreDigestedRatherThanRecorded(t *testing.T) {
 	t.Parallel()
-	// The shape of a send_keys call carrying something nobody should log.
 	arguments := json.RawMessage(`{
 		"paneId": "%3",
 		"command": "deploy --token ghp_abcdefghijklmnop",
@@ -46,8 +42,6 @@ func TestPayloadsAreDigestedRatherThanRecorded(t *testing.T) {
 	}
 }
 
-// The same payload twice is the same digest, which is what makes a loop
-// visible without making the record a transcript.
 func TestTheSamePayloadDigestsTheSame(t *testing.T) {
 	t.Parallel()
 	first := digest("tmux kill-server")
@@ -62,8 +56,6 @@ func TestTheSamePayloadDigestsTheSame(t *testing.T) {
 	}
 }
 
-// A field nobody classified is a payload, because that is the safe way to be
-// wrong when a tool is added.
 func TestAnUnknownFieldIsTreatedAsAPayload(t *testing.T) {
 	t.Parallel()
 	summary := summarizeArguments(json.RawMessage(`{"somethingNewAndSecret": "hunter2"}`))
@@ -86,8 +78,6 @@ func TestUserChosenNamesAreDigested(t *testing.T) {
 	}
 }
 
-// A batch carries its calls' arguments one level down, and they are payloads
-// there too.
 func TestNestedArgumentsAreSummarizedToo(t *testing.T) {
 	t.Parallel()
 	summary := summarizeArguments(json.RawMessage(`{
@@ -108,8 +98,6 @@ func TestNestedArgumentsAreSummarizedToo(t *testing.T) {
 	}
 }
 
-// Every name logged in the clear has to be an identifier. This is the list a
-// reviewer should look at when a tool gains a field.
 func TestNothingContentShapedIsLoggedInTheClear(t *testing.T) {
 	t.Parallel()
 	for _, name := range auditedIdentifierNames() {

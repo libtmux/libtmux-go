@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-// TestTheWrapperEchoIsDroppedWhereverItWraps covers the rows a recovery must
-// discard.
-//
-// The echo is one logical line the shell wrapped, so where the grid breaks it
-// is a function of the prompt's width and moves with it. Dropping through the
-// row the path ends on rather than the row the whole echo ends on leaves the
-// tail of the path behind as a line of output.
-// The captured rows carry a stand-in for the prompt's directory at the same
-// widths as the one they were taken from. Where the row breaks is the whole
-// point of them; whose directory it was is not.
 func TestTheWrapperEchoIsDroppedWhereverItWraps(t *testing.T) {
 	const echo = ". '/tmp/libtmux-mcp-run478228931/script'"
 	for _, probe := range []struct {
@@ -192,15 +182,6 @@ func TestTheWrapperEchoIsDroppedWhereverItWraps(t *testing.T) {
 	}
 }
 
-// TestTheMarksSeeAGridThatMovedUnderThem covers a command whose output came
-// back as nothing because the grid shifted by exactly as much as the cursor.
-//
-// A mark is history_size plus cursor_y. That sum is stable while a pane only
-// scrolls, and anything moving rows between screen and scrollback without the
-// cursor advancing cancels inside it. Erasing the scrollback does it one way
-// and clearing the screen does it the other, and both read as a command that
-// printed nothing. The numbers below were measured against tmux 3.7b at the
-// pane widths named.
 func TestTheMarksSeeAGridThatMovedUnderThem(t *testing.T) {
 	at := func(history, cursor, width int) mark {
 		return mark{historySize: history, row: history + cursor, width: width, height: 24}

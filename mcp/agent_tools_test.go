@@ -46,11 +46,6 @@ func firstPane(ctx context.Context, t *testing.T, session *sdk.ClientSession) st
 	return panes[0]
 }
 
-// TestCaptureKeepsTheEndAndSaysWhatItDropped covers the bound every tool that
-// returns pane text shares. A pane holding more than the caller asked for must
-// answer with the most recent of it, because the end is what a question about
-// a terminal is about, and must say that it did.
-//
 //libtmux:real-tmux
 func TestCaptureKeepsTheEndAndSaysWhatItDropped(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -105,9 +100,6 @@ func TestCaptureKeepsTheEndAndSaysWhatItDropped(t *testing.T) {
 	}
 }
 
-// TestCaptureSinceReturnsOnlyWhatIsNew covers the cursor: the second reading of
-// a pane must cost what changed rather than what is there.
-//
 //libtmux:real-tmux
 func TestCaptureSinceReturnsOnlyWhatIsNew(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -167,10 +159,6 @@ func TestCaptureSinceReturnsOnlyWhatIsNew(t *testing.T) {
 	}
 }
 
-// TestACursorForAnotherPaneIsRefused covers the mistake that would be silent:
-// reading on from the wrong pane's cursor would report that pane's history as
-// this one's, and a client has no way to notice.
-//
 //libtmux:real-tmux
 func TestACursorForAnotherPaneIsRefused(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -217,11 +205,6 @@ func TestACursorForAnotherPaneIsRefused(t *testing.T) {
 	}
 }
 
-// TestClearedHistoryIsReportedAsLinesMissed covers the honest failure. tmux
-// discards scrollback, and a client whose record of a pane now has a gap in it
-// has to be told rather than handed the current screen as though it followed
-// on from the last reading.
-//
 //libtmux:real-tmux
 func TestClearedHistoryIsReportedAsLinesMissed(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -254,10 +237,6 @@ func TestClearedHistoryIsReportedAsLinesMissed(t *testing.T) {
 	}
 }
 
-// TestAStopPatternEndsAWaitBeforeItsDeadline covers what makes waiting cheap:
-// a run that has already failed should return when it fails, not when the
-// caller's patience runs out.
-//
 //libtmux:real-tmux
 func TestAStopPatternEndsAWaitBeforeItsDeadline(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -294,10 +273,6 @@ func TestAStopPatternEndsAWaitBeforeItsDeadline(t *testing.T) {
 	}
 }
 
-// TestSearchReportsTheLinesThatMatched covers the second call this tool exists
-// to avoid: a client told only which pane matched has to capture it to find
-// out what it found.
-//
 //libtmux:real-tmux
 func TestSearchReportsTheLinesThatMatched(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -358,10 +333,6 @@ func TestSearchReportsTheLinesThatMatched(t *testing.T) {
 	}
 }
 
-// TestPasteTextDeliversWhatSendKeysWouldEat covers the difference between the
-// two, which is the one an agent gets wrong: tmux reads key names out of
-// send_keys, so text containing one is not delivered as itself.
-//
 //libtmux:real-tmux
 func TestPasteTextDeliversWhatSendKeysWouldEat(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -390,10 +361,6 @@ func TestPasteTextDeliversWhatSendKeysWouldEat(t *testing.T) {
 	t.Error("the pasted text did not arrive intact")
 }
 
-// TestKillingTheLastPaneSaysTheWindowWentWithIt covers what tmux does without
-// saying: a client that killed one pane of what it believed were several has
-// just ended the window it was working in.
-//
 //libtmux:real-tmux
 func TestKillingTheLastPaneSaysTheWindowWentWithIt(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
@@ -437,10 +404,6 @@ func TestKillingTheLastPaneSaysTheWindowWentWithIt(t *testing.T) {
 	}
 }
 
-// TestABatchIsCheckedWholeBeforeAnythingRuns covers the difference between a
-// client learning it asked for the wrong thing and learning it after three
-// panes were gone.
-//
 //libtmux:real-tmux
 func TestABatchIsCheckedWholeBeforeAnythingRuns(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
@@ -482,9 +445,6 @@ func TestABatchIsCheckedWholeBeforeAnythingRuns(t *testing.T) {
 	}
 }
 
-// TestOptionsAreReadAndWrittenAtTheScopeAsked covers the settings that explain
-// a pane's behaviour when the pane itself does not.
-//
 //libtmux:real-tmux
 func TestOptionsAreReadAndWrittenAtTheScopeAsked(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -521,9 +481,6 @@ func TestOptionsAreReadAndWrittenAtTheScopeAsked(t *testing.T) {
 	}
 }
 
-// TestTheServerSaysWhichSocketItAddresses covers the first question a client
-// handed a tmux server it did not choose has to ask.
-//
 //libtmux:real-tmux
 func TestTheServerSaysWhichSocketItAddresses(t *testing.T) {
 	session, target, ctx := connect(t)
@@ -575,9 +532,6 @@ func TestTheServerSaysWhichSocketItAddresses(t *testing.T) {
 	}
 }
 
-// TestASubscriberIsToldWhenAPaneChanges covers the push side of observation: a
-// client that subscribed should not have to ask whether anything happened.
-//
 //libtmux:real-tmux
 func TestASubscriberIsToldWhenAPaneChanges(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -636,10 +590,6 @@ func TestASubscriberIsToldWhenAPaneChanges(t *testing.T) {
 	}
 }
 
-// TestRunCommandReportsWhatTheCommandPrinted covers the half a caller would
-// otherwise have to go looking for: an exit status with no output leaves it
-// capturing the pane and guessing where its command began.
-//
 //libtmux:real-tmux
 func TestRunCommandReportsWhatTheCommandPrinted(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -705,9 +655,6 @@ func send(ctx context.Context, t *testing.T, session *sdk.ClientSession, pane, c
 	}
 }
 
-// TestTheEnvironmentIsWhatANewPaneWouldGet covers the distinction the tool's
-// description makes and a caller will otherwise trip over.
-//
 //libtmux:real-tmux
 func TestTheEnvironmentIsWhatANewPaneWouldGet(t *testing.T) {
 	session, target, ctx := connect(t)
@@ -891,15 +838,8 @@ func TestBufferNamesPreserveEmbeddedWhitespace(t *testing.T) {
 	}
 }
 
-// TestALoadedBufferIsReachableByTheNameItAnswersWith covers a handle that stops
-// addressing the thing it names.
-//
-// tmux 3.7 cleans a buffer name for display before storing it, and doubles a
-// backslash doing so, while lookup does not repeat the cleaning. A name holding
-// one is therefore stored under a spelling the caller was never told, so the
-// buffer could be neither read nor deleted through the handle load_buffer
-// returned. Below 3.7 the same call round-trips, which is the whole problem: one
-// name meant two things depending on the tmux underneath.
+// tmux 3.7 normalizes displayed buffer names differently from lookup. A
+// successful load must return a name that later buffer operations can use.
 //
 //libtmux:real-tmux
 func TestALoadedBufferIsReachableByTheNameItAnswersWith(t *testing.T) {
@@ -937,10 +877,6 @@ func TestALoadedBufferIsReachableByTheNameItAnswersWith(t *testing.T) {
 // tell an absent field from an empty one.
 //
 
-// TestTheInstructionsNameTheToolsTheyRecommend guards the text a client reads
-// before it calls anything. A recommendation for a tool that is not advertised
-// sends a model looking for something it cannot find.
-//
 //libtmux:real-tmux
 func TestTheInstructionsNameTheToolsTheyRecommend(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
@@ -991,9 +927,6 @@ func TestTheInstructionsNameTheToolsTheyRecommend(t *testing.T) {
 	}
 }
 
-// TestPaneTextNeverExceedsTheCeiling guards the promise the bounds make. A
-// caller asking for everything is the case the ceiling exists for.
-//
 //libtmux:real-tmux
 func TestPaneTextNeverExceedsTheCeiling(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1019,9 +952,6 @@ func TestPaneTextNeverExceedsTheCeiling(t *testing.T) {
 	}
 }
 
-// TestDisplayMessageAnswersInTmuxsOwnLanguage covers the escape hatch: tmux
-// knows hundreds of things no tool here has an answer for.
-//
 //libtmux:real-tmux
 func TestDisplayMessageAnswersInTmuxsOwnLanguage(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1051,9 +981,6 @@ func TestDisplayMessageAnswersInTmuxsOwnLanguage(t *testing.T) {
 	}
 }
 
-// TestSendKeysBatchDrivesAProgramThatReadsKeys covers what send_keys cannot
-// express: a sequence with no Enter appended.
-//
 //libtmux:real-tmux
 func TestSendKeysBatchDrivesAProgramThatReadsKeys(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1089,10 +1016,6 @@ func TestSendKeysBatchDrivesAProgramThatReadsKeys(t *testing.T) {
 	t.Error("the keys did not reach the pane")
 }
 
-// TestASafetyLevelWithholdsTheToolsItSays guards the guarantee the level
-// makes: a withheld tool is not advertised, and a batch cannot reach around
-// that to call it.
-//
 //libtmux:real-tmux
 func TestASafetyLevelWithholdsTheToolsItSays(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "readonly")
@@ -1122,11 +1045,6 @@ func TestASafetyLevelWithholdsTheToolsItSays(t *testing.T) {
 	}
 }
 
-// TestAnEmptyPaneIsStillAReadableResource covers the shape MCP requires. A
-// text resource has to carry a text field; the SDK omits an empty one, and a
-// client then rejects contents that are neither text nor binary. A pane
-// showing nothing is ordinary, so it has to survive the round trip.
-//
 //libtmux:real-tmux
 func TestAnEmptyPaneIsStillAReadableResource(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1160,15 +1078,6 @@ const (
 	insidePaneReport = "LIBTMUX_MCP_TEST_REPORT"
 )
 
-// TestTheServerFindsItsOwnPaneWithoutTheEnvironment covers self-detection the
-// way a client actually arranges it.
-//
-// tmux tells a process in a pane which pane it is through TMUX and TMUX_PANE,
-// and an MCP client starts its servers with the environment it chooses — most
-// choose a curated one that carries neither. A server that only read the
-// environment would be inside a pane and unable to tell, and would report its
-// own terminal as somebody else's pane.
-//
 //libtmux:real-tmux
 func TestTheServerFindsItsOwnPaneWithoutTheEnvironment(t *testing.T) {
 	if socket := os.Getenv(insidePaneSocket); socket != "" {
@@ -1327,14 +1236,6 @@ func propertiesOf(t *testing.T, request *sdk.ElicitRequest) map[string]any {
 	return schema.Properties
 }
 
-// TestAYesAboutTheCallerPaneCanBeKept covers the question asked once per call.
-//
-// A guard that asks every time is a guard people learn to click through, and
-// an agent doing five things in the caller's pane asked five times. A yes can
-// now be kept for the rest of the session -- but only for writing there, and
-// only when the person said so. Ending the pane asks again whatever was said
-// about typing into it, because those are not the same yes.
-//
 //libtmux:real-tmux
 func TestAYesAboutTheCallerPaneCanBeKept(t *testing.T) {
 	const ownPane = "%0"
@@ -1414,15 +1315,6 @@ func TestAYesAboutTheCallerPaneCanBeKept(t *testing.T) {
 	}
 }
 
-// TestOneSessionsYesDoesNotSilenceAnother covers a kept consent reaching a
-// client that never gave it.
-//
-// The answers are held per session for exactly this reason, and nothing
-// checked it. An MCP server can carry several sessions -- an embedder holds
-// one per client -- and a yes about writing into the caller's pane that leaked
-// across them would let a second client type into somebody's terminal on the
-// strength of a question it never saw.
-//
 //libtmux:real-tmux
 func TestOneSessionsYesDoesNotSilenceAnother(t *testing.T) {
 	const ownPane = "%0"
@@ -1498,14 +1390,6 @@ func TestOneSessionsYesDoesNotSilenceAnother(t *testing.T) {
 	}
 }
 
-// TestEndingWhatHoldsTheCallerPaneIsAskedAbout covers the way around the write
-// guard.
-//
-// The guard names one pane, and everything containing it reaches the same
-// terminal one level up: a client refused kill_pane got the same outcome from
-// kill_window, and was told nothing, because the answer travelled through the
-// pane that had just gone. The Python server of the same name refuses all four.
-//
 //libtmux:real-tmux
 func TestEndingWhatHoldsTheCallerPaneIsAskedAbout(t *testing.T) {
 	const ownPane = "%0"
@@ -1573,11 +1457,6 @@ func TestEndingWhatHoldsTheCallerPaneIsAskedAbout(t *testing.T) {
 	}
 }
 
-// TestWritingToTheCallerPaneIsAskedAbout covers the one pane where being wrong
-// cannot be undone. Typing into the pane this server runs in reaches the
-// terminal the conversation is happening in, and isCaller in a reply is only a
-// note that a model with a task may not read.
-//
 //libtmux:real-tmux
 func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	// A fresh server hands out predictable pane ids, which is what lets the
@@ -1772,11 +1651,6 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	})
 }
 
-// TestEnteringCopyModeOnTheCallerPaneIsAskedAbout covers the write that does
-// not look like one. Copy mode takes the person's keystrokes away from their
-// shell, which is the thing the guard exists for; exit_copy_mode is the way
-// out of it and so must not be guarded.
-//
 //libtmux:real-tmux
 func TestEnteringCopyModeOnTheCallerPaneIsAskedAbout(t *testing.T) {
 	const ownPane = "%0"
@@ -1810,13 +1684,6 @@ func TestEnteringCopyModeOnTheCallerPaneIsAskedAbout(t *testing.T) {
 	}
 }
 
-// TestAWaitIsClampedRatherThanRefused covers the ceiling's whole point: a
-// caller that asked for more than the server will run should still get its
-// wait, and should learn the policy from the answer.
-//
-// Refusing instead would teach a model nothing it can act on, and a model
-// cannot change its mind once a call is in flight.
-//
 //libtmux:real-tmux
 func TestAWaitIsClampedRatherThanRefused(t *testing.T) {
 	t.Setenv(tmuxmcp.WaitCeilingEnvironmentVariable, "2")
@@ -1849,10 +1716,6 @@ func TestAWaitIsClampedRatherThanRefused(t *testing.T) {
 	}
 }
 
-// TestEveryWaitReportsTheBudgetItRan covers the default being invisible: a
-// caller that sent no timeout at all cannot otherwise tell what it is waiting
-// for, so the reply says so even when nothing was clamped.
-//
 //libtmux:real-tmux
 func TestEveryWaitReportsTheBudgetItRan(t *testing.T) {
 	t.Setenv(tmuxmcp.WaitCeilingEnvironmentVariable, "30")
@@ -1875,11 +1738,6 @@ func TestEveryWaitReportsTheBudgetItRan(t *testing.T) {
 	}
 }
 
-// TestAQuietPaneEndsAnIdleWait covers the ending for a program whose output
-// cannot be predicted. A caller that does not know what finishing prints still
-// knows that finishing means quiet, and should not have to wait out a deadline
-// to find out.
-//
 //libtmux:real-tmux
 func TestAQuietPaneEndsAnIdleWait(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1906,16 +1764,6 @@ func TestAQuietPaneEndsAnIdleWait(t *testing.T) {
 	}
 }
 
-// TestOutputExtendsAnIdleWait covers the semantic that makes an idle wait
-// usable: the window is measured from the last thing the pane wrote, so a
-// program that is still working is not mistaken for one that has finished.
-//
-// Discriminating needs the pane to write for longer than the window, with gaps
-// shorter than it. A loaded machine stretches those gaps, and once one exceeds
-// the window the wait ends early for a correct implementation too -- so a run
-// that did not see enough output reports that it could not tell rather than
-// reporting a defect it did not observe.
-//
 //libtmux:real-tmux
 func TestOutputExtendsAnIdleWait(t *testing.T) {
 	const (
@@ -1972,10 +1820,6 @@ func TestOutputExtendsAnIdleWait(t *testing.T) {
 	}
 }
 
-// TestADetachedCommandReturnsBeforeItFinishes covers the point of detaching:
-// the call costs what typing costs, not what the command costs, so a caller
-// with other work to do keeps its turn.
-//
 //libtmux:real-tmux
 func TestADetachedCommandReturnsBeforeItFinishes(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2028,11 +1872,6 @@ func TestADetachedCommandReturnsBeforeItFinishes(t *testing.T) {
 	}
 }
 
-// TestAJobAnswersTheSameWayTwice covers the ordinary thing a caller does with
-// a handle: ask again. A handle that stopped answering once it had been read
-// would turn checking on a command into an error that reads like the command
-// was lost.
-//
 //libtmux:real-tmux
 func TestAJobAnswersTheSameWayTwice(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2069,11 +1908,6 @@ func TestAJobAnswersTheSameWayTwice(t *testing.T) {
 	}
 }
 
-// TestAHandleFromAnotherRunSaysSo covers an error that would otherwise send a
-// caller looking for something that never happened. A handle does not outlive
-// the process that issued it, and reporting that as "newer commands crowded it
-// out" describes commands the caller never started.
-//
 //libtmux:real-tmux
 func TestAHandleFromAnotherRunSaysSo(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2118,10 +1952,6 @@ type listing struct {
 	} `json:"panes"`
 }
 
-// TestAFilteredListingReturnsOnlyWhatMatched covers the reason the criteria
-// exist: the whole server is the answer to a question nobody asks, and a
-// caller pays for it in context it cannot get back.
-//
 //libtmux:real-tmux
 func TestAFilteredListingReturnsOnlyWhatMatched(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2148,10 +1978,6 @@ func TestAFilteredListingReturnsOnlyWhatMatched(t *testing.T) {
 	}
 }
 
-// TestAFullListingCarriesStateWithoutASecondCall covers what makes supervising
-// several panes cheap: the state is in the snapshot already taken, so asking
-// for it costs no further tmux command and no capture.
-//
 //libtmux:real-tmux
 func TestAFullListingCarriesStateWithoutASecondCall(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2176,10 +2002,6 @@ func TestAFullListingCarriesStateWithoutASecondCall(t *testing.T) {
 	}
 }
 
-// TestAnUnknownDetailIsRefused covers the choice not to fall back: a caller
-// that asked for more and silently got less would read the absent fields as
-// absent state.
-//
 //libtmux:real-tmux
 func TestAnUnknownDetailIsRefused(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2191,10 +2013,6 @@ func TestAnUnknownDetailIsRefused(t *testing.T) {
 	}
 }
 
-// TestPathUnderDoesNotMatchASiblingPrefix covers the trap a plain prefix test
-// falls into: /tmp/work starts with /tmp/wo, and a caller filtering for one
-// would silently be handed the other.
-//
 //libtmux:real-tmux
 func TestPathUnderDoesNotMatchASiblingPrefix(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2229,10 +2047,6 @@ func TestPathUnderDoesNotMatchASiblingPrefix(t *testing.T) {
 	}
 }
 
-// TestWindowsAndSessionsNarrowToo covers the two listings that are easy to
-// leave behind: a caller that can filter panes and not the things holding them
-// still reads the whole server to find one window.
-//
 //libtmux:real-tmux
 func TestWindowsAndSessionsNarrowToo(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2280,11 +2094,6 @@ func TestWindowsAndSessionsNarrowToo(t *testing.T) {
 	}
 }
 
-// TestServerInfoTellsWhoIsWatching covers the distinction a count cannot make.
-// This server's own control connection is a tmux client, so a caller asking
-// whether a person is looking at a session has to be able to tell the two
-// apart before it decides that selecting a window is polite.
-//
 //libtmux:real-tmux
 func TestServerInfoTellsWhoIsWatching(t *testing.T) {
 	session, target, ctx := connect(t)
@@ -2329,10 +2138,6 @@ func TestServerInfoTellsWhoIsWatching(t *testing.T) {
 	}
 }
 
-// TestOneHookIsReadableWithoutTheTable covers the cost of asking: a caller
-// checking whether one thing is hooked should not be handed every hook in
-// force to search through.
-//
 //libtmux:real-tmux
 func TestOneHookIsReadableWithoutTheTable(t *testing.T) {
 	session, target, ctx := connect(t)
@@ -2380,10 +2185,6 @@ func TestOneHookIsReadableWithoutTheTable(t *testing.T) {
 	}
 }
 
-// TestAPaneKeepsItsIdentityWhenItMoves covers what move_pane is for: killing
-// and splitting again loses whatever the pane was running, and every id that
-// addressed it.
-//
 //libtmux:real-tmux
 func TestAPaneKeepsItsIdentityWhenItMoves(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2437,10 +2238,6 @@ func TestAPaneKeepsItsIdentityWhenItMoves(t *testing.T) {
 	}
 }
 
-// TestStyledCaptureKeepsColour covers the state a plain capture throws away.
-// A program that says whether it passed by colouring one word says nothing at
-// all once the colour is stripped.
-//
 //libtmux:real-tmux
 func TestStyledCaptureKeepsColour(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2471,11 +2268,6 @@ func TestStyledCaptureKeepsColour(t *testing.T) {
 	}
 }
 
-// TestRecipesAreOffAsAToolUnlessAsked covers the cost of saying anything in a
-// tool list. The recipes are already offered as prompts, and a server that
-// also advertises them as a tool is describing the same four things twice to
-// every client, whether or not that client can read prompts.
-//
 //libtmux:real-tmux
 func TestRecipesAreOffAsAToolUnlessAsked(t *testing.T) {
 	t.Run("off by default", func(t *testing.T) {
@@ -2552,10 +2344,6 @@ type ranCommand struct {
 	JobID      string   `json:"jobId"`
 }
 
-// TestRunCommandKeepsATabInItsCommand covers a command carrying a character the
-// shell's line editor acts on. A tab at a prompt asks for completion, so a
-// command delivered as keystrokes ran as whatever the completion inserted.
-//
 //libtmux:real-tmux
 func TestRunCommandKeepsATabInItsCommand(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2583,10 +2371,6 @@ func TestRunCommandKeepsATabInItsCommand(t *testing.T) {
 	}
 }
 
-// TestDetachedRunCommandReportsOnlyTheCommandsOutput covers the row the shell
-// redraws its prompt into. Reading the closing mark's row inclusively picked
-// that prompt up whenever the read lost the race against the redraw.
-//
 //libtmux:real-tmux
 func TestDetachedRunCommandReportsOnlyTheCommandsOutput(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2618,10 +2402,6 @@ func TestDetachedRunCommandReportsOnlyTheCommandsOutput(t *testing.T) {
 	}
 }
 
-// TestRunCommandRejoinsOutputTheTerminalWrapped covers a line longer than the
-// pane. A capture returns it as one row per screen line, so a caller parsing
-// the reply saw one line of output arrive as several.
-//
 //libtmux:real-tmux
 func TestRunCommandRejoinsOutputTheTerminalWrapped(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2654,10 +2434,6 @@ func lineLengths(lines []string) []int {
 	return lengths
 }
 
-// TestRunCommandRefusesAPaneWhoseShellHasExited covers a pane that can never
-// answer. Keys sent to it reach nothing, so the wait ran to its deadline and
-// then named the exited shell as what was still running.
-//
 //libtmux:real-tmux
 func TestRunCommandRefusesAPaneWhoseShellHasExited(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2701,13 +2477,6 @@ func waitForDeadPane(
 	t.Fatal("the pane's shell never exited")
 }
 
-// TestRunCommandSaysWhyThereIsNoOutput covers the reply a caller cannot act on.
-//
-// A pane running something that is not a shell takes the keys as that
-// program's input, so the wrapper never runs and never writes its opening
-// mark. Reporting the failed open names a path inside this server and hands
-// the reader a filesystem error for a tmux problem.
-//
 //libtmux:real-tmux
 func TestRunCommandSaysWhyThereIsNoOutput(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2741,16 +2510,6 @@ func TestRunCommandSaysWhyThereIsNoOutput(t *testing.T) {
 	}
 }
 
-// TestToolsKeepWorkingAfterTmuxRestarts covers a tmux server that goes away
-// and comes back, which is an ordinary thing for a person to do.
-//
-// The control connection is opened once at startup and every command goes
-// through it. When tmux dies the connection dies with it, and nothing reopened
-// it: every later call failed with "control client is closed" for the life of
-// the process, so restarting tmux meant restarting every agent attached to it.
-// The connection is an optimisation, and the behaviour without it is spawning
-// a process per command, so losing it should cost speed rather than function.
-//
 //libtmux:real-tmux
 func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -2906,17 +2665,6 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	}
 }
 
-// TestTypingIntoAPaneInAModeIsRefused covers keys that were never going to
-// reach the program.
-//
-// A pane in copy mode reads keys as that mode's bindings. The text does not
-// arrive, something else happens instead, and one of the things that can
-// happen is a binding that waits for a further key -- after which the client
-// that sent it never gets a reply. run_command is the one that shows how bad
-// that is: it hung past the timeout its own caller set and took the connection
-// with it. Every tool that delivers keystrokes is refused, because the hazard
-// belongs to the keystrokes rather than to any one tool.
-//
 //libtmux:real-tmux
 func TestTypingIntoAPaneInAModeIsRefused(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3002,15 +2750,6 @@ func runInPane(
 	return reply.Output
 }
 
-// TestAnEraseAfterAScreenClearStillReturnsTheOutput covers a command whose
-// output came back as nothing at all.
-//
-// A mark is one number, history_size plus cursor_y. Erasing the scrollback
-// drops a line of history while the cursor moves down one, so the sum is the
-// same on both sides of the command and the erase leaves no trace in it. The
-// reply then said the command printed nothing. Clearing the screen first is
-// what lines the two up, which puts this one `clear` away from ordinary.
-//
 //libtmux:real-tmux
 func TestAnEraseAfterAScreenClearStillReturnsTheOutput(t *testing.T) {
 	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
@@ -3030,15 +2769,6 @@ func TestAnEraseAfterAScreenClearStillReturnsTheOutput(t *testing.T) {
 	}
 }
 
-// TestRecoveredOutputHoldsNoWrapperEcho covers the shell's echo of this
-// server's own command arriving as though the command had printed it.
-//
-// Recovering from an erase means reading from the top of the grid, and the top
-// of an erased grid holds the prompt and the line that sourced the wrapper.
-// run_command exists so a caller never has to tell those from output, and a
-// contaminated reply is worse than a silent one: silence is obviously wrong
-// and gets retried, a plausible first line gets believed.
-//
 //libtmux:real-tmux
 func TestRecoveredOutputHoldsNoWrapperEcho(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3060,17 +2790,6 @@ func TestRecoveredOutputHoldsNoWrapperEcho(t *testing.T) {
 	}
 }
 
-// TestEveryDeliveryRefusesAPaneWithNoProcess covers four tools reporting
-// success for keys that reached nothing.
-//
-// run_command refused a dead pane and named respawn_pane. Its neighbours did
-// not look, so send_keys answered {"sent": "..."} and send_keys_batch answered
-// {"sent": 1} for keystrokes delivered to a pane with no process to read them.
-// An agent reads that as delivered and waits for output that cannot come.
-//
-// The guard was applied by hand at the one tool that remembered it, which is
-// the thing resolvePaneToDeliver exists to stop.
-//
 //libtmux:real-tmux
 func TestEveryDeliveryRefusesAPaneWithNoProcess(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3113,13 +2832,6 @@ func TestEveryDeliveryRefusesAPaneWithNoProcess(t *testing.T) {
 	}
 }
 
-// TestADeadPaneIsStillReadableAndRestartable is the other half: the guard must
-// not reach the tools whose point is a pane that has stopped.
-//
-// A person attached to the session scrolls a corpse by hand, which no capture
-// does for them, so entering a mode has to keep working. Clearing and
-// respawning one are reasonable for their own reasons.
-//
 //libtmux:real-tmux
 func TestADeadPaneIsStillReadableAndRestartable(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3201,15 +2913,6 @@ func deadPaneHeldOpen(
 	}
 }
 
-// TestAWaitThatIgnoredWhatWasAlreadyThereSaysSo covers the one reply here that
-// reads as a hang.
-//
-// sinceEntry asks for text written during the wait, so text that was already on
-// the pane is deliberately ignored and the deadline runs out. Both facts are on
-// the wire -- matchedAtEntry true beside a timeout -- and a caller has to
-// reason from the pair to the cause. The explanation existed only in a Go doc
-// comment on the field, which is not a place a client reads.
-//
 //libtmux:real-tmux
 func TestAWaitThatIgnoredWhatWasAlreadyThereSaysSo(t *testing.T) {
 	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
@@ -3255,17 +2958,6 @@ func TestAWaitThatIgnoredWhatWasAlreadyThereSaysSo(t *testing.T) {
 	}
 }
 
-// TestClearingTheScrollbackSaysTheOutputIsGone covers a command whose output
-// vanished with no sign that anything was lost.
-//
-// run_command locates a command's output by two marks, absolute positions in
-// tmux's grid taken before and after. ESC[3J erases the scrollback and
-// renumbers the grid, so the closing mark lands below the opening one and the
-// arithmetic yields nothing -- which the code returned as no output at all,
-// indistinguishable from a command that printed nothing. clear, tput clear and
-// reset all emit ESC[3J under xterm-256color, so "clear; make test" reported
-// success and returned silence.
-//
 //libtmux:real-tmux
 func TestClearingTheScrollbackSaysTheOutputIsGone(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3352,17 +3044,6 @@ func TestClearingTheScrollbackSaysTheOutputIsGone(t *testing.T) {
 	}
 }
 
-// TestJoinWrappedReadsAPaneAsTmuxDoes covers a seam that was reported as a
-// defect here and belongs to tmux.
-//
-// In a narrow pane with a shell prompt that draws several rows, the join can
-// put the prompt's last row and the command typed after it on one line and
-// orphan the command's wrapped tail on the next. tmux's own capture-pane -J
-// does the same, because it is tmux that decides which rows were wrapped, from
-// a flag it sets as it wraps them. Reproducing tmux rather than improving on it
-// is the contract, so this pins the equivalence: a later divergence is then a
-// change here rather than something nobody notices.
-//
 //libtmux:real-tmux
 func TestJoinWrappedReadsAPaneAsTmuxDoes(t *testing.T) {
 	session, target, ctx := connect(t)

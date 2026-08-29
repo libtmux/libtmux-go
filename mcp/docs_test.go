@@ -42,17 +42,6 @@ func TestOperationalNamesInDocumentationMatchTheBinary(t *testing.T) {
 	}
 }
 
-// TestTheReferenceNamesEverythingTheServerOffers gates the tool reference
-// against the server rather than against the last time someone read both.
-//
-// TOOLS.md is where a client's operator goes to find out what is here, and a
-// tool missing from it is a tool nobody reaches on purpose. Nothing about
-// adding one to the server adds it to the reference, and nothing about renaming
-// one renames it there, so the failure is silent in both directions: an
-// undocumented tool, and an entry describing a tool that no longer answers.
-//
-// The widest safety level is the one asked, because the reference documents
-// every tool and says which level withholds it.
 func TestTheReferenceNamesEverythingTheServerOffers(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
 	session, _, ctx := connect(t)

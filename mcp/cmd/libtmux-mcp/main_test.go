@@ -80,10 +80,6 @@ func TestFirstSentenceStopsAtTheFirstSentence(t *testing.T) {
 	}
 }
 
-// TestResolveSocketPrefersAFlagOverTheEnvironment covers the two ways an
-// operator names a socket. The variable is what the Python server reads, so a
-// configuration written for it reaches the tmux it names rather than whatever
-// sits on the default socket; a flag is the more specific statement and wins.
 func TestResolveSocketPrefersAFlagOverTheEnvironment(t *testing.T) {
 	for _, testCase := range []struct {
 		name, flagName, flagPath, environment, want, origin string
@@ -107,14 +103,6 @@ func TestResolveSocketPrefersAFlagOverTheEnvironment(t *testing.T) {
 	}
 }
 
-// TestTheSocketAndBinaryComeFromTheEnvironmentToo covers the options a client
-// could not reach.
-//
-// An MCP client starts this server with an environment rather than an argument
-// vector, so an option only a flag could set was one a client configuration
-// could not use. A socket outside tmux's own directory is the ordinary case:
-// naming it in the variable that takes a NAME joins it to that directory and
-// addresses nothing, which is the mistake this pair exists to make impossible.
 func TestTheSocketAndBinaryComeFromTheEnvironmentToo(t *testing.T) {
 	t.Run("a path in the environment is taken as a path", func(t *testing.T) {
 		t.Setenv("LIBTMUX_SOCKET_PATH", "/somewhere/else/tmux.sock")

@@ -8,14 +8,6 @@ import (
 	"testing"
 )
 
-// TestAFrameThatIsNotJSONIsDroppedRatherThanFatal covers the byte that should
-// not cost a session.
-//
-// The SDK decodes the stream rather than the line, so a syntax error leaves
-// its decoder with nothing to resync on and ends the process. Dropping the
-// line before the decoder sees it is what keeps the rest of the connection
-// working, and skipping the error afterwards does not: the decoder cannot find
-// the next frame either.
 func TestAFrameThatIsNotJSONIsDroppedRatherThanFatal(t *testing.T) {
 	const good = `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
 	stream := strings.Join([]string{
@@ -59,9 +51,6 @@ func TestAFrameThatIsNotJSONIsDroppedRatherThanFatal(t *testing.T) {
 	}
 }
 
-// TestALongFrameSurvivesTheFilter covers the reason this reads lines rather
-// than scanning tokens: a capture of a wide pane's scrollback is a legitimate
-// frame far past any default buffer.
 func TestALongFrameSurvivesTheFilter(t *testing.T) {
 	encoded, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -82,8 +71,6 @@ func TestALongFrameSurvivesTheFilter(t *testing.T) {
 	}
 }
 
-// TestTheFilterEndsWhenThePipeDoes is the other half: dropping bad lines must
-// not turn a closed pipe into a read that never returns.
 func TestTheFilterEndsWhenThePipeDoes(t *testing.T) {
 	reader := wholeJSONLines(io.NopCloser(strings.NewReader("{ bad\n")), io.Discard)
 	if _, err := io.ReadAll(reader); err != nil {

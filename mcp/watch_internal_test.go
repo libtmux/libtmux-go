@@ -9,18 +9,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// TestACoalescedNotificationIsDeferredNotDropped covers the tail of a burst.
-//
-// Two notifications about one pane inside the interval are one notification,
-// which is the point of the interval. Dropping the second is not: a client
-// re-reads when it is told, and a write that landed after that read and before
-// the window expired was never mentioned again, so a pane that then went quiet
-// left the client stale with nothing coming to correct it.
-//
-// Driven here rather than through a pane, because how many times tmux reports
-// a write and how far apart is not something a test of the coalescing can
-// control -- one written through the harness passed whether the deferral was
-// there or not, which is a gate that cannot fail.
 func TestACoalescedNotificationIsDeferredNotDropped(t *testing.T) {
 	const uri = "tmux://panes/%9/content"
 	watchers := newWatchers(
@@ -60,11 +48,6 @@ func TestACoalescedNotificationIsDeferredNotDropped(t *testing.T) {
 	}
 }
 
-// TestUnsubscribingDropsThePanesRecord covers the two maps keyed by URI.
-//
-// Neither is large and nothing fails when they grow, which is why they grew: a
-// server watching panes that come and go kept one entry per pane it had ever
-// watched, for as long as the process lived.
 func TestUnsubscribingDropsThePanesRecord(t *testing.T) {
 	const uri = "tmux://panes/%7/content"
 	watchers := newWatchers(

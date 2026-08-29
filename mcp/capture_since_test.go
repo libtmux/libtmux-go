@@ -23,11 +23,6 @@ import (
 // gone and the reply must say so — a gap reported as completeness is the one
 // outcome a caller cannot detect.
 
-// TestATrimmedAnchorIsReportedAsLinesMissed covers what tmux does to a cursor:
-// when tmux trims scrollback, the absolute row the cursor recorded stops
-// meaning the row it recorded, and the delta silently starts too late.
-// linesMissed stays false, so the gap is invisible.
-//
 //libtmux:real-tmux
 func TestATrimmedAnchorIsReportedAsLinesMissed(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -102,14 +97,6 @@ func TestATrimmedAnchorIsReportedAsLinesMissed(t *testing.T) {
 	}
 }
 
-// TestATrimThatKeepsTheAnchorLosesNothing isolates the mechanism from the loss.
-//
-// The pane is trimmed by less than the distance from the anchor to the start of
-// history, so the anchor row itself is still retained and every line after it
-// is still readable. If the delta is computed from the absolute row the cursor
-// recorded, it starts exactly the trimmed amount too late, and the lines it
-// skips are ones tmux still has.
-//
 //libtmux:real-tmux
 func TestATrimThatKeepsTheAnchorLosesNothing(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -187,11 +174,6 @@ func containsWord(haystack, marker string) bool {
 	return slices.Contains(strings.Fields(haystack), marker)
 }
 
-// TestASubscriberThatArrivedFirstIsStillTold covers the ordinary case a
-// give-up-once watcher got wrong: a client is pointed at a socket before
-// anyone has made a session on it, subscribes, and has to hear about the
-// sessions that appear afterwards.
-//
 //libtmux:real-tmux
 func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -240,24 +222,6 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	}
 }
 
-// TestASubscriptionWritingThePaneSigilIsStillTold covers the spelling a client
-// reaches for first.
-//
-// A pane arrives from every tool as %1, so a client addressing it as a resource
-// writes tmux://panes/%1/content. Reading accepts that; subscribing accepted it
-// too and then never delivered, because updates are addressed by the sigil-less
-// form alone. Nothing distinguished that from a pane which never wrote.
-//
-// TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched covers the gap in
-// the middle of a rebuild.
-//
-// A control connection ends whenever the set of sessions changes, and the
-// whole set is rebuilt from scratch. Between the two, tmux reports a pane's
-// output to nobody, and tmux keeps no record to catch up from: a write in that
-// window was never mentioned again, so a subscriber sat silent while the pane
-// it was watching filled. Somebody else creating a session anywhere on the
-// server was enough.
-//
 //libtmux:real-tmux
 func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -389,15 +353,6 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 	}
 }
 
-// TestAPaneIsWatchedWhicheverSessionHoldsIt covers the session a subscriber
-// happens to be interested in.
-//
-// tmux reports a pane's output only to a client attached to that pane's
-// session. Watching held one connection, to the first session, so a pane in
-// any other was subscribed to and never reported — silence indistinguishable
-// from a pane that never wrote, for anyone with more than one session, which
-// is most people.
-//
 //libtmux:real-tmux
 func TestAPaneIsWatchedWhicheverSessionHoldsIt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -516,14 +471,6 @@ func awaitURI(ctx context.Context, t *testing.T, updated <-chan string, want, co
 	}
 }
 
-// TestTheBackstopRefusesAnOversizedReply covers the cap that exists for the
-// tool that forgets to bound itself.
-//
-// Every tool that returns pane text bounds its own reply, which is the right
-// place for it. This is the floor under that convention: a reply past what
-// this server will send is refused with a message that names the tool, because
-// the alternative is spending a caller's whole context on one answer.
-//
 //libtmux:real-tmux
 func TestTheBackstopRefusesAnOversizedReply(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -545,10 +492,6 @@ func TestTheBackstopRefusesAnOversizedReply(t *testing.T) {
 	}
 }
 
-// TestEveryTextToolBoundsItself is the convention the backstop is a floor
-// under: a tool that returns pane lines takes maxLines, so a caller can ask
-// for less and the default is not the pane's whole history.
-//
 //libtmux:real-tmux
 func TestEveryTextToolBoundsItself(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -584,16 +527,6 @@ func TestEveryTextToolBoundsItself(t *testing.T) {
 	}
 }
 
-// TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere covers the timeout that
-// looks like a broken pattern.
-//
-// A caller cannot start a program and wait for it in one request, so a fast
-// program has already printed by the time the wait begins. sinceEntry then
-// correctly refuses to match it and the wait runs to its deadline — reporting
-// only that nothing was found, which reads as a pattern that does not work and
-// sends the reader looking for the fault in their regular expression. The
-// server knows the text was there and has to say so.
-//
 //libtmux:real-tmux
 func TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere(t *testing.T) {
 	session, _, ctx := connect(t)

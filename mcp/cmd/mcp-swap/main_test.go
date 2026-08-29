@@ -224,8 +224,6 @@ sleep 0.02
 	}
 }
 
-// TestSelectedNarrowsToTheClientsNamed covers trying a build in one client on a
-// machine where the others deliberately run a different server.
 func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	t.Parallel()
 	all := knownClients("/home/someone")
@@ -255,13 +253,6 @@ func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	}
 }
 
-// TestASecondSwapBacksUpWhatIsThereBySecondTime covers the file this tool is
-// most able to damage: someone else's global agent configuration.
-//
-// A backup is written only when none exists, which is what makes swapping an
-// already-swapped client still revert to the original. Left in place after a
-// revert, that same rule turns into data loss: the file is edited, swapped
-// again, and the revert restores the copy from before the edit.
 func TestASecondSwapBacksUpWhatIsThereBySecondTime(t *testing.T) {
 	t.Parallel()
 
@@ -430,14 +421,6 @@ func TestDryRunsReportUninspectablePaths(t *testing.T) {
 	}
 }
 
-// TestOneUnwritableClientDoesNotStopTheRest covers a swap across several CLIs
-// where one of them has a config this cannot edit.
-//
-// Returning at the first failure leaves the clients before it swapped and the
-// ones after it untouched, which is a mixed state nothing reports: the CLIs
-// that were never reached look exactly like the ones that were, and the next
-// run has to be made after fixing the broken one. Every client is attempted
-// and every failure is named instead.
 func TestOneUnwritableClientDoesNotStopTheRest(t *testing.T) {
 	t.Parallel()
 

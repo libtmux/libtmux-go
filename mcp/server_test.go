@@ -358,10 +358,6 @@ func TestKillSessionRefusesAnEmptyName(t *testing.T) {
 	}
 }
 
-// TestConnectPutsToolsOnAControlTransport covers the reason Run connects at
-// all: a client issuing many small reads should not start a tmux process for
-// each one.
-//
 //libtmux:real-tmux
 func TestConnectPutsToolsOnAControlTransport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -413,10 +409,6 @@ func TestConnectPutsToolsOnAControlTransport(t *testing.T) {
 	}
 }
 
-// TestConnectLeavesAnEmptyServerAlone pins that connecting never invents a
-// session, because one created here would outlive the pool and show up in the
-// user's own tmux.
-//
 //libtmux:real-tmux
 func TestConnectLeavesAnEmptyServerAlone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -444,16 +436,6 @@ func TestConnectLeavesAnEmptyServerAlone(t *testing.T) {
 	}
 }
 
-// TestAnAbsentServerIsNotAnEmptyOne covers what a listing says when there is
-// no tmux on the socket at all.
-//
-// The listing answers rather than failing, because asking what is there is the
-// ordinary opening move; but tmux exits when its last pane goes, so a listing
-// of nothing is never a quiet server. Without the note a client reads the
-// wrong socket as an idle machine and goes looking for a pane that was never
-// going to be there, which is what a client that starts its servers with a
-// curated environment produces every time.
-//
 //libtmux:real-tmux
 func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -530,10 +512,6 @@ func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 	}
 }
 
-// TestConnectLeavesAChosenTransportAlone covers an embedder declining the
-// long-lived client, which is what a tmux configuration that reacts to
-// attachment wants.
-//
 //libtmux:real-tmux
 func TestConnectLeavesAChosenTransportAlone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -565,11 +543,6 @@ func TestConnectLeavesAChosenTransportAlone(t *testing.T) {
 	}
 }
 
-// TestRunCommandReportsExitStatusWithoutReadingTheScreen covers the tool that
-// exists so a client does not poll. The command prints the very text a naive
-// waiter would look for before it exits nonzero, so a screen-reading answer
-// would be both early and wrong.
-//
 //libtmux:real-tmux
 func TestRunCommandReportsExitStatusWithoutReadingTheScreen(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -617,9 +590,6 @@ func TestRunCommandReportsExitStatusWithoutReadingTheScreen(t *testing.T) {
 	}
 }
 
-// TestRunCommandReportsATimeoutRatherThanFailing covers a command that outlasts
-// the wait, which is a fact about the command rather than a broken call.
-//
 //libtmux:real-tmux
 func TestRunCommandReportsATimeoutRatherThanFailing(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -656,11 +626,6 @@ func TestRunCommandReportsATimeoutRatherThanFailing(t *testing.T) {
 	}
 }
 
-// TestWaitForTextReadsTheStreamRatherThanTheScreen covers waiting on output
-// the client did not author. The pane announces itself a second in, so an
-// answer that arrived immediately would be reading the screen rather than the
-// stream.
-//
 //libtmux:real-tmux
 func TestWaitForTextReadsTheStreamRatherThanTheScreen(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -747,10 +712,6 @@ func paneIDs(ctx context.Context, t *testing.T, session *sdk.ClientSession) []st
 	return ids
 }
 
-// TestSplitPaneDividesAPaneAndNamesTheNewOne covers the tool an agent uses to
-// make room for work: without it, changing a layout means typing tmux commands
-// into a shell and reading the screen to learn what happened.
-//
 //libtmux:real-tmux
 func TestSplitPaneDividesAPaneAndNamesTheNewOne(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -792,10 +753,6 @@ func TestSplitPaneDividesAPaneAndNamesTheNewOne(t *testing.T) {
 	}
 }
 
-// TestResizePaneSetsTheSizeTmuxSettlesOn covers changing a pane's size, and
-// that the answer is what tmux did rather than what was asked, since a layout
-// constrains its panes.
-//
 //libtmux:real-tmux
 func TestResizePaneSetsTheSizeTmuxSettlesOn(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -831,11 +788,6 @@ func TestResizePaneSetsTheSizeTmuxSettlesOn(t *testing.T) {
 	}
 }
 
-// TestSelectLayoutRefusesTwoAlternativesItself covers a pair tmux rejects. The
-// schema can hold both, so the tool has to say which of its own arguments
-// conflict — otherwise tmux's parser answers, naming modes this tool does not
-// offer.
-//
 //libtmux:real-tmux
 func TestSelectLayoutRefusesTwoAlternativesItself(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -875,19 +827,6 @@ func TestSelectLayoutRefusesTwoAlternativesItself(t *testing.T) {
 	}
 }
 
-// TestEveryPresetThisTmuxArrangesIsOffered covers an allowlist that stopped
-// keeping up with tmux.
-//
-// A name tmux does not know is not merely refused: 3.3a dies of it and takes
-// every session on the socket, which is why the names are checked before they
-// are sent. The cost of that is a list that has to grow when tmux's does, and
-// the mirrored presets arrived at 3.5 without it.
-//
-// The mirrored pair is checked against the running version rather than by
-// sending an unknown name to find out, because finding out is what ends a 3.3a
-// server. Where the tool does offer one, tmux is made to apply it, so the
-// boundary is not taken on trust.
-//
 //libtmux:real-tmux
 func TestEveryPresetThisTmuxArrangesIsOffered(t *testing.T) {
 	session, target, ctx := connect(t)
@@ -938,10 +877,6 @@ func TestEveryPresetThisTmuxArrangesIsOffered(t *testing.T) {
 	}
 }
 
-// TestFindPaneByPositionReadsTheLayout covers the question an index cannot
-// answer. A pane's index is the order it was made in, so a client with only
-// indexes cannot say which pane is above another.
-//
 //libtmux:real-tmux
 func TestFindPaneByPositionReadsTheLayout(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1050,14 +985,6 @@ func TestChannelNamesAreValidated(t *testing.T) {
 	}
 }
 
-// TestIsCallerHasThreeAnswers covers identifying the server's own pane. A pane
-// id is unique only within one tmux server, so the socket has to agree before
-// a pane can be called this one.
-//
-// Each situation gets its own server, because a server works out which pane it
-// runs in once and keeps the answer: the pane a process is in does not change,
-// and finding it costs a walk up the process tree and a listing.
-//
 //libtmux:real-tmux
 func TestIsCallerHasThreeAnswers(t *testing.T) {
 	// The pane ids a fresh server hands out are predictable, which is what lets
@@ -1148,10 +1075,6 @@ func TestIsCallerHasThreeAnswers(t *testing.T) {
 	})
 }
 
-// TestInstructionsNameTheCallersPane covers the half of self-detection that
-// costs no tool call: a client that must ask which pane it is in spends a
-// round trip on a fact tmux put in this process's environment.
-//
 //libtmux:real-tmux
 func TestInstructionsNameTheCallersPane(t *testing.T) {
 	t.Setenv("TMUX_PANE", "%7")
@@ -1175,7 +1098,7 @@ func TestInstructionsNameTheCallersPane(t *testing.T) {
 		"run_command",         // and where each waiting case should go
 		"wait_for_text",
 		"wait_for_channel",
-		"snapshot_pane", // prefer the whole answer to two that can disagree
+		"snapshot_pane", // prefer one response when both state and content are needed
 	} {
 		if !strings.Contains(instructions, expected) {
 			t.Errorf("instructions omit %q", expected)
@@ -1183,10 +1106,6 @@ func TestInstructionsNameTheCallersPane(t *testing.T) {
 	}
 }
 
-// TestBatchesRunInOrderAndRefuseMutations covers running several calls in one
-// request, and the promise a read-only batch makes: a batch a client believed
-// only looked at tmux must not have changed it.
-//
 //libtmux:real-tmux
 func TestBatchesRunInOrderAndRefuseMutations(t *testing.T) {
 	// kill_session is offered only at the destructive level.
@@ -1253,10 +1172,6 @@ func TestBatchesRunInOrderAndRefuseMutations(t *testing.T) {
 	}
 }
 
-// TestWaitForTextSeesWhatThePaneAlreadyShowed covers the race a client cannot
-// avoid: it cannot start a program and wait for it in one request, so a quick
-// program has announced itself before the wait begins.
-//
 //libtmux:real-tmux
 func TestWaitForTextSeesWhatThePaneAlreadyShowed(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1318,15 +1233,6 @@ func TestWaitForTextSeesWhatThePaneAlreadyShowed(t *testing.T) {
 	}
 }
 
-// TestABatchToldToContinueRunsTheCallsAfterAFailure covers the other ordinary
-// shape a batch has.
-//
-// Stopping is right for a sequence, where a step nobody took makes the ones
-// after it wrong. It is wrong for independent calls, where one failure turned
-// the whole batch into something a caller cannot tell the state of and had to
-// re-send call by call to find out. The Python server of the same name has
-// taken the choice since it was written.
-//
 //libtmux:real-tmux
 func TestABatchToldToContinueRunsTheCallsAfterAFailure(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1389,11 +1295,6 @@ func TestABatchToldToContinueRunsTheCallsAfterAFailure(t *testing.T) {
 	}
 }
 
-// TestBatchArgumentsAreCheckedLikeAnyCall covers the one place a mistake used
-// to pass: the schema the SDK enforces on a call of its own does not reach a
-// call inside a batch, so a misspelled field was dropped and the call ran on
-// defaults while reporting success.
-//
 //libtmux:real-tmux
 func TestBatchArgumentsAreCheckedLikeAnyCall(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1452,14 +1353,6 @@ func TestBatchArgumentsAreCheckedLikeAnyCall(t *testing.T) {
 	}
 }
 
-// TestACommandThatPrintedBlankLinesSaysSo covers the one answer that reads as
-// its own opposite.
-//
-// A blank row is an empty line, and a capture that is nothing but empty lines
-// arrives as no lines at all, so a command whose whole output is blank lines
-// was reported as having printed nothing. Those are different answers, and the
-// reply has no other field that tells them apart.
-//
 //libtmux:real-tmux
 func TestACommandThatPrintedBlankLinesSaysSo(t *testing.T) {
 	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
@@ -1494,16 +1387,6 @@ func TestACommandThatPrintedBlankLinesSaysSo(t *testing.T) {
 	}
 }
 
-// TestATimedOutRunLeavesNothingOfItsOwnInThePane covers the wrapper outliving
-// the wait that started it.
-//
-// A run that times out is still running, and the directory it records itself
-// in is removed when the call returns. Minutes later the command finishes, the
-// wrapper reaches its own bookkeeping, and the shell reports the redirections
-// it cannot open -- four lines of this package's temporary paths, printed into
-// somebody's terminal long after the call that caused them, and read as
-// command output by whatever runs next.
-//
 //libtmux:real-tmux
 func TestATimedOutRunLeavesNothingOfItsOwnInThePane(t *testing.T) {
 	// A plain POSIX shell, which is what the wrapper is written for, and a
@@ -1559,10 +1442,6 @@ func TestATimedOutRunLeavesNothingOfItsOwnInThePane(t *testing.T) {
 	}
 }
 
-// TestSendKeysRecoversAPaneLeftBusy covers the way back from a run_command
-// that timed out. The pane still holds that command, so every later one times
-// out too, and nothing else in the tool set can interrupt it.
-//
 //libtmux:real-tmux
 func TestSendKeysRecoversAPaneLeftBusy(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1602,10 +1481,6 @@ func TestSendKeysRecoversAPaneLeftBusy(t *testing.T) {
 	}
 }
 
-// TestATimeoutNamesWhatThePaneWasRunning covers telling a slow command from a
-// pane that never ran one. run_command types into whatever the pane is
-// running, so a busy pane receives the text as that program's input.
-//
 //libtmux:real-tmux
 func TestATimeoutNamesWhatThePaneWasRunning(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1630,10 +1505,6 @@ func TestATimeoutNamesWhatThePaneWasRunning(t *testing.T) {
 	}
 }
 
-// TestOrientationToolsDescribeTheServer covers the questions an agent asks
-// first. A window is what a person switches between, so what windows exist is
-// usually the first question rather than a coarser form of what panes exist.
-//
 //libtmux:real-tmux
 func TestOrientationToolsDescribeTheServer(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1697,10 +1568,6 @@ func TestOrientationToolsDescribeTheServer(t *testing.T) {
 	}
 }
 
-// TestCreateWindowAndSessionWithoutADocument covers wanting one more window.
-// build_workspace lays out a whole session from a document, which is a larger
-// door than the job, and the alternative was typing a tmux command into a pane.
-//
 //libtmux:real-tmux
 func TestCreateWindowAndSessionWithoutADocument(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1772,10 +1639,6 @@ func TestCreateWindowAndSessionWithoutADocument(t *testing.T) {
 	}
 }
 
-// TestSnapshotAndSearchFindPanesByWhatTheyShow covers the two questions that
-// otherwise cost a call per pane: what is this pane doing, and where is the
-// thing I am looking for.
-//
 //libtmux:real-tmux
 func TestSnapshotAndSearchFindPanesByWhatTheyShow(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1842,10 +1705,6 @@ func TestSnapshotAndSearchFindPanesByWhatTheyShow(t *testing.T) {
 	}
 }
 
-// TestEveryToolCarriesAnnotations covers what a client acts on without reading
-// prose: a listing can be approved unasked, a kill cannot. A tool shipped
-// without hints looks exactly as dangerous as one that ends a session.
-//
 //libtmux:real-tmux
 func TestEveryToolCarriesAnnotations(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1893,11 +1752,6 @@ func TestEveryToolCarriesAnnotations(t *testing.T) {
 	}
 }
 
-// TestNoNotificationsBeforeTheClientIsInitialized covers the ordering MCP
-// asks for: a server should not send notifications until it has received
-// notifications/initialized. The SDK announces the tool list as changed as
-// soon as a session exists, which lands before that.
-//
 //libtmux:real-tmux
 func TestNoNotificationsBeforeTheClientIsInitialized(t *testing.T) {
 	target := tmux.NewServer(tmux.ServerOptions{
@@ -1944,10 +1798,6 @@ func handshakeOrderingFor(inner sdk.Transport) sdk.Transport {
 	return tmuxmcp.HandshakeOrdered(inner)
 }
 
-// TestToolDescriptionsCarryNoSchemaSyntax covers text a model reads. The SDK
-// takes a whole jsonschema tag as the description, so a constraint written
-// there never reaches the schema and ships as trailing syntax instead.
-//
 //libtmux:real-tmux
 func TestToolDescriptionsCarryNoSchemaSyntax(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -1968,12 +1818,6 @@ func TestToolDescriptionsCarryNoSchemaSyntax(t *testing.T) {
 	}
 }
 
-// TestEveryChangingToolSaysWhetherRepeatingItCompounds covers the hint a
-// client needs after a timeout: a call that may or may not have landed can be
-// retried only when repeating it cannot compound. A tool added without
-// deciding lands in neither list and fails here rather than defaulting to the
-// cautious answer silently.
-//
 //libtmux:real-tmux
 func TestEveryChangingToolSaysWhetherRepeatingItCompounds(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
@@ -2035,10 +1879,6 @@ func TestEveryChangingToolSaysWhetherRepeatingItCompounds(t *testing.T) {
 	}
 }
 
-// TestSafetyLevelWithholdsTools covers the guarantee a level makes: a tool
-// above it is never advertised, so no prompt reaches it, and a batch cannot
-// reach around the level that hid it.
-//
 //libtmux:real-tmux
 func TestSafetyLevelWithholdsTools(t *testing.T) {
 	for _, testCase := range []struct {
@@ -2113,10 +1953,6 @@ func TestReadOnlyWithholdsArbitraryFormatExpansion(t *testing.T) {
 	}
 }
 
-// TestResourcesAddressTheHierarchy covers the surface a tool cannot offer: a
-// URI a person can attach to a conversation, and a client can browse without
-// knowing a single tool name.
-//
 //libtmux:real-tmux
 func TestResourcesAddressTheHierarchy(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2226,11 +2062,6 @@ func TestResourcesAddressTheHierarchy(t *testing.T) {
 	}
 }
 
-// TestResourceURIsArePercentDecoded covers the promise the URI comment makes:
-// both the bare form and the percent-encoded sigil form address one object. A
-// name needing an escape has no other spelling, so without decoding it cannot
-// be addressed as a resource at all.
-//
 //libtmux:real-tmux
 func TestResourceURIsArePercentDecoded(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2265,10 +2096,6 @@ func TestResourceURIsArePercentDecoded(t *testing.T) {
 	}
 }
 
-// TestResourcesSurviveAReadOnlyServer covers browsing a server that offers no
-// tool which changes anything: every resource only reads, so the safety level
-// never withholds one.
-//
 //libtmux:real-tmux
 func TestResourcesSurviveAReadOnlyServer(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "readonly")
@@ -2282,11 +2109,6 @@ func TestResourcesSurviveAReadOnlyServer(t *testing.T) {
 	}
 }
 
-// TestSuppressHistoryKeepsACommandOutOfHistory covers a courtesy an agent
-// owes a person whose pane it is typing into: a shell told to ignore lines
-// beginning with a space keeps them out of its history, and without this every
-// command an agent ran would sit in the history of someone who never ran one.
-//
 //libtmux:real-tmux
 func TestSuppressHistoryKeepsACommandOutOfHistory(t *testing.T) {
 	session, target, ctx := connect(t)
@@ -2345,10 +2167,6 @@ func TestSuppressHistoryKeepsACommandOutOfHistory(t *testing.T) {
 	}
 }
 
-// TestPromptsNameTheJobs covers the surface neither a tool list nor a resource
-// list can offer: the task a person actually wants, with the order of tools
-// that does it attached.
-//
 //libtmux:real-tmux
 func TestPromptsNameTheJobs(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2403,10 +2221,6 @@ func TestPromptsNameTheJobs(t *testing.T) {
 	}
 }
 
-// TestPromptsRespectTheSafetyLevel covers a server offering nothing that
-// changes tmux: suggesting how to lay a session out would be advice it cannot
-// carry out.
-//
 //libtmux:real-tmux
 func TestPromptsRespectTheSafetyLevel(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "readonly")
@@ -2430,10 +2244,6 @@ func TestPromptsRespectTheSafetyLevel(t *testing.T) {
 	}
 }
 
-// TestCompletionsOfferValuesThatExist covers the one surface a client fills in
-// rather than reads. MCP has no completion for tool arguments, so this reaches
-// the resource templates and the prompts.
-//
 //libtmux:real-tmux
 func TestCompletionsOfferValuesThatExist(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2518,10 +2328,6 @@ func TestCompletionsOfferValuesThatExist(t *testing.T) {
 	}
 }
 
-// TestCompletionsEscapeWhatAUriMustCarry covers a name a URI cannot hold as it
-// stands: a completion for a template slot is pasted into a path, so it has to
-// arrive already escaped or the URI it builds does not parse.
-//
 //libtmux:real-tmux
 func TestCompletionsEscapeWhatAUriMustCarry(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2555,9 +2361,6 @@ func TestCompletionsEscapeWhatAUriMustCarry(t *testing.T) {
 	}
 }
 
-// TestCompletionsNarrowToWhatIsAlreadyChosen covers the context a client sends:
-// a session already filled in should leave only its own windows offered.
-//
 //libtmux:real-tmux
 func TestCompletionsNarrowToWhatIsAlreadyChosen(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2593,10 +2396,6 @@ func TestCompletionsNarrowToWhatIsAlreadyChosen(t *testing.T) {
 	}
 }
 
-// TestATimeoutIsLoggedToAClientThatAsked covers the capability this server
-// advertises. A client that sets a level should hear why a wait ended with
-// nothing; one that never asks should hear nothing at all.
-//
 //libtmux:real-tmux
 func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -2688,9 +2487,6 @@ func schemaOf(t *testing.T, tool *sdk.Tool) advertisedSchema {
 	return schema
 }
 
-// TestEveryArgumentSaysWhatItIs is a structural gate on the surface a client
-// reads. An argument with no description is invisible to anything choosing
-// tools from the schema alone, which is how an agent chooses them.
 func TestEveryArgumentSaysWhatItIs(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
 	session, _, ctx := connect(t)
@@ -2708,11 +2504,6 @@ func TestEveryArgumentSaysWhatItIs(t *testing.T) {
 	}
 }
 
-// TestAValueOutsideAClosedSetIsRefused covers what publishing a closed set is
-// for: the server enforces it rather than describing it, and still takes every
-// value it lists. An enum that narrowed what a tool accepts would break
-// callers instead of guiding them.
-//
 //libtmux:real-tmux
 func TestAValueOutsideAClosedSetIsRefused(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
@@ -2781,9 +2572,6 @@ func TestAValueOutsideAClosedSetIsRefused(t *testing.T) {
 	}
 }
 
-// TestNoToolOffersAnArgumentItIgnores covers arguments that reached a schema by
-// sharing a Go type with another tool. A client cannot tell such an argument
-// from one that works, so it asks for behaviour it will not get.
 func TestNoToolOffersAnArgumentItIgnores(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
 	session, _, ctx := connect(t)
@@ -2806,11 +2594,6 @@ func TestNoToolOffersAnArgumentItIgnores(t *testing.T) {
 	}
 }
 
-// TestAListWithNoMatchesIsStillAList covers the shape a client parses. A
-// collection that disappears when it is empty makes every caller check whether
-// the field is there before it can count what matched, and the three listing
-// tools disagreed about it.
-//
 //libtmux:real-tmux
 func TestAListWithNoMatchesIsStillAList(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2850,11 +2633,6 @@ func TestAListWithNoMatchesIsStillAList(t *testing.T) {
 	}
 }
 
-// TestABatchNamesTheCallsItSkipped covers what a caller of the mutating batch
-// needs after a failure: which of its changes were never made. Counting the
-// difference between the calls sent and the results returned is not something
-// a reply should ask of a client.
-//
 //libtmux:real-tmux
 func TestABatchNamesTheCallsItSkipped(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2890,9 +2668,6 @@ func TestABatchNamesTheCallsItSkipped(t *testing.T) {
 	}
 }
 
-// TestABatchSaysWhyItCannotBatchABatch covers a refusal that used to deny the
-// existence of a tool the client can see in the listing.
-//
 //libtmux:real-tmux
 func TestABatchSaysWhyItCannotBatchABatch(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2917,11 +2692,6 @@ func TestABatchSaysWhyItCannotBatchABatch(t *testing.T) {
 	}
 }
 
-// TestListServersLeavesOutSocketsNothingIsListeningOn covers a reply whose size
-// was set by how many test suites the machine had ever run. tmux leaves a
-// socket file behind when a server exits, so the directory only grows, and a
-// listing that reported all of them buried the running ones.
-//
 //libtmux:real-tmux
 func TestListServersLeavesOutSocketsNothingIsListeningOn(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -2962,17 +2732,6 @@ func TestListServersLeavesOutSocketsNothingIsListeningOn(t *testing.T) {
 	}
 }
 
-// TestANamedTargetThatIsGoneNamesTheCallThatFindsOne covers the difference
-// between an error a model can read and one it can act on.
-//
-// tmux answers with what it looked for, which names the mechanism and leaves
-// the way out to be guessed. The listing is always the right next move, so the
-// refusal says so.
-//
-// This is about a tool that resolves a target. The listing tools take the same
-// argument names as filters, where selecting nothing is an answer rather than
-// a failure, and they are deliberately not here.
-//
 //libtmux:real-tmux
 func TestANamedTargetThatIsGoneNamesTheCallThatFindsOne(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3012,13 +2771,6 @@ func TestANamedTargetThatIsGoneNamesTheCallThatFindsOne(t *testing.T) {
 	}
 }
 
-// TestASettingsScopeRefusesATargetItCannotRead covers an argument thrown away
-// without a word.
-//
-// A caller who means a pane and writes session gets a session-wide answer, and
-// nothing in the reply says the pane they named was discarded — so a mistake
-// in one field reads as a successful call about something else.
-//
 //libtmux:real-tmux
 func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3113,15 +2865,6 @@ func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
 	}
 }
 
-// TestServerMessagesAreBoundedLikeEveryOtherReply covers the one reply in this
-// package that had a count cap and no byte cap.
-//
-// tmux's message log records the commands it ran, and this server's own
-// listings carry a format string naming every field it wants, so the log is
-// mostly this server quoted back at itself at thousands of characters a line.
-// A hundred of those is a reply no caller can afford, and the caller cannot
-// see it coming: the size belongs to the log, not to the request.
-//
 //libtmux:real-tmux
 func TestServerMessagesAreBoundedLikeEveryOtherReply(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3205,15 +2948,6 @@ func TestServerMessagesAreBoundedLikeEveryOtherReply(t *testing.T) {
 	}
 }
 
-// TestServerInfoDoesNotInventAHealthyEmptyServer covers a reply that a caller
-// would believe.
-//
-// A tmux server with nothing in it and a tmux this process could not run come
-// back as the same reply once the errors are dropped: alive false, no socket,
-// zero of everything. The first is an answer and the second is not knowing, and
-// a caller acting on the second acts on a description of a server that does not
-// exist.
-//
 //libtmux:real-tmux
 func TestServerInfoDoesNotInventAHealthyEmptyServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -3249,15 +2983,6 @@ func TestServerInfoDoesNotInventAHealthyEmptyServer(t *testing.T) {
 	}
 }
 
-// TestAHalfBuiltWorkspaceSaysWhatSurvived covers a failure whose leftovers the
-// reply did not mention.
-//
-// Build is not atomic and cannot be: tmux has no transaction. The reply named
-// the pane it died on and nothing else, so a caller who read it believed
-// nothing happened and sent the same document again -- which fails on a name
-// that already exists, for a reason the first reply never gave. The batch tools
-// have the same property and disclose it; this now does too.
-//
 //libtmux:real-tmux
 func TestAHalfBuiltWorkspaceSaysWhatSurvived(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3319,13 +3044,6 @@ func TestAHalfBuiltWorkspaceSaysWhatSurvived(t *testing.T) {
 	}
 }
 
-// TestRespawningALivePaneNamesTheWayOut covers tmux's own refusal reaching a
-// caller unexplained.
-//
-// tmux will not respawn a pane that is still running without -k, and says so
-// as "respawn-pane exited 1". The way out is one argument away, and every
-// other refusal in this server names it.
-//
 //libtmux:real-tmux
 func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3357,13 +3075,6 @@ func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 	}
 }
 
-// TestACommandThatExitsTakesThePaneAndItsWindow covers the gap between what
-// respawn_pane promises and what a caller gets.
-//
-// Keeping the pane and its place in the layout holds while the command runs.
-// A command that exits leaves tmux nothing to keep, and remain-on-exit is the
-// only thing that holds the pane open, so the description has to name it.
-//
 //libtmux:real-tmux
 func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3468,15 +3179,6 @@ func TestACommandThatExitsTakesThePaneAndItsWindow(t *testing.T) {
 	}
 }
 
-// TestAFilteredListingSaysHowManyItLeftOut covers a total a client reads as a
-// remainder.
-//
-// total counts what was there before the criteria ran, so a shorter list under
-// a larger total is what a filter excluded. Every tool here that returns pane
-// text does shorten its reply and says so, which makes "ask again for the
-// rest" the available and wrong reading. list_servers has always answered this
-// with skipped; the listings a client reaches for first did not.
-//
 //libtmux:real-tmux
 func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3527,17 +3229,6 @@ func TestAFilteredListingSaysHowManyItLeftOut(t *testing.T) {
 	}
 }
 
-// TestEveryToolAgreesWithEverySafetyLevel covers the whole cross-product of
-// tool and level, in both directions, rather than the one tool a spot check
-// would try.
-//
-// A level that withholds a tool and still dispatches it is worse than one that
-// never withheld it, because the operator believes the bound is in place. A
-// level that offers a tool and then refuses it for safety is the same lie told
-// the other way round. Which tools a level withholds comes from the
-// annotations, so the set moves whenever a tool is added, and a spot check on
-// kill_server said nothing about the other thirty-five.
-//
 //libtmux:real-tmux
 func TestEveryToolAgreesWithEverySafetyLevel(t *testing.T) {
 	everything := func(t *testing.T) map[string]bool {
@@ -3629,17 +3320,6 @@ func TestEveryToolAgreesWithEverySafetyLevel(t *testing.T) {
 	}
 }
 
-// TestAnIdThatNamesNothingSaysWhichListingFindsOne is a behavioural gate on
-// every tool that takes an id.
-//
-// tmux answers with what it looked for -- "snapshot object not found: pane
-// %9" -- which names the mechanism. A model reading that has no reason to
-// prefer listing over trying another id, and the listing is always the right
-// next move, which is why notFound exists. Six tools reached tmux directly and
-// returned its message instead, and nothing said so: each is a correct-looking
-// call to the tmux module. Asking every tool at once covers the ones nobody
-// has written yet.
-//
 //libtmux:real-tmux
 func TestAnIdThatNamesNothingSaysWhichListingFindsOne(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
@@ -3710,14 +3390,6 @@ func TestAnIdThatNamesNothingSaysWhichListingFindsOne(t *testing.T) {
 	}
 }
 
-// TestAResourceNamingNothingSaysSoInTheProtocol covers the two halves of a
-// failed read: the code a client branches on and the message a model acts on.
-//
-// A handler's plain error reaches the wire as code 0, which says neither that
-// the URI named nothing nor that the server broke, and the reads that went
-// straight to tmux answered with tmux's own "snapshot object not found", which
-// names the mechanism rather than the way out.
-//
 //libtmux:real-tmux
 func TestAResourceNamingNothingSaysSoInTheProtocol(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3750,14 +3422,6 @@ func TestAResourceNamingNothingSaysSoInTheProtocol(t *testing.T) {
 	}
 }
 
-// TestEveryAdvertisedResourceCanBeRead covers a template a client cannot use.
-//
-// A resource template is a promise: a client fills in the blank and reads. The
-// blanks here take ids, and the ids have sigils a URI cannot carry raw, so a
-// description naming one -- "such as @1" -- advertises the single spelling
-// that answers "resource not found". Nothing checked that what is advertised
-// can be read, so the wrong spelling sat in two descriptions.
-//
 //libtmux:real-tmux
 func TestEveryAdvertisedResourceCanBeRead(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3824,15 +3488,6 @@ func TestEveryAdvertisedResourceCanBeRead(t *testing.T) {
 	}
 }
 
-// TestTheEnvironmentListingWithholdsValues covers a reply that put every
-// credential on a developer's machine into a model's context.
-//
-// An environment is where people keep API tokens, and a no-argument call
-// returned all of them with their values -- eleven live ones on the machine
-// this was found on. A listing now carries names, which is what most of the
-// question is, and naming a variable returns its value, which is a caller
-// asking for one thing rather than receiving everything.
-//
 //libtmux:real-tmux
 func TestTheEnvironmentListingWithholdsValues(t *testing.T) {
 	session, target, ctx := connect(t)
@@ -3918,15 +3573,6 @@ func TestTheEnvironmentListingWithholdsValues(t *testing.T) {
 	}
 }
 
-// TestAnEmptyCollectionIsStillAnArray covers a reply a consumer cannot iterate.
-//
-// A scope with no hooks returned {"scope":"server"} and nothing else, so a
-// caller had to branch on a missing key rather than loop over an empty list.
-// The same applied to the attached clients. Both are collections a caller walks
-// and neither absence means anything the emptiness does not; the text fields
-// elsewhere are different, because run_command's missing output distinguishes a
-// command that printed nothing from one whose output could not be read.
-//
 //libtmux:real-tmux
 func TestAnEmptyCollectionIsStillAnArray(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -3966,12 +3612,6 @@ func TestAnEmptyCollectionIsStillAnArray(t *testing.T) {
 	}
 }
 
-// TestResizingAPaneSaysWhichPaneMoved covers a reply a caller cannot act on.
-//
-// paneId is optional and resolves the active pane, so a caller that left it out
-// was told a width and a height with nothing saying whose. Every other pane
-// tool here echoes the pane it acted on.
-//
 //libtmux:real-tmux
 func TestResizingAPaneSaysWhichPaneMoved(t *testing.T) {
 	session, _, ctx := connect(t)
