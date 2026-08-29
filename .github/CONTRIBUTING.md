@@ -135,10 +135,11 @@ tmux is on `PATH`, so run the supported releases before anything ships.
 `scripts/matrix.sh` runs every compatible module suite, given a directory of
 tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
 whole 3.2a-through-3.7c range. With no matrix directory, the script skips with
-an explanation rather than reporting a pass it did not earn:
+an explanation rather than reporting a pass it did not earn. Set
+`LIBTMUX_MATRIX_REQUIRED=1` for a release gate, where absence must fail:
 
 ```console
-$ bash scripts/matrix.sh
+$ LIBTMUX_MATRIX_REQUIRED=1 bash scripts/matrix.sh
 ```
 
 ### The language floor

@@ -12,7 +12,8 @@
 # against nine tmux builds -- and because it needs a matrix of tmux builds a
 # checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
 # <version>/bin/tmux, or let it look where the matrix is usually built. Narrow
-# what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS.
+# what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS. Set
+# LIBTMUX_MATRIX_REQUIRED=1 when absence must fail rather than skip.
 
 set -uo pipefail
 
@@ -20,7 +21,19 @@ script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 repository_root=$(cd "$script_directory/.." && pwd -P)
 
 matrix=${LIBTMUX_TMUX_MATRIX:-$HOME/.local/share/libtmux-tmux-matrix}
+required=${LIBTMUX_MATRIX_REQUIRED:-0}
+case $required in
+    0 | 1) ;;
+    *)
+        echo "matrix: LIBTMUX_MATRIX_REQUIRED must be 0 or 1, got $required" >&2
+        exit 1
+        ;;
+esac
 if [[ ! -d $matrix ]]; then
+    if [[ $required == 1 ]]; then
+        echo "matrix: required matrix directory does not exist: $matrix" >&2
+        exit 1
+    fi
     cat >&2 <<MESSAGE
 matrix: no tmux matrix at $matrix
 
@@ -50,6 +63,31 @@ unset TMUX TMUX_PANE
 # Resolving without a workspace is TestEveryModuleResolvesWithoutAWorkspace's
 # question, and it does not vary by tmux version.
 
+all_modules=(. examples workspace mcp benchmarks)
+modules=()
+if [[ ${LIBTMUX_MATRIX_MODULES+x} ]]; then
+    read -r -a modules <<< "$LIBTMUX_MATRIX_MODULES"
+else
+    modules=("${all_modules[@]}")
+fi
+if (( ${#modules[@]} == 0 )); then
+    echo "matrix: no modules selected" >&2
+    exit 1
+fi
+for module in "${modules[@]}"; do
+    case $module in
+        . | examples | workspace | mcp | benchmarks) ;;
+        *)
+            echo "matrix: unknown module \"$module\"" >&2
+            exit 1
+            ;;
+    esac
+    if [[ ! -f "$repository_root/$module/go.mod" ]]; then
+        echo "matrix: module \"$module\" has no go.mod" >&2
+        exit 1
+    fi
+done
+
 versions=()
 if [[ -n ${LIBTMUX_MATRIX_VERSIONS:-} ]]; then
     read -r -a versions <<< "$LIBTMUX_MATRIX_VERSIONS"
@@ -65,18 +103,36 @@ if (( ${#versions[@]} == 0 )); then
     echo "matrix: $matrix holds no version with bin/tmux in it" >&2
     exit 1
 fi
+for version in "${versions[@]}"; do
+    tmux_binary="$matrix/$version/bin/tmux"
+    if [[ ! -x $tmux_binary ]]; then
+        echo "matrix: $tmux_binary is not executable" >&2
+        exit 1
+    fi
+    if ! reported=$("$tmux_binary" -V 2>&1); then
+        echo "matrix: $tmux_binary could not report its version: $reported" >&2
+        exit 1
+    fi
+    expected="tmux $version"
+    if [[ $reported != "$expected" ]]; then
+        printf 'matrix: %s: expected "%s", got "%s"\n' \
+            "$tmux_binary" "$expected" "$reported" >&2
+        exit 1
+    fi
+done
 
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 
 failed=()
+selected_cells=$(( ${#versions[@]} * ${#modules[@]} ))
+run_cells=0
 for version in "${versions[@]}"; do
-    tmux_binary="$matrix/$version/bin/tmux"
-    printf 'matrix: %s (%s)\n' "$version" "$("$tmux_binary" -V 2>&1 || true)"
+    printf 'matrix: %s (tmux %s)\n' "$version" "$version"
 
-    for module in ${LIBTMUX_MATRIX_MODULES:-. examples workspace mcp benchmarks}; do
+    for module in "${modules[@]}"; do
         directory="$repository_root/$module"
-        [[ -f "$directory/go.mod" ]] || continue
+        run_cells=$((run_cells + 1))
         if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" go test -count=1 ./... > "$log" 2>&1); then
             printf '  %-14s ok\n' "$module"
         else
@@ -88,9 +144,15 @@ for version in "${versions[@]}"; do
 done
 
 echo
+if (( run_cells != selected_cells )); then
+    printf 'matrix: ran %d of %d selected cells\n' "$run_cells" "$selected_cells" >&2
+    exit 1
+fi
 if (( ${#failed[@]} == 0 )); then
-    printf 'matrix: %d tmux versions, all green\n' "${#versions[@]}"
+    printf 'matrix: %d cells across %d tmux versions, all green\n' \
+        "$run_cells" "${#versions[@]}"
     exit 0
 fi
-printf 'matrix: %d failed: %s\n' "${#failed[@]}" "${failed[*]}"
+printf 'matrix: %d of %d cells failed: %s\n' \
+    "${#failed[@]}" "$selected_cells" "${failed[*]}"
 exit 1

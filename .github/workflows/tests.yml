@@ -304,7 +304,13 @@ jobs:
         run: |
           sudo apt-get install --yes libevent-2.1-7
           export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
-          tmux -V
+          actual_version=$(tmux -V)
+          expected_version="tmux $TMUX_VERSION"
+          if [ "$actual_version" != "$expected_version" ]; then
+            echo "::error::expected $expected_version, got $actual_version" >&2
+            exit 1
+          fi
+          printf '%s\n' "$actual_version"
           mkdir -p "$TMUX_TMPDIR"
           for module in . examples workspace mcp benchmarks; do
             echo "--- $module: full suite ---"

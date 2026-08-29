@@ -2,6 +2,7 @@ package integration
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -123,5 +124,143 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 			t.Errorf("BENCHMARKS.md records tmux %s and the workflow runs no "+
 				"such release", version)
 		}
+	}
+}
+
+func TestMatrixRejectsRequestedVersionWithoutBinary(t *testing.T) {
+	output, err := runMatrixScript(t, t.TempDir(),
+		"LIBTMUX_MATRIX_VERSIONS=3.7c",
+		"LIBTMUX_MATRIX_MODULES=.",
+	)
+	if err == nil {
+		t.Fatalf("matrix without the requested binary reported success:\n%s", output)
+	}
+	if !strings.Contains(output, "3.7c/bin/tmux is not executable") {
+		t.Fatalf("matrix error did not name the missing binary:\n%s", output)
+	}
+}
+
+func TestMatrixRejectsBinaryReportingAnotherVersion(t *testing.T) {
+	matrix := t.TempDir()
+	installMatrixTmux(t, matrix, "3.7c", "tmux 3.7b")
+	output, err := runMatrixScript(t, matrix,
+		"LIBTMUX_MATRIX_VERSIONS=3.7c",
+		"LIBTMUX_MATRIX_MODULES=.",
+	)
+	if err == nil {
+		t.Fatalf("matrix labeled tmux 3.7b as 3.7c:\n%s", output)
+	}
+	if !strings.Contains(output, `expected "tmux 3.7c", got "tmux 3.7b"`) {
+		t.Fatalf("matrix error did not report the version mismatch:\n%s", output)
+	}
+}
+
+func TestMatrixRejectsUnknownModule(t *testing.T) {
+	matrix := t.TempDir()
+	installMatrixTmux(t, matrix, "3.7c", "tmux 3.7c")
+	output, err := runMatrixScript(t, matrix,
+		"LIBTMUX_MATRIX_VERSIONS=3.7c",
+		"LIBTMUX_MATRIX_MODULES=typo",
+	)
+	if err == nil {
+		t.Fatalf("matrix skipped an unknown module and reported success:\n%s", output)
+	}
+	if !strings.Contains(output, `unknown module "typo"`) {
+		t.Fatalf("matrix error did not name the unknown module:\n%s", output)
+	}
+}
+
+func TestMatrixRejectsNoSelectedModules(t *testing.T) {
+	matrix := t.TempDir()
+	installMatrixTmux(t, matrix, "3.7c", "tmux 3.7c")
+	output, err := runMatrixScript(t, matrix,
+		"LIBTMUX_MATRIX_VERSIONS=3.7c",
+		"LIBTMUX_MATRIX_MODULES=   ",
+	)
+	if err == nil {
+		t.Fatalf("matrix ran no module cells and reported success:\n%s", output)
+	}
+	if !strings.Contains(output, "no modules selected") {
+		t.Fatalf("matrix error did not report the empty selection:\n%s", output)
+	}
+}
+
+func TestMatrixCanRequireItsDirectory(t *testing.T) {
+	matrix := filepath.Join(t.TempDir(), "missing")
+	output, err := runMatrixScript(t, matrix,
+		"LIBTMUX_MATRIX_REQUIRED=1",
+		"LIBTMUX_MATRIX_VERSIONS=3.7c",
+		"LIBTMUX_MATRIX_MODULES=.",
+	)
+	if err == nil {
+		t.Fatalf("required matrix skipped its missing directory:\n%s", output)
+	}
+	if !strings.Contains(output, "required matrix directory does not exist") {
+		t.Fatalf("matrix error did not report the required directory:\n%s", output)
+	}
+}
+
+func TestMatrixCountsEverySelectedCell(t *testing.T) {
+	matrix := t.TempDir()
+	installMatrixTmux(t, matrix, "3.7b", "tmux 3.7b")
+	installMatrixTmux(t, matrix, "3.7c", "tmux 3.7c")
+	log := filepath.Join(t.TempDir(), "go-calls")
+	output, err := runMatrixScript(t, matrix,
+		"LIBTMUX_MATRIX_VERSIONS=3.7b 3.7c",
+		"LIBTMUX_MATRIX_MODULES=. workspace",
+		"LIBTMUX_MATRIX_TEST_LOG="+log,
+	)
+	if err != nil {
+		t.Fatalf("valid matrix failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "matrix: 4 cells across 2 tmux versions, all green") {
+		t.Fatalf("matrix did not report its selected cells:\n%s", output)
+	}
+	calls, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(strings.Fields(string(calls))); got != 4 {
+		t.Fatalf("matrix ran %d cells, want 4:\n%s", got, calls)
+	}
+}
+
+func runMatrixScript(t *testing.T, matrix string, variables ...string) (string, error) {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "bin")
+	writeMatrixExecutable(t, filepath.Join(bin, "go"), `#!/bin/sh
+if [ -n "${LIBTMUX_MATRIX_TEST_LOG:-}" ]; then
+    printf '%s\n' "$PWD" >> "$LIBTMUX_MATRIX_TEST_LOG"
+fi
+exit 0
+`)
+	root := repositoryRoot(t)
+	command := exec.Command("bash", filepath.Join(root, "scripts", "matrix.sh"))
+	command.Dir = root
+	command.Env = append([]string{
+		"PATH=" + bin + ":" + os.Getenv("PATH"),
+		"LIBTMUX_TMUX_MATRIX=" + matrix,
+		"TMUX_TMPDIR=" + t.TempDir(),
+	}, variables...)
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func installMatrixTmux(t *testing.T, matrix, version, reported string) {
+	t.Helper()
+	writeMatrixExecutable(
+		t,
+		filepath.Join(matrix, version, "bin", "tmux"),
+		"#!/bin/sh\nprintf '%s\\n' '"+reported+"'\n",
+	)
+}
+
+func writeMatrixExecutable(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o700); err != nil {
+		t.Fatal(err)
 	}
 }
