@@ -23,11 +23,10 @@ type ptrHolder[T any] struct {
 	_     byte
 }
 
-// Ptr returns a pointer to a shallow copy of value. Each call has separate
-// owning storage. Go permits pointers to distinct zero-size values to compare
-// equal; non-zero values have distinct pointer identities. Reference-bearing
-// values such as slices, maps, and pointers still alias their referenced data.
-// Ptr performs no validation and transfers no ownership.
+// Ptr returns a distinct pointer to a shallow copy of value, including when T
+// has zero size. Its nonzero holder prevents Go from coalescing zero-size
+// addresses. Slices, maps, pointers, and other reference-bearing values still
+// alias their referenced data. Ptr performs no validation or ownership transfer.
 func Ptr[T any](value T) *T {
 	holder := &ptrHolder[T]{value: value}
 	return &holder.value
