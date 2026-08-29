@@ -240,20 +240,6 @@ func TestWatcherHandsPaneOutputToItsNewSession(t *testing.T) {
 		defer cancelCleanup()
 		_ = keeper.CloseContext(cleanupCtx)
 	})
-	version, err := target.Version(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	minimumDestructionProof, err := tmux.ParseVersion("3.6")
-	if err != nil {
-		t.Fatal(err)
-	}
-	proveSessionDestruction := version.AtLeast(minimumDestructionProof)
-	if proveSessionDestruction {
-		if err := unselected.SetDestroyUnattached(ctx, tmux.DestroyUnattachedOn); err != nil {
-			t.Fatal(err)
-		}
-	}
 	resolved := paneContentURI(resolvedPane.ID().String())
 	if err := clientSession.Subscribe(ctx, &sdk.SubscribeParams{URI: resolved}); err != nil {
 		t.Fatal(err)
@@ -274,40 +260,51 @@ func TestWatcherHandsPaneOutputToItsNewSession(t *testing.T) {
 	if err := keeper.CloseContext(ctx); err != nil {
 		t.Fatal(err)
 	}
-	assertSessionGone := func() {
-		t.Helper()
-		for {
-			remaining, listErr := target.SearchSessions(ctx, nil)
-			present := false
-			for _, session := range remaining {
-				present = present || session.ID() == unselected.ID()
+	attachedClients := func() (int, int, error) {
+		clients, listErr := target.Clients(ctx)
+		if listErr != nil {
+			return 0, 0, listErr
+		}
+		source, destination := 0, 0
+		for _, client := range clients {
+			sessionID, ok := client.Formats().SessionID()
+			if !ok {
+				continue
 			}
-			if listErr == nil && !present {
-				return
-			}
-			select {
-			case <-ctx.Done():
-				t.Fatalf("source session remained after publication: %v", listErr)
-			case <-time.After(10 * time.Millisecond):
+			switch sessionID {
+			case unselected.ID():
+				source++
+			case moved.SessionID():
+				destination++
 			}
 		}
+		return source, destination, nil
 	}
-	remaining, err := target.SearchSessions(ctx, nil)
+	sourceBefore, destinationBefore, err := attachedClients()
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourcePresent := false
-	for _, session := range remaining {
-		sourcePresent = sourcePresent || session.ID() == unselected.ID()
-	}
-	if !sourcePresent {
-		t.Fatal("source session was destroyed while candidate attachment was blocked")
+	if sourceBefore == 0 {
+		t.Fatal("source session lost its observer while candidate attachment was blocked")
 	}
 	releaseOnce.Do(func() { close(release) })
-	if proveSessionDestruction {
-		assertSessionGone()
-	}
 	awaitResourceWrite(t, updated, resolved)
+	for {
+		source, destination, listErr := attachedClients()
+		if listErr == nil && source == 0 && destination > destinationBefore {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf(
+				"observer handoff clients = source %d, destination %d: %v",
+				source,
+				destination,
+				listErr,
+			)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 	lines, err := moved.Capture(ctx, tmux.CapturePaneRequest{})
 	if err != nil || !strings.Contains(strings.Join(lines, "\n"), "HANDOFF-GAP") {
 		t.Fatalf("gap marker capture = (%q, %v)", lines, err)
