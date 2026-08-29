@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -202,22 +203,30 @@ func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 
 	activeCtx, cancelActive := context.WithCancel(context.Background())
 	defer cancelActive()
+	wait := &secondDoneObservedContext{
+		Context:  activeCtx,
+		observed: make(chan struct{}),
+	}
 	activeDone := make(chan error, 1)
 	go func() {
-		_, err := observation.NextNotification(activeCtx)
+		_, err := observation.NextNotification(wait)
 		activeDone <- err
 	}()
-	deadline := time.Now().Add(time.Second)
-	for len(observation.state.readToken) != 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if len(observation.state.readToken) != 0 {
-		t.Fatal("NextNotification() did not acquire reader ownership")
+	select {
+	case <-wait.observed:
+	case err := <-activeDone:
+		t.Fatalf("owned read returned before cancellation: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("owned read did not reach notification waiting")
 	}
 	cancelActive()
-	if err := <-activeDone; !errors.Is(err, context.Canceled) ||
-		errors.Is(err, ErrPaneObservationLost) {
-		t.Fatalf("owned read error = %v, want retryable context cancellation", err)
+	select {
+	case err := <-activeDone:
+		if !errors.Is(err, context.Canceled) || errors.Is(err, ErrPaneObservationLost) {
+			t.Fatalf("owned read error = %v, want retryable context cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("owned read did not honor context cancellation")
 	}
 	if err := queue.append(2, []byte("%output %1 active")); err != nil {
 		t.Fatal(err)
@@ -321,6 +330,19 @@ func newTestPaneObservation(queue *controlNotificationQueue) *PaneObservation {
 		paneID: "%1", windowID: "@1", sessionID: "$1",
 		state: newPaneObservationState(),
 	}
+}
+
+type secondDoneObservedContext struct {
+	context.Context
+	calls    atomic.Int32
+	observed chan struct{}
+}
+
+func (c *secondDoneObservedContext) Done() <-chan struct{} {
+	if c.calls.Add(1) == 2 {
+		close(c.observed)
+	}
+	return c.Context.Done()
 }
 
 func TestControlNotificationQueueFinishDrainsBeforeEOF(t *testing.T) {
