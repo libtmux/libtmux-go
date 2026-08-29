@@ -18,7 +18,6 @@ func (p *Plan) SplitPane(target Ref, request SplitPaneRequest) Ref {
 		name:         "split-window",
 		target:       target,
 		creates:      true,
-		marks:        request.Attach,
 		needsVersion: splitPaneRequiresVersion(request),
 		build: func(resolved, _ string, version Version) ([]string, error) {
 			arguments, warnings, err := splitPaneArguments(resolved, request, version)

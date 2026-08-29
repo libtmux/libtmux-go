@@ -741,11 +741,8 @@ asked for anything.
 Batching is a `Planner`, and planners are values rather than names in a
 registry, so selecting one is a compiler-checked expression and a caller can
 supply their own. `Sequential` sends one command per invocation, `Folding`
-groups each run of operations that neither answer nor create, and `Marked`
-additionally folds a pane creation together with the operations decorating it,
-by marking the new pane and addressing it as `{marked}` within the same command
-list. The results are identical through all three; only the invocation count
-differs.
+groups each run of operations that neither answer nor create. Successful
+results are identical through both; only the invocation count differs.
 
 `Plan.Preview` renders without a server, and separates the two reasons an
 operation cannot render there. A step naming an object an earlier step has yet
@@ -760,10 +757,11 @@ exit status and one merged stdout with no boundary between its commands, so an
 operation whose result is its output cannot be told apart from its neighbours.
 `Op.Chainable` reports that, and rendering re-checks it rather than trusting a
 `Planner` to have honoured it: a planner that groups a capturing or creating
-operation is refused with a `PlanError`. A failure blames the first operation
-of its dispatch and marks the rest `OpSkipped`, which is exact for every
-dispatch carrying one operation — every creation and every read — and
-`Plan.Explain` reports which those are.
+operation is refused with a `PlanError`. A single-operation refusal is
+`OpFailed`. Every operation in a refused command list is `OpIndeterminate`,
+because tmux does not identify which command failed or which earlier commands
+ran. Later dispatches are `OpSkipped`. `Plan.Explain` exposes that attribution
+boundary before execution.
 
 The consumer modules here stayed on the direct API, which is a finding rather
 than a gap. `workspace.Build` wants a materialized record after each step and

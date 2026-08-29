@@ -130,6 +130,29 @@ func TestPlanPreviewLeavesUnresolvedStepsNil(t *testing.T) {
 	}
 }
 
+//libtmux:real-tmux
+func TestPlanKeepsAnUnsentRenderFailureSkipped(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+
+	plan := tmux.NewPlan()
+	session := plan.NewSession(tmux.NewSessionRequest{Name: "render-boundary"})
+	plan.RenameSession(session, "bad:name")
+
+	result, err := plan.Run(ctx, server)
+	if err == nil {
+		t.Fatal("Run() accepted an invalid forward-referenced request")
+	}
+	if result.Ops[0].Status != tmux.OpComplete {
+		t.Errorf("creation status = %v, want complete", result.Ops[0].Status)
+	}
+	if result.Ops[1].Status != tmux.OpSkipped || result.Ops[1].Err != nil {
+		t.Errorf("unsent rename = (%v, %v), want skipped without an operation error",
+			result.Ops[1].Status, result.Ops[1].Err)
+	}
+}
+
 // A zero Ref must not alias the plan's first step.
 func TestPlanRefusesTheZeroRef(t *testing.T) {
 	t.Parallel()
@@ -147,8 +170,8 @@ func TestPlanRefusesTheZeroRef(t *testing.T) {
 	}
 }
 
-// tmux abandons a command list at its first failure; later operations must be
-// reported as skipped.
+// tmux does not attribute a grouped command-list failure to an individual
+// operation, so every operation in the dispatch is indeterminate.
 //
 //libtmux:real-tmux
 func TestPlanStopsAtTheFirstFailure(t *testing.T) {
@@ -185,11 +208,16 @@ func TestPlanStopsAtTheFirstFailure(t *testing.T) {
 		result.Ops[0].Status,
 		result.Ops[1].Status,
 		result.Ops[2].Status,
+		result.Ops[3].Status,
 	}
-	// All three chain into one dispatch, so tmux blames the dispatch and the
-	// plan blames its first operation; nothing after it ran.
-	if statuses[2] != tmux.OpSkipped {
-		t.Errorf("operation after the failure = %v, want skipped", statuses[2])
+	want := []tmux.OpStatus{
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+	}
+	if !slices.Equal(statuses, want) {
+		t.Errorf("statuses = %v, want %v", statuses, want)
 	}
 	t.Logf("statuses = %v", statuses)
 
@@ -449,9 +477,8 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 			t.Fatalf("NewWindow() error = %v", err)
 		}
 		plan := tmux.NewPlan()
-		// The layout comes first so the split is followed only by operations
-		// naming the pane it creates, which is what Marked folds and Folding
-		// cannot.
+		// The layout is chainable; the split and read remain separate because
+		// their output must be attributed exactly.
 		plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 		pane := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 		plan.SetPaneTitle(pane, "decorated")
@@ -462,7 +489,6 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 
 	type outcome struct {
 		dispatches int
-		marked     int
 		statuses   []tmux.OpStatus
 		answer     string
 	}
@@ -473,7 +499,6 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 	}{
 		{"Sequential", tmux.Sequential{}},
 		{"Folding", tmux.Folding{}},
-		{"Marked", tmux.Marked{}},
 	} {
 		plan := build()
 		dispatches := plan.ExplainWith(planner.value)
@@ -500,19 +525,13 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 		if result.Ops[1].Created == "" {
 			t.Errorf("%s: the split reported no pane ID", planner.name)
 		}
-		marked := 0
-		for _, dispatch := range dispatches {
-			if dispatch.Marked {
-				marked++
-			}
-		}
-		outcomes[planner.name] = outcome{len(dispatches), marked, statuses, answer}
+		outcomes[planner.name] = outcome{len(dispatches), statuses, answer}
 		t.Logf("%-10s %d operations in %d tmux invocations, answer %q",
 			planner.name, plan.Len(), len(dispatches), answer)
 	}
 
 	// Same meaning.
-	for _, name := range []string{"Folding", "Marked"} {
+	for _, name := range []string{"Folding"} {
 		if !slices.Equal(outcomes[name].statuses, outcomes["Sequential"].statuses) {
 			t.Errorf("%s statuses = %v, Sequential = %v",
 				name, outcomes[name].statuses, outcomes["Sequential"].statuses)
@@ -526,20 +545,11 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 		t.Errorf("answer = %q, want \"decorated reached\"", outcomes["Sequential"].answer)
 	}
 
-	// Different cost, strictly decreasing as the planner folds more.
-	if outcomes["Sequential"].dispatches <= outcomes["Folding"].dispatches ||
-		outcomes["Folding"].dispatches <= outcomes["Marked"].dispatches {
-		t.Errorf("dispatches were %d/%d/%d for Sequential/Folding/Marked, want strictly fewer",
+	// Folding must use fewer dispatches than the sequential baseline.
+	if outcomes["Sequential"].dispatches <= outcomes["Folding"].dispatches {
+		t.Errorf("dispatches were %d/%d for Sequential/Folding, want fewer",
 			outcomes["Sequential"].dispatches,
-			outcomes["Folding"].dispatches,
-			outcomes["Marked"].dispatches)
-	}
-	// And Marked got there the documented way, rather than by folding less.
-	if outcomes["Marked"].marked != 1 {
-		t.Errorf("Marked produced %d marked dispatches, want 1", outcomes["Marked"].marked)
-	}
-	if outcomes["Folding"].marked != 0 || outcomes["Sequential"].marked != 0 {
-		t.Errorf("a planner other than Marked used the {marked} register")
+			outcomes["Folding"].dispatches)
 	}
 }
 
@@ -585,12 +595,14 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 		t.Errorf("second read Stdout = %q, want [\"SECOND\"]", got)
 	}
 
-	// All three statuses, in one run.
+	// The grouped send, Enter, and rename cannot be distinguished after a
+	// nonzero exit.
 	want := []tmux.OpStatus{
 		tmux.OpComplete, // the reads ran
 		tmux.OpComplete,
-		tmux.OpFailed,  // tmux refused this one
-		tmux.OpSkipped, // and never saw this one
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
 	}
 	for index, expected := range want {
 		if got := result.Ops[index].Status; got != expected {
@@ -598,14 +610,16 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 		}
 	}
 
-	// The failure carries tmux's reason, and only the failed operation does.
-	if result.Ops[2].Err == nil {
-		t.Error("the failed operation carries no error")
+	// Every indeterminate operation carries the grouped command's reason.
+	for _, index := range []int{2, 3, 4} {
+		if result.Ops[index].Err == nil {
+			t.Errorf("indeterminate operation %d carries no error", index)
+		}
 	}
 	if !errors.Is(result.Err(), tmux.ErrCommand) {
 		t.Errorf("Err() = %v, want ErrCommand", result.Err())
 	}
-	for _, index := range []int{0, 1, 3} {
+	for _, index := range []int{0, 1} {
 		if result.Ops[index].Err != nil {
 			t.Errorf("operation %d carries an error it did not cause: %v",
 				index, result.Ops[index].Err)
@@ -622,9 +636,6 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 	}
 }
 
-// Marked rewrites the primary target to {marked}; it must preserve a second
-// target because tmux accepts an omitted source as the current pane.
-//
 //libtmux:real-tmux
 func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -651,9 +662,7 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 			t.Fatalf("SetTitle() error = %v", err)
 		}
 
-		// The split and the two operations naming its pane are what Marked
-		// folds into one command list. The swap is the one that also names a
-		// pane somewhere else.
+		// The swap names both the new pane and one that already exists.
 		plan := tmux.NewPlan()
 		created := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 		plan.SetPaneTitle(created, "beta")
@@ -690,7 +699,6 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 		value tmux.Planner
 	}{
 		{"Folding", tmux.Folding{}},
-		{"Marked", tmux.Marked{}},
 	} {
 		if got := swapWith(planner.value); !slices.Equal(got, want) {
 			t.Errorf("%s left the panes %v, Sequential left them %v",
@@ -771,71 +779,6 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 				if op.Status != tmux.OpSkipped {
 					t.Errorf("operation %d = %v, want every one skipped", index, op.Status)
 				}
-			}
-		})
-	}
-}
-
-// markingPlanner marks whatever it is told to, including groups no planner in
-// this package would make.
-type markingPlanner struct{ ops []int }
-
-// Plan returns one marked dispatch carrying the operations it was built with.
-func (p markingPlanner) Plan([]tmux.Op) []tmux.Dispatch {
-	return []tmux.Dispatch{{Ops: p.ops, Marked: true}}
-}
-
-// TestPlanRefusesAMarkedGroupItCannotReportSeparately verifies marked command
-// lists fail closed when their output cannot be attributed.
-func TestPlanRefusesAMarkedGroupItCannotReportSeparately(t *testing.T) {
-	t.Parallel()
-
-	for _, refused := range []struct {
-		name string
-		plan func() (*tmux.Plan, []int)
-	}{
-		{
-			name: "a read riding with the creation",
-			plan: func() (*tmux.Plan, []int) {
-				plan := tmux.NewPlan()
-				pane := plan.SplitPane(
-					tmux.WindowRef("@1"), tmux.SplitPaneRequest{Attach: true})
-				plan.DisplayMessage(pane, "#{pane_id}")
-				return plan, []int{0, 1}
-			},
-		},
-		{
-			name: "nothing that leaves a pane to mark",
-			plan: func() (*tmux.Plan, []int) {
-				plan := tmux.NewPlan()
-				plan.RenameWindow(tmux.WindowRef("@1"), "first")
-				plan.RenameWindow(tmux.WindowRef("@1"), "second")
-				return plan, []int{0, 1}
-			},
-		},
-	} {
-		t.Run(refused.name, func(t *testing.T) {
-			t.Parallel()
-
-			plan, ops := refused.plan()
-			server, err := tmux.NewServer(tmux.ServerOptions{
-				SocketName: "libtmux-go-plan-unreachable",
-			})
-			if err != nil {
-				t.Fatalf("NewServer() error = %v", err)
-			}
-			// Reaching tmux would itself be the failure: this is refused while
-			// the command list is being built, before anything is sent.
-			result, err := plan.RunWith(
-				context.Background(),
-				server,
-				markingPlanner{ops: ops},
-			)
-			if _, ok := errors.AsType[*tmux.PlanError](err); !ok {
-				t.Fatalf("RunWith() error = %v, want a plan error", err)
-			}
-			if result.Ops[1].Status != tmux.OpSkipped {
-				t.Errorf("second operation = %v, want skipped", result.Ops[1].Status)
 			}
 		})
 	}

@@ -89,8 +89,6 @@ type Op struct {
 	creates   bool
 	captures  bool
 	untargets bool
-	// marks means a creation leaves its pane active for tmux's {marked} register.
-	marks bool
 	// needsVersion requests the otherwise-avoided version probe.
 	needsVersion bool
 }
@@ -232,15 +230,10 @@ func untargetedArguments(command string, rest ...string) ([]string, error) {
 type Dispatch struct {
 	// Ops are the indices of the operations this dispatch carries, in order.
 	Ops []int
-	// Marked reports that this dispatch names the object its first operation
-	// creates through tmux's {marked} register, so the operations after it can
-	// share the command list rather than waiting for the created ID.
-	Marked bool
 	// Reason says why the dispatch ends where it does. It is "chained" for a
 	// command list, "creates" for an operation whose new object's ID a later
-	// step needs, "captures" for one whose output the caller reads, "alone" for
-	// a chainable operation with nothing beside it to chain to, and "marked"
-	// for a creation carrying the operations that decorate it.
+	// step needs, "captures" for one whose output the caller reads, and "alone"
+	// for a chainable operation with nothing beside it to chain to.
 	Reason string
 }
 
@@ -292,7 +285,6 @@ func (Folding) Plan(ops []Op) []Dispatch {
 	return dispatches
 }
 
-// foldFrom is shared by Folding and Marked for unmarked operations.
 func foldFrom(ops []Op, index int) Dispatch {
 	if !ops[index].chainable() {
 		reason := "captures"
@@ -314,48 +306,6 @@ func foldFrom(ops []Op, index int) Dispatch {
 		reason = "alone"
 	}
 	return Dispatch{Ops: group, Reason: reason}
-}
-
-// Marked groups an active pane creation with operations that reference it. It
-// marks the new pane, addresses it as {marked}, then clears the mark. Detached
-// creations run alone; everything else follows [Folding].
-type Marked struct{}
-
-// Plan returns the dispatches for ops, folding a marked creation with the
-// operations that name it.
-func (Marked) Plan(ops []Op) []Dispatch {
-	var dispatches []Dispatch
-	for index := 0; index < len(ops); {
-		var dispatch Dispatch
-		if decorates := markedDecorates(ops, index); len(decorates) != 0 {
-			dispatch = Dispatch{
-				Ops:    append([]int{index}, decorates...),
-				Marked: true,
-				Reason: "marked",
-			}
-		} else {
-			dispatch = foldFrom(ops, index)
-		}
-		dispatches = append(dispatches, dispatch)
-		index = dispatch.Ops[len(dispatch.Ops)-1] + 1
-	}
-	return dispatches
-}
-
-func markedDecorates(ops []Op, index int) []int {
-	creator := ops[index]
-	if !creator.creates || !creator.marks {
-		return nil
-	}
-	var decorates []int
-	for cursor := index + 1; cursor < len(ops); cursor++ {
-		op := ops[cursor]
-		if !op.chainable() || op.target != (Ref{step: index + 1}) {
-			break
-		}
-		decorates = append(decorates, cursor)
-	}
-	return decorates
 }
 
 // Explain reports how [Plan.Run] would group the recorded operations into tmux
@@ -416,11 +366,11 @@ func (r PlanResult) OK() bool {
 	return true
 }
 
-// Err returns the first failed operation's error, or nil when every operation
-// completed.
+// Err returns the first failed or indeterminate operation's error, or nil when
+// every operation completed.
 func (r PlanResult) Err() error {
 	for _, result := range r.Ops {
-		if result.Status == OpFailed {
+		if result.Status == OpFailed || result.Status == OpIndeterminate {
 			return result.Err
 		}
 	}
@@ -433,15 +383,14 @@ type OpStatus uint8
 const (
 	// OpComplete is an operation tmux ran successfully.
 	OpComplete OpStatus = iota
-	// OpFailed is an operation tmux refused, or the first operation of a
-	// dispatch one of whose commands tmux refused. tmux reports one status for
-	// a command list without naming the command that produced it, so this is
-	// exact only for a dispatch carrying a single operation, which the plan's
-	// Explain method reports.
+	// OpFailed is an operation tmux refused. Only an operation sent alone can
+	// receive this status.
 	OpFailed
-	// OpSkipped is an operation tmux never saw. tmux abandons the rest of a
-	// command list once one of its commands fails, and a plan stops at a failed
-	// dispatch rather than sending later ones.
+	// OpIndeterminate is an operation dispatched without enough reply evidence
+	// to prove whether tmux applied or rejected it.
+	OpIndeterminate
+	// OpSkipped is an operation the plan did not dispatch because an earlier
+	// dispatch failed or became indeterminate.
 	OpSkipped
 )
 
@@ -452,6 +401,8 @@ func (s OpStatus) String() string {
 		return "complete"
 	case OpFailed:
 		return "failed"
+	case OpIndeterminate:
+		return "indeterminate"
 	case OpSkipped:
 		return "skipped"
 	default:
@@ -470,15 +421,15 @@ type OpResult struct {
 	Created string
 	// Stdout holds the operation's output, for an operation that captures it.
 	Stdout []string
-	// Err is the failure, for a failed operation.
+	// Err is the failure or uncertainty for a failed or indeterminate operation.
 	Err error
 }
 
 // Run sends the recorded operations through server and returns one result per step.
 //
 // Operations that need no answer travel together in one tmux command list;
-// [Plan.Explain] reports the grouping. Run stops at the first failed dispatch;
-// later operations are [OpSkipped].
+// [Plan.Explain] reports the grouping. Run stops at the first failed or
+// indeterminate dispatch; later operations are [OpSkipped].
 //
 // Tmux refusals appear in results. Transport, context, and [PlanError] failures
 // are returned. Run is not atomic; completed mutations remain after failure.
@@ -487,8 +438,9 @@ func (p *Plan) Run(ctx context.Context, server Server) (PlanResult, error) {
 }
 
 // RunWith runs the plan with planner deciding dispatch grouping. Successful
-// execution produces planner-independent results, but a failed grouped dispatch
-// is attributed to its first operation. Use [Sequential] for exact attribution.
+// execution produces planner-independent results, but every operation in a
+// failed grouped dispatch is [OpIndeterminate]. Use [Sequential] for exact
+// attribution.
 func (p *Plan) RunWith(
 	ctx context.Context,
 	server Server,
@@ -525,14 +477,16 @@ func (p *Plan) RunWith(
 	for _, dispatch := range dispatches {
 		argv, err := p.renderDispatch(dispatch, created, version)
 		if err != nil {
-			results[dispatch.Ops[0]].Status = OpFailed
-			results[dispatch.Ops[0]].Err = err
 			return PlanResult{Ops: results}, err
 		}
 		result, err := server.dispatchCommandList(ctx, argv)
 		if err != nil {
-			results[dispatch.Ops[0]].Status = OpFailed
-			results[dispatch.Ops[0]].Err = err
+			if errors.Is(err, ErrOutcomeUnknown) {
+				for _, index := range dispatch.Ops {
+					results[index].Status = OpIndeterminate
+					results[index].Err = err
+				}
+			}
 			return PlanResult{Ops: results}, err
 		}
 		if !p.attribute(dispatch, result, results, created) {
@@ -589,9 +543,6 @@ func (p *Plan) renderDispatch(
 	created map[int]string,
 	version Version,
 ) ([]string, error) {
-	if dispatch.Marked {
-		return p.renderMarked(dispatch, created, version)
-	}
 	if len(dispatch.Ops) == 1 {
 		return p.render(dispatch.Ops[0], created, version)
 	}
@@ -638,53 +589,8 @@ func (p *Plan) refuseIfGrouped(index int) error {
 	}
 }
 
-// renderMarked addresses the new pane through {marked}, clears the mark, and
-// resolves any source Ref normally. Grouped operations must remain chainable.
-func (p *Plan) renderMarked(
-	dispatch Dispatch,
-	created map[int]string,
-	version Version,
-) ([]string, error) {
-	creation := p.ops[dispatch.Ops[0]]
-	if !creation.creates || !creation.marks {
-		return nil, &PlanError{
-			Step: dispatch.Ops[0],
-			Reason: fmt.Sprintf(
-				"dispatch is marked, but %s does not leave a new pane active "+
-					"for select-pane -m to name", creation.name,
-			),
-		}
-	}
-	argv, err := p.render(dispatch.Ops[0], created, version)
-	if err != nil {
-		return nil, err
-	}
-	argv = append(argv, ";", "select-pane", "-m")
-	for _, index := range dispatch.Ops[1:] {
-		if err := p.refuseIfGrouped(index); err != nil {
-			return nil, err
-		}
-		op := p.ops[index]
-		source := ""
-		if op.source != (Ref{}) {
-			resolved, err := p.resolve(op.source, created, index)
-			if err != nil {
-				return nil, err
-			}
-			source = resolved
-		}
-		rendered, err := op.build("{marked}", source, version)
-		if err != nil {
-			return nil, err
-		}
-		argv = append(argv, ";")
-		argv = append(argv, rendered...)
-	}
-	return append(argv, ";", "select-pane", "-M"), nil
-}
-
-// attribute maps a successful dispatch to every operation. A failed command
-// list cannot identify its failing command, so it fails the first and skips the rest.
+// attribute maps one dispatch result to its operations. A failed command list
+// cannot identify its failing command, so every grouped operation is indeterminate.
 func (p *Plan) attribute(
 	dispatch Dispatch,
 	result CommandResult,
@@ -692,6 +598,14 @@ func (p *Plan) attribute(
 	created map[int]string,
 ) bool {
 	if result.ExitCode != 0 {
+		if len(dispatch.Ops) != 1 {
+			err := newCommandError("command list", result)
+			for _, index := range dispatch.Ops {
+				results[index].Status = OpIndeterminate
+				results[index].Err = err
+			}
+			return false
+		}
 		results[dispatch.Ops[0]].Status = OpFailed
 		results[dispatch.Ops[0]].Err = newCommandError(p.ops[dispatch.Ops[0]].name, result)
 		return false
@@ -699,7 +613,7 @@ func (p *Plan) attribute(
 	for _, index := range dispatch.Ops {
 		results[index].Status = OpComplete
 	}
-	if len(dispatch.Ops) != 1 && !dispatch.Marked {
+	if len(dispatch.Ops) != 1 {
 		return true
 	}
 

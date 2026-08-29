@@ -223,12 +223,11 @@ no work: it reads what tmux says on its own while something else does, so there
 is no build to time and no query to answer. What it costs is the connection it
 rides on, which is the control-mode row.
 
-**`chained` is one planner of three.** A plan groups its commands through a
+**`chained` is one planner of two.** A plan groups its commands through a
 `Planner`, and the row above uses the default, which folds every run of
-commands that neither answer nor create something. `Marked` folds more, putting
-a pane creation and the commands decorating it in one list, and `Sequential`
-folds nothing, which is how a failure that grouping made ambiguous gets
-isolated. All three produce the same results and differ only in invocations;
+commands that neither answer nor create something. `Sequential` folds nothing,
+which is how a failure that grouping made ambiguous gets isolated. Both
+produce the same successful results and differ only in invocations;
 `TestPlannersAgreeOnResultsAndDifferOnCost` is where that is measured.
 
 **Concurrency is a size, not a speed.** `concurrent x4` opens four connections
