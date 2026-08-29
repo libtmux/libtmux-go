@@ -584,10 +584,12 @@ put to it.
 
 ## Error handling
 
-Reads use the tmux module's lenient default, so an unreachable server is an
-empty result rather than a failure. `capture_pane` is an exception: it names one
-pane, and a missing pane is a failure rather than emptiness. Writes use strict errors, because a
-mutation that silently did nothing is worse than one that reports a problem.
+`list_sessions`, `list_windows`, and `list_panes` treat an unreachable server
+as an empty topology and return a `serverNote` explaining the absence. This is
+a deliberate orientation exception. `get_server_info` and `list_servers`
+instead report liveness as data. Reads that require a live object preserve tmux
+failures as tool errors, and writes do the same because a mutation that silently
+did nothing is worse than one that reports a problem.
 
 A tmux failure reaches the client as tool error content carrying tmux's own
 message, so a model can read what went wrong and choose a different call

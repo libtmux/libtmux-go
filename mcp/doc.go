@@ -63,8 +63,10 @@
 //
 // List criteria are matched against a materialized snapshot rather than passed
 // to tmux as format filters, which can execute shell commands through #(...).
-// Read collections treat an unreachable server as empty; reads targeting one
-// object and all mutations return the failure.
+// list_sessions, list_windows, and list_panes treat an unreachable server as
+// an empty topology and report the absence. get_server_info and list_servers
+// report liveness as data. Reads that require a live object and all mutations
+// return tmux failures.
 //
 // # Tool discovery
 //
