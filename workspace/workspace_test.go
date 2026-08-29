@@ -249,6 +249,63 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 }
 
 //libtmux:real-tmux
+func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		globalOptions map[string]string
+		options       map[string]string
+		wantErr       error
+	}{
+		{
+			name:    "destroy-unattached",
+			options: map[string]string{"destroy-unattached": "on"},
+			wantErr: tmux.ErrSnapshotNotFound,
+		},
+		{
+			name:          "exit-unattached",
+			globalOptions: map[string]string{"exit-unattached": "on"},
+			wantErr:       tmux.ErrNoServer,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, ctx := testServer(t)
+			if _, err := server.NewSession(ctx, tmux.NewSessionRequest{
+				Name: "anchor", Command: "sleep 300",
+			}); err != nil {
+				t.Fatalf("create anchor session: %v", err)
+			}
+			described := workspace.Workspace{
+				SessionName:   "detach-policy-" + test.name,
+				GlobalOptions: test.globalOptions,
+				Options:       test.options,
+				Windows: []workspace.Window{{
+					Name:  "work",
+					Panes: []workspace.Pane{{Shell: "sleep 300"}},
+				}},
+			}
+
+			session, err := workspace.Build(ctx, server, described)
+			if session.ID() == "" {
+				t.Fatal("Build() returned a zero session after creating it")
+			}
+			if name, ok := session.Name(); !ok || name != described.SessionName {
+				t.Fatalf("Build() session name = (%q, %t), want (%q, true)", name, ok, described.SessionName)
+			}
+			if err == nil {
+				t.Fatal("Build() error = nil, want destroyed-session lifecycle error")
+			}
+			const prefix = "refresh built session after closing workspace connection: "
+			if !strings.HasPrefix(err.Error(), prefix) {
+				t.Fatalf("Build() error = %q, want prefix %q", err, prefix)
+			}
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("Build() error = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+//libtmux:real-tmux
 func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)

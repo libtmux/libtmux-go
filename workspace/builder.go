@@ -32,8 +32,9 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 //
 // Build creates the session and an attached control connection in one process,
 // uses that connection for the build, and closes it before returning. The
-// returned Session is not bound to the closed connection. An attached
-// connection may fire client hooks and policies.
+// returned Session is not bound to the closed connection. Build verifies that
+// the session remains reachable after closing it. An attached connection may
+// fire client hooks and policies.
 //
 // Each pane receives workspace, window, and pane CommandsBefore, then its own
 // Commands. Sleep values pause Build rather than the pane.
@@ -59,7 +60,14 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 	if err := errors.Join(buildErr, closeErr); err != nil {
 		return created, err
 	}
-	return created, nil
+	refreshed, err := created.Refresh(ctx)
+	if err != nil {
+		return created, fmt.Errorf(
+			"refresh built session after closing workspace connection: %w",
+			err,
+		)
+	}
+	return refreshed, nil
 }
 
 // BuildInto populates the initial session described by workspace. The session
