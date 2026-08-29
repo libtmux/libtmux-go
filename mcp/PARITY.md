@@ -54,10 +54,10 @@ Three tools are here and not there:
   how a build runs without spending the turn waiting for it.
 - `move_pane` moves a pane between windows, or breaks it out into its own.
 
-One is here behind `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`: `get_recipe` offers the same
-text as the MCP prompts, for a client that reads tools and not prompts. The
-Python server has the same idea under `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`, which
-turns each prompt into a tool of its own.
+One is here behind `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`: `get_recipe` offers the
+same text as the MCP prompts, for a client that reads tools and not prompts.
+The Python server has the same idea under `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`,
+which turns each prompt into a tool of its own.
 
 One is there and not here: `show_hook`, for a single hook. Here that is
 `show_hooks` with a `name`.

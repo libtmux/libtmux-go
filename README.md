@@ -129,8 +129,8 @@ replacement when exact-daemon ownership is required.
 
 Plans run over either a plain server or a connection-bound server. Unsupported
 capability policy is separate: `ServerOptions.Unsupported` decides whether a
-request naming an unavailable tmux flag is refused — the default — or carried
-out without it and reported to a warning handler.
+request naming an unavailable tmux flag is refused — the default — or
+carried out without it and reported to a warning handler.
 
 A connection carries commands without starting a process for each. It appears
 in `list-clients` and counts toward `session_attached`, which is why opening one

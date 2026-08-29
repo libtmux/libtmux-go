@@ -169,9 +169,9 @@ caller's turn, not the server's CPU.
 **`capture_since` has a break-even.** It reads the pane and then fingerprints
 the rows to mint a cursor, so it costs more than a plain capture and returns a
 cursor in every reply. On an 80x24 pane of short lines that is about 373 bytes
-against 173, and `capture_pane` wins on both counts. It earns its place on a wide
-pane holding full lines, read repeatedly -- which is what it is for, and is
-worth knowing is not every pane.
+against 173, and `capture_pane` wins on both counts. It earns its place on a
+wide pane holding full lines, read repeatedly -- which is what it is for, and
+is worth knowing is not every pane.
 
 ## What waiting and watching cost
 
