@@ -198,12 +198,13 @@ A server restart during collection is an invariant error, while ordinary
 dangling relationships remain observable.
 Each materialized record keeps that four-part daemon provenance. Its follow-up
 commands wrap the requested operation in one tmux-side `if-shell`, comparing
-the current PID, start time, and socket before execution. A replacement daemon
-therefore rejects a stale record atomically instead of receiving its command
-after a separate liveness probe. Record equality and record-derived plan refs
-include the provenance; raw ID refs remain relative to the server selected at
-execution. A plan containing refs from different daemons is invalid before it
-sends anything.
+the current PID, start time, and socket before execution. Under stable, trusted
+tmux parser primitives and aliases, a replacement daemon rejects a stale
+record before the requested command runs. The subprocess guard is not a
+confinement boundary for a daemon that controls parsing. Record equality and
+record-derived plan refs include the provenance; raw ID refs remain relative
+to the server selected at execution. A plan containing refs from different
+daemons is invalid before it sends anything.
 Snapshot slice accessors return fresh slices, and iterators range over
 materialized state only. Duplicate point lookup reports ambiguity. Live point
 lookups (`Server.Session`, `Server.Window`, `Server.Pane`, and `Server.Client`)
@@ -444,10 +445,11 @@ environment, working directory, configuration, and socket selection, and every
 record derived from it keeps that binding. Ordinary operations start the frozen
 executable. There is no generic transport selector on `Server`.
 
-`Session.OpenControl` creates an owned `Connection` bound to the exact daemon
-that materialized the session. `Server.NewSessionConnection` creates a session
-and retains its creating control process as the first lane. Each connection
-owns one or more internal command lanes and exposes bound `Server` and `Session`
+`Session.OpenControl` creates an owned `Connection` under the subprocess
+guard's parser assumptions. A connection established before replacement is
+the exact-daemon boundary. `Server.NewSessionConnection` creates a session and
+retains its creating control process as the first lane. Each connection owns
+one or more internal command lanes and exposes bound `Server` and `Session`
 values. Records derived from those values retain the same owner.
 
 Plain and connection-bound records may coexist. A record materialized before a
@@ -669,12 +671,13 @@ requesting an operation that needs a separate process cannot detach it.
 Exact-byte reads and interactive attachment return
 `ErrConnectionRequiresProcess`; no fallback is attempted.
 
-The initial `tmux -C` process executes `if-shell -F` as its first command. Only
-the matching PID, start time, and socket branch schedules `attach-session`; a
-replacement daemon therefore never observes even a transient attached client.
-The startup reader consumes the outer predicate and inner attach frames before
-calibrating request boundaries. `Connection.CloseContext` always begins
-shutdown and uses its context only to bound the join.
+The initial `tmux -C` process executes `if-shell -F` as its first command. Its
+startup guard has the subprocess path's stable, trusted parser assumption.
+Once the original daemon accepts the connection, later replacement closes the
+lane instead of retargeting it. The startup reader consumes the outer predicate
+and inner attach frames before calibrating request boundaries.
+`Connection.CloseContext` always begins shutdown and uses its context only to
+bound the join.
 
 `Server.OpenControl` starts an attached `tmux -C` process and returns a
 low-level `ControlClient`. It exposes commands and notifications on one client;

@@ -69,11 +69,13 @@
 // Search methods use the same opening and closing identity probes and fail if
 // the tmux daemon changes during their listing.
 //
-// Materialized records retain that daemon identity. Follow-up operations use
-// an atomic tmux-side guard, so a daemon that later takes over the same socket
-// cannot receive a stale record's command; the refusal matches
-// [ErrDaemonReplaced]. Refs derived from records retain the same provenance,
-// while [SessionRef], [WindowRef], and [PaneRef] remain selector-relative.
+// Materialized records retain that daemon identity. Follow-up subprocess
+// operations use an atomic tmux-side guard and refuse ordinary socket
+// replacement with [ErrDaemonReplaced]. This guard assumes tmux's parser
+// primitives and aliases remain trusted and stable. A [Connection] established
+// before replacement is the exact-daemon boundary. Refs derived from records
+// retain the same provenance, while [SessionRef], [WindowRef], and [PaneRef]
+// remain selector-relative.
 //
 // Record relationship methods such as [Session.Windows] and [Window.Panes]
 // return a bool because targeted lookups do not materialize relations. False
@@ -104,15 +106,14 @@
 //
 // # Execution modes
 //
-// [Session.OpenControl] returns a terminal [Connection] to that session's exact
-// daemon. Values obtained from [Connection.Server] and [Connection.Session]
-// retain its owned control lanes. Closing the connection is terminal: those
-// values return [ErrControlClosed] instead of reconnecting or falling back to
-// subprocesses. Operations whose contract requires a process, including
-// interactive attachment and exact-byte reads, return
-// [ErrConnectionRequiresProcess] while it is open. When no session exists,
-// [Server.NewSessionConnection] creates one and keeps the creating control
-// process as its first lane.
+// [Session.OpenControl] returns a terminal [Connection]. Once established, its
+// values retain the owned control lanes to that exact daemon. Closing the
+// connection is terminal: those values return [ErrControlClosed] instead of
+// reconnecting or falling back to subprocesses. Operations whose contract
+// requires a process, including interactive attachment and exact-byte reads,
+// return [ErrConnectionRequiresProcess] while it is open. When no session
+// exists, [Server.NewSessionConnection] creates one and keeps the creating
+// control process as its first lane.
 //
 // A plain [Server] starts one tmux process per operation. A [Connection] owns
 // persistent command lanes and returns model values already bound to them.

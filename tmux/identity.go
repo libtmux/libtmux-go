@@ -2,11 +2,11 @@ package tmux
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"sync/atomic"
 )
 
 type snapshotServerIdentity struct {
@@ -19,8 +19,6 @@ type snapshotServerIdentity struct {
 // ErrDaemonReplaced identifies an operation refused because the tmux server
 // instance that produced a materialized value no longer occupies its socket.
 var ErrDaemonReplaced = errors.New("tmux: materialized value's server was replaced")
-
-var daemonGuardSequence atomic.Uint64
 
 type daemonCommandGuard struct {
 	failure string
@@ -141,8 +139,7 @@ func (s Server) guardCommand(
 		return nil, nil, err
 	}
 	guard := &daemonCommandGuard{
-		failure: "__libtmux_daemon_replaced_" +
-			strconv.FormatUint(daemonGuardSequence.Add(1), 10) + "__",
+		failure: "__libtmux_daemon_replaced_" + rand.Text() + "__",
 	}
 	condition := fmt.Sprintf(
 		"#{&&:#{==:#{pid},%s},#{==:#{start_time},%s},#{==:#{socket_path},%s}}",

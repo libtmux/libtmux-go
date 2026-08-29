@@ -11,11 +11,20 @@ import (
 )
 
 //libtmux:real-tmux
-func TestMaterializedSessionRejectsDaemonReplacement(t *testing.T) {
+func TestMaterializedSessionRejectsAliasedDaemonReplacementMarker(t *testing.T) {
+	const (
+		aliasSideEffect      = "@libtmux_guard_alias_side_effect"
+		oldReplacementMarker = "__libtmux_daemon_replaced_1__"
+	)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	server := tmuxtest.NewServer(ctx, t)
+	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	result, err := server.Cmd(ctx, "new-session", "-d", "-s", "work")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("start original daemon = (%#v, %v), want exit 0", result, err)
+	}
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -24,12 +33,9 @@ func TestMaterializedSessionRejectsDaemonReplacement(t *testing.T) {
 	if len(sessions) != 1 {
 		t.Fatalf("snapshot sessions = %d, want 1", len(sessions))
 	}
-	stale, err := sessions[0].Rename(ctx, "before-replacement")
-	if err != nil {
-		t.Fatalf("guarded rename on original daemon: %v", err)
-	}
+	stale := sessions[0]
 
-	result, err := server.Cmd(ctx, "kill-server")
+	result, err = server.Cmd(ctx, "kill-server")
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("kill-server = (%#v, %v), want exit 0", result, err)
 	}
@@ -44,8 +50,21 @@ func TestMaterializedSessionRejectsDaemonReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start replacement daemon: %v", err)
 	}
+	result, err = server.Cmd(
+		ctx,
+		"set-option", "-s", "--", "command-alias[100]",
+		oldReplacementMarker+"=set-option -g "+aliasSideEffect+" yes",
+	)
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("install replacement alias = (%#v, %v), want exit 0", result, err)
+	}
 	if _, err := stale.Rename(ctx, "must-not-reach-replacement"); !errors.Is(err, tmux.ErrDaemonReplaced) {
 		t.Fatalf("stale Rename() error = %v, want ErrDaemonReplaced", err)
+	}
+	if value, ok, err := server.RawOption(ctx, aliasSideEffect); err != nil {
+		t.Fatalf("read replacement alias side effect: %v", err)
+	} else if ok {
+		t.Fatalf("replacement alias side effect = %q, want absent", value)
 	}
 
 	replacement, err = replacement.Refresh(ctx)

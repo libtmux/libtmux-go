@@ -115,7 +115,9 @@ Runnable: [`examples/filter-query`](examples/filter-query).
 
 A plain `Server` uses the executable, environment, working directory, and
 socket selection frozen by `NewServer`. Values derived from it retain that
-subprocess binding.
+subprocess binding. Guards on materialized values assume stable, trusted tmux
+parser primitives and aliases. Establish a connection before socket
+replacement when exact-daemon ownership is required.
 
 | Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
@@ -147,12 +149,12 @@ connected := connection.Session()
 
 <!-- docs:end -->
 
-`connection.Server()` and `connection.Session()` are bound to the exact daemon
-that materialized the original session. Values derived from them retain that
-owner. The binding is terminal: closing the connection makes later operations
-return `ErrControlClosed`, and an operation that needs a separate process
-returns `ErrConnectionRequiresProcess`. It never falls back or rebinds. The
-original session remains on its frozen subprocess binding.
+Once established, `connection.Server()` and `connection.Session()` are bound
+to that exact daemon. Values derived from them retain that owner. The binding
+is terminal: closing the connection makes later operations return
+`ErrControlClosed`, and an operation that needs a separate process returns
+`ErrConnectionRequiresProcess`. It never falls back or rebinds. The original
+session remains on its frozen subprocess binding.
 
 `Server.NewSessionConnection` creates a session and retains its creating
 control process as the first lane. It returns the ordinary created session and
