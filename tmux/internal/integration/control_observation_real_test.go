@@ -31,6 +31,7 @@ func TestPaneObservationLinearizesBaselineAndOutput(t *testing.T) {
 	if err != nil || len(panes) != 1 {
 		t.Fatalf("Panes() = (%d, %v), want one", len(panes), err)
 	}
+	tmuxtest.WaitForShellReady(ctx, t, panes[0])
 	const before = "OBSERVATION-BEFORE"
 	writePaneMarker(ctx, t, panes[0],
 		"printf '%s\\n' '"+before+"' '%end 1 2 3'")
