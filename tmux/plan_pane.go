@@ -9,7 +9,6 @@ package tmux
 // SplitPane records a split of the window or pane target names, and returns a
 // [Ref] to the pane it will create.
 //
-// It mirrors [Window.SplitPane] and [Pane.Split] and takes the same request.
 // The returned ref can target later steps before the pane exists:
 //
 //	plan := tmux.NewPlan()
@@ -39,9 +38,7 @@ func (p *Plan) SplitPane(target Ref, request SplitPaneRequest) Ref {
 
 // SendKeys records keys sent to the pane target names.
 //
-// It mirrors [Pane.SendKeys] and takes the same request. Sending keys produces
-// no output and creates nothing, so it shares a dispatch with its neighbours;
-// see [Plan.Explain].
+// Sending keys produces no output and can share a dispatch; see [Plan.Explain].
 //
 // A request carrying a command records two steps, as [Pane.SendKeys] issues two
 // tmux commands: the keys, and the Enter that submits them. Both are chainable,
@@ -72,9 +69,7 @@ func (p *Plan) SendKeys(target Ref, request SendKeysRequest) {
 // returns its output in the step's [OpResult]. The zero [Ref] expands it against
 // no object, the way [Plan.Cmd] takes one.
 //
-// It mirrors [Pane.DisplayMessage]. Reading output is what stops an operation
-// sharing a dispatch: tmux merges a command list into one stdout with no
-// boundary, so this one is sent on its own. [Plan.Explain] reports that.
+// It runs alone because command-list stdout has no operation boundaries.
 func (p *Plan) DisplayMessage(target Ref, format string) {
 	p.add(Op{
 		name:      "display-message",
@@ -91,8 +86,6 @@ func (p *Plan) DisplayMessage(target Ref, format string) {
 }
 
 // KillPane records the destruction of the pane target names.
-//
-// It mirrors [Pane.Kill].
 func (p *Plan) KillPane(target Ref) {
 	p.add(Op{
 		name:   "kill-pane",
@@ -105,8 +98,6 @@ func (p *Plan) KillPane(target Ref) {
 
 // KillOtherPanes records the destruction of every pane in the window holding
 // the pane target names, except that pane.
-//
-// It mirrors [Pane.KillOthers].
 func (p *Plan) KillOtherPanes(target Ref) {
 	p.add(Op{
 		name:   "kill-pane",
@@ -118,8 +109,6 @@ func (p *Plan) KillOtherPanes(target Ref) {
 }
 
 // SelectPane records a selection or marking of the pane target names.
-//
-// It mirrors [Pane.Select] and takes the same request.
 func (p *Plan) SelectPane(target Ref, request PaneSelectRequest) {
 	p.add(Op{
 		name:   "select-pane",
@@ -131,8 +120,6 @@ func (p *Plan) SelectPane(target Ref, request PaneSelectRequest) {
 }
 
 // ResizePane records a resize of the pane target names.
-//
-// It mirrors [Pane.Resize] and takes the same request.
 func (p *Plan) ResizePane(target Ref, request ResizePaneRequest) {
 	p.add(Op{
 		name:   "resize-pane",
@@ -144,8 +131,6 @@ func (p *Plan) ResizePane(target Ref, request ResizePaneRequest) {
 }
 
 // SetPaneTitle records a title for the pane target names.
-//
-// It mirrors [Pane.SetTitle].
 func (p *Plan) SetPaneTitle(target Ref, title string) {
 	p.add(Op{
 		name:   "select-pane",
@@ -157,8 +142,6 @@ func (p *Plan) SetPaneTitle(target Ref, title string) {
 }
 
 // ClearHistory records the clearing of the scrollback of the pane target names.
-//
-// It mirrors [Pane.ClearHistory] and takes the same request.
 func (p *Plan) ClearHistory(target Ref, request ClearHistoryRequest) {
 	p.add(Op{
 		name:         "clear-history",
@@ -172,8 +155,6 @@ func (p *Plan) ClearHistory(target Ref, request ClearHistoryRequest) {
 }
 
 // SendPrefix records tmux's prefix key sent to the pane target names.
-//
-// It mirrors [Pane.SendPrefix].
 func (p *Plan) SendPrefix(target Ref, key PrefixKey) {
 	p.add(Op{
 		name:   "send-prefix",
@@ -186,8 +167,6 @@ func (p *Plan) SendPrefix(target Ref, key PrefixKey) {
 
 // PipePane records the pane target names having its output piped to a shell
 // command.
-//
-// It mirrors [Pane.Pipe] and takes the same request.
 func (p *Plan) PipePane(target Ref, request PipePaneRequest) {
 	p.add(Op{
 		name:   "pipe-pane",
@@ -199,8 +178,6 @@ func (p *Plan) PipePane(target Ref, request PipePaneRequest) {
 }
 
 // RespawnPane records the pane target names being restarted with a new command.
-//
-// It mirrors [Pane.Respawn] and takes the same request.
 func (p *Plan) RespawnPane(target Ref, request RespawnRequest) {
 	p.add(Op{
 		name:   "respawn-pane",
@@ -213,10 +190,8 @@ func (p *Plan) RespawnPane(target Ref, request RespawnRequest) {
 
 // SwapPane records the panes target and source name exchanging places.
 //
-// It mirrors [Pane.Swap], but names both panes rather than taking that method's
-// request: the request selects the other pane as a materialized [Pane], and a
-// plan needs to be able to name one an earlier step will create. Detach leaves
-// the active-pane selection alone, and KeepZoom preserves a zoomed window.
+// Both panes are Refs so either may be created by an earlier step. Detach leaves
+// active selection alone; KeepZoom preserves a zoomed window.
 func (p *Plan) SwapPane(target, source Ref, detach, keepZoom bool) {
 	p.add(Op{
 		name:   "swap-pane",
@@ -241,9 +216,7 @@ func (p *Plan) SwapPane(target, source Ref, detach, keepZoom bool) {
 // JoinPane records the pane source names being moved beside the pane target
 // names, splitting that pane's space.
 //
-// It mirrors [Pane.Join], but names both panes for the reason [Plan.SwapPane]
-// does. Horizontal splits left and right rather than above and below, and
-// Detach leaves the active-pane selection alone.
+// Horizontal splits left and right; Detach leaves active selection alone.
 func (p *Plan) JoinPane(target, source Ref, horizontal, detach bool) {
 	p.add(Op{
 		name:   "join-pane",
@@ -257,9 +230,6 @@ func (p *Plan) JoinPane(target, source Ref, horizontal, detach bool) {
 
 // MovePane records the pane source names being moved beside the pane target
 // names without joining it to that pane's layout.
-//
-// It mirrors [Pane.Move], and names both panes for the reason [Plan.SwapPane]
-// does.
 func (p *Plan) MovePane(target, source Ref, horizontal, detach bool) {
 	p.add(Op{
 		name:   "move-pane",
