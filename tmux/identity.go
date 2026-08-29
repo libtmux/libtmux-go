@@ -1,12 +1,20 @@
 package tmux
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
 )
+
+type snapshotServerIdentity struct {
+	version    Version
+	pid        string
+	startTime  string
+	socketPath string
+}
 
 // ErrDaemonReplaced identifies an operation refused because the tmux server
 // instance that produced a materialized value no longer occupies its socket.
@@ -164,4 +172,108 @@ func escapeFormatLiteral(value string) string {
 func (g *daemonCommandGuard) rejected(exitCode int, stderr []string) bool {
 	return g != nil && exitCode != 0 &&
 		len(stderr) == 1 && stderr[0] == "unknown command: "+g.failure
+}
+
+func snapshotIdentityChangeError(identity snapshotServerIdentity) error {
+	return newSnapshotDecodeError(
+		"server",
+		1,
+		"server_identity",
+		formatSnapshotIdentity(identity),
+		"tmux server changed while materializing snapshot",
+	)
+}
+
+func snapshotIdentityFields() []formatField {
+	return []formatField{
+		{name: "version"},
+		{name: "pid"},
+		{name: "start_time"},
+		{name: "socket_path"},
+	}
+}
+
+// probeClosingIdentity verifies one daemon produced the listing. A bound
+// transport already proves this and reuses the opening identity.
+func (s Server) probeClosingIdentity(
+	ctx context.Context,
+	opening snapshotServerIdentity,
+) (snapshotServerIdentity, error) {
+	if s.boundToInstance() {
+		return opening, nil
+	}
+	return s.probeSnapshotIdentity(ctx)
+}
+
+func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdentity, error) {
+	if s.daemon != nil {
+		return *s.daemon, nil
+	}
+	fields := snapshotIdentityFields()
+	result, rawOutput, err := s.literalCmdWithRaw(
+		ctx,
+		"display-message",
+		"-p",
+		formatTemplate(fields),
+	)
+	if err != nil {
+		return snapshotServerIdentity{}, err
+	}
+	if result.ExitCode != 0 {
+		return snapshotServerIdentity{}, newCommandError("display-message", result)
+	}
+	rows, err := decodeFormatRecords(rawOutput, Version{}, fields)
+	if err != nil {
+		return snapshotServerIdentity{}, err
+	}
+	if len(rows) != 1 {
+		return snapshotServerIdentity{}, newSnapshotDecodeError(
+			"server",
+			0,
+			"identity",
+			strconv.Itoa(len(rows)),
+			"expected one identity record",
+		)
+	}
+	identity, err := decodeSnapshotIdentity("server", 0, rows[0])
+	if err != nil {
+		return snapshotServerIdentity{}, err
+	}
+	return s.normalizeSnapshotIdentityVersion(ctx, identity)
+}
+
+func (s Server) normalizeSnapshotIdentityVersion(
+	ctx context.Context,
+	identity snapshotServerIdentity,
+) (snapshotServerIdentity, error) {
+	if !isOpenBSDVersionToken(identity.version.String()) {
+		return identity, nil
+	}
+	capabilities, err := s.Version(ctx)
+	if err != nil {
+		return snapshotServerIdentity{}, err
+	}
+	if capabilities.String() != identity.version.String() {
+		return snapshotServerIdentity{}, newVersionQueryError(
+			CommandResult{},
+			"tmux binary version differed from server version",
+		)
+	}
+	identity.version.major = capabilities.major
+	identity.version.minor = capabilities.minor
+	identity.version.patch = capabilities.patch
+	identity.version.development = capabilities.development
+	return identity, nil
+}
+
+func sameSnapshotIdentity(left, right snapshotServerIdentity) bool {
+	return left.version.String() == right.version.String() &&
+		left.pid == right.pid &&
+		left.startTime == right.startTime &&
+		left.socketPath == right.socketPath
+}
+
+func formatSnapshotIdentity(identity snapshotServerIdentity) string {
+	return identity.version.String() + "/" + identity.pid + "/" +
+		identity.startTime + "/" + identity.socketPath
 }
