@@ -32,6 +32,11 @@ type Connection struct {
 	pool    *ControlPool
 }
 
+// ConnectionBound reports whether this handle retains terminal transport
+// owned by a [Connection]. A bound handle never reconnects or falls back to a
+// tmux subprocess after that connection closes.
+func (s Server) ConnectionBound() bool { return s.connection != nil }
+
 // OpenControl opens terminal control-mode transport to the receiver's daemon.
 // The returned connection owns its lanes and must be closed. A receiver already
 // bound to a connection cannot be rebound.

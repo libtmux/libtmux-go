@@ -82,6 +82,22 @@ func TestConnectionBoundServerCannotEscapeToAProcess(t *testing.T) {
 	}
 }
 
+func TestServerReportsConnectionBinding(t *testing.T) {
+	t.Parallel()
+
+	plain := serverWithRunner(&versionQueueRunner{})
+	if plain.ConnectionBound() {
+		t.Fatal("plain server reports a terminal connection")
+	}
+	connection := &Connection{}
+	bound := plain
+	bound.connection = connection
+	connection.server = bound
+	if !bound.ConnectionBound() {
+		t.Fatal("connection server does not report its terminal binding")
+	}
+}
+
 func TestNewSessionConnectionRejectsBeforeStartingTmux(t *testing.T) {
 	t.Parallel()
 

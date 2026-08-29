@@ -26,6 +26,8 @@ type connectionSessionSignature func(*tmux.Connection) tmux.Session
 
 type connectionLanesSignature func(*tmux.Connection) int
 
+type serverConnectionBoundSignature func(tmux.Server) bool
+
 type closeConnectionContextSignature func(*tmux.Connection, context.Context) error
 
 type closeConnectionSignature func(*tmux.Connection) error
@@ -36,6 +38,7 @@ func TestConnectionPublicSurfaceCompiles(_ *testing.T) {
 	var _ connectionServerSignature = (*tmux.Connection).Server
 	var _ connectionSessionSignature = (*tmux.Connection).Session
 	var _ connectionLanesSignature = (*tmux.Connection).Lanes
+	var _ serverConnectionBoundSignature = tmux.Server.ConnectionBound
 	var _ closeConnectionContextSignature = (*tmux.Connection).CloseContext
 	var _ closeConnectionSignature = (*tmux.Connection).Close
 	_ = tmux.ErrConnectionRequiresProcess
