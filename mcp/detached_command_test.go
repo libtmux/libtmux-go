@@ -135,13 +135,15 @@ func TestOneJobCompletionDoesNotFinishAnother(t *testing.T) {
 	instance, serverSession, request := connectJobSession(ctx, t, target)
 
 	_, first, err := instance.tools.runCommand(ctx, request, runCommandInput{
-		PaneID: firstPane.ID().String(), Command: "tmux wait-for job-gate-first; echo FIRST", Detach: true,
+		PaneID: firstPane.ID().String(), Detach: true,
+		Command: target.Executable() + " wait-for job-gate-first; echo FIRST",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, second, err := instance.tools.runCommand(ctx, request, runCommandInput{
-		PaneID: secondPane.ID().String(), Command: "tmux wait-for job-gate-second; echo SECOND", Detach: true,
+		PaneID: secondPane.ID().String(), Detach: true,
+		Command: target.Executable() + " wait-for job-gate-second; echo SECOND",
 	})
 	if err != nil {
 		t.Fatal(err)
