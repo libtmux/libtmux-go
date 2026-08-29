@@ -117,17 +117,16 @@ func (h *packedHashes) UnmarshalJSON(raw []byte) error {
 
 // paneState is one tmux expansion so its grid coordinates describe one instant.
 type paneState struct {
-	pid          int
-	historySize  int
-	historyLimit int
-	height       int
-	cursorY      int
-	dead         bool
+	pid         int
+	historySize int
+	height      int
+	cursorY     int
+	dead        bool
 }
 
 // paneStateFormat uses a printable separator because tmux may rewrite control
 // characters when the client environment has no UTF-8 locale.
-const paneStateFormat = "#{pane_pid}|#{history_size}|#{history_limit}|#{pane_height}|#{cursor_y}|#{pane_dead}"
+const paneStateFormat = "#{pane_pid}|#{history_size}|#{pane_height}|#{cursor_y}|#{pane_dead}"
 
 // readPaneState asks tmux where the pane's grid stands.
 func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
@@ -144,10 +143,10 @@ func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
 		return paneState{}, fmt.Errorf("pane %s reported no state", pane.ID())
 	}
 	fields := strings.Split(printed[0], "|")
-	if len(fields) != 6 {
+	if len(fields) != 5 {
 		return paneState{}, fmt.Errorf("pane %s reported unreadable state %q", pane.ID(), printed[0])
 	}
-	numbers := make([]int, 5)
+	numbers := make([]int, 4)
 	for index := range numbers {
 		value, err := strconv.Atoi(strings.TrimSpace(fields[index]))
 		if err != nil {
@@ -157,14 +156,13 @@ func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
 		numbers[index] = value
 	}
 	return paneState{
-		pid:          numbers[0],
-		historySize:  numbers[1],
-		historyLimit: numbers[2],
-		height:       numbers[3],
-		cursorY:      numbers[4],
+		pid:         numbers[0],
+		historySize: numbers[1],
+		height:      numbers[2],
+		cursorY:     numbers[3],
 		// tmux writes the flag as 1 or 0, and as empty on versions that do not
 		// set it for a live pane.
-		dead: strings.TrimSpace(fields[5]) == "1",
+		dead: strings.TrimSpace(fields[4]) == "1",
 	}, nil
 }
 
@@ -361,17 +359,20 @@ func locateAnchor(
 ) (rows []string, at int, found bool, err error) {
 	if len(cursor.Leading) == 0 {
 		// The pane had written nothing when this cursor was taken, so its
-		// anchor is the first row and there is nothing above it to fingerprint.
-		// A full history means rows have been discarded since, and the anchor
-		// cannot be told from the oldest row that survived it.
-		if state.historyLimit > 0 && state.historySize >= state.historyLimit {
+		// anchor is the oldest row there is and no row above it can identify
+		// it. Reading from the retained boundary either finds that row still
+		// first, or shows that trimming discarded it.
+		rows, err = captureRawRows(ctx, pane, tmux.CapturePaneRequest{
+			Start: tmux.CaptureBoundary,
+		})
+		if err != nil {
+			return nil, 0, false, err
+		}
+		if cursor.AnchorHash == "" || len(rows) == 0 ||
+			lineHash(rows[0]) != cursor.AnchorHash {
 			return nil, 0, false, nil
 		}
-		start := cursor.AnchorAbs - state.historySize
-		rows, err = captureRawRows(ctx, pane, tmux.CapturePaneRequest{
-			Start: tmux.CaptureLine(start),
-		})
-		return rows, 0, err == nil, err
+		return rows, 0, true, nil
 	}
 
 	lead := len(cursor.Leading)
