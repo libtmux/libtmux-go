@@ -143,6 +143,27 @@ func TestAJSONCSwapKeepsTheCommentsAroundIt(t *testing.T) {
 	}
 }
 
+func TestAJSONCSwapAddsAfterATrailingComma(t *testing.T) {
+	t.Parallel()
+	path := writeTemp(t, "opencode.jsonc", `{
+  "mcp": {
+    "other": { "type": "local", "command": ["other-server"] },
+  },
+}
+`)
+	target := client{
+		name: "opencode", path: path, key: "mcp",
+		format: formatJSONC, dialect: dialectOpencode,
+	}
+
+	if err := writeEntry(target, devEntry()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readJSONC([]byte(readFile(t, path))); err != nil {
+		t.Fatalf("the inserted entry left invalid JSONC: %v\n%s", err, readFile(t, path))
+	}
+}
+
 func TestBlankingCommentsKeepsEveryOffset(t *testing.T) {
 	t.Parallel()
 	// Offsets have to line up, because a span found in the blanked text is

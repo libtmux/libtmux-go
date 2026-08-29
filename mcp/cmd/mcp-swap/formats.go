@@ -513,7 +513,8 @@ func setJSONCMember(text []byte, path []string, value any, indent string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	span, ok := findJSONCMember(blankComments(text), path)
+	blanked := blankComments(text)
+	span, ok := findJSONCMember(blanked, path)
 	if !ok {
 		return nil, fmt.Errorf("no %q object to write into", strings.Join(path[:len(path)-1], "."))
 	}
@@ -528,9 +529,6 @@ func setJSONCMember(text []byte, path []string, value any, indent string) ([]byt
 
 	member := fmt.Sprintf("\n%s%q: %s",
 		strings.Repeat(indent, len(path)), path[len(path)-1], rendered)
-	if !span.objectEmpty {
-		member = "," + member
-	}
 	out.Write(text[:span.objectStart])
 	// An empty parent has its closing brace right after the opening one, so
 	// the new member needs the newline the file would otherwise have had.
@@ -544,11 +542,14 @@ func setJSONCMember(text []byte, path []string, value any, indent string) ([]byt
 	// the closing brace.
 	closing := span.objectStart
 	for {
-		next := endOfValueAfterMember(blankComments(text), closing)
+		next := endOfValueAfterMember(blanked, closing)
 		if next <= closing {
 			break
 		}
 		closing = next
+	}
+	if closing == span.objectStart || blanked[closing-1] != ',' {
+		member = "," + member
 	}
 	out.Reset()
 	out.Write(text[:closing])
