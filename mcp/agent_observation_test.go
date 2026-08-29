@@ -766,8 +766,17 @@ func TestJoinWrappedReadsAPaneAsTmuxDoes(t *testing.T) {
 	call(ctx, t, session, "resize_pane", map[string]any{"paneId": pane, "width": 40}, nil)
 	// Comfortably more than two rows of a forty-column pane, so joined and
 	// unjoined cannot come out the same.
-	send(ctx, t, session, pane, "printf 'X%.0s' {1..95}; echo")
-	time.Sleep(time.Second)
+	send(ctx, t, session, pane, "printf 'X%.0s' {1..95}; echo; read libtmux_hold")
+	var ready struct {
+		Outcome string `json:"outcome"`
+	}
+	result := call(ctx, t, session, "wait_for_text", map[string]any{
+		"paneId": pane, "patterns": []string{strings.Repeat("X", 20)},
+		"timeoutSeconds": 10,
+	}, &ready)
+	if result.IsError || ready.Outcome != "matched" {
+		t.Fatalf("long wrapped line outcome = %q: %s", ready.Outcome, resultText(result))
+	}
 
 	read := func(join bool) []string {
 		t.Helper()
