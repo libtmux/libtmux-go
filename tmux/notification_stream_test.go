@@ -117,3 +117,47 @@ func newClosableNotificationStream() *NotificationStream {
 		closeDone:     make(chan struct{}),
 	}}
 }
+
+func TestNotificationOptionsRejectAnUnusableHold(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		options NotificationOptions
+	}{
+		{
+			name:    "below tmux's resolution",
+			options: NotificationOptions{IncludePaneOutput: true, PauseAfter: time.Millisecond},
+		},
+		{
+			name:    "without the output it holds",
+			options: NotificationOptions{PauseAfter: time.Minute},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if err := test.options.validate(); !errors.Is(err, ErrInvalidServerCommandRequest) {
+				t.Fatalf("validate() = %v, want an invalid request", err)
+			}
+		})
+	}
+	usable := NotificationOptions{IncludePaneOutput: true, PauseAfter: time.Minute}
+	if err := usable.validate(); err != nil {
+		t.Fatalf("validate() = %v, want a usable hold accepted", err)
+	}
+}
+
+func TestResumablePaneIDMatchesTmuxsParser(t *testing.T) {
+	t.Parallel()
+
+	// tmux resumes only "%" followed by digits, and discards anything else
+	// without reporting it.
+	for id, want := range map[PaneID]bool{
+		"%0": true, "%12": true,
+		"": false, "%": false, "0": false, "@1": false, "%1a": false, "%1:continue": false,
+	} {
+		if got := resumablePaneID(id); got != want {
+			t.Errorf("resumablePaneID(%q) = %t, want %t", id, got, want)
+		}
+	}
+}

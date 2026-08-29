@@ -143,3 +143,45 @@ type controlNotificationReader struct {
 func (r controlNotificationReader) Read(data []byte) (int, error) {
 	return r.control.Read(r.ctx, data)
 }
+
+//libtmux:real-tmux
+func TestNotificationStreamPauseAfterArmsTheServerHold(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
+	}
+	stream, err := server.OpenNotifications(ctx, sessions[0], tmux.NotificationOptions{
+		IncludePaneOutput: true,
+		PauseAfter:        time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+
+	sendRealPaneCommand(ctx, t, panes[0], "printf 'pause-after-armed\\n'")
+	for {
+		notification, err := stream.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// tmux frames pane output as extended output only for a client that
+		// armed the hold, so this is the arming reaching the server.
+		if notification.Kind() == tmux.ControlNotificationExtendedOutput {
+			break
+		}
+		if notification.Kind() == tmux.ControlNotificationOutput {
+			t.Fatal("pane output arrived unextended, so the hold never reached tmux")
+		}
+	}
+	if err := stream.ContinuePane(ctx, panes[0].ID()); err != nil {
+		t.Fatalf("ContinuePane() error = %v", err)
+	}
+}
