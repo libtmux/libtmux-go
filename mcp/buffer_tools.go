@@ -203,12 +203,8 @@ func (t *tools) deleteBuffer(
 	return nil, deleteBufferOutput{Deleted: name}, nil
 }
 
-// bufferName validates a name a client chose, or makes one up.
-//
-// tmux reads a buffer name as a plain argument, so whitespace would be read as
-// further arguments and a leading dash as a flag. The prefix is added rather
-// than required, so a client that named a buffer "notes" gets a buffer it can
-// find again and a person's own buffers keep their names to themselves.
+// bufferName allocates or validates a server-owned buffer name. User names
+// receive bufferPrefix so foreign buffers remain unreachable.
 func bufferName(requested string) (string, error) {
 	name := strings.TrimSpace(requested)
 	if name == "" {
@@ -223,17 +219,9 @@ func bufferName(requested string) (string, error) {
 	return bufferPrefix + name, nil
 }
 
-// usableBufferName refuses what tmux would not hand back unchanged.
-//
-// From 3.7 tmux cleans a name for display before storing it and doubles a
-// backslash doing so, while lookup does not repeat the cleaning. The buffer
-// then answers to a spelling the caller was never told, so the handle these
-// tools return would address nothing. Below 3.7 the same name round-trips,
-// which is why it is refused rather than left to the tmux underneath.
+// usableBufferName rejects backslashes because tmux 3.7+ stores a
+// display-escaped spelling that lookup does not accept.
 func usableBufferName(requested, name string) error {
-	if strings.ContainsAny(name, " \t\n") {
-		return fmt.Errorf("buffer name %q must not contain whitespace", requested)
-	}
 	if strings.Contains(name, `\`) {
 		return fmt.Errorf(
 			"buffer name %q must not contain a backslash: tmux 3.7 stores it "+

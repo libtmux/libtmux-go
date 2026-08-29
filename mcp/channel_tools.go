@@ -91,11 +91,7 @@ func (t *tools) signalChannel(
 	return nil, signalChannelOutput{Channel: channel}, nil
 }
 
-// validChannel accepts a channel name tmux will take as one word.
-//
-// tmux reads a channel as a plain argument, so a name carrying whitespace
-// would be read as a different command's worth of arguments, and one starting
-// with a dash would be read as a flag.
+// validChannel rejects empty names and leading dashes.
 func validChannel(name string) (string, error) {
 	channel := strings.TrimSpace(name)
 	if channel == "" {
@@ -103,9 +99,6 @@ func validChannel(name string) (string, error) {
 	}
 	if strings.HasPrefix(channel, "-") {
 		return "", fmt.Errorf("channel %q must not begin with a dash", name)
-	}
-	if strings.ContainsAny(channel, " \t\n") {
-		return "", fmt.Errorf("channel %q must not contain whitespace", name)
 	}
 	return channel, nil
 }

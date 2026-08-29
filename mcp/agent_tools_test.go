@@ -861,6 +861,39 @@ func TestBuffersAreThisServersOwn(t *testing.T) {
 	}
 }
 
+//libtmux:real-tmux
+func TestBufferNamesPreserveEmbeddedWhitespace(t *testing.T) {
+	session, _, ctx := connect(t)
+	workspace(ctx, t, session, "session_name: spaced-buffer\nwindows:\n  - panes:\n      - {}\n")
+
+	const name = "release notes"
+	var staged struct {
+		Name string `json:"name"`
+	}
+	result := call(ctx, t, session, "load_buffer", map[string]any{
+		"text": "payload", "name": name,
+	}, &staged)
+	if result.IsError {
+		t.Fatalf("load_buffer(%q): %#v", name, result.Content)
+	}
+	if !strings.HasSuffix(staged.Name, name) {
+		t.Errorf("load_buffer(%q) returned name %q", name, staged.Name)
+	}
+
+	var read struct {
+		Lines []string `json:"lines"`
+	}
+	result = call(ctx, t, session, "show_buffer", map[string]any{
+		"name": staged.Name,
+	}, &read)
+	if result.IsError {
+		t.Fatalf("show_buffer(%q): %#v", staged.Name, result.Content)
+	}
+	if got := strings.Join(read.Lines, "\n"); got != "payload" {
+		t.Errorf("show_buffer(%q) = %q, want payload", staged.Name, got)
+	}
+}
+
 // TestALoadedBufferIsReachableByTheNameItAnswersWith covers a handle that stops
 // addressing the thing it names.
 //

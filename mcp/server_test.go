@@ -1011,7 +1011,7 @@ func TestWaitForChannelIsReleasedBySignalling(t *testing.T) {
 			Signalled bool `json:"signalled"`
 		}
 		call(ctx, t, session, "wait_for_channel", map[string]any{
-			"channel": "ready-for-work", "timeoutSeconds": 30,
+			"channel": "ready for work", "timeoutSeconds": 30,
 		}, &out)
 		waited <- out.Signalled
 	}()
@@ -1020,7 +1020,7 @@ func TestWaitForChannelIsReleasedBySignalling(t *testing.T) {
 	deadline := time.After(20 * time.Second)
 	for {
 		call(ctx, t, session, "signal_channel", map[string]any{
-			"channel": "ready-for-work",
+			"channel": "ready for work",
 		}, nil)
 		select {
 		case signalled := <-waited:
@@ -1041,7 +1041,7 @@ func TestWaitForChannelIsReleasedBySignalling(t *testing.T) {
 //libtmux:real-tmux
 func TestChannelNamesAreValidated(t *testing.T) {
 	session, _, ctx := connect(t)
-	for _, channel := range []string{"", "-L", "two words"} {
+	for _, channel := range []string{"", "-L"} {
 		if result := call(ctx, t, session, "signal_channel", map[string]any{
 			"channel": channel,
 		}, nil); !result.IsError {
