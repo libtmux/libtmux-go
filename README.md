@@ -125,7 +125,7 @@ replacement when exact-daemon ownership is required.
 | connection | `Session.OpenControl` | one tmux client per lane | repeated commands |
 | concurrent | `ConnectionOptions{Lanes: N}` | N tmux clients | parallel readers |
 | chained | `NewPlan` then `Run` | fewer process starts | builds and layouts |
-| streaming | `Session.OpenNotifications` | one tmux client | watching what tmux does |
+| streaming | `Session.OpenNotifications(ctx, NotificationOptions{})` | one tmux client | watching what tmux does |
 
 Plans run over either a plain server or a connection-bound server. Unsupported
 capability policy is separate: `ServerOptions.Unsupported` decides whether a
@@ -184,13 +184,27 @@ supported tmux.
 
 ## Watching tmux
 
-`Session.OpenNotifications` returns an owned stream. tmux pushes changes down
-its client once, when they happen, rather than making a poll guess how often to
-ask:
+`Session.OpenNotifications` and `Server.OpenNotifications` return owned
+streams. Zero options retain tmux changes but suppress pane output; set
+`IncludePaneOutput` when watching pane content. tmux pushes each change when it
+happens rather than making a poll guess how often to ask. Before tmux 3.6,
+destroying the attached session follows its `detach-on-destroy` policy and may
+end the stream:
 
 <!-- docs:watching -->
 
 ```go
+stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+if err != nil {
+	return fmt.Errorf("open notification stream: %w", err)
+}
+defer func() { err = errors.Join(err, stream.Close()) }()
+
+// Rename after subscribing; notifications do not include earlier changes.
+if _, err := session.Rename(ctx, "control-example"); err != nil {
+	return fmt.Errorf("rename session: %w", err)
+}
+
 for {
 	notification, err := stream.Next(ctx)
 	if err != nil {

@@ -92,12 +92,12 @@ A dependency analysis over the root package -- asking each used object where it
 was declared -- found `control`, `filter` and `search` reachable in one
 direction only, and `plan` reachable once one shared argument builder moves.
 They stay anyway. Extracting `control` would strand `Session.OpenControl`,
-`Server.NewSessionConnection`, and `Session.OpenNotifications` from the models
-whose daemon identity they retain. Extracting `search` would strand the eight
-methods that are its API; and `filter` is a cycle in practice, because the
-search signatures name filter types while the filter predicates name the model.
-The finding is recorded so the question does not have to be reopened from
-scratch.
+`Server.NewSessionConnection`, and the `Server` and `Session`
+`OpenNotifications` methods from the models whose daemon identity they retain.
+Extracting `search` would strand the eight methods that are its API; and
+`filter` is a cycle in practice, because the search signatures name filter
+types while the filter predicates name the model. The finding is recorded so
+the question does not have to be reopened from scratch.
 
 `Plan` follows that rule for a reason of its own. A recorded operation and the
 method that runs the same command share one argv builder, which is what stops a
@@ -693,8 +693,11 @@ The client validates `%begin`/`%end`/`%error` framing, serializes concurrent
 commands, correlates each reply by command number, and buffers ordered
 notifications in a bounded in-memory queue. On overflow it keeps draining
 tmux's stdout, preserves the queued prefix, and then reports a typed error.
-High-level command lanes ask tmux not to send pane output. `%output` payloads
-are decoded to pane IDs and exact bytes.
+Raw control clients retain the full stream. High-level command lanes retain no
+notification queue and ask tmux not to send pane output. Notification streams
+always retain the queue; zero options suppress pane output, while
+`IncludePaneOutput` enables it. `%output` payloads are decoded to pane IDs and
+exact bytes.
 
 Command arguments are encoded without a shell. Single-quoted spans preserve
 printable bytes, adjacent quoted spans preserve literal single quotes, and
@@ -720,8 +723,10 @@ transport tests.
 at `io.EOF` without an error because the end of a stream is not a failure, and
 continues past a record it could not parse because a tmux sending a
 notification kind this package does not know must not end a watcher.
-`Session.OpenNotifications` wraps the same protocol in an owned,
-observation-only `NotificationStream` whose `Next` preserves wire order.
+`Server.OpenNotifications` and `Session.OpenNotifications` wrap the same
+protocol in an owned, observation-only `NotificationStream` whose `Next`
+preserves wire order. Before tmux 3.6, destroying the attached session follows
+that session's `detach-on-destroy` policy and may end the stream.
 
 ## Recorded operations
 
