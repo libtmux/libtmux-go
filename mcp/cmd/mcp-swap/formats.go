@@ -159,9 +159,10 @@ func tomlValueComplete(value string) bool {
 		character := value[index]
 		switch quote {
 		case quoteBasic:
-			if character == '\\' {
+			switch character {
+			case '\\':
 				index++
-			} else if character == '"' {
+			case '"':
 				quote = quoteNone
 			}
 			continue
