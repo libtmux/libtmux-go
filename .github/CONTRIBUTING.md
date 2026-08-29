@@ -63,7 +63,9 @@ current source graph. `go mod tidy -diff` with the workspace off proves each
 module's released dependency graph is standalone and tidy:
 
 ```console
-$ go test ./tmux/internal/integration/ -run TestEveryModuleMetadataResolvesWithoutAWorkspace
+$ go test \
+    -run TestEveryModuleMetadataResolvesWithoutAWorkspace \
+    ./tmux/internal/integration/
 ```
 
 The install gate runs the documented version-suffixed command, so it tests the
