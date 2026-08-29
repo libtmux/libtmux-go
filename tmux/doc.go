@@ -8,7 +8,7 @@
 // [NewServer] records configuration without starting tmux. Its zero-value
 // [Server] targets tmux with its default socket and process environment.
 //
-// # Starting points
+// # Where to start
 //
 //   - Create objects with [Server.NewSession], [Session.NewWindow], and
 //     [Window.SplitPane].
