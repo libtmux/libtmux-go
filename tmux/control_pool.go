@@ -45,9 +45,18 @@ func newControlLanePool(clients []*ControlClient) *controlLanePool {
 }
 
 func closeControlClients(clients []*ControlClient) error {
+	ctx, cancel := context.WithTimeout(context.Background(), controlClientCloseTimeout)
+	defer cancel()
+	return closeControlClientsContext(ctx, clients)
+}
+
+func closeControlClientsContext(ctx context.Context, clients []*ControlClient) error {
+	for _, client := range clients {
+		client.startClose()
+	}
 	failures := make([]error, 0, len(clients))
 	for _, client := range clients {
-		failures = append(failures, client.Close())
+		failures = append(failures, client.waitClose(ctx))
 	}
 	return errors.Join(failures...)
 }
@@ -68,11 +77,7 @@ type controlLanePool struct {
 
 func (p *controlLanePool) closeContext(ctx context.Context) error {
 	p.stop()
-	failures := make([]error, 0, len(p.clients))
-	for _, client := range p.clients {
-		failures = append(failures, client.CloseContext(ctx))
-	}
-	return errors.Join(failures...)
+	return closeControlClientsContext(ctx, p.clients)
 }
 
 func (p *controlLanePool) close() error {

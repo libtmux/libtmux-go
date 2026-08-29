@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	controlClientStopGrace   = 250 * time.Millisecond
-	controlClientStopTimeout = 2 * time.Second
+	controlClientStopGrace    = 250 * time.Millisecond
+	controlClientStopTimeout  = 2 * time.Second
+	controlClientCloseTimeout = controlClientStopTimeout + 2*controlClientStopGrace
 )
 
 // Wait blocks until the control process exits or ctx ends. It does not close
@@ -31,11 +32,19 @@ func (c *ControlClient) Wait(ctx context.Context) error {
 // The context bounds only the wait: an already-ended context still starts
 // shutdown, and a later call may resume waiting for the same close.
 func (c *ControlClient) CloseContext(ctx context.Context) error {
+	c.startClose()
+	return c.waitClose(ctx)
+}
+
+func (c *ControlClient) startClose() {
 	c.closeOnce.Do(func() {
 		c.closeRequested.Store(true)
 		close(c.stopRequests)
 		go c.closeAfterRequests()
 	})
+}
+
+func (c *ControlClient) waitClose(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -52,7 +61,7 @@ func (c *ControlClient) CloseContext(ctx context.Context) error {
 func (c *ControlClient) Close() error {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
-		controlClientStopTimeout+2*controlClientStopGrace,
+		controlClientCloseTimeout,
 	)
 	defer cancel()
 	return c.CloseContext(ctx)
