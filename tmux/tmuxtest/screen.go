@@ -14,33 +14,20 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// A tmux pane settles after the program in it is asked to do something, not
-// while it is being asked, and there is no signal that says it has. Every wait
-// below therefore polls, and the interesting part of each is not the polling
-// but what it prints when the deadline arrives: the screen it last read, which
-// is the thing a caller would otherwise add a print statement to see.
+// Pane waits poll because tmux provides no screen-settled signal. Failures print
+// the last screen read.
 const (
-	// pollInterval is how often a wait re-reads the pane. It is short because
-	// the read is one tmux command against a local socket, and a wait that
-	// ends as soon as its condition holds costs nothing for being eager.
+	// pollInterval is how often a wait re-reads the local pane.
 	pollInterval = 10 * time.Millisecond
-	// waitBudget bounds a wait whose context carries no deadline of its own.
-	// Without it a condition that never holds hangs until go test's own
-	// timeout, which reports every goroutine in the process and not the screen
-	// that would say why.
+	// waitBudget bounds a wait whose context has no deadline.
 	waitBudget = 30 * time.Second
 )
 
 // Screen returns the pane's visible lines, top to bottom, with tmux's trailing
 // blank lines removed.
 //
-// It is what a person watching the pane would see, and nothing more: output
-// that has scrolled out of view is not returned, and neither are the blank
-// lines tmux pads a short screen with. Every wait here reads the same thing, so
-// what they search is what a failure prints.
-//
-// Reach past it with [tmux.Pane.Capture] and [tmux.CaptureBoundary] for a test
-// whose subject is the scrollback rather than the screen.
+// Scrolled-out output is excluded. Use [tmux.Pane.Capture] with
+// [tmux.CaptureBoundary] to read scrollback.
 //
 // Read failures call [testing.TB.Fatal].
 func Screen(ctx context.Context, t testing.TB, pane tmux.Pane) []string {
@@ -53,10 +40,6 @@ func Screen(ctx context.Context, t testing.TB, pane tmux.Pane) []string {
 }
 
 // WaitForText blocks until some line of the pane's screen contains text.
-//
-// It is the wait to reach for first: a program announcing itself, a prompt
-// returning, a value appearing in a status line. [WaitForLine] is the stricter
-// one, and [WaitForScreen] takes a condition of your own.
 //
 // A pane that never shows text fails the test with the screen it last read.
 func WaitForText(ctx context.Context, t testing.TB, pane tmux.Pane, text string) {
@@ -74,10 +57,6 @@ func WaitForText(ctx context.Context, t testing.TB, pane tmux.Pane, text string)
 
 // WaitForLine blocks until some line of the pane's screen is exactly line.
 //
-// It is [WaitForText] for output a test controls the whole of, such as a marker
-// a command was asked to print. Prefer it there: a substring of a prompt that
-// still shows the command that produced it will match text it was not meant to.
-//
 // A pane that never shows line fails the test with the screen it last read.
 func WaitForLine(ctx context.Context, t testing.TB, pane tmux.Pane, line string) {
 	t.Helper()
@@ -89,11 +68,7 @@ func WaitForLine(ctx context.Context, t testing.TB, pane tmux.Pane, line string)
 
 // WaitForScreen blocks until the pane's screen satisfies match.
 //
-// It is the general form the other waits are written in, for a condition they
-// do not cover: two values in order, a table with the right number of rows, a
-// spinner that has stopped. The want string is what the failure reports the
-// pane never showed, so it reads best as a noun phrase completing "the pane
-// never showed": "three rows of results", "a prompt ending in $".
+// want is the noun phrase used in the failure message.
 //
 // match receives a newly read screen and must not retain it.
 func WaitForScreen(
@@ -128,28 +103,14 @@ func WaitForScreen(
 	t.Fatal(harnessFailure("wait for pane screen", err))
 }
 
-// WaitForShellReady blocks until the pane's shell has drawn its prompt and is
-// ready to be typed at.
-//
-// A pane exists before its shell is reading from it, and keys sent in between
-// are dropped without a word: the test that follows then waits for output from
-// a command that never ran. This waits for [ShellPrompt], which the shell draws
-// once it is ready, so the first thing a test sends is the first thing to
-// arrive.
-//
-// It waits for the shell to draw anything at all, which is a prompt on every
-// shell that has one, rather than for a particular prompt: a pane on a server
-// without [ServerOptions.FixedShell] shows whatever the person running the
-// tests has configured, and this has to work there too.
-//
-// It reads the pane rather than typing at it. A wait that probes by sending
-// keys leaves every probe it sent on the screen, and the screen is what every
-// other assertion here is about.
+// WaitForShellReady blocks until the pane first shows output. With
+// [ServerOptions.FixedShell], that expected first output is the harness prompt
+// and serves as readiness evidence; custom shell startup output may not.
 //
 // [RunInPane] calls it, and a test building its own pane should too.
 func WaitForShellReady(ctx context.Context, t testing.TB, pane tmux.Pane) {
 	t.Helper()
-	WaitForScreen(ctx, t, pane, "a shell prompt", func(screen []string) bool {
+	WaitForScreen(ctx, t, pane, "shell output", func(screen []string) bool {
 		return len(screen) > 0
 	})
 }
@@ -157,10 +118,8 @@ func WaitForShellReady(ctx context.Context, t testing.TB, pane tmux.Pane) {
 // Type sends command to the pane and submits it, as a person at the keyboard
 // would.
 //
-// tmux does not interpret command, so a value holding a semicolon or a dollar
-// sign arrives as written. It returns as soon as tmux has the keys, which is
-// before the shell has run them: follow it with [WaitForText] or one of its
-// neighbours rather than assuming the command is done.
+// command is sent literally. Type returns when tmux accepts the keys, before the
+// shell finishes; follow it with a wait when completion matters.
 func Type(ctx context.Context, t testing.TB, pane tmux.Pane, command string) {
 	t.Helper()
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
@@ -173,15 +132,8 @@ func Type(ctx context.Context, t testing.TB, pane tmux.Pane, command string) {
 
 // TypeAndWait sends command to the pane and blocks until it has finished.
 //
-// [Type] returns as soon as tmux has the keys, which says nothing about the
-// program: a test that types "make build" and reads the screen reads it while
-// make is still running. This waits for the command to be over, whether it
-// succeeded or failed, so the screen that follows is the one it left.
-//
-// It works by asking the shell to print a marker after the command, and waiting
-// for that marker on its own line. The command's own exit status is not
-// reported: a test that wants it should ask for it, by typing a command that
-// prints it.
+// It appends and waits for a unique marker whether the command succeeds or
+// fails. It does not return the command's exit status.
 func TypeAndWait(ctx context.Context, t testing.TB, pane tmux.Pane, command string) {
 	t.Helper()
 	marker, err := finishedMarker()
@@ -196,7 +148,6 @@ func TypeAndWait(ctx context.Context, t testing.TB, pane tmux.Pane, command stri
 	WaitForLine(ctx, t, pane, marker)
 }
 
-// finishedMarker returns a line that a command's own output will not contain.
 func finishedMarker() (string, error) {
 	raw := make([]byte, 8)
 	if _, err := rand.Read(raw); err != nil {
@@ -207,30 +158,19 @@ func finishedMarker() (string, error) {
 
 // RunInPane returns a pane running command on a tmux server of its own.
 //
-// It is the short way into everything else here, for a test whose subject is a
-// program rather than tmux:
-//
 //	pane := tmuxtest.RunInPane(ctx, t, "./mytui --watch")
 //	tmuxtest.WaitForText(ctx, t, pane, "ready")
 //	tmuxtest.Type(ctx, t, pane, "q")
 //
-// The server, its session, and its window belong to t and end with it. The pane
-// runs a shell with command typed into it rather than running command as the
-// pane's own process, because a pane whose process exits takes its window, its
-// session, and then the server with it, and a test asserting on what it left
-// behind would race that teardown.
+// The server, session, and window belong to t. command is typed into a retained
+// shell so its exit does not destroy the pane before assertions run.
 //
-// Its panes run a POSIX shell with no start-up files and the fixed
-// [ShellPrompt], so what a pane shows does not depend on whose machine ran the
-// test. Setup failures call [testing.TB.Fatal]. Use [NewServerWithOptions],
-// with [ServerOptions.FixedShell] for the same panes, when a test needs more
-// than one pane, a particular tmux binary, or a configuration of its own.
+// It uses a startup-file-free POSIX shell with [ShellPrompt]. Setup failures call
+// [testing.TB.Fatal]. Use [NewServerWithOptions] for custom topology or config.
 func RunInPane(ctx context.Context, t testing.TB, command string) tmux.Pane {
 	t.Helper()
 	initialSession := tmux.NewSessionRequest{}
 	server := NewServerWithOptions(ctx, t, ServerOptions{
-		// A test reading a pane needs the pane to show the same thing on every
-		// machine, which is what FixedShell is for.
 		FixedShell:     true,
 		InitialSession: &initialSession,
 	})
@@ -252,8 +192,6 @@ var (
 	errNoActivePane   = errors.New("session reported no active pane")
 )
 
-// waitContext bounds a wait that would otherwise run until go test gives up.
-// A caller's own deadline is always the tighter one and is left alone.
 func waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, ok := ctx.Deadline(); ok {
 		return context.WithCancel(ctx)
@@ -261,16 +199,7 @@ func waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, waitBudget)
 }
 
-// readScreen returns the pane's visible lines with tmux's trailing blank lines
-// removed.
-//
-// The zero request is tmux's visible-screen default. Capturing from
-// [tmux.CaptureBoundary] instead would return the scrollback, which for a pane
-// that has been running a while is thousands of lines: a wait would search
-// output long gone from view, and its failure would print all of it.
-//
-// tmux pads the visible capture to the pane's height, so a two-line program on
-// a twenty-line pane reports eighteen empty lines that no assertion wants.
+// readScreen removes the blank lines tmux pads to the pane height.
 func readScreen(ctx context.Context, pane tmux.Pane) ([]string, error) {
 	lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
 	if err != nil {

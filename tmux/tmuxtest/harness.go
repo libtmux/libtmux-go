@@ -1,16 +1,9 @@
 // Package tmuxtest runs your program inside a real tmux and lets a test assert
-// on what it drew.
-//
-// tmux is awkward to test against for two reasons, and this package exists for
-// both. Servers leak between tests unless every socket, configuration file, and
-// environment variable is accounted for. And a pane settles some time after it
-// is asked to do something, with nothing to say when: the usual answer is a
-// sleep, which is slow when it is generous and flaky when it is not.
+// on what it drew. It isolates servers and polls panes instead of sleeping.
 //
 // # Testing a program
 //
-// A test whose subject is a program rather than tmux needs three lines. The
-// server, its session, and its pane belong to t and end with it:
+// [RunInPane] owns the server, session, and pane for the test:
 //
 //	func TestReadyBanner(t *testing.T) {
 //		ctx := context.Background()
@@ -20,46 +13,25 @@
 //		tmuxtest.Type(ctx, t, pane, "q")
 //	}
 //
-// [WaitForText] polls until the text appears, so a quick program costs
-// milliseconds and a slow one is still waited for. A program that never shows
-// it fails the test with the screen the pane last held, which is what a print
-// statement would have been added to see:
+// Failed waits print the last screen. [WaitForLine] matches a whole line,
+// [WaitForScreen] takes a condition, and [Screen] reads without waiting.
 //
-//	tmuxtest: pane %1 never showed a line containing "ready"
-//	the pane showed 3 line(s):
-//	    | tmuxtest$ ./mytui --watch
-//	    | loading widgets
-//	    | connecting
-//
-// [WaitForLine] matches a whole line, [WaitForScreen] takes a condition of your
-// own, and [Screen] reads the pane without waiting. [TypeAndWait] is [Type] for
-// a command whose end matters rather than its output.
-//
-// [RunInPane] gives its panes a POSIX shell with no start-up files and the
-// fixed [ShellPrompt], so a pane shows the same thing on every machine rather
-// than whatever prompt the person running the tests has configured. Ask for it
-// on a server you build yourself with [ServerOptions.FixedShell].
+// [RunInPane] uses a startup-file-free POSIX shell and fixed [ShellPrompt]. Use
+// [ServerOptions.FixedShell] for the same behavior on a custom server.
 //
 // # Testing tmux itself
 //
-// [NewServer] returns a [tmux.Server] for a test whose subject is tmux: an
-// isolated daemon on a socket of its own, with [NewSession] and [NewWindow] for
-// resources that clean themselves up.
+// [NewServer] returns an isolated [tmux.Server]. [NewSession] and [NewWindow]
+// register resource cleanup with the test.
 //
 // # Setup and lifecycle
 //
-// Call [Main] exactly once from the package's TestMain before calling
-// [NewServer] or [NewServerWithOptions]. Main creates short temporary roots,
-// temporarily redirects TMPDIR, GOTMPDIR, and TMUX_TMPDIR into them, and cleans
-// every registered server after the test package returns. Redirecting
-// TMUX_TMPDIR is what keeps a socket named rather than pathed -- a test or an
-// example that names its own -- inside the suite as well.
+// Call [Main] exactly once from TestMain before creating servers. It redirects
+// temporary and tmux socket roots, then cleans registered servers.
 //
 //	func TestMain(m *testing.M) {
 //		os.Exit(tmuxtest.Main(m))
 //	}
-//
-//
 //	func TestWindow(t *testing.T) {
 //		ctx := context.Background()
 //		server := tmuxtest.NewServer(ctx, t)
@@ -68,32 +40,22 @@
 //		_ = window
 //	}
 //
-// The helpers register testing cleanup; setup failures call [testing.TB.Fatal].
+// Setup failures call [testing.TB.Fatal].
 //
 // # Isolation and compatibility
 //
-// Each server has an explicit short socket path, a harness-owned configuration
-// file, and a process environment with tmux targeting variables removed. tmux
-// 3.2a or newer must be available. The server harness supports its Unix targets;
-// [StartPTYProcess] additionally requires Linux. Cleanup is owned by the
-// creating test, bounded, and retried during the package lifecycle if needed.
-// Resource cleanup targets stable tmux IDs, so a renamed session or moved window
-// remains owned by its creating test.
+// Each server uses a short private socket, harness-owned config, and environment
+// without tmux targeting variables. tmux 3.2a or newer is required. The harness
+// supports Unix; [StartPTYProcess] requires Linux. Cleanup uses stable tmux IDs,
+// remains owned by the creating test, and is bounded and retried.
 //
 // # Context and failures
 //
-// [NewServer] and [NewControlMode] contexts bound startup only; they do not own
-// an already-returned [ControlMode]'s lifetime. [StartPTYProcess] is the
-// exception because its start context owns the child process. [NewSession] and
-// [NewWindow] use their caller-owned contexts directly for resource creation;
-// their cleanup uses fresh bounded contexts. Inputs to [ServerOptions],
-// [NewSession], and [NewWindow] are copied before use. Nil and empty inputs can
-// differ: a nil server environment inherits a snapshot, an empty environment
-// stays empty, and a nil window name requests a generated name while an empty
-// non-nil name is explicit. A failed test reports one package-relative go test
-// command for its top-level test and whether every harness-owned socket was
-// cleaned. The diagnostic excludes commands, command output, paths, options,
-// and environment values.
+// [NewServer] and [NewControlMode] contexts bound startup, not returned-resource
+// lifetime. [StartPTYProcess] is the exception: its context owns the child.
+// Resource cleanup uses fresh bounded contexts, and request inputs are copied.
+// Nil and empty environments or names retain their documented distinction.
+// Failure guidance omits commands, output, paths, options, and environment values.
 //
 // # Control clients and subprocesses
 //
@@ -132,8 +94,8 @@ import (
 type ServerOptions struct {
 	// Binary is the tmux executable. An empty value resolves tmux from PATH.
 	Binary string
-	// Config is appended to the mandatory isolation configuration in the
-	// harness-owned config file; it cannot replace that file.
+	// Config is appended to the harness-owned config file; it cannot replace the
+	// private file that prevents user configuration from loading.
 	Config []byte
 	// ProcessEnvironment supplies the server environment. Nil snapshots the
 	// current process environment, while a non-nil empty slice remains empty.
@@ -142,57 +104,25 @@ type ServerOptions struct {
 	// InitialSession starts the daemon with this copied request. Nil returns a
 	// lazy bare server; a later tmux command may start it.
 	InitialSession *tmux.NewSessionRequest
-	// FixedShell gives every pane a POSIX shell with no start-up files and the
-	// prompt ShellPrompt, instead of the login shell tmux would otherwise run.
-	//
-	// Set it for a test that reads what a pane shows. Without it a pane opens
-	// on whatever the person running the tests has configured, so a screen
-	// carries their prompt, their colours, and on some systems the system
-	// message of the day, and an assertion about it passes or fails by machine.
-	//
-	// It is off by default because it changes what tmux spawns, which a test
-	// about process behaviour rather than screen content may be measuring.
-	// RunInPane sets it.
+	// FixedShell gives panes without an explicit command a POSIX shell with no
+	// startup files and the prompt ShellPrompt. RunInPane sets it; the default
+	// preserves tmux process behavior for tests that need it.
 	FixedShell bool
 }
 
-// ShellPrompt is the prompt every harness pane draws.
-//
-// A pane's shell is fixed by the harness rather than inherited, so what a pane
-// shows is the same on every machine. Without that, a pane opens on whatever
-// the person running the tests has configured -- a prompt carrying a git
-// branch, a path, colours -- and an assertion about the screen passes or fails
-// according to whose laptop ran it.
-//
-// It is exported because it is what a screen read has to account for: the first
-// line of a pane is this, and a test matching loosely against the whole screen
-// should know what is already there.
+// ShellPrompt is the prompt drawn when [ServerOptions.FixedShell] is enabled.
 const ShellPrompt = "tmuxtest$ "
 
 const (
-	// harnessIsolationConfig fixes what a pane runs.
-	//
-	// default-shell and default-command together give every pane a POSIX shell
-	// with no start-up files: ENV is cleared so sh reads none, and PS1 is the
-	// prompt above. tmux still runs an explicit command given to split-window
-	// or new-window in preference to this, so a test that wants its own program
-	// in a pane is unaffected.
+	// An empty private config still prevents tmux from loading user configuration.
 	harnessIsolationConfig = ""
-	// fixedShellConfig is what [ServerOptions.FixedShell] adds.
-	//
-	// default-command is what makes the shell predictable: without it tmux runs
-	// the shell as a login shell, which reads /etc/profile and prints whatever
-	// that system has to say. With it, sh reads no start-up files at all, since
-	// ENV is cleared, and draws ShellPrompt.
+	// fixedShellConfig supplies the default command for panes without one.
 	fixedShellConfig = "set -g default-shell /bin/sh\n" +
 		"set -g default-command \"ENV= PS1='" + ShellPrompt + "' /bin/sh -i\"\n"
 	maxSocketPathBytes  = 103
 	cleanupTimeout      = 3 * time.Second
 	perTestCleanupTries = 3
-	// cleanupRetryGap is how long a failed cleanup waits before trying again.
-	// Long enough for a server that was mid-shutdown to have finished, short
-	// enough that it costs a passing test nothing, since it is only ever waited
-	// after a failure.
+	// cleanupRetryGap gives an in-progress daemon shutdown time to complete.
 	cleanupRetryGap = 100 * time.Millisecond
 )
 
@@ -281,14 +211,7 @@ var failureGuidance = struct {
 	states map[testing.TB]*failureGuidanceState
 }{states: make(map[testing.TB]*failureGuidanceState)}
 
-// suiteEnvironment names the variables redirected into the suite's temporary
-// root while it runs.
-//
-// TMPDIR and GOTMPDIR keep every path the harness derives short enough for a
-// socket. TMUX_TMPDIR is where tmux resolves a socket named rather than pathed,
-// so redirecting it is what keeps a test naming its own socket inside the root
-// as well, instead of in the directory the person running the tests keeps their
-// real sessions in.
+// These variables keep derived paths short and named sockets inside the suite root.
 var suiteEnvironment = []string{"TMPDIR", "GOTMPDIR", "TMUX_TMPDIR"}
 
 // SuiteRootTagVariable names the environment variable that tags a suite's
@@ -297,7 +220,6 @@ var suiteEnvironment = []string{"TMPDIR", "GOTMPDIR", "TMUX_TMPDIR"}
 // to tell its child's root from theirs.
 const SuiteRootTagVariable = "LIBTMUX_SUITE_ROOT_TAG"
 
-// suiteRootPrefix is the prefix a suite's temporary root is created under.
 func suiteRootPrefix() string {
 	if tag := os.Getenv(SuiteRootTagVariable); tag != "" {
 		return "ltg-" + tag + "-"
@@ -749,14 +671,7 @@ func cleanupWithRetries(record *serverRecord, attempts int) error {
 	})
 }
 
-// retryCleanup runs attempt until it succeeds, waiting gap between tries.
-//
-// The wait is the point. What fails here is a server caught partway through
-// shutting down: the process has been told to stop and has not finished, or the
-// socket it owned is still on disk. Trying again immediately asks the same
-// question inside the same moment and gets the same answer, which is why two
-// attempts back to back used to report the same failure twice rather than
-// giving the condition a chance to change.
+// retryCleanup waits between attempts so an in-progress shutdown can complete.
 func retryCleanup(attempts int, gap time.Duration, attempt func() error) error {
 	if attempts < 1 {
 		return errors.New("tmuxtest: cleanup requires at least one attempt")
@@ -806,14 +721,8 @@ func registeredServers() []*serverRecord {
 	return records
 }
 
-// reachableDaemonRemains reports whether any of records may still have a tmux
-// daemon running.
-//
-// The socket inside the suite root is the only way left to reach such a daemon,
-// so the root outlives the run that failed to stop it. A cleanup that failed
-// without leaving anything running -- a tmux that never started, or one already
-// gone -- leaves nothing to reach, and a root kept for it is never read: the
-// failure diagnostic reports paths to nobody by design.
+// reachableDaemonRemains decides whether the suite root must survive for a
+// daemon whose socket is otherwise no longer reachable.
 func reachableDaemonRemains(records []*serverRecord) bool {
 	for _, record := range records {
 		if !record.daemonStopped && record.pid > 0 && processAlive(record.pid) {
