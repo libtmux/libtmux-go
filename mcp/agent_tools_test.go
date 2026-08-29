@@ -811,16 +811,14 @@ func TestTheEnvironmentIsWhatANewPaneWouldGet(t *testing.T) {
 	}
 }
 
-// TestBuffersAreThisServersOwn covers the boundary: tmux's buffer list is where
-// a person's copies land, so a tool that read any buffer by name would be a
-// tool for reading what someone copied.
+// Buffer tools normalize names into the libtmux-mcp- namespace.
 //
 //libtmux:real-tmux
-func TestBuffersAreThisServersOwn(t *testing.T) {
+func TestBuffersStayInTheMCPNamespace(t *testing.T) {
 	session, target, ctx := connect(t)
 	workspace(ctx, t, session, "session_name: buffers\nwindows:\n  - panes:\n      - {}\n")
 
-	// A buffer this server did not create, standing in for a person's copy.
+	// An unprefixed buffer stands in for a person's copy.
 	if err := target.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: "a private copy",
 		Name: new("someones-own"),
@@ -847,11 +845,10 @@ func TestBuffersAreThisServersOwn(t *testing.T) {
 		t.Errorf("read back %q", strings.Join(read.Lines, "\n"))
 	}
 
-	// The foreign buffer is not reachable: its name is prefixed on the way in,
-	// so it addresses a buffer this server would have made rather than that one.
+	// The foreign buffer is not reachable because its name is prefixed on lookup.
 	foreign := call(ctx, t, session, "show_buffer", map[string]any{"name": "someones-own"}, nil)
 	if !foreign.IsError {
-		t.Error("a buffer this server did not create was readable")
+		t.Error("an unprefixed buffer was readable")
 	}
 
 	if result := call(ctx, t, session, "delete_buffer", map[string]any{

@@ -798,7 +798,7 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `delete_buffer`
 
-Remove a buffer this server staged, once nothing else will paste it.
+Remove a buffer in the libtmux-mcp- namespace once nothing else will paste it.
 
 Requires the `tmux-settings` capability.
 
@@ -1613,7 +1613,7 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `show_buffer`
 
-Read back a buffer this server staged.
+Read a buffer in the libtmux-mcp- namespace.
 
 Requires the `content-read` capability.
 

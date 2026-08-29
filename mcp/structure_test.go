@@ -172,3 +172,41 @@ func TestSafetyDescriptionsStateTheirBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestBufferToolDescriptionsStateTheNamespaceBoundary(t *testing.T) {
+	t.Setenv(SafetyEnvironmentVariable, "destructive")
+	t.Setenv(CapabilitiesEnvironmentVariable, "all")
+
+	ctx := context.Background()
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	instance := NewServer(tmux.NewServer(tmux.ServerOptions{SocketName: "buffer-docs-unused"}))
+	if _, err := instance.Connect(ctx, serverTransport, nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = instance.Close() })
+	client := mcp.NewClient(&mcp.Implementation{Name: "buffer-docs", Version: "1"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, tool := range listed.Tools {
+		if tool.Name != "show_buffer" && tool.Name != "delete_buffer" {
+			continue
+		}
+		checked++
+		if !strings.Contains(tool.Description, "libtmux-mcp- namespace") ||
+			strings.Contains(tool.Description, "this server staged") {
+			t.Errorf("%s description overstates buffer provenance: %q", tool.Name, tool.Description)
+		}
+	}
+	if checked != 2 {
+		t.Errorf("checked %d buffer tool descriptions, want 2", checked)
+	}
+}
