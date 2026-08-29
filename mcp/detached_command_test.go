@@ -115,7 +115,9 @@ func TestDetachedAdmissionPrecedesPaneDelivery(t *testing.T) {
 func TestOneJobCompletionDoesNotFinishAnother(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	// A fixed shell keeps the budget measuring job bookkeeping rather than how
+	// long two interactive shells take to start.
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{FixedShell: true})
 	firstSession, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "job-shared-first"})
 	if err != nil {
 		t.Fatal(err)
