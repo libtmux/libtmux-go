@@ -184,6 +184,24 @@ jobs:
             (cd "$module" && go test -count=1 ./...)
           done
 
+  # tmux itself does not run on Windows, but constructor-time executable
+  # resolution follows Windows PATH, PATHEXT, and current-directory rules.
+  # Cross-compilation cannot exercise those filesystem semantics.
+  windows-resolver:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+
+      - name: Test Windows executable resolution
+        run: |
+          go vet ./tmux/internal/tmuxcmd
+          go test -count=1 -run '^TestResolveExecutable' ./tmux/internal/tmuxcmd
+
   # The fuzz targets already carry regression seeds. A bounded job lets the
   # engine keep searching without turning an open-ended fuzz run into a gate
   # that never completes.
