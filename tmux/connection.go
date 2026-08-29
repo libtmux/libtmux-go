@@ -3,6 +3,8 @@ package tmux
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
 )
 
 // ErrConnectionRequiresProcess identifies an operation refused because a
@@ -22,7 +24,8 @@ type ConnectionOptions struct {
 // Connection owns terminal control-mode transport to the exact daemon that
 // materialized its session. Values obtained from Server or Session retain the
 // connection. Closing is terminal: they neither reconnect nor fall back to a
-// subprocess.
+// subprocess. Its lanes are attached tmux clients; closing the last client can
+// trigger tmux's destroy-unattached or exit-unattached policy.
 type Connection struct {
 	server  Server
 	session Session
@@ -48,13 +51,197 @@ func (s Session) OpenControl(
 	if err != nil {
 		return nil, err
 	}
+	return bindControlConnection(s, pool), nil
+}
+
+// NewSessionConnection creates a session with a control-mode client and keeps
+// that same process as the first terminal command lane. Unlike [Server.NewSession],
+// it creates an attached session. If tmux reports a valid session ID before
+// later setup fails, the returned partial session retains that ID and server.
+// Cleanup closes the attached creator, so tmux policy may make the partial
+// session no longer live. KillExisting is rejected because removing an existing
+// session cannot be rolled back if later connection setup fails.
+func (s Server) NewSessionConnection(
+	ctx context.Context,
+	request NewSessionRequest,
+	options ConnectionOptions,
+) (Session, *Connection, error) {
+	if err := ctx.Err(); err != nil {
+		return Session{}, nil, err
+	}
+	if options.Lanes < 0 {
+		return Session{}, nil, invalidServerCommandRequest(
+			"connect",
+			"Lanes",
+			strconv.Itoa(options.Lanes),
+			"must not be negative",
+		)
+	}
+	request = captureNewSessionRequest(request)
+	if request.KillExisting {
+		return Session{}, nil, invalidLifecycleRequest(
+			"KillExisting is not supported by NewSessionConnection",
+		)
+	}
+	if err := validateServerCommandArguments(
+		"new-session",
+		serverCommandArgument{field: "Name", value: request.Name},
+		serverCommandArgument{field: "StartDirectory", value: request.StartDirectory},
+		serverCommandArgument{field: "WindowName", value: request.WindowName},
+		serverCommandArgument{field: "Command", value: request.Command},
+	); err != nil {
+		return Session{}, nil, err
+	}
+	if s.connection != nil {
+		return Session{}, nil, s.connection.routeError(ctx, CommandProcess)
+	}
+	effective, err := newSessionCommandServer(s)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	arguments, fields, err := newSessionConnectionArguments(request)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	if request.Name != "" {
+		existing, lookupErr := effective.sessionNamed(ctx, request.Name)
+		if lookupErr != nil {
+			return Session{}, nil, lookupErr
+		}
+		if existing != "" {
+			return Session{}, nil, fmt.Errorf("%w: %q", ErrSessionExists, request.Name)
+		}
+	}
+	startup, guard, err := effective.guardCommand(arguments, false)
+	if err != nil {
+		return Session{}, nil, err
+	}
+
+	var created Session
+	first, err := effective.startControl(
+		ctx,
+		Session{},
+		controlNotificationsDiscarded,
+		append([]string{"-C"}, startup...),
+		func(client *ControlClient) error {
+			accepted, acceptErr := effective.acceptNewSessionFrame(
+				ctx,
+				client,
+				guard,
+				arguments,
+				fields,
+			)
+			created = accepted
+			if acceptErr != nil {
+				return acceptErr
+			}
+			client.server = accepted.server
+			client.session = created
+			return nil
+		},
+	)
+	if err != nil {
+		return created, nil, err
+	}
+	materialized, err := created.Refresh(ctx)
+	if err != nil {
+		return created, nil, errors.Join(err, first.Close())
+	}
+
+	count := max(options.Lanes, 1)
+	clients := make([]*ControlClient, 1, count)
+	clients[0] = first
+	for range count - 1 {
+		client, openErr := materialized.server.openControl(
+			ctx,
+			materialized,
+			controlNotificationsDiscarded,
+		)
+		if openErr != nil {
+			return materialized, nil, errors.Join(openErr, closeControlClients(clients))
+		}
+		clients = append(clients, client)
+	}
+	_, _, pool := newControlPool(materialized.server, materialized, clients)
+	return materialized, bindControlConnection(materialized, pool), nil
+}
+
+func (s Server) acceptNewSessionFrame(
+	ctx context.Context,
+	client *ControlClient,
+	guard *daemonCommandGuard,
+	arguments []string,
+	fields []formatField,
+) (Session, error) {
+	frame, err := client.nextStartupFrame(ctx, guard)
+	if err != nil {
+		return Session{}, err
+	}
+	if frame.failed {
+		result := controlCommandResults(
+			arguments,
+			[]ControlCommandResult{frame.result(arguments)},
+		)
+		return Session{}, newRedactedCommandError("new-session", result)
+	}
+	rows, err := decodeFormatRecords(frame.rawStdout, Version{}, fields)
+	if err != nil {
+		return Session{}, err
+	}
+	if len(rows) != 1 {
+		return Session{}, fmt.Errorf(
+			"%w: session command printed %d identity lines",
+			ErrInvalidCommandOutput,
+			len(rows),
+		)
+	}
+	identifier, err := requiredSnapshotValue("session", 0, rows[0], "session_id")
+	if err != nil {
+		return Session{}, err
+	}
+	if err = validateStableTarget("session", identifier); err != nil {
+		return Session{}, err
+	}
+	created := Session{server: s, sessionID: SessionID(identifier)}
+	identity, err := decodeSnapshotIdentity("session", 0, rows[0])
+	if err != nil {
+		return created, err
+	}
+	identity, err = s.normalizeSnapshotIdentityVersion(ctx, identity)
+	if err != nil {
+		return created, err
+	}
+	if s.daemon != nil && !sameSnapshotIdentity(*s.daemon, identity) {
+		return created, ErrDaemonReplaced
+	}
+	created.server = s.withDaemon(identity)
+	return created, nil
+}
+
+func newSessionConnectionArguments(
+	request NewSessionRequest,
+) ([]string, []formatField, error) {
+	fields := append(
+		[]formatField{{name: "session_id", scope: formatScopeSession, kind: formatKindSessionID}},
+		snapshotIdentityFields()...,
+	)
+	arguments, err := renderNewSessionArguments(
+		request,
+		formatTemplate(fields),
+		false,
+		"no-output",
+	)
+	return arguments, fields, err
+}
+
+func bindControlConnection(session Session, pool *ControlPool) *Connection {
 	connection := &Connection{pool: pool}
-	bound := s.server
+	bound := session.server
 	bound.connection = connection
 	connection.server = bound
-	connection.session = s.withServer(bound)
+	connection.session = session.withServer(bound)
 	pool.session = connection.session
-	return connection, nil
+	return connection
 }
 
 // Server returns the ordinary server value bound to this connection.

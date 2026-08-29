@@ -55,13 +55,24 @@ func (s Server) OpenControlPool(
 	}
 
 	clients := make([]*ControlClient, 0, count)
-	free := make(chan *ControlClient, count)
 	for range count {
 		client, err := s.openControl(ctx, session, controlNotificationsDiscarded)
 		if err != nil {
 			return Server{}, Session{}, nil, errors.Join(err, closeControlClients(clients))
 		}
 		clients = append(clients, client)
+	}
+	connected, live, pool := newControlPool(s, session, clients)
+	return connected, live, pool, nil
+}
+
+func newControlPool(
+	s Server,
+	session Session,
+	clients []*ControlClient,
+) (Server, Session, *ControlPool) {
+	free := make(chan *ControlClient, len(clients))
+	for _, client := range clients {
 		free <- client
 	}
 	pool := &ControlPool{
@@ -69,7 +80,7 @@ func (s Server) OpenControlPool(
 		free:    free,
 		stopped: make(chan struct{}),
 		drained: make(chan struct{}),
-		live:    count,
+		live:    len(clients),
 	}
 	s.connectionState().coordination().pools.Add(1)
 	connected := s.WithEngine(pool.Engine())
@@ -81,7 +92,7 @@ func (s Server) OpenControlPool(
 	// session they passed in, so the one they go on to use is the one that
 	// carries the connections.
 	pool.session = session.withServer(connected)
-	return connected, pool.session, pool, nil
+	return connected, pool.session, pool
 }
 
 func closeControlClients(clients []*ControlClient) error {

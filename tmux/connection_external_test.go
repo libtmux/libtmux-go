@@ -13,6 +13,13 @@ type openSessionControlSignature func(
 	tmux.ConnectionOptions,
 ) (*tmux.Connection, error)
 
+type newSessionConnectionSignature func(
+	tmux.Server,
+	context.Context,
+	tmux.NewSessionRequest,
+	tmux.ConnectionOptions,
+) (tmux.Session, *tmux.Connection, error)
+
 type connectionServerSignature func(*tmux.Connection) tmux.Server
 
 type connectionSessionSignature func(*tmux.Connection) tmux.Session
@@ -25,6 +32,7 @@ type closeConnectionSignature func(*tmux.Connection) error
 
 func TestConnectionPublicSurfaceCompiles(_ *testing.T) {
 	var _ openSessionControlSignature = tmux.Session.OpenControl
+	var _ newSessionConnectionSignature = tmux.Server.NewSessionConnection
 	var _ connectionServerSignature = (*tmux.Connection).Server
 	var _ connectionSessionSignature = (*tmux.Connection).Session
 	var _ connectionLanesSignature = (*tmux.Connection).Lanes

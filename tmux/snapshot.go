@@ -461,22 +461,30 @@ func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdenti
 	if err != nil {
 		return snapshotServerIdentity{}, err
 	}
-	if isOpenBSDVersionToken(identity.version.String()) {
-		capabilities, versionErr := s.Version(ctx)
-		if versionErr != nil {
-			return snapshotServerIdentity{}, versionErr
-		}
-		if capabilities.String() != identity.version.String() {
-			return snapshotServerIdentity{}, newVersionQueryError(
-				CommandResult{},
-				"tmux binary version differed from server version",
-			)
-		}
-		identity.version.major = capabilities.major
-		identity.version.minor = capabilities.minor
-		identity.version.patch = capabilities.patch
-		identity.version.development = capabilities.development
+	return s.normalizeSnapshotIdentityVersion(ctx, identity)
+}
+
+func (s Server) normalizeSnapshotIdentityVersion(
+	ctx context.Context,
+	identity snapshotServerIdentity,
+) (snapshotServerIdentity, error) {
+	if !isOpenBSDVersionToken(identity.version.String()) {
+		return identity, nil
 	}
+	capabilities, err := s.Version(ctx)
+	if err != nil {
+		return snapshotServerIdentity{}, err
+	}
+	if capabilities.String() != identity.version.String() {
+		return snapshotServerIdentity{}, newVersionQueryError(
+			CommandResult{},
+			"tmux binary version differed from server version",
+		)
+	}
+	identity.version.major = capabilities.major
+	identity.version.minor = capabilities.minor
+	identity.version.patch = capabilities.patch
+	identity.version.development = capabilities.development
 	return identity, nil
 }
 

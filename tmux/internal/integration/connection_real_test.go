@@ -3,12 +3,127 @@ package integration
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+//libtmux:real-tmux
+func TestNewSessionConnectionKeepsTheCreatingControlProcess(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var mutex sync.Mutex
+	var requests [][]string
+	runner := tmux.CommandRunnerFunc(func(
+		ctx context.Context,
+		request tmux.CommandRequest,
+	) (tmux.CommandResult, error) {
+		mutex.Lock()
+		requests = append(requests, append([]string(nil), request.Arguments...))
+		mutex.Unlock()
+		return tmux.SubprocessRunner().Run(ctx, request)
+	})
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		Runner:     runner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = server.Kill(killCtx)
+	})
+
+	created, connection, err := server.NewSessionConnection(
+		ctx,
+		tmux.NewSessionRequest{Name: "bootstrap", Width: 80, Height: 24},
+		tmux.ConnectionOptions{Lanes: 2},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionConnection() error = %v", err)
+	}
+	if created.ID() == "" || connection == nil {
+		t.Fatalf("NewSessionConnection() = (%#v, %#v), want session and connection", created, connection)
+	}
+	if connection.Lanes() != 2 {
+		t.Fatalf("Lanes() = %d, want 2", connection.Lanes())
+	}
+	if name, ok := connection.Session().Name(); !ok || name != "bootstrap" {
+		t.Fatalf("connected session name = (%q, %t), want (bootstrap, true)", name, ok)
+	}
+
+	mutex.Lock()
+	captured := append([][]string(nil), requests...)
+	mutex.Unlock()
+	for _, arguments := range captured {
+		for _, argument := range arguments {
+			if argument == "new-session" {
+				t.Fatalf("session creation escaped to a subprocess: %q", arguments)
+			}
+		}
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	refreshed, err := server.Session(ctx, created.ID())
+	if err != nil {
+		t.Fatalf("created session disappeared after Close(): %v", err)
+	}
+	if name, ok := refreshed.Name(); !ok || name != "bootstrap" {
+		t.Fatalf("created session name after Close() = (%q, %t)", name, ok)
+	}
+}
+
+//libtmux:real-tmux
+func TestNewSessionConnectionRetainsGuardedCreator(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	const attachedMarker = "@libtmux-bootstrap-attached"
+	result, err := server.Cmd(
+		ctx,
+		"set-hook",
+		"-g",
+		"client-attached",
+		"set-option -ag "+attachedMarker+" x",
+	)
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("install client-attached hook = (%#v, %v), want exit 0", result, err)
+	}
+
+	created, connection, err := sessions[0].Server().NewSessionConnection(
+		ctx,
+		tmux.NewSessionRequest{Name: "guarded-bootstrap"},
+		tmux.ConnectionOptions{Lanes: 2},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+	if name, ok := created.Name(); !ok || name != "guarded-bootstrap" {
+		t.Fatalf("created session name = (%q, %t), want guarded-bootstrap", name, ok)
+	}
+	marker, markerErr := server.Cmd(ctx, "show-options", "-gqv", attachedMarker)
+	if markerErr != nil || !slices.Equal(marker.Stdout, []string{"x"}) {
+		t.Fatalf(
+			"client-attached marker = (%#v, %v), want only the second lane to attach",
+			marker,
+			markerErr,
+		)
+	}
+}
 
 //libtmux:real-tmux
 func TestConnectionOwnsTerminalControlLanes(t *testing.T) {
@@ -113,5 +228,59 @@ func TestConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 	}
 	if name, ok := replacement.Name(); !ok || name != "replacement" {
 		t.Fatalf("replacement name = (%q, %t), want (replacement, true)", name, ok)
+	}
+}
+
+//libtmux:real-tmux
+func TestNewSessionConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	stale := sessions[0].Server()
+	result, err := server.Cmd(ctx, "kill-server")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("kill-server = (%#v, %v), want exit 0", result, err)
+	}
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
+		alive, aliveErr := server.IsAlive(ctx)
+		return !alive, aliveErr
+	}); err != nil {
+		t.Fatalf("wait for original daemon exit: %v", err)
+	}
+	if _, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "replacement"},
+	); err != nil {
+		t.Fatalf("start replacement daemon: %v", err)
+	}
+
+	created, connection, err := stale.NewSessionConnection(
+		ctx,
+		tmux.NewSessionRequest{},
+		tmux.ConnectionOptions{},
+	)
+	if connection != nil {
+		_ = connection.Close()
+	}
+	if created.ID() != "" || !errors.Is(err, tmux.ErrDaemonReplaced) {
+		t.Fatalf(
+			"stale NewSessionConnection() = (%#v, %#v, %v), want zero, nil, ErrDaemonReplaced",
+			created,
+			connection,
+			err,
+		)
+	}
+	replacementSessions, sessionsErr := server.Sessions(ctx)
+	if sessionsErr != nil || len(replacementSessions) != 1 {
+		t.Fatalf(
+			"replacement sessions = (%d, %v), want only the existing replacement",
+			len(replacementSessions),
+			sessionsErr,
+		)
 	}
 }

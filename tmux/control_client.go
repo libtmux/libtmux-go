@@ -194,8 +194,7 @@ func (s Server) openControl(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	state, err := s.stateForUse()
-	if err != nil {
+	if _, err := s.stateForUse(); err != nil {
 		return nil, err
 	}
 	if session.ID() == "" {
@@ -228,12 +227,37 @@ func (s Server) openControl(
 		return nil, err
 	}
 	attach = append([]string{"-C"}, attach...)
+	return s.startControl(
+		ctx,
+		session,
+		mode,
+		attach,
+		func(client *ControlClient) error {
+			return client.acceptAttach(ctx, guard)
+		},
+	)
+}
+
+// startControl owns process setup shared by existing-session attachment and
+// first-session creation. accept consumes the startup command's frames and may
+// replace the client's initially unknown server and session provenance.
+func (s Server) startControl(
+	ctx context.Context,
+	session Session,
+	mode controlNotificationMode,
+	startup []string,
+	accept func(*ControlClient) error,
+) (*ControlClient, error) {
+	state, err := s.stateForUse()
+	if err != nil {
+		return nil, err
+	}
 
 	var notifications *controlNotificationQueue
 	if mode == controlNotificationsRetained {
 		notifications = newControlNotificationQueue(defaultControlNotificationLimit)
 	}
-	arguments := s.commandArguments(attach)
+	arguments := s.commandArguments(startup)
 	command := exec.Command(state.config.executable, arguments...)
 	command.Env = slices.Clone(state.config.processEnvironment)
 	command.Dir = state.config.directory
@@ -299,7 +323,7 @@ func (s Server) openControl(
 	go client.waitProcess()
 	go client.readStream()
 
-	if err := client.acceptAttach(ctx, guard); err != nil {
+	if err := accept(client); err != nil {
 		return nil, client.failStartup(err)
 	}
 	client.dispatching.Store(true)
@@ -319,28 +343,41 @@ func (c *ControlClient) acceptAttach(
 	ctx context.Context,
 	guard *daemonCommandGuard,
 ) error {
-	frames := 1
-	if guard != nil {
-		// if-shell completes before the attach command it schedules.
-		frames = 2
+	frame, err := c.nextStartupFrame(ctx, guard)
+	if err != nil {
+		return err
 	}
-	for range frames {
+	if frame.failed {
+		return fmt.Errorf(
+			"control attach failed: %s",
+			strings.TrimSpace(string(frame.rawStdout)),
+		)
+	}
+	return nil
+}
+
+func (c *ControlClient) nextStartupFrame(
+	ctx context.Context,
+	guard *daemonCommandGuard,
+) (controlFrame, error) {
+	if guard != nil {
+		// if-shell completes before the startup command it schedules.
 		frame, err := c.nextFrame(ctx)
 		if err != nil {
-			return err
+			return controlFrame{}, err
 		}
-		if guard != nil && frame.failed &&
+		if frame.failed &&
 			string(frame.rawStdout) == "unknown command: "+guard.failure+"\n" {
-			return ErrDaemonReplaced
+			return controlFrame{}, ErrDaemonReplaced
 		}
 		if frame.failed {
-			return fmt.Errorf(
-				"control attach failed: %s",
+			return controlFrame{}, fmt.Errorf(
+				"control startup guard failed: %s",
 				strings.TrimSpace(string(frame.rawStdout)),
 			)
 		}
 	}
-	return nil
+	return c.nextFrame(ctx)
 }
 
 // Cmd executes one safely encoded tmux command through the control client. It

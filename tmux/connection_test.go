@@ -82,6 +82,94 @@ func TestConnectionBoundServerCannotEscapeToAProcess(t *testing.T) {
 	}
 }
 
+func TestNewSessionConnectionRejectsBeforeStartingTmux(t *testing.T) {
+	t.Parallel()
+
+	for name, test := range map[string]struct {
+		call func() error
+		want error
+	}{
+		"negative lanes": {
+			call: func() error {
+				_, _, err := (Server{}).NewSessionConnection(
+					context.Background(),
+					NewSessionRequest{},
+					ConnectionOptions{Lanes: -1},
+				)
+				return err
+			},
+			want: ErrInvalidServerCommandRequest,
+		},
+		"kill existing": {
+			call: func() error {
+				_, _, err := (Server{}).NewSessionConnection(
+					context.Background(),
+					NewSessionRequest{Name: "existing", KillExisting: true},
+					ConnectionOptions{},
+				)
+				return err
+			},
+			want: ErrInvalidRequest,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := test.call(); !errors.Is(err, test.want) {
+				t.Fatalf("NewSessionConnection() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestNewSessionFrameNormalizesOpenBSDIdentityVersion(t *testing.T) {
+	t.Parallel()
+
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: tmuxcmd.Result{Stdout: []string{"tmux openbsd-7.8"}, ExitCode: 0}},
+		{result: tmuxcmd.Result{Stdout: []string{
+			"display-popup (popup) [-CE]",
+			"confirm-before (confirm) [-by] [-c confirm-key] command",
+			"copy-mode [-deHMqSu] [-t target-pane]",
+		}, ExitCode: 0}},
+	}}
+	server := serverWithRunner(runner)
+	arguments, fields, err := newSessionConnectionArguments(NewSessionRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &ControlClient{
+		frames:  make(chan controlFrame, 1),
+		closing: make(chan struct{}),
+	}
+	client.frames <- controlFrame{rawStdout: framedSnapshotRecord(
+		fields,
+		snapshotRowValues(mustParseVersion(t, "3.7"), map[string]string{
+			"session_id": "$7",
+			"version":    "openbsd-7.8",
+		}),
+	)}
+
+	created, err := server.acceptNewSessionFrame(
+		context.Background(),
+		client,
+		nil,
+		arguments,
+		fields,
+	)
+	if err != nil {
+		t.Fatalf("acceptNewSessionFrame() error = %v", err)
+	}
+	want := mustParseVersion(t, "3.5")
+	if created.ID() != "$7" || created.server.daemon == nil ||
+		created.server.daemon.version.String() != "openbsd-7.8" ||
+		created.server.daemon.version.Compare(want) != 0 {
+		t.Fatalf(
+			"accepted session = %#v, want $7 with raw openbsd-7.8 at %s",
+			created,
+			want,
+		)
+	}
+}
+
 func TestClosedConnectionBoundServerFailsClosed(t *testing.T) {
 	t.Parallel()
 

@@ -110,7 +110,9 @@
 // values return [ErrControlClosed] instead of reconnecting or falling back to
 // subprocesses. Operations whose contract requires a process, including
 // interactive attachment and exact-byte reads, return
-// [ErrConnectionRequiresProcess] while it is open.
+// [ErrConnectionRequiresProcess] while it is open. When no session exists,
+// [Server.NewSessionConnection] creates one and keeps the creating control
+// process as its first lane.
 //
 // The default transport starts one tmux process per command. [Engine] lets a
 // [Server] carry supported commands another way without changing their meaning.

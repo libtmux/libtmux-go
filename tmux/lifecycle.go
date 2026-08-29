@@ -65,14 +65,15 @@ type KillWindowRequest struct {
 	Index *int
 }
 
-// NewSessionRequest configures detached session creation. Its zero value uses
-// tmux defaults. Width and Height are either zero or 1 through 65535;
-// KillExisting requires Name. KillExisting may remove a session before a later
-// creation failure.
+// NewSessionRequest configures session creation. [Server.NewSession] creates a
+// detached session; [Server.NewSessionConnection] creates one attached to its
+// first control-mode lane. Its zero value uses tmux defaults. Width and Height
+// are either zero or 1 through 65535; KillExisting requires Name. KillExisting
+// may remove a session before a later creation failure.
 //
 // [Server.NewSession] copies Environment before validation and retains no map
 // storage; concurrent mutation during the copy is unsafe. Foreground-only tmux
-// flags are not exposed by this detached API.
+// flags are not exposed.
 type NewSessionRequest struct {
 	// Name selects the new session name; empty lets tmux generate one.
 	Name string
@@ -99,6 +100,15 @@ type NewSessionRequest struct {
 // tmux I/O, so a [Plan] can render a session it has not created. The existence
 // probe KillExisting needs is the caller's, not this.
 func newSessionArguments(request NewSessionRequest) ([]string, error) {
+	return renderNewSessionArguments(request, "#{session_id}", true, "")
+}
+
+func renderNewSessionArguments(
+	request NewSessionRequest,
+	format string,
+	detached bool,
+	clientFlags string,
+) ([]string, error) {
 	if request.Width < 0 || request.Width > 65535 {
 		return nil, invalidLifecycleRequest("Width must be between 1 and 65535")
 	}
@@ -119,11 +129,16 @@ func newSessionArguments(request NewSessionRequest) ([]string, error) {
 		return nil, err
 	}
 
-	arguments := []string{"new-session", "-P", "-F#{session_id}"}
+	arguments := []string{"new-session", "-P", "-F" + format}
+	if clientFlags != "" {
+		arguments = append(arguments, "-f"+clientFlags)
+	}
 	if request.Name != "" {
 		arguments = append(arguments, "-s"+request.Name)
 	}
-	arguments = append(arguments, "-d")
+	if detached {
+		arguments = append(arguments, "-d")
+	}
 	if startDirectory != "" {
 		arguments = append(arguments, "-c", startDirectory)
 	}
