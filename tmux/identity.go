@@ -112,7 +112,7 @@ func (c Client) String() string { return fmt.Sprintf("Client(%s)", c.clientName)
 
 func sameMaterializedDaemon(left, right Server) bool {
 	if left.daemon == nil || right.daemon == nil {
-		return left.daemon == nil && right.daemon == nil
+		return left.daemon == nil && right.daemon == nil && left.Equal(right)
 	}
 	return sameSnapshotIdentity(*left.daemon, *right.daemon)
 }

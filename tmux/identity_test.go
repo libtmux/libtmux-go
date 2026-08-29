@@ -268,6 +268,26 @@ func TestModelEqualityIncludesDaemonProvenance(t *testing.T) {
 		first.Clients()[0].Equal(replacement.Clients()[0]) {
 		t.Fatal("equal tmux identifiers from different daemons compare equal")
 	}
+
+	left := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/libtmux-left.sock"},
+		&versionQueueRunner{},
+	)
+	right := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/libtmux-right.sock"},
+		&versionQueueRunner{},
+	)
+	if (Session{server: left, sessionID: "$0"}).Equal(
+		Session{server: right, sessionID: "$0"},
+	) || (Window{server: left, windowID: "@0"}).Equal(
+		Window{server: right, windowID: "@0"},
+	) || (Pane{server: left, paneID: "%0"}).Equal(
+		Pane{server: right, paneID: "%0"},
+	) || (Client{server: left, clientName: "/dev/pts/9"}).Equal(
+		Client{server: right, clientName: "/dev/pts/9"},
+	) {
+		t.Fatal("equal identifiers from partial records on different sockets compare equal")
+	}
 }
 
 type daemonReplacementRunner struct {
