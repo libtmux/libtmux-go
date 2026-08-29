@@ -86,7 +86,7 @@ type runCommandInput struct {
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to run in when paneId is empty"`
 	// Command is the shell command to run.
 	Command string `json:"command" jsonschema:"the shell command to run"`
-	// TimeoutSeconds bounds the wait. Zero uses a default.
+	// TimeoutSeconds bounds the non-detached operation. Zero uses a default.
 	TimeoutSeconds int `json:"timeoutSeconds,omitempty" jsonschema:"how long to wait before giving up"`
 	// SuppressHistory keeps the command out of the shell's history, as it does
 	// for send_keys. It covers the wrapper too, which is this package's own
@@ -132,7 +132,7 @@ type runCommandOutput struct {
 	// be found. What it printed afterwards is still here. capture_since uses
 	// the same word for the same thing.
 	LinesMissed bool `json:"linesMissed,omitempty"`
-	// EffectiveTimeoutSeconds is the wait this call actually ran, which is
+	// EffectiveTimeoutSeconds is the budget this call actually used, which is
 	// what timeoutSeconds asked for unless the server's ceiling was lower. It
 	// is absent from a detached run, which waited for nothing.
 	EffectiveTimeoutSeconds int `json:"effectiveTimeoutSeconds,omitempty"`
@@ -170,11 +170,33 @@ func (t *tools) runCommand(
 			return nil, runCommandOutput{}, err
 		}
 	}
-	started, err := t.startCommand(ctx, request, input, owned)
-	if err != nil {
-		return nil, runCommandOutput{}, err
+	output := runCommandOutput{}
+	runCtx := ctx
+	if !input.Detach {
+		timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
+		output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+		output.TimeoutClamped = clamped
+		var runCancel context.CancelFunc
+		runCtx, runCancel = context.WithTimeout(ctx, timeout)
+		defer runCancel()
+		reporter := newProgressReporter(
+			runCtx, request, timeout, "waiting for the command to finish")
+		defer reporter.stop()
 	}
-	output := runCommandOutput{PaneID: started.paneID.String()}
+	started, err := t.startCommand(runCtx, request, input, owned)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, output, ctx.Err()
+		}
+		if !input.Detach && isOwnWaitDeadline(ctx, runCtx, err) {
+			output.TimedOut = true
+			output.OutputUnavailable = "the effective timeout ended during command setup, " +
+				"before pane output was collected"
+			return nil, output, nil
+		}
+		return nil, output, err
+	}
+	output.PaneID = started.paneID.String()
 
 	// A detached run is finished here. The handle is what collects it, and the
 	// directory it records itself in outlives this call because of that.
@@ -184,23 +206,19 @@ func (t *tools) runCommand(
 		return nil, output, nil
 	}
 	defer func() { _ = os.RemoveAll(started.directory) }()
-	timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
-	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
-	output.TimeoutClamped = clamped
-	waitCtx, waitCancel := context.WithTimeout(ctx, timeout)
-	defer waitCancel()
-	reporter := newProgressReporter(waitCtx, request, timeout, "waiting for the command to finish")
-	defer reporter.stop()
 
-	pane, err := t.tmux(waitCtx).Pane(waitCtx, started.paneID)
+	pane, err := t.tmux(runCtx).Pane(runCtx, started.paneID)
 	if err != nil {
-		if isOwnWaitDeadline(ctx, waitCtx, err) {
+		if ctx.Err() != nil {
+			return nil, output, ctx.Err()
+		}
+		if isOwnWaitDeadline(ctx, runCtx, err) {
 			return finishRunCommandDeadline(*started, output, "")
 		}
 		return nil, output, err
 	}
 	running, _ := pane.Formats().PaneCurrentCommand()
-	return t.awaitCommand(ctx, waitCtx, awaiting{
+	return t.awaitCommand(ctx, runCtx, awaiting{
 		pane:       pane,
 		statusPath: started.statusAt,
 		openedPath: started.openedAt,

@@ -637,7 +637,7 @@ func TestTimedOutGetJobUsesCommitPolling(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestRunCommandCannotOutliveItsEffectiveTimeout(t *testing.T) {
+func TestRunCommandTimeoutIncludesCommandSetup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{FixedShell: true})
@@ -651,40 +651,41 @@ func TestRunCommandCannotOutliveItsEffectiveTimeout(t *testing.T) {
 	}
 	tmuxtest.WaitForShellReady(ctx, t, pane)
 	instance, _, request := connectJobSession(ctx, t, target)
-
-	type result struct {
-		output runCommandOutput
-		err    error
+	command, err := instance.runtime.command(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	returned := make(chan result, 1)
-	startedAt := time.Now()
+	const gate = "run-command-setup-gate"
+	held := make(chan error, 1)
 	go func() {
-		_, output, err := instance.tools.runCommand(ctx, request, runCommandInput{
-			PaneID: pane.ID().String(), Command: "sleep 300", TimeoutSeconds: 2,
-		})
-		returned <- result{output: output, err: err}
+		held <- command.WaitFor(ctx, tmux.WaitForRequest{Channel: gate})
 	}()
-	wallClockLimit := 2500 * time.Millisecond
-	remaining := wallClockLimit - time.Since(startedAt)
-	if remaining < 0 {
-		remaining = 0
+	waitForWaitTextLaneBlock(t, ctx, command)
+	released := make(chan error, 1)
+	time.AfterFunc(1250*time.Millisecond, func() {
+		if err := target.WaitFor(ctx, tmux.WaitForRequest{
+			Channel: gate, Mode: tmux.WaitForModeSignal,
+		}); err != nil {
+			released <- err
+			return
+		}
+		released <- <-held
+	})
+
+	startedAt := time.Now()
+	_, output, err := instance.tools.runCommand(ctx, request, runCommandInput{
+		PaneID: pane.ID().String(), Command: "sleep 300", TimeoutSeconds: 1,
+	})
+	elapsed := time.Since(startedAt)
+	if releaseErr := <-released; releaseErr != nil {
+		t.Fatal(releaseErr)
 	}
-	timer := time.NewTimer(remaining)
-	defer timer.Stop()
-	var got result
-	overran := false
-	select {
-	case got = <-returned:
-	case <-timer.C:
-		overran = true
+	if err != nil || !output.TimedOut ||
+		output.EffectiveTimeoutSeconds != 1 || output.TimeoutClamped {
+		t.Fatalf("timed run_command = (%+v, %v)", output, err)
 	}
-	if overran {
-		got = <-returned
-		t.Fatalf("run_command outlived its effective timeout: (%+v, %v)", got.output, got.err)
-	}
-	if got.err != nil || !got.output.TimedOut ||
-		got.output.EffectiveTimeoutSeconds != 2 || got.output.TimeoutClamped {
-		t.Fatalf("timed run_command = (%+v, %v)", got.output, got.err)
+	if elapsed < 750*time.Millisecond || elapsed > 1500*time.Millisecond {
+		t.Fatalf("run_command elapsed = %v, want whole-operation one-second budget", elapsed)
 	}
 }
 
