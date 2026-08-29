@@ -58,13 +58,14 @@ func TestMaterializedSessionRejectsAliasedDaemonReplacementMarker(t *testing.T) 
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("install replacement alias = (%#v, %v), want exit 0", result, err)
 	}
-	if _, err := stale.Rename(ctx, "must-not-reach-replacement"); !errors.Is(err, tmux.ErrDaemonReplaced) {
-		t.Fatalf("stale Rename() error = %v, want ErrDaemonReplaced", err)
-	}
-	if value, ok, err := server.RawOption(ctx, aliasSideEffect); err != nil {
+	_, renameErr := stale.Rename(ctx, "must-not-reach-replacement")
+	if value, ok, err := server.GlobalSessionScope().RawOption(ctx, aliasSideEffect); err != nil {
 		t.Fatalf("read replacement alias side effect: %v", err)
 	} else if ok {
 		t.Fatalf("replacement alias side effect = %q, want absent", value)
+	}
+	if !errors.Is(renameErr, tmux.ErrDaemonReplaced) {
+		t.Fatalf("stale Rename() error = %v, want ErrDaemonReplaced", renameErr)
 	}
 
 	replacement, err = replacement.Refresh(ctx)
