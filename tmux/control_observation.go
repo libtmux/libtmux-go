@@ -19,8 +19,10 @@ import (
 var ErrPaneObservationLost = errors.New("tmux: pane observation lost")
 
 // PaneObservation is one visible pane baseline followed by the exact control
-// notification stream after that baseline. Create one with
-// [Pane.OpenObservation] and close it when finished. Copies share notification
+// notification stream after that baseline. That stream is the observation's
+// whole control connection, so a caller wanting only this pane's output selects
+// it by identifier. Create one with [Pane.OpenObservation] and close it when
+// finished. Copies share notification
 // reader ownership, terminal loss, and client lifetime; closing one closes them
 // all.
 type PaneObservation struct {
@@ -65,7 +67,8 @@ func (o *PaneObservation) Baseline() []string {
 }
 
 // NextNotification returns the next notification strictly after the pane
-// baseline. Notifications queued before that boundary are discarded.
+// baseline, from the whole connection rather than this pane alone.
+// Notifications queued before that boundary are discarded.
 // Concurrent calls are serialized. Caller context errors and
 // [ControlNotificationError] affect only one call. Explicit close returns an
 // error matching [os.ErrClosed].
