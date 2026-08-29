@@ -211,18 +211,24 @@ func run(chosen options) error {
 				return err
 			}
 		}
-		entry, err := buildEntry(chosen, repository)
+		plan, err := prepareEntry(chosen, repository)
 		if err != nil {
 			return err
 		}
+		defer plan.cleanup()
 		// Preflight dry runs too so they validate the selected build.
 		if !chosen.noPreflight {
-			fmt.Fprintf(os.Stderr, "preflight: %s\n", describe(entry))
-			if reason := preflight(entry); reason != "" {
+			fmt.Fprintf(os.Stderr, "preflight: %s\n", describe(plan.configured))
+			if reason := preflight(plan.executable); reason != "" {
 				return fmt.Errorf("preflight failed, nothing written: %s", reason)
 			}
 		}
-		return useLocal(clients, entry, chosen.dryRun)
+		if !chosen.dryRun {
+			if err := plan.install(); err != nil {
+				return fmt.Errorf("install build: %w", err)
+			}
+		}
+		return useLocal(clients, plan.configured, chosen.dryRun)
 	default:
 		return fmt.Errorf("%q is not a command", chosen.command)
 	}
@@ -268,6 +274,60 @@ func clientNames(clients []client) []string {
 	return names
 }
 
+type entryPlan struct {
+	configured map[string]any
+	executable map[string]any
+	install    func() error
+	cleanup    func()
+}
+
+func prepareEntry(chosen options, repository string) (entryPlan, error) {
+	entry, err := buildEntry(chosen, repository)
+	if err != nil {
+		return entryPlan{}, err
+	}
+	plan := entryPlan{
+		configured: entry,
+		executable: entry,
+		install:    func() error { return nil },
+		cleanup:    func() {},
+	}
+	if chosen.mode != modeBuild || (chosen.dryRun && chosen.noPreflight) {
+		return plan, nil
+	}
+
+	directory, err := os.MkdirTemp("", buildDirectoryName+"-build-")
+	if err != nil {
+		return entryPlan{}, err
+	}
+	plan.cleanup = func() { _ = os.RemoveAll(directory) }
+	temporary := filepath.Join(directory, commandName)
+	if err := compileAt(repository, temporary); err != nil {
+		plan.cleanup()
+		return entryPlan{}, err
+	}
+	executable := make(map[string]any, len(entry))
+	for key, value := range entry {
+		executable[key] = value
+	}
+	executable["command"] = temporary
+	plan.executable = executable
+	if !chosen.dryRun {
+		plan.install = func() error {
+			contents, err := os.ReadFile(temporary)
+			if err != nil {
+				return err
+			}
+			persistent := entryCommand(entry)
+			if err := os.MkdirAll(filepath.Dir(persistent), 0o755); err != nil {
+				return err
+			}
+			return atomicWriteFile(persistent, contents, 0o755)
+		}
+	}
+	return plan, nil
+}
+
 // buildEntry uses go -C for dev mode because not every client honors cwd.
 func buildEntry(chosen options, repository string) (map[string]any, error) {
 	entry := map[string]any{
@@ -288,7 +348,7 @@ func buildEntry(chosen options, repository string) (map[string]any, error) {
 			"run", fmt.Sprintf("%s/cmd/%s@%s", modulePath, commandName, ref),
 		}
 	case modeBuild:
-		binary, err := compile(repository)
+		binary, err := persistentBinaryPath()
 		if err != nil {
 			return nil, err
 		}
@@ -303,22 +363,26 @@ func buildEntry(chosen options, repository string) (map[string]any, error) {
 	return entry, nil
 }
 
-// compile writes a persistent binary because the config outlives this process.
-func compile(repository string) (string, error) {
+func persistentBinaryPath() (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return "", err
 	}
-	binary := filepath.Join(cache, buildDirectoryName, commandName)
+	return filepath.Join(cache, buildDirectoryName, commandName), nil
+}
+
+// compileAt produces the binary that preflight executes. Build mode installs
+// it only after preflight succeeds.
+func compileAt(repository, binary string) error {
 	if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {
-		return "", err
+		return err
 	}
 	build := exec.Command("go", "build", "-o", binary, "./cmd/"+commandName)
 	build.Dir = repository
 	if output, err := build.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("go build failed: %s", strings.TrimSpace(string(output)))
+		return fmt.Errorf("go build failed: %s", strings.TrimSpace(string(output)))
 	}
-	return binary, nil
+	return nil
 }
 
 func entryCommand(entry map[string]any) string {
@@ -381,7 +445,7 @@ func report(clients []client) error {
 func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 	var failures []error
 	for _, c := range clients {
-		_, err := os.Stat(c.path)
+		change, err := planEntryChange(c, entry)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -394,7 +458,7 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 			fmt.Printf("%-12s would run %s\n", c.name, describe(entry))
 			continue
 		}
-		if err := writeEntry(c, entry); err != nil {
+		if err := change.apply(); err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s not changed: %v\n", c.name, err)
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
@@ -408,8 +472,7 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 func revert(clients []client, dryRun bool) error {
 	var failures []error
 	for _, c := range clients {
-		backup := backupPath(c)
-		exists, err := regularFileExists(backup)
+		change, exists, err := planRestore(c)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
@@ -419,51 +482,58 @@ func revert(clients []client, dryRun bool) error {
 			continue
 		}
 		if dryRun {
-			fmt.Printf("%-12s would restore %s\n", c.name, filepath.Base(backup))
+			fmt.Printf("%-12s would restore %s\n", c.name, filepath.Base(change.backup))
 			continue
 		}
-		contents, err := os.ReadFile(backup)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
-			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
-			continue
-		}
-		current, err := os.ReadFile(c.path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
-			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
-			continue
-		}
-		entry, present, err := entryFromContents(c, current)
-		if err != nil || !present || !isLocal(entry) {
-			if err == nil {
-				err = errors.New("the current server entry is no longer the one mcp-swap wrote")
-			}
-			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
-			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
-			continue
-		}
-		restored, err := restoreEntry(c, current, contents)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
-			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
-			continue
-		}
-		if err := atomicWriteFile(c.path, restored, 0o600); err != nil {
+		if err := atomicWriteFile(c.path, change.restored, 0o600); err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
 		// Remove the restored backup so the next swap captures current state.
-		if err := os.Remove(backup); err != nil {
+		if err := os.Remove(change.backup); err != nil {
 			fmt.Fprintf(os.Stderr, "%-12s restored, but its backup remains: %v\n",
 				c.name, err)
 			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
-		fmt.Printf("%-12s restored from %s\n", c.name, filepath.Base(backup))
+		fmt.Printf("%-12s restored from %s\n", c.name, filepath.Base(change.backup))
 	}
 	return errors.Join(failures...)
+}
+
+type restoreChange struct {
+	backup   string
+	restored []byte
+}
+
+func planRestore(c client) (restoreChange, bool, error) {
+	backup := backupPath(c)
+	exists, err := regularFileExists(backup)
+	if err != nil || !exists {
+		return restoreChange{}, exists, err
+	}
+	original, err := os.ReadFile(backup)
+	if err != nil {
+		return restoreChange{}, false, err
+	}
+	current, err := os.ReadFile(c.path)
+	if err != nil {
+		return restoreChange{}, false, err
+	}
+	entry, present, err := entryFromContents(c, current)
+	if err != nil {
+		return restoreChange{}, false, err
+	}
+	if !present || !isLocal(entry) {
+		return restoreChange{}, false,
+			errors.New("the current server entry is no longer the one mcp-swap wrote")
+	}
+	restored, err := restoreEntry(c, current, original)
+	if err != nil {
+		return restoreChange{}, false, err
+	}
+	return restoreChange{backup: backup, restored: restored}, true, nil
 }
 
 // entryOf may decode freely because it never writes the result back.
@@ -570,18 +640,45 @@ func openCodeEntry(entry map[string]any) map[string]any {
 	return flattened
 }
 
+type entryChange struct {
+	target            client
+	original, updated []byte
+}
+
+func planEntryChange(c client, entry map[string]any) (entryChange, error) {
+	contents, err := os.ReadFile(c.path)
+	if err != nil {
+		return entryChange{}, err
+	}
+	updated, err := renderEntryChange(c, contents, entry)
+	if err != nil {
+		return entryChange{}, err
+	}
+	if _, err := regularFileExists(backupPath(c)); err != nil {
+		return entryChange{}, fmt.Errorf("inspect backup: %w", err)
+	}
+	return entryChange{target: c, original: contents, updated: updated}, nil
+}
+
+func (c entryChange) apply() error {
+	return writeBesideBackup(c.target, c.original, c.updated)
+}
+
 // writeEntry splices TOML and JSONC so unrelated settings and comments survive.
 func writeEntry(c client, entry map[string]any) error {
-	contents, err := os.ReadFile(c.path)
+	change, err := planEntryChange(c, entry)
 	if err != nil {
 		return err
 	}
+	return change.apply()
+}
 
+func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte, error) {
 	switch c.format {
 	case formatTOML:
 		table := c.key + "." + serverName
 		if err := validateTOMLPreservation(contents, table); err != nil {
-			return err
+			return nil, err
 		}
 		previous := tomlPreserved(contents, table)
 		if environment := tomlEnvironment(contents, table); environment != nil {
@@ -606,26 +703,28 @@ func writeEntry(c client, entry map[string]any) error {
 			updated = append(append([]byte{}, contents...),
 				[]byte(separator+"\n"+rendered)...)
 		}
-		return writeBesideBackup(c, contents, updated)
+		return updated, nil
 	case formatJSONC:
 		previous := map[string]any{}
-		if decoded, err := readJSONC(contents); err == nil {
-			if existing, found := serverEntry(decoded, c.key); found {
-				previous = existing
-			}
+		decoded, err := readJSONC(contents)
+		if err != nil {
+			return nil, err
+		}
+		if existing, found := serverEntry(decoded, c.key); found {
+			previous = existing
 		}
 		shaped := mergeWithExisting(previous, renderEntry(entry, c.dialect))
 		updated, err := setJSONCMember(contents, []string{c.key, serverName}, shaped, "  ")
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return writeBesideBackup(c, contents, updated)
+		return updated, nil
 	case formatJSON:
 		fallthrough
 	default:
 		var decoded map[string]any
 		if err := json.Unmarshal(contents, &decoded); err != nil {
-			return err
+			return nil, err
 		}
 		servers, _ := decoded[c.key].(map[string]any)
 		if servers == nil {
@@ -636,9 +735,9 @@ func writeEntry(c client, entry map[string]any) error {
 		decoded[c.key] = servers
 		updated, err := json.MarshalIndent(decoded, "", "  ")
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return writeBesideBackup(c, contents, append(updated, '\n'))
+		return append(updated, '\n'), nil
 	}
 }
 

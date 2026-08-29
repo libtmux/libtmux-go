@@ -165,6 +165,9 @@ headers = [
 		format: formatTOML, dialect: dialectStandard,
 	}
 
+	if err := useLocal([]client{target}, devEntry(), true); err == nil {
+		t.Fatal("dry run accepted a multiline value it cannot preserve")
+	}
 	if err := writeEntry(target, devEntry()); err == nil {
 		t.Fatal("swap accepted a multiline value it cannot preserve")
 	}
@@ -288,6 +291,26 @@ func TestAJSONCSwapAddsAfterATrailingComma(t *testing.T) {
 	}
 	if _, err := readJSONC([]byte(readFile(t, path))); err != nil {
 		t.Fatalf("the inserted entry left invalid JSONC: %v\n%s", err, readFile(t, path))
+	}
+}
+
+func TestAJSONCDryRunRefusesMalformedConfiguration(t *testing.T) {
+	t.Parallel()
+	const config = `{"mcp":{"other":{"command":"keep"}}`
+	path := writeTemp(t, "config.jsonc", config)
+	target := client{
+		name: "opencode", path: path, key: "mcp",
+		format: formatJSONC, dialect: dialectOpencode,
+	}
+
+	if err := useLocal([]client{target}, devEntry(), true); err == nil {
+		t.Fatal("dry run accepted malformed JSONC")
+	}
+	if err := writeEntry(target, devEntry()); err == nil {
+		t.Fatal("swap accepted malformed JSONC")
+	}
+	if after := readFile(t, path); after != config {
+		t.Fatalf("refused dry run changed the file: %s", after)
 	}
 }
 
@@ -461,6 +484,9 @@ func TestRevertRefusesAnEntryWithoutItsSwapMarker(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := revert([]client{target}, true); err == nil {
+		t.Fatal("revert dry run accepted an entry without its swap marker")
+	}
 	if err := revert([]client{target}, false); err == nil {
 		t.Fatal("revert accepted an entry that no longer carries its swap marker")
 	}

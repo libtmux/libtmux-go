@@ -24,7 +24,9 @@ codex        uvx --no-config libtmux-mcp==0.1.0a19
 
 ## Pointing them at this checkout
 
-Look before you leap — `--dry-run` prints what would change and writes nothing:
+Look before you leap — `--dry-run` parses and validates the selected
+configurations, prints what would change, and leaves the configurations and
+cached server binary unchanged:
 
 ```console
 $ go -C mcp run ./cmd/mcp-swap use-local --dry-run
