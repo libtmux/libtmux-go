@@ -28,7 +28,7 @@ import (
 //
 // So an argument is either an identifier or a payload. Identifiers are named
 // here and logged as themselves, because "%3" and "below" are what make a
-// record readable and neither is a secret. Everything else is a payload,
+// record readable and neither is user-chosen text. Everything else is a payload,
 // logged as its length and a digest prefix: enough to see that the same thing
 // was sent twice, or that a command was long when it should have been short,
 // and not enough to recover it.
@@ -47,11 +47,10 @@ const AuditEnvironmentVariable = "LIBTMUX_AUDIT"
 
 // auditIdentifiers are the argument names logged as themselves.
 //
-// Each is something tmux itself would show anyone looking at the server: an
-// object's id, a name it is listed under, a direction, a bound, a flag. None
-// carries content a caller supplied for a program to read.
+// Each is a stable object id, a closed choice, a bound, or a flag. User-chosen
+// names remain payloads even though tmux also displays them.
 var auditIdentifiers = map[string]bool{
-	"paneId": true, "windowId": true, "sessionId": true, "sessionName": true,
+	"paneId": true, "windowId": true, "sessionId": true,
 	"direction": true, "scope": true, "layout": true, "withPaneId": true,
 	"maxLines": true, "maxBytes": true, "maxPanes": true, "maxMatchesPerPane": true,
 	"timeoutSeconds": true, "percentage": true, "width": true, "height": true,

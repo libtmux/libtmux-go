@@ -72,6 +72,20 @@ func TestAnUnknownFieldIsTreatedAsAPayload(t *testing.T) {
 	}
 }
 
+func TestUserChosenNamesAreDigested(t *testing.T) {
+	t.Parallel()
+	summary := summarizeArguments(json.RawMessage(`{
+		"sessionName": "customer-secret-project",
+		"paneId": "%3"
+	}`))
+	if _, digested := summary["sessionName"].(map[string]any); !digested {
+		t.Errorf("sessionName was logged in cleartext: %#v", summary["sessionName"])
+	}
+	if summary["paneId"] != "%3" {
+		t.Errorf("stable pane id = %v, want %%3", summary["paneId"])
+	}
+}
+
 // A batch carries its calls' arguments one level down, and they are payloads
 // there too.
 func TestNestedArgumentsAreSummarizedToo(t *testing.T) {
