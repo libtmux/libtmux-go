@@ -153,6 +153,63 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
+  # Linux is the release matrix because it can build every supported tmux
+  # version. One native macOS run covers its different PTYs, process tree,
+  # socket paths, and command diagnostics against Homebrew's current tmux.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.mod
+            examples/go.mod
+            workspace/go.mod
+            mcp/go.mod
+            benchmarks/go.mod
+
+      - name: Install tmux
+        run: brew install tmux
+
+      - name: Test every module on macOS
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          mkdir -p "$TMUX_TMPDIR"
+          for module in . examples workspace mcp benchmarks; do
+            echo "--- $module ---"
+            (cd "$module" && go test -count=1 ./...)
+          done
+
+  # The fuzz targets already carry regression seeds. A bounded job lets the
+  # engine keep searching without turning an open-ended fuzz run into a gate
+  # that never completes.
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+
+      # go test exits zero with only a warning when -fuzz matches no target.
+      # Check the names first so a rename cannot silently disable this job.
+      - name: Verify fuzz targets
+        run: |
+          test "$(go test ./tmux -list '^FuzzDecodeArgsEscapedValueRoundTrip$' | sed -n '1p')" = 'FuzzDecodeArgsEscapedValueRoundTrip'
+          test "$(go test ./tmux -list '^FuzzDecodeFormatRecordsRoundTrip$' | sed -n '1p')" = 'FuzzDecodeFormatRecordsRoundTrip'
+
+      - name: Fuzz escaped option values
+        run: go test ./tmux -run '^$' -fuzz '^FuzzDecodeArgsEscapedValueRoundTrip$' -fuzztime 30s
+
+      - name: Fuzz format records
+        run: go test ./tmux -run '^$' -fuzz '^FuzzDecodeFormatRecordsRoundTrip$' -fuzztime 30s
+
   # The benchmarks module prints the table BENCHMARKS.md holds. Publishing it
   # here is what lets the checked-in numbers be compared against a run other
   # than the one they were recorded on.
