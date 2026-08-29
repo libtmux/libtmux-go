@@ -8,7 +8,13 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const progressShutdownWait = time.Second
+const (
+	// waitProgressInterval is how often a long wait tells the client it is
+	// still waiting. A client that asked for progress on a two-minute wait
+	// should not go two minutes without hearing anything.
+	waitProgressInterval = 2 * time.Second
+	progressShutdownWait = time.Second
+)
 
 // Progress reports elapsed wait time, not command completion. It is sent only
 // when the request carries a progress token.
