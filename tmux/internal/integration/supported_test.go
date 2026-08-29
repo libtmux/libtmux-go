@@ -38,23 +38,29 @@ var documentedNamedFloor = regexp.MustCompile(
 // measurements.
 var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?)\s*$`)
 
-func TestDocumentedTmuxRangesAreTested(t *testing.T) {
-	t.Parallel()
-
-	root := repositoryRoot(t)
+func workflowVersionNames(t *testing.T, root string) []string {
+	t.Helper()
 	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "tests.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	matrix := workflowTmuxVersions.FindSubmatch(workflow)
 	if matrix == nil {
-		t.Fatal("the tests workflow builds no tmux matrix, so the supported " +
-			"range is a claim nothing checks")
+		t.Fatal("the tests workflow builds no tmux matrix")
 	}
-
-	tested := make([]tmux.Version, 0, 8)
+	var versions []string
 	for entry := range strings.SplitSeq(string(matrix[1]), ",") {
-		raw := strings.Trim(strings.TrimSpace(entry), `"'`)
+		versions = append(versions, strings.Trim(strings.TrimSpace(entry), `"'`))
+	}
+	return versions
+}
+
+func TestDocumentedTmuxRangesAreTested(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	tested := make([]tmux.Version, 0, 8)
+	for _, raw := range workflowVersionNames(t, root) {
 		version, err := tmux.ParseVersion(raw)
 		if err != nil {
 			t.Fatalf("the workflow matrix names %q, which is not a tmux version: %v", raw, err)
@@ -200,12 +206,38 @@ func TestMatrixCanRequireItsDirectory(t *testing.T) {
 	}
 }
 
-func TestMatrixCountsEverySelectedCell(t *testing.T) {
+func TestRequiredMatrixRejectsEachMissingSupportedVersion(t *testing.T) {
+	supported := workflowVersionNames(t, repositoryRoot(t))
+	for _, missing := range supported {
+		t.Run(missing, func(t *testing.T) {
+			matrix := t.TempDir()
+			for _, version := range supported {
+				if version != missing {
+					installMatrixTmux(t, matrix, version, "tmux "+version)
+				}
+			}
+			output, err := runMatrixScript(t, matrix,
+				"LIBTMUX_MATRIX_REQUIRED=1",
+				"LIBTMUX_MATRIX_MODULES=.",
+			)
+			if err == nil {
+				t.Fatalf("required matrix without tmux %s reported success:\n%s", missing, output)
+			}
+			want := filepath.Join(missing, "bin", "tmux") + " is not executable"
+			if !strings.Contains(output, want) {
+				t.Fatalf("matrix error did not name missing tmux %s:\n%s", missing, output)
+			}
+		})
+	}
+}
+
+func TestRequiredMatrixCountsEveryExplicitlySelectedCell(t *testing.T) {
 	matrix := t.TempDir()
 	installMatrixTmux(t, matrix, "3.7b", "tmux 3.7b")
 	installMatrixTmux(t, matrix, "3.7c", "tmux 3.7c")
 	log := filepath.Join(t.TempDir(), "go-calls")
 	output, err := runMatrixScript(t, matrix,
+		"LIBTMUX_MATRIX_REQUIRED=1",
 		"LIBTMUX_MATRIX_VERSIONS=3.7b 3.7c",
 		"LIBTMUX_MATRIX_MODULES=. workspace",
 		"LIBTMUX_MATRIX_TEST_LOG="+log,

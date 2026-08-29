@@ -88,9 +88,12 @@ for module in "${modules[@]}"; do
     fi
 done
 
+supported_versions=(3.2a 3.3a 3.4 3.5 3.6 3.7 3.7a 3.7b 3.7c)
 versions=()
 if [[ -n ${LIBTMUX_MATRIX_VERSIONS:-} ]]; then
     read -r -a versions <<< "$LIBTMUX_MATRIX_VERSIONS"
+elif [[ $required == 1 ]]; then
+    versions=("${supported_versions[@]}")
 else
     for candidate in "$matrix"/*/; do
         version=$(basename "$candidate")
