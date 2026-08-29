@@ -786,13 +786,20 @@ func writeEntry(c client, entry map[string]any) error {
 	switch c.format {
 	case formatTOML:
 		table := c.key + "." + serverName
+		if err := validateTOMLPreservation(contents, table); err != nil {
+			return err
+		}
 		previous := tomlPreserved(contents, table)
 		if environment := tomlEnvironment(contents, table); environment != nil {
 			previous["env"] = environment
 		}
 		shaped := mergeWithExisting(previous, renderEntry(entry, c.dialect))
-		rendered := renderTOMLTable(table, shaped)
 		start, end, found := tomlTableSpan(contents, table)
+		header := "[" + table + "]"
+		if found {
+			header = tomlHeaderAt(contents, start)
+		}
+		rendered := renderTOMLTable(table, header, shaped)
 		var updated []byte
 		if found {
 			updated = append(append(append([]byte{}, contents[:start]...),

@@ -81,7 +81,7 @@ func tomlTableSpan(text []byte, table string) (start int, end int, found bool) {
 	offset := 0
 	for index, line := range lines {
 		trimmed := bytes.TrimSpace(line)
-		if !bytes.Equal(trimmed, header) {
+		if !tomlHeaderMatches(trimmed, header) {
 			offset += len(line)
 			continue
 		}
@@ -99,16 +99,148 @@ func tomlTableSpan(text []byte, table string) (start int, end int, found bool) {
 	return 0, 0, false
 }
 
-// mergeWithExisting carries forward what the previous entry said and this one
-// does not.
-//
-// Two things survive a swap. Keys this tool does not write — grok's "enabled",
-// say — because they configure the client's relationship with the server
-// rather than which build it is, and dropping one silently disables a server
-// somebody meant to keep. And the environment, because that is where
-// LIBTMUX_SAFETY and a socket name live: a swap changes which build answers,
-// not how it is configured. The marker this tool sets wins over an old value
-// of the same name, since it describes the swap being made now.
+func tomlHeaderMatches(line, header []byte) bool {
+	if !bytes.HasPrefix(line, header) {
+		return false
+	}
+	remainder := bytes.TrimSpace(line[len(header):])
+	return len(remainder) == 0 || remainder[0] == '#'
+}
+
+func tomlHeaderAt(text []byte, start int) string {
+	end := bytes.IndexByte(text[start:], '\n')
+	if end < 0 {
+		end = len(text) - start
+	}
+	return strings.TrimSuffix(string(text[start:start+end]), "\r")
+}
+
+// validateTOMLPreservation refuses syntax the line-oriented writer would drop.
+func validateTOMLPreservation(text []byte, table string) error {
+	start, end, found := tomlTableSpan(text, table)
+	if !found {
+		return nil
+	}
+	baseHeader := []byte("[" + table + "]")
+	environmentHeader := []byte("[" + table + ".env]")
+	section := ""
+	lines := strings.Split(string(text[start:end]), "\n")
+	for index := 0; index < len(lines); index++ {
+		trimmed := strings.TrimSpace(lines[index])
+		switch {
+		case trimmed == "" || strings.HasPrefix(trimmed, "#"):
+			continue
+		case strings.HasPrefix(trimmed, "["):
+			switch {
+			case tomlHeaderMatches([]byte(trimmed), baseHeader):
+				section = "entry"
+			case tomlHeaderMatches([]byte(trimmed), environmentHeader):
+				section = "environment"
+			default:
+				return fmt.Errorf("cannot preserve child table %q under %s", trimmed, table)
+			}
+			continue
+		}
+
+		name, value, ok := strings.Cut(trimmed, "=")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		raw := strings.TrimSpace(value)
+		if tomlValueComplete(raw) {
+			continue
+		}
+		for !tomlValueComplete(raw) && index+1 < len(lines) {
+			index++
+			raw += "\n" + lines[index]
+		}
+		if !tomlValueComplete(raw) {
+			return fmt.Errorf("cannot parse multiline TOML value %q in %s", name, table)
+		}
+		if section == "entry" && (name == "command" || name == "args") {
+			continue
+		}
+		return fmt.Errorf("cannot preserve multiline TOML value %q in %s", name, table)
+	}
+	return nil
+}
+
+func tomlValueComplete(value string) bool {
+	if strings.TrimSpace(value) == "" {
+		return false
+	}
+	const (
+		quoteNone = iota
+		quoteBasic
+		quoteLiteral
+		quoteMultilineBasic
+		quoteMultilineLiteral
+	)
+	quote, square, curly := quoteNone, 0, 0
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		switch quote {
+		case quoteBasic:
+			if character == '\\' {
+				index++
+			} else if character == '"' {
+				quote = quoteNone
+			}
+			continue
+		case quoteLiteral:
+			if character == '\'' {
+				quote = quoteNone
+			}
+			continue
+		case quoteMultilineBasic:
+			if character == '\\' {
+				index++
+			} else if strings.HasPrefix(value[index:], `"""`) {
+				quote = quoteNone
+				index += 2
+			}
+			continue
+		case quoteMultilineLiteral:
+			if strings.HasPrefix(value[index:], `'''`) {
+				quote = quoteNone
+				index += 2
+			}
+			continue
+		}
+
+		switch {
+		case character == '#':
+			if newline := strings.IndexByte(value[index:], '\n'); newline >= 0 {
+				index += newline
+			} else {
+				index = len(value)
+			}
+		case strings.HasPrefix(value[index:], `"""`):
+			quote = quoteMultilineBasic
+			index += 2
+		case strings.HasPrefix(value[index:], `'''`):
+			quote = quoteMultilineLiteral
+			index += 2
+		case character == '"':
+			quote = quoteBasic
+		case character == '\'':
+			quote = quoteLiteral
+		case character == '[':
+			square++
+		case character == ']':
+			square--
+		case character == '{':
+			curly++
+		case character == '}':
+			curly--
+		}
+	}
+	return quote == quoteNone && square == 0 && curly == 0
+}
+
+// mergeWithExisting preserves unknown client keys and environment while fresh
+// command fields win.
 func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	merged := map[string]any{}
 	maps.Copy(merged, fresh)
@@ -143,18 +275,18 @@ func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	return merged
 }
 
-// tomlPreserved reports the lines of a table this tool would not rewrite.
 func tomlPreserved(text []byte, table string) map[string]any {
 	start, end, found := tomlTableSpan(text, table)
 	if !found {
 		return nil
 	}
 	kept := map[string]any{}
-	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
+	lines := strings.Split(string(text[start:end]), "\n")
+	for index := 0; index < len(lines); index++ {
+		line := lines[index]
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
-			// A sub-table header; its keys are the environment, read
-			// separately so they merge rather than round-trip as raw text.
+			// Read environment sub-tables separately.
 			if trimmed != "["+table+"]" {
 				break
 			}
@@ -165,10 +297,15 @@ func tomlPreserved(text []byte, table string) map[string]any {
 			continue
 		}
 		name = strings.TrimSpace(name)
+		raw := strings.TrimSpace(value)
+		for !tomlValueComplete(raw) && index+1 < len(lines) {
+			index++
+			raw += "\n" + lines[index]
+		}
 		switch name {
 		case "command", "args", "":
 		default:
-			kept[name] = tomlRawValue(strings.TrimSpace(value))
+			kept[name] = tomlRawValue(raw)
 		}
 	}
 	return kept
@@ -204,14 +341,11 @@ func tomlEnvironment(text []byte, table string) map[string]any {
 	return environment
 }
 
-// renderTOMLTable writes one server entry as TOML.
-//
-// Only the value shapes this tool writes are handled — strings, string lists,
-// and a flat environment — because those are what a server entry is. Anything
-// else in the file is never re-rendered, only skipped over.
-func renderTOMLTable(table string, entry map[string]any) string {
+// renderTOMLTable renders only supported entry values; unrelated file content
+// is spliced around it.
+func renderTOMLTable(table, header string, entry map[string]any) string {
 	var out strings.Builder
-	fmt.Fprintf(&out, "[%s]\n", table)
+	fmt.Fprintln(&out, header)
 
 	if command, ok := entry["command"].(string); ok {
 		fmt.Fprintf(&out, "command = %s\n", tomlString(command))

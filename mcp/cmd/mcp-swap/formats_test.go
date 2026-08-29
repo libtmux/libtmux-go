@@ -126,6 +126,102 @@ COMMENTED = "readonly" # why this is restricted
 	}
 }
 
+func TestATOMLSwapRecognizesACommentedTableHeader(t *testing.T) {
+	t.Parallel()
+	const config = `[mcp_servers.tmux] # selected for local development
+command = "old"
+enabled = true
+`
+	path := writeTemp(t, "config.toml", config)
+	target := client{
+		name: "codex", path: path, key: "mcp_servers",
+		format: formatTOML, dialect: dialectStandard,
+	}
+
+	if err := writeEntry(target, devEntry()); err != nil {
+		t.Fatal(err)
+	}
+	after := readFile(t, path)
+	if count := strings.Count(after, "[mcp_servers.tmux]"); count != 1 {
+		t.Fatalf("swap wrote %d tmux tables, want one:\n%s", count, after)
+	}
+	if !strings.Contains(after, "# selected for local development") {
+		t.Fatalf("swap dropped the table-header comment:\n%s", after)
+	}
+}
+
+func TestATOMLSwapRefusesAnUnknownMultilineValueWithoutWriting(t *testing.T) {
+	t.Parallel()
+	const config = `[mcp_servers.tmux]
+command = "old"
+headers = [
+  "authorization",
+  "traceparent",
+]
+`
+	path := writeTemp(t, "config.toml", config)
+	target := client{
+		name: "codex", path: path, key: "mcp_servers",
+		format: formatTOML, dialect: dialectStandard,
+	}
+
+	if err := writeEntry(target, devEntry()); err == nil {
+		t.Fatal("swap accepted a multiline value it cannot preserve")
+	}
+	if after := readFile(t, path); after != config {
+		t.Fatalf("refused swap changed the file:\n--- want ---\n%s\n--- got ---\n%s", config, after)
+	}
+}
+
+func TestATOMLSwapReplacesMultilineArgumentsWithoutReadingTheirRowsAsKeys(t *testing.T) {
+	t.Parallel()
+	const config = `[mcp_servers.tmux]
+command = "old"
+args = [
+  "--env",
+  "KEY=value",
+]
+`
+	path := writeTemp(t, "config.toml", config)
+	target := client{
+		name: "codex", path: path, key: "mcp_servers",
+		format: formatTOML, dialect: dialectStandard,
+	}
+
+	if err := writeEntry(target, devEntry()); err != nil {
+		t.Fatal(err)
+	}
+	after := readFile(t, path)
+	if strings.Contains(after, `"KEY = value"`) || strings.Contains(after, `"KEY =`) {
+		t.Fatalf("array element became a table key:\n%s", after)
+	}
+	if !strings.Contains(after, `args = ["-C", "/repo/golang/mcp", "run", "./cmd/libtmux-mcp"]`) {
+		t.Fatalf("new arguments were not written:\n%s", after)
+	}
+}
+
+func TestATOMLSwapRefusesAnUnknownChildTableWithoutWriting(t *testing.T) {
+	t.Parallel()
+	const config = `[mcp_servers.tmux]
+command = "old"
+
+[mcp_servers.tmux.headers]
+authorization = "secret"
+`
+	path := writeTemp(t, "config.toml", config)
+	target := client{
+		name: "codex", path: path, key: "mcp_servers",
+		format: formatTOML, dialect: dialectStandard,
+	}
+
+	if err := writeEntry(target, devEntry()); err == nil {
+		t.Fatal("swap accepted a child table it cannot preserve")
+	}
+	if after := readFile(t, path); after != config {
+		t.Fatalf("refused swap changed the file:\n--- want ---\n%s\n--- got ---\n%s", config, after)
+	}
+}
+
 const opencodeConfig = `{
   // Why this file looks the way it does.
   "$schema": "https://opencode.ai/config.json",
