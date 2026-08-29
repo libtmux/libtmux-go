@@ -304,6 +304,49 @@ func TestASecondSwapBacksUpWhatIsThereBySecondTime(t *testing.T) {
 	}
 }
 
+func TestWriteRefusesAnUninspectableBackup(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	target := client{name: "loop", path: filepath.Join(directory, "config.json")}
+	const original = `{"keep":true}`
+	if err := os.WriteFile(target.path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backup := backupPath(target)
+	if err := os.Symlink(filepath.Base(backup), backup); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeBesideBackup(target, []byte(original), []byte(`{"changed":true}`)); err == nil {
+		t.Fatal("write accepted a backup path it could not inspect")
+	}
+	if got := readFile(t, target.path); got != original {
+		t.Fatalf("write changed the config without a usable backup: %s", got)
+	}
+}
+
+func TestDryRunsReportUninspectablePaths(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	config := filepath.Join(directory, "config.json")
+	if err := os.Symlink(filepath.Base(config), config); err != nil {
+		t.Fatal(err)
+	}
+	target := client{name: "config-loop", path: config}
+	if err := useLocal([]client{target}, devEntry(), true); err == nil {
+		t.Error("use-local dry-run accepted a config path it could not inspect")
+	}
+
+	revertTarget := client{name: "backup-loop", path: filepath.Join(directory, "other.json")}
+	backup := backupPath(revertTarget)
+	if err := os.Symlink(filepath.Base(backup), backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := revert([]client{revertTarget}, true); err == nil {
+		t.Error("revert dry-run accepted a backup path it could not inspect")
+	}
+}
+
 // TestOneUnwritableClientDoesNotStopTheRest covers a swap across several CLIs
 // where one of them has a config this cannot edit.
 //

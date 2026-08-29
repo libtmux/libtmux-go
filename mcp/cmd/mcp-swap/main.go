@@ -548,7 +548,13 @@ func report(clients []client) error {
 func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 	var failures []error
 	for _, c := range clients {
-		if _, err := os.Stat(c.path); errors.Is(err, os.ErrNotExist) {
+		_, err := os.Stat(c.path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%-12s not changed: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
 		if dryRun {
@@ -574,7 +580,13 @@ func revert(clients []client, dryRun bool) error {
 	var failures []error
 	for _, c := range clients {
 		backup := backupPath(c)
-		if _, err := os.Stat(backup); errors.Is(err, os.ErrNotExist) {
+		_, err := os.Stat(backup)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%-12s not restored: %v\n", c.name, err)
+			failures = append(failures, fmt.Errorf("%s: %w", c.name, err))
 			continue
 		}
 		if dryRun {
@@ -816,10 +828,13 @@ func writeEntry(c client, entry map[string]any) error {
 // which is the whole point of a tool that switches one entry back and forth.
 func writeBesideBackup(c client, original, updated []byte) error {
 	backup := backupPath(c)
-	if _, err := os.Stat(backup); errors.Is(err, os.ErrNotExist) {
+	_, err := os.Stat(backup)
+	if errors.Is(err, os.ErrNotExist) {
 		if err := os.WriteFile(backup, original, 0o600); err != nil {
 			return err
 		}
+	} else if err != nil {
+		return fmt.Errorf("inspect backup: %w", err)
 	}
 	return os.WriteFile(c.path, updated, 0o600)
 }
