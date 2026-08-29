@@ -359,7 +359,14 @@ func TestRunCommandPreservesPaneShellErrexit(t *testing.T) {
 					if dead, _ := fresh.Dead(); dead {
 						t.Fatal("pane shell exited")
 					}
-					tmuxtest.TypeAndWait(ctx, t, fresh, "printf 'SHELL-ALIVE\\n'")
+					wantErrexit := "off"
+					if enabled {
+						wantErrexit = "on"
+					}
+					tmuxtest.TypeAndWait(ctx, t, fresh,
+						"case $- in *e*) printf 'PARENT-ERREXIT=on\\n' ;; "+
+							"*) printf 'PARENT-ERREXIT=off\\n' ;; esac")
+					tmuxtest.WaitForLine(ctx, t, fresh, "PARENT-ERREXIT="+wantErrexit)
 				})
 			}
 		}
@@ -400,6 +407,14 @@ func TestRunCommandRejectsFishBeforeDelivery(t *testing.T) {
 			}
 			if elapsed := time.Since(started); elapsed >= time.Second {
 				t.Fatalf("fish refusal took %v, want pre-delivery failure", elapsed)
+			}
+			tmuxtest.TypeAndWait(ctx, t, pane, "true")
+			lines, captureErr := pane.Capture(ctx, tmux.CapturePaneRequest{})
+			if captureErr != nil {
+				t.Fatalf("capture fish pane after refusal: %v", captureErr)
+			}
+			if strings.Contains(strings.Join(lines, "\n"), "MUST-NOT-RUN") {
+				t.Fatalf("fish refusal delivered the command to the pane: %q", lines)
 			}
 		})
 	}
