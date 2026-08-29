@@ -3,17 +3,31 @@ package tmux
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
+
+func TestConnectionDoesNotRetainLegacyControlPool(t *testing.T) {
+	t.Parallel()
+
+	connectionType := reflect.TypeFor[Connection]()
+	legacyPoolType := reflect.TypeFor[*ControlPool]()
+	for index := range connectionType.NumField() {
+		field := connectionType.Field(index)
+		if field.Type == legacyPoolType {
+			t.Fatalf("Connection field %q retains legacy ControlPool", field.Name)
+		}
+	}
+}
 
 func TestConnectionBoundServerCannotEscapeToAProcess(t *testing.T) {
 	t.Parallel()
 
 	runner := &versionQueueRunner{}
 	server := serverWithRunner(runner)
-	pool := &ControlPool{
+	pool := &controlLanePool{
 		stopped: make(chan struct{}),
 		drained: make(chan struct{}),
 	}
@@ -95,6 +109,42 @@ func TestServerReportsConnectionBinding(t *testing.T) {
 	connection.server = bound
 	if !bound.ConnectionBound() {
 		t.Fatal("connection server does not report its terminal binding")
+	}
+}
+
+func TestControlLaneCountValidationNamesTheCallerField(t *testing.T) {
+	t.Parallel()
+
+	runner := &versionQueueRunner{}
+	server := serverWithRunner(runner)
+	session := Session{server: server, sessionID: "$1"}
+	connection, err := session.OpenControl(
+		context.Background(),
+		ConnectionOptions{Lanes: -1},
+	)
+	if connection != nil {
+		_ = connection.Close()
+		t.Fatal("OpenControl() returned a connection for negative lanes")
+	}
+	var requestError *ServerCommandRequestError
+	if !errors.As(err, &requestError) || requestError.Field != "Lanes" {
+		t.Fatalf("OpenControl() error = %#v, want rejected Lanes field", err)
+	}
+	if calls := runner.callCount(); calls != 0 {
+		t.Fatalf("runner calls = %d, want validation before tmux I/O", calls)
+	}
+
+	_, _, pool, err := server.OpenControlPool(
+		context.Background(),
+		session,
+		ControlPoolRequest{Connections: -1},
+	)
+	if pool != nil {
+		_ = pool.Close()
+		t.Fatal("OpenControlPool() returned a pool for negative connections")
+	}
+	if !errors.As(err, &requestError) || requestError.Field != "Connections" {
+		t.Fatalf("OpenControlPool() error = %#v, want rejected Connections field", err)
 	}
 }
 
@@ -247,7 +297,7 @@ func TestClosedConnectionBoundServerFailsClosed(t *testing.T) {
 	server := serverWithRunner(runner)
 	stopped := make(chan struct{})
 	close(stopped)
-	connection := &Connection{pool: &ControlPool{stopped: stopped}}
+	connection := &Connection{pool: &controlLanePool{stopped: stopped}}
 	server.connection = connection
 	connection.server = server
 
@@ -263,7 +313,7 @@ func TestClosedConnectionBoundServerFailsClosed(t *testing.T) {
 	}
 }
 
-func TestControlPoolNeverLeasesAfterStop(t *testing.T) {
+func TestControlLanePoolNeverLeasesAfterStop(t *testing.T) {
 	t.Parallel()
 
 	for range 100 {
@@ -271,7 +321,7 @@ func TestControlPoolNeverLeasesAfterStop(t *testing.T) {
 		close(stopped)
 		free := make(chan *ControlClient, 1)
 		free <- &ControlClient{}
-		pool := &ControlPool{
+		pool := &controlLanePool{
 			free:    free,
 			stopped: stopped,
 			drained: make(chan struct{}),

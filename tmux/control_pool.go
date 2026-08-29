@@ -48,41 +48,11 @@ func (s Server) OpenControlPool(
 			"must not be negative",
 		)
 	}
-	count := max(request.Connections, 1)
-
-	if _, err := s.Version(ctx); err != nil {
+	lanes, err := s.openControlLanePool(ctx, session, request.Connections)
+	if err != nil {
 		return Server{}, Session{}, nil, err
 	}
-
-	clients := make([]*ControlClient, 0, count)
-	for range count {
-		client, err := s.openControl(ctx, session, controlNotificationsDiscarded)
-		if err != nil {
-			return Server{}, Session{}, nil, errors.Join(err, closeControlClients(clients))
-		}
-		clients = append(clients, client)
-	}
-	connected, live, pool := newControlPool(s, session, clients)
-	return connected, live, pool, nil
-}
-
-func newControlPool(
-	s Server,
-	session Session,
-	clients []*ControlClient,
-) (Server, Session, *ControlPool) {
-	free := make(chan *ControlClient, len(clients))
-	for _, client := range clients {
-		free <- client
-	}
-	pool := &ControlPool{
-		clients: clients,
-		free:    free,
-		stopped: make(chan struct{}),
-		drained: make(chan struct{}),
-		live:    len(clients),
-	}
-	s.connectionState().coordination().pools.Add(1)
+	pool := &ControlPool{pool: lanes}
 	connected := s.WithEngine(pool.Engine())
 	if session.server.daemon != nil {
 		connected = connected.withDaemon(*session.server.daemon)
@@ -92,7 +62,47 @@ func newControlPool(
 	// session they passed in, so the one they go on to use is the one that
 	// carries the connections.
 	pool.session = session.withServer(connected)
-	return connected, pool.session, pool
+	return connected, pool.session, pool, nil
+}
+
+func (s Server) openControlLanePool(
+	ctx context.Context,
+	session Session,
+	connections int,
+) (*controlLanePool, error) {
+	count := max(connections, 1)
+
+	if _, err := s.Version(ctx); err != nil {
+		return nil, err
+	}
+
+	clients := make([]*ControlClient, 0, count)
+	for range count {
+		client, err := s.openControl(ctx, session, controlNotificationsDiscarded)
+		if err != nil {
+			return nil, errors.Join(err, closeControlClients(clients))
+		}
+		clients = append(clients, client)
+	}
+	return newControlLanePool(s, clients), nil
+}
+
+func newControlLanePool(s Server, clients []*ControlClient) *controlLanePool {
+	free := make(chan *ControlClient, len(clients))
+	for _, client := range clients {
+		free <- client
+	}
+	coordination := s.connectionState().coordination()
+	pool := &controlLanePool{
+		clients:      clients,
+		free:         free,
+		stopped:      make(chan struct{}),
+		drained:      make(chan struct{}),
+		coordination: coordination,
+		live:         len(clients),
+	}
+	coordination.pools.Add(1)
+	return pool
 }
 
 func closeControlClients(clients []*ControlClient) error {
@@ -111,22 +121,12 @@ func closeControlClients(clients []*ControlClient) error {
 // done. Every method is safe for concurrent use.
 type ControlPool struct {
 	session Session
-	clients []*ControlClient
-
-	free    chan *ControlClient
-	stopped chan struct{}
-	drained chan struct{}
-
-	stopOnce sync.Once
-
-	mu      sync.Mutex
-	live    int
-	failure error
+	pool    *controlLanePool
 }
 
 // Engine returns the pool's [Engine] for use with [Server.WithEngine]. Records
 // obtained before selecting it retain their original server handle.
-func (p *ControlPool) Engine() Engine { return poolEngine{pool: p} }
+func (p *ControlPool) Engine() Engine { return poolEngine{pool: p.pool} }
 
 // Session returns the attached session on the connected handle.
 func (p *ControlPool) Session() Session { return p.session }
@@ -134,17 +134,42 @@ func (p *ControlPool) Session() Session { return p.session }
 // Connections reports how many connections have not been retired after a
 // connection failure. It starts at the requested count, or one when
 // [ControlPoolRequest.Connections] is zero. Closing the pool does not change it.
-func (p *ControlPool) Connections() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.live
-}
+func (p *ControlPool) Connections() int { return p.pool.connections() }
 
 // CloseContext stops every connection and waits within ctx. It is idempotent
 // and retryable for the reason [ControlClient.CloseContext] is: a context that
 // ends while waiting abandons the wait rather than the shutdown, so a later
 // call resumes waiting for the same processes.
 func (p *ControlPool) CloseContext(ctx context.Context) error {
+	return p.pool.closeContext(ctx)
+}
+
+// Close stops every connection on a bounded context of its own. It is safe to
+// call concurrently and more than once, so it suits defer.
+func (p *ControlPool) Close() error { return p.pool.close() }
+
+type controlLanePool struct {
+	clients []*ControlClient
+
+	free    chan *ControlClient
+	stopped chan struct{}
+	drained chan struct{}
+
+	coordination *serverShared
+	stopOnce     sync.Once
+
+	mu      sync.Mutex
+	live    int
+	failure error
+}
+
+func (p *controlLanePool) connections() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.live
+}
+
+func (p *controlLanePool) closeContext(ctx context.Context) error {
 	p.stop()
 	failures := make([]error, 0, len(p.clients))
 	for _, client := range p.clients {
@@ -153,23 +178,21 @@ func (p *ControlPool) CloseContext(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 
-// Close stops every connection on a bounded context of its own. It is safe to
-// call concurrently and more than once, so it suits defer.
-func (p *ControlPool) Close() error {
+func (p *controlLanePool) close() error {
 	p.stop()
 	return closeControlClients(p.clients)
 }
 
-func (p *ControlPool) stop() {
+func (p *controlLanePool) stop() {
 	p.stopOnce.Do(func() {
 		close(p.stopped)
-		p.session.server.connectionState().coordination().pools.Add(-1)
+		p.coordination.pools.Add(-1)
 	})
 }
 
 // run carries one command on an exclusive connection. It must forward
 // commandList so a list is not reinterpreted as arguments to its first command.
-func (p *ControlPool) run(
+func (p *controlLanePool) run(
 	ctx context.Context,
 	arguments []string,
 	commandList bool,
@@ -186,7 +209,7 @@ func (p *ControlPool) run(
 	return controlCommandResults(arguments, results), nil
 }
 
-func (p *ControlPool) acquire(ctx context.Context) (*ControlClient, error) {
+func (p *controlLanePool) acquire(ctx context.Context) (*ControlClient, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -227,7 +250,7 @@ func (p *ControlPool) acquire(ctx context.Context) (*ControlClient, error) {
 //
 // Retired connections are not replaced or retried because delivery is ambiguous
 // and retrying could repeat a mutation.
-func (p *ControlPool) release(client *ControlClient, err error) {
+func (p *controlLanePool) release(client *ControlClient, err error) {
 	if err == nil || connectionSurvives(err) {
 		p.free <- client
 		return
@@ -256,7 +279,7 @@ func connectionSurvives(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
-func (p *ControlPool) drainError() error {
+func (p *controlLanePool) drainError() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.failure != nil {
@@ -266,7 +289,7 @@ func (p *ControlPool) drainError() error {
 }
 
 type poolEngine struct {
-	pool *ControlPool
+	pool *controlLanePool
 }
 
 // Supports accepts server commands while the pool is open. After closure it

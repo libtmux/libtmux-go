@@ -33,7 +33,7 @@ type ConnectionOptions struct {
 type Connection struct {
 	server  Server
 	session Session
-	pool    *ControlPool
+	pool    *controlLanePool
 }
 
 // ConnectionBound reports whether this handle retains terminal transport
@@ -56,12 +56,18 @@ func (s Session) OpenControl(
 	if s.server.connection != nil {
 		return nil, s.server.connection.routeError(ctx, CommandProcess)
 	}
+	if options.Lanes < 0 {
+		return nil, invalidServerCommandRequest(
+			"connect",
+			"Lanes",
+			strconv.Itoa(options.Lanes),
+			"must not be negative",
+		)
+	}
 	if err := s.server.RequireVersion(ctx, controlNoDetachVersion36); err != nil {
 		return nil, err
 	}
-	_, _, pool, err := s.server.OpenControlPool(ctx, s, ControlPoolRequest{
-		Connections: options.Lanes,
-	})
+	pool, err := s.server.openControlLanePool(ctx, s, options.Lanes)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +187,7 @@ func (s Server) NewSessionConnection(
 		}
 		clients = append(clients, client)
 	}
-	_, _, pool := newControlPool(materialized.server, materialized, clients)
+	pool := newControlLanePool(materialized.server, clients)
 	return materialized, bindControlConnection(materialized, pool), nil
 }
 
@@ -253,13 +259,12 @@ func newSessionConnectionArguments(
 	return arguments, fields, err
 }
 
-func bindControlConnection(session Session, pool *ControlPool) *Connection {
+func bindControlConnection(session Session, pool *controlLanePool) *Connection {
 	connection := &Connection{pool: pool}
 	bound := session.server
 	bound.connection = connection
 	connection.server = bound
 	connection.session = session.withServer(bound)
-	pool.session = connection.session
 	return connection
 }
 
@@ -283,7 +288,7 @@ func (c *Connection) CloseContext(ctx context.Context) error {
 	if c == nil || c.pool == nil {
 		return ErrControlClosed
 	}
-	return c.pool.CloseContext(ctx)
+	return c.pool.closeContext(ctx)
 }
 
 // Close terminally closes every lane on bounded internal contexts. It is safe
@@ -292,7 +297,7 @@ func (c *Connection) Close() error {
 	if c == nil || c.pool == nil {
 		return ErrControlClosed
 	}
-	return c.pool.Close()
+	return c.pool.close()
 }
 
 func (c *Connection) routeError(ctx context.Context, kind CommandKind) error {
