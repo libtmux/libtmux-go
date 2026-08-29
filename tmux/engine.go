@@ -10,14 +10,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// CommandKind names what one tmux request needs from the transport that runs
-// it. A [Server] asks its [Engine] whether it supports a request's kind and
-// normally falls back to a tmux process when it does not. A handle using
-// [EngineFallbackReject] refuses that fallback instead.
-//
-// An engine must report a kind it does not recognize as unsupported. Later
-// kinds are therefore additive: an engine written before one existed keeps
-// routing it to a tmux process under the default fallback policy.
+// CommandKind classifies what a request needs from an [Engine]. Unknown kinds
+// must be unsupported so later kinds fall back safely.
 type CommandKind int
 
 const (
@@ -50,23 +44,12 @@ func (k CommandKind) String() string {
 	}
 }
 
-// Engine executes tmux commands for a [Server] over one transport, and
-// declares which [CommandKind] values that transport can carry. Selecting one
-// with [Server.WithEngine] changes how commands reach tmux without changing
-// what any operation means. By default, a request the engine does not support
-// runs as a tmux process through [ServerOptions.Runner];
-// [Server.WithEngineFallback] can reject that route.
+// Engine executes supported [CommandKind] values for a [Server]. Unsupported
+// requests use [ServerOptions.Runner] unless fallback is rejected.
 //
-// An engine does not own its own shutdown. A [Server] is an immutable handle
-// that callers copy freely, so it cannot be the value that closes a transport;
-// whoever created the transport closes it. [ControlClient.Close] stops the
-// process behind [ControlClient.Engine].
+// The creator, not the copyable Server, owns the engine's shutdown.
 //
-// Run may be called concurrently when the Server is used concurrently. An
-// engine that serializes internally, as the control-mode engine does, bounds
-// concurrent callers to one in-flight tmux command; that is an engine property
-// rather than an interface one, so a transport that matches replies out of
-// order needs no change here.
+// Run may be called concurrently; an engine may serialize internally.
 type Engine interface {
 	// Supports reports whether the engine can carry requests of kind. It must
 	// be deterministic and must not perform I/O: a Server consults it on every
@@ -113,20 +96,14 @@ func (e *EngineFallbackError) Error() string {
 // Unwrap makes errors.Is(err, ErrEngineFallback) true.
 func (e *EngineFallbackError) Unwrap() error { return ErrEngineFallback }
 
-// WithEngine returns a handle whose supported commands run through engine
-// rather than through a tmux process. A nil engine restores process execution.
-// The returned handle shares immutable configuration and version-cache
-// coordination with s; derived sessions, windows, and panes keep the engine.
+// WithEngine returns a handle whose supported commands run through engine. Nil
+// restores process execution. Records derived from the result retain the engine.
 //
-// The engine is not adopted: s keeps forking, and closing the engine's
-// transport is the caller's job. Under the default fallback policy, operations
-// the engine does not support and reads that promise exact stdout bytes keep
-// running as tmux processes on the returned handle.
+// The caller retains ownership of the engine. Unsupported commands and exact-byte
+// reads use the configured fallback policy.
 //
-// A record carries the handle that produced it, so sessions, windows, and
-// panes obtained before this call keep forking and report no error while doing
-// so. Look one up again through the returned handle, with [Server.Session],
-// [Server.Window], or [Server.Pane], to move it onto the engine.
+// Existing records retain their original handle; look them up through the result
+// or use their WithEngine method to change transport.
 func (s Server) WithEngine(engine Engine) Server {
 	s.engine = engine
 	s.engineless = false
@@ -151,27 +128,12 @@ func (s Server) WithEngineFallback(policy EngineFallbackPolicy) Server {
 // cannot carry an operation.
 func (s Server) EngineFallback() EngineFallbackPolicy { return s.engineFallback }
 
-// Engine returns the engine this handle routes through, or nil when every
-// command starts a tmux process.
-//
-// It is the read half of [Server.WithEngine], and exists so that code handed a
-// Server can tell whether its caller already chose a transport. A library that
-// opens a connection of its own should not do so on a handle whose owner has
-// already decided: passing [Server.SubprocessEngine] is how that owner says to
-// stay on processes, and silently overriding it would make the choice
-// unobservable.
+// Engine returns the selected engine, or nil when commands use subprocesses.
+// A non-nil [Server.SubprocessEngine] records an explicit subprocess choice.
 func (s Server) Engine() Engine { return s.engine }
 
-// SubprocessEngine returns the [Engine] that runs every request as its own
-// tmux process, through this server's configured [ServerOptions.Runner]. It is
-// what a handle with no engine already does, as a value: passing it to
-// [Server.WithEngine] restores process execution on a handle derived from one
-// that selected another engine.
-//
-// It is also how a caller declines a connection a library would otherwise open
-// for them. A handle carrying this engine has chosen its transport, and code
-// that checks [Server.Engine] leaves that choice alone, so it is the way to say
-// no to something that would attach a tmux client.
+// SubprocessEngine returns an [Engine] that runs every request through the
+// configured [ServerOptions.Runner]. It expresses an explicit subprocess choice.
 func (s Server) SubprocessEngine() Engine {
 	return subprocessEngine{server: s.withoutEngine()}
 }
@@ -225,42 +187,25 @@ func (s Server) withoutEngine() Server {
 	return s
 }
 
-// InstanceBoundEngine is an optional interface an [Engine] may implement to
-// report that its transport cannot outlive the tmux server instance it talks
-// to. A connection is bound: tmux gives a client no way to survive its server,
-// so a client that answers at all answers from the instance it was opened
-// against, and a replacement server on the same socket cannot be reached
-// through it. A tmux process is not bound, because each one connects afresh
-// and two of them may reach two servers that owned the socket in turn.
-//
-// Snapshot reads use it to skip a second identity probe whose only job is to
-// prove what a bound transport already guarantees. An engine that does not
-// implement it, or reports false, is read exactly as before.
-//
-// An engine that wraps another must forward this, or the transport underneath
-// silently loses the property and pays for the probe again.
+// InstanceBoundEngine reports that consecutive commands cannot cross a tmux
+// daemon replacement. Snapshots use it to skip a redundant identity probe.
+// Wrapping engines should forward the property.
 type InstanceBoundEngine interface {
 	// InstanceBound reports whether consecutive commands this engine carried
 	// provably reached one tmux server instance.
 	InstanceBound() bool
 }
 
-// boundToInstance reports whether this handle's transport already proves that
-// consecutive commands reached one tmux server instance. Snapshot reads use it
-// to skip a second identity probe whose only job is to prove exactly that.
 func (s Server) boundToInstance() bool {
 	bound, ok := s.engine.(InstanceBoundEngine)
 	return ok && bound.InstanceBound()
 }
 
-// engineDecliner reports why an engine turned a command down, when the reason
-// is one a caller would want to hear about. An engine that simply never
-// carries a kind is not news; one that stopped carrying it is.
+// engineDecliner reports noteworthy changes in an engine's support.
 type engineDecliner interface {
 	declined(kind CommandKind) (Warning, bool)
 }
 
-// commandEngine returns the engine that will carry kind, or nil for a process.
 func (s Server) commandEngine(kind CommandKind) (Engine, error) {
 	if s.engine == nil {
 		if s.engineless && s.engineFallback == EngineFallbackReject {
@@ -283,14 +228,8 @@ func (s Server) commandEngine(kind CommandKind) (Engine, error) {
 	return s.engine, nil
 }
 
-// runCommand routes one tmux command. args holds the tmux command; the
-// configured client-global selectors are added wherever the transport needs
-// them, which is everywhere except an engine already connected to the server.
-//
-// commandList reports whether a bare ";" in args separates two commands. It
-// decides one thing here: a tmux process hands its argv to tmux's outer command
-// parser, so a value that ends in a semicolon is escaped on the way to one and
-// left alone on the way to an engine, which quotes its arguments instead.
+// runCommand adds client-global selectors unless the engine is already connected.
+// commandList controls subprocess escaping of literal trailing semicolons.
 func (s Server) runCommand(
 	ctx context.Context,
 	kind CommandKind,

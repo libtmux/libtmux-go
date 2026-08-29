@@ -8,77 +8,41 @@ import (
 	"sync"
 )
 
-// ControlPoolRequest configures the control-mode connections a pool owns. Its
-// zero value opens one, which is what a caller writes when the only goal is to
-// stop starting a tmux process per command.
+// ControlPoolRequest configures the control-mode connections a pool owns.
 type ControlPoolRequest struct {
 	// Connections is how many control-mode connections the pool owns. Zero
-	// opens one, which is all a program that issues commands from a single
-	// goroutine can use: ControlClient.Cmd serializes, so one connection
-	// carries one tmux command at a time.
+	// opens one. A connection carries one command at a time.
 	//
-	// A tmux command that blocks inside tmux holds its connection for as long
-	// as it blocks: a wait on a tmux channel, and the prompting commands,
-	// occupy one until they are answered. Enough of them at once
-	// leaves nothing to carry the next command, which then waits for a
-	// connection rather than for tmux and reports whatever the caller's
-	// context reports. Run those on a handle with no engine instead.
+	// A command that blocks inside tmux, including waits and prompts, holds its
+	// connection. If all connections block, later commands wait for a free one.
 	//
-	// Raise it only for concurrent callers, and treat the number as a cost
-	// rather than a tuning dial. Each connection is an attached tmux process
-	// that appears in list-clients output, participates in
-	// destroy-unattached and session-attached behavior. Pane output is disabled
-	// on pooled clients because a pool exposes no notification stream.
+	// Each connection is an attached tmux client that affects list-clients,
+	// destroy-unattached, and session-attached. Pools disable pane output because
+	// they expose no notification stream.
 	Connections int
 }
 
 // OpenControlPool returns a [Server] carrying a control-mode transport,
 // together with the [ControlPool] that owns it.
 //
-// It is [Server.OpenControl] and [Server.WithEngine] in one call, and unlike
-// them it can hold more than one connection: [ControlClient.Cmd] serializes, so
-// a single connection carries one tmux command at a time and concurrent callers
-// queue behind each other.
-//
 // Closing the pool does not invalidate anything derived from the returned
-// handle. Those records go back to starting a tmux process per command and
-// report [WarningControlPoolClosed] through [ServerOptions.WarningHandler], so
-// a function may use a pool internally and return what it built.
+// handle. Under the default fallback policy, those records start a subprocess
+// and report [WarningControlPoolClosed]. [EngineFallbackReject] instead returns
+// [EngineFallbackError].
 //
-// session is attached by every connection, because tmux has no unattached
-// control client. Its lifetime governs the pool's: killing it closes the
-// connections attached to it. Passing one the caller already owns is deliberate
-// rather than convenient, since a pool that invented its own session would
-// leave one behind that nobody asked for.
+// Every connection attaches to session because tmux has no unattached control
+// client. Killing the session closes its connections.
 //
 // The returned handle is the one to derive records from. A record taken from
-// the original handle keeps starting a process; its WithEngine method selects
-// the pool engine without a lookup.
+// the original handle still starts a process per command. Use its WithEngine
+// method to select the pool without a lookup.
 //
-// The transport is otherwise four separate things a caller has to know: open a
-// control client, adapt it to an [Engine], select that engine on a handle copy,
-// and look up again every record obtained before the selection, because a
-// record carries the handle that made it and an older record keeps starting
-// tmux processes without reporting anything. Building the connection with the
-// handle retires the last of those. The returned Server is the first handle the
-// program holds, so no record can predate its engine.
+// The pool, not the copyable [Server], owns the connections and must be closed.
 //
-// The returned handle is an ordinary immutable [Server]: it copies freely, and
-// every session, window, and pane derived from it carries the transport too.
-// The lifetime lives in the second return value rather than in a Close method
-// on the handle, because a
-// handle is embedded in every record it produces and copied into every one of
-// them, so no copy could own the shutdown of the others.
-//
-// Construction starts tmux processes: it lists or creates the session, opens
-// each connection, and probes the tmux version once so that a later
-// version-gated operation finds the answer cached rather than starting a
-// process for it. Afterwards every command the connection can carry runs over
-// it. The exceptions are the ones [Server.WithEngine] documents, since routing
-// is unchanged: interactive attachment, the tmux -V probe, and the reads whose
-// contract is tmux's exact stdout bytes, which are [Pane.Capture],
-// [Pane.CaptureBytes], and [Server.ShowBufferBytes].
-// [Pane.CaptureToFile] is the capture that stays on the connection.
+// Construction probes and caches the tmux version, opens attached client
+// processes, and registers each connection. Interactive attachment, version
+// probing, and exact-byte reads still use their documented transports;
+// [Pane.CaptureToFile] stays on the pool.
 //
 // Failure closes anything it already opened. A caller that receives an error
 // receives no pool to close.
@@ -136,28 +100,15 @@ func closeControlClients(clients []*ControlClient) error {
 	return errors.Join(failures...)
 }
 
-// ControlPool owns the control-mode connections behind a connected [Server] and
-// hands one to each command that needs it.
+// ControlPool owns the control-mode connections behind a connected [Server].
+// Close it when done. After closure, the default policy uses subprocesses and
+// reports [WarningControlPoolClosed]; [EngineFallbackReject] refuses fallback.
 //
-// It is the value that closes what [Server.OpenControlPool] opened. A pool is
-// separate from the handle for the reason [Engine] gives for owning no
-// shutdown: a [Server] is copied into every record it produces, so shutdown
-// cannot belong to it. Close the pool when the program is done with the tmux
-// server; commands issued afterwards report [ErrControlClosed] as transport
-// failures, which reach the caller rather than reading as a tmux server holding
-// nothing.
+// The pool gives each command an exclusive connection, bounding concurrency by
+// the configured connection count.
 //
-// More than one connection is worth owning only for concurrent callers, since
-// a single connection carries one tmux command at a time. A pool hands each
-// command a connection no other command is using and returns it afterwards, so
-// concurrency is bounded by the number of connections rather than by the
-// library.
-//
-// A pool carries commands and nothing else. It exposes no notification stream:
-// which connection carried which command is not a caller-visible property, so a
-// pooled connection's notifications are not a sequence a caller could reason
-// about. Open a control client of your own with [Server.OpenControl] to watch
-// tmux as it changes. The pool disables pane-output notifications at attach.
+// A pool exposes no notification stream and disables pane-output notifications.
+// Use [Server.OpenControl] to watch tmux changes.
 //
 // Every method is safe for concurrent use.
 type ControlPool struct {
@@ -175,23 +126,16 @@ type ControlPool struct {
 	failure error
 }
 
-// Engine returns the [Engine] the connected handle already carries. It is the
-// seam for a second handle that was built elsewhere, such as one from
-// [NewServerFromEnv]: passing it to [Server.WithEngine] moves that handle onto
-// these connections. Records obtained from the other handle before the call
-// keep starting tmux processes, so look them up again through the result.
+// Engine returns the pool's [Engine] for use with [Server.WithEngine]. Records
+// obtained before selecting it retain their original server handle.
 func (p *ControlPool) Engine() Engine { return poolEngine{pool: p} }
 
-// Session returns the attached session on the connected handle, which is the
-// same value [Server.OpenControlPool] returned. Reading it here rather than
-// keeping the session that was passed in is what a caller wants: the one
-// passed in still starts a tmux process per command.
+// Session returns the attached session on the connected handle.
 func (p *ControlPool) Session() Session { return p.session }
 
-// Connections reports how many of the pool's connections can still carry a
-// command. It starts at [ConnectOptions.Connections] and falls as connections
-// fail, so a supervisor can notice a pool degrading before it reaches zero and
-// every command starts failing.
+// Connections reports how many connections have not been retired after a
+// connection failure. It starts at the requested count, or one when
+// [ControlPoolRequest.Connections] is zero. Closing the pool does not change it.
 func (p *ControlPool) Connections() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -225,10 +169,8 @@ func (p *ControlPool) stop() {
 	})
 }
 
-// run carries one tmux command on a connection no other command is using.
-// commandList is forwarded rather than defaulted: this engine wraps another,
-// and a wrapper that drops it silently turns a command list into quoted
-// arguments of the first command.
+// run carries one command on an exclusive connection. It must forward
+// commandList so a list is not reinterpreted as arguments to its first command.
 func (p *ControlPool) run(
 	ctx context.Context,
 	arguments []string,
@@ -262,11 +204,8 @@ func (p *ControlPool) acquire(ctx context.Context) (*ControlClient, error) {
 // release returns a connection to the pool, or retires it when the failure
 // proves the connection itself is gone.
 //
-// The distinction matters because a retired connection is never replaced. A
-// command that reached tmux before its connection died is indistinguishable
-// from one that did not, so reconnecting and retrying would re-run a mutation;
-// dropping the connection instead keeps the surviving ones serving while the
-// failed command reports what happened.
+// Retired connections are not replaced or retried because delivery is ambiguous
+// and retrying could repeat a mutation.
 func (p *ControlPool) release(client *ControlClient, err error) {
 	if err == nil || connectionSurvives(err) {
 		p.free <- client
@@ -309,16 +248,8 @@ type poolEngine struct {
 	pool *ControlPool
 }
 
-// Supports reports that control connections carry server commands only.
-// Supports stops claiming commands once the pool is closed, so routing sends
-// them to a tmux process instead.
-//
-// A pool is an optimization, and an optimization that ends must not take
-// correctness with it. Records derived from a pooled handle outlive the pool
-// routinely: a function that builds something over a pool and returns what it
-// built hands back records whose handle is the pooled one, and closing the pool
-// on the way out would leave the caller holding records that fail rather than
-// records that are merely slower again.
+// Supports accepts server commands while the pool is open. After closure it
+// declines them, leaving the handle's fallback policy to choose the result.
 func (e poolEngine) Supports(kind CommandKind) bool {
 	if kind != CommandServer {
 		return false
@@ -336,8 +267,6 @@ func (e poolEngine) Supports(kind CommandKind) bool {
 // back to starting tmux processes.
 func (e poolEngine) InstanceBound() bool { return e.Supports(CommandServer) }
 
-// declined reports the fallback, because a command that silently costs a
-// process is the kind of thing a caller wants told rather than measured.
 func (e poolEngine) declined(kind CommandKind) (Warning, bool) {
 	if kind != CommandServer {
 		return Warning{}, false

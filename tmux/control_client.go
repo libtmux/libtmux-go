@@ -65,23 +65,12 @@ type ControlClient struct {
 	closeOnce      sync.Once
 	closeErr       error
 
-	// dispatching reports that startup is over and every frame from here has
-	// to be matched to a command this client sent. The attach tmux performs to
-	// start the client is not one of those, so its frame is read before this
-	// is set.
+	// dispatching excludes the attach frame before matching later command replies.
 	dispatching atomic.Bool
 }
 
-// ownReply reports whether a frame answers a command this client sent.
-//
-// tmux writes a guard block for every command it runs on a client's behalf,
-// and marks in the guard's flags whether the command arrived over the control
-// channel: it computes them as !!(state & CMDQ_STATE_CONTROL), so 1 is this
-// client's command and 0 is anything else. Keys sent into a pane that is in a
-// mode are the ordinary way to get one of the others, because a mode looks a
-// key up as a binding and the command it runs belongs to this client without
-// having been sent by it. Reading such a block as a reply shifts every later
-// reply by one for the life of the connection.
+// ownReply uses tmux's CMDQ_STATE_CONTROL guard flag. Treating a key-binding
+// command as our reply would shift every later reply on the connection.
 func (f controlFrame) ownReply() bool {
 	return f.flags != 0
 }
@@ -277,14 +266,8 @@ func (c *ControlClient) Cmd(
 	return results[0], nil
 }
 
-// cmd executes one control-mode command line and returns a result per tmux
-// command in it. commandList reports whether a bare ";" in args separates two
-// commands rather than naming a value; [ControlClient.Cmd] sends one command,
-// so it never does and always gets one result back.
-//
-// A list that failed part way returns the results tmux did answer: every
-// command up to and including the failure, and nothing for the ones tmux
-// dropped.
+// cmd returns one result per executed command in a command list. A failed list
+// includes the failure and omits commands tmux dropped after it.
 func (c *ControlClient) cmd(
 	ctx context.Context,
 	commandList bool,
@@ -325,8 +308,6 @@ func (c *ControlClient) cmd(
 	}
 }
 
-// countCommandListCommands reports how many tmux commands an argument vector
-// carries, which is how many reply frames tmux will send for it.
 func countCommandListCommands(arguments []string, commandList bool) int {
 	if !commandList {
 		return 1
@@ -359,8 +340,8 @@ func (c *ControlClient) NextNotification(
 // Notifications returns an iterator over what tmux says without being asked:
 // pane output, and the events behind [ControlNotification].
 //
-// It is [ControlClient.NextNotification] as a range loop, and carries that
-// method's rule that exactly one of them may run at a time.
+// It is [ControlClient.NextNotification] as a range loop; exactly one iterator
+// or direct notification read may run at a time.
 //
 //	for notification, err := range client.Notifications(ctx) {
 //		if err != nil {
@@ -371,20 +352,12 @@ func (c *ControlClient) NextNotification(
 //		}
 //	}
 //
-// A record this package could not read yields its error and the loop
-// continues, because one unreadable notification is not the end of anything: a
-// tmux newer than this package sends kinds it does not know, and a watcher
-// that stopped at the first would be useless. Those are the errors matching
-// [ErrMalformedControlNotification] and [ErrUnknownControlNotification]. Every
-// other error ended the stream, and is the last thing the loop yields.
+// Malformed or unknown notifications yield their error and iteration continues.
+// Every other error ends the stream after being yielded.
 //
-// A tmux that exited on its own drains what it had already sent and then ends
-// the loop with no error at all, because reaching the end of a stream is not a
-// failure. A loop that ends silently is one tmux finished.
+// Natural tmux exit drains queued notifications and then ends without error.
 //
-// Leaving the loop early leaves the rest of the queue where it is rather than
-// dropping it, so a later loop, or a direct call to
-// [ControlClient.NextNotification], resumes from the same place.
+// Leaving early preserves queued notifications for the next read.
 func (c *ControlClient) Notifications(
 	ctx context.Context,
 ) iter.Seq2[ControlNotification, error] {
@@ -498,12 +471,8 @@ func (c *ControlClient) executeControlRequest(
 	if _, err := io.WriteString(c.stdin, request.line+"\n"); err != nil {
 		return controlResponse{err: c.classifyOperationError(err)}, false
 	}
-	// tmux answers a command list with one frame per command, and stops the
-	// list at the first failure without answering the commands it dropped. The
-	// reply is therefore complete at the first %error, or after as many %end
-	// frames as the list held; waiting for a frame tmux will never send would
-	// hang the connection, and leaving an unread frame behind would answer the
-	// next request with this one's reply.
+	// A list ends at its first %error or after one %end per command. Reading too
+	// few frames skews the next reply; waiting for a dropped command hangs.
 	results := make([]ControlCommandResult, 0, request.commands)
 	for range request.commands {
 		frame, err := c.nextFrame(context.Background())
@@ -618,18 +587,8 @@ func (c *ControlClient) waitProcess() {
 	close(c.done)
 }
 
-// registrationFormat asks tmux which process each client is.
-//
-// The separator is the printable one the format decoder uses rather than a
-// tab, because tmux rewrites control characters in format output for a client
-// it does not believe is using UTF-8, and a client is not using UTF-8 whenever
-// the process environment names no UTF-8 locale. A tab came back as an
-// underscore, no line ever split, and the poll below ran until its context
-// ended: on a caller whose context has no deadline, forever. Nothing about
-// that is visible from here, which is why it survived so long.
-//
-// A pid is digits and a client name is a tty path or tmux's own client-<pid>,
-// so cutting at the first separator is unambiguous for both.
+// Use a printable separator because tmux rewrites control characters for clients
+// without a UTF-8 locale. Neither numeric PIDs nor client names contain it.
 const registrationFormat = "#{client_pid}" + string(formatFieldSeparator) + "#{client_name}"
 
 func (c *ControlClient) waitForRegistration(ctx context.Context) (ClientName, error) {

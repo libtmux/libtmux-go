@@ -41,7 +41,7 @@ type ServerOptions struct {
 	ProcessEnvironment []string
 	// Unsupported selects what happens when a request needs an optional tmux
 	// capability the running server does not have. The zero value refuses the
-	// request; see UnsupportedPolicy.
+	// request; see [UnsupportedPolicy].
 	Unsupported UnsupportedPolicy
 	// WarningHandler receives nonfatal compatibility warnings. Nil discards
 	// warnings. See WarningHandler for delivery and concurrency semantics.
@@ -50,18 +50,8 @@ type ServerOptions struct {
 	// uses the local tmux subprocess runner. The server retains Runner, which
 	// must support concurrent calls when the server is used concurrently.
 	//
-	// It covers requests that run to completion and return output. It does not
-	// cover the tmux -C process Server.OpenControl starts, which is a
-	// long-lived bidirectional stream that a request-and-result interface
-	// cannot carry; that process is started directly, while its registration
-	// and version probes do pass through Runner. Substituting Runner therefore
-	// does not stop OpenControl from starting a real tmux.
-	//
-	// Because Runner sees every request an engine does not carry, it is also
-	// how a caller confirms an engine is being used: count the requests that
-	// reach it before and after Server.WithEngine. Wrap SubprocessRunner to do
-	// that rather than reimplementing execution, whose result shape the rest
-	// of the package reads.
+	// [Server.OpenControl] starts its tmux -C process directly. Registration and
+	// version probes use the server's normal Engine/Runner routing.
 	Runner CommandRunner
 }
 
@@ -85,17 +75,8 @@ type serverState struct {
 	shared  *serverShared
 }
 
-// serverShared is coordination that belongs to the tmux server a handle
-// addresses rather than to the handle's own configuration, so a derived handle
-// keeps it rather than starting over.
-//
-// [Server.NewSession] is why this is separate. It runs its commands on a handle
-// whose environment has TMUX removed, so that a program started inside a pane
-// does not create a session against the server it happens to be running in,
-// and the session it returns keeps that handle. Those are different options and
-// so a different serverState, but the same tmux: re-probing its version costs a
-// process for an answer already held, and a control pool opened on one of the
-// two handles is a connection the other could be using.
+// serverShared coordinates version caching and pool state across handles that
+// address the same daemon with different process environments.
 type serverShared struct {
 	version versionCache
 	// pools counts the control pools open on this tmux server. A record
@@ -164,24 +145,13 @@ func (adapter commandRunnerAdapter) Run(
 	}, err
 }
 
-// SubprocessRunner returns the [CommandRunner] a server uses when
-// [ServerOptions.Runner] is nil: it runs each request as its own tmux process.
-//
-// It exists so a Runner can wrap the default rather than replace it. Counting,
-// logging, or failing requests needs only the wrapper, while running them
-// produces the result the rest of the package reads: a nonzero exit is a
-// completed result rather than an error, Stdout holds one decoded line per
-// element with no trailing empty line, and RawStdout holds the exact bytes
-// that the captures promising them return. Delegating keeps all of that
-// correct in a wrapper that does not care about any of it.
+// SubprocessRunner returns the default [CommandRunner]. It preserves completed
+// nonzero exits, decoded output lines, and exact RawStdout for wrapping runners.
 func SubprocessRunner() CommandRunner {
 	return subprocessRunner(0)
 }
 
-// subprocessRunner is SubprocessRunner with the transport's wait delay exposed.
-// Zero keeps the transport's own default, which is what every caller outside
-// this package gets. It is separate only because a test standing in for tmux
-// with something far heavier than tmux needs longer than that default allows.
+// subprocessRunner exposes the transport wait delay for tests; zero uses its default.
 func subprocessRunner(waitDelay time.Duration) CommandRunner {
 	return CommandRunnerFunc(func(
 		ctx context.Context,
@@ -232,11 +202,9 @@ func (s Server) ProcessEnvironment() []string {
 	return slices.Clone(s.connectionState().options.ProcessEnvironment)
 }
 
-// Cmd executes raw tmux arguments. A completed nonzero tmux exit remains in
-// the returned [CommandResult]; validation and transport failures return an
-// error. Cmd clones result slices, so the caller owns Command, decoded Stdout,
-// exact RawStdout, and decoded Stderr. Canceling ctx stops the wait for the
-// command but cannot determine whether a mutating command reached tmux.
+// Cmd executes raw tmux arguments and returns caller-owned result slices. A
+// completed nonzero exit remains a result; validation and transport failures
+// return errors. Cancellation cannot prove whether a mutation reached tmux.
 //
 // An argument that is exactly ";" separates two tmux commands, so one call can
 // submit a command list. tmux runs a list until a command fails and drops the
@@ -244,12 +212,8 @@ func (s Server) ProcessEnvironment() []string {
 // which command produced which line submits them separately. A list means the
 // same thing through every transport.
 //
-// Only a standalone ";" is a separator. A semicolon inside a larger argument is
-// left to tmux's own parsing, which differs by transport: a tmux process hands
-// the argument to tmux's outer command parser, which consumes a trailing
-// semicolon, while a control connection quotes the argument and keeps it. Pass
-// values through the typed operations rather than here when that matters; they
-// are literal through either transport.
+// Only a standalone ";" separates commands. Other semicolons follow the selected
+// transport's parsing; typed operations keep values literal across transports.
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error) {
 	result, _, err := s.dispatch(ctx, true, args...)
 	return result, err

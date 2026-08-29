@@ -8,8 +8,7 @@ import (
 )
 
 // Engine returns an [Engine] that carries tmux commands over the receiver's
-// persistent control-mode connection instead of starting a tmux process for
-// each one. Pass it to [Server.WithEngine] to make the object API use it:
+// persistent connection. Pass it to [Server.WithEngine]:
 //
 //	client, err := server.OpenControl(ctx, session)
 //	if err != nil {
@@ -18,27 +17,16 @@ import (
 //	defer client.Close()
 //	connected := server.WithEngine(client.Engine())
 //
-// The engine borrows the client rather than owning it: [ControlClient.Close]
-// stops the underlying process, and commands issued afterwards report
-// [ErrControlClosed] as transport failures, which reach the caller rather than
-// reading as a tmux server holding nothing.
+// The engine borrows the client; [ControlClient.Close] owns shutdown.
 //
-// It supports [CommandServer] only. Interactive attachment and the tmux -V
-// version probe need their own process and keep starting one, as do the reads
-// whose documented result is tmux's exact stdout bytes: [Pane.Capture],
-// [Pane.CaptureBytes], and [Server.ShowBufferBytes] preserve tmux's process
-// output, while [ControlCommandResult.RawStdout] preserves tmux's control
-// rendering of a reply, and this package does not translate one into the other.
+// It supports [CommandServer] only. Process commands and exact-byte reads follow
+// the server's subprocess fallback policy because control replies use different
+// framing.
 //
-// A tmux %error frame becomes exit status 1 with the tmux message in
-// [CommandResult.Stderr], which is what the same failure looks like through a
-// tmux process, so [CommandError] and its missing-target classification behave
-// identically through either transport. Control mode has no separate error
-// stream, so a command that succeeds while writing a diagnostic reports empty
-// Stderr here and a nonempty one through a process.
+// A %error frame maps to exit status 1 and Stderr. Successful control replies
+// cannot preserve subprocess stderr because control mode has no error stream.
 //
-// [ControlClient.Cmd] serializes concurrent requests, so concurrent callers of
-// a Server holding this engine see one in-flight tmux command at a time.
+// [ControlClient.Cmd] serializes requests to one in-flight command.
 func (c *ControlClient) Engine() Engine { return controlEngine{client: c} }
 
 type controlEngine struct {
@@ -71,16 +59,8 @@ func (e controlEngine) Run(
 // String implements fmt.Stringer.
 func (e controlEngine) String() string { return "control-mode" }
 
-// controlCommandResults renders the frames tmux returned for one command line
-// as a process-shaped result. tmux exits 1 for every command error and reports
-// the reason on stderr, so a %error frame is mapped to that pair rather than to
-// a distinct signal.
-//
-// A command list produces one frame per command, which a tmux process would
-// have merged into one stdout with no boundary between them. They are joined
-// here for the same reason: an operation reads the same result through either
-// transport. The frames tmux stopped short of sending, after a failure, are
-// simply absent -- their commands did not run.
+// controlCommandResults maps %error to exit 1 and stderr, and joins command-list
+// frames to match subprocess output. Frames after a failure are absent.
 func controlCommandResults(
 	arguments []string,
 	frames []ControlCommandResult,

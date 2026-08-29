@@ -19,15 +19,8 @@ var ErrUnknownColor = errors.New("tmux: unknown color mode")
 // errors.Is for [CommandError].
 var ErrCommand = errors.New("tmux: command failed")
 
-// ErrNoServer identifies a command that no tmux server answered: either tmux
-// refused it before running it, because it reached no server on the configured
-// socket or would not use the directory that socket lives in, or the server it
-// reached went away before answering. It is matched by errors.Is for
-// [CommandError], alongside [ErrCommand].
-//
-// It exists because a tmux server holding no sessions exits, so "nothing is
-// running yet" is ordinary state rather than a fault, and a program that starts
-// what it does not find needs to recognize it:
+// ErrNoServer identifies a command that no tmux server answered. It matches
+// [CommandError] through errors.Is, alongside [ErrCommand].
 //
 //	sessions, err := server.Sessions(ctx)
 //	switch {
@@ -37,24 +30,8 @@ var ErrCommand = errors.New("tmux: command failed")
 //		return err
 //	}
 //
-// It classifies an error and never replaces one. A list that cannot be read
-// reports the failure either way, so a socket that is unreadable, is not a
-// socket, or holds a server this process may not reach is never answered with
-// an empty collection.
-//
-// It does not separate a server that was never reached from one that has just
-// gone, because a program killing a server and reading from it immediately
-// produces either, depending on whether its client had connected first.
-//
-// It also does not separate an absent server from one that is present and
-// unreachable, because tmux does not either: client.c treats ECONNREFUSED and
-// ENOENT alike, prints a constant message only for the first, and renders every
-// other errno through strerror, whose text follows the process locale. Matching
-// that text would make the classification locale-dependent, which is worse than
-// declining to draw the line. Acting on this sentinel stays safe regardless: a
-// caller that creates what it did not find gets tmux's own refusal, naming the
-// socket and the reason, rather than a session somewhere unintended. A caller
-// that needs the distinction should inspect the socket itself.
+// tmux does not reliably distinguish an absent or unreachable server from one
+// that exited during the command. Inspect the socket when that distinction matters.
 var ErrNoServer = errors.New("tmux: no server reached")
 
 // ColorMode selects a tmux color-capability override for [ServerOptions].
@@ -181,27 +158,8 @@ func (e *commandTransportError) Error() string { return e.err.Error() }
 
 func (e *commandTransportError) Unwrap() error { return e.err }
 
-// commandTransportFailure classifies a runner failure for collection leniency.
-//
-// A failure to resolve the configured tmux executable is returned unwrapped.
-// No process started, so there is no transport that could have failed, and the
-// condition is caller configuration rather than the runtime state of a tmux
-// server. Normalizing it would report a missing binary as an empty collection,
-// which no caller can act on. Every other runner failure stays a transport
-// failure and remains subject to leniency.
-//
-// Resolution failures are detected as [os/exec.Error], which os/exec returns
-// both for a name absent from PATH and for an explicit path that does not
-// exist. Only the first of those wraps exec.ErrNotFound.
-//
-// A truncated read is returned unwrapped for a sharper reason. tmux answered,
-// and the answer this package holds is part of it: os/exec stops waiting for
-// the output of a command that has already exited once its wait delay passes,
-// closes the pipe, and keeps whatever had arrived. Leniency exists to report a
-// server that said nothing as nothing; a server that said something this
-// package failed to finish reading is the opposite, and normalizing it would
-// turn a short listing into a confident empty one. That is the single worst
-// answer available, so it is refused here.
+// commandTransportFailure leaves executable-resolution and truncated-read
+// failures strict so configuration errors or partial output cannot become empty rows.
 func commandTransportFailure(err error) error {
 	if _, ok := errors.AsType[*exec.Error](err); ok {
 		return err
@@ -270,24 +228,9 @@ func newRedactedCommandError(subcommand string, result CommandResult) *CommandEr
 	}
 }
 
-// commandServerUnreachablePrefixes are what tmux prints when no server carried
-// the command: the first two from client.c when it cannot reach one, the third
-// from server.c when it cannot create the socket for one, and the rest from
-// make_label in tmux.c when it cannot settle on a socket path to try. All are
-// produced before a command runs, so they carry the caller's own socket path
-// and an errno string and never an option value, an environment value, or
-// buffer contents.
-//
-// The socket-path failures are why the older wording is not enough on its own.
-// tmux 3.2a reported all of them as "error creating"; 3.3a split them into the
-// messages here, so matching only 3.2a's wording classified one situation two
-// ways depending on which tmux was installed. A directory tmux considers
-// unsafe is the reachable one: it needs mode 0700, and a filesystem that does
-// not keep Unix permissions gives it something else.
-//
-// The third prefix is also why the exit code alone is not enough: tmux exits 0
-// after failing to create a socket, so without its message the failure reads as
-// a command that succeeded.
+// These pre-command diagnostics contain only socket paths and errno text, so
+// secret-redacting errors may disclose them. tmux 3.2a and 3.3a use different
+// socket-path wording, and tmux may exit zero after failing to create a socket.
 var commandServerUnreachablePrefixes = [...]string{
 	"no server running on ",
 	"error connecting to ",
@@ -297,29 +240,17 @@ var commandServerUnreachablePrefixes = [...]string{
 	"no suitable socket path",
 }
 
-// commandServerUnreachableSuffixes are the two socket-path failures that put
-// the path first, so a prefix cannot anchor them. Both end in a constant, and
-// anchoring at the end is what keeps the words out of the class when tmux uses
-// them for something a caller can act on.
+// These socket-path failures put the variable path before the fixed diagnostic.
 var commandServerUnreachableSuffixes = [...]string{
 	" is not a directory",
 	" has unsafe permissions",
 }
 
-// commandFixedRefusals are tmux diagnostics built from a constant string with
-// nothing interpolated into them, so they cannot carry a caller's value and are
-// safe to disclose from an error that withholds output for secrecy.
-//
-// Redaction exists because a value or a command may be echoed back. A refusal
-// tmux writes as a literal has nothing of the caller's in it, and withholding
-// it leaves an exit code where an actionable reason would fit: a split refused
-// for want of room is one a caller can answer by resizing or choosing another
-// pane.
+// Fixed refusals contain no caller values and remain safe in redacted errors.
 var commandFixedRefusals = [...]string{
 	"no space for a new pane",
 }
 
-// commandFixedRefusal reports whether tmux refused with one of those.
 func commandFixedRefusal(stderr []string) bool {
 	for _, line := range stderr {
 		for _, refusal := range commandFixedRefusals {
@@ -331,11 +262,7 @@ func commandFixedRefusal(stderr []string) bool {
 	return false
 }
 
-// commandServerUnreachable reports whether tmux failed before reaching a
-// server. An operation that redacts its output for secrecy can still report
-// this, because the failure happened before tmux had a value to disclose, and
-// withholding it leaves a caller with an exit code and no way to learn that
-// nothing was listening.
+// commandServerUnreachable detects safe-to-disclose failures before a command ran.
 func commandServerUnreachable(stderr []string) bool {
 	for _, line := range stderr {
 		for _, prefix := range commandServerUnreachablePrefixes {
@@ -357,20 +284,8 @@ func commandServerUnreachable(stderr []string) bool {
 	return false
 }
 
-// commandServerGoneMessages are what tmux prints when a command reached a
-// server and did not get an answer from it, which client.c renders from its
-// exit reason and writes to stderr verbatim for a command client.
-//
-// They are matched whole rather than by prefix, because "server exited" is a
-// prefix of "server exited unexpectedly" and both are constants with nothing
-// interpolated into them, so an exact match is both safe to disclose and
-// independent of the process locale.
-//
-// The distinction between these and the connect failures above is real but not
-// one a caller can act on differently: killing a server and reading from it
-// immediately produces either, depending on whether the client had connected
-// before it went. Classifying only one of them would make the answer to "is
-// anything running" depend on that race.
+// These exact, locale-independent messages cover a server lost after connect.
+// Treating them like connect failures avoids a race-dependent ErrNoServer result.
 var commandServerGoneMessages = [...]string{
 	// CLIENT_EXIT_LOST_SERVER: the connection went while the command was in
 	// flight.
@@ -379,23 +294,11 @@ var commandServerGoneMessages = [...]string{
 	"server exited",
 }
 
-// commandTargetNotFoundObjects are the object words tmux names when target
-// resolution fails. tmux exits 1 for every command error and exposes no
-// distinct status for a missing target, so its message is the only available
-// signal.
+// tmux exposes missing targets only through these words in its diagnostics.
 var commandTargetNotFoundObjects = [...]string{"session", "window", "pane", "client"}
 
-// commandTargetNotFound reports whether tmux failed because a target did not
-// resolve. tmux's cmd_find_target has emitted "can't find <object>: <target>"
-// for exactly these four objects since 2015, and all four sites are unchanged
-// across every supported version from 3.2a through 3.7b, so the message is
-// stable even though matching it is not a typed signal.
-//
-// Matching the object word rather than the bare "can't find " prefix keeps
-// unrelated failures out of the classification: tmux reports a missing
-// terminfo database with the same prefix, and reports an exhausted session
-// list as "can't find next session", neither of which means the caller's
-// target was absent.
+// Match the object word because terminfo and "next session" failures also begin
+// with "can't find" but do not mean the requested target was absent.
 func commandTargetNotFound(stderr []string) bool {
 	for _, line := range stderr {
 		for _, object := range commandTargetNotFoundObjects {
@@ -416,10 +319,7 @@ func cloneCommandResult(result CommandResult) CommandResult {
 	return result
 }
 
-// validateLiteralCommandArguments rejects what cannot cross a process argv.
-// It is separate from escaping because the two answer to different layers: NUL
-// is impossible for either transport, while the escape below describes only
-// tmux's outer command parser.
+// validateLiteralCommandArguments rejects NUL, which no process argv can carry.
 func validateLiteralCommandArguments(arguments []string) error {
 	for _, argument := range arguments {
 		if strings.ContainsRune(argument, '\x00') {
@@ -434,14 +334,8 @@ func validateLiteralCommandArguments(arguments []string) error {
 	return nil
 }
 
-// escapeCommandListSeparators prepares literal arguments for tmux's outer
-// command parser. One added backslash protects a final semicolon; tmux removes
-// that backslash before passing nested command or shell strings to the
-// subcommand that owns them.
-//
-// It applies to a tmux process and to nothing else. A control connection quotes
-// every argument it sends, so the semicolon is already protected there and the
-// added backslash would survive into the value tmux stores.
+// escapeCommandListSeparators protects final semicolons from a subprocess's
+// outer tmux parser. Control mode quotes arguments and must not add this escape.
 func escapeCommandListSeparators(arguments []string) []string {
 	escaped := make([]string, len(arguments))
 	for index, argument := range arguments {
