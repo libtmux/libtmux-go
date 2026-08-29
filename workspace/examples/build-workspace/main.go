@@ -1,11 +1,5 @@
-// Command build-workspace loads a tmuxp-style YAML workspace and builds it,
-// then reports what tmux actually created.
-//
-// It reads the workspace from its own source rather than from a file so the
-// program runs anywhere, and it counts the tmux processes the build started.
-// That count barely moves as a file grows, because the build runs over a
-// control connection: the windows and panes below cost about what a file ten
-// times the size would.
+// Command build-workspace builds an embedded tmuxp-style workspace over control
+// mode, then reports the topology and tmux process count.
 package main
 
 import (
