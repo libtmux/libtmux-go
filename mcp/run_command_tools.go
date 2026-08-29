@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -319,13 +320,35 @@ func incompatibleRunCommandShell(pane tmux.Pane) string {
 	if !ok || command == "" {
 		return ""
 	}
-	name := strings.ToLower(strings.TrimPrefix(filepath.Base(command), "-"))
-	switch name {
-	case "csh", "elvish", "fish", "nu", "nushell", "powershell", "pwsh", "tcsh":
+	if slices.Contains(nonPOSIXShells, shellName(command)) {
 		return command
-	default:
-		return ""
 	}
+	return ""
+}
+
+// nonPOSIXShells reject the bookkeeping wrapper's syntax; posixShells run it
+// once they are reading keys. Both are shells, so both explain a pane that has
+// not started a command yet rather than one that swallowed it.
+var (
+	nonPOSIXShells = []string{
+		"csh", "elvish", "fish", "nu", "nushell", "powershell", "pwsh", "tcsh",
+	}
+	posixShells = []string{
+		"ash", "bash", "dash", "ksh", "ksh93", "mksh", "pdksh", "sh", "zsh",
+	}
+)
+
+// shellName reduces a pane's current command to a comparable shell name,
+// dropping the login shell's leading hyphen.
+func shellName(command string) string {
+	return strings.ToLower(strings.TrimPrefix(filepath.Base(command), "-"))
+}
+
+// runsAShell reports whether a pane's current command reads typed keys once it
+// is ready. Anything else has taken them as its own input.
+func runsAShell(running string) bool {
+	name := shellName(running)
+	return slices.Contains(posixShells, name) || slices.Contains(nonPOSIXShells, name)
 }
 
 // awaiting is what a wait for one command needs to know, gathered so that the
@@ -611,9 +634,13 @@ func (t *tools) markMissing(ctx context.Context, pane tmux.Pane, err error) (str
 
 func commandNeverRanReason(running string) string {
 	if running == "" {
-		return "the command recorded no start: the pane has not read the keys. " +
-			"A shell that is still starting reads them late; a program holding " +
-			"the pane never does"
+		return "the command recorded no start: nothing in the pane has read the " +
+			"keys yet"
+	}
+	if runsAShell(running) {
+		return fmt.Sprintf("the command recorded no start: the pane's %s has not "+
+			"read the keys yet, which a shell that is still starting does late",
+			running)
 	}
 	return fmt.Sprintf("the pane never ran the command: it is running %s, "+
 		"which took the text as its own input rather than running it; "+

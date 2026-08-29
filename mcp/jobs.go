@@ -396,6 +396,14 @@ func (t *tools) getJob(
 			return nil, pendingJobOutput(output, entry, status), nil
 		}
 		output.ElapsedSeconds = time.Since(entry.started).Seconds()
+		// The wait context is spent; naming what holds the pane needs the
+		// caller's own deadline, and is what separates a shell that will read
+		// the keys from a program that never will.
+		if pane, paneErr := t.tmux(ctx).Pane(ctx, entry.paneID); paneErr == nil {
+			output.Running, _ = pane.Formats().PaneCurrentCommand()
+		} else if t.runtime.isTerminalError(paneErr) {
+			return nil, output, paneErr
+		}
 		output.OutputUnavailable = unstartedReason(entry.openedAt, output.Running)
 		return nil, output, nil
 	}
