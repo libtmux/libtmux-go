@@ -474,11 +474,8 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	})
 
 	t.Run("a client that cannot be asked is refused", func(t *testing.T) {
-		// Elicitation is optional, and letting the write through when nobody
-		// can be asked makes the guard advisory: the client least able to warn
-		// its person is the one that types into their terminal unannounced. It
-		// happened -- a peer session identifying its own server ran a command
-		// against the caller pane and put the text in its user's prompt box.
+		// Missing elicitation must fail closed; otherwise clients that cannot
+		// warn their operator bypass caller-pane protection.
 		t.Setenv("TMUX_PANE", ownPane)
 		t.Setenv("TMUX", "")
 		session, target, ctx := connect(t)
@@ -590,12 +587,8 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 	})
 
 	t.Run("a client that cannot be asked is still stopped", func(t *testing.T) {
-		// This reverses what this test asserted before. Letting the write
-		// through when nobody could be asked was chosen so a client without
-		// elicitation kept the behaviour it had; what that bought in practice
-		// was a guard that is absent from the clients most likely to need it.
-		// Writing to somebody's own terminal unannounced is the harm, and it
-		// does not become acceptable because their client cannot show a prompt.
+		// Client capabilities cannot weaken caller-pane protection; missing
+		// elicitation still fails closed.
 		session, ctx, _ := arrange(t, nil)
 		result := call(ctx, t, session, "send_keys", map[string]any{
 			"paneId": ownPane, "command": "true",
@@ -761,7 +754,7 @@ func TestTypingIntoAPaneInAModeIsRefused(t *testing.T) {
 				t.Errorf("the %s refusal does not name %s: %q", tool, wanted, said)
 			}
 		}
-		// And the connection is still there, which run_command used to cost.
+		// Refusal leaves the shared connection usable.
 		if listed := call(ctx, t, session, "list_panes", map[string]any{}, nil); listed.IsError {
 			t.Fatalf("the connection did not survive refusing %s: %#v", tool, listed.Content)
 		}
