@@ -733,7 +733,12 @@ notification stream. Copies of a `PaneObservation` share one serialized reader
 and terminal state. Caller cancellation, an individual
 `ControlNotificationError`, and explicit close do not become observation loss.
 Topology loss, `io.EOF`, or a terminal reader failure permanently returns
-`ErrPaneObservationLost` while preserving the underlying cause.
+`ErrPaneObservationLost` while preserving the underlying cause. tmux has no
+pane-close notification, so a pane that ends while its window survives is
+recognised by its absence from the window's next arrangement; an arrangement
+this package cannot read is not evidence either way. A stream tmux ends for its
+own reason, such as a control client too far behind, carries that reason into
+the loss.
 
 ## Recorded operations
 
