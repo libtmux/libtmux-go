@@ -81,6 +81,30 @@ func Example() {
 	// Output: tests 2 true
 }
 
+func ExampleNewPlan() {
+	plan := tmux.NewPlan()
+	session := plan.NewSession(tmux.NewSessionRequest{Name: "project"})
+	plan.RenameSession(session, "renamed")
+	plan.SetEnvironment(session, "APP_MODE", "development")
+
+	preview, err := plan.Preview(tmux.Version{})
+	if err != nil {
+		fmt.Println("preview:", err)
+		return
+	}
+	fmt.Println(preview[0])
+	fmt.Println(preview[1] == nil, preview[2] == nil)
+	for _, dispatch := range plan.Explain() {
+		fmt.Printf("steps %v: %s\n", dispatch.Ops, dispatch.Reason)
+	}
+
+	// Output:
+	// [new-session -P -F#{session_id} -sproject -d]
+	// true true
+	// steps [0]: creates
+	// steps [1 2]: chained
+}
+
 func ExamplePane_SendKeys() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
