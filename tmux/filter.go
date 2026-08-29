@@ -14,7 +14,8 @@ import (
 	"strings"
 )
 
-// ErrInvalidFilter reports a malformed or impossible generated filter.
+// ErrInvalidFilter reports a malformed or impossible generated filter. Filter
+// validation, lookup parsing, predicates, and JSON methods wrap this error.
 var ErrInvalidFilter = errors.New("tmux: invalid filter")
 
 type ptrHolder[T any] struct {

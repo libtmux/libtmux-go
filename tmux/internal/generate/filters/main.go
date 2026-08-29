@@ -565,14 +565,12 @@ func declaredNames(declaration ast.Decl) []string {
 }
 
 func renderFilterStruct(output *bytes.Buffer, model modelSpec) {
-	fmt.Fprintf(output, "// %sFilter evaluates already-materialized [%s] values and never runs tmux.\n", model.Name, model.Name)
-	output.WriteString("// Its zero value matches every non-nil candidate. Ordinary field and relation criteria are ANDed.\n")
-	output.WriteString("// AnyOf additionally requires at least one branch to match; Not excludes a match.\n")
+	fmt.Fprintf(output, "// %sFilter matches materialized [%s] values without tmux I/O.\n", model.Name, model.Name)
+	output.WriteString("// Its zero value matches every non-nil candidate. Criteria are ANDed; AnyOf adds an OR requirement and Not excludes.\n")
 	if links := filterDocumentationLinks(model); len(links) != 0 {
 		fmt.Fprintf(output, "// Field and relation criteria correspond to %s.\n", joinDocumentationLinks(links))
 	}
-	fmt.Fprintf(output, "// [%sFilter.Predicate], [%sFilter.MarshalJSON], and [%sFilter.UnmarshalJSON] validate automatically.\n", model.Name, model.Name, model.Name)
-	fmt.Fprintf(output, "// Use [%sFilter.Validate] to check a filter constructed directly.\n", model.Name)
+	fmt.Fprintf(output, "// [%sFilter.Validate] and methods that consume the filter reject invalid criteria with [ErrInvalidFilter].\n", model.Name)
 	fmt.Fprintf(output, "type %sFilter struct {\n", model.Name)
 	for _, field := range model.Fields {
 		for _, generated := range generatedFields(field) {
@@ -607,9 +605,8 @@ func renderFilterStruct(output *bytes.Buffer, model modelSpec) {
 }
 
 func renderRelationStruct(output *bytes.Buffer, target string) {
-	fmt.Fprintf(output, "// %sRel applies quantifiers to a materialized [%s] relation.\n", target, target)
-	output.WriteString("// Its zero value is invalid. Some is existential, None is exclusion, and Every is universal and vacuously true for an empty relation.\n")
-	output.WriteString("// All enabled quantifiers are conjunctive.\n")
+	fmt.Fprintf(output, "// %sRel applies quantifiers to a materialized [%s] relation; its zero value is invalid.\n", target, target)
+	output.WriteString("// Some is existential, Every is universal and vacuously true for an empty relation, and None excludes; enabled quantifiers are conjunctive.\n")
 	fmt.Fprintf(output, "type %sRel struct {\n", target)
 	output.WriteString("\t// Some requires an existential match: at least one related value must match.\n")
 	fmt.Fprintf(output, "\tSome *%sFilter `json:\"some,omitempty\"`\n", target)
@@ -750,7 +747,7 @@ func renderLookupParsers(output *bytes.Buffer, spec filterSpec) {
 		output.WriteString("// Paths traverse generated JSON relation names and separate segments with double underscores.\n")
 		output.WriteString("// The default operator is exact. Accepted suffixes are eq, exact, iexact, contains, icontains, startswith, istartswith, endswith, iendswith, in, nin, regex, and iregex; availability is field-specific.\n")
 		output.WriteString("// The eq suffix aliases exact, nin negates in, scalar operators require one value, and in and nin require one or more.\n")
-		output.WriteString("// Invalid paths, operators, values, or results return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.\n")
+		output.WriteString("// Invalid paths, operators, values, or results wrap [ErrInvalidFilter].\n")
 		fmt.Fprintf(
 			output,
 			"func Parse%sLookup(lookup string, values ...string) (%sFilter, error) {\n",
@@ -1034,8 +1031,7 @@ func renderValidationState(output *bytes.Buffer, spec filterSpec) {
 }
 
 func renderValidation(output *bytes.Buffer, model modelSpec) {
-	output.WriteString("// Validate checks structure, regular expressions, and contradictory criteria before filter use.\n")
-	output.WriteString("// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.\n")
+	output.WriteString("// Validate checks structure, regular expressions, and contradictory criteria; failures wrap [ErrInvalidFilter].\n")
 	fmt.Fprintf(output, "func (filter %sFilter) Validate() error {\n", model.Name)
 	output.WriteString("\tstate := newFilterValidationState()\n")
 	output.WriteString("\tif err := (&filter).validateStructure(&state, 0); err != nil {\n")
@@ -1315,9 +1311,7 @@ func stableFilterObject(goType string) (string, bool) {
 }
 
 func renderFilterMarshal(output *bytes.Buffer, model modelSpec) {
-	fmt.Fprintf(output, "// MarshalJSON validates the %s filter and encodes its JSON wire object.\n", strings.ToLower(model.Name))
-	output.WriteString("// [FilterSchemaVersion] remains external metadata and is not embedded in the object.\n")
-	output.WriteString("// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.\n")
+	fmt.Fprintf(output, "// MarshalJSON validates and encodes the %s filter; failures wrap [ErrInvalidFilter].\n", strings.ToLower(model.Name))
 	fmt.Fprintf(output, "func (filter %sFilter) MarshalJSON() ([]byte, error) {\n", model.Name)
 	output.WriteString("\tif err := filter.Validate(); err != nil {\n")
 	output.WriteString("\t\treturn nil, err\n")
@@ -1346,9 +1340,7 @@ func renderRelationMarshal(output *bytes.Buffer, target string) {
 	output.WriteString("\treturn nil\n")
 	output.WriteString("}\n\n")
 
-	fmt.Fprintf(output, "// MarshalJSON validates and encodes the %s relation quantifiers as JSON.\n", strings.ToLower(target))
-	output.WriteString("// [FilterSchemaVersion] remains external metadata and is not embedded in the object.\n")
-	output.WriteString("// The zero relation returns [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect it.\n")
+	fmt.Fprintf(output, "// MarshalJSON validates and encodes the %s relation; failures wrap [ErrInvalidFilter].\n", strings.ToLower(target))
 	fmt.Fprintf(output, "func (relation %sRel) MarshalJSON() ([]byte, error) {\n", target)
 	output.WriteString("\tif err := relation.validate(); err != nil {\n")
 	output.WriteString("\t\treturn nil, err\n")
@@ -1359,9 +1351,8 @@ func renderRelationMarshal(output *bytes.Buffer, target string) {
 }
 
 func renderCompiler(output *bytes.Buffer, model modelSpec) {
-	fmt.Fprintf(output, "// Predicate validates the %s filter and returns a local predicate accepting [%s] values already materialized by a [Snapshot]; it never runs tmux.\n", strings.ToLower(model.Name), model.Name)
-	output.WriteString("// Relation criteria traverse only relationships already materialized on that candidate.\n")
-	output.WriteString("// The predicate returns false for a nil candidate. Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.\n")
+	fmt.Fprintf(output, "// Predicate validates the %s filter and returns a local predicate for [%s] values materialized by a [Snapshot]; it never runs tmux.\n", strings.ToLower(model.Name), model.Name)
+	output.WriteString("// It traverses only loaded relations and returns false for a nil candidate.\n")
 	fmt.Fprintf(output, "func (filter %sFilter) Predicate() (func(*%s) bool, error) {\n", model.Name, model.Name)
 	output.WriteString("\tif err := filter.Validate(); err != nil {\n")
 	output.WriteString("\t\treturn nil, err\n")
@@ -1569,10 +1560,8 @@ func renderRelationMatch(output *bytes.Buffer, relation relationSpec) {
 		return
 	}
 	fmt.Fprintf(output, "\t\tif %sSome != nil || %sEvery != nil || %sNone != nil {\n", base, base, base)
-	// A record carrying no relations cannot answer a relation criterion, so it
-	// does not match one. That is what the to-one branch above already does
-	// with its found result, and an empty slice would instead report a session
-	// with no windows, which tmux does not have.
+	// Unmaterialized relations do not match; an empty slice would falsely mean
+	// a materialized relation with no members.
 	fmt.Fprintf(output, "\t\t\trelated, found := value.%s()\n", relation.Method)
 	output.WriteString("\t\t\tif !found {\n")
 	output.WriteString("\t\t\t\treturn false\n")
@@ -1607,11 +1596,8 @@ func renderRelationMatch(output *bytes.Buffer, relation relationSpec) {
 }
 
 func renderFilterUnmarshal(output *bytes.Buffer, model modelSpec) {
-	fmt.Fprintf(output, "// UnmarshalJSON clears the receiver, then decodes a strict %s filter JSON object.\n", strings.ToLower(model.Name))
-	output.WriteString("// [FilterSchemaVersion] remains external metadata and is not embedded in the object.\n")
-	output.WriteString("// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.\n")
-	output.WriteString("// On error, the receiver can retain a partial or complete decoded value.\n")
-	output.WriteString("// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.\n")
+	fmt.Fprintf(output, "// UnmarshalJSON clears the receiver, strictly decodes a %s filter, then validates it.\n", strings.ToLower(model.Name))
+	output.WriteString("// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.\n")
 	fmt.Fprintf(output, "func (filter *%sFilter) UnmarshalJSON(data []byte) error {\n", model.Name)
 	output.WriteString("\tif filter == nil {\n")
 	output.WriteString("\t\treturn invalidFilter(\"cannot decode into a nil filter\")\n")
@@ -1646,11 +1632,8 @@ func renderFilterUnmarshal(output *bytes.Buffer, model modelSpec) {
 }
 
 func renderRelationUnmarshal(output *bytes.Buffer, target string) {
-	fmt.Fprintf(output, "// UnmarshalJSON clears the receiver, then decodes strict %s relation quantifiers.\n", strings.ToLower(target))
-	output.WriteString("// [FilterSchemaVersion] remains external metadata and is not embedded in the object.\n")
-	output.WriteString("// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.\n")
-	output.WriteString("// On error, the receiver can retain a partial or complete decoded value.\n")
-	output.WriteString("// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.\n")
+	fmt.Fprintf(output, "// UnmarshalJSON clears the receiver, strictly decodes a %s relation, then validates it.\n", strings.ToLower(target))
+	output.WriteString("// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.\n")
 	fmt.Fprintf(output, "func (relation *%sRel) UnmarshalJSON(data []byte) error {\n", target)
 	output.WriteString("\tif relation == nil {\n")
 	output.WriteString("\t\treturn invalidFilter(\"cannot decode into a nil relation\")\n")
