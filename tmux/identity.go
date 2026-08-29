@@ -131,7 +131,7 @@ func (s Server) guardCommand(
 	arguments []string,
 	commandList bool,
 ) ([]string, *daemonCommandGuard, error) {
-	if s.daemon == nil {
+	if s.daemon == nil || s.boundToInstance() {
 		return arguments, nil, nil
 	}
 	thenCommand, err := encodeControlCommand(arguments, commandList)

@@ -316,6 +316,28 @@ func TestMaterializedCommandAtomicallyRejectsAReplacement(t *testing.T) {
 	}
 }
 
+func TestConnectionBoundCommandSkipsDaemonGuard(t *testing.T) {
+	t.Parallel()
+
+	server := serverWithRunner(&versionQueueRunner{})
+	server = server.withDaemon(snapshotServerIdentity{
+		version:    mustParseVersion(t, "3.7"),
+		pid:        "123",
+		startTime:  "456",
+		socketPath: server.SocketPath(),
+	})
+	server.connection = &Connection{}
+	arguments := []string{"display-message", "-p", "#{pane_id}"}
+
+	guarded, guard, err := server.guardCommand(arguments, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if guard != nil || !slices.Equal(guarded, arguments) {
+		t.Fatalf("connection command = (%q, %#v), want original arguments without a guard", guarded, guard)
+	}
+}
+
 func TestDaemonGuardEscapesFormatSeparators(t *testing.T) {
 	t.Parallel()
 
