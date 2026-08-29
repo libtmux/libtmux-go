@@ -11,6 +11,16 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
+func TestStartServerUsesNoVersionProbe(t *testing.T) {
+	t.Parallel()
+
+	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{}}}}
+	if err := serverWithRunner(runner).Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	assertInteractiveRequests(t, runner, [][]string{{"start-server"}})
+}
+
 // libtmux:parity libtmux.server.Server.attach_session
 // libtmux:parity libtmux.session.Session.attach
 // libtmux:parity libtmux.session.Session.attach#parameter-branch:exit_:ec1dc0f87e55

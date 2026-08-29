@@ -154,16 +154,6 @@ func TestDisplayMenuBuildsTypedItemArguments(t *testing.T) {
 	})
 }
 
-func TestStartServerUsesNoVersionProbe(t *testing.T) {
-	t.Parallel()
-
-	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{}}}}
-	if err := serverWithRunner(runner).Start(context.Background()); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	assertInteractiveRequests(t, runner, [][]string{{"start-server"}})
-}
-
 // libtmux:parity libtmux.server.Server.command_prompt
 // libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:bspace_exit:7238f0865c95
 // libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:expand_format:3634369442f2
