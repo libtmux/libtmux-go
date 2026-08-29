@@ -267,19 +267,6 @@ func setterScope(receiver string) string {
 	}[receiver]
 }
 
-func rawFallbacksForSurface(typeName string) []string {
-	return map[string][]string{
-		"ServerOptionValues":  {"[Server.RawOption]"},
-		"SessionOptionValues": {"[Session.RawOption]", "[GlobalSessionScope.RawOption]"},
-		"WindowOptionValues":  {"[Window.RawOption]", "[GlobalWindowScope.RawOption]"},
-		"PaneOptionValues":    {"[Pane.RawOption]"},
-		"ServerHookValues":    {"[GlobalSessionScope.RawHook]"},
-		"SessionHookValues":   {"[Session.RawHook]"},
-		"WindowHookValues":    {"[Window.RawHook]", "[GlobalWindowScope.RawHook]"},
-		"PaneHookValues":      {"[Pane.RawHook]"},
-	}[typeName]
-}
-
 func TestGeneratedNotificationGrammarRendersLiteralMetavariables(t *testing.T) {
 	t.Parallel()
 
