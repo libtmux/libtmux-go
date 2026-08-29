@@ -10,31 +10,9 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// The one pane where being wrong is not recoverable.
-//
-// Every pane summary carries isCaller, and until now that was the whole of the
-// protection: the server said which pane it was running in and trusted whoever
-// read it not to type into it. That is a note in a reply, and a model with
-// forty tools and a task does not always read the note. Typing into the caller
-// pane feeds keystrokes to the terminal the conversation is happening in --
-// interrupting the client, or answering a prompt nobody saw -- and no later
-// call undoes it.
-//
-// So a write to that pane asks first. MCP has a way to ask: elicitation puts
-// the question to the person, in their own client, and answers accept, decline,
-// or cancel.
-//
-// What counts as a write is what reaches the person's keyboard or their shell:
-// keys, pasted text, a command, a restart, a clear, an ending, and entering
-// copy mode, which takes their keystrokes away from their shell. Splitting the
-// pane is not one -- an agent that finds its own pane and makes room beside it
-// is the ordinary opening move -- and neither is exit_copy_mode, which is the
-// way out of the one mode that is.
-//
-// A client that cannot be asked is refused. Elicitation is negotiated at
-// initialize, so the server knows before the write whether the person can
-// answer. This guard protects the caller pane; it does not make the tools a
-// sandbox, because a write to another pane can still run anything the user can.
+// Caller-pane writes and teardown require elicitation because they can disrupt
+// the terminal carrying the conversation. Clients without elicitation are refused.
+// Entering copy mode is guarded; splitting and exit_copy_mode are not.
 
 // callerWriteGuard is what a caller is told when the person says no.
 const callerWriteGuard = "the person declined: %s is the pane this server " +
@@ -74,23 +52,12 @@ func (t *tools) resolvePaneToWrite(
 	return pane, nil
 }
 
-// resolvePaneToDeliver resolves the pane a keystroke is aimed at and refuses
-// one that cannot read it.
+// resolvePaneToDeliver is the target-resolution seam for input tools, applying
+// caller-pane and input-state guards. Non-input mutations use
+// resolvePaneToWrite so dead panes remain addressable.
 //
-// Tools that type call this instead of resolvePaneToWrite, for the same reason
-// write tools call that instead of resolvePane: a tool added later is guarded
-// by the way it finds its target rather than by remembering to ask. Delivering
-// a tool is what it means to be one of these, so the set cannot be listed
-// wrongly or fall out of date.
-//
-// The tool names itself rather than being read off the request, because a
-// batched call carries the batch's name and a refusal has to say which of its
-// calls stopped it.
-//
-// Tools that change a pane without typing into it keep resolvePaneToWrite. A
-// dead pane is a reasonable target for clearing, for respawning, and for
-// entering a mode: a person attached to that session scrolls a corpse by hand,
-// which no capture does for them.
+// tool is explicit because batched requests name the batch; refusals must
+// identify the nested tool.
 func (t *tools) resolvePaneToDeliver(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -229,14 +196,7 @@ func (t *tools) askAboutTheCaller(
 		RequestedSchema: schema,
 	})
 	if err != nil {
-		// A client that cannot be asked is refused rather than waved through.
-		// Letting it through made the guard advisory exactly where it matters
-		// most: the client least able to warn its person is the one that types
-		// into their terminal unannounced, which is what happened -- a session
-		// identifying its own server ran a command against the caller pane and
-		// put the text in its user's prompt box. Writing to the terminal the
-		// conversation is happening in is almost always a mistake, and naming
-		// another pane is the whole of the way out.
+		// Caller-pane writes fail closed when the client cannot elicit consent.
 		logToClient(ctx, request, "debug", map[string]any{
 			"event": "caller-pane write refused, nobody to ask",
 			"pane":  identifier,
