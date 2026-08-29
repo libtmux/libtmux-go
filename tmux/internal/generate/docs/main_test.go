@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// write puts one file into a temporary tree, creating the directories above it.
 func write(t *testing.T, root, relative, content string) string {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(relative))
@@ -55,8 +54,6 @@ func TestRunFillsMarkedBlockFromSource(t *testing.T) {
 	}
 }
 
-// TestRunIsIdempotent covers the gate rather than the rewrite: the tree is
-// checked in, and the check is that regenerating changes nothing.
 func TestRunIsIdempotent(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "example/main.go", sourceWithRegions)
@@ -81,8 +78,6 @@ func TestRunIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestRunNoticesEditedSource is the gate proving itself capable of failing: a
-// changed source must change the markdown, or nothing would ever catch drift.
 func TestRunNoticesEditedSource(t *testing.T) {
 	root := t.TempDir()
 	source := write(t, root, "example/main.go", sourceWithRegions)

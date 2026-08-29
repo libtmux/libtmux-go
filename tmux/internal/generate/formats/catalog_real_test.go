@@ -105,13 +105,8 @@ func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 	}
 }
 
-// attachCatalogClient holds a control-mode client on the server for as long as
-// the test runs.
-//
-// Without one, tmux's inventory omits every variable that needs a client to
-// have a value, which is what let session_active reach 3.6 without the catalog
-// noticing. Control mode is used rather than an ordinary attach because it
-// needs no terminal, and stdin is held open because closing it detaches.
+// attachCatalogClient keeps client-scoped variables in tmux's format inventory.
+// Control mode avoids a terminal; open stdin keeps the client attached.
 func attachCatalogClient(ctx context.Context, t *testing.T, socket string) {
 	t.Helper()
 

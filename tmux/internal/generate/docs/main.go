@@ -1,28 +1,5 @@
-// Command docs keeps the Go in the repository's markdown identical to Go that
-// compiles.
-//
-// A README that carries hand-copied code drifts from the package it describes,
-// and nothing catches it: the code is checked by a compiler, a linter, a race
-// detector and eight tmux releases, while the copy of it in the README is
-// checked by nobody. This removes the copy. A region of a real file is named
-// where it is written:
-//
-//	// docs:filter-pushdown
-//	filter := tmux.PaneFilter{Active: tmux.Ptr(true)}
-//	// docs:end
-//
-// and a markdown file asks for it by that name:
-//
-//	<!-- docs:filter-pushdown -->
-//	<!-- docs:end -->
-//
-// Everything between those two lines is replaced by a fenced block holding
-// exactly the region's lines. The result is checked in, and regenerating it
-// must leave the tree unchanged, which is the same gate the other generators in
-// this directory are held to.
-//
-// Markdown outside a marker pair is never touched, so a block that no program
-// backs stays hand-written and says so by not being marked.
+// Command docs replaces marked Markdown blocks with matching Go source regions.
+// Text outside marker pairs is unchanged.
 package main
 
 import (
@@ -46,8 +23,7 @@ var (
 	markdownEnd       = regexp.MustCompile(`^<!-- docs:end -->$`)
 )
 
-// skipDirectories are not searched. Generated fixtures and dependency caches
-// hold Go that is not this repository's to quote.
+// skipDirectories excludes generated fixtures and dependency caches.
 var skipDirectories = map[string]bool{
 	".git":         true,
 	"testdata":     true,
@@ -94,8 +70,7 @@ func run(root string) error {
 	return nil
 }
 
-// region is the body of one named block, with the indentation it was written
-// at removed so it reads as top-level code in a fenced block.
+// region holds one named, dedented source block.
 type region struct {
 	origin string
 	lines  []string
@@ -136,9 +111,7 @@ func collectFileRegions(path string, regions map[string]region) error {
 	for scanner.Scan() {
 		line++
 		text := scanner.Text()
-		// The end marker is tested first: "end" is also a name the start
-		// pattern accepts, so testing that first would read every region as
-		// opening a second one.
+		// Check the end marker first because sourceRegionStart also accepts "end".
 		if sourceRegionEnd.MatchString(text) {
 			if name == "" {
 				return fmt.Errorf("%s:%d: region ends without starting", path, line)
@@ -170,9 +143,8 @@ func collectFileRegions(path string, regions map[string]region) error {
 	return nil
 }
 
-// dedent removes the shared leading tabs, so a region written inside a function
-// reads as code rather than as an indented quotation. Blank lines carry no
-// indentation and are ignored when measuring it.
+// dedent removes shared leading tabs. Blank lines do not affect the measured
+// indentation.
 func dedent(lines []string) []string {
 	shared := -1
 	for _, line := range lines {
@@ -230,8 +202,6 @@ func findMarkdown(root string) ([]string, error) {
 	return documents, err
 }
 
-// applyRegions rewrites every marked block in one markdown file, reporting
-// whether anything changed.
 func applyRegions(path string, regions map[string]region) (bool, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -247,8 +217,6 @@ func applyRegions(path string, regions map[string]region) (bool, error) {
 	for index, line := range lines {
 		if name == "" {
 			out = append(out, line)
-			// As in the Go scanner, an end marker outside a block is not the
-			// start of one named "end".
 			if match := markdownStart.FindStringSubmatch(line); match != nil &&
 				!markdownEnd.MatchString(line) {
 				name, started = match[1], index+1
@@ -256,8 +224,6 @@ func applyRegions(path string, regions map[string]region) (bool, error) {
 			continue
 		}
 		if !markdownEnd.MatchString(line) {
-			// The previous body is dropped; it is about to be written again
-			// from the source of truth.
 			continue
 		}
 		source, ok := regions[name]

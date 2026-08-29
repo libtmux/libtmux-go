@@ -1,17 +1,10 @@
-// Package goname converts tmux and Python lower_snake_case names to the Go
-// exported spelling this module uses. It is the single source of truth for
-// that convention: generated format accessors and the parity omission guard
-// must agree on how a name crosses the language boundary, or the guard would
-// look for symbols the generator never produces.
+// Package goname defines the exported Go spelling shared by generators and
+// parity checks for tmux and Python lower_snake_case names.
 package goname
 
 import "strings"
 
-// initialisms are words Go writes fully capitalized. The Go community treats a
-// mixed-case initialism such as "Id" or "Utf8" as a style error, so a name
-// crossing into Go adopts the capitalized form. Entries cover the tmux
-// vocabulary this module already generates plus the initialisms Go programmers
-// expect, so a future name containing one needs no change here.
+// initialisms use Go's conventional all-capital spelling.
 var initialisms = map[string]string{
 	"acl":   "ACL",
 	"api":   "API",
@@ -61,9 +54,7 @@ var initialisms = map[string]string{
 	"xss":   "XSS",
 }
 
-// compounds are single lower-case tokens that carry more than one English word.
-// tmux spells them unseparated, so splitting on "_" alone would produce
-// Readonly or Termname rather than the Go spelling a reader expects.
+// compounds records tmux words whose Go spelling needs an internal capital.
 var compounds = map[string]string{
 	"readonly":     "ReadOnly",
 	"termfeatures": "TermFeatures",
@@ -71,15 +62,9 @@ var compounds = map[string]string{
 	"termtype":     "TermType",
 }
 
-// Exported returns the Go exported spelling of a lower_snake_case name. It
-// capitalizes each underscore-separated word, expands known initialisms and
-// compounds, and drops empty segments so leading, trailing, and doubled
-// underscores cannot produce an invalid identifier. Callers own the decision
-// that a name should be exported at all; Exported never inspects visibility.
-//
-// Exported returns an empty string when name contributes no words. Word
-// matching is exact and case-sensitive, so a name that already carries Go
-// casing passes through its non-initialism words unchanged.
+// Exported converts lower_snake_case to exported Go spelling, applying known
+// initialisms and compounds and ignoring empty segments. Matching is
+// case-sensitive; a name with no words returns an empty string.
 func Exported(name string) string {
 	var exported strings.Builder
 	for word := range strings.SplitSeq(name, "_") {
