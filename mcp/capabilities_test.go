@@ -169,7 +169,13 @@ func TestCapabilitiesSeparateTopologyFromPaneContentResources(t *testing.T) {
 			}
 			gotContent := false
 			for _, template := range templates.ResourceTemplates {
-				gotContent = gotContent || template.URITemplate == templatePaneContent
+				if template.URITemplate != templatePaneContent {
+					continue
+				}
+				gotContent = true
+				if template.MIMEType != "text/plain" {
+					t.Errorf("pane-content template MIME type = %q, want text/plain", template.MIMEType)
+				}
 			}
 			if gotContent != test.wantContent {
 				t.Errorf("pane-content template advertised = %v, want %v", gotContent, test.wantContent)

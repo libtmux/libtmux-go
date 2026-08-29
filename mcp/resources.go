@@ -102,7 +102,7 @@ func addResources(server *mcp.Server, t *tools) {
 			Title:       "Contents of One Pane",
 			Description: "What one pane is showing, as text, addressed by pane id without " +
 				"its sigil, so %1 is written 1.",
-			MIMEType: "application/json",
+			MIMEType: "text/plain",
 		}, t.readTemplated)
 	}
 }
