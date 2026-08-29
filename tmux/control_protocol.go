@@ -32,8 +32,9 @@ func (e *ControlProtocolError) Unwrap() error { return ErrControlProtocol }
 
 // ControlCommandResult is one completed control-mode command frame. A failed
 // tmux command remains result data through Failed; local, protocol, transport,
-// and context failures are returned separately by [ControlClient.Cmd] and
-// [ControlClient.Call]. All slices are owned by the caller.
+// and context failures are returned separately by [Connection.Call],
+// [ControlClient.Cmd], and [ControlClient.Call]. All slices are owned by the
+// caller.
 type ControlCommandResult struct {
 	// Command is the safely encoded command's original argument vector.
 	Command []string

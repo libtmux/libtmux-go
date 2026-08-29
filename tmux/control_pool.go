@@ -197,16 +197,25 @@ func (p *controlLanePool) run(
 	arguments []string,
 	commandList bool,
 ) (CommandResult, error) {
-	client, err := p.acquire(ctx)
-	if err != nil {
-		return CommandResult{Command: slices.Clone(arguments), ExitCode: -1}, err
-	}
-	results, err := client.cmd(ctx, commandList, arguments...)
-	p.release(client, err)
+	results, err := p.call(ctx, arguments, commandList)
 	if err != nil {
 		return CommandResult{Command: slices.Clone(arguments), ExitCode: -1}, err
 	}
 	return controlCommandResults(arguments, results), nil
+}
+
+func (p *controlLanePool) call(
+	ctx context.Context,
+	arguments []string,
+	commandList bool,
+) ([]ControlCommandResult, error) {
+	client, err := p.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	results, err := client.cmd(ctx, commandList, arguments...)
+	p.release(client, err)
+	return results, err
 }
 
 func (p *controlLanePool) acquire(ctx context.Context) (*ControlClient, error) {

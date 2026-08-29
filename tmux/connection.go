@@ -282,6 +282,21 @@ func (c *Connection) Lanes() int {
 	return len(c.pool.clients)
 }
 
+// Call executes one safely encoded tmux command on an owned lane and returns
+// every reply frame in order. An alias may produce zero or multiple frames; a
+// %error frame remains result data through [ControlCommandResult.Failed]. Args
+// always describe one command, so a bare semicolon is quoted as an operand
+// rather than interpreted as a command-list separator.
+func (c *Connection) Call(
+	ctx context.Context,
+	args ...string,
+) ([]ControlCommandResult, error) {
+	if err := c.routeError(ctx, CommandServer); err != nil {
+		return nil, err
+	}
+	return c.pool.call(ctx, args, false)
+}
+
 // CloseContext starts terminal shutdown and waits within ctx. The context
 // bounds only the wait; a later call may resume waiting for the same shutdown.
 func (c *Connection) CloseContext(ctx context.Context) error {
