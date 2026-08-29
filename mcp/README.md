@@ -23,7 +23,7 @@ runtime dependency; speaking MCP needs one, so this lives in its own module and
 
 ## Installing it
 
-**Requirements:** Go 1.26+, and `tmux` on `$PATH`.
+**Requirements:** Go 1.26+, and tmux 3.6 or newer on `$PATH`.
 
 ```console
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
@@ -409,7 +409,11 @@ if err != nil {
     return err
 }
 defer instance.Close()
-session, err := instance.Connect(ctx, transport, nil)
+session, err := instance.Connect(
+    ctx,
+    tmuxmcp.AssumeResponseCommit(transport),
+    nil,
+)
 ```
 
 `tmuxmcp.NewServer` returns an `Instance` with managed `Connect` and `Run`
@@ -419,6 +423,14 @@ target before allocating instance-owned resources. Closing a session releases
 that client's consent, subscriptions, and job files. Closing the instance
 rejects new clients, cancels the remaining sessions, and then releases shared
 watchers, timers, and an owned audit file.
+
+`Connect` checks the installed tmux version before opening the transport. It
+also needs to know that one successful transport write commits one response.
+Built-in IO and stdio transports receive one-message framing automatically. A
+custom transport must enforce that contract itself and be marked with
+`AssumeResponseCommit`, as above; the marker is an assertion and does not alter
+the transport.
+
 This package is named `mcp` and so is the SDK's, so a file using both has to
 rename one of them.
 
