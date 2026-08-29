@@ -240,8 +240,8 @@ size that has not moved since the last reading means that pane wrote nothing.
 the command is a build and the caller has reading to do. `detach` returns a
 `jobId` as soon as the command is typed; `get_job` collects it later — at once
 to ask whether it has finished, or with `timeoutSeconds` to wait a bounded
-while. The command is identical either way: the same wrapper records the same
-exit status against the same tmux channel, and only who waits changes.
+while. The command is identical either way: the same wrapper commits the same
+exit status and closing position, and only who waits changes.
 
 Collecting is idempotent. The first read that finds a status keeps it and
 releases the files behind it; every later read is answered from what was kept.
@@ -262,10 +262,10 @@ call, as the MCP Inspector's `--cli` does, sees it every time.
 Prefer `run_command` to `send_keys` followed by `capture_pane`. A shell echoes
 the command it was given, so a screen read finds the request rather than the
 result and reports success before the command has run. `run_command` reads no
-screen to decide the command is done: the command signals a tmux channel when it
-ends and records its status. It also returns what the command printed, read from
-marks the wrapper records inside the pane, so a caller does not have to guess
-where in the scrollback its command began.
+screen to decide the command is done: the wrapper atomically publishes status
+and closing records when it ends. It also returns what the command printed,
+read from marks the wrapper records inside the pane, so a caller does not have
+to guess where in the scrollback its command began.
 
 What the command printed is read back off the pane, so it is what tmux can
 still see there. A tab is the one character that survives this only on newer
@@ -282,10 +282,11 @@ is, and the row the shell draws its prompt into is left out. When the output
 cannot be read at all, `outputUnavailable` says why, which is what separates a
 command that printed nothing from a pane that could not be reached.
 
-Your command is written to a file and sourced, never typed. A shell's line
-editor acts on what arrives as keys, so a command carrying a tab would ask it to
-complete a filename and a command carrying `C-c` would be acted on rather than
-run. Nothing you send crosses that line editor, whatever it contains.
+Your POSIX-compatible command is written to a file and sourced, never typed.
+A shell's line editor acts on what arrives as keys, so a command carrying a tab
+would ask it to complete a filename and a command carrying `C-c` would be acted
+on rather than run. Known incompatible shells are refused before delivery.
+Nothing you send crosses that line editor, whatever it contains.
 
 A command that outlasts its wait leaves the pane holding it, and every later
 `run_command` there times out too; send `C-c` with `send_keys` to get the pane
@@ -456,8 +457,8 @@ command printed.
 
 **The non-obvious part.** Asking again is free and gives the same answer: the
 first read that finds a status keeps it. And `detach` does not change the
-command — the same wrapper records the same status against the same channel, so
-a detached run and a waited one report identically.
+command — the same wrapper commits the same records, so a detached run and a
+waited one report identically.
 
 ### Check on eight panes without reading any of them
 
@@ -759,7 +760,7 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `create_session`
 
-Start one detached session and return its id and name.
+Start one session and return its id and name.
 
 Requires the `workspace-create` capability.
 
@@ -911,9 +912,12 @@ Reads only. Repeating it changes nothing.
 | `jobId` **required** | string |
 | `paneId` **required** | string |
 | `truncated` **required** | boolean |
+| `collectionPending` | boolean |
 | `effectiveTimeoutSeconds` | integer |
 | `exitStatus` | integer |
+| `linesMissed` | boolean |
 | `output` | array |
+| `outputUnavailable` | string |
 | `running` | string |
 | `timeoutClamped` | boolean |
 | `truncatedBytes` | integer |
@@ -1399,7 +1403,7 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `run_command`
 
-Run a shell command in one pane, wait for it to finish, and return its exit status and its output.
+Run a POSIX-compatible shell command in one pane, wait for it to finish, and return its exit status and its output.
 
 Requires the `pane-control` capability.
 
@@ -1407,7 +1411,7 @@ Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `command` **required** | string | the shell command to run |
+| `command` **required** | string | the POSIX-compatible shell command to run |
 | `detach` | boolean | return a jobId at once instead of waiting; collect it later with get_job |
 | `maxBytes` | integer | how many bytes of output to return at most, keeping the last lines |
 | `maxLines` | integer | how many lines of output to return at most, keeping the last ones |
@@ -1787,9 +1791,9 @@ Changes tmux by a step. Repeating it compounds.
 
 Wait until something signals a tmux wait-for channel.
 
-Requires the `metadata-read` capability.
+Requires the `pane-control` capability.
 
-Reads only. Repeating it changes nothing.
+Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1798,11 +1802,13 @@ Reads only. Repeating it changes nothing.
 
 | Returns | Type |
 | --- | --- |
+| `effectiveTimeoutSeconds` **required** | integer |
 | `signalled` **required** | boolean |
+| `timeoutClamped` | boolean |
 
 ### `wait_for_text`
 
-Wait until a pane writes one of several patterns, reading what the pane produces rather than its screen.
+Wait until a pane writes one of several patterns.
 
 Requires the `content-read` capability.
 
