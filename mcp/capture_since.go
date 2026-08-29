@@ -117,16 +117,17 @@ func (h *packedHashes) UnmarshalJSON(raw []byte) error {
 
 // paneState is one tmux expansion so its grid coordinates describe one instant.
 type paneState struct {
-	pid         int
-	historySize int
-	height      int
-	cursorY     int
-	dead        bool
+	pid          int
+	historySize  int
+	historyLimit int
+	height       int
+	cursorY      int
+	dead         bool
 }
 
 // paneStateFormat uses a printable separator because tmux may rewrite control
 // characters when the client environment has no UTF-8 locale.
-const paneStateFormat = "#{pane_pid}|#{history_size}|#{pane_height}|#{cursor_y}|#{pane_dead}"
+const paneStateFormat = "#{pane_pid}|#{history_size}|#{history_limit}|#{pane_height}|#{cursor_y}|#{pane_dead}"
 
 // readPaneState asks tmux where the pane's grid stands.
 func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
@@ -143,10 +144,10 @@ func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
 		return paneState{}, fmt.Errorf("pane %s reported no state", pane.ID())
 	}
 	fields := strings.Split(printed[0], "|")
-	if len(fields) != 5 {
+	if len(fields) != 6 {
 		return paneState{}, fmt.Errorf("pane %s reported unreadable state %q", pane.ID(), printed[0])
 	}
-	numbers := make([]int, 4)
+	numbers := make([]int, 5)
 	for index := range numbers {
 		value, err := strconv.Atoi(strings.TrimSpace(fields[index]))
 		if err != nil {
@@ -156,13 +157,14 @@ func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
 		numbers[index] = value
 	}
 	return paneState{
-		pid:         numbers[0],
-		historySize: numbers[1],
-		height:      numbers[2],
-		cursorY:     numbers[3],
+		pid:          numbers[0],
+		historySize:  numbers[1],
+		historyLimit: numbers[2],
+		height:       numbers[3],
+		cursorY:      numbers[4],
 		// tmux writes the flag as 1 or 0, and as empty on versions that do not
 		// set it for a live pane.
-		dead: strings.TrimSpace(fields[4]) == "1",
+		dead: strings.TrimSpace(fields[5]) == "1",
 	}, nil
 }
 
@@ -358,10 +360,13 @@ func locateAnchor(
 	state paneState,
 ) (rows []string, at int, found bool, err error) {
 	if len(cursor.Leading) == 0 {
-		// A cursor from before this server recorded a fingerprint, or one for
-		// a pane that had written nothing at all. Its position is all there
-		// is, so it is used as-is rather than reporting a loss that may not
-		// have happened.
+		// The pane had written nothing when this cursor was taken, so its
+		// anchor is the first row and there is nothing above it to fingerprint.
+		// A full history means rows have been discarded since, and the anchor
+		// cannot be told from the oldest row that survived it.
+		if state.historyLimit > 0 && state.historySize >= state.historyLimit {
+			return nil, 0, false, nil
+		}
 		start := cursor.AnchorAbs - state.historySize
 		rows, err = captureRawRows(ctx, pane, tmux.CapturePaneRequest{
 			Start: tmux.CaptureLine(start),
@@ -464,10 +469,10 @@ func captureFingerprintRows(
 		}
 	}
 	// The settled rows above the anchor, which may reach back into history
-	// when the pane has written more than a screenful. A cursor at the very
-	// top of a pane that has written nothing has none, and is then located by
-	// its position alone.
-	if state.cursorY > 0 {
+	// when the pane has written more than a screenful. Only a pane that has
+	// written nothing at all has none; a cursor on the first row of a cleared
+	// pane still has history above it, and needs those rows to survive a trim.
+	if state.cursorY > 0 || state.historySize > 0 {
 		leading, err = captureRawRows(ctx, pane, tmux.CapturePaneRequest{
 			Start: tmux.CaptureLine(max(state.cursorY-fingerprintRows, -state.historySize)),
 			End:   tmux.CaptureLine(state.cursorY - 1),

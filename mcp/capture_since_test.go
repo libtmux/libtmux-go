@@ -164,6 +164,64 @@ func TestATrimThatKeepsTheAnchorLosesNothing(t *testing.T) {
 }
 
 // firstLine reports the first line, for the probe's log.
+//
+//libtmux:real-tmux
+func TestATrimmedAnchorTakenAtTheTopIsStillReported(t *testing.T) {
+	session, _, ctx := connect(t)
+
+	workspace(ctx, t, session, "session_name: top-anchor\nwindows:\n  - panes:\n      - {}\n")
+	if result := call(ctx, t, session, "set_option", map[string]any{
+		"scope": "session", "sessionName": "top-anchor",
+		"name": "history-limit", "value": "50",
+	}, nil); result.IsError {
+		t.Fatalf("set history-limit: %#v", result.Content)
+	}
+	var made struct {
+		PaneID string `json:"paneId"`
+	}
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "top-anchor", "name": "top",
+	}, &made); result.IsError {
+		t.Fatalf("create_window: %#v", result.Content)
+	}
+	pane := made.PaneID
+
+	// clear leaves the prompt on the pane's first row, so the cursor taken next
+	// has nothing above it on screen.
+	run(ctx, t, session, pane, "clear")
+
+	var first struct {
+		Cursor string `json:"cursor"`
+	}
+	call(ctx, t, session, "capture_since", map[string]any{"paneId": pane}, &first)
+	if first.Cursor == "" {
+		t.Fatal("no cursor")
+	}
+
+	// Overflow the history, so tmux drops rows and renumbers the grid under an
+	// anchor that was recorded by its position.
+	run(ctx, t, session, pane, "for i in $(seq 1 200); do echo c-$i; done")
+
+	var delta struct {
+		Lines       []string `json:"lines"`
+		LinesMissed bool     `json:"linesMissed"`
+	}
+	call(ctx, t, session, "capture_since", map[string]any{"cursor": first.Cursor}, &delta)
+	joined := strings.Join(delta.Lines, "\n")
+
+	var absent []string
+	for i := 1; i <= 200; i++ {
+		marker := fmt.Sprintf("c-%d", i)
+		if !containsWord(joined, marker) {
+			absent = append(absent, marker)
+		}
+	}
+	if len(absent) > 0 && !delta.LinesMissed {
+		t.Fatalf("%d lines are missing from the delta and linesMissed is false; "+
+			"first missing %v", len(absent), absent[:min(6, len(absent))])
+	}
+}
+
 func firstLine(lines []string) string {
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {
