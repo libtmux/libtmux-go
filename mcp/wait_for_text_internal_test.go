@@ -140,7 +140,7 @@ func TestWaitForTextTimeoutIncludesPaneSetup(t *testing.T) {
 	go func() {
 		held <- command.WaitFor(ctx, tmux.WaitForRequest{Channel: gate})
 	}()
-	waitForWaitTextLaneBlock(t, ctx, command)
+	waitForWaitTextLaneBlock(ctx, t, command)
 	release := func() {
 		if err := target.WaitFor(ctx, tmux.WaitForRequest{
 			Channel: gate, Mode: tmux.WaitForModeSignal,
@@ -207,7 +207,7 @@ func TestInstanceCloseJoinsTimedOutPaneObservations(t *testing.T) {
 	}
 }
 
-func waitForWaitTextLaneBlock(t *testing.T, ctx context.Context, command tmux.Server) {
+func waitForWaitTextLaneBlock(ctx context.Context, t *testing.T, command tmux.Server) {
 	t.Helper()
 	deadline := time.NewTimer(time.Second)
 	defer deadline.Stop()

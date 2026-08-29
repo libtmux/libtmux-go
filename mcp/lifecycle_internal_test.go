@@ -346,8 +346,12 @@ func TestTerminalShutdownWaitsForEveryReadCallResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	instance.requestRead(scope, &jsonrpc.Request{ID: firstID})
-	instance.requestRead(scope, &jsonrpc.Request{ID: secondID})
+	if err := instance.requestRead(scope, &jsonrpc.Request{ID: firstID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := instance.requestRead(scope, &jsonrpc.Request{ID: secondID}); err != nil {
+		t.Fatal(err)
+	}
 	instance.terminal(tmux.ErrDaemonReplaced)
 
 	instance.responseSettled(scope, &jsonrpc.Response{ID: secondID})

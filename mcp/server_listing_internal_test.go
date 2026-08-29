@@ -163,6 +163,7 @@ func TestProbeSiblingServerTreatsTimeoutAsDead(t *testing.T) {
 }
 
 func TestListServersPropagatesOuterCancellationAfterSiblingProbe(t *testing.T) {
+	//nolint:usetesting // t.TempDir can exceed the Unix socket path limit.
 	root, err := os.MkdirTemp("", "mcp-list-")
 	if err != nil {
 		t.Fatal(err)

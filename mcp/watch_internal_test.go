@@ -403,7 +403,7 @@ func TestWatcherSelectsSessionsNeededByItsResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	drainResourceUpdates(updated)
-	assertWatcherAttends(t, ctx, instance.tools.watchers, target, unselected.ID())
+	assertWatcherAttends(ctx, t, instance.tools.watchers, target, unselected.ID())
 	if err := secondWindow.SelectLayout(ctx, tmux.SelectLayoutRequest{
 		Layout: "even-horizontal",
 	}); err != nil {
@@ -423,7 +423,7 @@ func TestWatcherSelectsSessionsNeededByItsResources(t *testing.T) {
 	// assertion.
 	awaitResourceWrite(t, updated, unresolved)
 	drainResourceUpdates(updated)
-	assertWatcherAttends(t, ctx, instance.tools.watchers, target, unselected.ID())
+	assertWatcherAttends(ctx, t, instance.tools.watchers, target, unselected.ID())
 	if err := secondWindow.SelectLayout(ctx, tmux.SelectLayoutRequest{
 		Layout: "even-vertical",
 	}); err != nil {
@@ -448,8 +448,8 @@ func TestWatcherSelectsSessionsNeededByItsResources(t *testing.T) {
 }
 
 func assertWatcherAttends(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	watchers *watchers,
 	server tmux.Server,
 	want tmux.SessionID,

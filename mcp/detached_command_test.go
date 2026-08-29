@@ -40,7 +40,7 @@ func TestRunCommandTimeoutIncludesCommandSetup(t *testing.T) {
 	go func() {
 		held <- command.WaitFor(ctx, tmux.WaitForRequest{Channel: gate})
 	}()
-	waitForWaitTextLaneBlock(t, ctx, command)
+	waitForWaitTextLaneBlock(ctx, t, command)
 	released := make(chan error, 1)
 	time.AfterFunc(1250*time.Millisecond, func() {
 		if err := target.WaitFor(ctx, tmux.WaitForRequest{
@@ -165,13 +165,13 @@ func TestOneJobCompletionDoesNotFinishAnother(t *testing.T) {
 		})
 		returned <- result{output: output, err: err}
 	}()
-	waitForJobCollection(t, ctx, serverSession.scope.jobs, second.JobID)
+	waitForJobCollection(ctx, t, serverSession.scope.jobs, second.JobID)
 	if err := target.WaitFor(ctx, tmux.WaitForRequest{
 		Channel: "job-gate-first", Mode: tmux.WaitForModeSignal,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	waitForPath(t, ctx, firstJob.closedAt)
+	waitForPath(ctx, t, firstJob.closedAt)
 	select {
 	case got := <-returned:
 		t.Fatalf("another job's completion ended the wait: (%+v, %v)", got.output, got.err)
@@ -542,7 +542,7 @@ func assertPaneCannotResolveTmux(
 	}
 }
 
-func waitForJobCollection(t *testing.T, ctx context.Context, owned *jobs, id string) {
+func waitForJobCollection(ctx context.Context, t *testing.T, owned *jobs, id string) {
 	t.Helper()
 	for {
 		entry, found := owned.find(id)
@@ -560,7 +560,7 @@ func waitForJobCollection(t *testing.T, ctx context.Context, owned *jobs, id str
 	}
 }
 
-func waitForPath(t *testing.T, ctx context.Context, path string) {
+func waitForPath(ctx context.Context, t *testing.T, path string) {
 	t.Helper()
 	for {
 		if _, err := os.Stat(path); err == nil {

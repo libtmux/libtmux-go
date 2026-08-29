@@ -34,7 +34,7 @@ func TestCreateWindowPreservesIdentityAfterPostCreationFailure(t *testing.T) {
 			}
 
 			injected := errors.New("injected post-creation window refresh failure")
-			failure := error(injected)
+			failure := injected
 			if test.terminal {
 				failure = errors.Join(tmux.ErrDaemonReplaced, injected)
 			}
