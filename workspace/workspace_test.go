@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -112,6 +113,125 @@ func TestParseAcceptsQuotedBooleans(t *testing.T) {
 	}
 	if !bool(parsed.Windows[0].Focus) || !bool(parsed.Windows[0].Panes[0].Focus) {
 		t.Fatalf("quoted booleans did not decode as true: %#v", parsed.Windows[0])
+	}
+}
+
+func TestInitialSessionRequestCarriesTheFirstPane(t *testing.T) {
+	described := workspace.Workspace{
+		SessionName:    "project",
+		StartDirectory: "/workspace",
+		Windows: []workspace.Window{{
+			Name:           "editor",
+			StartDirectory: "/window",
+			Panes: []workspace.Pane{{
+				StartDirectory: "/pane",
+				Shell:          "sleep 300",
+			}},
+		}},
+	}
+
+	request, err := described.InitialSessionRequest()
+	if err != nil {
+		t.Fatalf("InitialSessionRequest() error = %v", err)
+	}
+	if request.Name != "project" || request.WindowName != "editor" ||
+		request.StartDirectory != "/pane" || request.Command != "sleep 300" {
+		t.Fatalf("InitialSessionRequest() = %+v, want first pane settings", request)
+	}
+}
+
+func TestInitialSessionRequestRejectsAnInvalidWorkspace(t *testing.T) {
+	_, err := (workspace.Workspace{}).InitialSessionRequest()
+	if !errors.Is(err, workspace.ErrInvalidWorkspace) {
+		t.Fatalf("InitialSessionRequest() error = %v, want ErrInvalidWorkspace", err)
+	}
+}
+
+func TestBuildIntoRequiresAMaterializedSession(t *testing.T) {
+	described := workspace.Workspace{
+		SessionName:   "continued",
+		GlobalOptions: map[string]string{"status": "off"},
+		Windows:       []workspace.Window{{Name: "initial"}},
+	}
+	err := workspace.BuildInto(context.Background(), tmux.Session{}, described)
+	if !errors.Is(err, tmux.ErrMissingTarget) {
+		t.Fatalf("BuildInto() error = %v, want ErrMissingTarget", err)
+	}
+	if errors.Is(err, workspace.ErrInvalidWorkspace) {
+		t.Fatalf("BuildInto() classified a missing session as an invalid workspace: %v", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	configuration := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(configuration, nil, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var mutex sync.Mutex
+	processes := 0
+	server := mustNewServer(t, tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		ConfigFile: configuration,
+		Runner: tmux.CommandRunnerFunc(func(
+			ctx context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			mutex.Lock()
+			processes++
+			mutex.Unlock()
+			return tmux.SubprocessRunner().Run(ctx, request)
+		}),
+	})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = server.Kill(killCtx)
+	})
+
+	described := workspace.Workspace{
+		SessionName: "continued",
+		Windows: []workspace.Window{
+			{Name: "editor", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+			{Name: "shell", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+		},
+	}
+	request, err := described.InitialSessionRequest()
+	if err != nil {
+		t.Fatalf("InitialSessionRequest() error = %v", err)
+	}
+	_, connection, err := server.NewSessionConnection(
+		ctx,
+		request,
+		tmux.ConnectionOptions{},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+
+	mutex.Lock()
+	processes = 0
+	mutex.Unlock()
+	if err := workspace.BuildInto(ctx, connection.Session(), described); err != nil {
+		t.Fatalf("BuildInto() error = %v", err)
+	}
+	mutex.Lock()
+	started := processes
+	mutex.Unlock()
+	if started != 0 {
+		t.Fatalf("BuildInto() started %d tmux processes, want none", started)
+	}
+
+	windows, err := connection.Session().SearchWindows(ctx, nil)
+	if err != nil {
+		t.Fatalf("SearchWindows() error = %v", err)
+	}
+	if len(windows) != 2 {
+		t.Fatalf("BuildInto() left %d windows, want 2", len(windows))
 	}
 }
 

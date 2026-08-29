@@ -8,6 +8,22 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
+// InitialSessionRequest validates w and returns the request that creates its
+// session and initial window. Use the resulting materialized session with
+// [BuildInto] to continue the build over a caller-owned transport.
+func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
+	if err := w.Validate(); err != nil {
+		return tmux.NewSessionRequest{}, err
+	}
+	first := w.Windows[0]
+	return tmux.NewSessionRequest{
+		Name:           w.SessionName,
+		StartDirectory: windowDirectory(first, firstWindowDirectory(w, first)),
+		WindowName:     first.Name,
+		Command:        windowCommand(first),
+	}, nil
+}
+
 // Build creates the workspace on server and returns the created session.
 //
 // Build is not atomic. A failure after session creation returns that session;
@@ -25,17 +41,11 @@ import (
 // Each pane receives workspace, window, and pane CommandsBefore, then its own
 // Commands. Sleep values pause Build rather than the pane.
 func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.Session, error) {
-	if err := workspace.Validate(); err != nil {
+	request, err := workspace.InitialSessionRequest()
+	if err != nil {
 		return tmux.Session{}, err
 	}
-
-	first := workspace.Windows[0]
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
-		Name:           workspace.SessionName,
-		StartDirectory: windowDirectory(first, firstWindowDirectory(workspace, first)),
-		WindowName:     first.Name,
-		Command:        windowCommand(first),
-	})
+	session, err := server.NewSession(ctx, request)
 	if err != nil {
 		return session, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
 	}
@@ -45,21 +55,40 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 	// close, EngineFallbackAllow permits subprocess fallback;
 	// EngineFallbackReject returns a tmux.EngineFallbackError instead.
 	if server.Engine() == nil {
-		connected, live, pool, poolErr := server.OpenControlPool(
+		_, live, pool, poolErr := server.OpenControlPool(
 			ctx, session, tmux.ControlPoolRequest{},
 		)
 		if poolErr == nil {
 			defer func() { _ = pool.Close() }()
-			server = connected
 			session = live
 		}
 	}
+	if err := BuildInto(ctx, session, workspace); err != nil {
+		return session, err
+	}
+	return session, nil
+}
+
+// BuildInto populates the initial session described by workspace. The session
+// must already have been created from [Workspace.InitialSessionRequest].
+// BuildInto uses the session's existing server and transport; it neither
+// creates a session nor opens or owns a connection.
+//
+// BuildInto is not atomic. A failure leaves completed mutations in tmux.
+func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) error {
+	if session.ID() == "" {
+		return tmux.ErrMissingTarget
+	}
+	if err := workspace.Validate(); err != nil {
+		return err
+	}
+	server := session.Server()
 
 	// The initial window is created with the session before these values are set;
 	// later windows can inherit them at creation.
 	for name, value := range workspace.GlobalOptions {
 		if err := setGlobalOption(ctx, server, name, value); err != nil {
-			return session, fmt.Errorf("set global option %q: %w", name, err)
+			return fmt.Errorf("set global option %q: %w", name, err)
 		}
 	}
 
@@ -67,12 +96,12 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 		if err := session.SetEnvironment(
 			ctx, name, value, tmux.SetEnvironmentOptions{},
 		); err != nil {
-			return session, fmt.Errorf("set environment %q: %w", name, err)
+			return fmt.Errorf("set environment %q: %w", name, err)
 		}
 	}
 	for name, value := range workspace.Options {
 		if err := setSessionOption(ctx, session, name, value); err != nil {
-			return session, fmt.Errorf("set session option %q: %w", name, err)
+			return fmt.Errorf("set session option %q: %w", name, err)
 		}
 	}
 
@@ -80,7 +109,7 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 	for index, described := range workspace.Windows {
 		window, err := buildWindow(ctx, session, workspace, described, index)
 		if err != nil {
-			return session, err
+			return err
 		}
 		if bool(described.Focus) {
 			focused := window
@@ -90,10 +119,10 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 
 	if focusWindow != nil {
 		if _, err := focusWindow.Select(ctx); err != nil {
-			return session, fmt.Errorf("focus window: %w", err)
+			return fmt.Errorf("focus window: %w", err)
 		}
 	}
-	return session, nil
+	return nil
 }
 
 // buildWindow resolves the session's initial window or creates a later one,
