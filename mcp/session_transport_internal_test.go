@@ -15,7 +15,7 @@ import (
 
 func testReadyConnection(
 	inner mcp.Connection,
-	onRequest func(jsonrpc.Message) bool,
+	onRequest func(jsonrpc.Message) error,
 	onSettled func(jsonrpc.Message),
 	onTerminal func(error),
 ) *sessionReadyConnection {

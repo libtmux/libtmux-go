@@ -52,7 +52,7 @@ func (i *Instance) Connect(
 	managedTransport := sessionReadyTransport{
 		inner:     transport,
 		ready:     ready,
-		onRequest: func(message jsonrpc.Message) bool { return i.requestRead(scope, message) },
+		onRequest: func(message jsonrpc.Message) error { return i.requestRead(scope, message) },
 		onSettled: func(message jsonrpc.Message) { i.responseSettled(scope, message) },
 		onConnect: func(connection *sessionReadyConnection) { responseConnection = connection },
 		onTerminal: func(err error) {

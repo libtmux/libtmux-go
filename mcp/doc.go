@@ -14,8 +14,10 @@
 // transport, applies handshake ordering, and gives each client isolated
 // consent, subscriptions, waits, and detached jobs. Custom transports must use
 // [AssumeResponseCommit] to assert that a successful write commits one response.
-// Close the instance after serving. [Run] provides the same lifecycle for the
-// command-line server.
+// The server admits at most 32 unsettled calls per client and 128 per instance
+// before the SDK queue. Exceeding either limit closes only that client session;
+// [ServerSession.Wait] then matches [ErrRequestCapacity]. Close the instance
+// after serving. [Run] provides the same lifecycle for the command-line server.
 //
 // On tmux 3.2a through 3.5, destroying the session that supplied the runtime's
 // control client follows that session's detach-on-destroy policy and may end

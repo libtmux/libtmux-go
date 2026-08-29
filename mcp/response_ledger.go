@@ -1,23 +1,54 @@
 package mcp
 
-import "github.com/modelcontextprotocol/go-sdk/jsonrpc"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+)
 
 // responseLedger tracks read calls until their replies settle at the transport
 // Write boundary or become impossible after connection termination.
 // Instance.mutex guards it.
 type responseLedger map[*sessionScope]map[jsonrpc.ID]struct{}
 
-func (l responseLedger) read(scope *sessionScope, message jsonrpc.Message) {
+var errDuplicateRequestID = errors.New("duplicate unsettled MCP request ID")
+
+func (l responseLedger) admit(
+	scope *sessionScope,
+	message jsonrpc.Message,
+	maxSessionCalls int,
+	maxInstanceCalls int,
+) error {
 	request, ok := message.(*jsonrpc.Request)
 	if !ok || !request.IsCall() {
-		return
+		return nil
 	}
 	requests := l[scope]
+	if _, duplicate := requests[request.ID]; duplicate {
+		// The SDK forgets an ID immediately before it writes the response. Refuse
+		// reuse until the wrapped write commits so that gap cannot create an
+		// accepted call with no ledger entry.
+		return fmt.Errorf("%w: %v", errDuplicateRequestID, request.ID)
+	}
+	if len(requests) >= maxSessionCalls {
+		return fmt.Errorf(
+			"%w: session has %d unsettled calls (limit %d)",
+			ErrRequestCapacity, len(requests), maxSessionCalls,
+		)
+	}
+	if total := l.count(); total >= maxInstanceCalls {
+		return fmt.Errorf(
+			"%w: server has %d unsettled calls (limit %d)",
+			ErrRequestCapacity, total, maxInstanceCalls,
+		)
+	}
 	if requests == nil {
 		requests = map[jsonrpc.ID]struct{}{}
 		l[scope] = requests
 	}
 	requests[request.ID] = struct{}{}
+	return nil
 }
 
 func (l responseLedger) settled(scope *sessionScope, message jsonrpc.Message) {
@@ -42,14 +73,15 @@ func (l responseLedger) count() int {
 	return total
 }
 
-func (i *Instance) requestRead(scope *sessionScope, message jsonrpc.Message) bool {
+func (i *Instance) requestRead(scope *sessionScope, message jsonrpc.Message) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 	if i.closing {
-		return false
+		return ErrInstanceClosed
 	}
-	i.responses.read(scope, message)
-	return true
+	return i.responses.admit(
+		scope, message, i.maxSessionCalls, i.maxInstanceCalls,
+	)
 }
 
 func (i *Instance) responseSettled(scope *sessionScope, message jsonrpc.Message) {

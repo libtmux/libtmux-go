@@ -10,10 +10,19 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ErrInstanceClosed identifies work refused after instance shutdown starts.
-var ErrInstanceClosed = errors.New("libtmux MCP instance is closed")
+var (
+	// ErrInstanceClosed identifies work refused after instance shutdown starts.
+	ErrInstanceClosed = errors.New("libtmux MCP instance is closed")
+	// ErrRequestCapacity identifies a client session closed after it exceeded
+	// the server's finite unsettled-call capacity.
+	ErrRequestCapacity = errors.New("libtmux MCP request capacity exceeded")
+)
 
-const terminalResponseDrainTimeout = 5 * time.Second
+const (
+	terminalResponseDrainTimeout = 5 * time.Second
+	defaultMaxSessionCalls       = 32
+	defaultMaxInstanceCalls      = 128
+)
 
 // Instance owns the SDK server, all connected client sessions, and every
 // resource allocated on their behalf. The SDK server is composed so Connect
@@ -30,24 +39,30 @@ type Instance struct {
 	closing     bool
 	terminalErr error
 	responses   responseLedger
-	drainTimer  *time.Timer
-	drainWait   time.Duration
-	sessions    map[*sdk.ServerSession]*ServerSession
-	connecting  sync.WaitGroup
-	closeOnce   sync.Once
-	closeDone   chan struct{}
-	closeErr    error
+	// Calls are admitted before the SDK's unbounded handler queue. These fields
+	// are private so tests can exercise small limits without widening the API.
+	maxSessionCalls  int
+	maxInstanceCalls int
+	drainTimer       *time.Timer
+	drainWait        time.Duration
+	sessions         map[*sdk.ServerSession]*ServerSession
+	connecting       sync.WaitGroup
+	closeOnce        sync.Once
+	closeDone        chan struct{}
+	closeErr         error
 }
 
 func newInstance() *Instance {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Instance{
-		sessions:  map[*sdk.ServerSession]*ServerSession{},
-		responses: responseLedger{},
-		closeDone: make(chan struct{}),
-		drainWait: terminalResponseDrainTimeout,
-		ctx:       ctx,
-		cancel:    cancel,
+		sessions:         map[*sdk.ServerSession]*ServerSession{},
+		responses:        responseLedger{},
+		closeDone:        make(chan struct{}),
+		drainWait:        terminalResponseDrainTimeout,
+		maxSessionCalls:  defaultMaxSessionCalls,
+		maxInstanceCalls: defaultMaxInstanceCalls,
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 }
 

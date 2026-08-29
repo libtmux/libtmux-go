@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type orderedLedgerConnection struct {
@@ -61,7 +63,7 @@ func TestResponseCommitPrecedesReusedIDAdmission(t *testing.T) {
 	events := make(chan string, 3)
 	connection := testReadyConnection(
 		inner,
-		func(jsonrpc.Message) bool { events <- "read"; return true },
+		func(jsonrpc.Message) error { events <- "read"; return nil },
 		func(jsonrpc.Message) { events <- "write" },
 		func(error) {},
 	)
@@ -133,7 +135,7 @@ func TestCloseCannotReinsertALateRead(t *testing.T) {
 	var admitted atomic.Int64
 	connection := testReadyConnection(
 		inner,
-		func(jsonrpc.Message) bool { admitted.Add(1); return true },
+		func(jsonrpc.Message) error { admitted.Add(1); return nil },
 		func(jsonrpc.Message) {},
 		func(error) {},
 	)
@@ -163,7 +165,7 @@ func TestRejectedWriteSettlesOnlyItsResponse(t *testing.T) {
 	var settled, terminated atomic.Int64
 	connection := testReadyConnection(
 		inner,
-		func(jsonrpc.Message) bool { return true },
+		func(jsonrpc.Message) error { return nil },
 		func(jsonrpc.Message) { settled.Add(1) },
 		func(error) { terminated.Add(1) },
 	)
@@ -196,7 +198,7 @@ func TestCanceledWriteSettlesOnlyItsResponse(t *testing.T) {
 			var settled, terminated atomic.Int64
 			connection := testReadyConnection(
 				inner,
-				func(jsonrpc.Message) bool { return true },
+				func(jsonrpc.Message) error { return nil },
 				func(jsonrpc.Message) { settled.Add(1) },
 				func(error) { terminated.Add(1) },
 			)
@@ -221,7 +223,7 @@ func TestCanceledContextDoesNotHideConnectionWriteFailure(t *testing.T) {
 	var settled, terminated atomic.Int64
 	connection := testReadyConnection(
 		inner,
-		func(jsonrpc.Message) bool { return true },
+		func(jsonrpc.Message) error { return nil },
 		func(jsonrpc.Message) { settled.Add(1) },
 		func(error) { terminated.Add(1) },
 	)
@@ -250,12 +252,14 @@ func TestTerminalFreezesItsResponseDrainSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !instance.requestRead(scope, &jsonrpc.Request{ID: first, Method: "first"}) {
-		t.Fatal("initial request was not admitted")
+	if err := instance.requestRead(scope, &jsonrpc.Request{ID: first, Method: "first"}); err != nil {
+		t.Fatalf("initial request admission: %v", err)
 	}
 	instance.terminal(tmux.ErrDaemonReplaced)
-	if instance.requestRead(scope, &jsonrpc.Request{ID: second, Method: "second"}) {
-		t.Fatal("request admitted after terminal drain began")
+	if err := instance.requestRead(scope, &jsonrpc.Request{ID: second, Method: "second"}); !errors.Is(
+		err, ErrInstanceClosed,
+	) {
+		t.Fatalf("request after terminal drain error = %v, want ErrInstanceClosed", err)
 	}
 	instance.mutex.Lock()
 	count := instance.responses.count()
@@ -281,8 +285,8 @@ func TestTerminalResponseDrainHasABoundedFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !instance.requestRead(scope, &jsonrpc.Request{ID: id, Method: "stuck"}) {
-		t.Fatal("request was not admitted")
+	if err := instance.requestRead(scope, &jsonrpc.Request{ID: id, Method: "stuck"}); err != nil {
+		t.Fatalf("request admission: %v", err)
 	}
 	instance.terminal(tmux.ErrDaemonReplaced)
 	select {
@@ -290,4 +294,187 @@ func TestTerminalResponseDrainHasABoundedFallback(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("terminal response drain had no bounded fallback")
 	}
+}
+
+func TestRequestAdmissionLimitsOneSession(t *testing.T) {
+	instance := newInstance()
+	defer instance.cancel()
+	instance.maxSessionCalls = 2
+	instance.maxInstanceCalls = 8
+	scope := newSessionScope(instance.ctx)
+
+	for _, id := range []string{"first", "second"} {
+		if err := instance.requestRead(scope, admissionRequest(t, id)); err != nil {
+			t.Fatalf("admit %s: %v", id, err)
+		}
+	}
+	err := instance.requestRead(scope, admissionRequest(t, "third"))
+	if !errors.Is(err, ErrRequestCapacity) {
+		t.Fatalf("third admission error = %v, want ErrRequestCapacity", err)
+	}
+	if got := len(instance.responses[scope]); got != 2 {
+		t.Fatalf("tracked session calls = %d, want 2", got)
+	}
+}
+
+func TestRequestAdmissionLimitsTheInstance(t *testing.T) {
+	instance := newInstance()
+	defer instance.cancel()
+	instance.maxSessionCalls = 4
+	instance.maxInstanceCalls = 2
+	first := newSessionScope(instance.ctx)
+	second := newSessionScope(instance.ctx)
+	offender := newSessionScope(instance.ctx)
+
+	if err := instance.requestRead(first, admissionRequest(t, "first")); err != nil {
+		t.Fatal(err)
+	}
+	if err := instance.requestRead(second, admissionRequest(t, "second")); err != nil {
+		t.Fatal(err)
+	}
+	err := instance.requestRead(offender, admissionRequest(t, "third"))
+	if !errors.Is(err, ErrRequestCapacity) {
+		t.Fatalf("instance overflow error = %v, want ErrRequestCapacity", err)
+	}
+	if got := instance.responses.count(); got != 2 {
+		t.Fatalf("tracked instance calls = %d, want 2", got)
+	}
+}
+
+func TestResponseCommitReleasesRequestCapacity(t *testing.T) {
+	instance := newInstance()
+	defer instance.cancel()
+	instance.maxSessionCalls = 1
+	instance.maxInstanceCalls = 1
+	scope := newSessionScope(instance.ctx)
+	first := admissionRequest(t, "reused")
+
+	if err := instance.requestRead(scope, first); err != nil {
+		t.Fatal(err)
+	}
+	// The SDK removes an ID just before its response enters the wrapped Write.
+	// Reuse in that gap must not create an accepted but untracked handler.
+	if err := instance.requestRead(scope, first); !errors.Is(err, errDuplicateRequestID) {
+		t.Fatalf("duplicate admission error = %v, want errDuplicateRequestID", err)
+	}
+	if got := instance.responses.count(); got != 1 {
+		t.Fatalf("tracked duplicate calls = %d, want 1", got)
+	}
+	instance.responseSettled(scope, &jsonrpc.Response{ID: first.ID})
+	if err := instance.requestRead(scope, admissionRequest(t, "next")); err != nil {
+		t.Fatalf("admission after response commit: %v", err)
+	}
+}
+
+func TestSDKRequestAdmissionClosesOnlyTheOffendingSession(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		maxInstanceCalls int
+		splitAcrossPeers bool
+	}{
+		{name: "session limit", maxInstanceCalls: 8},
+		{name: "instance limit", maxInstanceCalls: 2, splitAcrossPeers: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			instance := mustInternalMCPServer(t, mustInternalTmuxServer(t, tmux.ServerOptions{
+				SocketName: "request-admission-" + strings.ReplaceAll(test.name, " ", "-"),
+			}))
+			instance.maxSessionCalls = 2
+			instance.maxInstanceCalls = test.maxInstanceCalls
+			started := make(chan struct{}, 3)
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+			sdk.AddTool(instance.server, &sdk.Tool{Name: "admission-block"}, func(
+				ctx context.Context,
+				_ *sdk.CallToolRequest,
+				_ struct{},
+			) (*sdk.CallToolResult, struct{}, error) {
+				started <- struct{}{}
+				select {
+				case <-release:
+					return nil, struct{}{}, nil
+				case <-ctx.Done():
+					return nil, struct{}{}, ctx.Err()
+				}
+			})
+
+			connect := func(name string) (*sdk.ClientSession, *ServerSession) {
+				clientTransport, serverTransport := sdk.NewInMemoryTransports()
+				serverSession, err := instance.Connect(
+					t.Context(), AssumeResponseCommit(serverTransport), nil,
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				clientSession, err := sdk.NewClient(
+					&sdk.Implementation{Name: name}, nil,
+				).Connect(t.Context(), clientTransport, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = clientSession.Close() })
+				t.Cleanup(func() { _ = serverSession.Close() })
+				return clientSession, serverSession
+			}
+			offender, offenderServer := connect("admission-offender")
+			survivor, _ := connect("admission-survivor")
+
+			callDone := make(chan error, 3)
+			call := func(client *sdk.ClientSession) {
+				_, err := client.CallTool(t.Context(), &sdk.CallToolParams{
+					Name: "admission-block", Arguments: map[string]any{},
+				})
+				callDone <- err
+			}
+			go call(offender)
+			if test.splitAcrossPeers {
+				go call(survivor)
+			} else {
+				go call(offender)
+			}
+			for range 2 {
+				select {
+				case <-started:
+				case <-time.After(time.Second):
+					t.Fatal("admitted handler did not start")
+				}
+			}
+			waited := make(chan error, 1)
+			go func() { waited <- offenderServer.Wait() }()
+			go call(offender)
+			select {
+			case <-started:
+				t.Fatal("a handler started beyond the admission limit")
+			case err := <-waited:
+				if !errors.Is(err, ErrRequestCapacity) {
+					t.Fatalf("offending session error = %v, want ErrRequestCapacity", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("overflow did not close the offending session")
+			}
+			// Ping needs one slot. At the instance limit it proves termination
+			// reclaimed the offender's unsettled call before preserving this peer.
+			if err := survivor.Ping(t.Context(), nil); err != nil {
+				t.Fatalf("surviving session Ping() error = %v", err)
+			}
+			releaseOnce.Do(func() { close(release) })
+			for range 3 {
+				select {
+				case <-callDone:
+				case <-time.After(time.Second):
+					t.Fatal("call did not retire")
+				}
+			}
+		})
+	}
+}
+
+func admissionRequest(t *testing.T, value string) *jsonrpc.Request {
+	t.Helper()
+	id, err := jsonrpc.MakeID(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &jsonrpc.Request{ID: id, Method: "admission-probe"}
 }

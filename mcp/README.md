@@ -429,6 +429,10 @@ that client's consent, subscriptions, and job files. Closing the instance
 rejects new clients, cancels the remaining sessions, and then releases shared
 watchers, timers, and an owned audit file.
 
+The server admits at most 32 unsettled calls from one client and 128 across the
+instance before the SDK queue. Crossing either limit closes only the offending
+session; `ServerSession.Wait` returns an error matching `ErrRequestCapacity`.
+
 `Connect` checks the installed tmux version before opening the transport. It
 also needs to know that one successful transport write commits one response.
 Built-in IO and stdio transports receive one-message framing automatically. A

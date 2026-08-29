@@ -19,7 +19,7 @@ var errTransportCloseTimeout = errors.New("mcp transport close timed out")
 type sessionReadyTransport struct {
 	inner      mcp.Transport
 	ready      <-chan struct{}
-	onRequest  func(jsonrpc.Message) bool
+	onRequest  func(jsonrpc.Message) error
 	onSettled  func(jsonrpc.Message)
 	onTerminal func(error)
 	onConnect  func(*sessionReadyConnection)
@@ -49,7 +49,7 @@ func (t sessionReadyTransport) Connect(ctx context.Context) (mcp.Connection, err
 type sessionReadyConnection struct {
 	inner      mcp.Connection
 	ready      <-chan struct{}
-	onRequest  func(jsonrpc.Message) bool
+	onRequest  func(jsonrpc.Message) error
 	onSettled  func(jsonrpc.Message)
 	onTerminal func(error)
 
@@ -106,18 +106,22 @@ func (c *sessionReadyConnection) Read(ctx context.Context) (jsonrpc.Message, err
 		c.stateMutex.Unlock()
 		return nil, errors.Join(ErrInstanceClosed, c.connectionTerminalError())
 	}
-	accepted := c.onRequest == nil || c.onRequest(message)
-	if !accepted {
+	var admissionErr error
+	if c.onRequest != nil {
+		admissionErr = c.onRequest(message)
+	}
+	if admissionErr != nil {
 		c.active = false
+		c.terminalErr = errors.Join(c.terminalErr, admissionErr)
 		c.changed.Broadcast()
 	}
 	c.stateMutex.Unlock()
-	if !accepted {
+	if admissionErr != nil {
 		c.cancelLifetime()
 		if c.onTerminal != nil {
-			c.onTerminal(nil)
+			c.onTerminal(admissionErr)
 		}
-		return nil, ErrInstanceClosed
+		return nil, errors.Join(ErrInstanceClosed, admissionErr)
 	}
 	return message, nil
 }
