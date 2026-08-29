@@ -85,6 +85,7 @@
 //   - what a program said in colour rather than in words: capture_pane with
 //     styles, which keeps the escape sequences a capture otherwise strips
 //   - anything else tmux knows: display_message, which expands a tmux format
+//     but is withheld read-only because tmux formats may run shell commands
 //
 // Waiting, rather than looking again:
 //   - a command you run, its exit status and its output: run_command

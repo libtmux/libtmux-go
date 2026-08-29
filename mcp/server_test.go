@@ -1861,7 +1861,7 @@ func TestEveryToolCarriesAnnotations(t *testing.T) {
 		"find_pane_by_position": true, "wait_for_text": true,
 		"wait_for_channel": true, "call_readonly_tools_batch": true,
 		"get_pane_info": true, "get_window_info": true, "get_session_info": true,
-		"get_server_info": true, "display_message": true, "show_buffer": true,
+		"get_server_info": true, "show_buffer": true,
 		"show_option": true, "show_environment": true, "show_hooks": true,
 		"get_job": true,
 	}
@@ -1989,7 +1989,8 @@ func TestEveryChangingToolSaysWhetherRepeatingItCompounds(t *testing.T) {
 	compounds := map[string]bool{
 		"build_workspace": true, "call_destructive_tools_batch": true,
 		"call_mutating_tools_batch": true, "create_session": true,
-		"create_window": true, "enter_copy_mode": true, "kill_pane": true,
+		"create_window": true, "display_message": true, "enter_copy_mode": true,
+		"kill_pane":   true,
 		"kill_server": true, "kill_session": true, "kill_window": true,
 		"load_buffer": true, "move_pane": true, "paste_buffer": true,
 		"paste_text": true, "pipe_pane": true, "resize_pane": true,
@@ -2088,6 +2089,21 @@ func TestSafetyLevelWithholdsTools(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReadOnlyWithholdsArbitraryFormatExpansion(t *testing.T) {
+	t.Setenv("LIBTMUX_SAFETY", "readonly")
+	session, _, ctx := connect(t)
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range listed.Tools {
+		if tool.Name == "display_message" {
+			t.Fatal("readonly advertised display_message, whose #() formats run shell commands")
+		}
 	}
 }
 

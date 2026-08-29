@@ -416,9 +416,9 @@ type displayMessageOutput struct {
 // #{pane_current_path} for where a pane is, #{client_termname} for what a
 // person is looking at, #{window_flags} for what tmux is marking.
 //
-// It is read-only despite the name. tmux's display-message can put a message
-// on a person's status line; this always prints instead, so it answers rather
-// than announces.
+// Printing avoids changing a person's status line, but it does not make an
+// arbitrary format read-only. tmux's #() syntax starts a shell command, and
+// the E and T modifiers can expand option values containing the same syntax.
 func (t *tools) displayMessage(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -468,9 +468,10 @@ func addServerTools(server *mcp.Server, t *tools) {
 	}, t.listServers)
 	register(server, t, &mcp.Tool{
 		Name:        "display_message",
-		Annotations: readOnly("Expand a tmux Format"),
-		Description: "Ask tmux to expand one of its format strings, such as " +
-			"#{pane_current_path} or #{window_flags}. This is how to read " +
-			"anything about tmux that no tool here has its own answer for.",
+		Annotations: mutating("Expand a tmux Format"),
+		Description: "Expand a tmux format; tmux's #() syntax runs a shell " +
+			"command, so treat the format as operator-powerful. Use formats such " +
+			"as #{pane_current_path} or #{window_flags} to inspect anything about " +
+			"tmux that no tool here has its own answer for.",
 	}, t.displayMessage)
 }

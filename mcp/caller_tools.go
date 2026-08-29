@@ -261,7 +261,8 @@ WHEN A PANE MAKES NO SENSE, the reason is often a setting rather than its
 contents: show_option for why scrollback stopped or a dead pane is still there,
 show_hooks with a name for behaviour nothing here caused, show_environment for
 what a new pane would inherit, get_server_info with includeMessages for tmux's
-own log of what it refused, display_message for anything else tmux knows. If a
+own log of what it refused, display_message for anything else tmux knows when
+changing tools are enabled. A tmux format may run a shell command through #(). If a
 program reports success or failure by colouring a word rather than saying so,
 capture_pane with styles keeps the colour a capture strips.
 `)

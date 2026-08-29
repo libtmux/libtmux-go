@@ -792,9 +792,9 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `display_message`
 
-Ask tmux to expand one of its format strings, such as #{pane_current_path} or #{window_flags}.
+Expand a tmux format; tmux's #() syntax runs a shell command, so treat the format as operator-powerful.
 
-Reads only. Repeating it changes nothing.
+Changes tmux by a step. Repeating it compounds.
 
 | Argument | Type | |
 | --- | --- | --- |
