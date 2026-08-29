@@ -13,8 +13,8 @@ import (
 
 // RequireTmux skips a real-tmux example below its stated feature floor.
 func RequireTmux(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	server tmux.Server,
 	minimum string,
 ) {
