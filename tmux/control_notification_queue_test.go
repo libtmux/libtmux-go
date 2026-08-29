@@ -139,87 +139,61 @@ func TestPaneObservationReportsTopologyLoss(t *testing.T) {
 	}
 }
 
-func TestPaneObservationSerializesReadersAtLoss(t *testing.T) {
+func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 	t.Parallel()
 
 	queue := newControlNotificationQueue(128)
 	t.Cleanup(func() { _ = queue.Close() })
-	for sequence, record := range []string{
-		"%unlinked-window-close @1",
-		"%output %1 must-not-escape",
-	} {
-		if err := queue.append(uint64(sequence+1), []byte(record)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	observation := newTestPaneObservation(queue)
-	start := make(chan struct{})
-	results := make(chan error, 2)
-	var readers sync.WaitGroup
-	for range 2 {
-		readers.Go(func() {
-			<-start
-			_, err := observation.NextNotification(context.Background())
-			results <- err
-		})
-	}
-	close(start)
-	readers.Wait()
-	close(results)
-	for err := range results {
-		if !errors.Is(err, ErrPaneObservationLost) {
-			t.Fatalf("NextNotification() error = %v, want shared ErrPaneObservationLost", err)
-		}
-	}
-}
-
-func TestPaneObservationReaderCancellationIsRetryable(t *testing.T) {
-	t.Parallel()
-
-	queue := newControlNotificationQueue(128)
-	t.Cleanup(func() { _ = queue.Close() })
-	observation := newTestPaneObservation(queue)
-	firstCtx, cancelFirst := context.WithCancel(context.Background())
-	firstDone := make(chan error, 1)
-	go func() {
-		_, err := observation.NextNotification(firstCtx)
-		firstDone <- err
-	}()
-	select {
-	case err := <-firstDone:
-		t.Fatalf("first reader returned before cancellation: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
-
-	secondCtx, cancelSecond := context.WithCancel(context.Background())
-	secondDone := make(chan error, 1)
-	go func() {
-		_, err := observation.NextNotification(secondCtx)
-		secondDone <- err
-	}()
-	select {
-	case err := <-secondDone:
-		t.Fatalf("second reader returned before cancellation: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
-	cancelSecond()
-	select {
-	case err := <-secondDone:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("second reader error = %v, want context canceled", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("queued reader did not honor context cancellation")
-	}
-	cancelFirst()
-	if err := <-firstDone; !errors.Is(err, context.Canceled) {
-		t.Fatalf("first reader error = %v, want context canceled", err)
-	}
 	if err := queue.append(1, []byte("%output %1 retry")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := observation.NextNotification(context.Background()); err != nil {
+	observation := newTestPaneObservation(queue)
+	if err := observation.state.acquireReadToken(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	owned := true
+	defer func() {
+		if owned {
+			observation.state.releaseReadToken()
+		}
+	}()
+
+	readCtx, cancelRead := context.WithCancel(context.Background())
+	defer cancelRead()
+	wake := &doneObservedContext{
+		Context:  readCtx,
+		observed: make(chan struct{}),
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, err := observation.NextNotification(wake)
+		result <- err
+	}()
+	select {
+	case <-wake.observed:
+	case err := <-result:
+		t.Fatalf("NextNotification() bypassed reader ownership: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("NextNotification() did not wait for reader ownership")
+	}
+	cancelRead()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("NextNotification() error = %v, want context canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("waiting reader did not honor context cancellation")
+	}
+	observation.state.releaseReadToken()
+	owned = false
+	notification, err := observation.NextNotification(context.Background())
+	if err != nil {
 		t.Fatalf("NextNotification() after cancellation error = %v, want retry", err)
+	}
+	paneID, output, ok := notification.Output()
+	if !ok || paneID != "%1" || string(output) != "retry" {
+		t.Fatalf("NextNotification() = (%q, %q, %t), want retained output", paneID, output, ok)
 	}
 }
 
