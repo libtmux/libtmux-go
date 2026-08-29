@@ -234,11 +234,6 @@ type clientAttachment struct {
 // Server returns the configured handle that produced the client.
 func (c Client) Server() Server { return c.server }
 
-func (c Client) withServer(server Server) Client {
-	c.server = server
-	return c
-}
-
 // Name returns the stable tmux name of this client.
 func (c Client) Name() ClientName { return c.clientName }
 

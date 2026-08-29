@@ -28,9 +28,9 @@ func TestPaneObservationLinearizesBaselineAndOutput(t *testing.T) {
 		t.Fatalf("Panes() = (%d, %v), want one", len(panes), err)
 	}
 	const before = "OBSERVATION-BEFORE"
-	writePaneMarker(t, ctx, panes[0],
+	writePaneMarker(ctx, t, panes[0],
 		"printf '%s\\n' '"+before+"' '%end 1 2 3'")
-	waitForPaneMarker(t, ctx, panes[0], before)
+	waitForPaneMarker(ctx, t, panes[0], before)
 
 	const handoff = "OBSERVATION-HANDOFF"
 	hook := "run-shell \"printf '" + handoff + "\\n' > #{pane_tty}\""
@@ -172,7 +172,7 @@ func TestPaneObservationOwnsLinkedSessionAndDetectsUnlink(t *testing.T) {
 	}
 }
 
-func writePaneMarker(t *testing.T, ctx context.Context, pane tmux.Pane, command string) {
+func writePaneMarker(ctx context.Context, t *testing.T, pane tmux.Pane, command string) {
 	t.Helper()
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
 		Command: &command,
@@ -183,8 +183,8 @@ func writePaneMarker(t *testing.T, ctx context.Context, pane tmux.Pane, command 
 }
 
 func waitForPaneMarker(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	pane tmux.Pane,
 	marker string,
 ) {

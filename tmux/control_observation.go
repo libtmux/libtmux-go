@@ -55,30 +55,26 @@ func (o *PaneObservation) NextNotification(
 	if o == nil || o.client == nil {
 		return ControlNotification{}, ErrControlClosed
 	}
-	for {
-		notification, err := o.client.nextNotificationAfter(ctx, o.after)
-		if err != nil {
-			return ControlNotification{}, err
-		}
-		arguments := notification.Arguments()
-		switch notification.Kind() {
-		case ControlNotificationUnlinkedWindowClose:
-			if len(arguments) != 0 && WindowID(arguments[0]) == o.windowID {
-				return ControlNotification{}, fmt.Errorf(
-					"%w: observed window is no longer linked into the attached session",
-					ErrPaneObservationLost,
-				)
-			}
-		case ControlNotificationSessionChanged:
-			if len(arguments) != 0 && SessionID(arguments[0]) != o.sessionID {
-				return ControlNotification{}, fmt.Errorf(
-					"%w: control client changed sessions",
-					ErrPaneObservationLost,
-				)
-			}
-		}
-		return notification, nil
+	notification, err := o.client.nextNotificationAfter(ctx, o.after)
+	if err != nil {
+		return ControlNotification{}, err
 	}
+	arguments := notification.Arguments()
+	if notification.Kind() == ControlNotificationUnlinkedWindowClose &&
+		len(arguments) != 0 && WindowID(arguments[0]) == o.windowID {
+		return ControlNotification{}, fmt.Errorf(
+			"%w: observed window is no longer linked into the attached session",
+			ErrPaneObservationLost,
+		)
+	}
+	if notification.Kind() == ControlNotificationSessionChanged &&
+		len(arguments) != 0 && SessionID(arguments[0]) != o.sessionID {
+		return ControlNotification{}, fmt.Errorf(
+			"%w: control client changed sessions",
+			ErrPaneObservationLost,
+		)
+	}
+	return notification, nil
 }
 
 // Close stops the dedicated control client. It is safe to call more than once.
