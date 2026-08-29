@@ -56,14 +56,24 @@ $ for module in examples workspace mcp benchmarks; do (cd "$module" && gofumpt -
 Run them with the workspace on, which is the only way they see the working
 tree. `mcp` carries no `replace` directive — `go install` refuses a module that
 does — so `GOWORK=off` swaps this repository's core for whatever release its
-`require` names, and the tests then pass or fail on code nobody is editing.
+`require` names. Compiling current consumer source in that mode during ordinary
+development confuses source compatibility with whether sibling releases have
+already been published.
 
-`GOWORK=off` still answers a real question, just not that one: whether a module
-resolves for someone who has no workspace. `TestEveryModuleResolvesWithoutAWorkspace`
-asks it per module, so no gate has to be run twice to cover it:
+The repository keeps those claims separate. Workspace-on builds prove the
+current source graph. `go mod tidy -diff` with the workspace off proves each
+module's released dependency graph is standalone and tidy:
 
 ```console
-$ go test ./tmux/internal/integration/ -run TestEveryModuleResolvesWithoutAWorkspace
+$ go test ./tmux/internal/integration/ -run TestEveryModuleMetadataResolvesWithoutAWorkspace
+```
+
+The install gate runs the documented version-suffixed command, so it tests the
+latest published MCP artifact rather than compiling current source against old
+sibling releases:
+
+```console
+$ go test ./tmux/internal/integration/ -run TestLatestPublishedServerInstalls
 ```
 
 A `require` naming a module of this repository is a copy of a tag, so it is
@@ -74,6 +84,15 @@ the failure that happened:
 ```console
 $ go test ./tmux/internal/integration/ -run TestEveryRequirementNamesTheNewestRelease
 ```
+
+Release sibling modules in dependency order: core, workspace, then MCP. After
+publishing core, update workspace's core requirement and test it with
+`GOWORK=off` before publishing workspace. Then update both requirements in MCP,
+run its complete suite with `GOWORK=off`, publish MCP, and install that explicit
+MCP version. An ordinary feature branch cannot satisfy that release-candidate
+gate because the versions it needs do not exist yet; do not add temporary tags,
+pseudo-versions, compatibility shims, or a checked-in replacement to pretend
+they do.
 
 Coverage has to name the core module rather than defaulting to the package under
 test, because most of what exercises the core lives in `internal/integration`:
