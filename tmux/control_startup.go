@@ -177,6 +177,11 @@ func (s Server) startControl(
 	if err := accept(client); err != nil {
 		return nil, client.failStartup(err)
 	}
+	client.stateMu.Lock()
+	if client.currentSessionID == "" {
+		client.currentSessionID = client.session.ID()
+	}
+	client.stateMu.Unlock()
 	client.dispatching.Store(true)
 	if err := client.calibrateReplyFence(ctx); err != nil {
 		return nil, client.failStartup(err)

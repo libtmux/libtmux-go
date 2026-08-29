@@ -317,14 +317,17 @@ func ExampleServer_OpenControl() {
 	// than a decoded string: the frame is what tmux sent.
 	fmt.Printf("%q\n", result.RawStdout)
 
-	// Reconnect replaces the client with one on a new attachment. The old one
-	// is spent, so the result is what later commands go through.
+	// Reconnect registers the replacement before spending the old client. A
+	// non-nil replacement is caller-owned even when closing the old client
+	// also returns an error.
 	reconnected, err := client.Reconnect(ctx)
+	if reconnected != nil {
+		client = reconnected
+	}
 	if err != nil {
 		fmt.Println("reconnect:", err)
 		return
 	}
-	client = reconnected
 
 	result, err = client.Cmd(ctx, "display-message", "-p", "still here")
 	if err != nil {

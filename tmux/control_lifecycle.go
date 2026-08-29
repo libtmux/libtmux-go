@@ -67,13 +67,62 @@ func (c *ControlClient) Close() error {
 	return c.CloseContext(ctx)
 }
 
-// Reconnect closes the receiver and starts a new control client for the same
-// server and session. It returns a new identity and never replays commands.
+// Reconnect registers a replacement on the last attached session observed at a
+// reply boundary, then closes the receiver. Failed replacement setup does not
+// initiate receiver shutdown. If shutdown fails, Reconnect returns the live
+// replacement with that error; the caller owns every non-nil result. A receiver
+// whose stream ended cleanly can recover from its last observation. Commands
+// are never replayed.
 func (c *ControlClient) Reconnect(ctx context.Context) (*ControlClient, error) {
-	if err := c.CloseContext(ctx); err != nil {
+	session, err := c.reconnectSession(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return c.server.OpenControl(ctx, c.session)
+	replacement, err := c.server.OpenControl(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.CloseContext(ctx); err != nil {
+		return replacement, err
+	}
+	return replacement, nil
+}
+
+func (c *ControlClient) reconnectSession(ctx context.Context) (Session, error) {
+	barrierErr := c.crossReplyFence(ctx)
+	if barrierErr != nil {
+		if err := ctx.Err(); err != nil {
+			return Session{}, err
+		}
+		select {
+		case <-c.readDone:
+		case <-ctx.Done():
+			return Session{}, ctx.Err()
+		}
+		if err := ctx.Err(); err != nil {
+			return Session{}, err
+		}
+	}
+
+	c.stateMu.Lock()
+	current := c.currentSessionID
+	readErr := c.readErr
+	c.stateMu.Unlock()
+
+	if barrierErr != nil {
+		if readErr != nil {
+			return Session{}, readErr
+		}
+		if c.closeRequested.Load() {
+			return Session{}, barrierErr
+		}
+	}
+
+	session := c.session.withServer(c.server)
+	if current == "" || current == session.ID() {
+		return session, nil
+	}
+	return c.server.Session(ctx, current)
 }
 
 func (c *ControlClient) closeAfterRequests() {

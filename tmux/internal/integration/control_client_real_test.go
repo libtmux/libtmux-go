@@ -105,17 +105,49 @@ func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testin
 		break
 	}
 
+	canceledCtx, cancelReconnect := context.WithCancel(ctx)
+	cancelReconnect()
+	if replacement, err := client.Reconnect(canceledCtx); replacement != nil ||
+		!errors.Is(err, context.Canceled) {
+		t.Fatalf("Reconnect(canceled) = (%#v, %v), want nil, context canceled", replacement, err)
+	}
+
+	current, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "control-current"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	switchResult, err := server.Cmd(
+		ctx,
+		"switch-client", "-c", client.ClientName().String(), "-t", current.ID().String(),
+	)
+	if err != nil || switchResult.ExitCode != 0 {
+		t.Fatalf("switch-client = (%#v, %v)", switchResult, err)
+	}
+	if err := current.SetDestroyUnattached(ctx, tmux.DestroyUnattachedOn); err != nil {
+		t.Fatalf("SetDestroyUnattached(on) error = %v", err)
+	}
+
+	original := client
 	reconnected, err := client.Reconnect(ctx)
 	if err != nil {
 		t.Fatalf("Reconnect() error = %v", err)
 	}
 	client = reconnected
-	if client.ClientName() == "" {
-		t.Fatal("reconnected ClientName() is empty")
+	name, named := client.Session().Name()
+	if client.ClientName() == "" || client.Session().ID() != current.ID() ||
+		!named || name != "control-current" {
+		t.Fatalf("reconnected identity = (%q, %s, %q), want materialized session %s",
+			client.ClientName(), client.Session().ID(), name, current.ID())
+	}
+	if _, err := original.Cmd(ctx, "display-message", "-p", "spent"); !errors.Is(err, tmux.ErrControlClosed) {
+		t.Fatalf("original Cmd() after reconnect error = %v, want ErrControlClosed", err)
 	}
 	result, err = client.Cmd(ctx, "display-message", "-p", "reconnected")
 	if err != nil || result.Failed || string(result.RawStdout) != "reconnected\n" {
 		t.Fatalf("reconnected Cmd() = (%#v, %v)", result, err)
+	}
+	if err := client.Session().SetDestroyUnattached(ctx, tmux.DestroyUnattachedOff); err != nil {
+		t.Fatalf("SetDestroyUnattached(off) error = %v", err)
 	}
 
 	canceledCtx, cancelClose := context.WithCancel(context.Background())
@@ -370,7 +402,7 @@ func TestControlClientPreservesCommandArgumentBytesAgainstRealTmux(t *testing.T)
 }
 
 //libtmux:real-tmux
-func TestControlClientPreservesExitNotificationAfterWait(t *testing.T) {
+func TestControlClientReconnectsAfterWaitWithoutLosingExitNotification(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -407,6 +439,16 @@ func TestControlClientPreservesExitNotificationAfterWait(t *testing.T) {
 	}
 	if !foundExit {
 		t.Fatalf("notifications after Wait() did not include %%exit")
+	}
+
+	replacement, err := client.Reconnect(ctx)
+	if err != nil {
+		t.Fatalf("Reconnect() after process exit error = %v", err)
+	}
+	client = replacement
+	controlResult, err := client.Cmd(ctx, "display-message", "-p", "post-exit")
+	if err != nil || controlResult.Failed || string(controlResult.RawStdout) != "post-exit\n" {
+		t.Fatalf("post-exit Cmd() = (%#v, %v)", controlResult, err)
 	}
 }
 

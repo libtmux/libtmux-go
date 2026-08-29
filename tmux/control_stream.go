@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -108,6 +109,7 @@ func (c *ControlClient) readStream() {
 				return
 			}
 			if notification != nil {
+				c.trackSessionChange(notification)
 				wireSequence++
 				if appendErr := c.notifications.append(
 					wireSequence,
@@ -146,6 +148,23 @@ func (c *ControlClient) readStream() {
 			return
 		}
 	}
+}
+
+func (c *ControlClient) trackSessionChange(record []byte) {
+	if !bytes.HasPrefix(record, []byte(ControlNotificationSessionChanged+" ")) {
+		return
+	}
+	notification, err := ParseControlNotification(record)
+	if err != nil || notification.Kind() != ControlNotificationSessionChanged {
+		return
+	}
+	arguments := notification.arguments
+	if len(arguments) == 0 || validateStableTarget("session", arguments[0]) != nil {
+		return
+	}
+	c.stateMu.Lock()
+	c.currentSessionID = SessionID(arguments[0])
+	c.stateMu.Unlock()
 }
 
 func (c *ControlClient) nextFrame(ctx context.Context) (controlFrame, error) {

@@ -681,9 +681,13 @@ bound the join.
 
 `Server.OpenControl` starts an attached `tmux -C` process and returns a
 low-level `ControlClient`. It exposes commands and notifications on one client;
-it is not a transport selector for model values. `Reconnect` explicitly closes
-that client and returns a new identity. It never hides recovery behind command
-fallback.
+it is not a transport selector for model values. `Reconnect` crosses a private
+reply boundary, opens a replacement on the last attached session observed at
+that boundary, then closes the old client. Replacement failure does not
+initiate old-client shutdown; old-client shutdown failure returns the live
+replacement with the error. A naturally ended client can recover from its last
+observed session only after the reader drains cleanly. It never hides recovery
+behind command fallback or replays a command.
 
 The client validates `%begin`/`%end`/`%error` framing, serializes concurrent
 commands, correlates each reply by command number, and buffers ordered

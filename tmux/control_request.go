@@ -18,10 +18,11 @@ const (
 type controlRequest struct {
 	ctx context.Context
 	// command is the request's original argument vector.
-	command  []string
-	line     string
-	response chan controlResponse
-	state    atomic.Uint32
+	command   []string
+	line      string
+	fenceOnly bool
+	response  chan controlResponse
+	state     atomic.Uint32
 }
 
 type controlResponse struct {
@@ -141,19 +142,36 @@ func (c *ControlClient) cmd(
 		line:     line,
 		response: make(chan controlResponse, 1),
 	}
+	return c.submitControlRequest(request)
+}
+
+func (c *ControlClient) crossReplyFence(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	request := &controlRequest{
+		ctx:       ctx,
+		fenceOnly: true,
+		response:  make(chan controlResponse, 1),
+	}
+	_, err := c.submitControlRequest(request)
+	return err
+}
+
+func (c *ControlClient) submitControlRequest(request *controlRequest) ([]ControlCommandResult, error) {
 	if c.closeRequested.Load() {
 		return nil, ErrControlClosed
 	}
 	select {
 	case c.requests <- request:
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	case <-request.ctx.Done():
+		return nil, request.ctx.Err()
 	case <-c.requestDone:
 		return nil, c.operationError()
 	case <-c.stopRequests:
 		return nil, ErrControlClosed
 	}
-	return request.await(ctx)
+	return request.await(request.ctx)
 }
 
 func (r *controlRequest) await(ctx context.Context) ([]ControlCommandResult, error) {
@@ -225,7 +243,11 @@ func (c *ControlClient) executeControlRequest(
 	) {
 		return controlResponse{err: request.ctx.Err()}, true
 	}
-	if _, err := io.WriteString(c.stdin, request.line+"\n"+controlReplyFenceInput); err != nil {
+	input := controlReplyFenceInput
+	if !request.fenceOnly {
+		input = request.line + "\n" + input
+	}
+	if _, err := io.WriteString(c.stdin, input); err != nil {
 		return request.finish(
 			controlResponse{err: outcomeUnknown(c.classifyOperationError(err))},
 			false,

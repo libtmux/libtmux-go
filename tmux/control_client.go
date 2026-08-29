@@ -43,9 +43,10 @@ type ControlClient struct {
 	done          chan struct{}
 	closeDone     chan struct{}
 
-	stateMu sync.Mutex
-	readErr error
-	waitErr error
+	stateMu          sync.Mutex
+	readErr          error
+	waitErr          error
+	currentSessionID SessionID
 
 	closeRequested atomic.Bool
 	closeOnce      sync.Once
