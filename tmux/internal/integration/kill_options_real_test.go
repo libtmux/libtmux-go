@@ -177,8 +177,13 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	const activityChannel = "clear-alerts-activity-ready"
 	session := tmuxtest.NewSession(
-		ctx, t, server, tmux.NewSessionRequest{Name: "clear-alerts"},
+		ctx, t, server, tmux.NewSessionRequest{
+			Name: "clear-alerts",
+			Command: "tmux wait-for " + activityChannel +
+				"; printf clear-alerts-activity; exec tail -f /dev/null",
+		},
 	)
 	alertWindowIDValue, ok := session.Formats().WindowID()
 	if !ok {
@@ -190,21 +195,20 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 	})
 	mustRealCommand(t, server, "set-option", "-t", session.ID().String(), "activity-action", "other")
 	mustRealCommand(t, server, "set-window-option", "-t", alertWindowID.String(), "monitor-activity", "on")
-	setupSnapshot, err := server.Snapshot(ctx)
-	if err != nil {
-		t.Fatalf("Snapshot() for ClearAlerts setup error = %v", err)
+	// Unblock one write after monitoring is on, then leave the pane on a process
+	// that produces no more output. An interactive shell would echo the command
+	// and draw its prompt after it, racing the alert this test is about.
+	mustRealCommand(t, server, "wait-for", "-S", activityChannel)
+	if err := tmuxtest.WaitFor(ctx, 25*time.Millisecond, func(ctx context.Context) (bool, error) {
+		window, err := server.Window(ctx, alertWindowID)
+		if err != nil {
+			return false, err
+		}
+		activity, ok := window.ActivityFlag()
+		return ok && activity, nil
+	}); err != nil {
+		t.Fatalf("wait for activity flag on window %s: %v", alertWindowID, err)
 	}
-	alertWindow, ok := killOptionsWindow(setupSnapshot, session.ID(), alertWindowID)
-	if !ok || len(relatedPanes(t, alertWindow)) != 1 {
-		t.Fatalf("alert window panes = %#v, want one pane", relatedPanes(t, alertWindow))
-	}
-	// Every byte the pane writes raises the alert again, including the ones it
-	// writes after this clears it, so the pane has to be finished rather than
-	// merely started. Waiting for the flag is not enough on its own: the echo
-	// of the typed keys raises it before the command has run at all.
-	alertPane := relatedPanes(t, alertWindow)[0]
-	tmuxtest.TypeAndWait(ctx, t, alertPane, "printf clear-alerts-activity")
-	waitUntilWindowIsQuiet(ctx, t, server, alertWindowID)
 	beforeSnapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		t.Fatalf("Snapshot() before ClearAlerts error = %v", err)
@@ -241,53 +245,6 @@ func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *
 	}
 	if activity := killOptionsActivityFlag(t, after, alertWindowID); activity {
 		t.Fatal("activity flag after ClearAlerts = true, want false")
-	}
-}
-
-// waitUntilWindowIsQuiet blocks until tmux stops recording activity on a
-// window.
-//
-// Reading the pane's rendered screen is not enough, and was the reason this
-// test failed about two runs in five: a write that only moves the cursor, or
-// that redraws the same characters, leaves the capture identical while tmux
-// counts it as activity -- so the wait ended early and the write that followed
-// raised the flag again after ClearAlerts had cleared it.
-//
-// #{window_activity} is tmux's own record of when the window last wrote, which
-// is the same thing the flag is raised by, so a wait on it cannot end before a
-// write the flag would notice. It is available on every supported release.
-func waitUntilWindowIsQuiet(
-	ctx context.Context,
-	t *testing.T,
-	server tmux.Server,
-	windowID tmux.WindowID,
-) {
-	t.Helper()
-
-	// A window between two writes looks identical to one that has finished, so
-	// quiet is counted rather than sampled. Half a second of it: the gap this
-	// has to outlast is a shell redrawing its prompt, which on a loaded machine
-	// is not always quick.
-	const stillEnough = 10
-	var previous time.Time
-	unchanged := 0
-	if err := tmuxtest.WaitFor(ctx, 50*time.Millisecond, func(ctx context.Context) (bool, error) {
-		window, err := server.Window(ctx, windowID)
-		if err != nil {
-			return false, err
-		}
-		current, ok := window.Formats().WindowActivity()
-		if !ok {
-			return false, nil
-		}
-		if current.Equal(previous) {
-			unchanged++
-		} else {
-			previous, unchanged = current, 0
-		}
-		return unchanged >= stillEnough, nil
-	}); err != nil {
-		t.Fatalf("wait for window %s to stop writing: %v", windowID, err)
 	}
 }
 
