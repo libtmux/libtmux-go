@@ -16,18 +16,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// TestKeysReachAPaneOnlyThroughTheDeliveryResolver is the gate under the
-// delivery guard.
-//
-// The guard refuses a pane that cannot read a key, and it is reached by
-// obtaining the pane rather than by remembering to call it. That only holds
-// while every handler that types takes its pane from resolvePaneToDeliver: one
-// that takes resolvePaneToWrite instead, and types anyway, is back to the
-// defect this replaced, and nothing about the code would look wrong.
-//
-// The claim is about the source rather than about behaviour, so it stays true
-// for tools nobody has written yet, which is what a behavioural test of the
-// tools that exist cannot do.
 func TestKeysReachAPaneOnlyThroughTheDeliveryResolver(t *testing.T) {
 	// Ways of putting a keystroke into a pane. paste_buffer reaches tmux by a
 	// different call than the rest, so both are named.
@@ -90,10 +78,6 @@ func TestKeysReachAPaneOnlyThroughTheDeliveryResolver(t *testing.T) {
 	}
 }
 
-// TestEveryClosedSetReachesTheSchema gates closedArguments against the tools
-// moving out from under it. An argument renamed or a tool withdrawn leaves an
-// entry naming nothing, and the set stops being published while the table
-// still claims it: on the wire the argument goes back to being any string.
 func TestEveryClosedSetReachesTheSchema(t *testing.T) {
 	t.Setenv(SafetyEnvironmentVariable, "destructive")
 	t.Setenv(RecipeToolEnvironmentVariable, "1")
@@ -154,13 +138,6 @@ func TestEveryClosedSetReachesTheSchema(t *testing.T) {
 	}
 }
 
-// TestASafetyValueThatIsNotALevelIsNamed covers the silent half of failing
-// closed.
-//
-// A misspelled level selects the lowest, which is the right direction: someone
-// who set the variable at all was bounding what a model may do. But the report
-// that exists to explain a short tool list then reads exactly like one from an
-// operator who asked for readonly on purpose.
 func TestASafetyValueThatIsNotALevelIsNamed(t *testing.T) {
 	for _, level := range []struct{ value, rejected string }{
 		{"destructve", "destructve"},
@@ -179,5 +156,19 @@ func TestASafetyValueThatIsNotALevelIsNamed(t *testing.T) {
 	t.Setenv(SafetyEnvironmentVariable, "nonsense")
 	if ResolvedSafetyLevel() != SafetyReadOnly {
 		t.Error("a value that is not a level did not fall back to the lowest")
+	}
+}
+
+func TestSafetyDescriptionsStateTheirBoundary(t *testing.T) {
+	for _, check := range []struct {
+		level SafetyLevel
+		want  string
+	}{
+		{SafetyReadOnly, "sensitive tmux metadata or content"},
+		{SafetyMutating, "may still execute commands"},
+	} {
+		if got := check.level.describe(); !strings.Contains(got, check.want) {
+			t.Errorf("%s description %q does not contain %q", check.level, got, check.want)
+		}
 	}
 }
