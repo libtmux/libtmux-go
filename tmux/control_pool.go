@@ -22,30 +22,19 @@ type ControlPoolRequest struct {
 	Connections int
 }
 
-// OpenControlPool returns a [Server] carrying a control-mode transport,
-// together with the [ControlPool] that owns it.
+// OpenControlPool opens a control-mode pool attached to session and returns a
+// [Server] and [Session] using it. The caller owns and must close the returned
+// [ControlPool]; killing session closes its connections.
 //
-// Closing the pool does not invalidate anything derived from the returned
-// handle. Under the default fallback policy, those records start a subprocess
-// and report [WarningControlPoolClosed]. [EngineFallbackReject] instead returns
-// [EngineFallbackError].
+// Derive records from the returned handle or select its engine explicitly;
+// existing records retain their old transport. After the pool closes,
+// [CommandServer] operations fall back to subprocesses and report
+// [WarningControlPoolClosed], or return [EngineFallbackError] when fallback is
+// rejected.
 //
-// Every connection attaches to session because tmux has no unattached control
-// client. Killing the session closes its connections.
-//
-// The returned handle is the one to derive records from. A record taken from
-// the original handle still starts a process per command. Use its WithEngine
-// method to select the pool without a lookup.
-//
-// The pool, not the copyable [Server], owns the connections and must be closed.
-//
-// Construction probes and caches the tmux version, opens attached client
-// processes, and registers each connection. Interactive attachment, version
-// probing, and exact-byte reads still use their documented transports;
-// [Pane.CaptureToFile] stays on the pool.
-//
-// Failure closes anything it already opened. A caller that receives an error
-// receives no pool to close.
+// Interactive attachment, version loading, and exact-byte reads retain their
+// documented transports; [Pane.CaptureToFile] remains pool-eligible. Partial
+// construction closes opened connections and returns a nil pool.
 func (s Server) OpenControlPool(
 	ctx context.Context,
 	session Session,
@@ -101,16 +90,9 @@ func closeControlClients(clients []*ControlClient) error {
 }
 
 // ControlPool owns the control-mode connections behind a connected [Server].
-// Close it when done. After closure, the default policy uses subprocesses and
-// reports [WarningControlPoolClosed]; [EngineFallbackReject] refuses fallback.
-//
-// The pool gives each command an exclusive connection, bounding concurrency by
-// the configured connection count.
-//
-// A pool exposes no notification stream and disables pane-output notifications.
-// Use [Server.OpenControl] to watch tmux changes.
-//
-// Every method is safe for concurrent use.
+// It leases one connection per command, bounding concurrency. It suppresses
+// pane output and exposes no notification stream; use [Server.OpenControl] to
+// watch tmux changes. Close it when done. Every method is safe for concurrent use.
 type ControlPool struct {
 	session Session
 	clients []*ControlClient

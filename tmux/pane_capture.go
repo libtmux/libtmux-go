@@ -166,10 +166,9 @@ var captureFileSequence atomic.Uint64
 // and the file at path, returning the same lines [Pane.Capture] returns.
 //
 // Printed captures cannot safely cross a control connection, so [Pane.Capture]
-// and [Pane.CaptureBytes] use a subprocess or reject fallback. This method's
-// three tmux commands remain engine-eligible; a control engine carries them,
-// while other engines follow the fallback policy. With no engine it costs three
-// processes.
+// and [Pane.CaptureBytes] use a subprocess or reject fallback. CaptureToFile
+// stages through a scratch buffer so capture, save, and cleanup remain
+// engine-eligible; unsupported engines follow fallback.
 //
 // path must name a file the tmux server can write and this process can read.
 // It is replaced and left for the caller. Concurrent calls must use distinct

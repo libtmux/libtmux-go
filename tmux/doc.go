@@ -110,9 +110,9 @@
 // [WarningControlPoolUnused] reports this behavior when a pool can detect it.
 //
 // Printed captures remain subprocess operations because control-mode replies
-// do not preserve the same byte contract. [Pane.CaptureToFile] avoids that
-// process on an engine-backed server by staging output through a tmux buffer
-// and a caller-supplied file.
+// do not preserve the same byte contract. [Pane.CaptureToFile] keeps its
+// commands engine-eligible by staging through a tmux buffer and caller-supplied
+// file. A control-backed server avoids those processes; other engines may not.
 //
 // [ControlClient.NextNotification] waits for pane output as a stream.
 // [Server.WaitFor] waits for an explicit tmux channel signal. Polling

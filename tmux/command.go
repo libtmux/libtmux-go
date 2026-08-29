@@ -19,19 +19,10 @@ var ErrUnknownColor = errors.New("tmux: unknown color mode")
 // errors.Is for [CommandError].
 var ErrCommand = errors.New("tmux: command failed")
 
-// ErrNoServer identifies a command that no tmux server answered. It matches
-// [CommandError] through errors.Is, alongside [ErrCommand].
-//
-//	sessions, err := server.Sessions(ctx)
-//	switch {
-//	case errors.Is(err, tmux.ErrNoServer):
-//		// nothing is running yet
-//	case err != nil:
-//		return err
-//	}
-//
-// tmux does not reliably distinguish an absent or unreachable server from one
-// that exited during the command. Inspect the socket when that distinction matters.
+// ErrNoServer identifies a command that no tmux server answered. A
+// [CommandError] may match both ErrNoServer and [ErrCommand]. tmux cannot
+// reliably distinguish an absent or unreachable server from one that exited
+// during the command.
 var ErrNoServer = errors.New("tmux: no server reached")
 
 // ColorMode selects a tmux color-capability override for [ServerOptions].
@@ -104,19 +95,12 @@ type CommandRequest struct {
 	// Stdio selects direct streaming. Nil requests captured output; nil files
 	// within a non-nil value inherit the corresponding process stream.
 	Stdio *CommandStdio
-	// CommandList reports that Arguments carries tmux command-list syntax, in
-	// which a bare ";" element separates two commands. The zero value is one
-	// command whose every element is a value, which is what every typed
-	// operation in this package sends.
+	// CommandList reports that Arguments contains tmux command-list syntax, where
+	// a bare ";" separates commands. Zero means one command of literal values.
 	//
-	// It exists because the two transports parse in opposite directions. A tmux
-	// process hands its argv to tmux's outer command parser, which reads a bare
-	// ";" as a separator, so a value that ends in one is escaped before it gets
-	// there. A control connection has no outer parser and quotes every argument
-	// instead, so the same value needs no escape and a separator cannot be
-	// written as a quoted argument at all. An engine that ignores this field
-	// sends one command with every element quoted, which is correct for the
-	// zero value.
+	// Engines must preserve literal trailing semicolons when false and leave bare
+	// separators unquoted when true; subprocess and control transports parse
+	// these forms differently.
 	CommandList bool
 }
 
