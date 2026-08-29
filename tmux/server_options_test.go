@@ -315,7 +315,8 @@ func TestZeroServerIsInvalidAndSafeToInspect(t *testing.T) {
 	if server.String() != "Server(invalid)" || server.Equal(Server{}) {
 		t.Fatalf("zero Server identity = (%q, %t), want invalid and unequal", server, server.Equal(Server{}))
 	}
-	if server.SocketPath() != "" || server.ConfigFile() != "" || server.ProcessEnvironment() != nil {
+	if server.Executable() != "" || server.SocketPath() != "" || server.ConfigFile() != "" ||
+		server.ProcessEnvironment() != nil {
 		t.Fatalf("zero Server accessors returned configured values")
 	}
 	result, err := server.Cmd(context.Background(), "list-sessions")
@@ -341,8 +342,8 @@ func TestNewServerAcceptsAnAbsoluteExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
-	if server.state.config.executable != filepath.Clean(executable) {
-		t.Fatalf("resolved executable = %q, want %q", server.state.config.executable, executable)
+	if server.Executable() != filepath.Clean(executable) {
+		t.Fatalf("resolved executable = %q, want %q", server.Executable(), executable)
 	}
 }
 
@@ -382,6 +383,7 @@ func TestServerWithSocketPathPreservesFrozenExecutionBinding(t *testing.T) {
 	}
 	if derived.state.executor != base.state.executor ||
 		derived.state.config.executable != base.state.config.executable ||
+		derived.Executable() != base.Executable() ||
 		derived.state.config.directory != base.state.config.directory ||
 		!slices.Equal(
 			derived.state.config.processEnvironment,

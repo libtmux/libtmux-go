@@ -154,6 +154,15 @@ func (s Server) ProcessEnvironment() []string {
 	return slices.Clone(s.state.config.configuredProcessEnvironment)
 }
 
+// Executable returns the absolute tmux executable path resolved when the
+// server was constructed. An invalid server returns an empty string.
+func (s Server) Executable() string {
+	if s.state == nil {
+		return ""
+	}
+	return s.state.config.executable
+}
+
 // Cmd executes raw tmux arguments and returns caller-owned result slices. A
 // completed nonzero exit remains a result; validation and transport failures
 // return errors. Cancellation cannot prove whether a mutation reached tmux.
