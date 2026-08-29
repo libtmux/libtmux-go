@@ -144,7 +144,7 @@ func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 
 	queue := newControlNotificationQueue(128)
 	t.Cleanup(func() { _ = queue.Close() })
-	if err := queue.append(1, []byte("%output %1 retry")); err != nil {
+	if err := queue.append(1, []byte("%output %1 queued")); err != nil {
 		t.Fatal(err)
 	}
 	observation := newTestPaneObservation(queue)
@@ -187,14 +187,42 @@ func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 	}
 	observation.state.releaseReadToken()
 	owned = false
-	notification, err := observation.NextNotification(context.Background())
-	if err != nil {
-		t.Fatalf("NextNotification() after cancellation error = %v, want retry", err)
+	readOutput := func(want string) {
+		t.Helper()
+		notification, err := observation.NextNotification(context.Background())
+		if err != nil {
+			t.Fatalf("NextNotification() after cancellation error = %v, want %q", err, want)
+		}
+		paneID, output, ok := notification.Output()
+		if !ok || paneID != "%1" || string(output) != want {
+			t.Fatalf("NextNotification() = (%q, %q, %t), want %q", paneID, output, ok, want)
+		}
 	}
-	paneID, output, ok := notification.Output()
-	if !ok || paneID != "%1" || string(output) != "retry" {
-		t.Fatalf("NextNotification() = (%q, %q, %t), want retained output", paneID, output, ok)
+	readOutput("queued")
+
+	activeCtx, cancelActive := context.WithCancel(context.Background())
+	defer cancelActive()
+	activeDone := make(chan error, 1)
+	go func() {
+		_, err := observation.NextNotification(activeCtx)
+		activeDone <- err
+	}()
+	deadline := time.Now().Add(time.Second)
+	for len(observation.state.readToken) != 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
 	}
+	if len(observation.state.readToken) != 0 {
+		t.Fatal("NextNotification() did not acquire reader ownership")
+	}
+	cancelActive()
+	if err := <-activeDone; !errors.Is(err, context.Canceled) ||
+		errors.Is(err, ErrPaneObservationLost) {
+		t.Fatalf("owned read error = %v, want retryable context cancellation", err)
+	}
+	if err := queue.append(2, []byte("%output %1 active")); err != nil {
+		t.Fatal(err)
+	}
+	readOutput("active")
 }
 
 func TestPaneObservationClassifiesTerminalStreamLoss(t *testing.T) {
