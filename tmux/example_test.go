@@ -1800,9 +1800,9 @@ func ExamplePane_CaptureToFile() {
 	// Output: build ready
 }
 
-// ExampleServer_OpenControlPool puts a handle on a control-mode transport in
-// one call, so the commands that follow start no tmux processes.
-func ExampleServer_OpenControlPool() {
+// ExampleSession_OpenControl binds ordinary model values to owned control-mode
+// lanes, so their commands start no additional tmux processes.
+func ExampleSession_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
 	server, err := tmux.NewServer(tmux.ServerOptions{
@@ -1820,16 +1820,14 @@ func ExampleServer_OpenControlPool() {
 		return
 	}
 
-	connected, _, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
+	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
-		fmt.Println("open pool:", err)
+		fmt.Println("open control connection:", err)
 		return
 	}
-	defer func() { _ = pool.Close() }()
+	defer func() { _ = connection.Close() }()
 
-	// The session was taken before the pool existed, so it still carries the
-	// forking handle. Moving it across needs no tmux command.
-	windows, err := session.WithEngine(connected.Engine()).SearchWindows(ctx, nil)
+	windows, err := connection.Session().SearchWindows(ctx, nil)
 	if err != nil {
 		fmt.Println("search windows:", err)
 		return

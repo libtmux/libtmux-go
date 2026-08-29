@@ -17,6 +17,7 @@ import (
 // are safe to share.
 type Server struct {
 	state          *serverState
+	connection     *Connection
 	daemon         *snapshotServerIdentity
 	engine         Engine
 	engineFallback EngineFallbackPolicy
@@ -24,6 +25,9 @@ type Server struct {
 	// that a command it sends through a tmux process is expected rather than
 	// the cost of a record that predates the connection.
 	engineless bool
+	// requiresProcess marks exact-output and interactive operations that cannot
+	// cross a persistent control connection.
+	requiresProcess bool
 }
 
 type serverState struct {

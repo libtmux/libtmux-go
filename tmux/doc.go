@@ -21,8 +21,8 @@
 //   - Capture pane text with [Pane.Capture] or exact bytes with
 //     [Pane.CaptureBytes].
 //   - Run arbitrary tmux commands with [Server.Cmd].
-//   - Reuse a control-mode transport with [Server.OpenControlPool], or receive
-//     tmux notifications with [Server.OpenControl].
+//   - Bind a materialized session to owned control lanes with
+//     [Session.OpenControl], or receive notifications with [Server.OpenControl].
 //   - Batch dependent commands with [NewPlan].
 //
 // The tmuxtest package runs integration tests against an isolated real tmux.
@@ -103,6 +103,14 @@
 // more convenient choice when exact bytes are not part of the contract.
 //
 // # Execution modes
+//
+// [Session.OpenControl] returns a terminal [Connection] to that session's exact
+// daemon. Values obtained from [Connection.Server] and [Connection.Session]
+// retain its owned control lanes. Closing the connection is terminal: those
+// values return [ErrControlClosed] instead of reconnecting or falling back to
+// subprocesses. Operations whose contract requires a process, including
+// interactive attachment and exact-byte reads, return
+// [ErrConnectionRequiresProcess] while it is open.
 //
 // The default transport starts one tmux process per command. [Engine] lets a
 // [Server] carry supported commands another way without changing their meaning.

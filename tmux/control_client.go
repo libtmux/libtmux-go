@@ -208,16 +208,31 @@ func (s Server) openControl(
 			"control", "Session", "[redacted]", "belongs to a different server selector",
 		)
 	}
+	if session.server.daemon != nil {
+		if s.daemon != nil && !sameSnapshotIdentity(*s.daemon, *session.server.daemon) {
+			return nil, ErrDaemonReplaced
+		}
+		s = s.withDaemon(*session.server.daemon)
+	}
+	if s.connection != nil {
+		return nil, s.connection.routeError(ctx, CommandProcess)
+	}
+
+	attach := []string{"attach-session"}
+	if mode == controlNotificationsDiscarded {
+		attach = append(attach, "-f", "no-output")
+	}
+	attach = append(attach, "-t", session.ID().String())
+	attach, guard, err := s.guardCommand(attach, false)
+	if err != nil {
+		return nil, err
+	}
+	attach = append([]string{"-C"}, attach...)
 
 	var notifications *controlNotificationQueue
 	if mode == controlNotificationsRetained {
 		notifications = newControlNotificationQueue(defaultControlNotificationLimit)
 	}
-	attach := []string{"-C", "attach-session"}
-	if mode == controlNotificationsDiscarded {
-		attach = append(attach, "-f", "no-output")
-	}
-	attach = append(attach, "-t", session.ID().String())
 	arguments := s.commandArguments(attach)
 	command := exec.Command(state.config.executable, arguments...)
 	command.Env = slices.Clone(state.config.processEnvironment)
@@ -284,15 +299,8 @@ func (s Server) openControl(
 	go client.waitProcess()
 	go client.readStream()
 
-	frame, err := client.nextFrame(ctx)
-	if err != nil {
+	if err := client.acceptAttach(ctx, guard); err != nil {
 		return nil, client.failStartup(err)
-	}
-	if frame.failed {
-		return nil, client.failStartup(fmt.Errorf(
-			"control attach failed: %s",
-			strings.TrimSpace(string(frame.rawStdout)),
-		))
 	}
 	client.dispatching.Store(true)
 	if err := client.calibrateReplyFence(ctx); err != nil {
@@ -305,6 +313,34 @@ func (s Server) openControl(
 	client.clientName = clientName
 	go client.runRequests()
 	return client, nil
+}
+
+func (c *ControlClient) acceptAttach(
+	ctx context.Context,
+	guard *daemonCommandGuard,
+) error {
+	frames := 1
+	if guard != nil {
+		// if-shell completes before the attach command it schedules.
+		frames = 2
+	}
+	for range frames {
+		frame, err := c.nextFrame(ctx)
+		if err != nil {
+			return err
+		}
+		if guard != nil && frame.failed &&
+			string(frame.rawStdout) == "unknown command: "+guard.failure+"\n" {
+			return ErrDaemonReplaced
+		}
+		if frame.failed {
+			return fmt.Errorf(
+				"control attach failed: %s",
+				strings.TrimSpace(string(frame.rawStdout)),
+			)
+		}
+	}
+	return nil
 }
 
 // Cmd executes one safely encoded tmux command through the control client. It

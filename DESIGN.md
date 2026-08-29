@@ -698,6 +698,23 @@ validated request. Contexts are never stored.
 
 ## Control-mode client and operation engines
 
+`Session.OpenControl` is the ownership boundary for ordinary object operations.
+It opens one or more control-mode command lanes under the materialized
+session's daemon predicate and returns a `Connection`. Its `Server` and
+`Session` values retain a private pointer to that owner through every derived
+record. The binding is terminal: close makes later operations return
+`ErrControlClosed`, and selecting another engine, retargeting the socket, or
+requesting an operation that needs a separate process cannot detach it.
+Exact-byte reads and interactive attachment return
+`ErrConnectionRequiresProcess`; no fallback is attempted.
+
+The initial `tmux -C` process executes `if-shell -F` as its first command. Only
+the matching PID, start time, and socket branch schedules `attach-session`; a
+replacement daemon therefore never observes even a transient attached client.
+The startup reader consumes the outer predicate and inner attach frames before
+calibrating request boundaries. `Connection.CloseContext` always begins
+shutdown and uses its context only to bound the join.
+
 `Server.OpenControl` starts an attached `tmux -C` process and returns a
 production `ControlClient`. It validates `%begin`/`%end`/`%error` framing,
 serializes concurrent commands, correlates each reply by command number, and

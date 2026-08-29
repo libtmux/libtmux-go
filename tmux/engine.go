@@ -107,6 +107,7 @@ func (e *EngineFallbackError) Unwrap() error { return ErrEngineFallback }
 func (s Server) WithEngine(engine Engine) Server {
 	s.engine = engine
 	s.engineless = false
+	s.requiresProcess = false
 	return s
 }
 
@@ -151,6 +152,10 @@ func (e subprocessEngine) Run(
 	kind CommandKind,
 	request CommandRequest,
 ) (CommandResult, error) {
+	if e.server.connection != nil {
+		return CommandResult{ExitCode: -1},
+			e.server.connection.routeError(ctx, CommandProcess)
+	}
 	state, err := e.server.stateForUse()
 	if err != nil {
 		return CommandResult{ExitCode: -1}, err
@@ -188,6 +193,7 @@ func (e subprocessEngine) String() string { return "subprocess" }
 func (s Server) withoutEngine() Server {
 	s.engine = nil
 	s.engineless = true
+	s.requiresProcess = true
 	return s
 }
 
@@ -252,12 +258,28 @@ func (s Server) runCommand(
 	if guard != nil {
 		commandList = false
 	}
-	engine, err := s.commandEngine(kind)
-	if err != nil {
-		return tmuxcmd.Result{ExitCode: -1}, err
+	routeKind := kind
+	if s.requiresProcess {
+		routeKind = CommandProcess
+	}
+	var engine Engine
+	if s.connection == nil {
+		engine, err = s.commandEngine(routeKind)
+		if err != nil {
+			return tmuxcmd.Result{ExitCode: -1}, err
+		}
 	}
 	var result tmuxcmd.Result
-	if engine != nil {
+	if s.connection != nil {
+		connectedResult, connectionErr := s.connection.run(
+			ctx,
+			routeKind,
+			guarded,
+			commandList,
+		)
+		result = internalCommandResult(connectedResult)
+		err = connectionErr
+	} else if engine != nil {
 		arguments := guarded
 		if kind != CommandServer {
 			arguments = s.commandArguments(guarded)
@@ -279,7 +301,7 @@ func (s Server) runCommand(
 	if guard == nil {
 		return result, err
 	}
-	result.Command = s.originalCommand(kind, args, engine != nil)
+	result.Command = s.originalCommand(kind, args, s.connection != nil || engine != nil)
 	if err == nil && guard.rejected(result.ExitCode, result.Stderr) {
 		return tmuxcmd.Result{Command: result.Command, ExitCode: -1}, ErrDaemonReplaced
 	}
@@ -319,6 +341,16 @@ func (s Server) originalCommand(kind CommandKind, arguments []string, engine boo
 	return append([]string{state.config.executable}, s.commandArguments(arguments)...)
 }
 
+func internalCommandResult(result CommandResult) tmuxcmd.Result {
+	return tmuxcmd.Result{
+		Command:   slices.Clone(result.Command),
+		Stdout:    slices.Clone(result.Stdout),
+		RawStdout: bytes.Clone(result.RawStdout),
+		Stderr:    slices.Clone(result.Stderr),
+		ExitCode:  result.ExitCode,
+	}
+}
+
 // runExactArgv routes a complete tmux argv that carries its own client-global
 // options, such as the tmux -V version probe. It is always [CommandProcess].
 func (s Server) runExactArgv(
@@ -328,6 +360,10 @@ func (s Server) runExactArgv(
 	state, err := s.stateForUse()
 	if err != nil {
 		return tmuxcmd.Result{ExitCode: -1}, err
+	}
+	if s.connection != nil {
+		return tmuxcmd.Result{ExitCode: -1},
+			s.connection.routeError(ctx, CommandProcess)
 	}
 	engine, err := s.commandEngine(CommandProcess)
 	if err != nil {

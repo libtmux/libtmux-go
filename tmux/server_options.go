@@ -115,6 +115,9 @@ func (s Server) WithSocketPath(path string) (Server, error) {
 	if err := validateServerCommandArgument("tmux", "SocketPath", path, true); err != nil {
 		return Server{}, invalidServerOptions(err)
 	}
+	if s.connection != nil {
+		return Server{}, s.connection.terminalError(CommandProcess)
+	}
 	config := state.config
 	config.socketName = ""
 	config.socketPath = path

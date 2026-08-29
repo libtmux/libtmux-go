@@ -39,6 +39,52 @@ func TestOpenControlRejectsInvalidSessionBeforeStartingProcess(t *testing.T) {
 	}
 }
 
+func TestControlAttachFramesRecognizeTheDaemonGuard(t *testing.T) {
+	t.Parallel()
+
+	guard := &daemonCommandGuard{failure: "__replacement__"}
+	for _, test := range []struct {
+		name   string
+		frames []controlFrame
+		guard  *daemonCommandGuard
+		want   error
+	}{
+		{
+			name:   "ordinary attach",
+			frames: []controlFrame{{}},
+		},
+		{
+			name:   "guarded attach",
+			frames: []controlFrame{{}, {}},
+			guard:  guard,
+		},
+		{
+			name: "replacement",
+			frames: []controlFrame{{
+				failed:    true,
+				rawStdout: []byte("unknown command: __replacement__\n"),
+			}},
+			guard: guard,
+			want:  ErrDaemonReplaced,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			client := &ControlClient{
+				frames:  make(chan controlFrame, len(test.frames)),
+				closing: make(chan struct{}),
+			}
+			for _, frame := range test.frames {
+				client.frames <- frame
+			}
+			err := client.acceptAttach(context.Background(), test.guard)
+			if !errors.Is(err, test.want) || (test.want == nil && err != nil) {
+				t.Fatalf("acceptAttach() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
 func TestControlClientCollectsAliasFramesThroughReplyFence(t *testing.T) {
 	t.Parallel()
 

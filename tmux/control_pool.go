@@ -174,8 +174,31 @@ func (p *ControlPool) run(
 }
 
 func (p *ControlPool) acquire(ctx context.Context) (*ControlClient, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	select {
+	case <-p.stopped:
+		return nil, ErrControlClosed
+	default:
+	}
+	select {
+	case <-p.drained:
+		return nil, p.drainError()
+	default:
+	}
 	select {
 	case client := <-p.free:
+		if err := ctx.Err(); err != nil {
+			p.free <- client
+			return nil, err
+		}
+		select {
+		case <-p.stopped:
+			p.free <- client
+			return nil, ErrControlClosed
+		default:
+		}
 		return client, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
