@@ -60,9 +60,9 @@ $ export TMUX_TMPDIR=/tmp/libtmux-go-probe && mkdir -p "$TMUX_TMPDIR" && unset T
 
 ### Layer 0 — the real binary over raw JSON-RPC
 
-Fastest and most deterministic, and it reaches everything the Go tests cannot:
-framing, schema validation on the wire, protocol negotiation, and the
-environment a client actually supplies. `references/drive.py` is that driver:
+Fastest and most deterministic, it covers process boundaries the Go tests do
+not: framing, protocol negotiation, and the environment a client actually
+supplies. `references/drive.py` is that driver:
 it spawns the binary with an environment it builds rather than inherits, holds
 stdin open, matches replies by id, declines any question the server asks, and
 reads a plan of JSON-RPC calls from stdin.

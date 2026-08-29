@@ -60,7 +60,7 @@ unset TMUX TMUX_PANE
 # The workspace stays on. This sweep asks what each tmux release does to the
 # code in this tree, and mcp carries no replace directive, so GOWORK=off would
 # aim every one of its runs at the core release its require names instead.
-# Resolving without a workspace is TestEveryModuleResolvesWithoutAWorkspace's
+# Resolving without a workspace is the standalone module-metadata test's
 # question, and it does not vary by tmux version.
 
 all_modules=(. examples workspace mcp benchmarks)

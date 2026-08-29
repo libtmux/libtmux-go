@@ -55,9 +55,9 @@ jobs:
       # report the core as uncovered by the tests that cover it.
       #
       # The workspace stays on. GOWORK=off answers whether a module resolves
-      # for a stranger, which is a real question and is why
-      # TestEveryModuleResolvesWithoutAWorkspace asks it -- but it cannot also
-      # answer whether this tree works, because mcp carries no replace
+      # for a stranger, which is a real question answered by the standalone
+      # module-metadata test. It cannot also answer whether this tree works,
+      # because mcp carries no replace
       # directive and so resolves the core from the proxy. Asking one run both
       # questions is how nineteen commits of core reached the mcp job as a
       # release nobody had built against it.

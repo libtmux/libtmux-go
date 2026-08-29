@@ -182,7 +182,7 @@ metadata-only; the Python server has no equivalent capability partition.
 The two ship different kinds of artefact for it. The Python server has sphinx
 documentation and a `justfile`. This one has an agent skill,
 `.agents/skills/testing-the-mcp-server/`, which carries the socket layout, the
-fidelity layers, and a per-client matrix of isolation levers and what each
-client's failure actually means — because the Go tests drive the server over
-in-memory transports and miss JSON-RPC framing, schema validation on the wire,
-argument coercion by a client, and the handshake itself.
+fidelity layers, an exhaustive real-tmux schema gate, and a per-client matrix
+of isolation levers and what each client's failure actually means. Its raw
+driver covers JSON-RPC framing, protocol negotiation, curated client
+environments, and real handshakes that the in-memory tests do not.
