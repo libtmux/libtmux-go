@@ -15,20 +15,20 @@ import (
 func TestControlNotificationQueueOwnsAndOrdersRecords(t *testing.T) {
 	t.Parallel()
 
-	queue := newControlNotificationQueue(32)
+	queue := newControlNotificationQueue(64)
 	t.Cleanup(func() { _ = queue.Close() })
 
 	first := []byte("first")
-	if err := queue.append(first); err != nil {
+	if err := queue.append(1, first); err != nil {
 		t.Fatalf("append(first) error = %v", err)
 	}
 	first[0] = 'X'
-	if err := queue.append([]byte("second")); err != nil {
+	if err := queue.append(2, []byte("second")); err != nil {
 		t.Fatalf("append(second) error = %v", err)
 	}
 
 	for index, want := range [][]byte{[]byte("first"), []byte("second")} {
-		got, err := queue.next(context.Background())
+		got, err := queue.next(context.Background(), 0)
 		if err != nil || !slices.Equal(got, want) {
 			t.Fatalf("next(%d) = (%q, %v), want %q", index, got, err, want)
 		}
@@ -38,13 +38,13 @@ func TestControlNotificationQueueOwnsAndOrdersRecords(t *testing.T) {
 func TestControlNotificationQueueNextHonorsContextWhileIdle(t *testing.T) {
 	t.Parallel()
 
-	queue := newControlNotificationQueue(32)
+	queue := newControlNotificationQueue(64)
 	t.Cleanup(func() { _ = queue.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
 	go func() {
-		_, err := queue.next(ctx)
+		_, err := queue.next(ctx, 0)
 		result <- err
 	}()
 	cancel()
@@ -58,20 +58,99 @@ func TestControlNotificationQueueNextHonorsContextWhileIdle(t *testing.T) {
 	}
 }
 
+func TestControlNotificationQueueSkipsThroughWireBoundary(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(96)
+	t.Cleanup(func() { _ = queue.Close() })
+	for sequence, record := range []string{"before", "at", "after"} {
+		if err := queue.append(uint64(sequence+4), []byte(record)); err != nil {
+			t.Fatalf("append(%q) error = %v", record, err)
+		}
+	}
+
+	got, err := queue.next(context.Background(), 5)
+	if err != nil || string(got) != "after" {
+		t.Fatalf("next(after 5) = (%q, %v), want after", got, err)
+	}
+}
+
+func TestPaneObservationOwnsBaselineAndWireBoundary(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(128)
+	t.Cleanup(func() { _ = queue.Close() })
+	if err := queue.append(2, []byte("%output %1 before")); err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.append(4, []byte("%output %1 after")); err != nil {
+		t.Fatal(err)
+	}
+	client := &ControlClient{notifications: queue}
+	baseline := []string{"visible"}
+	observation := &PaneObservation{
+		client: client, paneID: "%1", windowID: "@1", sessionID: "$1",
+		after: 3, baseline: baseline,
+	}
+	gotBaseline := observation.Baseline()
+	gotBaseline[0] = "also mutated"
+	if again := observation.Baseline(); !slices.Equal(again, []string{"visible"}) {
+		t.Fatalf("Baseline() = %q, want owned visible line", again)
+	}
+
+	notification, err := observation.NextNotification(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	paneID, output, ok := notification.Output()
+	if !ok || paneID != "%1" || string(output) != "after" {
+		t.Fatalf("NextNotification() = (%q, %q, %t), want post-boundary output", paneID, output, ok)
+	}
+}
+
+func TestPaneObservationReportsTopologyLoss(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		record string
+	}{
+		{name: "window unlinked", record: "%unlinked-window-close @1"},
+		{name: "session changed", record: "%session-changed $2 other"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			queue := newControlNotificationQueue(128)
+			t.Cleanup(func() { _ = queue.Close() })
+			if err := queue.append(4, []byte(test.record)); err != nil {
+				t.Fatal(err)
+			}
+			observation := &PaneObservation{
+				client: &ControlClient{notifications: queue},
+				paneID: "%1", windowID: "@1", sessionID: "$1", after: 3,
+			}
+			if _, err := observation.NextNotification(context.Background()); !errors.Is(err, ErrPaneObservationLost) {
+				t.Fatalf("NextNotification() error = %v, want ErrPaneObservationLost", err)
+			}
+		})
+	}
+}
+
 func TestControlNotificationQueueFinishDrainsBeforeEOF(t *testing.T) {
 	t.Parallel()
 
 	queue := newControlNotificationQueue(32)
 	t.Cleanup(func() { _ = queue.Close() })
 
-	if err := queue.append([]byte("final")); err != nil {
+	if err := queue.append(1, []byte("final")); err != nil {
 		t.Fatal(err)
 	}
 	queue.finish(nil)
-	if got, err := queue.next(context.Background()); err != nil || string(got) != "final" {
+	if got, err := queue.next(context.Background(), 0); err != nil || string(got) != "final" {
 		t.Fatalf("first next() = (%q, %v), want final", got, err)
 	}
-	if got, err := queue.next(context.Background()); got != nil || !errors.Is(err, io.EOF) {
+	if got, err := queue.next(context.Background(), 0); got != nil || !errors.Is(err, io.EOF) {
 		t.Fatalf("second next() = (%q, %v), want EOF", got, err)
 	}
 }
@@ -82,14 +161,14 @@ func TestControlNotificationQueueDrainsBeforeTerminalError(t *testing.T) {
 	queue := newControlNotificationQueue(32)
 	t.Cleanup(func() { _ = queue.Close() })
 
-	if err := queue.append([]byte("queued")); err != nil {
+	if err := queue.append(1, []byte("queued")); err != nil {
 		t.Fatal(err)
 	}
 	queue.finish(controlProtocolError("stream", "reader failed"))
-	if got, err := queue.next(context.Background()); err != nil || string(got) != "queued" {
+	if got, err := queue.next(context.Background(), 0); err != nil || string(got) != "queued" {
 		t.Fatalf("first next() = (%q, %v), want queued", got, err)
 	}
-	if got, err := queue.next(context.Background()); got != nil || !errors.Is(err, ErrControlProtocol) {
+	if got, err := queue.next(context.Background(), 0); got != nil || !errors.Is(err, ErrControlProtocol) {
 		t.Fatalf("second next() = (%q, %v), want protocol error", got, err)
 	}
 }
@@ -104,10 +183,10 @@ func TestControlNotificationQueueCloseIsIdempotent(t *testing.T) {
 	if err := queue.Close(); err != nil {
 		t.Fatalf("second Close() error = %v", err)
 	}
-	if err := queue.append([]byte("late")); !errors.Is(err, os.ErrClosed) {
+	if err := queue.append(1, []byte("late")); !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("append() after close error = %v, want closed", err)
 	}
-	if got, err := queue.next(context.Background()); got != nil ||
+	if got, err := queue.next(context.Background(), 0); got != nil ||
 		!errors.Is(err, os.ErrClosed) {
 		t.Fatalf("next() after close = (%q, %v), want closed", got, err)
 	}
@@ -116,14 +195,14 @@ func TestControlNotificationQueueCloseIsIdempotent(t *testing.T) {
 func TestControlNotificationQueueSupportsConcurrentProducerConsumer(t *testing.T) {
 	t.Parallel()
 
-	queue := newControlNotificationQueue(32)
+	queue := newControlNotificationQueue(64)
 	t.Cleanup(func() { _ = queue.Close() })
 
 	wants := [][]byte{[]byte("one"), []byte("two"), []byte("three")}
 	var wait sync.WaitGroup
 	wait.Go(func() {
-		for _, want := range wants {
-			if err := queue.append(want); err != nil {
+		for index, want := range wants {
+			if err := queue.append(uint64(index+1), want); err != nil {
 				t.Errorf("append() error = %v", err)
 				return
 			}
@@ -131,7 +210,7 @@ func TestControlNotificationQueueSupportsConcurrentProducerConsumer(t *testing.T
 		queue.finish(nil)
 	})
 	for index, want := range wants {
-		got, err := queue.next(context.Background())
+		got, err := queue.next(context.Background(), 0)
 		if err != nil || !slices.Equal(got, want) {
 			t.Fatalf("next(%d) = (%q, %v), want %q", index, got, err, want)
 		}
@@ -145,27 +224,29 @@ func TestControlNotificationQueueDrainsBeforeOverflow(t *testing.T) {
 	queue := newControlNotificationQueue(controlNotificationHeaderSize + 5)
 	t.Cleanup(func() { _ = queue.Close() })
 
-	if err := queue.append([]byte("first")); err != nil {
+	if err := queue.append(1, []byte("first")); err != nil {
 		t.Fatalf("append(first) error = %v", err)
 	}
-	if err := queue.append([]byte("overflow")); !errors.Is(err, ErrControlNotificationOverflow) {
+	if err := queue.append(2, []byte("overflow")); !errors.Is(err, ErrControlNotificationOverflow) {
 		t.Fatalf("append(overflow) error = %v, want overflow", err)
 	}
-	if err := queue.append([]byte("late")); !errors.Is(err, ErrControlNotificationOverflow) {
+	if err := queue.append(3, []byte("late")); !errors.Is(err, ErrControlNotificationOverflow) {
 		t.Fatalf("append(late) error = %v, want the terminal overflow", err)
 	}
 
-	got, err := queue.next(context.Background())
+	got, err := queue.next(context.Background(), 0)
 	if err != nil || string(got) != "first" {
 		t.Fatalf("first next() = (%q, %v), want first", got, err)
 	}
-	got, err = queue.next(context.Background())
+	got, err = queue.next(context.Background(), 0)
 	if got != nil || !errors.Is(err, ErrControlNotificationOverflow) {
 		t.Fatalf("second next() = (%q, %v), want overflow", got, err)
 	}
 	var overflow *ControlNotificationOverflowError
-	if !errors.As(err, &overflow) || overflow.LimitBytes != 9 ||
-		overflow.PendingBytes != 9 || overflow.NotificationBytes != 8 {
+	if !errors.As(err, &overflow) ||
+		overflow.LimitBytes != controlNotificationHeaderSize+5 ||
+		overflow.PendingBytes != controlNotificationHeaderSize+5 ||
+		overflow.NotificationBytes != 8 {
 		t.Fatalf("overflow detail = %#v", overflow)
 	}
 }
@@ -175,19 +256,19 @@ func TestControlNotificationQueueReusesConsumedCapacity(t *testing.T) {
 
 	queue := newControlNotificationQueue(2 * (controlNotificationHeaderSize + 4))
 	t.Cleanup(func() { _ = queue.Close() })
-	for _, record := range []string{"one", "two2"} {
-		if err := queue.append([]byte(record)); err != nil {
+	for index, record := range []string{"one", "two2"} {
+		if err := queue.append(uint64(index+1), []byte(record)); err != nil {
 			t.Fatalf("append(%q) error = %v", record, err)
 		}
 	}
-	if got, err := queue.next(context.Background()); err != nil || string(got) != "one" {
+	if got, err := queue.next(context.Background(), 0); err != nil || string(got) != "one" {
 		t.Fatalf("first next() = (%q, %v), want one", got, err)
 	}
-	if err := queue.append([]byte("thre")); err != nil {
+	if err := queue.append(3, []byte("thre")); err != nil {
 		t.Fatalf("append(reused capacity) error = %v", err)
 	}
 	for index, want := range []string{"two2", "thre"} {
-		got, err := queue.next(context.Background())
+		got, err := queue.next(context.Background(), 0)
 		if err != nil || string(got) != want {
 			t.Fatalf("next(%d) = (%q, %v), want %q", index, got, err, want)
 		}
@@ -235,11 +316,11 @@ func BenchmarkControlNotificationQueueAppendAndDrain(b *testing.B) {
 	payload := make([]byte, 256)
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range b.N {
-		if err := queue.append(payload); err != nil {
+	for index := range b.N {
+		if err := queue.append(uint64(index+1), payload); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := queue.next(context.Background()); err != nil {
+		if _, err := queue.next(context.Background(), 0); err != nil {
 			b.Fatal(err)
 		}
 	}

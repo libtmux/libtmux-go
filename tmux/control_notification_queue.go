@@ -12,7 +12,7 @@ import (
 
 const defaultControlNotificationLimit = 16 << 20
 
-const controlNotificationHeaderSize = 4
+const controlNotificationHeaderSize = 12
 
 // ErrControlNotificationOverflow identifies a watcher that did not consume
 // notifications before its bounded backlog filled.
@@ -65,7 +65,7 @@ func newControlNotificationQueue(limit int) *controlNotificationQueue {
 	}
 }
 
-func (q *controlNotificationQueue) append(record []byte) error {
+func (q *controlNotificationQueue) append(sequence uint64, record []byte) error {
 	if q == nil {
 		return nil
 	}
@@ -94,7 +94,8 @@ func (q *controlNotificationQueue) append(record []byte) error {
 	}
 	q.reserveLocked(storedBytes)
 	var header [controlNotificationHeaderSize]byte
-	binary.BigEndian.PutUint32(header[:], uint32(len(record)))
+	binary.BigEndian.PutUint64(header[:8], sequence)
+	binary.BigEndian.PutUint32(header[8:], uint32(len(record)))
 	q.writeLocked(header[:])
 	q.writeLocked(record)
 	q.signalLocked()
@@ -137,7 +138,10 @@ func (q *controlNotificationQueue) clearLocked(length int) {
 	clear(q.data[:length-first])
 }
 
-func (q *controlNotificationQueue) next(ctx context.Context) ([]byte, error) {
+func (q *controlNotificationQueue) next(
+	ctx context.Context,
+	after uint64,
+) ([]byte, error) {
 	if q == nil {
 		return nil, io.EOF
 	}
@@ -153,7 +157,8 @@ func (q *controlNotificationQueue) next(ctx context.Context) ([]byte, error) {
 		if q.used != 0 {
 			var header [controlNotificationHeaderSize]byte
 			q.readLocked(0, header[:])
-			length := int(binary.BigEndian.Uint32(header[:]))
+			sequence := binary.BigEndian.Uint64(header[:8])
+			length := int(binary.BigEndian.Uint32(header[8:]))
 			record := make([]byte, length)
 			q.readLocked(controlNotificationHeaderSize, record)
 			storedBytes := controlNotificationHeaderSize + length
@@ -164,6 +169,9 @@ func (q *controlNotificationQueue) next(ctx context.Context) ([]byte, error) {
 				q.head = 0
 			}
 			q.mu.Unlock()
+			if sequence <= after {
+				continue
+			}
 			return record, nil
 		}
 		if q.finished {

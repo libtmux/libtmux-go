@@ -50,6 +50,11 @@ type ControlCommandResult struct {
 	Flags int
 	// Failed reports whether tmux closed the frame with %error instead of %end.
 	Failed bool
+
+	// notificationSequence is the control-wire position of this frame's
+	// closing guard. It remains private because only an observation created by
+	// the originating client can use the position safely.
+	notificationSequence uint64
 }
 
 type controlGuardKind uint8
@@ -68,21 +73,23 @@ type controlGuard struct {
 }
 
 type controlFrame struct {
-	timestamp int64
-	number    uint64
-	flags     int
-	rawStdout []byte
-	failed    bool
+	timestamp    int64
+	number       uint64
+	flags        int
+	rawStdout    []byte
+	failed       bool
+	wireSequence uint64
 }
 
 func (f controlFrame) result(command []string) ControlCommandResult {
 	return ControlCommandResult{
-		Command:   slices.Clone(command),
-		RawStdout: bytes.Clone(f.rawStdout),
-		Timestamp: f.timestamp,
-		Number:    f.number,
-		Flags:     f.flags,
-		Failed:    f.failed,
+		Command:              slices.Clone(command),
+		RawStdout:            bytes.Clone(f.rawStdout),
+		Timestamp:            f.timestamp,
+		Number:               f.number,
+		Flags:                f.flags,
+		Failed:               f.failed,
+		notificationSequence: f.wireSequence,
 	}
 }
 

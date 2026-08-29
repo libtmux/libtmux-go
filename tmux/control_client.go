@@ -498,7 +498,14 @@ func (r *controlRequest) cancelBeforeWrite() bool {
 func (c *ControlClient) NextNotification(
 	ctx context.Context,
 ) (ControlNotification, error) {
-	record, err := c.notifications.next(ctx)
+	return c.nextNotificationAfter(ctx, 0)
+}
+
+func (c *ControlClient) nextNotificationAfter(
+	ctx context.Context,
+	sequence uint64,
+) (ControlNotification, error) {
+	record, err := c.notifications.next(ctx, sequence)
 	if err != nil {
 		return ControlNotification{}, err
 	}
@@ -723,6 +730,7 @@ func (c *ControlClient) closeAfterRequests() {
 
 func (c *ControlClient) readStream() {
 	var finalErr error
+	var wireSequence uint64
 	parser := controlStreamParser{}
 	reader := bufio.NewReader(c.stdout)
 	defer func() {
@@ -754,7 +762,11 @@ func (c *ControlClient) readStream() {
 				return
 			}
 			if notification != nil {
-				if appendErr := c.notifications.append(notification); appendErr != nil {
+				wireSequence++
+				if appendErr := c.notifications.append(
+					wireSequence,
+					notification,
+				); appendErr != nil {
 					if errors.Is(appendErr, ErrControlNotificationOverflow) {
 						continue
 					}
@@ -766,6 +778,8 @@ func (c *ControlClient) readStream() {
 				}
 			}
 			if frame != nil {
+				wireSequence++
+				frame.wireSequence = wireSequence
 				// Somebody else's block. Dropping it is what keeps this
 				// client's replies matched to its own commands.
 				if c.dispatching.Load() && !frame.ownReply() {
