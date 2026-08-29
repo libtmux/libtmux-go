@@ -36,6 +36,9 @@ type PaneObservation struct {
 type paneObservationState struct {
 	readToken chan struct{}
 	loss      error
+	// exitReason is what tmux said as it ended the stream, kept so the loss
+	// that follows names a cause instead of a bare EOF.
+	exitReason string
 }
 
 func newPaneObservationState() *paneObservationState {
@@ -112,6 +115,9 @@ func (o *PaneObservation) NextNotification(
 		)
 		return ControlNotification{}, state.loss
 	}
+	if notification.Kind() == ControlNotificationExit && len(arguments) != 0 {
+		state.exitReason = arguments[0]
+	}
 	// tmux has no pane-close notification: a pane that ends while its window
 	// survives is only visible as the window's new arrangement, which no longer
 	// lists it.
@@ -160,6 +166,11 @@ func (s *paneObservationState) classifyReadError(
 	}
 	if closeRequested {
 		return os.ErrClosed
+	}
+	if s.exitReason != "" {
+		s.loss = fmt.Errorf("%w: tmux ended the stream: %s: %w",
+			ErrPaneObservationLost, s.exitReason, err)
+		return s.loss
 	}
 	s.loss = fmt.Errorf("%w: %w", ErrPaneObservationLost, err)
 	return s.loss

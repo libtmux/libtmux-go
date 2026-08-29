@@ -283,6 +283,26 @@ func TestPaneObservationClassifiesTerminalStreamLoss(t *testing.T) {
 	}
 }
 
+func TestPaneObservationLossNamesTheServerExitReason(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(128)
+	t.Cleanup(func() { _ = queue.Close() })
+	if err := queue.append(1, []byte("%exit too far behind")); err != nil {
+		t.Fatal(err)
+	}
+	queue.finish(nil)
+	observation := newTestPaneObservation(queue)
+	if _, err := observation.NextNotification(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_, err := observation.NextNotification(context.Background())
+	if !errors.Is(err, ErrPaneObservationLost) || !errors.Is(err, io.EOF) ||
+		!strings.Contains(err.Error(), "too far behind") {
+		t.Fatalf("NextNotification() = %v, want loss naming the server's reason", err)
+	}
+}
+
 func TestPaneObservationKeepsNotificationErrorsRetryable(t *testing.T) {
 	t.Parallel()
 
