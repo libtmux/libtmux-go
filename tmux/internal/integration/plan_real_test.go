@@ -12,12 +12,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// TestPlanTargetsWhatItHasNotCreatedYet is the gate on forward references.
-//
-// A plan is worth having only if a step can address what an earlier step is
-// going to create, because that is what lets a build be written in one pass.
-// Here a split is recorded, then keys are sent to the pane it will create and a
-// format is read back from it, all before tmux has been asked for anything.
+// Forward references let later steps target objects created earlier in the
+// same run.
 //
 //libtmux:real-tmux
 func TestPlanTargetsWhatItHasNotCreatedYet(t *testing.T) {
@@ -71,9 +67,7 @@ func TestPlanTargetsWhatItHasNotCreatedYet(t *testing.T) {
 	}
 }
 
-// TestPlanExplainsItsDispatchesBeforeRunning gates the promise that a plan can
-// be read before it is run: what would be sent, and how it would be grouped,
-// with no server involved.
+// Explain reports dispatch grouping without reaching tmux.
 func TestPlanExplainsItsDispatchesBeforeRunning(t *testing.T) {
 	t.Parallel()
 
@@ -112,9 +106,6 @@ func TestPlanExplainsItsDispatchesBeforeRunning(t *testing.T) {
 	}
 }
 
-// TestPlanPreviewLeavesUnresolvedStepsNil gates Preview reporting what it
-// cannot know rather than inventing it: a step targeting an object an earlier
-// step will create has no argument vector until the plan runs.
 func TestPlanPreviewLeavesUnresolvedStepsNil(t *testing.T) {
 	t.Parallel()
 
@@ -139,12 +130,7 @@ func TestPlanPreviewLeavesUnresolvedStepsNil(t *testing.T) {
 	}
 }
 
-// TestPlanRefusesTheZeroRef gates the zero value addressing nothing.
-//
-// A Ref is either an object that exists or the one a numbered step will create,
-// and both are produced by a constructor. The zero value is neither, so a plan
-// holding one refuses rather than resolving it to the first step, which is what
-// a zero-based step index would have made it silently mean.
+// A zero Ref must not alias the plan's first step.
 func TestPlanRefusesTheZeroRef(t *testing.T) {
 	t.Parallel()
 
@@ -161,11 +147,8 @@ func TestPlanRefusesTheZeroRef(t *testing.T) {
 	}
 }
 
-// TestPlanStopsAtTheFirstFailure gates the status a caller reads back.
-//
-// tmux abandons a command list at its first failure, so a plan cannot pretend
-// the rest ran. The operations after a failure are skipped, and they are
-// reported as skipped rather than as failures of their own.
+// tmux abandons a command list at its first failure; later operations must be
+// reported as skipped.
 //
 //libtmux:real-tmux
 func TestPlanStopsAtTheFirstFailure(t *testing.T) {
@@ -214,11 +197,7 @@ func TestPlanStopsAtTheFirstFailure(t *testing.T) {
 	t.Logf("window name after the failed plan = %q (%t)", name, ok)
 }
 
-// TestPlanRunsIdenticallyOnBothTransports is the equivalence gate for plans.
-//
-// A plan is one of the switches a caller flips, so it has to mean the same
-// thing whichever transport carries it. The results compared here are the whole
-// point: only the cost is allowed to differ.
+// A transport may change plan cost, not results.
 //
 //libtmux:real-tmux
 func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
@@ -271,13 +250,7 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 	}
 }
 
-// TestPlanBuildsAWorkspaceInOnePass exercises the recorded operations the way a
-// workspace builder uses them: a session, windows inside it, panes inside those,
-// and commands typed into panes that did not exist when the plan was written.
-//
-// It is the coverage gate for the operation surface. Every step targets
-// something an earlier step created, so a mistake in how a Ref resolves shows up
-// as a tmux error rather than as a silently misplaced pane.
+// Every operation after session creation targets a forward reference.
 //
 //libtmux:real-tmux
 func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
@@ -346,11 +319,6 @@ func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
 	}
 }
 
-// TestPlanRecordsTheWiderSurface exercises the operations the workspace test
-// does not: the ones naming two objects, the server-scoped ones, and the option
-// and buffer writers. A plan that only ever names one object at a time would
-// pass every other test here.
-//
 //libtmux:real-tmux
 func TestPlanRecordsTheWiderSurface(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -416,11 +384,7 @@ func TestPlanRecordsTheWiderSurface(t *testing.T) {
 	}
 }
 
-// TestPlanCmdRecordsWhatHasNoRecorder gates the escape hatch.
-//
-// The recorders cover the commands this package wraps; Cmd covers the rest, and
-// the point of it being part of a plan rather than a separate call is that a
-// Ref still names what it acts on. Here it targets a pane the same plan created.
+// Cmd resolves forward references like typed plan operations.
 //
 //libtmux:real-tmux
 func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
@@ -465,13 +429,7 @@ func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
 	}
 }
 
-// TestPlannersAgreeOnResultsAndDifferOnCost is the gate on planners being
-// interchangeable policy.
-//
-// A planner decides only how many times tmux is invoked. Running one plan
-// through each must produce the same per-operation results, including the same
-// captured output and the same created IDs, at a different dispatch count. If
-// that ever stops holding, a planner is changing meaning rather than cost.
+// Planners may change dispatch count, never per-operation results.
 //
 //libtmux:real-tmux
 func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
@@ -585,14 +543,8 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 	}
 }
 
-// TestPlanSplitsResultsPerOperation gates what a caller reads back from one
-// merged tmux reply.
-//
-// tmux answers a command list with one exit status and one stdout, so the
-// per-operation result is something this package reconstructs rather than
-// something tmux reports. This checks all three statuses in one run, and that
-// output lands on the operation that asked for it rather than on its
-// neighbours.
+// tmux merges command-list replies; Plan must restore per-operation output and
+// status.
 //
 //libtmux:real-tmux
 func TestPlanSplitsResultsPerOperation(t *testing.T) {
@@ -670,19 +622,8 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 	}
 }
 
-// TestPlannersAgreeWhenAnOperationNamesTwoObjects is the gate on the part of a
-// planner's contract that no single planner can check on its own.
-//
-// A planner may change how many times tmux is invoked and nothing else. Marked
-// is the one that rewrites an operation as it folds it, replacing the target
-// with tmux's {marked} register, so it is the one that can break that promise
-// -- and a command naming two objects is where it breaks quietly. tmux takes an
-// empty second target as the current pane and reports success, so a dropped one
-// is not an error anywhere: the swap simply happens between the wrong panes.
-//
-// Comparing what each planner left behind is therefore the only check that
-// works. Asserting one planner's arguments would pass while the panes ended up
-// the wrong way round.
+// Marked rewrites the primary target to {marked}; it must preserve a second
+// target because tmux accepts an omitted source as the current pane.
 //
 //libtmux:real-tmux
 func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
@@ -758,13 +699,8 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 	}
 }
 
-// TestPlanPreviewReportsWhatTmuxWouldRefuse gates the reason a plan is worth
-// reading before it is sent.
-//
-// A plan is not atomic. An argument only rejected at the last step is rejected
-// after every step before it has already changed tmux, so a preview that
-// reported it the same way it reports a pane that does not exist yet would hide
-// the one of the two that is a defect.
+// Preview must reject invalid requests while leaving forward references
+// unresolved; Run is not atomic.
 func TestPlanPreviewReportsWhatTmuxWouldRefuse(t *testing.T) {
 	t.Parallel()
 
@@ -792,14 +728,8 @@ type countingPlanner struct{ dispatches []tmux.Dispatch }
 // Plan returns the grouping this planner was built with.
 func (p countingPlanner) Plan([]tmux.Op) []tmux.Dispatch { return p.dispatches }
 
-// TestPlanRefusesAGroupingThatIsNotThePlan gates the other half of the Planner
-// contract.
-//
-// A planner decides how many times tmux is invoked. It does not decide what
-// runs, or in what order, and a caller writing their own can get that wrong.
-// Every case here reached tmux or panicked before: an empty group and an index
-// past the end indexed past the end of the plan's own results, and a grouping
-// that covered nothing reported every operation skipped with no error at all.
+// A Planner may group operations but cannot omit, reorder, duplicate, or
+// invent them.
 func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 	t.Parallel()
 

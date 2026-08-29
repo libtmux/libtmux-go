@@ -156,17 +156,10 @@ func finishedMarker() (string, error) {
 	return "tmuxtest-finished-" + hex.EncodeToString(raw), nil
 }
 
-// RunInPane returns a pane running command on a tmux server of its own.
-//
-//	pane := tmuxtest.RunInPane(ctx, t, "./mytui --watch")
-//	tmuxtest.WaitForText(ctx, t, pane, "ready")
-//	tmuxtest.Type(ctx, t, pane, "q")
-//
-// The server, session, and window belong to t. command is typed into a retained
-// shell so its exit does not destroy the pane before assertions run.
-//
-// It uses a startup-file-free POSIX shell with [ShellPrompt]. Setup failures call
-// [testing.TB.Fatal]. Use [NewServerWithOptions] for custom topology or config.
+// RunInPane creates an isolated pane, waits for its startup-file-free POSIX
+// shell, and submits command with [Type]. It does not wait for command to start
+// or finish. Resources belong to t; setup failures call [testing.TB.Fatal]. Use
+// [NewServerWithOptions] for custom topology or configuration.
 func RunInPane(ctx context.Context, t testing.TB, command string) tmux.Pane {
 	t.Helper()
 	initialSession := tmux.NewSessionRequest{}

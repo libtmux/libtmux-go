@@ -54,13 +54,7 @@ func TestCleanupFailureRemainsRegisteredForSuiteRetry(t *testing.T) {
 	}
 }
 
-// TestOnlyALiveDaemonKeepsTheSuiteRoot covers which failed cleanups are worth
-// keeping a temporary root for.
-//
-// The root holds the socket, and the socket is the only way left to reach a
-// daemon the suite could not stop. A cleanup that failed with nothing running
-// leaves nothing to reach, so keeping its root only adds a directory nobody
-// reads: the failure diagnostic reports no paths, by design.
+// Keep the suite root only while its socket may still reach a live daemon.
 func TestOnlyALiveDaemonKeepsTheSuiteRoot(t *testing.T) {
 	alive := &serverRecord{pid: os.Getpid()}
 	stopped := &serverRecord{pid: os.Getpid(), daemonStopped: true}
@@ -289,10 +283,7 @@ func TestCleanupRetryResumesAfterPartialArtifactRemoval(t *testing.T) {
 	}
 }
 
-// TestRetryCleanupWaitsBetweenAttempts covers the wait rather than the retry.
-// What cleanup contends with is a server partway through shutting down, and
-// asking again inside the same moment gets the same answer -- which is how two
-// attempts came to report one failure twice on a loaded machine.
+// Cleanup retries must pause so a server already shutting down can finish.
 func TestRetryCleanupWaitsBetweenAttempts(t *testing.T) {
 	const gap = 20 * time.Millisecond
 	attempts := 0
