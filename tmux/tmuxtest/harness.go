@@ -396,12 +396,16 @@ func newServerWithOptions(
 	if processEnvironment == nil {
 		processEnvironment = os.Environ()
 	}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		Binary:             binary,
 		SocketPath:         socketPath,
 		ConfigFile:         configFile,
 		ProcessEnvironment: scrubTmuxEnvironment(processEnvironment),
 	})
+	if err != nil {
+		_ = os.RemoveAll(tempDir)
+		t.Fatal(harnessFailure("construct tmux server", err))
+	}
 	record := &serverRecord{
 		server:     server,
 		tempDir:    tempDir,

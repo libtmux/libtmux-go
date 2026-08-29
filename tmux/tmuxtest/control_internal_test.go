@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestStartControlModeRequiresExplicitSocketProvenance(t *testing.T) {
 		},
 		{
 			name:    "session identity",
-			server:  tmux.NewServer(tmux.ServerOptions{SocketPath: "/explicit.sock"}),
+			server:  mustNewTmuxServer(t, tmux.ServerOptions{SocketPath: "/explicit.sock"}),
 			session: tmux.Session{},
 			want:    "session id is empty",
 		},
@@ -52,6 +53,49 @@ func TestStartControlModeRequiresExplicitSocketProvenance(t *testing.T) {
 				t.Fatalf("startControlMode() error = %v, want containing %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestControlProcessEnvironmentRejectsPrivateInheritedSnapshot(t *testing.T) {
+	t.Parallel()
+
+	server := mustNewTmuxServer(t, tmux.ServerOptions{Binary: os.Args[0]})
+	if _, err := controlProcessEnvironment(server); err == nil ||
+		!strings.Contains(err.Error(), "explicit ProcessEnvironment") {
+		t.Fatalf(
+			"controlProcessEnvironment() error = %v, want explicit-environment requirement",
+			err,
+		)
+	}
+}
+
+func TestControlCommandPrefixPinsTheEffectiveSocketPath(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	server := mustNewTmuxServer(t, tmux.ServerOptions{
+		Binary:             os.Args[0],
+		SocketName:         "named",
+		ConfigFile:         "relative.conf",
+		Colors:             tmux.Color256,
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
+		Runner: tmux.CommandRunnerFunc(func(
+			_ context.Context,
+			request tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			return tmux.CommandResult{
+				Command:  append([]string{request.Binary}, request.Arguments...),
+				ExitCode: 0,
+			}, nil
+		}),
+	})
+	prefix, err := controlCommandPrefix(context.Background(), server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{os.Args[0], "-2", "-S" + server.SocketPath()}
+	if !slices.Equal(prefix, want) {
+		t.Fatalf("controlCommandPrefix() = %#v, want %#v", prefix, want)
 	}
 }
 
@@ -120,7 +164,7 @@ func TestControlModeUsesServerProcessEnvironment(t *testing.T) {
 		"LIBTMUX_CONTROL_REQUIRED=configured",
 		"LIBTMUX_CONTROL_REAL_TMUX="+prefix[0],
 	)
-	server := tmux.NewServer(tmux.ServerOptions{
+	server := mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             proxyPath,
 		SocketPath:         base.SocketPath(),
 		ConfigFile:         base.ConfigFile(),
@@ -188,7 +232,7 @@ func TestControlModeCloseBoundsInheritedOutputPipes(t *testing.T) {
 		"LIBTMUX_CONTROL_REAL_TMUX="+prefix[0],
 		"LIBTMUX_CONTROL_ORPHAN_PID="+pidPath,
 	)
-	server := tmux.NewServer(tmux.ServerOptions{
+	server := mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             proxyPath,
 		SocketPath:         base.SocketPath(),
 		ConfigFile:         base.ConfigFile(),
@@ -407,7 +451,7 @@ func TestStartControlModeCleansFailedRegistrationProcessAndSpool(t *testing.T) {
 		"LIBTMUX_CONTROL_PID_FILE="+pidPath,
 		"LIBTMUX_CONTROL_REAL_TMUX="+prefix[0],
 	)
-	server := tmux.NewServer(tmux.ServerOptions{
+	server := mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             proxyPath,
 		SocketPath:         base.SocketPath(),
 		ConfigFile:         base.ConfigFile(),

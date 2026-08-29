@@ -136,24 +136,35 @@ func TestPythonAliasPropertiesUseCanonicalModelValues(t *testing.T) {
 	}
 }
 
-func TestServerIdentityUsesSocketConfiguration(t *testing.T) {
+func TestServerIdentityUsesSelectedSocketPath(t *testing.T) {
 	t.Parallel()
 
-	left := NewServer(ServerOptions{
+	leftRoot := t.TempDir()
+	rightRoot := t.TempDir()
+	left := serverWithOptionsAndRunner(ServerOptions{
 		SocketName:         "work",
 		ConfigFile:         "/one",
-		ProcessEnvironment: []string{"TMUX_TMPDIR=/one"},
-	})
-	right := NewServer(ServerOptions{
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + leftRoot},
+	}, &versionQueueRunner{})
+	right := serverWithOptionsAndRunner(ServerOptions{
 		SocketName:         "work",
 		ConfigFile:         "/two",
-		ProcessEnvironment: []string{"TMUX_TMPDIR=/two"},
-	})
-	other := NewServer(ServerOptions{SocketPath: "/tmp/other.sock"})
-	if !left.Equal(right) || left.Equal(other) {
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + rightRoot},
+	}, &versionQueueRunner{})
+	sameEndpoint := serverWithOptionsAndRunner(ServerOptions{
+		SocketName:         "work",
+		ConfigFile:         "/different",
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + leftRoot},
+	}, &versionQueueRunner{})
+	other := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/other.sock"},
+		&versionQueueRunner{},
+	)
+	if left.Equal(right) || !left.Equal(sameEndpoint) || left.Equal(other) {
 		t.Fatalf(
-			"server equality = (same selector %t, other selector %t)",
+			"server equality = (different roots %t, same endpoint %t, other selector %t)",
 			left.Equal(right),
+			left.Equal(sameEndpoint),
 			left.Equal(other),
 		)
 	}
@@ -163,8 +174,29 @@ func TestServerIdentityUsesSocketConfiguration(t *testing.T) {
 	if got := other.String(); got != "Server(socket_path=/tmp/other.sock)" {
 		t.Fatalf("path Server.String() = %q", got)
 	}
-	if got := (Server{}).String(); got != "Server(default)" {
+	if got := (Server{}).String(); got != "Server(invalid)" {
 		t.Fatalf("zero Server.String() = %q", got)
+	}
+	if (Server{}).Equal(Server{}) {
+		t.Fatal("zero servers compare equal")
+	}
+}
+
+func TestServerIdentityAnchorsRelativePathsToFrozenWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	left := serverWithSocketSelection(
+		t,
+		t.TempDir(),
+		ServerOptions{SocketPath: "relative.sock"},
+	)
+	right := serverWithSocketSelection(
+		t,
+		t.TempDir(),
+		ServerOptions{SocketPath: "relative.sock"},
+	)
+	if left.Equal(right) {
+		t.Fatal("relative socket paths under different frozen directories compare equal")
 	}
 }
 
@@ -176,9 +208,18 @@ func TestServerIdentityUsesSocketConfiguration(t *testing.T) {
 func TestServerIdentityUsesEffectiveSocketPathSelector(t *testing.T) {
 	t.Parallel()
 
-	left := NewServer(ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "left"})
-	right := NewServer(ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "right"})
-	named := NewServer(ServerOptions{SocketName: "left"})
+	left := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "left"},
+		&versionQueueRunner{},
+	)
+	right := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "right"},
+		&versionQueueRunner{},
+	)
+	named := serverWithOptionsAndRunner(
+		ServerOptions{SocketName: "left"},
+		&versionQueueRunner{},
+	)
 
 	if !left.Equal(right) {
 		t.Fatal("servers with the same effective socket path compare unequal")

@@ -29,10 +29,13 @@ func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "tmux-"+strconv.Itoa(os.Getuid())), 0o700); err != nil {
 		t.Fatalf("Mkdir() = %v", err)
 	}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName:         "empty",
 		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root, "PATH=" + os.Getenv("PATH")},
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 
 	if alive, err := server.IsAlive(ctx); err != nil || alive {
 		t.Fatalf("IsAlive() = (%t, %v), want (false, nil) before anything runs", alive, err)

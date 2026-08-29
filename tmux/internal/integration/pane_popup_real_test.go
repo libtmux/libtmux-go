@@ -57,7 +57,7 @@ import (
 func TestDisplayPopupVersionedFieldsAgainstRealTmux(t *testing.T) {
 	base := tmuxtest.NewServer(context.Background(), t)
 	warnings := make([]tmux.Warning, 0, 3)
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath:         base.SocketPath(),
 		ConfigFile:         base.ConfigFile(),
 		ProcessEnvironment: base.ProcessEnvironment(),
@@ -66,6 +66,9 @@ func TestDisplayPopupVersionedFieldsAgainstRealTmux(t *testing.T) {
 			warnings = append(warnings, warning)
 		},
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 

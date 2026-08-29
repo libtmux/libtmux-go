@@ -341,7 +341,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	name, _ := session.Name()
 	producing := session.Server()
 	if session.sessionID != "$7" || name != "alpha" ||
-		producing.connectionState().runner != runner {
+		producing.connectionState().executor != runner {
 		t.Fatalf("NewSession() = %#v with name %q, want live $7 alpha model", session, name)
 	}
 
@@ -903,8 +903,8 @@ func TestCreationReturnsIdentityHandleWhenLiveLookupFails(t *testing.T) {
 					test.wantSameServer,
 				)
 			}
-			if producingServer.connectionState().runner != runner {
-				t.Fatal("partial-success Server() lost the creating command runner")
+			if producingServer.connectionState().executor != runner {
+				t.Fatal("partial-success Server() lost the creating command executor")
 			}
 		})
 	}
@@ -967,8 +967,8 @@ func TestCreationTransportErrorPreservesPrintedIdentity(t *testing.T) {
 			if identity != test.identity {
 				t.Fatalf("transport-error identity = %q, want %q", identity, test.identity)
 			}
-			if producingServer.connectionState().runner != runner {
-				t.Fatal("transport-error handle lost the creating command runner")
+			if producingServer.connectionState().executor != runner {
+				t.Fatal("transport-error handle lost the creating command executor")
 			}
 			if calls := runner.callCount(); calls != 1 {
 				t.Fatalf("runner calls = %d, want no lookup after transport error", calls)
@@ -1330,11 +1330,9 @@ func TestNewSessionScrubsTMUXFromExplicitEnvironment(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
 		Stderr: []string{"stop after environment capture"}, ExitCode: 7,
 	}}}}
-	server := Server{state: &serverState{
-		shared:  &serverShared{},
-		options: ServerOptions{ProcessEnvironment: []string{"TMUX=/tmp/foreign,123,0", "KEEP=value"}},
-		runner:  runner,
-	}}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		ProcessEnvironment: []string{"TMUX=/tmp/foreign,123,0", "KEEP=value"},
+	}, runner)
 
 	_, err := server.NewSession(context.Background(), NewSessionRequest{})
 	if !errors.Is(err, ErrCommand) {
@@ -1343,6 +1341,12 @@ func TestNewSessionScrubsTMUXFromExplicitEnvironment(t *testing.T) {
 	request := runner.recordedRequests()[0]
 	if !slices.Equal(request.Environment, []string{"KEEP=value"}) {
 		t.Fatalf("new-session child environment = %#v, want only KEEP", request.Environment)
+	}
+	if !slices.Contains(request.Arguments, "-S/tmp/foreign") {
+		t.Fatalf(
+			"new-session arguments = %#v, want frozen TMUX socket selector",
+			request.Arguments,
+		)
 	}
 }
 
@@ -1385,7 +1389,7 @@ func TestNewSessionUsesOneScrubbedHandleAcrossTheLifecycle(t *testing.T) {
 		t.Fatal("NewSession() returned the unsanitized input server")
 	}
 	if value, ok := lifecycleEnvironmentValue(
-		producing.connectionState().options.ProcessEnvironment,
+		producing.ProcessEnvironment(),
 		"TMUX",
 	); ok {
 		t.Fatalf("returned server TMUX = %q, want absent", value)

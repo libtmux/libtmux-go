@@ -6608,7 +6608,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestPaneFromEnvRejectsMalformedStableIDsWithoutExecutionOrDisclosure"
+          "test": "tmux.TestPaneIDFromEnvironmentRejectsMalformedStableIDsWithoutDisclosure"
         }
       ],
       "tmux": "not-applicable",
@@ -6628,7 +6628,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestPaneFromEnvRejectsMalformedStableIDsWithoutExecutionOrDisclosure"
+          "test": "tmux.TestPaneIDFromEnvironmentRejectsMalformedStableIDsWithoutDisclosure"
         }
       ],
       "tmux": "not-applicable",
@@ -6648,7 +6648,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestPaneFromEnvRejectsMalformedStableIDsWithoutExecutionOrDisclosure"
+          "test": "tmux.TestPaneIDFromEnvironmentRejectsMalformedStableIDsWithoutDisclosure"
         }
       ],
       "tmux": "not-applicable",
@@ -6689,7 +6689,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestNewServerFromEnvDistinguishesNilFromEmptyEnvironment"
+          "test": "tmux.TestNewServerFromEnvSnapshotsProcessEnvironmentOnce"
         }
       ],
       "tmux": "not-applicable",
@@ -6711,7 +6711,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestNewServerFromEnvDistinguishesNilFromEmptyEnvironment"
+          "test": "tmux.TestNewServerFromEnvOverridesOneProcessSnapshot"
         }
       ],
       "tmux": "not-applicable",
@@ -10862,12 +10862,12 @@
       "digest": "sha256:febcadc2c3af75be25c9ef8a2ec8b964057b909f9c612de05a0ccfb5b360b34f",
       "status": "translation",
       "go": [
-        "tmux.Server.IsAlive"
+        "tmux.NewServer"
       ],
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux#test.TestServerIsAliveReturnsProcessStartError"
+          "test": "tmux#test.TestNewServerRejectsMissingExecutableBeforeLiveness"
         }
       ],
       "tmux": "not-applicable",
@@ -10999,7 +10999,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestServerCmdRejectsUnknownColorMode"
+          "test": "tmux.TestNewServerRejectsUnknownColorMode"
         }
       ],
       "tmux": "not-applicable",
@@ -11021,7 +11021,7 @@
       "proof": [
         {
           "kind": "unit",
-          "test": "tmux.TestServerCmdRejectsUnknownColorMode"
+          "test": "tmux.TestNewServerRejectsUnknownColorMode"
         }
       ],
       "tmux": "not-applicable",

@@ -84,11 +84,16 @@ func TestEveryClosedSetReachesTheSchema(t *testing.T) {
 
 	ctx := context.Background()
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	if _, err := NewServer(
-		tmux.NewServer(tmux.ServerOptions{SocketName: "closed-sets-unused"}),
-	).Connect(ctx, serverTransport, nil); err != nil {
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "closed-sets-unused"})
+	if err != nil {
 		t.Fatal(err)
 	}
+	instance := mustInternalMCPServer(t, target)
+	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
 	client := mcp.NewClient(&mcp.Implementation{Name: "closed-sets", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
@@ -179,11 +184,16 @@ func TestBufferToolDescriptionsStateTheNamespaceBoundary(t *testing.T) {
 
 	ctx := context.Background()
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	instance := NewServer(tmux.NewServer(tmux.ServerOptions{SocketName: "buffer-docs-unused"}))
-	if _, err := instance.Connect(ctx, serverTransport, nil); err != nil {
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "buffer-docs-unused"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = instance.Close() })
+	instance := mustInternalMCPServer(t, target)
+	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
 	client := mcp.NewClient(&mcp.Implementation{Name: "buffer-docs", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {

@@ -750,12 +750,18 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 			plan := tmux.NewPlan()
 			plan.RenameWindow(tmux.WindowRef("@1"), "first")
 			plan.RenameWindow(tmux.WindowRef("@1"), "second")
+			server, err := tmux.NewServer(tmux.ServerOptions{
+				SocketName: "libtmux-go-plan-unreachable",
+			})
+			if err != nil {
+				t.Fatalf("NewServer() error = %v", err)
+			}
 
 			// A server that was never started: reaching it would be the failure
 			// this is checking for, so it must not be reachable.
 			result, err := plan.RunWith(
 				context.Background(),
-				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
+				server,
 				countingPlanner{dispatches: malformed.dispatches},
 			)
 			if _, ok := errors.AsType[*tmux.PlanError](err); !ok {
@@ -812,11 +818,17 @@ func TestPlanRefusesAMarkedGroupItCannotReportSeparately(t *testing.T) {
 			t.Parallel()
 
 			plan, ops := refused.plan()
+			server, err := tmux.NewServer(tmux.ServerOptions{
+				SocketName: "libtmux-go-plan-unreachable",
+			})
+			if err != nil {
+				t.Fatalf("NewServer() error = %v", err)
+			}
 			// Reaching tmux would itself be the failure: this is refused while
 			// the command list is being built, before anything is sent.
 			result, err := plan.RunWith(
 				context.Background(),
-				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
+				server,
 				markingPlanner{ops: ops},
 			)
 			if _, ok := errors.AsType[*tmux.PlanError](err); !ok {

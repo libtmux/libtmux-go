@@ -16,7 +16,7 @@ func TestGlobalScopeFactoriesReturnConcreteCapturedHandles(t *testing.T) {
 
 	sessionFactory := Server.GlobalSessionScope
 	windowFactory := Server.GlobalWindowScope
-	server := Server{state: &serverState{shared: &serverShared{}}}
+	server := serverWithRunner(&versionQueueRunner{})
 
 	sessionScope := sessionFactory(server)
 	if sessionScope.server != server {
@@ -28,12 +28,12 @@ func TestGlobalScopeFactoriesReturnConcreteCapturedHandles(t *testing.T) {
 	}
 
 	var zeroSession GlobalSessionScope
-	if zeroSession.server.connectionState() != defaultServerState {
-		t.Fatal("zero GlobalSessionScope does not use the zero Server connection")
+	if zeroSession.server.connectionState() != nil {
+		t.Fatal("zero GlobalSessionScope does not retain an invalid zero Server")
 	}
 	var zeroWindow GlobalWindowScope
-	if zeroWindow.server.connectionState() != defaultServerState {
-		t.Fatal("zero GlobalWindowScope does not use the zero Server connection")
+	if zeroWindow.server.connectionState() != nil {
+		t.Fatal("zero GlobalWindowScope does not retain an invalid zero Server")
 	}
 }
 

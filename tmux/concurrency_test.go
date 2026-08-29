@@ -19,8 +19,12 @@ func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
 	// more time without weakening the transport's truncated-read guard.
 	const drainStandInOutput = 30 * time.Second
 
-	server := NewServer(ServerOptions{
-		Binary: os.Args[0],
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+	server := mustNewServer(ServerOptions{
+		Binary: executable,
 		Runner: subprocessRunner(drainStandInOutput),
 	})
 

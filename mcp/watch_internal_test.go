@@ -13,7 +13,7 @@ func TestACoalescedNotificationIsDeferredNotDropped(t *testing.T) {
 	const uri = "tmux://panes/%9/content"
 	watchers := newWatchers(
 		mcp.NewServer(&mcp.Implementation{Name: "coalescing", Version: "1"}, nil),
-		tmux.NewServer(tmux.ServerOptions{SocketName: "coalescing-unused"}),
+		mustInternalTmuxServer(t, tmux.ServerOptions{SocketName: "coalescing-unused"}),
 	)
 	// Subscribed without a watcher: this is about what notify decides, and
 	// starting one would open a connection to a server that is not there.
@@ -52,7 +52,7 @@ func TestUnsubscribingDropsThePanesRecord(t *testing.T) {
 	const uri = "tmux://panes/%7/content"
 	watchers := newWatchers(
 		mcp.NewServer(&mcp.Implementation{Name: "pruning", Version: "1"}, nil),
-		tmux.NewServer(tmux.ServerOptions{SocketName: "pruning-unused"}),
+		mustInternalTmuxServer(t, tmux.ServerOptions{SocketName: "pruning-unused"}),
 	)
 	watchers.subscribed[uri] = 1
 	watchers.spelled[uri] = map[string]int{uri: 1}

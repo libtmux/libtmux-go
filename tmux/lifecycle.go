@@ -352,7 +352,10 @@ func (s Server) NewSession(ctx context.Context, request NewSessionRequest) (Sess
 	if request.Height < 0 || request.Height > 65535 {
 		return Session{}, invalidLifecycleRequest("Height must be between 1 and 65535")
 	}
-	effective := newSessionCommandServer(s)
+	effective, err := newSessionCommandServer(s)
+	if err != nil {
+		return Session{}, err
+	}
 	if request.Name != "" {
 		if err := validateLifecycleSessionName("name", request.Name); err != nil {
 			return Session{}, err
@@ -1305,34 +1308,45 @@ func expandLifecycleDirectory(path string) (string, error) {
 	return filepath.Join(home, strings.TrimPrefix(path, "~/")), nil
 }
 
-func newSessionCommandServer(server Server) Server {
-	state := server.connectionState()
-	options := state.options
-	environment := options.ProcessEnvironment
-	if environment == nil {
-		environment = os.Environ()
-	} else {
-		environment = slices.Clone(environment)
+func newSessionCommandServer(server Server) (Server, error) {
+	state, err := server.stateForUse()
+	if err != nil {
+		return Server{}, err
 	}
+	config := state.config
+	if config.socketPath == "" && config.socketName == "" {
+		if _, selectedByEnvironment := tmuxEnvironmentSocketPath(config); selectedByEnvironment {
+			config.socketPath = config.socketSelection.Path
+		}
+	}
+	environment := slices.Clone(config.processEnvironment)
 	filtered := make([]string, 0, len(environment))
 	for _, entry := range environment {
 		name, _, _ := strings.Cut(entry, "=")
-		if name != "TMUX" {
+		if processEnvironmentKey(name) != processEnvironmentKey("TMUX") {
 			filtered = append(filtered, entry)
 		}
 	}
-	options.ProcessEnvironment = filtered
+	config.processEnvironment = filtered
+	configured := slices.Clone(config.configuredProcessEnvironment)
+	configured = slices.DeleteFunc(configured, func(entry string) bool {
+		name, _, _ := strings.Cut(entry, "=")
+		return processEnvironmentKey(name) == processEnvironmentKey("TMUX")
+	})
+	config.configuredProcessEnvironment = configured
 	return Server{
 		state: &serverState{
-			options: options,
-			runner:  state.runner,
+			config:   config,
+			executor: state.executor,
 			// Different options, the same tmux: the version it reports and the
 			// pools open on it are properties of the server, not of whether
 			// TMUX was removed from the environment reaching it.
-			shared: state.coordination(),
+			shared: state.shared,
 		},
-		engine: server.engine,
-	}
+		engine:         server.engine,
+		engineFallback: server.engineFallback,
+		engineless:     server.engineless,
+	}, nil
 }
 
 func requireLifecycleSuccess(

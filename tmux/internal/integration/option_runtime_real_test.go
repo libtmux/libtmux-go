@@ -404,12 +404,15 @@ func TestTypedArrayOptionReplacementReportsRealPartialFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("LIBTMUX_OPTION_REAL_TMUX", realBinary)
-	proxyServer := tmux.NewServer(tmux.ServerOptions{
+	proxyServer, err := tmux.NewServer(tmux.ServerOptions{
 		Binary:             proxyPath,
 		SocketPath:         server.SocketPath(),
 		ConfigFile:         server.ConfigFile(),
 		ProcessEnvironment: os.Environ(),
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	values := mustSparseStrings(t,

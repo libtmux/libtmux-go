@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -173,10 +172,12 @@ type serverSummary struct {
 
 type listServersOutput struct {
 	// Servers is always an array with the target first when present.
-	Servers    []serverSummary `json:"servers"`
-	Total      int             `json:"total"`
-	Skipped    int             `json:"skipped,omitempty"`
-	SearchedIn string          `json:"searchedIn"`
+	Servers []serverSummary `json:"servers"`
+	// Total includes directory entries and an explicit target absent from that
+	// directory, before filtering and limits.
+	Total      int    `json:"total"`
+	Skipped    int    `json:"skipped,omitempty"`
+	SearchedIn string `json:"searchedIn"`
 	// UnreachableNote explains that discovered servers cannot be retargeted.
 	UnreachableNote string `json:"unreachableNote,omitempty"`
 }
@@ -187,35 +188,80 @@ func (t *tools) listServers(
 	_ *mcp.CallToolRequest,
 	input listServersInput,
 ) (*mcp.CallToolResult, listServersOutput, error) {
-	directory := socketDirectory()
+	binding := t.tmux()
+	selection, err := binding.SocketSelection()
+	if err != nil {
+		return nil, listServersOutput{}, err
+	}
+	directory := selection.NamedDirectory
 	output := listServersOutput{SearchedIn: directory, Servers: []serverSummary{}}
 
-	target := t.socketPath(ctx)
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		//nolint:nilerr // discovery treats an unreadable socket directory as empty
-		return nil, output, nil
+	target := selection.Path
+	targetPath := resolvePath(target)
+	entries, _ := os.ReadDir(directory)
+	targetFound := false
+	type candidate struct {
+		path     string
+		name     string
+		isTarget bool
+		probe    tmux.Server
 	}
+	candidates := make([]candidate, 0, len(entries)+1)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		output.Total++
 		path := filepath.Join(directory, entry.Name())
+		isTarget := target != "" && resolvePath(path) == targetPath
+		probe := binding
+		if !isTarget {
+			var err error
+			probe, err = binding.WithSocketPath(path)
+			if err != nil {
+				return nil, output, err
+			}
+		}
+		targetFound = targetFound || isTarget
+		candidates = append(candidates, candidate{
+			path: path, name: entry.Name(), isTarget: isTarget, probe: probe,
+		})
+	}
+	if target != "" && !targetFound {
+		output.Total++
+		candidates = append(candidates, candidate{
+			path: target, name: filepath.Base(target), isTarget: true, probe: binding,
+		})
+	}
+
+	for _, candidate := range candidates {
 		summary := serverSummary{
-			SocketPath: path,
-			Name:       entry.Name(),
-			IsTarget:   target != "" && resolvePath(path) == resolvePath(target),
+			SocketPath: candidate.path,
+			Name:       candidate.name,
+			IsTarget:   candidate.isTarget,
 		}
 		if input.Name != "" && !containsFold(summary.Name, input.Name) {
 			output.Skipped++
 			continue
 		}
-		// Probe each socket on its own temporary handle.
-		probe := tmux.NewServer(tmux.ServerOptions{SocketPath: path})
-		if alive, err := probe.IsAlive(ctx); err == nil && alive {
+		alive, err := candidate.probe.IsAlive(ctx)
+		if err != nil && candidate.isTarget && errors.Is(err, tmux.ErrControlClosed) {
+			return nil, output, err
+		}
+		if ctx.Err() != nil {
+			return nil, output, ctx.Err()
+		}
+		if err == nil && alive {
 			summary.Alive = true
-			if sessions, err := probe.Sessions(ctx); err == nil {
+			sessions, sessionsErr := candidate.probe.Sessions(ctx)
+			if sessionsErr != nil && candidate.isTarget &&
+				errors.Is(sessionsErr, tmux.ErrControlClosed) {
+				return nil, output, sessionsErr
+			}
+			if ctx.Err() != nil {
+				return nil, output, ctx.Err()
+			}
+			if sessionsErr == nil {
 				summary.Sessions = len(sessions)
 			}
 		}
@@ -250,15 +296,6 @@ func (t *tools) listServers(
 		output.Servers = output.Servers[:input.MaxServers]
 	}
 	return nil, output, nil
-}
-
-// socketDirectory mirrors tmux's TMUX_TMPDIR and per-user directory rules.
-func socketDirectory() string {
-	base := os.Getenv("TMUX_TMPDIR")
-	if base == "" {
-		base = "/tmp"
-	}
-	return filepath.Join(base, fmt.Sprintf("tmux-%d", os.Getuid()))
 }
 
 type displayMessageInput struct {

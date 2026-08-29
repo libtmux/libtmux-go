@@ -113,13 +113,17 @@ func measuredServer(t *testing.T, harness tmux.Server) (tmux.Server, *countingRu
 		t.Fatalf("resolve tmux: %v", err)
 	}
 	runner := &countingRunner{}
-	return tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		Binary:             binary,
 		SocketPath:         harness.SocketPath(),
 		ConfigFile:         harness.ConfigFile(),
 		ProcessEnvironment: harness.ProcessEnvironment(),
 		Runner:             runner,
-	}), runner
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	return server, runner
 }
 
 //libtmux:real-tmux
@@ -582,10 +586,13 @@ func TestControlPoolServesConcurrentCallersWithoutProcesses(t *testing.T) {
 		return tmux.SubprocessRunner().Run(ctx, request)
 	})
 
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -680,7 +687,7 @@ func TestARecordOutlivesThePoolThatCarriedIt(t *testing.T) {
 		return tmux.SubprocessRunner().Run(ctx, request)
 	})
 
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath:  filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:      counting,
 		Unsupported: tmux.DegradeUnsupported,
@@ -690,6 +697,9 @@ func TestARecordOutlivesThePoolThatCarriedIt(t *testing.T) {
 			mutex.Unlock()
 		},
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -800,10 +810,13 @@ func TestThePoolHandsBackAConnectedSession(t *testing.T) {
 		return tmux.SubprocessRunner().Run(ctx, request)
 	})
 
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -952,10 +965,13 @@ func TestAConnectionProvesItsOwnServerIdentity(t *testing.T) {
 		return tmux.SubprocessRunner().Run(ctx, request)
 	})
 
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

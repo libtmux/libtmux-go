@@ -28,8 +28,10 @@ libtmux-mcp v0.0.1-alpha.7
 List every tool the server exposes, as a client would see them:
 
 ```console
-$ libtmux-mcp -tools -socket-name my-application
+$ libtmux-mcp -tools
 ```
+
+Tool listing does not resolve or contact tmux.
 
 Check that the server can reach the tmux it was pointed at:
 

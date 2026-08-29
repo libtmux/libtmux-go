@@ -138,11 +138,14 @@ func TestAttachSessionRealHelper(t *testing.T) {
 	if os.Getenv("LIBTMUX_ATTACH_HELPER") != "1" {
 		return
 	}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		Binary:     os.Getenv("LIBTMUX_ATTACH_BINARY"),
 		SocketPath: os.Getenv("LIBTMUX_ATTACH_SOCKET"),
 		ConfigFile: os.Getenv("LIBTMUX_ATTACH_CONFIG"),
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	mode := os.Getenv("LIBTMUX_ATTACH_MODE")
 	ctx := context.Background()
 	if mode == "cancel" {

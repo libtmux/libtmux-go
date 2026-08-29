@@ -344,10 +344,12 @@ func TestDisplayMessageVersionBoundariesWarnAndOmitUnsupportedFlags(t *testing.T
 				{result: tmuxcmd.Result{Stdout: []string{"tmux " + test.version}}},
 				{result: tmuxcmd.Result{}},
 			}}
-			server := displayServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(warning Warning) {
-				warnings = append(warnings, warning)
-			}
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported: DegradeUnsupported,
+				WarningHandler: func(warning Warning) {
+					warnings = append(warnings, warning)
+				},
+			}, runner)
 			var err error
 			if test.pane {
 				_, err = (Pane{
@@ -397,14 +399,16 @@ func TestDisplayMessageCompletedStderrIsConcreteSynchronousWarning(t *testing.T)
 	runner := &displayQueueRunner{responses: []displayResponse{{result: tmuxcmd.Result{
 		Stdout: sourceStdout, Stderr: sourceStderr, ExitCode: 1,
 	}}}}
-	server := displayServerWithRunner(runner)
 	var got Warning
-	server.connectionState().options.WarningHandler = func(warning Warning) {
-		if runner.callCount() != 1 {
-			t.Errorf("warning delivered after %d runner calls, want completed display call", runner.callCount())
-		}
-		got = warning
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			if runner.callCount() != 1 {
+				t.Errorf("warning delivered after %d runner calls, want completed display call", runner.callCount())
+			}
+			got = warning
+		},
+	}, runner)
 	output, err := server.DisplayMessage(
 		context.Background(), DisplayMessageRequest{Message: "x", Print: true},
 	)
@@ -441,8 +445,10 @@ func TestDisplayMessageReturnsTransportErrorsWithoutWarnings(t *testing.T) {
 				result: tmuxcmd.Result{Stderr: []string{"incomplete"}, ExitCode: -1},
 				err:    test.err,
 			}}}
-			server := displayServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(Warning) { warnings++ }
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported:    DegradeUnsupported,
+				WarningHandler: func(Warning) { warnings++ },
+			}, runner)
 			output, err := server.DisplayMessage(
 				context.Background(), DisplayMessageRequest{Print: true},
 			)
@@ -507,8 +513,10 @@ func TestDisplayMessageVersionProbeFailuresStayLoud(t *testing.T) {
 
 			warnings := 0
 			runner := &displayQueueRunner{responses: []displayResponse{test.response}}
-			server := displayServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(Warning) { warnings++ }
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported:    DegradeUnsupported,
+				WarningHandler: func(Warning) { warnings++ },
+			}, runner)
 			output, err := server.DisplayMessage(
 				context.Background(), DisplayMessageRequest{Print: true, NoExpand: true},
 			)
@@ -701,11 +709,10 @@ func (r *displayQueueRunner) recordedRequests() []tmuxcmd.Request {
 }
 
 func displayServerWithRunner(runner commandRunner) Server {
-	return Server{state: &serverState{
-		shared:  &serverShared{},
-		runner:  runner,
-		options: ServerOptions{Unsupported: DegradeUnsupported},
-	}}
+	return serverWithOptionsAndRunner(
+		ServerOptions{Unsupported: DegradeUnsupported},
+		runner,
+	)
 }
 
 func assertDisplayArguments(t *testing.T, request tmuxcmd.Request, want []string) {

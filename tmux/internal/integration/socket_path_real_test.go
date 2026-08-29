@@ -45,10 +45,13 @@ func TestADirectoryTmuxRefusesReadsAsNoServer(t *testing.T) {
 				t.Fatalf("Chmod(%q) = %v", sockets, err)
 			}
 
-			server := tmux.NewServer(tmux.ServerOptions{
+			server, err := tmux.NewServer(tmux.ServerOptions{
 				SocketName:         "refused",
 				ProcessEnvironment: []string{"TMUX_TMPDIR=" + root, "PATH=" + os.Getenv("PATH")},
 			})
+			if err != nil {
+				t.Fatalf("NewServer() error = %v", err)
+			}
 
 			alive, err := server.IsAlive(ctx)
 			if err != nil {
@@ -83,16 +86,65 @@ func TestAnAbsentSocketDirectoryStillReadsAsNoServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "absent",
 		ProcessEnvironment: []string{
 			"TMUX_TMPDIR=" + filepath.Join(t.TempDir(), "nothing-here"),
 			"PATH=" + os.Getenv("PATH"),
 		},
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 
 	alive, err := server.IsAlive(ctx)
 	if err != nil || alive {
 		t.Fatalf("IsAlive() = (%t, %v), want (false, nil)", alive, err)
+	}
+}
+
+//libtmux:real-tmux
+func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	missingRoot := filepath.Join(t.TempDir(), "appears-later")
+	name := "frozen-" + filepath.Base(t.TempDir())
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: name,
+		ProcessEnvironment: []string{
+			"TMUX_TMPDIR=" + missingRoot,
+			"PATH=" + os.Getenv("PATH"),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := server.SocketSelection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(missingRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "frozen-root"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_ = server.Kill(cleanupCtx)
+	})
+	result, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
+		t.Fatalf("display-message = %#v, %v", result, err)
+	}
+	if result.Stdout[0] != selection.Path {
+		t.Fatalf(
+			"tmux socket path = %q, want frozen selection %q",
+			result.Stdout[0],
+			selection.Path,
+		)
 	}
 }

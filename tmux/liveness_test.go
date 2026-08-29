@@ -68,48 +68,27 @@ func TestServerIsAliveReturnsContextError(t *testing.T) {
 }
 
 // libtmux:parity libtmux.exc.TmuxCommandNotFound
-func TestServerIsAliveReturnsProcessStartError(t *testing.T) {
-	server := tmux.NewServer(tmux.ServerOptions{
-		Binary: filepath.Join(t.TempDir(), "missing-tmux"),
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	alive, err := server.IsAlive(ctx)
-	if err == nil || alive {
-		t.Fatalf("IsAlive() = (%v, %v), want (false, process-start error)", alive, err)
+func TestNewServerRejectsMissingExecutableBeforeLiveness(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing-tmux")
+	_, err := tmux.NewServer(tmux.ServerOptions{Binary: missing})
+	var executableError *exec.Error
+	if !errors.As(err, &executableError) || executableError.Name != missing {
+		t.Fatalf("NewServer() error = %#v, want *exec.Error for %q", err, missing)
 	}
 }
 
-// TestServerSessionsReportsAnUnresolvableBinaryInBothModes pins the boundary
-// collection leniency draws. A binary that cannot be resolved is caller
-// configuration rather than server state, so no mode normalizes it. os/exec
-// reports the two spellings differently: a name absent from PATH wraps
-// exec.ErrNotFound, while an explicit path that does not exist does not, so
-// both are covered here and the library classifies on *exec.Error.
-func TestServerSessionsReportsAnUnresolvableBinaryInBothModes(t *testing.T) {
+// TestNewServerReportsEveryUnresolvableExecutableSpelling covers both an
+// explicit missing path and a name absent from the frozen PATH. Both are
+// constructor failures that retain the requested spelling in an *exec.Error.
+func TestNewServerReportsEveryUnresolvableExecutableSpelling(t *testing.T) {
 	for _, binary := range []string{
 		filepath.Join(t.TempDir(), "missing-tmux"),
 		"libtmux-go-definitely-not-on-path",
 	} {
-		for _, mode := range []struct {
-			name   string
-			server tmux.Server
-		}{
-			{name: "lenient", server: tmux.NewServer(tmux.ServerOptions{Binary: binary})},
-			{
-				name:   "strict",
-				server: tmux.NewServer(tmux.ServerOptions{Binary: binary}),
-			},
-		} {
-			sessions, err := mode.server.Sessions(context.Background())
-			if _, ok := errors.AsType[*exec.Error](err); !ok {
-				t.Errorf("%s Sessions() with %q error = %v, want an *exec.Error",
-					mode.name, binary, err)
-			}
-			if len(sessions) != 0 {
-				t.Errorf("%s Sessions() with %q = %#v, want no rows", mode.name, binary, sessions)
-			}
+		_, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+		var executableError *exec.Error
+		if !errors.As(err, &executableError) || executableError.Name != binary {
+			t.Errorf("NewServer(%q) error = %#v, want *exec.Error for requested spelling", binary, err)
 		}
 	}
 }
@@ -143,7 +122,7 @@ func TestServerSessionsReportsEveryUnusableSocket(t *testing.T) {
 		{name: "directory", socketPath: subdirectory},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			server := tmux.NewServer(tmux.ServerOptions{SocketPath: test.socketPath})
+			server := mustNewServer(t, tmux.ServerOptions{SocketPath: test.socketPath})
 
 			sessions, err := server.Sessions(context.Background())
 			if err == nil {
@@ -163,7 +142,7 @@ func TestServerSessionsReportsEveryUnusableSocket(t *testing.T) {
 
 	// Acting on ErrNoServer is only safe if creating what was not found still
 	// fails on a socket that exists and cannot be used.
-	unusable := tmux.NewServer(tmux.ServerOptions{SocketPath: unreadable})
+	unusable := mustNewServer(t, tmux.ServerOptions{SocketPath: unreadable})
 	session, err := unusable.NewSession(context.Background(), tmux.NewSessionRequest{Name: "probe"})
 	if err == nil {
 		_ = unusable.Kill(context.Background())
@@ -199,7 +178,10 @@ func TestErrNoServerCoversEveryWayTmuxSaysItIsGone(t *testing.T) {
 			) (tmux.CommandResult, error) {
 				return tmux.CommandResult{Stderr: []string{test.stderr}, ExitCode: 1}, nil
 			})
-			server := tmux.NewServer(tmux.ServerOptions{Runner: runner})
+			server := mustNewServer(t, tmux.ServerOptions{
+				Binary: testExecutable(t),
+				Runner: runner,
+			})
 
 			_, err := server.Sessions(context.Background())
 			if err == nil {
@@ -240,7 +222,7 @@ func TestServerVersionRedactsMalformedProxyOutput(t *testing.T) {
 	if err := os.WriteFile(proxy, []byte("#!/bin/sh\nprintf '%s\\n' 'tmux "+secret+"'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	server := tmux.NewServer(tmux.ServerOptions{Binary: proxy})
+	server := mustNewServer(t, tmux.ServerOptions{Binary: proxy})
 	_, err := server.Version(context.Background())
 	if !errors.Is(err, tmux.ErrVersionQuery) || errors.Is(err, tmux.ErrInvalidVersion) {
 		t.Fatalf("Server.Version() error = %v, want only ErrVersionQuery", err)

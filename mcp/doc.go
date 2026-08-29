@@ -8,9 +8,9 @@
 //		sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 //	)
 //
-// [NewServer] returns an [Instance] that owns its MCP server and background
-// resources. Close the instance after serving. [Run] provides the same
-// lifecycle for the command-line server.
+// [NewServer] rejects an invalid tmux target, then returns an [Instance] that
+// owns its MCP server and background resources. Close the instance after
+// serving. [Run] provides the same lifecycle for the command-line server.
 //
 // # Target and security boundary
 //

@@ -160,10 +160,12 @@ func TestSessionKillGroupWarnsAndOmitsBefore37(t *testing.T) {
 		{result: tmuxcmd.Result{}},
 	}}
 	warnings := make([]Warning, 0, 1)
-	server := degradingServerWithRunner(runner)
-	server.state.options.WarningHandler = func(warning Warning) {
-		warnings = append(warnings, warning)
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			warnings = append(warnings, warning)
+		},
+	}, runner)
 	err := (Session{server: server, sessionID: "$1"}).KillWith(
 		context.Background(),
 		SessionKillRequest{Group: true},

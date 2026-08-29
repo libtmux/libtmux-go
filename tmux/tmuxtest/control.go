@@ -42,10 +42,10 @@ type ControlMode struct {
 }
 
 // NewControlMode starts a [ControlMode] attached to session and registers
-// cleanup with t. It validates that server has an explicit socket path and that
-// session belongs to that server; validation or startup failures call
-// [testing.TB.Fatal]. ctx bounds startup and registration only, not the returned
-// client's lifetime.
+// cleanup with t. It requires an explicitly configured process environment and
+// validates that session belongs to server. The client pins the server's frozen
+// effective socket path. Validation or startup failures call [testing.TB.Fatal].
+// ctx bounds startup and registration only, not the returned client's lifetime.
 func NewControlMode(
 	ctx context.Context,
 	t testing.TB,
@@ -174,13 +174,17 @@ func startControlMode(
 	if err != nil {
 		return nil, err
 	}
+	environment, err := controlProcessEnvironment(server)
+	if err != nil {
+		return nil, err
+	}
 	arguments := append(
 		slices.Clone(prefix),
 		"-C", "attach-session", "-t", session.ID().String(),
 	)
 	command := exec.Command(arguments[0], arguments[1:]...)
 	command.WaitDelay = controlStopGrace
-	command.Env = controlProcessEnvironment(server)
+	command.Env = environment
 
 	stdout, err := newControlOutputSpool()
 	if err != nil {
@@ -222,12 +226,14 @@ func startControlMode(
 	return control, nil
 }
 
-func controlProcessEnvironment(server tmux.Server) []string {
+func controlProcessEnvironment(server tmux.Server) ([]string, error) {
 	environment := server.ProcessEnvironment()
 	if environment == nil {
-		environment = os.Environ()
+		return nil, errors.New(
+			"control mode requires ServerOptions with explicit ProcessEnvironment",
+		)
 	}
-	return scrubTmuxEnvironment(environment)
+	return scrubTmuxEnvironment(environment), nil
 }
 
 func validateControlTarget(server tmux.Server, session tmux.Session) error {
@@ -269,7 +275,25 @@ func controlCommandPrefix(ctx context.Context, server tmux.Server) ([]string, er
 	if len(result.Command) <= suffixLength {
 		return nil, fmt.Errorf("display-message command is incomplete: %#v", result.Command)
 	}
-	return append([]string(nil), result.Command[:len(result.Command)-suffixLength]...), nil
+	prefix := result.Command[:len(result.Command)-suffixLength]
+	if len(prefix) == 0 {
+		return nil, errors.New("display-message command has no executable")
+	}
+	path := server.SocketPath()
+	if path == "" {
+		return nil, errors.New("server socket path is empty")
+	}
+	// The daemon already exists, so the control process needs neither the
+	// startup configuration file nor the original selector spelling. Preserve
+	// color capability flags and pin the absolute endpoint selected at server
+	// construction.
+	command := []string{prefix[0]}
+	for _, argument := range prefix[1:] {
+		if argument == "-2" || argument == "-8" {
+			command = append(command, argument)
+		}
+	}
+	return append(command, "-S"+path), nil
 }
 
 func (c *ControlMode) waitForRegistration(

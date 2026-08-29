@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -24,11 +25,10 @@ func TestServerVersionCachesSuccessfulProbe(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{{
 		result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}, ExitCode: 0},
 	}}}
-	server := Server{state: &serverState{
-		shared:  &serverShared{},
-		options: ServerOptions{SocketPath: "/ignored/socket", ConfigFile: "/ignored/config"},
-		runner:  runner,
-	}}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		SocketPath: "/ignored/socket",
+		ConfigFile: "/ignored/config",
+	}, runner)
 
 	for range 2 {
 		version, err := server.Version(context.Background())
@@ -318,16 +318,12 @@ func TestServerVersionProbesOpenBSDCapabilities(t *testing.T) {
 			"copy-mode [-deHMqSu] [-t target-pane]",
 		}, ExitCode: 0}},
 	}}
-	server := Server{state: &serverState{
-		shared: &serverShared{},
-		options: ServerOptions{
-			Binary:             "configured-tmux",
-			SocketPath:         "/ignored/socket",
-			ConfigFile:         "/ignored/config",
-			ProcessEnvironment: []string{"TEST_ENV=value"},
-		},
-		runner: runner,
-	}}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Binary:             "configured-tmux",
+		SocketPath:         "/ignored/socket",
+		ConfigFile:         "/ignored/config",
+		ProcessEnvironment: []string{"TEST_ENV=value"},
+	}, runner)
 
 	version, err := server.queryVersionForOS(context.Background(), "openbsd")
 	if err != nil {
@@ -341,12 +337,12 @@ func TestServerVersionProbesOpenBSDCapabilities(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("version probe requests = %d, want 2", len(requests))
 	}
-	if requests[0].Binary != "configured-tmux" ||
+	if requests[0].Binary != server.state.config.executable ||
 		!slices.Equal(requests[0].Arguments, []string{"-V"}) {
 		t.Fatalf("version token request = %#v", requests[0])
 	}
 	capabilityRequest := requests[1]
-	if capabilityRequest.Binary != "configured-tmux" ||
+	if capabilityRequest.Binary != server.state.config.executable ||
 		!slices.Equal(capabilityRequest.Environment, []string{"TEST_ENV=value"}) ||
 		len(capabilityRequest.Arguments) != 5 ||
 		capabilityRequest.Arguments[0] != "-f/dev/null" ||
@@ -637,7 +633,34 @@ func (r *blockingVersionRunner) Run(context.Context, tmuxcmd.Request) (tmuxcmd.R
 }
 
 func serverWithRunner(runner commandRunner) Server {
-	return Server{state: &serverState{shared: &serverShared{}, runner: runner}}
+	return serverWithOptionsAndRunner(ServerOptions{}, runner)
+}
+
+func mustNewServer(options ServerOptions) Server {
+	server, err := NewServer(options)
+	if err != nil {
+		panic(fmt.Sprintf("construct server: %v", err))
+	}
+	return server
+}
+
+func serverWithOptionsAndRunner(options ServerOptions, runner commandRunner) Server {
+	executable, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test executable: %v", err))
+	}
+	server, err := newServer(options, serverDependencies{
+		environ: os.Environ,
+		getwd:   os.Getwd,
+		resolveExecutable: func(string, []string, string) (string, error) {
+			return executable, nil
+		},
+		executor: runner,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("construct test server: %v", err))
+	}
+	return server
 }
 
 // degradingServerWithRunner is serverWithRunner with the policy that omits a
@@ -645,9 +668,8 @@ func serverWithRunner(runner commandRunner) Server {
 // the tests covering that path use; the default refuses, and
 // TestUnsupportedFeaturesAreRefusedByDefault covers that.
 func degradingServerWithRunner(runner commandRunner) Server {
-	return Server{state: &serverState{
-		shared:  &serverShared{},
-		runner:  runner,
-		options: ServerOptions{Unsupported: DegradeUnsupported},
-	}}
+	return serverWithOptionsAndRunner(
+		ServerOptions{Unsupported: DegradeUnsupported},
+		runner,
+	)
 }

@@ -51,7 +51,7 @@ func run() error {
 
 	var mutex sync.Mutex
 	var processes int
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-build-workspace",
 		Runner: tmux.CommandRunnerFunc(func(
 			ctx context.Context,
@@ -63,6 +63,9 @@ func run() error {
 			return tmux.SubprocessRunner().Run(ctx, request)
 		}),
 	})
+	if err != nil {
+		return fmt.Errorf("construct tmux server: %w", err)
+	}
 	defer func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

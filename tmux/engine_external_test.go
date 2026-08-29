@@ -73,7 +73,8 @@ func TestWithEngineRoutesServerCommandsWithoutClientSelectors(t *testing.T) {
 		result:   tmux.CommandResult{Stdout: []string{"$0 work"}},
 	}
 	runner := &recordingRunner{}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary:     testExecutable(t),
 		SocketName: "engine-socket",
 		Colors:     tmux.Color256,
 		Runner:     runner,
@@ -108,7 +109,8 @@ func TestWithEngineKeepsUnsupportedKindsOnATmuxProcess(t *testing.T) {
 	runner := &recordingRunner{
 		result: tmux.CommandResult{Stdout: []string{"tmux 3.7b"}},
 	}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary:     testExecutable(t),
 		SocketName: "engine-socket",
 		Runner:     runner,
 	}).WithEngine(engine)
@@ -139,7 +141,10 @@ func TestWithEngineCanRejectSubprocessFallback(t *testing.T) {
 	runner := &recordingRunner{
 		result: tmux.CommandResult{Stdout: []string{"tmux 3.7b"}},
 	}
-	server := tmux.NewServer(tmux.ServerOptions{Runner: runner}).
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary: testExecutable(t),
+		Runner: runner,
+	}).
 		WithEngine(engine).
 		WithEngineFallback(tmux.EngineFallbackReject)
 
@@ -172,7 +177,10 @@ func TestWithEngineNilDisablesStrictFallbackPolicy(t *testing.T) {
 	engine := &recordingEngine{
 		supports: map[tmux.CommandKind]bool{tmux.CommandServer: true},
 	}
-	server := tmux.NewServer(tmux.ServerOptions{Runner: runner}).
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary: testExecutable(t),
+		Runner: runner,
+	}).
 		WithEngine(engine).
 		WithEngineFallback(tmux.EngineFallbackReject).
 		WithEngine(nil)
@@ -189,7 +197,8 @@ func TestSubprocessEngineRestoresClientSelectorsAndProcessExecution(t *testing.T
 	t.Parallel()
 
 	runner := &recordingRunner{}
-	base := tmux.NewServer(tmux.ServerOptions{
+	base := mustNewServer(t, tmux.ServerOptions{
+		Binary:     testExecutable(t),
 		SocketPath: "/tmp/engine.sock",
 		ConfigFile: "/tmp/engine.conf",
 		Runner:     runner,
@@ -220,7 +229,10 @@ func TestWithEngineNilRestoresProcessExecution(t *testing.T) {
 	engine := &recordingEngine{
 		supports: map[tmux.CommandKind]bool{tmux.CommandServer: true},
 	}
-	server := tmux.NewServer(tmux.ServerOptions{Runner: runner}).WithEngine(engine)
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary: testExecutable(t),
+		Runner: runner,
+	}).WithEngine(engine)
 
 	if _, err := server.WithEngine(nil).Cmd(context.Background(), "list-sessions"); err != nil {
 		t.Fatalf("Cmd() error = %v", err)
@@ -237,7 +249,9 @@ func TestEngineTransportFailureStaysDetectable(t *testing.T) {
 	t.Parallel()
 
 	want := errors.New("engine unavailable")
-	server := tmux.NewServer(tmux.ServerOptions{}).WithEngine(&recordingEngine{
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary: testExecutable(t),
+	}).WithEngine(&recordingEngine{
 		supports: map[tmux.CommandKind]bool{tmux.CommandServer: true},
 		result:   tmux.CommandResult{ExitCode: -1},
 		err:      want,
@@ -285,7 +299,8 @@ func TestEngineRequestsDoNotAliasServerConfiguration(t *testing.T) {
 			return tmux.CommandResult{}, nil
 		},
 	)
-	server := tmux.NewServer(tmux.ServerOptions{
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary:             testExecutable(t),
 		ProcessEnvironment: environment,
 		Runner:             mutating,
 	})

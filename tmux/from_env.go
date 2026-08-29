@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -33,19 +35,38 @@ func (e *FromEnvError) Error() string {
 // Unwrap makes FromEnvError compatible with ErrNotInsideTmux.
 func (e *FromEnvError) Unwrap() error { return ErrNotInsideTmux }
 
-// NewServerFromEnv returns a server configured from TMUX without executing tmux.
-// A nil environment reads the process environment; a non-nil empty map does not.
+// NewServerFromEnv returns a server configured from TMUX without starting tmux.
+// It snapshots the process environment once. A nonnil environment supplies
+// discovery values and overrides that snapshot for later tmux processes; an
+// empty map therefore has no TMUX discovery value. Names follow the platform's
+// environment rules and are case-insensitive on Windows.
 func NewServerFromEnv(environment map[string]string) (Server, error) {
-	socketPath, err := socketPathFromEnvironment(environment)
+	discovery, effective, err := snapshotDiscoveryEnvironment(environment, os.Environ)
 	if err != nil {
 		return Server{}, err
 	}
-	return NewServer(ServerOptions{SocketPath: socketPath}), nil
+	return newServerFromEnvironmentSnapshot(discovery, effective)
+}
+
+func newServerFromEnvironmentSnapshot(
+	discovery map[string]string,
+	effective []string,
+) (Server, error) {
+	socketPath, err := socketPathFromEnvironment(discovery)
+	if err != nil {
+		return Server{}, err
+	}
+	dependencies := defaultServerDependencies()
+	dependencies.environ = func() []string { return slices.Clone(effective) }
+	return newServer(ServerOptions{
+		SocketPath: socketPath,
+	}, dependencies)
 }
 
 // PaneFromEnv returns the pane identified by TMUX and TMUX_PANE. Nil reads the
-// process environment; a nonnil empty map does not. It resolves the live
-// hierarchy later through identity-checked tmux queries.
+// process environment; a nonnil empty map does not. Environment names are
+// case-insensitive on Windows. It resolves the live hierarchy later through
+// identity-checked tmux queries.
 func PaneFromEnv(ctx context.Context, environment map[string]string) (Pane, error) {
 	pane, _, _, err := hierarchyFromEnvironment(ctx, environment)
 	return pane, err
@@ -77,18 +98,79 @@ func hierarchyFromEnvironmentWithProcess(
 	environment map[string]string,
 	processEnvironment func() []string,
 ) (Pane, Window, Session, error) {
-	if environment == nil {
-		environment = environmentFromEntries(processEnvironment())
-	}
-	server, err := NewServerFromEnv(environment)
+	discovery, effective, err := snapshotDiscoveryEnvironment(
+		environment,
+		processEnvironment,
+	)
 	if err != nil {
 		return Pane{}, Window{}, Session{}, err
 	}
-	paneID, err := paneIDFromEnvironment(environment)
+	paneID, err := paneIDFromEnvironment(discovery)
+	if err != nil {
+		return Pane{}, Window{}, Session{}, err
+	}
+	server, err := newServerFromEnvironmentSnapshot(discovery, effective)
 	if err != nil {
 		return Pane{}, Window{}, Session{}, err
 	}
 	return discoverEnvironmentHierarchy(ctx, server, paneID)
+}
+
+func snapshotDiscoveryEnvironment(
+	environment map[string]string,
+	processEnvironment func() []string,
+) (map[string]string, []string, error) {
+	parent := slices.Clone(processEnvironment())
+	if environment == nil {
+		return environmentFromEntries(parent), parent, nil
+	}
+	overrides, err := processEnvironmentEntries(environment)
+	if err != nil {
+		return nil, nil, err
+	}
+	discovery, err := canonicalDiscoveryEnvironment(environment, processEnvironmentKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	effective := parent
+	effective = append(effective, overrides...)
+	return discovery, effective, nil
+}
+
+func canonicalDiscoveryEnvironment(
+	environment map[string]string,
+	canonical func(string) string,
+) (map[string]string, error) {
+	normalized := make(map[string]string, len(environment))
+	for _, name := range slices.Sorted(maps.Keys(environment)) {
+		key := canonical(name)
+		if _, exists := normalized[key]; exists {
+			return nil, fmt.Errorf(
+				"%w: environment contains duplicate names",
+				ErrInvalidServerOptions,
+			)
+		}
+		normalized[key] = environment[name]
+	}
+	return normalized, nil
+}
+
+func processEnvironmentEntries(environment map[string]string) ([]string, error) {
+	names := slices.Sorted(maps.Keys(environment))
+	entries := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" || strings.ContainsRune(name, '=') ||
+			!processEnvironmentNULAllowed &&
+				(strings.ContainsRune(name, '\x00') ||
+					strings.ContainsRune(environment[name], '\x00')) {
+			return nil, fmt.Errorf(
+				"%w: environment contains an invalid entry",
+				ErrInvalidServerOptions,
+			)
+		}
+		entries = append(entries, name+"="+environment[name])
+	}
+	return entries, nil
 }
 
 func discoverEnvironmentHierarchy(
@@ -172,7 +254,7 @@ func environmentFromEntries(entries []string) map[string]string {
 	for _, entry := range entries {
 		name, value, ok := strings.Cut(entry, "=")
 		if ok {
-			environment[name] = value
+			environment[processEnvironmentKey(name)] = value
 		}
 	}
 	return environment
@@ -182,7 +264,7 @@ func environmentValue(environment map[string]string, name string) (string, bool)
 	if environment == nil {
 		return os.LookupEnv(name)
 	}
-	value, ok := environment[name]
+	value, ok := environment[processEnvironmentKey(name)]
 	return value, ok
 }
 

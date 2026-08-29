@@ -59,12 +59,15 @@ func TestTruncatedReadIsNotReportedAsAnEmptyServer(t *testing.T) {
 	}
 
 	// The same server, read through a transport that truncates.
-	starved := tmux.NewServer(tmux.ServerOptions{
+	starved, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath:         harness.SocketPath(),
 		ConfigFile:         harness.ConfigFile(),
 		ProcessEnvironment: harness.ProcessEnvironment(),
 		Runner:             starvedRunner(),
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 
 	// The lenient default is what this is about: a lenient read must still
 	// refuse to call a partial answer an empty one.

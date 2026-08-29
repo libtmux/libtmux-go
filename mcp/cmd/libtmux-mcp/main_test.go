@@ -82,19 +82,30 @@ func TestFirstSentenceStopsAtTheFirstSentence(t *testing.T) {
 
 func TestResolveSocketPrefersAFlagOverTheEnvironment(t *testing.T) {
 	for _, testCase := range []struct {
-		name, flagName, flagPath, environment, want, origin string
+		name                                                 string
+		flagName, flagPath, environmentName, environmentPath string
+		wantName, wantPath, origin                           string
 	}{
-		{"nothing at all", "", "", "", "", "tmux's default"},
-		{"the variable alone", "", "", "named", "named", "LIBTMUX_SOCKET"},
-		{"a name beats it", "flagged", "", "named", "flagged", "-socket-name"},
-		{"a path beats it", "", "/tmp/s", "named", "", "-socket-path"},
-		{"blank is not a name", "", "", "   ", "", "tmux's default"},
+		{name: "nothing at all", origin: "tmux environment"},
+		{name: "the name variable alone", environmentName: "named", wantName: "named", origin: "LIBTMUX_SOCKET"},
+		{name: "the path variable alone", environmentPath: "/env/socket", wantPath: "/env/socket", origin: "LIBTMUX_SOCKET_PATH"},
+		{name: "environment path beats environment name", environmentName: "named", environmentPath: "/env/socket", wantPath: "/env/socket", origin: "LIBTMUX_SOCKET_PATH"},
+		{name: "name flag beats environment path", flagName: "flagged", environmentPath: "/env/socket", wantName: "flagged", origin: "-socket-name"},
+		{name: "path flag beats name flag", flagName: "flagged", flagPath: "/flag/socket", wantPath: "/flag/socket", origin: "-socket-path"},
+		{name: "blank is not a name", environmentName: "   ", origin: "tmux environment"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Setenv("LIBTMUX_SOCKET", testCase.environment)
-			resolved, origin := resolveSocket(testCase.flagName, testCase.flagPath)
-			if resolved != testCase.want {
-				t.Errorf("socket = %q, want %q", resolved, testCase.want)
+			t.Setenv("LIBTMUX_SOCKET", testCase.environmentName)
+			t.Setenv("LIBTMUX_SOCKET_PATH", testCase.environmentPath)
+			name, path, origin := resolveSocket(testCase.flagName, testCase.flagPath)
+			if name != testCase.wantName || path != testCase.wantPath {
+				t.Errorf(
+					"socket = (%q, %q), want (%q, %q)",
+					name,
+					path,
+					testCase.wantName,
+					testCase.wantPath,
+				)
 			}
 			if origin != testCase.origin {
 				t.Errorf("origin = %q, want %q", origin, testCase.origin)
@@ -104,28 +115,10 @@ func TestResolveSocketPrefersAFlagOverTheEnvironment(t *testing.T) {
 }
 
 func TestTheSocketAndBinaryComeFromTheEnvironmentToo(t *testing.T) {
-	t.Run("a path in the environment is taken as a path", func(t *testing.T) {
-		t.Setenv("LIBTMUX_SOCKET_PATH", "/somewhere/else/tmux.sock")
-		if got := socketPathFrom(""); got != "/somewhere/else/tmux.sock" {
-			t.Errorf("socketPathFrom() = %q, want the path from the environment", got)
-		}
-	})
-	t.Run("the flag wins over the environment", func(t *testing.T) {
-		t.Setenv("LIBTMUX_SOCKET_PATH", "/from/the/environment.sock")
-		if got := socketPathFrom("/from/the/flag.sock"); got != "/from/the/flag.sock" {
-			t.Errorf("socketPathFrom() = %q, want the flag to win", got)
-		}
-	})
 	t.Run("the binary comes from the environment", func(t *testing.T) {
 		t.Setenv("LIBTMUX_TMUX_BIN", "/opt/tmux/bin/tmux")
 		if got := binaryFrom(""); got != "/opt/tmux/bin/tmux" {
 			t.Errorf("binaryFrom() = %q, want the path from the environment", got)
-		}
-	})
-	t.Run("doctor names the path variable as the origin", func(t *testing.T) {
-		t.Setenv("LIBTMUX_SOCKET_PATH", "/somewhere/else/tmux.sock")
-		if _, origin := resolveSocket("", ""); origin != "LIBTMUX_SOCKET_PATH" {
-			t.Errorf("origin = %q, want %q", origin, "LIBTMUX_SOCKET_PATH")
 		}
 	})
 }

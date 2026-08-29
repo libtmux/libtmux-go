@@ -265,8 +265,12 @@ func TestSomething(t *testing.T) {
 }
 ```
 
-For a machine with no tmux at all, `ServerOptions.Runner` replaces process
-execution entirely.
+`NewServer` snapshots its effective environment and working directory, resolves
+one absolute executable, and returns an error before starting tmux when
+configuration or resolution fails. Later environment and directory changes do
+not retarget the handle, and the zero `Server` is invalid. Tests without tmux
+can point `ServerOptions.Binary` at an executable fixture and supply a `Runner`
+for ordinary process calls; construction still resolves `Binary`.
 
 ## Documentation
 

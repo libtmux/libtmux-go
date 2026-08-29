@@ -143,14 +143,10 @@ func TestUnsupportedFeaturesDegradeOnRequest(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := Server{state: &serverState{
-		shared: &serverShared{},
-		runner: runner,
-		options: ServerOptions{
-			Unsupported:    DegradeUnsupported,
-			WarningHandler: func(warning Warning) { warnings = append(warnings, warning) },
-		},
-	}}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported:    DegradeUnsupported,
+		WarningHandler: func(warning Warning) { warnings = append(warnings, warning) },
+	}, runner)
 
 	session := Session{server: server, sessionID: "$1"}
 	if err := session.KillWith(context.Background(), SessionKillRequest{Group: true}); err != nil {
@@ -178,14 +174,10 @@ func TestStaleRecordReportsPayingForProcesses(t *testing.T) {
 	t.Parallel()
 
 	var warnings []Warning
-	state := &serverState{
-		runner: &versionQueueRunner{},
-		shared: &serverShared{},
-		options: ServerOptions{
-			WarningHandler: func(warning Warning) { warnings = append(warnings, warning) },
-		},
-	}
-	stale := Server{state: state}
+	stale := serverWithOptionsAndRunner(ServerOptions{
+		WarningHandler: func(warning Warning) { warnings = append(warnings, warning) },
+	}, &versionQueueRunner{})
+	state := stale.connectionState()
 
 	// No pool open: paying for a process is the documented default and is not
 	// worth reporting.
@@ -224,8 +216,13 @@ func TestStaleRecordReportsPayingForProcesses(t *testing.T) {
 func TestDerivedHandleKeepsServerCoordination(t *testing.T) {
 	t.Parallel()
 
-	original := serverWithRunner(&versionQueueRunner{})
-	derived := newSessionCommandServer(original)
+	original := serverWithOptionsAndRunner(ServerOptions{
+		ProcessEnvironment: []string{"TMUX=/tmp/foreign,123,0", "KEEP=value"},
+	}, &versionQueueRunner{})
+	derived, err := newSessionCommandServer(original)
+	if err != nil {
+		t.Fatalf("newSessionCommandServer() error = %v", err)
+	}
 
 	if derived.connectionState() == original.connectionState() {
 		t.Fatal("NewSession's handle shares the configuration it had to change")
@@ -234,7 +231,7 @@ func TestDerivedHandleKeepsServerCoordination(t *testing.T) {
 		t.Fatal("NewSession's handle started a second version cache for the same tmux")
 	}
 	if _, ok := lifecycleEnvironmentValue(
-		derived.connectionState().options.ProcessEnvironment, "TMUX",
+		derived.ProcessEnvironment(), "TMUX",
 	); ok {
 		t.Fatal("NewSession's handle kept TMUX in its environment")
 	}

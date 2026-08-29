@@ -402,10 +402,12 @@ func TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := degradingServerWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(warning Warning) {
-		warnings = append(warnings, warning)
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			warnings = append(warnings, warning)
+		},
+	}, runner)
 	err := server.RefreshClient(
 		context.Background(),
 		RefreshClientRequest{TargetClient: target, RequestClipboard: true},

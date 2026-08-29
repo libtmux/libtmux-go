@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -18,19 +19,20 @@ func TestNewServerAcceptsCommandRunner(t *testing.T) {
 	type runnerContextKey struct{}
 	contextKey := runnerContextKey{}
 	ctx := context.WithValue(context.Background(), contextKey, "runner-context")
-	environment := []string{"LANG=C"}
+	configuredEnvironment := []string{"LANG=C"}
+	executable := testExecutable(t)
 	source := tmux.CommandResult{
-		Command:   []string{"fake-tmux", "display-message"},
+		Command:   []string{executable, "display-message"},
 		Stdout:    []string{"output"},
 		RawStdout: []byte("output\n"),
 		Stderr:    []string{"diagnostic"},
 		ExitCode:  7,
 	}
 	var request tmux.CommandRequest
-	server := tmux.NewServer(tmux.ServerOptions{
-		Binary:             "fake-tmux",
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary:             executable,
 		SocketName:         "runner-socket",
-		ProcessEnvironment: environment,
+		ProcessEnvironment: configuredEnvironment,
 		Runner: tmux.CommandRunnerFunc(func(gotContext context.Context, got tmux.CommandRequest) (tmux.CommandResult, error) {
 			if gotContext.Value(contextKey) != "runner-context" {
 				t.Fatal("runner did not receive the command context")
@@ -39,17 +41,26 @@ func TestNewServerAcceptsCommandRunner(t *testing.T) {
 			return source, nil
 		}),
 	})
+	environment := server.ProcessEnvironment()
+	selection, err := server.SocketSelection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	executionEnvironment := append(
+		slices.Clone(environment),
+		"TMUX_TMPDIR="+filepath.Dir(selection.NamedDirectory),
+	)
 
 	result, err := server.Cmd(ctx, "display-message", "-p", "hello")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantArguments := []string{"-Lrunner-socket", "display-message", "-p", "hello"}
-	if request.Binary != "fake-tmux" || !slices.Equal(request.Arguments, wantArguments) {
+	if request.Binary != executable || !slices.Equal(request.Arguments, wantArguments) {
 		t.Fatalf("runner request = %#v, want binary and arguments %#v", request, wantArguments)
 	}
-	if !slices.Equal(request.Environment, environment) {
-		t.Fatalf("runner environment = %#v, want %#v", request.Environment, environment)
+	if !slices.Equal(request.Environment, executionEnvironment) {
+		t.Fatalf("runner environment = %#v, want %#v", request.Environment, executionEnvironment)
 	}
 	if result.ExitCode != 7 || !bytes.Equal(result.RawStdout, []byte("output\n")) {
 		t.Fatalf("Cmd() = %#v, want runner result", result)
@@ -63,7 +74,7 @@ func TestNewServerAcceptsCommandRunner(t *testing.T) {
 	if got := server.ProcessEnvironment(); !slices.Equal(got, environment) {
 		t.Fatalf("runner mutated server environment: %#v", got)
 	}
-	if result.Command[0] != "fake-tmux" || result.Stdout[0] != "output" ||
+	if result.Command[0] != executable || result.Stdout[0] != "output" ||
 		result.RawStdout[0] != 'o' || result.Stderr[0] != "diagnostic" {
 		t.Fatalf("runner result aliases caller storage: %#v", result)
 	}
@@ -73,7 +84,8 @@ func TestCommandRunnerTransportErrorRemainsDetectable(t *testing.T) {
 	t.Parallel()
 
 	want := errors.New("runner unavailable")
-	server := tmux.NewServer(tmux.ServerOptions{
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary: testExecutable(t),
 		Runner: tmux.CommandRunnerFunc(func(context.Context, tmux.CommandRequest) (tmux.CommandResult, error) {
 			return tmux.CommandResult{ExitCode: -1}, want
 		}),
@@ -99,8 +111,8 @@ func TestSubprocessRunnerMatchesTheDefaultRunner(t *testing.T) {
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
 	options := tmux.ServerOptions{SocketPath: socket}
-	implicit := tmux.NewServer(options)
-	explicit := tmux.NewServer(tmux.ServerOptions{
+	implicit := mustNewServer(t, options)
+	explicit := mustNewServer(t, tmux.ServerOptions{
 		SocketPath: socket,
 		Runner:     tmux.SubprocessRunner(),
 	})
@@ -138,4 +150,24 @@ func TestSubprocessRunnerMatchesTheDefaultRunner(t *testing.T) {
 			t.Errorf("%v: stderr %q, want %q", arguments, got.Stderr, want.Stderr)
 		}
 	}
+}
+
+func mustNewServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	return server
+}
+
+func testExecutable(t testing.TB) string {
+	t.Helper()
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+	return filepath.Clean(executable)
 }

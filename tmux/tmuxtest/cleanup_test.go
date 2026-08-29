@@ -33,9 +33,13 @@ func TestScrubTmuxEnvironmentRemovesTargetingVariables(t *testing.T) {
 
 func TestCleanupFailureRemainsRegisteredForSuiteRetry(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "unstarted-socket")
+	failingBinary := filepath.Join(t.TempDir(), "failing-tmux")
+	if err := os.WriteFile(failingBinary, []byte("#!/bin/sh\nexit 71\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	record := &serverRecord{
-		server: tmux.NewServer(tmux.ServerOptions{
-			Binary: filepath.Join(t.TempDir(), "missing-tmux"),
+		server: mustNewTmuxServer(t, tmux.ServerOptions{
+			Binary: failingBinary,
 		}),
 		socketPath: socketPath,
 	}
@@ -105,7 +109,7 @@ func TestFailedCleanupPreservesSocketForSuiteRetry(t *testing.T) {
 	if record == nil {
 		t.Fatal("server record was not created")
 	}
-	realServer := tmux.NewServer(tmux.ServerOptions{
+	realServer := mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             realBinary,
 		SocketPath:         record.socketPath,
 		ConfigFile:         record.configFile,
@@ -207,7 +211,7 @@ func TestCleanupTracksReplacementDaemonOnOwnedSocket(t *testing.T) {
 		t.Fatalf("replacement reused first pid %d; test cannot distinguish daemons", firstPID)
 	}
 
-	record.server = tmux.NewServer(tmux.ServerOptions{
+	record.server = mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             proxyPath,
 		SocketPath:         record.socketPath,
 		ConfigFile:         record.configFile,
@@ -348,7 +352,7 @@ func TestCleanupRetriesTransientKillFailure(t *testing.T) {
 	cleaned := false
 	t.Cleanup(func() {
 		if !cleaned {
-			record.server = tmux.NewServer(tmux.ServerOptions{
+			record.server = mustNewTmuxServer(t, tmux.ServerOptions{
 				Binary:             realBinary,
 				SocketPath:         record.socketPath,
 				ConfigFile:         record.configFile,

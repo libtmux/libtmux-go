@@ -3,11 +3,37 @@ package tmux
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
+
+func TestRequireTopologyServerUsesFrozenSocketPath(t *testing.T) {
+	t.Parallel()
+
+	left := serverWithSocketSelection(t, t.TempDir(), ServerOptions{
+		SocketPath: "relative.sock",
+	})
+	right := serverWithSocketSelection(t, t.TempDir(), ServerOptions{
+		SocketPath: "relative.sock",
+	})
+	if err := requireTopologyServer(left, right); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("different effective paths error = %v, want ErrInvalidRequest", err)
+	}
+
+	root := t.TempDir()
+	options := ServerOptions{
+		SocketName:         "shared",
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
+	}
+	left = serverWithSocketSelection(t, filepath.Join(root, "left"), options)
+	right = serverWithSocketSelection(t, filepath.Join(root, "right"), options)
+	if err := requireTopologyServer(left, right); err != nil {
+		t.Fatalf("same effective named path error = %v", err)
+	}
+}
 
 // libtmux:parity libtmux.pane.Pane.break_pane
 // libtmux:parity libtmux.pane.Pane.break_pane#parameter-branch:detach:3c117da5d4e8
@@ -633,13 +659,14 @@ func TestTopologyRejectsUnprovenSameDaemonBeforeExecution(t *testing.T) {
 	t.Parallel()
 
 	sourceRunner := &versionQueueRunner{}
-	source := NewServer(ServerOptions{
-		SocketName: "shared", ProcessEnvironment: []string{"TMUX_TMPDIR=/one"},
-	})
-	source.state.runner = sourceRunner
-	target := NewServer(ServerOptions{
-		SocketName: "shared", ProcessEnvironment: []string{"TMUX_TMPDIR=/two"},
-	})
+	sourceRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	source := serverWithOptionsAndRunner(ServerOptions{
+		SocketName: "shared", ProcessEnvironment: []string{"TMUX_TMPDIR=" + sourceRoot},
+	}, sourceRunner)
+	target := serverWithOptionsAndRunner(ServerOptions{
+		SocketName: "shared", ProcessEnvironment: []string{"TMUX_TMPDIR=" + targetRoot},
+	}, &versionQueueRunner{})
 	_, err := (Window{server: source, sessionID: "$1", windowID: "@2"}).Swap(
 		context.Background(),
 		SwapWindowRequest{Target: Window{server: target, sessionID: "$3", windowID: "@4"}},
@@ -659,9 +686,14 @@ func TestTopologyAcceptsSeparateHandlesWithSameExplicitSocketPath(t *testing.T) 
 		{result: tmuxcmd.Result{ExitCode: 0}},
 		{err: context.Canceled},
 	}}
-	source := NewServer(ServerOptions{SocketPath: "/tmp/shared.sock"})
-	source.state.runner = runner
-	target := NewServer(ServerOptions{SocketPath: "/tmp/shared.sock"})
+	source := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/shared.sock"},
+		runner,
+	)
+	target := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/shared.sock"},
+		&versionQueueRunner{},
+	)
 	_, err := (Window{server: source, sessionID: "$1", windowID: "@2"}).Swap(
 		context.Background(),
 		SwapWindowRequest{Target: Window{server: target, sessionID: "$3", windowID: "@4"}},

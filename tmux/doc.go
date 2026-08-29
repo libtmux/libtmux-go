@@ -3,10 +3,13 @@
 //
 //	import "github.com/libtmux/libtmux-go/tmux"
 //
-//	server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+//	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
-// [NewServer] records configuration without starting tmux. Its zero-value
-// [Server] targets tmux with its default socket and process environment.
+// [NewServer] validates and snapshots configuration without starting tmux.
+// The zero [Server] is invalid and operations on it return [ErrInvalidServer].
 //
 // # Where to start
 //
@@ -23,8 +26,8 @@
 //   - Batch dependent commands with [NewPlan].
 //
 // The tmuxtest package runs integration tests against an isolated real tmux.
-// [ServerOptions.Runner] substitutes process execution for unit tests or custom
-// transports.
+// [ServerOptions.Runner] intercepts dispatched subprocess commands after
+// construction. It does not replace executable discovery or control startup.
 //
 // # Naming and call shapes
 //
@@ -73,9 +76,11 @@
 //
 // # Errors and context
 //
-// All I/O accepts a context. Cancellation stops this package from waiting; it
-// does not prove whether tmux applied a mutation. Operations may make partial
-// progress, and the package does not provide rollback.
+// All tmux process and transport I/O accepts a context. [NewServer] performs
+// synchronous local environment, working-directory, executable, and socket-path
+// resolution before a server exists. Cancellation stops this package from
+// waiting; it does not prove whether tmux applied a mutation. Operations may
+// make partial progress, and the package does not provide rollback.
 //
 // [Server.Cmd] returns a completed nonzero tmux exit in [CommandResult], while
 // validation, process, and transport failures are errors. Higher-level calls

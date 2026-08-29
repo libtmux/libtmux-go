@@ -117,12 +117,16 @@ func newHarness(ctx context.Context) (*harness, error) {
 	}
 
 	processes := &countingRunner{}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath:         filepath.Join(directory, "s.sock"),
 		ConfigFile:         config,
 		Runner:             processes.runner(),
 		ProcessEnvironment: cleanEnvironment(),
 	})
+	if err != nil {
+		_ = os.RemoveAll(directory)
+		return nil, fmt.Errorf("construct tmux server: %w", err)
+	}
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "bench"})
 	if err != nil {

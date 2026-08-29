@@ -18,7 +18,7 @@ func TestRunCommandUsesCallerContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	server := tmux.NewServer(tmux.ServerOptions{Binary: os.Args[0]})
+	server := mustNewTmuxServer(t, tmux.ServerOptions{Binary: os.Args[0]})
 	result := runCommand(ctx, server, "list-sessions")
 
 	if result.ExitCode != -1 {
@@ -27,6 +27,15 @@ func TestRunCommandUsesCallerContext(t *testing.T) {
 	if len(result.Stderr) != 1 || !strings.Contains(result.Stderr[0], context.Canceled.Error()) {
 		t.Fatalf("runCommand() stderr = %#v, want context canceled", result.Stderr)
 	}
+}
+
+func mustNewTmuxServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatalf("tmux.NewServer() error = %v", err)
+	}
+	return server
 }
 
 func TestCommandFailureRedactsDiagnosticsAndPreservesClassification(t *testing.T) {

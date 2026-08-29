@@ -217,10 +217,12 @@ func TestListKeysWarnsAndOmitsFormatBefore37(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}}},
 		{result: tmuxcmd.Result{Stdout: []string{"bind-key -T root F12"}}},
 	}}
-	server := degradingServerWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(warning Warning) {
-		warnings = append(warnings, warning)
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			warnings = append(warnings, warning)
+		},
+	}, runner)
 
 	output, err := server.ListKeys(context.Background(), ListKeysRequest{
 		KeyTable: &keyTable,

@@ -67,8 +67,10 @@ server you build yourself with `ServerOptions.FixedShell`.
 
 ## Testing tmux itself
 
-`NewServer` returns a [`tmux.Server`](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux#Server)
-for a test whose subject is tmux rather than a program running inside it.
+`tmuxtest.NewServer` returns a
+[`tmux.Server`](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux#Server)
+for a test whose subject is tmux rather than a program running inside it. It
+reports construction and startup failures through `t.Fatal`.
 
 ### One server per test
 
@@ -108,17 +110,27 @@ removing its socket.
 
 ## Testing without tmux installed
 
-`ServerOptions.Runner` replaces process execution entirely, so code that drives
-tmux can be unit tested on a machine that has none:
+`tmux.NewServer` resolves `Binary` even when a `Runner` is supplied. A test on
+a machine without tmux can bind the server to its own executable, then replace
+ordinary process commands with a runner. `OpenControl` still starts the
+resolved executable directly.
 
 ```go
-server := tmux.NewServer(tmux.ServerOptions{
+binary, err := os.Executable()
+if err != nil {
+	t.Fatal(err)
+}
+server, err := tmux.NewServer(tmux.ServerOptions{
+	Binary: binary,
 	Runner: tmux.CommandRunnerFunc(func(
 		ctx context.Context, request tmux.CommandRequest,
 	) (tmux.CommandResult, error) {
 		return tmux.CommandResult{Stdout: []string{"$1"}}, nil
 	}),
 })
+if err != nil {
+	t.Fatal(err)
+}
 ```
 
 ## Keeping your suite to itself

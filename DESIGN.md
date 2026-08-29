@@ -360,8 +360,9 @@ if it is, and `error` if it is not.
 
 ## Command boundary
 
-Every tmux invocation crosses one unexported runner method. The request value
-and argv builders remain private; `CommandResult` is public and contains argv,
+Every dispatched tmux command crosses one unexported executor method. Direct
+control-mode processes retain their documented lifecycle. The request value and
+argv builders remain private; `CommandResult` is public and contains argv,
 decoded stdout lines, exact stdout bytes, decoded stderr lines, and exit status.
 
 `Server.Cmd(ctx, args...)` preserves raw tmux behavior:
@@ -421,11 +422,12 @@ sensitive when their own command operands contain secrets.
 malformed field value.
 
 `Engine` is the seam that decides whether a process happens at all; see
-"Engines" below. `ServerOptions.Runner` remains the seam that replaces process
-execution, and stays in effect underneath every engine. Pure private request
-builders can also seed a future deferred operation graph. An exported operation
-hierarchy is deferred until a real downstream consumer fixes its required
-identity, batching, and error semantics.
+"Engines" below. `ServerOptions.Runner` replaces dispatched process execution
+after construction and remains underneath engine fallback. It neither skips
+executable resolution nor starts `OpenControl`'s direct process. Pure private
+request builders can also seed a future deferred operation graph. An exported
+operation hierarchy is deferred until a real downstream consumer fixes its
+required identity, batching, and error semantics.
 
 ## Engines
 
@@ -474,9 +476,9 @@ operations that declare it.
 
 The `Server`, not the engine, routes around what an engine cannot carry. An
 engine author writes one transport and gets the fallback; the fallback honors
-`ServerOptions.Runner`, so a substituted transport still intercepts everything;
-and every engine gets identical behavior for the kinds it declines. The cost is
-that an engine cannot implement a smarter fallback of its own.
+`ServerOptions.Runner`, so a substituted transport intercepts every fallback
+request; and every engine gets identical behavior for the kinds it declines.
+The cost is that an engine cannot implement a smarter fallback of its own.
 
 Argv is classified, never re-parsed. The library already knows, at each of its
 call sites, which selectors it added and what the request needs; deriving that
@@ -522,16 +524,24 @@ interface and a caller can discover it with a type assertion, the way
 so that interface is not declared.
 
 An engine costs a caller who wants none of it nothing: `Engine` is nil on every
-handle `NewServer` returns, and the routing is one nil check on a struct field
+handle returned by a successful `NewServer`, and routing adds one nil check
 before the same request the runner always received.
 
 ## Core API signatures
 
-`NewServer(ServerOptions) Server` returns a cheap immutable handle whose private
-state may contain locks, caches, and a runner. Policy copies share that state and
-copy only immutable handle fields. Representative signatures are:
+`NewServer(ServerOptions) (Server, error)` validates and freezes one immutable
+binding without starting tmux. It snapshots the effective environment and
+working directory, resolves one absolute executable with them, and shares that
+path and environment across process and control transports. It also freezes the
+effective socket path; named and default selectors receive a canonical
+`TMUX_TMPDIR`, while an inherited `TMUX` path becomes explicit before lifecycle
+code scrubs that variable. Invalid options, an unavailable executable, or a
+failed working-directory snapshot return an error. The zero `Server` is invalid;
+operations return `ErrInvalidServer`. Policy copies share private coordination
+and copy only immutable handle fields. Representative signatures are:
 
 ```go
+func NewServer(options ServerOptions) (Server, error)
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error)
 func (s Server) Sessions(ctx context.Context) ([]Session, error)
 func (s Server) IsAlive(ctx context.Context) (bool, error)

@@ -333,11 +333,14 @@ func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 	}
 	t.Setenv("LIBTMUX_LIFECYCLE_REAL_TMUX", realBinary)
 	t.Setenv("TMUX", "/tmp/foreign,424242,7")
-	ambient := tmux.NewServer(tmux.ServerOptions{
+	ambient, err := tmux.NewServer(tmux.ServerOptions{
 		Binary:     proxyPath,
 		SocketPath: server.SocketPath(),
 		ConfigFile: server.ConfigFile(),
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -350,6 +353,58 @@ func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 	}
 	if name, _ := session.Name(); name != "ambient-clean" {
 		t.Fatalf("new session name = %q, want ambient-clean", name)
+	}
+}
+
+//libtmux:real-tmux
+func TestNewSessionKeepsTheSocketSelectedByTMUX(t *testing.T) {
+	primary := tmuxtest.NewServer(context.Background(), t)
+	root := t.TempDir()
+	environment := []string{"TMUX_TMPDIR=" + root, "PATH=" + os.Getenv("PATH")}
+	distractor, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName:         "default",
+		ProcessEnvironment: environment,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := distractor.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "distractor",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_ = distractor.Kill(cleanupCtx)
+	})
+
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		ProcessEnvironment: []string{
+			"TMUX=" + primary.SocketPath() + ",424242,7",
+			"TMUX_TMPDIR=" + root,
+			"PATH=" + os.Getenv("PATH"),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "implicit-target",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := primary.HasSession(ctx, tmux.HasSessionRequest{
+		Target: "implicit-target",
+	}); err != nil || !found {
+		t.Fatalf("primary HasSession() = (%t, %v), want (true, nil)", found, err)
+	}
+	if found, err := distractor.HasSession(ctx, tmux.HasSessionRequest{
+		Target: "implicit-target",
+	}); err != nil || found {
+		t.Fatalf("distractor HasSession() = (%t, %v), want (false, nil)", found, err)
 	}
 }
 
@@ -452,10 +507,13 @@ func TestStartKeepsAnEmptyServerOnlyThroughTheConfigFile(t *testing.T) {
 	); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		ConfigFile: configuration,
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()

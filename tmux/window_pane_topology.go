@@ -875,13 +875,19 @@ func paneSelectDirectionFlag(direction PaneSelectDirection) string {
 }
 
 func requireTopologyServer(left, right Server) error {
-	leftState := left.connectionState()
-	rightState := right.connectionState()
+	leftState, err := left.stateForUse()
+	if err != nil {
+		return err
+	}
+	rightState, err := right.stateForUse()
+	if err != nil {
+		return err
+	}
 	if leftState == rightState {
 		return nil
 	}
-	leftPath := leftState.options.SocketPath
-	if leftPath != "" && leftPath == rightState.options.SocketPath {
+	leftPath := leftState.config.socketSelection.Path
+	if leftPath != "" && leftPath == rightState.config.socketSelection.Path {
 		return nil
 	}
 	return invalidLifecycleRequest("source and target are not proven to use the same tmux server")

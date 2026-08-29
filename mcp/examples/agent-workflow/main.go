@@ -40,11 +40,15 @@ func run(socketName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	session, err := connect(ctx, tmux.NewServer(tmux.ServerOptions{SocketName: socketName}))
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: socketName})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = session.Close() }()
+	session, closeSession, err := connect(ctx, target)
+	if err != nil {
+		return err
+	}
+	defer closeSession()
 
 	// Which tmux is this, and are we inside it? A pane reported with isCaller
 	// true is the terminal this program is running in, so acting on it acts on
@@ -221,19 +225,34 @@ func window(ctx context.Context, session *sdk.ClientSession, paneID string) stri
 // Over a pipe this is the client's job and the server is a subprocess; the
 // tool calls either side of it are the same, which is why an example can do
 // both halves and still show the real thing.
-func connect(ctx context.Context, target tmux.Server) (*sdk.ClientSession, error) {
+func connect(
+	ctx context.Context,
+	target tmux.Server,
+) (*sdk.ClientSession, func(), error) {
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	if _, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil); err != nil {
-		return nil, fmt.Errorf("start the server: %w", err)
+	instance, err := tmuxmcp.NewServer(target)
+	if err != nil {
+		return nil, nil, fmt.Errorf("construct the server: %w", err)
+	}
+	serverSession, err := instance.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		_ = instance.Close()
+		return nil, nil, fmt.Errorf("start the server: %w", err)
 	}
 	client := sdk.NewClient(&sdk.Implementation{
 		Name: "agent-workflow", Version: "1",
 	}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
-		return nil, fmt.Errorf("connect a client: %w", err)
+		_ = serverSession.Close()
+		_ = instance.Close()
+		return nil, nil, fmt.Errorf("connect a client: %w", err)
 	}
-	return session, nil
+	return session, func() {
+		_ = session.Close()
+		_ = serverSession.Close()
+		_ = instance.Close()
+	}, nil
 }
 
 // call runs one tool and decodes its structured result.

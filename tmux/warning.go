@@ -14,10 +14,13 @@ import (
 //
 // Choose degradation only when omission is acceptable:
 //
-//	server := tmux.NewServer(tmux.ServerOptions{
+//	server, err := tmux.NewServer(tmux.ServerOptions{
 //		Unsupported:    tmux.DegradeUnsupported,
 //		WarningHandler: func(w tmux.Warning) { log.Printf("tmux: %s", w) },
 //	})
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
 // Set [ServerOptions.WarningHandler] alongside it to observe omissions.
 type UnsupportedPolicy uint8
@@ -86,11 +89,14 @@ type Warning struct {
 
 // WarningHandler receives warnings synchronously on the caller goroutine:
 //
-//	tmux.NewServer(tmux.ServerOptions{
+//	server, err := tmux.NewServer(tmux.ServerOptions{
 //		WarningHandler: func(warning tmux.Warning) {
 //			log.Printf("tmux: %s", warning.Message)
 //		},
 //	})
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
 // Operations may invoke it concurrently; synchronize shared state. Diagnostics
 // may contain caller-supplied arguments and are delivered only to this handler.
@@ -100,7 +106,10 @@ type WarningHandler func(Warning)
 func (w Warning) String() string { return w.Message }
 
 func (s Server) warn(warning Warning) {
-	handler := s.connectionState().options.WarningHandler
+	if s.state == nil {
+		return
+	}
+	handler := s.state.config.warningHandler
 	if handler != nil {
 		handler(warning)
 	}
@@ -129,7 +138,7 @@ func (s Server) warnIfPoolUnused(kind CommandKind) {
 	if kind != CommandServer || s.engineless {
 		return
 	}
-	if s.connectionState().coordination().pools.Load() == 0 {
+	if s.state == nil || s.state.shared == nil || s.state.shared.pools.Load() == 0 {
 		return
 	}
 	s.warn(newControlPoolUnusedWarning())
@@ -150,7 +159,7 @@ func (s Server) unsupportedFeature(
 	current Version,
 	required Version,
 ) error {
-	if s.connectionState().options.Unsupported == FailUnsupported {
+	if s.state == nil || s.state.config.unsupported == FailUnsupported {
 		return &VersionTooLowError{
 			Current:    current,
 			Minimum:    required,

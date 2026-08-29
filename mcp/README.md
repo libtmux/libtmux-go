@@ -76,22 +76,25 @@ startup, and a client cannot change it afterwards:
 
 | Flag | Meaning |
 | --- | --- |
-| `-socket-name` | tmux socket name; empty uses `LIBTMUX_SOCKET`, then tmux's default socket |
-| `-socket-path` | explicit socket path; overrides `-socket-name` |
-| `-binary` | tmux executable; empty resolves `tmux` through `PATH` |
+| `-socket-path` | explicit socket path; nonempty has highest precedence |
+| `-socket-name` | tmux socket name; nonempty precedes both socket environment variables |
+| `-binary` | tmux executable; empty uses `LIBTMUX_TMUX_BIN`, then resolves `tmux` through `PATH` |
 
-The command resolves the tmux binary before serving, so a misconfigured path
-fails at startup rather than on the first tool call. A tmux server that is not
-running is not an error: tmux starts one on demand.
+Before serving or running `-doctor`, the command resolves the tmux binary once
+from its startup environment and working directory. A bad path fails at
+startup, and later environment or directory changes cannot retarget it. A tmux
+server that is not running is not an error: tmux starts one on demand.
 
-Three more flags answer questions without a client, which is what a
-config entry that will not start actually needs:
+Three more flags answer questions without serving MCP over stdio, which is
+what a config entry that will not start actually needs:
 
 | Flag | Answers |
 | --- | --- |
 | `-version` | which build this is |
 | `-tools` | what a client would be offered, and how safety and capabilities changed it |
 | `-doctor` | which socket it reaches, what is on it, and whether it is running inside that tmux itself |
+
+`-version` and `-tools` do not resolve or contact tmux.
 
 ```console
 $ libtmux-mcp -doctor -socket-name my-application
@@ -241,15 +244,16 @@ registration.
 | --- | --- |
 | `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
 | `LIBTMUX_MCP_CAPABILITIES` | allowlists independent access classes; defaults to `metadata-read` |
-| `LIBTMUX_SOCKET` | names the tmux socket when no `-socket-name` or `-socket-path` says; a flag wins |
+| `LIBTMUX_SOCKET_PATH` | selects an explicit socket path when both socket flags are empty; it precedes `LIBTMUX_SOCKET` |
+| `LIBTMUX_SOCKET` | names the tmux socket when no path or `-socket-name` selects one |
+| `LIBTMUX_TMUX_BIN` | selects the tmux executable when `-binary` is empty |
 | `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
 | `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
 | `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |
 
 The names match the Python server, so an operator running both writes one
-thing. Which tmux is used is a flag rather than a variable — `-binary`,
-`-socket-name`, `-socket-path` — because the target is fixed when the server
-starts and a client cannot change it.
+thing. Flags override their corresponding variables; both are resolved once
+when the server starts, and a client cannot change the target afterwards.
 
 A wait longer than the ceiling is shortened rather than refused, and the reply
 says so in `effectiveTimeoutSeconds` and `timeoutClamped`. The ceiling bounds
@@ -389,22 +393,31 @@ and stdout.
 
 ```go
 import (
-    sdk "github.com/modelcontextprotocol/go-sdk/mcp"
     tmuxmcp "github.com/libtmux/libtmux-go/mcp"
+    "github.com/libtmux/libtmux-go/tmux"
+    sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 ```
 
 ```go
-instance := tmuxmcp.NewServer(tmux.NewServer(tmux.ServerOptions{SocketName: "app"}))
+target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "app"})
+if err != nil {
+    return err
+}
+instance, err := tmuxmcp.NewServer(target)
+if err != nil {
+    return err
+}
 defer instance.Close()
 session, err := instance.Connect(ctx, transport, nil)
 ```
 
-`NewServer` returns an `Instance` embedding the SDK's `*sdk.Server`, so the
-usual SDK methods remain available. Close the instance after its sessions to
-release job files, watcher connections, timers, and an owned audit file. This
-package is named `mcp` and so is the SDK's, so a file using both has to rename
-one of them.
+`tmuxmcp.NewServer` returns an `Instance` embedding the SDK's `*sdk.Server`, so
+the usual SDK methods remain available. It rejects an invalid tmux target
+before allocating instance-owned resources. Close the instance after its
+sessions to release job files, watcher connections, timers, and an owned audit file.
+This package is named `mcp` and so is the SDK's, so a file using both has to
+rename one of them.
 
 ## Developing on it
 

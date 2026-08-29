@@ -494,11 +494,15 @@ func (p *Plan) RunWith(
 	server Server,
 	planner Planner,
 ) (PlanResult, error) {
-	p.unsupported = server.connectionState().options.Unsupported
 	results := make([]OpResult, len(p.ops))
 	for index, op := range p.ops {
 		results[index] = OpResult{Command: op.name, Status: OpSkipped}
 	}
+	state, err := server.stateForUse()
+	if err != nil {
+		return PlanResult{Ops: results}, err
+	}
+	p.unsupported = state.config.unsupported
 	if len(p.ops) == 0 {
 		return PlanResult{Ops: results}, nil
 	}

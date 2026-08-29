@@ -194,11 +194,8 @@ func (s Server) openControl(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	state := s.connectionState()
-	if err := validateColorMode(state.options.Colors); err != nil {
-		return nil, err
-	}
-	if err := validateConnectionArguments(state.options); err != nil {
+	state, err := s.stateForUse()
+	if err != nil {
 		return nil, err
 	}
 	if session.ID() == "" {
@@ -216,25 +213,15 @@ func (s Server) openControl(
 	if mode == controlNotificationsRetained {
 		notifications = newControlNotificationQueue(defaultControlNotificationLimit)
 	}
-	binary := state.options.Binary
-	if binary == "" {
-		binary = "tmux"
-	}
-	resolved, err := exec.LookPath(binary)
-	if err != nil {
-		return nil, errors.Join(
-			fmt.Errorf("resolve tmux executable %q: %w", binary, err),
-			notifications.Close(),
-		)
-	}
 	attach := []string{"-C", "attach-session"}
 	if mode == controlNotificationsDiscarded {
 		attach = append(attach, "-f", "no-output")
 	}
 	attach = append(attach, "-t", session.ID().String())
 	arguments := s.commandArguments(attach)
-	command := exec.Command(resolved, arguments...)
-	command.Env = state.options.ProcessEnvironment
+	command := exec.Command(state.config.executable, arguments...)
+	command.Env = slices.Clone(state.config.processEnvironment)
+	command.Dir = state.config.directory
 	command.WaitDelay = controlClientStopGrace
 	stderr := &controlLockedBuffer{}
 	command.Stderr = stderr

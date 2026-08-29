@@ -188,10 +188,12 @@ func TestPasteBufferVersionGatesNoVis(t *testing.T) {
 			}
 			responses = append(responses, versionResponse{result: tmuxcmd.Result{}})
 			runner := &versionQueueRunner{responses: responses}
-			server := degradingServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(warning Warning) {
-				warnings = append(warnings, warning)
-			}
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported: DegradeUnsupported,
+				WarningHandler: func(warning Warning) {
+					warnings = append(warnings, warning)
+				},
+			}, runner)
 			err := (Pane{
 				server: server, sessionID: "$7", windowID: "@8", paneID: "%9",
 			}).PasteBuffer(context.Background(), PasteBufferRequest{NoVis: test.noVis})
@@ -222,8 +224,9 @@ func TestPasteBufferVersionFailureStopsBeforeWarningAndPaste(t *testing.T) {
 
 	warnings := 0
 	runner := &versionQueueRunner{responses: []versionResponse{{err: context.Canceled}}}
-	server := serverWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(Warning) { warnings++ }
+	server := serverWithOptionsAndRunner(ServerOptions{
+		WarningHandler: func(Warning) { warnings++ },
+	}, runner)
 	err := (Pane{
 		server: server, sessionID: "$7", windowID: "@8", paneID: "%9",
 	}).PasteBuffer(context.Background(), PasteBufferRequest{NoVis: true})

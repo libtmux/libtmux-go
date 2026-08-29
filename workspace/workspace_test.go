@@ -20,6 +20,16 @@ func TestMain(m *testing.M) {
 	os.Exit(tmuxtest.Main(m))
 }
 
+func mustNewServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	return server
+}
+
 // testServer returns a bare server so Build owns all asserted topology.
 func testServer(t *testing.T) (tmux.Server, context.Context) {
 	t.Helper()
@@ -721,7 +731,7 @@ func TestAFirstWindowMayAskForTheIndexItAlreadyHas(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			t.Cleanup(cancel)
-			server := tmux.NewServer(tmux.ServerOptions{
+			server := mustNewServer(t, tmux.ServerOptions{
 				SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 				ConfigFile: configuration,
 			})

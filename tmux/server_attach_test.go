@@ -25,13 +25,12 @@ func TestServerAttachSessionBuildsExactStreamingRequest(t *testing.T) {
 	clientFlags := []string{"ignore-size", "read-only"}
 	environment := []string{"TERM=xterm-256color"}
 	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{}}}}
-	server := NewServer(ServerOptions{
+	server := serverWithOptionsAndRunner(ServerOptions{
 		SocketPath:         "/tmp/libtmux-attach.sock",
 		ConfigFile:         "/tmp/libtmux-attach.conf",
 		Colors:             Color256,
 		ProcessEnvironment: environment,
-	})
-	server.connectionState().runner = runner
+	}, runner)
 
 	err := server.AttachSession(context.Background(), AttachSessionRequest{
 		Target: "work*",

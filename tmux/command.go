@@ -80,17 +80,20 @@ type CommandResult struct {
 // them. Stdio retains caller-owned files; neither the runner nor the library
 // closes them.
 type CommandRequest struct {
-	// Binary is the configured executable. Empty means the default "tmux"
-	// executable should be resolved through PATH.
+	// Binary is the executable. A Server supplies the absolute path resolved at
+	// construction. A request passed directly to SubprocessRunner may leave it
+	// empty to resolve "tmux" through PATH.
 	Binary string
 	// Arguments contains the complete tmux argv after global socket, config,
 	// and color arguments are applied.
 	Arguments []string
-	// Environment is the configured child environment. Nil inherits the
-	// current process environment.
+	// Environment is the child environment. A Server supplies its private
+	// constructor snapshot. A request passed directly to SubprocessRunner may
+	// leave it nil to inherit the current process environment.
 	Environment []string
-	// Directory is the child working directory. Empty inherits the current
-	// process working directory.
+	// Directory is the child working directory. A Server supplies the absolute
+	// directory frozen at construction. A request passed directly to
+	// SubprocessRunner may leave it empty to inherit the current directory.
 	Directory string
 	// Stdio selects direct streaming. Nil requests captured output; nil files
 	// within a non-nil value inherit the corresponding process stream.

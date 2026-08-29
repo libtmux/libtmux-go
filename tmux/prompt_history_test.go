@@ -423,7 +423,7 @@ func (r *historyQueueRunner) recordedRequests() []tmuxcmd.Request {
 }
 
 func historyServerWithRunner(runner commandRunner) Server {
-	return Server{state: &serverState{shared: &serverShared{}, runner: runner}}
+	return serverWithRunner(runner)
 }
 
 func assertHistoryArguments(t *testing.T, request tmuxcmd.Request, want []string) {

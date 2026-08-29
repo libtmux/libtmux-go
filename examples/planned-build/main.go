@@ -24,7 +24,10 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server := tmux.NewServer(tmux.ServerOptions{})
+	server, err := tmux.NewServer(tmux.ServerOptions{})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
 	return run(ctx, server)
 }
 

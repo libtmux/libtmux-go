@@ -313,7 +313,11 @@ func capabilitySession(t *testing.T) (*sdk.ClientSession, context.Context) {
 	t.Helper()
 	ctx := context.Background()
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	instance := NewServer(tmux.NewServer(tmux.ServerOptions{SocketName: "capabilities-unused"}))
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "capabilities-unused"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := mustInternalMCPServer(t, target)
 	t.Cleanup(func() { _ = instance.Close() })
 	serverSession, err := instance.Connect(ctx, serverTransport, nil)
 	if err != nil {

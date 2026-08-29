@@ -229,13 +229,13 @@ type UnsetOptionOptions struct {
 }
 
 // GlobalSessionScope is an immutable handle for global session options and
-// hooks. Its zero value uses the zero [Server] and tmux's default connection.
+// hooks. Its zero value is invalid because it contains a zero [Server].
 type GlobalSessionScope struct {
 	server Server
 }
 
 // GlobalWindowScope is an immutable handle for global window options and
-// hooks. Its zero value uses the zero [Server] and tmux's default connection.
+// hooks. Its zero value is invalid because it contains a zero [Server].
 type GlobalWindowScope struct {
 	server Server
 }

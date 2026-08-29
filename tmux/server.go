@@ -11,54 +11,10 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// ServerOptions configures a [Server] without executing tmux. [NewServer]
-// copies ProcessEnvironment; callers retain ownership of the supplied slice.
-type ServerOptions struct {
-	// Binary is the tmux executable name or path. Empty resolves tmux through
-	// PATH for each invocation. A binary that cannot be resolved fails every
-	// operation, as an os/exec.Error. Match it
-	// with errors.As rather than errors.Is(err, exec.ErrNotFound), which holds
-	// only for a bare name missing from PATH and not for an absent explicit
-	// path.
-	Binary string
-	// SocketName selects tmux's named socket. SocketPath takes precedence.
-	SocketName string
-	// SocketPath selects an explicit tmux socket path.
-	SocketPath string
-	// ConfigFile selects an exact tmux configuration file. Empty lets tmux read
-	// its default configuration, so a program inherits whatever the user
-	// running it has configured: a base-index other than zero, a prompt that
-	// appears in captured pane text, hooks that fire on the sessions this
-	// program creates. Point it at a file the program owns, which may be an
-	// empty one, when the tmux it drives should not depend on that.
-	ConfigFile string
-	// Colors overrides tmux's terminal color capability.
-	Colors ColorMode
-	// ProcessEnvironment replaces the child process environment. Nil inherits
-	// the current process environment; a non-nil empty slice supplies no
-	// caller-provided variables, subject to additions required by Go or the
-	// target platform. NewServer clones the slice.
-	ProcessEnvironment []string
-	// Unsupported selects what happens when a request needs an optional tmux
-	// capability the running server does not have. The zero value refuses the
-	// request; see UnsupportedPolicy.
-	Unsupported UnsupportedPolicy
-	// WarningHandler receives nonfatal compatibility warnings. Nil discards
-	// warnings. See WarningHandler for delivery and concurrency semantics.
-	WarningHandler WarningHandler
-	// Runner replaces process execution for tests and alternate transports. Nil
-	// uses the local tmux subprocess runner. The server retains Runner, which
-	// must support concurrent calls when the server is used concurrently.
-	//
-	// Server.OpenControl starts its tmux -C process directly. Registration and
-	// version probes use the server's normal Engine/Runner routing.
-	Runner CommandRunner
-}
-
 // Server is an immutable handle to one tmux configuration. Its zero value
-// targets tmux's default binary, socket, configuration, and environment.
-// Copying a Server preserves its configuration and shares version-cache
-// coordination; only the documented concurrent operations are safe to share.
+// is invalid. Copying a configured Server preserves its configuration and
+// shares version-cache coordination; only the documented concurrent operations
+// are safe to share.
 type Server struct {
 	state          *serverState
 	engine         Engine
@@ -70,9 +26,9 @@ type Server struct {
 }
 
 type serverState struct {
-	options ServerOptions
-	runner  commandRunner
-	shared  *serverShared
+	config   serverConfig
+	executor commandRunner
+	shared   *serverShared
 }
 
 // serverShared coordinates version caching and pool state across handles that
@@ -85,33 +41,13 @@ type serverShared struct {
 	pools atomic.Int64
 }
 
-// defaultServerShared backs a state built without one, which is a zero [Server]
-// and the states tests construct directly.
-var defaultServerShared = &serverShared{}
-
-// coordination returns the state's shared coordination, never nil.
+// coordination returns the daemon-scoped shared state.
 func (s *serverState) coordination() *serverShared {
-	if s.shared == nil {
-		return defaultServerShared
-	}
 	return s.shared
 }
 
 type commandRunner interface {
 	Run(context.Context, tmuxcmd.Request) (tmuxcmd.Result, error)
-}
-
-var defaultServerState = &serverState{runner: tmuxcmd.Runner{}, shared: defaultServerShared}
-
-// NewServer returns a configured server handle without executing tmux. Empty
-// socket selectors retain tmux's default configuration.
-func NewServer(options ServerOptions) Server {
-	options.ProcessEnvironment = slices.Clone(options.ProcessEnvironment)
-	return Server{state: &serverState{
-		options: options,
-		runner:  configuredCommandRunner(options.Runner),
-		shared:  &serverShared{},
-	}}
 }
 
 type commandRunnerAdapter struct {
@@ -185,21 +121,32 @@ func exportCommandStdio(stdio *tmuxcmd.Stdio) *CommandStdio {
 	}
 }
 
-// SocketPath returns the configured explicit tmux socket path.
+// SocketPath returns the absolute socket path selected when the server was
+// constructed. An invalid server returns an empty string.
 func (s Server) SocketPath() string {
-	return s.connectionState().options.SocketPath
+	if s.state == nil {
+		return ""
+	}
+	return s.state.config.socketSelection.Path
 }
 
 // ConfigFile returns the configured tmux configuration path.
 func (s Server) ConfigFile() string {
-	return s.connectionState().options.ConfigFile
+	if s.state == nil {
+		return ""
+	}
+	return s.state.config.configFile
 }
 
-// ProcessEnvironment returns the configured child-process environment. Nil
-// means commands inherit the current process environment. The returned slice
-// is owned by the caller.
+// ProcessEnvironment returns the normalized environment explicitly supplied
+// through [ServerOptions]. Nil means the server inherited a private process
+// snapshot. The returned slice is owned by the caller; an invalid server
+// returns nil.
 func (s Server) ProcessEnvironment() []string {
-	return slices.Clone(s.connectionState().options.ProcessEnvironment)
+	if s.state == nil {
+		return nil
+	}
+	return slices.Clone(s.state.config.configuredProcessEnvironment)
 }
 
 // Cmd executes raw tmux arguments and returns caller-owned result slices. A
@@ -241,14 +188,6 @@ func (s Server) dispatch(
 	commandList bool,
 	args ...string,
 ) (CommandResult, []byte, error) {
-	state := s.connectionState()
-	if err := validateColorMode(state.options.Colors); err != nil {
-		return CommandResult{ExitCode: -1}, nil, err
-	}
-	if err := validateConnectionArguments(state.options); err != nil {
-		return CommandResult{ExitCode: -1}, nil, err
-	}
-
 	result, err := s.runCommand(ctx, CommandServer, args, nil, commandList)
 	commandResult := cloneCommandResult(CommandResult{
 		Command:   result.Command,
@@ -296,20 +235,31 @@ func (s Server) RaiseIfDead(ctx context.Context) error {
 }
 
 func (s Server) connectionState() *serverState {
-	if s.state == nil {
-		return defaultServerState
-	}
 	return s.state
 }
 
+func (s Server) stateForUse() (*serverState, error) {
+	if s.state == nil || s.state.executor == nil || s.state.shared == nil ||
+		s.state.config.executable == "" || s.state.config.directory == "" {
+		return nil, ErrInvalidServer
+	}
+	return s.state, nil
+}
+
 func (s Server) commandArguments(args []string) []string {
-	options := s.connectionState().options
-	selectorFlag, selectorValue := effectiveSocketSelector(options)
+	if s.state == nil {
+		return slices.Clone(args)
+	}
+	config := s.state.config
+	selectorFlag, selectorValue := effectiveSocketSelectorValues(
+		config.socketPath,
+		config.socketName,
+	)
 	globalCount := 0
-	if options.Colors != ColorDefault {
+	if config.colors != ColorDefault {
 		globalCount++
 	}
-	if options.ConfigFile != "" {
+	if config.configFile != "" {
 		globalCount++
 	}
 	if selectorValue != "" {
@@ -317,7 +267,7 @@ func (s Server) commandArguments(args []string) []string {
 	}
 
 	command := make([]string, 0, globalCount+len(args))
-	switch options.Colors {
+	switch config.colors {
 	case ColorDefault:
 	case Color88:
 		command = append(command, "-8")
@@ -327,8 +277,8 @@ func (s Server) commandArguments(args []string) []string {
 	// Global arguments are consumed before tmux's command-list parser. Their
 	// values are already literal; a separator escape would become part of the
 	// configured path or socket name.
-	if options.ConfigFile != "" {
-		command = append(command, "-f"+options.ConfigFile)
+	if config.configFile != "" {
+		command = append(command, "-f"+config.configFile)
 	}
 	if selectorValue != "" {
 		command = append(command, selectorFlag+selectorValue)
@@ -356,11 +306,15 @@ func validateConnectionArguments(options ServerOptions) error {
 }
 
 func effectiveSocketSelector(options ServerOptions) (flag string, value string) {
-	if options.SocketPath != "" {
-		return "-S", options.SocketPath
+	return effectiveSocketSelectorValues(options.SocketPath, options.SocketName)
+}
+
+func effectiveSocketSelectorValues(socketPath, socketName string) (flag string, value string) {
+	if socketPath != "" {
+		return "-S", socketPath
 	}
-	if options.SocketName != "" {
-		return "-L", options.SocketName
+	if socketName != "" {
+		return "-L", socketName
 	}
 	return "", ""
 }

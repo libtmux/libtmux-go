@@ -669,13 +669,12 @@ func TestListBuffersReportsFailuresAndOwnsResults(t *testing.T) {
 	}
 }
 
-func TestServerListCommandsKeepLocalValidationErrorsLoud(t *testing.T) {
+func TestNewServerRejectsInvalidColorBeforeListBuffers(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer(ServerOptions{Colors: ColorMode(16)})
-	got, err := server.ListBuffers(context.Background(), ListBuffersRequest{})
+	_, err := NewServer(ServerOptions{Colors: ColorMode(16)})
 	if !errors.Is(err, ErrUnknownColor) {
-		t.Fatalf("ListBuffers(invalid color) = (%#v, %v), want ErrUnknownColor", got, err)
+		t.Fatalf("NewServer(invalid color) error = %v, want ErrUnknownColor", err)
 	}
 }
 

@@ -2,17 +2,27 @@ package tmux
 
 import "fmt"
 
-// Equal reports whether both handles have the same configured socket selector.
-// It does not resolve environment-dependent named or default socket paths.
+// Equal reports whether both handles currently select the same socket path.
+// It evaluates relative paths and environment-dependent named and default
+// sockets against each handle's frozen binding.
 func (s Server) Equal(other Server) bool {
-	leftFlag, leftValue := effectiveSocketSelector(s.connectionState().options)
-	rightFlag, rightValue := effectiveSocketSelector(other.connectionState().options)
-	return leftFlag == rightFlag && leftValue == rightValue
+	left, err := s.SocketSelection()
+	if err != nil {
+		return false
+	}
+	right, err := other.SocketSelection()
+	return err == nil && left.Path == right.Path
 }
 
 // String returns a concise representation of the server selector.
 func (s Server) String() string {
-	flag, value := effectiveSocketSelector(s.connectionState().options)
+	if s.state == nil {
+		return "Server(invalid)"
+	}
+	flag, value := effectiveSocketSelectorValues(
+		s.state.config.socketPath,
+		s.state.config.socketName,
+	)
 	switch flag {
 	case "-S":
 		return fmt.Sprintf("Server(socket_path=%s)", value)

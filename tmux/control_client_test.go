@@ -16,14 +16,21 @@ import (
 func TestOpenControlRejectsInvalidSessionBeforeStartingProcess(t *testing.T) {
 	t.Parallel()
 
-	_, err := (Server{}).OpenControl(context.Background(), Session{})
+	server := serverWithOptionsAndRunner(
+		ServerOptions{SocketName: "one"},
+		&versionQueueRunner{},
+	)
+	_, err := server.OpenControl(context.Background(), Session{})
 	if !errors.Is(err, ErrInvalidServerCommandRequest) {
 		t.Fatalf("OpenControl() error = %v, want ErrInvalidServerCommandRequest", err)
 	}
 
-	other := NewServer(ServerOptions{SocketName: "other"})
+	other := serverWithOptionsAndRunner(
+		ServerOptions{SocketName: "other"},
+		&versionQueueRunner{},
+	)
 	session := Session{server: other, sessionID: "$1"}
-	_, err = NewServer(ServerOptions{SocketName: "one"}).OpenControl(
+	_, err = server.OpenControl(
 		context.Background(),
 		session,
 	)

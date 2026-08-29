@@ -186,10 +186,12 @@ func TestRunShellWarnsAndOmitsUnsupportedFeatures(t *testing.T) {
 				{result: tmuxcmd.Result{Stdout: []string{"tmux " + test.version}}},
 				{result: tmuxcmd.Result{}},
 			}}
-			server := degradingServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(warning Warning) {
-				warnings = append(warnings, warning)
-			}
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported: DegradeUnsupported,
+				WarningHandler: func(warning Warning) {
+					warnings = append(warnings, warning)
+				},
+			}, runner)
 
 			if _, err := server.RunShell(context.Background(), test.request); err != nil {
 				t.Fatalf("RunShell() error = %v", err)
@@ -223,10 +225,12 @@ func TestRunShellOrdersWarningsAndExecutesOneReducedCommand(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := degradingServerWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(warning Warning) {
-		warnings = append(warnings, warning)
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			warnings = append(warnings, warning)
+		},
+	}, runner)
 
 	if _, err := server.RunShell(context.Background(), RunShellRequest{
 		Command:        "true",

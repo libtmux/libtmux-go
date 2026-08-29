@@ -18,8 +18,10 @@ levers and what each client's failure actually means. The rest of this section
 is the part worth knowing before reading it.
 
 The socket is chosen once, at launch, rather than per call as the Python server
-allows: `-socket-name` or `-socket-path`, falling back to `LIBTMUX_SOCKET`. A
-flag wins over the variable, and `-doctor` names which of them was taken.
+allows. Precedence is `-socket-path`, `-socket-name`, `LIBTMUX_SOCKET_PATH`,
+`LIBTMUX_SOCKET`, then tmux's environment-dependent endpoint; `-doctor` names
+which source was taken. `-binary` similarly precedes `LIBTMUX_TMUX_BIN` and
+`PATH`.
 
 ### The MCP Inspector
 
@@ -84,4 +86,3 @@ A workspace pane running a command that exits, such as `true`, takes its
 window, its session, and then the tmux server with it. A test asserting what
 survived will race that teardown and report a safety guard failing. Give a
 fixture a pane that outlives the assertions made about it.
-

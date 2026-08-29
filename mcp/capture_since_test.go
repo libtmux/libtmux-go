@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -180,7 +179,7 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -189,7 +188,7 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +227,7 @@ func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -237,7 +236,7 @@ func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
 
 	updated := make(chan string, 64)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +300,7 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -310,7 +309,7 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +358,7 @@ func TestAPaneIsWatchedWhicheverSessionHoldsIt(t *testing.T) {
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -368,7 +367,7 @@ func TestAPaneIsWatchedWhicheverSessionHoldsIt(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

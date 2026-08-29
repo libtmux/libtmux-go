@@ -33,7 +33,11 @@ described, err := workspace.Parse(document)
 if err != nil {
     return err
 }
-session, err := workspace.Build(ctx, tmux.NewServer(tmux.ServerOptions{}), described)
+server, err := tmux.NewServer(tmux.ServerOptions{})
+if err != nil {
+    return err
+}
+session, err := workspace.Build(ctx, server, described)
 ```
 
 `Parse` rejects a field it does not recognise rather than dropping it, so a

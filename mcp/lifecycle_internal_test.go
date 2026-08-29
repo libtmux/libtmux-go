@@ -10,10 +10,45 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
+func mustInternalTmuxServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server
+}
+
+func mustInternalMCPServer(t testing.TB, target tmux.Server) *Instance {
+	t.Helper()
+	server, err := NewServer(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = server.Close() })
+	return server
+}
+
+func TestNewServerRejectsInvalidTargetBeforeAllocating(t *testing.T) {
+	auditPath := filepath.Join(t.TempDir(), "audit.jsonl")
+	t.Setenv(AuditEnvironmentVariable, auditPath)
+
+	instance, err := NewServer(tmux.Server{})
+	if !errors.Is(err, tmux.ErrInvalidServer) {
+		t.Fatalf("NewServer() error = %v, want ErrInvalidServer", err)
+	}
+	if instance != nil {
+		t.Fatalf("NewServer() instance = %v, want nil", instance)
+	}
+	if _, err := os.Stat(auditPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("audit file exists after rejected construction: %v", err)
+	}
+}
+
 func TestInstanceCloseReleasesOwnedResources(t *testing.T) {
 	auditPath := filepath.Join(t.TempDir(), "audit.jsonl")
 	t.Setenv(AuditEnvironmentVariable, auditPath)
-	instance := NewServer(tmux.NewServer(tmux.ServerOptions{
+	instance := mustInternalMCPServer(t, mustInternalTmuxServer(t, tmux.ServerOptions{
 		SocketName: "lifecycle-unused",
 	}))
 

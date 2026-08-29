@@ -266,10 +266,12 @@ func TestSendKeysVersionGatesClientAndKeyName(t *testing.T) {
 				{result: tmuxcmd.Result{Stdout: []string{"tmux " + test.version}}},
 				{result: tmuxcmd.Result{}},
 			}}
-			server := degradingServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(warning Warning) {
-				warnings = append(warnings, warning)
-			}
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported: DegradeUnsupported,
+				WarningHandler: func(warning Warning) {
+					warnings = append(warnings, warning)
+				},
+			}, runner)
 			err := paneWithExactTestTarget(server).SendKeys(
 				context.Background(),
 				SendKeysRequest{Reset: true, KeyName: true, TargetClient: client},
@@ -337,8 +339,9 @@ func TestSendKeysVersionFailureDoesNotWarnOrExecute(t *testing.T) {
 
 	warnings := 0
 	runner := &versionQueueRunner{responses: []versionResponse{{err: context.Canceled}}}
-	server := serverWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(Warning) { warnings++ }
+	server := serverWithOptionsAndRunner(ServerOptions{
+		WarningHandler: func(Warning) { warnings++ },
+	}, runner)
 	err := paneWithExactTestTarget(server).SendKeys(
 		context.Background(), SendKeysRequest{Reset: true, KeyName: true},
 	)
@@ -565,10 +568,12 @@ func TestClearHistoryVersionGatesHyperlinkReset(t *testing.T) {
 				{result: tmuxcmd.Result{Stdout: []string{"tmux " + test.version}}},
 				{result: tmuxcmd.Result{}},
 			}}
-			server := degradingServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(warning Warning) {
-				warnings = append(warnings, warning)
-			}
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported: DegradeUnsupported,
+				WarningHandler: func(warning Warning) {
+					warnings = append(warnings, warning)
+				},
+			}, runner)
 			err := paneWithExactTestTarget(server).ClearHistory(
 				context.Background(), ClearHistoryRequest{ResetHyperlinks: true},
 			)

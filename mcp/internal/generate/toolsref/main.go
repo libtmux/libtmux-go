@@ -16,7 +16,6 @@ import (
 	"time"
 
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
-	"github.com/libtmux/libtmux-go/tmux"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -69,28 +68,14 @@ func listTools() ([]*sdk.Tool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	target := tmux.NewServer(tmux.ServerOptions{SocketName: "toolsref-unused"})
-	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	instance := tmuxmcp.NewServer(target)
-	defer func() { _ = instance.Close() }()
-	if _, err := instance.Connect(ctx, serverTransport, nil); err != nil {
-		return nil, err
-	}
-	client := sdk.NewClient(&sdk.Implementation{Name: "toolsref", Version: "1"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
+	tools, err := tmuxmcp.AdvertisedTools(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = session.Close() }()
-
-	listed, err := session.ListTools(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	slices.SortFunc(listed.Tools, func(a, b *sdk.Tool) int {
+	slices.SortFunc(tools, func(a, b *sdk.Tool) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return listed.Tools, nil
+	return tools, nil
 }
 
 type property struct {

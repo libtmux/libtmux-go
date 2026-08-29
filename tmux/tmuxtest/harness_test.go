@@ -41,6 +41,15 @@ func isPTYHelperProcess(arguments []string) bool {
 	return false
 }
 
+func mustNewTmuxServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatalf("tmux.NewServer() error = %v", err)
+	}
+	return server
+}
+
 func TestMainShortensBothTemporaryRoots(t *testing.T) {
 	tmpRoot := os.Getenv("TMPDIR")
 	if got := os.Getenv("GOTMPDIR"); got != tmpRoot {
@@ -64,7 +73,7 @@ func TestMainKeepsANamedSocketInsideTheSuite(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "tmuxtest-named-socket"})
+	server := mustNewTmuxServer(t, tmux.ServerOptions{SocketName: "tmuxtest-named-socket"})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -364,7 +373,7 @@ func TestChildEnvironmentIgnoresInheritedTmuxPane(t *testing.T) {
 		t.Fatalf("could not find non-default pane: baseline=%q work=%q other=%q", baseline, work, other)
 	}
 	t.Setenv("TMUX_PANE", injected)
-	contaminated := tmux.NewServer(tmux.ServerOptions{
+	contaminated := mustNewTmuxServer(t, tmux.ServerOptions{
 		SocketPath:         server.SocketPath(),
 		ConfigFile:         server.ConfigFile(),
 		ProcessEnvironment: os.Environ(),

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -23,7 +22,7 @@ func benchServer(b *testing.B) (*sdk.ClientSession, context.Context) {
 
 	target := tmuxtest.NewServerWithOptions(ctx, b, tmuxtest.ServerOptions{})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(b, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		b.Fatal(err)
 	}

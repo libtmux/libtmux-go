@@ -74,7 +74,7 @@ import (
 func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 	base := tmuxtest.NewServer(context.Background(), t)
 	warnings := make([]tmux.Warning, 0, 2)
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath:  base.SocketPath(),
 		ConfigFile:  base.ConfigFile(),
 		Unsupported: tmux.DegradeUnsupported,
@@ -82,6 +82,9 @@ func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 			warnings = append(warnings, warning)
 		},
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

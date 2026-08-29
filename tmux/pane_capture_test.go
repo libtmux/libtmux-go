@@ -566,10 +566,9 @@ func (r *captureQueueRunner) recordedRequests() []tmuxcmd.Request {
 // exercised through; the default refuses, which
 // TestUnsupportedFeaturesAreRefusedByDefault covers.
 func newCaptureTestPane(runner commandRunner, handler WarningHandler) Pane {
-	server := NewServer(ServerOptions{
+	server := serverWithOptionsAndRunner(ServerOptions{
 		Unsupported:    DegradeUnsupported,
 		WarningHandler: handler,
-	})
-	server.state.runner = runner
+	}, runner)
 	return Pane{server: server, sessionID: "$5", windowID: "@6", paneID: "%7"}
 }

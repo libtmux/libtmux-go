@@ -151,6 +151,10 @@ func (e subprocessEngine) Run(
 	kind CommandKind,
 	request CommandRequest,
 ) (CommandResult, error) {
+	state, err := e.server.stateForUse()
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
 	arguments := request.Arguments
 	if !request.CommandList {
 		arguments = escapeCommandListSeparators(arguments)
@@ -158,7 +162,7 @@ func (e subprocessEngine) Run(
 	if kind == CommandServer {
 		arguments = e.server.commandArguments(arguments)
 	}
-	result, err := e.server.connectionState().runner.Run(ctx, tmuxcmd.Request{
+	result, err := state.executor.Run(ctx, tmuxcmd.Request{
 		Binary:      request.Binary,
 		Arguments:   arguments,
 		Environment: request.Environment,
@@ -237,7 +241,10 @@ func (s Server) runCommand(
 	stdio *tmuxcmd.Stdio,
 	commandList bool,
 ) (tmuxcmd.Result, error) {
-	state := s.connectionState()
+	state, err := s.stateForUse()
+	if err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
 	engine, err := s.commandEngine(kind)
 	if err != nil {
 		return tmuxcmd.Result{ExitCode: -1}, err
@@ -247,16 +254,17 @@ func (s Server) runCommand(
 		if kind != CommandServer {
 			arguments = s.commandArguments(args)
 		}
-		return runEngine(ctx, engine, kind, state.options, arguments, stdio, commandList)
+		return runEngine(ctx, engine, kind, state.config, arguments, stdio, commandList)
 	}
 	arguments := args
 	if !commandList {
 		arguments = escapeCommandListSeparators(arguments)
 	}
-	return state.runner.Run(ctx, tmuxcmd.Request{
-		Binary:      state.options.Binary,
+	return state.executor.Run(ctx, tmuxcmd.Request{
+		Binary:      state.config.executable,
 		Arguments:   s.commandArguments(arguments),
-		Environment: state.options.ProcessEnvironment,
+		Environment: slices.Clone(state.config.processEnvironment),
+		Directory:   state.config.directory,
 		Stdio:       stdio,
 	})
 }
@@ -267,7 +275,10 @@ func (s Server) runExactArgv(
 	ctx context.Context,
 	arguments []string,
 ) (tmuxcmd.Result, error) {
-	state := s.connectionState()
+	state, err := s.stateForUse()
+	if err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
 	engine, err := s.commandEngine(CommandProcess)
 	if err != nil {
 		return tmuxcmd.Result{ExitCode: -1}, err
@@ -275,12 +286,13 @@ func (s Server) runExactArgv(
 	if engine != nil {
 		// An exact argv is already what tmux should receive, so nothing here
 		// re-escapes it.
-		return runEngine(ctx, engine, CommandProcess, state.options, arguments, nil, true)
+		return runEngine(ctx, engine, CommandProcess, state.config, arguments, nil, true)
 	}
-	return state.runner.Run(ctx, tmuxcmd.Request{
-		Binary:      state.options.Binary,
+	return state.executor.Run(ctx, tmuxcmd.Request{
+		Binary:      state.config.executable,
 		Arguments:   arguments,
-		Environment: state.options.ProcessEnvironment,
+		Environment: slices.Clone(state.config.processEnvironment),
+		Directory:   state.config.directory,
 	})
 }
 
@@ -290,15 +302,16 @@ func runEngine(
 	ctx context.Context,
 	engine Engine,
 	kind CommandKind,
-	options ServerOptions,
+	config serverConfig,
 	arguments []string,
 	stdio *tmuxcmd.Stdio,
 	commandList bool,
 ) (tmuxcmd.Result, error) {
 	result, err := engine.Run(ctx, kind, CommandRequest{
-		Binary:      options.Binary,
+		Binary:      config.executable,
 		Arguments:   slices.Clone(arguments),
-		Environment: slices.Clone(options.ProcessEnvironment),
+		Environment: slices.Clone(config.processEnvironment),
+		Directory:   config.directory,
 		Stdio:       exportCommandStdio(stdio),
 		CommandList: commandList,
 	})

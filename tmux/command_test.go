@@ -18,7 +18,7 @@ import (
 func TestServerCmdReturnsNonzeroTmuxExitAsData(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer(ServerOptions{Binary: os.Args[0]})
+	server := mustNewServer(ServerOptions{Binary: os.Args[0]})
 	result, err := server.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -42,7 +42,7 @@ func TestServerCmdReturnsNonzeroTmuxExitAsData(t *testing.T) {
 func TestServerCmdReturnsExactRawStdout(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer(ServerOptions{Binary: os.Args[0]})
+	server := mustNewServer(ServerOptions{Binary: os.Args[0]})
 	result, err := server.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -62,16 +62,15 @@ func TestServerCmdReturnsExactRawStdout(t *testing.T) {
 
 // libtmux:parity libtmux.exc.UnknownColorOption
 // libtmux:parity libtmux.exc.UnknownColorOption.__init__
-func TestServerCmdRejectsUnknownColorMode(t *testing.T) {
+func TestNewServerRejectsUnknownColorMode(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer(ServerOptions{Binary: os.Args[0], Colors: ColorMode(16)})
-	result, err := server.Cmd(context.Background(), "ignored")
+	server, err := NewServer(ServerOptions{Binary: os.Args[0], Colors: ColorMode(16)})
 	if !errors.Is(err, ErrUnknownColor) {
-		t.Fatalf("Cmd() error = %v, want ErrUnknownColor", err)
+		t.Fatalf("NewServer() error = %v, want ErrUnknownColor", err)
 	}
-	if result.ExitCode != -1 {
-		t.Fatalf("Cmd() ExitCode = %d, want -1 before process start", result.ExitCode)
+	if server.state != nil {
+		t.Fatalf("NewServer() server = %#v, want zero server", server)
 	}
 }
 
@@ -93,7 +92,7 @@ func TestServerCmdRejectsUnknownColorMode(t *testing.T) {
 func TestServerBuildsTmuxGlobalArguments(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer(ServerOptions{
+	server := mustNewServer(ServerOptions{
 		SocketName: "ignored-name",
 		SocketPath: "/tmp/libtmux.sock",
 		ConfigFile: "/tmp/libtmux.conf",
@@ -211,9 +210,10 @@ func TestConnectionArgumentsAreLiteralWhileRawSubcommandStaysRaw(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{{
 		result: tmuxcmd.Result{ExitCode: 0},
 	}}}
-	server := serverWithRunner(runner)
-	server.state.options.ConfigFile = "config;"
-	server.state.options.SocketName = "socket;"
+	server := serverWithOptionsAndRunner(ServerOptions{
+		ConfigFile: "config;",
+		SocketName: "socket;",
+	}, runner)
 	_, err := server.Cmd(context.Background(), "display-message", "raw;")
 	if err != nil {
 		t.Fatalf("Cmd() error = %v", err)
@@ -233,6 +233,9 @@ func TestConnectionArgumentsRejectNULWithoutRetainingValues(t *testing.T) {
 		field string
 		set   func(*ServerOptions)
 	}{
+		{name: "binary", field: "Binary", set: func(options *ServerOptions) {
+			options.Binary = "secret\x00binary"
+		}},
 		{name: "config", field: "ConfigFile", set: func(options *ServerOptions) {
 			options.ConfigFile = "secret\x00config"
 		}},
@@ -247,11 +250,17 @@ func TestConnectionArgumentsRejectNULWithoutRetainingValues(t *testing.T) {
 			t.Parallel()
 
 			runner := &versionQueueRunner{}
-			server := serverWithRunner(runner)
-			test.set(&server.state.options)
-			_, err := server.Cmd(context.Background(), "list-sessions")
-			if !errors.Is(err, ErrInvalidServerCommandRequest) {
-				t.Fatalf("Cmd() error = %v, want ErrInvalidServerCommandRequest", err)
+			options := ServerOptions{}
+			test.set(&options)
+			dependencies := testServerDependencies(t, nil)
+			dependencies.executor = runner
+			server, err := newServer(options, dependencies)
+			if !errors.Is(err, ErrInvalidServerOptions) ||
+				!errors.Is(err, ErrInvalidServerCommandRequest) {
+				t.Fatalf(
+					"newServer() error = %v, want ErrInvalidServerOptions and ErrInvalidServerCommandRequest",
+					err,
+				)
 			}
 			var requestError *ServerCommandRequestError
 			if !errors.As(err, &requestError) || requestError.Field != test.field ||
@@ -259,10 +268,10 @@ func TestConnectionArgumentsRejectNULWithoutRetainingValues(t *testing.T) {
 				t.Fatalf("Cmd() error = %#v, want redacted %s error", err, test.field)
 			}
 			if strings.Contains(err.Error(), "secret") {
-				t.Fatalf("Cmd() error retained connection value: %v", err)
+				t.Fatalf("newServer() error retained connection value: %v", err)
 			}
-			if runner.callCount() != 0 {
-				t.Fatalf("runner calls = %d, want 0", runner.callCount())
+			if server.state != nil || runner.callCount() != 0 {
+				t.Fatalf("newServer() = (%#v, %v), want zero server without execution", server, err)
 			}
 		})
 	}
@@ -272,7 +281,7 @@ func TestNewServerCopiesEnvironment(t *testing.T) {
 	t.Parallel()
 
 	environment := []string{"TMUX_GO_TEST=original"}
-	server := NewServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: environment})
+	server := mustNewServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: environment})
 	environment[0] = "TMUX_GO_TEST=mutated"
 
 	result, err := server.Cmd(
@@ -292,7 +301,7 @@ func TestNewServerCopiesEnvironment(t *testing.T) {
 func TestServerProcessEnvironmentDistinguishesNilFromEmpty(t *testing.T) {
 	t.Setenv("TMUX_GO_TEST", "inherited")
 
-	inherited := NewServer(ServerOptions{Binary: os.Args[0]})
+	inherited := mustNewServer(ServerOptions{Binary: os.Args[0]})
 	result, err := inherited.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -306,7 +315,7 @@ func TestServerProcessEnvironmentDistinguishesNilFromEmpty(t *testing.T) {
 		t.Fatalf("inherited Stdout = %#v, want %#v", result.Stdout, want)
 	}
 
-	empty := NewServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: []string{}})
+	empty := mustNewServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: []string{}})
 	result, err = empty.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -324,7 +333,7 @@ func TestServerProcessEnvironmentDistinguishesNilFromEmpty(t *testing.T) {
 func TestServerCommandHelperDoesNotReenterTmuxSuite(t *testing.T) {
 	t.Parallel()
 
-	server := NewServer(ServerOptions{Binary: os.Args[0]})
+	server := mustNewServer(ServerOptions{Binary: os.Args[0]})
 	result, err := server.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",

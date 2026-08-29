@@ -538,7 +538,7 @@ func TestASubscriberIsToldWhenAPaneChanges(t *testing.T) {
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -547,7 +547,7 @@ func TestASubscriberIsToldWhenAPaneChanges(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -1088,7 +1088,7 @@ func TestTheServerFindsItsOwnPaneWithoutTheEnvironment(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -1147,9 +1147,9 @@ func reportOwnPaneFromInside(t *testing.T, socket, report string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -1187,7 +1187,7 @@ func connectAsking(
 
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1324,7 +1324,7 @@ func TestOneSessionsYesDoesNotSilenceAnother(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
-	server := tmuxmcp.NewServer(target)
+	server := mustMCPServer(t, target)
 
 	// Two clients of one server, as an embedder holds them.
 	join := func(name string, answer func(*sdk.ElicitRequest) *sdk.ElicitResult) (*sdk.ClientSession, *int) {
@@ -2517,7 +2517,7 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	// A socket of its own, not the shared harness's: this test kills the tmux
 	// server it is using, and the harness owns the cleanup of the one it made.
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -2541,7 +2541,7 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 	t.Cleanup(func() { _ = pool.Close() })
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(connected).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, connected).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2611,7 +2611,7 @@ func TestToolsKeepWorkingAfterTmuxRestarts(t *testing.T) {
 		},
 	})
 	watchTransport, watchServer := sdk.NewInMemoryTransports()
-	watchSession, err := tmuxmcp.NewServer(connected).Connect(ctx, watchServer, nil)
+	watchSession, err := mustMCPServer(t, connected).Connect(ctx, watchServer, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

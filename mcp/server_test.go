@@ -21,6 +21,25 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+func mustTmuxServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server
+}
+
+func mustMCPServer(t testing.TB, target tmux.Server) *tmuxmcp.Instance {
+	t.Helper()
+	server, err := tmuxmcp.NewServer(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = server.Close() })
+	return server
+}
+
 func TestMain(m *testing.M) {
 	if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "all"); err != nil {
 		panic(err)
@@ -51,7 +70,7 @@ func connectWith(
 	target := tmuxtest.NewServerWithOptions(ctx, t, options)
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	instance := tmuxmcp.NewServer(target)
+	instance := mustMCPServer(t, target)
 	t.Cleanup(func() { _ = instance.Close() })
 	serverSession, err := instance.Connect(ctx, serverTransport, nil)
 	if err != nil {
@@ -375,7 +394,7 @@ func TestConnectPutsToolsOnAControlTransport(t *testing.T) {
 		return tmux.SubprocessRunner().Run(ctx, request)
 	})
 
-	target := tmux.NewServer(tmux.ServerOptions{
+	target := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 		Runner:     counting,
 	})
@@ -414,7 +433,7 @@ func TestConnectLeavesAnEmptyServerAlone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	target := tmux.NewServer(tmux.ServerOptions{
+	target := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 	})
 	t.Cleanup(func() {
@@ -441,7 +460,7 @@ func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	target := tmux.NewServer(tmux.ServerOptions{
+	target := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 	})
 	t.Cleanup(func() {
@@ -451,7 +470,7 @@ func TestAnAbsentServerIsNotAnEmptyOne(t *testing.T) {
 	})
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -517,7 +536,7 @@ func TestConnectLeavesAChosenTransportAlone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	target := tmux.NewServer(tmux.ServerOptions{
+	target := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 	})
 	t.Cleanup(func() {
@@ -1754,7 +1773,7 @@ func TestEveryToolCarriesAnnotations(t *testing.T) {
 
 //libtmux:real-tmux
 func TestNoNotificationsBeforeTheClientIsInitialized(t *testing.T) {
-	target := tmux.NewServer(tmux.ServerOptions{
+	target := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 	})
 	t.Cleanup(func() {
@@ -1768,7 +1787,7 @@ func TestNoNotificationsBeforeTheClientIsInitialized(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, ordered, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, ordered, nil)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -2145,7 +2164,7 @@ func TestSuppressHistoryKeepsACommandOutOfHistory(t *testing.T) {
 				}
 				return tmux.SubprocessRunner().Run(ctx, request)
 			})
-			watched := tmux.NewServer(tmux.ServerOptions{
+			watched := mustTmuxServer(t, tmux.ServerOptions{
 				SocketPath: target.SocketPath(),
 				Runner:     counting,
 			})
@@ -2401,7 +2420,7 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	target := tmux.NewServer(tmux.ServerOptions{
+	target := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 	})
 	t.Cleanup(func() {
@@ -2415,7 +2434,7 @@ func TestATimeoutIsLoggedToAClientThatAsked(t *testing.T) {
 
 	logged := make(chan *sdk.LoggingMessageParams, 8)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatalf("connect server: %v", err)
 	}
@@ -2953,12 +2972,18 @@ func TestServerInfoDoesNotInventAHealthyEmptyServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	unreachable := tmux.NewServer(tmux.ServerOptions{
-		Binary:     filepath.Join(t.TempDir(), "there-is-no-tmux-here"),
+	transportFailure := errors.New("tmux transport is unavailable")
+	unreachable := mustTmuxServer(t, tmux.ServerOptions{
 		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		Runner: tmux.CommandRunnerFunc(func(
+			context.Context,
+			tmux.CommandRequest,
+		) (tmux.CommandResult, error) {
+			return tmux.CommandResult{ExitCode: -1}, transportFailure
+		}),
 	})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(unreachable).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, unreachable).Connect(ctx, serverTransport, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

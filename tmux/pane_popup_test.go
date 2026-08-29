@@ -105,10 +105,12 @@ func TestDisplayPopupWarnsAndOmitsUnsupportedFields(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := degradingServerWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(warning Warning) {
-		warnings = append(warnings, warning)
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			warnings = append(warnings, warning)
+		},
+	}, runner)
 	pane := Pane{server: server, sessionID: "$1", windowID: "@2", paneID: "%3"}
 	err := pane.DisplayPopup(context.Background(), DisplayPopupRequest{
 		Title: &title, BorderLines: &borderLines, Style: &style, BorderStyle: &borderStyle,

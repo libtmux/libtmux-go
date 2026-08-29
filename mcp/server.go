@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"runtime/debug"
 	"slices"
@@ -183,27 +184,24 @@ func (i *Instance) Close() error {
 	return i.closeErr
 }
 
-// NewServer returns a closeable MCP instance exposing target.
-func NewServer(target tmux.Server) *Instance {
-	level := safetyFromEnvironment()
-	capabilities, _ := capabilitiesFromEnvironment()
-	tools := &tools{
-		level:        level,
-		capabilities: capabilities,
-		dispatchers:  map[string]dispatcher{},
-		unbatchable:  map[string]struct{}{},
-		batchable:    true,
-		jobs:         newJobs(),
+// NewServer returns a closeable MCP instance exposing target. It rejects an
+// invalid target before allocating instance-owned resources.
+func NewServer(target tmux.Server) (*Instance, error) {
+	if _, err := target.SocketSelection(); err != nil {
+		return nil, fmt.Errorf("construct MCP server: %w", err)
 	}
+
+	tools := newToolRegistry()
+	tools.jobs = newJobs()
 	tools.reaching.Store(&target)
 	serverOptions := &mcp.ServerOptions{
 		Instructions: callerInstructions(),
 	}
-	if capabilities.permits(CapabilityMetadataRead) {
+	if tools.capabilities.permits(CapabilityMetadataRead) {
 		serverOptions.CompletionHandler = completionFor(target)
 	}
-	if capabilities.permits(CapabilityMetadataRead) ||
-		capabilities.permits(CapabilityContentRead) {
+	if tools.capabilities.permits(CapabilityMetadataRead) ||
+		tools.capabilities.permits(CapabilityContentRead) {
 		serverOptions.SubscribeHandler = tools.subscribe
 		serverOptions.UnsubscribeHandler = tools.unsubscribe
 	}
@@ -219,13 +217,28 @@ func NewServer(target tmux.Server) *Instance {
 		server.AddReceivingMiddleware(audit(writer))
 	}
 
-	for _, add := range toolGroups {
-		add(server, tools)
-	}
+	registerToolGroups(server, tools)
 	addResources(server, tools)
 	addPrompts(server, tools)
 
-	return &Instance{Server: server, tools: tools, audit: auditOwner}
+	return &Instance{Server: server, tools: tools, audit: auditOwner}, nil
+}
+
+func newToolRegistry() *tools {
+	capabilities, _ := capabilitiesFromEnvironment()
+	return &tools{
+		level:        safetyFromEnvironment(),
+		capabilities: capabilities,
+		dispatchers:  map[string]dispatcher{},
+		unbatchable:  map[string]struct{}{},
+		batchable:    true,
+	}
+}
+
+func registerToolGroups(server *mcp.Server, tools *tools) {
+	for _, add := range toolGroups {
+		add(server, tools)
+	}
 }
 
 // Run serves target over stdin and stdout until ctx is done.
@@ -234,7 +247,10 @@ func Run(ctx context.Context, target tmux.Server) error {
 	if pool != nil {
 		defer func() { _ = pool.Close() }()
 	}
-	instance := NewServer(connected)
+	instance, err := NewServer(connected)
+	if err != nil {
+		return err
+	}
 	defer func() { _ = instance.Close() }()
 	return instance.Run(ctx, handshakeOrderedTransport{inner: stdio()})
 }
@@ -316,13 +332,13 @@ func recovering[In, Out any](
 	}
 }
 
-// An unreachable server has no socket identity and cannot match the caller.
-func (t *tools) socketPath(ctx context.Context) string {
-	result, err := t.tmux().Cmd(ctx, "display-message", "-p", "#{socket_path}")
-	if err != nil || len(result.Stdout) == 0 {
+// An invalid target has no socket identity and cannot match the caller.
+func (t *tools) socketPath(_ context.Context) string {
+	selection, err := t.tmux().SocketSelection()
+	if err != nil {
 		return ""
 	}
-	return result.Stdout[0]
+	return selection.Path
 }
 
 // toolFailure preserves a partial result; returning err makes the SDK discard it.

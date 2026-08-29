@@ -553,13 +553,6 @@ func (s Server) streamingLiteralCmd(
 	if err := validateLiteralCommandArguments(args); err != nil {
 		return CommandResult{ExitCode: -1}, err
 	}
-	state := s.connectionState()
-	if err := validateColorMode(state.options.Colors); err != nil {
-		return CommandResult{ExitCode: -1}, err
-	}
-	if err := validateConnectionArguments(state.options); err != nil {
-		return CommandResult{ExitCode: -1}, err
-	}
 	result, err := s.runCommand(ctx, CommandProcess, args, &stdio, false)
 	commandResult := CommandResult{
 		Command:  slices.Clone(result.Command),

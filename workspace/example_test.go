@@ -13,9 +13,13 @@ import (
 func Example() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-workspace",
 	})
+	if err != nil {
+		fmt.Println("server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	document := []byte(`

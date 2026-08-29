@@ -29,10 +29,13 @@ func TestLiteralArgumentsAndRawSeparatorsAgainstRealTmux(t *testing.T) {
 			t.Errorf("remove socket alias: %v", err)
 		}
 	})
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath: socket,
 		ConfigFile: configuration,
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	alive, err := server.IsAlive(ctx)

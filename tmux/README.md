@@ -43,15 +43,24 @@ like. Everything else returns only an error.
 
 ## The object model
 
-`Server` is an immutable configuration handle — `NewServer` starts nothing.
-`Session` holds `Window` views, each holding `Pane` views.
+`Server` is an immutable configuration handle. `NewServer` validates its
+options, snapshots the effective environment and working directory, and
+resolves one absolute executable and effective socket path without starting tmux. A nil
+`ProcessEnvironment` snapshots the current process environment; supplied
+values are cloned. Named and default sockets use a canonical frozen
+`TMUX_TMPDIR`. Construction returns an error for invalid options or an unresolved
+executable. The zero `Server` is invalid, and its operations return
+`ErrInvalidServer`. `Session` holds `Window` views, each holding `Pane` views.
 
 Returned values are **records, not live handles**. A `Session` you hold is what
 tmux said when you asked. Nothing refreshes behind you; `Session.Refresh` and its
 counterparts get you a new one.
 
 ```go
-server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+if err != nil {
+	return err
+}
 
 session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
 if err != nil {
