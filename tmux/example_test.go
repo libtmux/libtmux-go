@@ -1616,3 +1616,119 @@ func ExampleSession_OpenControl() {
 	fmt.Println("windows:", len(windows))
 	// Output: windows: 1
 }
+
+func ExamplePane_OpenObservation() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-pane-observation",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "observe"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+
+	// The observation owns a dedicated control client. Close releases it.
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	command := "printf 'observation ready\\n'"
+	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
+		fmt.Println("send keys:", err)
+		return
+	}
+	var output []byte
+	for !bytes.Contains(output, []byte("observation ready")) {
+		notification, err := observation.NextNotification(ctx)
+		if err != nil {
+			fmt.Println("next notification:", err)
+			return
+		}
+		paneID, data, isOutput := notification.Output()
+		if isOutput && paneID == pane.ID() {
+			output = append(output, data...)
+		}
+	}
+	fmt.Println("observed:", bytes.Contains(output, []byte("observation ready")))
+
+	if err := observation.Close(); err != nil {
+		fmt.Println("close observation:", err)
+		return
+	}
+	_, err = observation.NextNotification(ctx)
+	fmt.Println("closed:", errors.Is(err, os.ErrClosed))
+	// Output:
+	// observed: true
+	// closed: true
+}
+
+func ExampleSession_OpenNotifications() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-session-notifications",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// The stream owns its observation-only control client. Close releases it.
+	stream, err := session.OpenNotifications(ctx)
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	if _, err := session.Rename(ctx, "renamed"); err != nil {
+		fmt.Println("rename session:", err)
+		return
+	}
+	for {
+		notification, err := stream.Next(ctx)
+		if err != nil {
+			fmt.Println("next notification:", err)
+			return
+		}
+		arguments := notification.Arguments()
+		if notification.Kind() == tmux.ControlNotificationSessionRenamed &&
+			len(arguments) == 2 && arguments[1] == "renamed" {
+			fmt.Println("renamed:", arguments[1])
+			break
+		}
+	}
+
+	if err := stream.Close(); err != nil {
+		fmt.Println("close notifications:", err)
+		return
+	}
+	_, err = stream.Next(ctx)
+	fmt.Println("closed:", errors.Is(err, os.ErrClosed))
+	// Output:
+	// renamed: renamed
+	// closed: true
+}
