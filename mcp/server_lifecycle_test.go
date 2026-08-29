@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 //libtmux:real-tmux
@@ -231,12 +229,7 @@ func TestAHalfBuiltWorkspaceSaysWhatSurvived(t *testing.T) {
 	if err := json.Unmarshal(encoded, &reported); err != nil {
 		t.Fatal(err)
 	}
-	said := ""
-	for _, content := range result.Content {
-		if text, ok := content.(*sdk.TextContent); ok {
-			said += text.Text
-		}
-	}
+	said := resultText(result)
 	if !strings.Contains(said, "halfbuilt") {
 		t.Errorf("the failure does not name the session it left behind: %q", said)
 	}

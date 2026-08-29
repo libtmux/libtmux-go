@@ -499,12 +499,7 @@ func TestWritingToTheCallerPaneIsAskedAbout(t *testing.T) {
 				t.Errorf("%s reached the caller pane with nobody able to be asked", tool)
 				continue
 			}
-			said := ""
-			for _, content := range result.Content {
-				if text, ok := content.(*sdk.TextContent); ok {
-					said += text.Text
-				}
-			}
+			said := resultText(result)
 			if !strings.Contains(said, ownPane) {
 				t.Errorf("the %s refusal does not name the pane: %q", tool, said)
 			}
@@ -758,12 +753,7 @@ func TestTypingIntoAPaneInAModeIsRefused(t *testing.T) {
 			t.Errorf("%s into a pane in copy mode was accepted", tool)
 			continue
 		}
-		said := ""
-		for _, content := range result.Content {
-			if text, ok := content.(*sdk.TextContent); ok {
-				said += text.Text
-			}
-		}
+		said := resultText(result)
 		// Both ways on, because a caller who entered the mode deliberately
 		// wants to read rather than to undo it.
 		for _, wanted := range []string{"capture_pane", "exit_copy_mode", tool} {

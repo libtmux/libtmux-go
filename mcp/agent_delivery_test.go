@@ -671,12 +671,7 @@ func TestEveryDeliveryRefusesAPaneWithNoProcess(t *testing.T) {
 			if !result.IsError {
 				t.Fatalf("%s reported success against a pane with no process", delivery.tool)
 			}
-			said := ""
-			for _, content := range result.Content {
-				if text, ok := content.(*sdk.TextContent); ok {
-					said += text.Text
-				}
-			}
+			said := resultText(result)
 			if !strings.Contains(said, "respawn_pane") {
 				t.Errorf("the refusal does not name the way out: %q", said)
 			}

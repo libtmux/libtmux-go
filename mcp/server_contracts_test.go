@@ -402,12 +402,7 @@ func TestServerMessagesAreBoundedLikeEveryOtherReply(t *testing.T) {
 		arguments["includeMessages"] = true
 		result := call(ctx, t, session, "get_server_info", arguments, &reply)
 		if result.IsError {
-			said := ""
-			for _, content := range result.Content {
-				if text, ok := content.(*sdk.TextContent); ok {
-					said += text.Text
-				}
-			}
+			said := resultText(result)
 			t.Fatalf("get_server_info %v: %s", arguments, said)
 		}
 		// tmux keeps the message log per client and refuses the command
@@ -523,12 +518,7 @@ func TestANamedTargetThatIsGoneNamesTheCallThatFindsOne(t *testing.T) {
 			if !result.IsError {
 				t.Fatalf("a target that does not exist was accepted")
 			}
-			said := ""
-			for _, content := range result.Content {
-				if text, ok := content.(*sdk.TextContent); ok {
-					said += text.Text
-				}
-			}
+			said := resultText(result)
 			if !strings.Contains(said, testCase.wants) {
 				t.Errorf("the refusal does not name %s: %q", testCase.wants, said)
 			}
@@ -620,12 +610,7 @@ func TestASettingsScopeRefusesATargetItCannotRead(t *testing.T) {
 			if !testCase.refused {
 				return
 			}
-			said := ""
-			for _, content := range result.Content {
-				if text, ok := content.(*sdk.TextContent); ok {
-					said += text.Text
-				}
-			}
+			said := resultText(result)
 			if !strings.Contains(said, "not read at") {
 				t.Errorf("the refusal does not say the argument is unread: %q", said)
 			}

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
-	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 //libtmux:real-tmux
@@ -99,12 +98,7 @@ func TestSelectLayoutRefusesTwoAlternativesItself(t *testing.T) {
 	if !result.IsError {
 		t.Fatal("a layout and a spread together were accepted")
 	}
-	said := ""
-	for _, content := range result.Content {
-		if text, ok := content.(*sdk.TextContent); ok {
-			said += text.Text
-		}
-	}
+	said := resultText(result)
 	for _, leaked := range []string{"mutually exclusive", "invalid server command"} {
 		if strings.Contains(said, leaked) {
 			t.Errorf("the refusal is tmux's parser talking, not this tool: %q", said)
@@ -237,12 +231,7 @@ func TestRespawningALivePaneNamesTheWayOut(t *testing.T) {
 	if !result.IsError {
 		t.Fatal("respawning a live pane without kill was accepted")
 	}
-	said := ""
-	for _, content := range result.Content {
-		if text, ok := content.(*sdk.TextContent); ok {
-			said += text.Text
-		}
-	}
+	said := resultText(result)
 	if !strings.Contains(said, "kill") {
 		t.Errorf("the refusal does not name the way out: %q", said)
 	}
