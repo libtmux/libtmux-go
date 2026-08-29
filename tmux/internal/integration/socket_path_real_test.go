@@ -14,16 +14,9 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// TestADirectoryTmuxRefusesReadsAsNoServer covers a failure that happens before
-// any command runs and whose wording changed under us.
-//
 // tmux keeps its sockets in TMUX_TMPDIR/tmux-<uid> and refuses that directory
-// if anyone outside the owner's group can reach it, which a filesystem that
-// does not keep Unix permissions will not prevent. tmux 3.2a reported the
-// refusal as "error creating"; 3.3a onward words it three other ways.
-// Classifying only the older wording made one situation answer "no server" on
-// one tmux and fail opaquely on the next, so this asks the installed tmux
-// rather than a recorded string.
+// if others can reach it. tmux 3.2a reports "error creating"; 3.3a and newer use
+// three other diagnostics, so the test exercises the installed version.
 //
 //libtmux:real-tmux
 func TestADirectoryTmuxRefusesReadsAsNoServer(t *testing.T) {

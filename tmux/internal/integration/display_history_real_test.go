@@ -75,11 +75,8 @@ func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 	base := tmuxtest.NewServer(context.Background(), t)
 	warnings := make([]tmux.Warning, 0, 2)
 	server := tmux.NewServer(tmux.ServerOptions{
-		SocketPath: base.SocketPath(),
-		ConfigFile: base.ConfigFile(),
-		// This test covers the reduced command and the warning that
-		// reports it. Refusing is the default; see
-		// tmux.TestUnsupportedFeaturesAreRefusedByDefault.
+		SocketPath:  base.SocketPath(),
+		ConfigFile:  base.ConfigFile(),
 		Unsupported: tmux.DegradeUnsupported,
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)

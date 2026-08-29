@@ -681,11 +681,8 @@ func TestARecordOutlivesThePoolThatCarriedIt(t *testing.T) {
 	})
 
 	server := tmux.NewServer(tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
-		Runner:     counting,
-		// This test covers the reduced command and the warning that
-		// reports it. Refusing is the default; see
-		// tmux.TestUnsupportedFeaturesAreRefusedByDefault.
+		SocketPath:  filepath.Join(t.TempDir(), "tmux.sock"),
+		Runner:      counting,
 		Unsupported: tmux.DegradeUnsupported,
 		WarningHandler: func(warning tmux.Warning) {
 			mutex.Lock()
@@ -783,10 +780,8 @@ func TestEngineReportsTheChosenTransport(t *testing.T) {
 	}
 }
 
-// TestThePoolHandsBackAConnectedSession pins the seam a source-blind reader
-// fell through. The session a caller passes in keeps starting a tmux process
-// per command, so the pool must not hand that same value back: the one it
-// returns, and the one its own accessor reports, both carry the connections.
+// TestThePoolHandsBackAConnectedSession verifies both returned sessions carry
+// the pool engine rather than the caller's original subprocess handle.
 //
 //libtmux:real-tmux
 func TestThePoolHandsBackAConnectedSession(t *testing.T) {

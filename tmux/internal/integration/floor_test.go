@@ -90,9 +90,7 @@ func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 		}
 	}
 
-	// Every markdown file, rather than the ones remembered as stating it. The
-	// gate that read only the README missed three that told a reader to install
-	// Go 1.23, which the modules had left three raises behind.
+	// Scan every Markdown file so unlisted copies cannot drift.
 	for _, document := range markdownFiles(t, root) {
 		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(document)))
 		if err != nil {

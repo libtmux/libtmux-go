@@ -849,14 +849,8 @@ func (p markingPlanner) Plan([]tmux.Op) []tmux.Dispatch {
 	return []tmux.Dispatch{{Ops: p.ops, Marked: true}}
 }
 
-// TestPlanRefusesAMarkedGroupItCannotReportSeparately gates the fail-closed
-// rule on the path that used to skip it.
-//
-// A marked dispatch is a tmux command list like any other, so the same thing is
-// true of it: tmux answers with one merged stdout and says nothing about which
-// command produced what. Marking a read therefore lost that read's output and
-// still reported it complete, which is exactly the result this package refuses
-// to stand behind elsewhere.
+// TestPlanRefusesAMarkedGroupItCannotReportSeparately verifies marked command
+// lists fail closed when their output cannot be attributed.
 func TestPlanRefusesAMarkedGroupItCannotReportSeparately(t *testing.T) {
 	t.Parallel()
 

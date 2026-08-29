@@ -112,10 +112,7 @@ func TestPaneInputAndHistoryAgainstRealTmux(t *testing.T) {
 		SocketPath:         baseServer.SocketPath(),
 		ConfigFile:         baseServer.ConfigFile(),
 		ProcessEnvironment: baseServer.ProcessEnvironment(),
-		// This test covers the reduced command and the warning that
-		// reports it. Refusing is the default; see
-		// tmux.TestUnsupportedFeaturesAreRefusedByDefault.
-		Unsupported: tmux.DegradeUnsupported,
+		Unsupported:        tmux.DegradeUnsupported,
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},

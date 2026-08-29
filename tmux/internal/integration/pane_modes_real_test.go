@@ -208,10 +208,7 @@ func TestCopyModeUsesLinkedReceiverAndSourcePaneAgainstRealTmux(t *testing.T) {
 		SocketPath:         base.SocketPath(),
 		ConfigFile:         base.ConfigFile(),
 		ProcessEnvironment: base.ProcessEnvironment(),
-		// This test covers the reduced command and the warning that
-		// reports it. Refusing is the default; see
-		// tmux.TestUnsupportedFeaturesAreRefusedByDefault.
-		Unsupported: tmux.DegradeUnsupported,
+		Unsupported:        tmux.DegradeUnsupported,
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},

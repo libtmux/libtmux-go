@@ -27,13 +27,7 @@ var documentationLinkPattern = regexp.MustCompile(
 	`\[(?:[A-Z_][A-Za-z0-9_]*(?:\.[A-Z_][A-Za-z0-9_]*)*|[a-z_][A-Za-z0-9_]*\.[A-Z_][A-Za-z0-9_]*(?:\.[A-Z_][A-Za-z0-9_]*)*)\]`,
 )
 
-// exampleWorkflows returns every runnable example program, discovered from the
-// examples module rather than listed.
-//
-// A listed one is a list to keep in step with the directory, and the gates that
-// consume it disagreed once already: an example was added, one list learned
-// about it, and the gate that builds and runs each program did not, so the
-// example nobody remembered to add was the one nothing ran.
+// exampleWorkflows discovers every runnable program in the examples module.
 func exampleWorkflows(t *testing.T) []string {
 	t.Helper()
 
