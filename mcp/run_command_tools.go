@@ -220,9 +220,6 @@ func (t *tools) startCommand(
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")
 	commandPath := filepath.Join(directory, "command")
-	statusTemp := statusPath + ".tmp"
-	openedTemp := openedPath + ".tmp"
-	closedTemp := closedPath + ".tmp"
 
 	// In-pane marks exclude shell echo; the closing column distinguishes a
 	// newline from output ending mid-row. Files hide markers from the pane, and
@@ -235,41 +232,7 @@ func (t *tools) startCommand(
 		shellQuote(socket.Stdout[0]),
 		shellQuote(pane.ID().String()),
 	)
-	// Publish each record by rename so a zero-time poll cannot observe a file
-	// after creation but before its small payload has been written. Brace groups
-	// suppress wrapper errors before inner file redirections. After timeout
-	// cleanup removes the directory, trailing stderr redirection is too late
-	// because shells apply redirections left to right. Command stderr remains
-	// captured.
-	script := fmt.Sprintf(
-		"(\n"+
-			"case $- in *e*) __libtmux_errexit=1 ;; *) __libtmux_errexit=0 ;; esac\n"+
-			"set +e\n"+
-			"{ %s > %s && command mv %s %s; } 2>/dev/null\n"+
-			"if [ \"$__libtmux_errexit\" -eq 1 ]; then\n"+
-			"  ( set -e; . %s )\n"+
-			"else\n"+
-			"  ( set +e; . %s )\n"+
-			"fi\n"+
-			"__libtmux_status=$?\n"+
-			"{ printf %%s \"$__libtmux_status\" > %s && command mv %s %s; } 2>/dev/null\n"+
-			"{ %s > %s && command mv %s %s; } 2>/dev/null\n"+
-			"exit 0\n"+
-			")\n",
-		mark,
-		shellQuote(openedTemp),
-		shellQuote(openedTemp),
-		shellQuote(openedPath),
-		shellQuote(commandPath),
-		shellQuote(commandPath),
-		shellQuote(statusTemp),
-		shellQuote(statusTemp),
-		shellQuote(statusPath),
-		mark,
-		shellQuote(closedTemp),
-		shellQuote(closedTemp),
-		shellQuote(closedPath),
-	)
+	script := wrapperScript(mark, openedPath, commandPath, statusPath, closedPath)
 
 	if err := os.WriteFile(commandPath, []byte(input.Command+"\n"), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
@@ -687,6 +650,38 @@ func readMark(path string) (mark, error) {
 // shellQuote wraps a value so a POSIX shell reads it as one word, which the
 // paths and channel names below need because this process chooses them and a
 // temporary directory may contain anything the platform allows.
+// wrapperScript renders the bookkeeping wrapper the pane runs. Sourcing the
+// caller's script inside a subshell keeps its syntax, and an `exit` in it, from
+// changing this structure. After timeout cleanup removes the directory a
+// trailing stderr redirection would be too late, because shells apply
+// redirections left to right; command stderr stays captured.
+func wrapperScript(mark, openedPath, commandPath, statusPath, closedPath string) string {
+	command := shellQuote(commandPath)
+	return "(\n" +
+		"case $- in *e*) __libtmux_errexit=1 ;; *) __libtmux_errexit=0 ;; esac\n" +
+		"set +e\n" +
+		publishRecord(mark, openedPath) +
+		"if [ \"$__libtmux_errexit\" -eq 1 ]; then\n" +
+		"  ( set -e; . " + command + " )\n" +
+		"else\n" +
+		"  ( set +e; . " + command + " )\n" +
+		"fi\n" +
+		"__libtmux_status=$?\n" +
+		publishRecord(`printf %s "$__libtmux_status"`, statusPath) +
+		publishRecord(mark, closedPath) +
+		"exit 0\n" +
+		")\n"
+}
+
+// publishRecord renders one record written by producer and renamed into place,
+// so a zero-time poll cannot observe the file after creation but before its
+// payload. The brace group suppresses wrapper errors before the redirection.
+func publishRecord(producer, path string) string {
+	temporary := shellQuote(path + ".tmp")
+	return fmt.Sprintf("{ %s > %s && command mv %s %s; } 2>/dev/null\n",
+		producer, temporary, temporary, shellQuote(path))
+}
+
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
