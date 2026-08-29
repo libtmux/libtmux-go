@@ -12,15 +12,8 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Three ways to put something into a pane, because they are not the same
-// thing and picking the wrong one is how an agent corrupts a file.
-//
-// send_keys types a command and presses Enter, and tmux reads its own key
-// names on the way, so "C-c" is an interrupt rather than three characters.
-// send_keys_batch is the same lookup without the Enter, for driving a program
-// that reads keys rather than lines. paste_text delivers text as text, with no
-// key names read at all, which is the only safe way to put arbitrary content
-// into a pane: a line of it beginning with "Escape" would otherwise be a key.
+// Input tools distinguish a command plus Enter, a sequence of tmux key names,
+// and literal text that tmux must not interpret as keys.
 
 // sendKeysBatchInput sends several keys to a pane in order.
 type sendKeysBatchInput struct {
@@ -113,17 +106,8 @@ type pasteTextOutput struct {
 	Bytes int `json:"bytes"`
 }
 
-// pasteText puts text into a pane without tmux reading any of it as keys.
-//
-// send_keys looks up tmux key names, so text containing "Escape", "C-c", or a
-// leading dash is not delivered as itself. Anything a client did not write by
-// hand — a file, a message, a generated command — goes through here, because
-// the client cannot know in advance whether it contains a word tmux claims.
-//
-// The text is staged in a tmux buffer and pasted from it, which is how tmux
-// delivers bytes rather than keys. The buffer is named for this call and
-// removed afterwards, so it does not join the buffers a person pastes from by
-// hand.
+// pasteText stages text in a per-call buffer so tmux cannot interpret key
+// names, then removes the buffer after delivery.
 func (t *tools) pasteText(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -177,11 +161,7 @@ func (t *tools) pasteText(
 	return nil, output, nil
 }
 
-// exitCopyModeInput returns a pane to passing keys to the program in it.
-//
-// Entering and leaving take separate types even though leaving needs nothing
-// extra, because sharing one put scrollUp in the schema of a tool that cannot
-// act on it, and a client reading the schema had no way to know that.
+// exitCopyModeInput omits fields that only entering copy mode can use.
 type exitCopyModeInput struct {
 	// PaneID is the tmux pane id. Empty uses the active pane.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
@@ -208,14 +188,8 @@ type copyModeOutput struct {
 	InCopyMode bool `json:"inCopyMode"`
 }
 
-// enterCopyMode puts a pane into copy mode.
-//
-// A pane in copy mode reads keys as tmux's own rather than passing them to the
-// program in it, which is what a client needs in order to scroll and select.
-// It is also a trap worth naming: a client that leaves a pane in copy mode has
-// left a person's keystrokes going somewhere they do not expect, and every
-// send_keys after it goes to tmux rather than to the shell. get_pane_info
-// reports inMode, and exit_copy_mode is the way back.
+// enterCopyMode redirects subsequent keys to tmux rather than the pane's
+// program. get_pane_info reports inMode; exit_copy_mode restores input.
 func (t *tools) enterCopyMode(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -235,17 +209,8 @@ func (t *tools) enterCopyMode(
 	return nil, copyModeOutput{PaneID: pane.ID().String(), InCopyMode: true}, nil
 }
 
-// refuseAPaneInAMode declines to type into a pane that is not listening.
-//
-// A pane in copy mode reads keys as that mode's bindings rather than passing
-// them to the program, so the text never arrives and something else happens
-// instead: a binding that copies a selection, moves the cursor, or waits for a
-// further key. The last one is why this is a refusal rather than a warning: the
-// client that sent such a key never gets its reply, and supplying the key the
-// binding waits for does not release it. It is the sender that blocks rather
-// than control clients in particular, which is what makes refusing here a whole
-// fix -- another client doing it, or a person doing it at a keyboard, costs
-// this connection nothing.
+// refuseAPaneThatCannotRead rejects dead or modal panes before input can be
+// lost or interpreted as tmux bindings.
 func refuseAPaneThatCannotRead(pane tmux.Pane, tool string) error {
 	formats := pane.Formats()
 	// Before the mode, because a pane can be dead and in a mode at once -- a

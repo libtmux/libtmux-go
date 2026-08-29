@@ -11,35 +11,20 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// splitWindowInput divides one pane in two.
 type splitWindowInput struct {
-	// PaneID is the tmux pane id to divide, such as %1. Empty divides the
-	// active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id to split; empty splits the active pane"`
-	// SessionName picks the session when PaneID is empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to split when paneId is empty"`
-	// Direction places the new pane relative to that one: below, above, right,
-	// or left. Empty places it below, as tmux does.
-	Direction string `json:"direction,omitempty" jsonschema:"where the new pane goes; empty puts it below"`
-	// Percentage gives the new pane that share of the space, from 1 to 100.
-	// Zero lets tmux halve the pane.
-	Percentage int `json:"percentage,omitempty" jsonschema:"the new pane's share of the space, 1 to 100"`
-	// Command starts the new pane running this instead of a shell.
-	Command string `json:"command,omitempty" jsonschema:"a command for the new pane to run instead of a shell"`
-	// StartDirectory is the new pane's working directory.
+	PaneID         string `json:"paneId,omitempty" jsonschema:"the tmux pane id to split; empty splits the active pane"`
+	SessionName    string `json:"sessionName,omitempty" jsonschema:"which session's active pane to split when paneId is empty"`
+	Direction      string `json:"direction,omitempty" jsonschema:"where the new pane goes; empty puts it below"`
+	Percentage     int    `json:"percentage,omitempty" jsonschema:"the new pane's share of the space, 1 to 100"`
+	Command        string `json:"command,omitempty" jsonschema:"a command for the new pane to run instead of a shell"`
 	StartDirectory string `json:"startDirectory,omitempty" jsonschema:"the new pane's working directory"`
 }
 
-// splitWindowOutput identifies the pane that was created.
 type splitWindowOutput struct {
-	// PaneID is the new pane's tmux id.
 	PaneID string `json:"paneId"`
 }
 
-// splitDirections maps the words a client uses to tmux's sides. The words are
-// the ones a person says about a screen, rather than tmux's flag letters,
-// because a client choosing between -h and -v has to know which axis each
-// names before it can ask for the pane it wants.
+// splitDirections maps screen-relative words to tmux pane directions.
 var splitDirections = map[string]tmux.PaneDirection{
 	"":      tmux.PaneDirectionBelow,
 	"below": tmux.PaneDirectionBelow,
@@ -48,49 +33,23 @@ var splitDirections = map[string]tmux.PaneDirection{
 	"left":  tmux.PaneDirectionLeft,
 }
 
-// movePaneInput moves a pane between windows, or out into one of its own.
 type movePaneInput struct {
-	// PaneID is the pane to move.
-	PaneID string `json:"paneId" jsonschema:"the tmux pane id to move, such as %1"`
-	// ToWindowID is the window to move it into. Empty breaks the pane out
-	// into a new window of its own.
+	PaneID     string `json:"paneId" jsonschema:"the tmux pane id to move, such as %1"`
 	ToWindowID string `json:"toWindowId,omitempty" jsonschema:"the window to move the pane into, such as @2; empty breaks it out into a new window"`
-	// Direction places the moved pane relative to the destination's active
-	// pane: below, above, right, or left. Empty places it below, as tmux does.
-	Direction string `json:"direction,omitempty" jsonschema:"where the moved pane goes in the destination; empty puts it below"`
-	// Percentage gives the moved pane that share of the destination, 1 to 100.
-	Percentage int `json:"percentage,omitempty" jsonschema:"the moved pane's share of the destination window, 1 to 100"`
-	// Name is the new window's name when the pane is broken out.
-	Name string `json:"name,omitempty" jsonschema:"the new window's name when breaking the pane out"`
-	// Focus makes the pane active where it lands, and the new window current
-	// when it was broken out. Off by default, because moving what a person is
-	// looking at is a bigger change than moving a pane.
-	Focus bool `json:"focus,omitempty" jsonschema:"make the pane active where it lands, moving what a person sees"`
+	Direction  string `json:"direction,omitempty" jsonschema:"where the moved pane goes in the destination; empty puts it below"`
+	Percentage int    `json:"percentage,omitempty" jsonschema:"the moved pane's share of the destination window, 1 to 100"`
+	Name       string `json:"name,omitempty" jsonschema:"the new window's name when breaking the pane out"`
+	Focus      bool   `json:"focus,omitempty" jsonschema:"make the pane active where it lands, moving what a person sees"`
 }
 
-// movePaneOutput reports where the pane ended up.
 type movePaneOutput struct {
-	// PaneID is the pane that moved. It keeps its id: a pane somewhere else is
-	// the same pane, so anything addressing it still can.
-	PaneID string `json:"paneId"`
-	// WindowID is the window it is in now.
-	WindowID string `json:"windowId"`
-	// BrokenOut reports that the window it is in was made for it.
-	BrokenOut bool `json:"brokenOut"`
+	PaneID    string `json:"paneId"`
+	WindowID  string `json:"windowId"`
+	BrokenOut bool   `json:"brokenOut"`
 }
 
-// movePane moves a pane into another window, or out into a new one.
-//
-// Rearranging across windows was the gap between splitting and killing: a
-// caller that put a pane in the wrong window could only kill it and split
-// again, losing whatever it was running. Both directions are one tool because
-// they are one question with the destination left out -- naming a window moves
-// the pane there, naming none gives it a window of its own.
-//
-// Moving the last pane out of a window destroys that window, and the session
-// with it if it held nothing else. That is tmux's own behaviour rather than
-// this tool's, and it is why the pane's new window is reported rather than
-// assumed.
+// Moving the last pane destroys its source window and possibly its session;
+// the reply reports the destination window.
 func (t *tools) movePane(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -147,7 +106,6 @@ func (t *tools) movePane(
 	}, nil
 }
 
-// splitWindow divides a pane and reports the new one's id.
 func (t *tools) splitWindow(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -183,34 +141,21 @@ func (t *tools) splitWindow(
 	return nil, splitWindowOutput{PaneID: created.ID().String()}, nil
 }
 
-// resizePaneInput sets one pane's size.
 type resizePaneInput struct {
-	// PaneID is the tmux pane id to resize. Empty resizes the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id to resize; empty resizes the active pane"`
-	// SessionName picks the session when PaneID is empty.
+	PaneID      string `json:"paneId,omitempty" jsonschema:"the tmux pane id to resize; empty resizes the active pane"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to resize when paneId is empty"`
-	// Width is the pane's new width in cells. Zero leaves it alone.
-	Width int `json:"width,omitempty" jsonschema:"the pane's new width in cells"`
-	// Height is the pane's new height in cells. Zero leaves it alone.
-	Height int `json:"height,omitempty" jsonschema:"the pane's new height in cells"`
-	// Zoom toggles the pane between its layout size and the whole window.
-	Zoom bool `json:"zoom,omitempty" jsonschema:"toggle the pane between its size and the whole window"`
+	Width       int    `json:"width,omitempty" jsonschema:"the pane's new width in cells"`
+	Height      int    `json:"height,omitempty" jsonschema:"the pane's new height in cells"`
+	Zoom        bool   `json:"zoom,omitempty" jsonschema:"toggle the pane between its size and the whole window"`
 }
 
-// resizePaneOutput reports the size tmux settled on.
 type resizePaneOutput struct {
-	// PaneID is the pane that was resized. A caller that named none had the
-	// active one resolved for it, and the reply is where it learns which.
 	PaneID string `json:"paneId"`
-	// Width is the pane's width in cells after the change.
-	Width int `json:"width"`
-	// Height is the pane's height in cells after the change.
-	Height int `json:"height"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
-// resizePane sets a pane's size and reports what tmux settled on, which is not
-// always what was asked: a layout constrains its panes, so a request larger
-// than the window allows is honored as far as it can be.
+// resizePane reports tmux's final size, which layout constraints may adjust.
 func (t *tools) resizePane(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -245,57 +190,34 @@ func (t *tools) resizePane(
 	}, nil
 }
 
-// selectLayoutInput arranges a window's panes.
 type selectLayoutInput struct {
-	// WindowID is the tmux window id. Empty arranges the current window.
-	WindowID string `json:"windowId,omitempty" jsonschema:"the tmux window id to arrange; empty uses the current window"`
-	// SessionName picks the session when WindowID is empty.
+	WindowID    string `json:"windowId,omitempty" jsonschema:"the tmux window id to arrange; empty uses the current window"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's current window to arrange when windowId is empty"`
-	// Layout is one of tmux's presets, or a layout string read from
-	// get_window_info. Empty with Spread set redistributes the space instead.
-	Layout string `json:"layout,omitempty" jsonschema:"even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, main-horizontal-mirrored or main-vertical-mirrored from tmux 3.5, or a layout string from get_window_info"`
-	// Spread gives every pane an equal share without changing the arrangement.
-	Spread bool `json:"spread,omitempty" jsonschema:"give every pane an equal share of the space"`
+	Layout      string `json:"layout,omitempty" jsonschema:"even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, main-horizontal-mirrored or main-vertical-mirrored from tmux 3.5, or a layout string from get_window_info"`
+	Spread      bool   `json:"spread,omitempty" jsonschema:"give every pane an equal share of the space"`
 }
 
-// selectLayoutOutput reports the layout in force.
 type selectLayoutOutput struct {
-	// WindowID is the window that was arranged.
 	WindowID string `json:"windowId"`
-	// Layout is tmux's description of the arrangement now, which this tool
-	// accepts back: a layout worth keeping is saved by storing this string.
-	Layout string `json:"layout"`
+	Layout   string `json:"layout"`
 }
 
-// layoutPresets are the arrangements tmux names.
-//
-// tmux takes an unrecognised name and, on some versions, dies of it: 3.3a
-// crashes the whole server, taking every session on the socket with it. So a
-// name is checked here before it is sent, and anything that is not a preset is
-// only accepted when it looks like tmux's own layout string.
+// tmux 3.3a may crash the server on an unknown layout name. Accept known
+// presets or strings shaped like tmux's serialized layouts.
 var layoutPresets = map[string]bool{
 	"even-horizontal": true,
 	"even-vertical":   true,
 	"main-horizontal": true,
 	"main-vertical":   true,
 	"tiled":           true,
-	// tmux added these at 3.5. They are passed on rather than gated here,
-	// because the tmux module refuses them below that with the version it
-	// found, which is the answer a client can act on.
+	// The tmux module version-gates the mirrored layouts added in 3.5.
 	"main-horizontal-mirrored": true,
 	"main-vertical-mirrored":   true,
 }
 
-// layoutString matches tmux's own description of an arrangement, which
-// get_window_info returns and which begins with a checksum.
+// layoutString matches tmux's checksum-prefixed serialized layouts.
 var layoutString = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
 
-// selectLayout arranges a window's panes.
-//
-// A client that split a window three times has three panes in whatever shape
-// the splits left. This is how it gets a shape someone can read, and how a
-// layout that worked is restored later: get_window_info reports the layout
-// string, and this accepts it back.
 func (t *tools) selectLayout(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -305,8 +227,6 @@ func (t *tools) selectLayout(
 	if layout == "" && !input.Spread {
 		return nil, selectLayoutOutput{}, errors.New("layout or spread is required")
 	}
-	// tmux refuses the pair. Saying so here keeps its parser's wording, which
-	// names modes this tool does not offer, from reaching a client.
 	if layout != "" && input.Spread {
 		return nil, selectLayoutOutput{}, errors.New(
 			"layout and spread are alternatives: spread evens the panes already " +
@@ -327,38 +247,24 @@ func (t *tools) selectLayout(
 	}); err != nil {
 		return nil, selectLayoutOutput{}, err
 	}
-	// tmux settles on an arrangement that may differ from the request, because
-	// a layout is fitted to the window it is applied to.
 	applied, err := window.Refresh(ctx)
 	if err != nil {
-		// The layout was applied. Failing the call because the read-back did
-		// not work would invite a client to apply it again, so the window is
-		// reported without the string that could not be read.
-		//nolint:nilerr // the change succeeded; only reporting the result of it
-		// failed, and a retry would repeat a change that already happened.
+		// Readback failure does not undo the successful layout change.
+		//nolint:nilerr // retrying would repeat a change that already succeeded
 		return nil, selectLayoutOutput{WindowID: window.ID().String()}, nil
 	}
 	current, _ := applied.Formats().WindowLayout()
 	return nil, selectLayoutOutput{WindowID: applied.ID().String(), Layout: current}, nil
 }
 
-// selectPaneInput chooses the pane a window is focused on.
 type selectPaneInput struct {
-	// PaneID is the tmux pane id to make active.
 	PaneID string `json:"paneId" jsonschema:"the tmux pane id to make active"`
 }
 
-// selectPaneOutput reports the pane that is now active.
 type selectPaneOutput struct {
-	// PaneID is the pane that is now its window's active one.
 	PaneID string `json:"paneId"`
 }
 
-// selectPane makes a pane its window's active one.
-//
-// The active pane is where a person's keystrokes go and what tmux's own
-// commands mean by "this pane", so a client that built a layout puts the
-// person in front of the pane they should be looking at.
 func (t *tools) selectPane(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -375,32 +281,17 @@ func (t *tools) selectPane(
 	return nil, selectPaneOutput{PaneID: selected.ID().String()}, nil
 }
 
-// swapPaneInput exchanges two panes.
 type swapPaneInput struct {
-	// PaneID is one of the panes.
-	PaneID string `json:"paneId" jsonschema:"one of the two panes to exchange"`
-	// WithPaneID is the other.
+	PaneID     string `json:"paneId" jsonschema:"one of the two panes to exchange"`
 	WithPaneID string `json:"withPaneId" jsonschema:"the other pane to exchange it with"`
-	// KeepFocus leaves the active pane where it was rather than following the
-	// pane that moved.
-	KeepFocus bool `json:"keepFocus,omitempty" jsonschema:"leave the active pane where it was"`
+	KeepFocus  bool   `json:"keepFocus,omitempty" jsonschema:"leave the active pane where it was"`
 }
 
-// swapPaneOutput reports the exchange.
 type swapPaneOutput struct {
-	// PaneID and WithPaneID are the panes that changed places. Both keep their
-	// ids: a pane that moved is the same pane in a different position, so
-	// anything addressing it still can.
-	PaneID string `json:"paneId"`
-	// WithPaneID is the pane it changed places with.
+	PaneID     string `json:"paneId"`
 	WithPaneID string `json:"withPaneId"`
 }
 
-// swapPane exchanges two panes' positions.
-//
-// A client that split a window and then wanted the new pane on the other side
-// would otherwise kill it and split again, losing whatever it started. The
-// panes keep their ids, so nothing addressing them has to be updated.
 func (t *tools) swapPane(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -430,34 +321,19 @@ func (t *tools) swapPane(
 	return nil, swapPaneOutput{PaneID: input.PaneID, WithPaneID: input.WithPaneID}, nil
 }
 
-// resizeWindowInput sets a window's size.
 type resizeWindowInput struct {
-	// WindowID is the tmux window id. Empty resizes the current window.
-	WindowID string `json:"windowId,omitempty" jsonschema:"the tmux window id to resize; empty uses the current window"`
-	// SessionName picks the session when WindowID is empty.
+	WindowID    string `json:"windowId,omitempty" jsonschema:"the tmux window id to resize; empty uses the current window"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's current window to resize when windowId is empty"`
-	// Width is the window's new width in cells. Zero leaves it alone.
-	Width int `json:"width,omitempty" jsonschema:"the window's new width in cells"`
-	// Height is the window's new height in cells. Zero leaves it alone.
-	Height int `json:"height,omitempty" jsonschema:"the window's new height in cells"`
+	Width       int    `json:"width,omitempty" jsonschema:"the window's new width in cells"`
+	Height      int    `json:"height,omitempty" jsonschema:"the window's new height in cells"`
 }
 
-// resizeWindowOutput reports the size tmux settled on.
 type resizeWindowOutput struct {
-	// WindowID is the window that was resized.
 	WindowID string `json:"windowId"`
-	// Width is its width in cells after the change.
-	Width int `json:"width"`
-	// Height is its height in cells after the change.
-	Height int `json:"height"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
 }
 
-// resizeWindow sets a window's size in cells.
-//
-// A window this server created is sized for a client that is not attached to
-// it, so a pane's width is whatever tmux guessed. That matters to anything
-// whose output is laid out in columns: a test runner or a table renders to the
-// width it is given, and a client reading it back gets what fitted.
 func (t *tools) resizeWindow(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -487,32 +363,18 @@ func (t *tools) resizeWindow(
 	}, nil
 }
 
-// moveWindowInput moves a window to another place in the order.
 type moveWindowInput struct {
-	// WindowID is the tmux window id to move.
-	WindowID string `json:"windowId" jsonschema:"the tmux window id to move"`
-	// SessionName is the session to move it to. Empty keeps it where it is.
+	WindowID    string `json:"windowId" jsonschema:"the tmux window id to move"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to move it to; empty keeps it in its own"`
-	// Index is the position to move it to. Omit to let tmux pick the next
-	// free one.
-	Index *int `json:"index,omitempty" jsonschema:"the index to move it to; omit to use the next free one"`
+	Index       *int   `json:"index,omitempty" jsonschema:"the index to move it to; omit to use the next free one"`
 }
 
-// moveWindowOutput reports where the window went.
 type moveWindowOutput struct {
-	// WindowID is the window that moved, which keeps its id.
 	WindowID string `json:"windowId"`
-	// Session is the session it is in now.
-	Session string `json:"session"`
-	// Index is its position there.
-	Index int `json:"index"`
+	Session  string `json:"session"`
+	Index    int    `json:"index"`
 }
 
-// moveWindow moves a window within its session or into another.
-//
-// Window indexes are what a person types to switch windows, so the order is
-// part of the layout rather than bookkeeping. This is also how a window built
-// in one session is handed to another.
 func (t *tools) moveWindow(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -545,7 +407,6 @@ func (t *tools) moveWindow(
 	}, nil
 }
 
-// addLayoutTools advertises the tools that arrange what exists.
 func addLayoutTools(server *mcp.Server, t *tools) {
 	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "split_window",

@@ -16,19 +16,8 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Waiting is a tool, because polling is a client's way of paying for one
-// answer many times.
-//
-// A client without these reads the pane, decides it is not done, and reads it
-// again. Every look is a round trip, the looks are spaced by a guess, and what
-// it matches is a screen: the shell's echo of the command it just sent looks
-// exactly like the command having produced that text.
-//
-// run_command is for a command this client runs, and answers with its exit
-// status, which no amount of screen-reading recovers. wait_for_text is for
-// output the client did not author, and reads tmux's stream of what the pane
-// produced rather than its screen. wait_for_channel is for anything else that
-// can signal tmux.
+// Wait tools replace screen polling. run_command tracks authored commands,
+// wait_for_text follows external output, and wait_for_channel follows tmux signals.
 
 const (
 	runCommandBinary         = "tmux"
@@ -52,23 +41,8 @@ const (
 // so an operator configuring both writes one thing.
 const WaitCeilingEnvironmentVariable = "LIBTMUX_MCP_WAIT_MAX_SECONDS"
 
-// A wait is the only thing here that runs for as long as a caller asks, so it
-// is the only thing that can spend a caller's turn without producing anything.
-//
-// The ceiling bounds the caller rather than the transport. These tools await
-// throughout, so a long wait blocks nothing else; what it costs is the turn it
-// happens in, because MCP gives a caller no way to change its mind once a call
-// is in flight. A model that guesses the wrong pattern and asks for an hour
-// gets an hour of nothing. The ceiling makes that mistake cost a wait.
-//
-// Clamp rather than refuse. An over-large timeout is a caller that does not
-// know the policy, and failing the call teaches it nothing it can act on; the
-// wait runs at the ceiling instead and every reply carries the timeout it
-// actually used, so the policy is learned from an answer rather than an error.
-//
-// Every reply carries it even when nothing was clamped, because the default is
-// otherwise invisible: a caller that sent no timeout at all has no way to know
-// what it is waiting for.
+// waitCeiling bounds caller latency without blocking other requests. Oversized
+// waits are clamped, and each reply reports the effective timeout.
 func waitCeiling() time.Duration {
 	raw := strings.TrimSpace(os.Getenv(WaitCeilingEnvironmentVariable))
 	if raw == "" {
@@ -84,13 +58,8 @@ func waitCeiling() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// resolveWaitTimeout turns the seconds a caller asked for into the wait this
-// server will run, and reports whether the ceiling shortened it.
-//
-// Only a caller that asked for more than the ceiling is told it was clamped.
-// A ceiling below the default shortens that too, but a call that named no
-// timeout had nothing of its own shortened, and reporting one would send a
-// caller looking for a request it never made.
+// resolveWaitTimeout reports clamping only when the caller's explicit timeout
+// exceeded the ceiling.
 func resolveWaitTimeout(requested int) (timeout time.Duration, clamped bool) {
 	ceiling := waitCeiling()
 	timeout = time.Duration(requested) * time.Second
@@ -144,15 +113,9 @@ type runCommandOutput struct {
 	// else means the pane was busy and received the text as that program's
 	// input instead of running it.
 	Running string `json:"running,omitempty"`
-	// Output is what the pane showed while the command ran, read from where
-	// the pane stood when it was sent. It is the command's output as a person
-	// would see it, so it includes whatever the program painted. Lines the
-	// terminal wrapped are rejoined, so one line the command printed is one
-	// entry here however wide the pane is.
-	//
-	// tmux before 3.6 left a tab in the grid as the spaces it moved the cursor
-	// over, so a tab in the output arrives as spaces there and cannot be
-	// recovered.
+	// Output is pane-rendered output between the command's cursor marks. Wrapped
+	// terminal rows are rejoined and screen painting remains. Before tmux 3.6,
+	// tabs are irreversibly expanded to spaces.
 	Output []string `json:"output,omitempty"`
 	// OutputUnavailable says why Output is missing, and is absent when the
 	// command simply printed nothing. The status is the answer either way, so
@@ -183,30 +146,10 @@ type runCommandOutput struct {
 	truncation
 }
 
-// runCommand types a command into a pane and blocks until it exits.
-//
-// It exists so that a client does not have to read the pane in a loop to learn
-// whether its command finished. Nothing is matched against the screen, so the
-// shell's echo of the command cannot be mistaken for the command's own output,
-// and the answer costs one call rather than one call per look.
-//
-// The command signals a tmux channel when it ends and writes its status to a
-// file this process reads, because a tmux channel carries no payload. Both
-// need a filesystem the tmux server and this process share, which is the same
-// assumption a pane running a local shell already makes.
-//
-// What the command printed comes back with the status. The wrapper notes the
-// pane's cursor on either side of the command, so the reply is exactly the rows
-// the command wrote rather than whatever the screen held; a client that wanted
-// only the status ignores it, and one that wanted the output no longer has to
-// guess where in the pane its command began.
-//
-// The pane must be at a shell prompt. This types into whatever the pane is
-// running, so a pane already busy receives the text as that program's input
-// rather than running it, and the wait then reaches its deadline with nothing
-// having happened. The result names what the pane was running when the wait
-// ended, which is how a caller tells that case from a slow command. Send
-// "C-c" with send_keys to get such a pane back.
+// runCommand types a command at a shell prompt and waits on a tmux channel.
+// A shared filesystem carries its exit status and cursor marks bound its output.
+// If the pane is busy, the text reaches that program instead; timeout results
+// report the pane's running command.
 func (t *tools) runCommand(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -298,31 +241,9 @@ func (t *tools) startCommand(
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")
 
-	// The wrapper notes where the pane's cursor stands on either side of the
-	// command, so the output can be read back from exactly the rows the
-	// command wrote.
-	//
-	// Noting it from inside the pane rather than before the keys are sent is
-	// what makes it exact: by the time the wrapper runs, the shell has already
-	// echoed the command and moved to the line where output will start.
-	// Measuring from outside instead means guessing how many rows that echo
-	// occupied, and an interactive shell redraws it as it goes, so the echo
-	// cannot be recognised and removed afterwards either.
-	//
-	// The column is recorded with the row because it says whether the command's
-	// last line ended. A cursor resting at column zero means the output ended
-	// with a newline and the closing row belongs to whatever comes next, which
-	// is the shell's own prompt; a cursor further along means that row holds the
-	// tail of the output itself.
-	//
-	// Both writes are redirected to files, so nothing about this appears in
-	// the pane. A marker printed into the pane would work as well and would be
-	// visible to whoever is looking at it.
-	//
-	// The command runs in a subshell so that a command ending in "exit" ends
-	// that subshell rather than the pane's shell, which would otherwise take
-	// the status recording and the signal with it and leave the wait hanging
-	// until its deadline.
+	// In-pane marks exclude shell echo; the closing column distinguishes a
+	// newline from output ending mid-row. Files hide markers from the pane, and
+	// a subshell keeps an `exit` command from bypassing status and signaling.
 	mark := fmt.Sprintf(
 		"%s -S %s display-message -p -t %s "+
 			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
@@ -330,15 +251,10 @@ func (t *tools) startCommand(
 		shellQuote(socket.Stdout[0]),
 		shellQuote(pane.ID().String()),
 	)
-	//
-	// Everything the wrapper does for itself is a brace group with its errors
-	// discarded, so that a run outliving this directory stays invisible: a
-	// command still running when its wait times out reaches these lines after
-	// the directory is gone, and a shell reports a redirection it cannot open
-	// on its own, into the pane. Silencing the redirection alone does not do
-	// it -- a shell applies them left to right and has already failed on the
-	// first by the time it reads the second. The command keeps its own stderr,
-	// which is the output being collected.
+	// Brace groups suppress wrapper errors before inner file redirections. After
+	// timeout cleanup removes the directory, trailing stderr redirection is too
+	// late because shells apply redirections left to right. Command stderr remains
+	// captured.
 	script := fmt.Sprintf(
 		"{ %s > %s; } 2>/dev/null; ( %s ); { printf %%s $? > %s; } 2>/dev/null; "+
 			"{ %s > %s; } 2>/dev/null; { %s -S %s wait-for -S %s; } 2>/dev/null\n",
@@ -353,14 +269,8 @@ func (t *tools) startCommand(
 		shellQuote(channel),
 	)
 
-	// The script is sourced from a file rather than typed. A shell's line
-	// editor reads what arrives as keys, so a command carrying a tab asked it
-	// to complete a filename and ran as whatever that inserted, and one
-	// carrying C-c or C-d was acted on rather than run. Only this path is
-	// typed, and this package chose every character in it.
-	//
-	// It also keeps the pane readable: what a person sees is one short line
-	// rather than the whole wrapper echoed across the screen.
+	// Source the script so tabs and control bytes bypass the shell's line editor;
+	// only this package-controlled path is typed into the pane.
 	scriptPath := filepath.Join(directory, "script")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
@@ -456,16 +366,8 @@ func (t *tools) awaitCommand(
 	return nil, output, nil
 }
 
-// attachCommandOutput reads back the rows the command wrote.
-//
-// Failing to read them is not failing the call: the exit status is the answer,
-// and a client that got a status with no output is better served than one
-// whose call failed because the pane went away after its command finished. A
-// command that timed out never wrote its closing mark, so it is read to the
-// bottom of the screen instead, which is as much as there is to know. Why the
-// output is missing is reported rather than swallowed, because a caller
-// otherwise cannot tell a command that printed nothing from one whose output
-// could not be read.
+// attachCommandOutput preserves a recorded exit status when capture fails and
+// reports why output is unavailable. A missing closing mark reads to screen end.
 func attachCommandOutput(
 	ctx context.Context,
 	pane tmux.Pane,
@@ -483,12 +385,7 @@ func attachCommandOutput(
 		output.OutputUnavailable = err.Error()
 		return
 	}
-	// The marks are absolute positions in tmux's grid; a capture addresses
-	// rows relative to the top of the screen, and tmux renumbers every row
-	// when it trims the oldest.
-	//
-	// Wrapped rows are rejoined, so a line longer than the pane arrives as the
-	// one line the command printed rather than as one entry per screen row.
+	// Convert absolute marks to current grid rows; tmux renumbers trimmed history.
 	request := tmux.CapturePaneRequest{
 		Start:       tmux.CaptureLine(opened.row - now.historySize),
 		JoinWrapped: true,
@@ -501,30 +398,13 @@ func attachCommandOutput(
 	// row holds whatever the shell drew next, and reading it returns a prompt
 	// as though the command had printed one.
 	if closed, err := readMark(closedPath); err == nil {
-		// A closing mark above the opening one means the grid was renumbered
-		// while the command ran, which is what erasing the scrollback does:
-		// ESC[3J drops the history and every absolute row moves with it. The
-		// marks no longer locate anything, and returning no output for that
-		// reads as a command that printed nothing. clear, tput clear and reset
-		// all emit it, so this is the ordinary way to hit it rather than a
-		// curiosity.
 		end := closed.row
 		if closed.column == 0 {
 			end--
 		}
 		if closed.row < opened.row || closed.moved(opened) {
-			// The grid was renumbered while the command ran, which is what
-			// erasing the scrollback does: ESC[3J drops the history and every
-			// absolute row moves with it, so the opening mark addresses
-			// nothing. Whatever was printed before the erase is gone, but what
-			// came after it is on the screen and still bounded by the closing
-			// mark, so the read starts at the top rather than returning
-			// nothing. clear, tput clear and reset all emit ESC[3J, which makes
-			// this the ordinary case rather than a curiosity.
-			// Only when the shift destroyed scrollback rather than moving
-			// it. Clearing the screen puts what was displayed into the
-			// history, where this still reads it, so nothing went missing and
-			// saying so would be a warning about an intact reply.
+			// Renumbering invalidates the opening mark. Report loss only when
+			// scrollback was erased rather than moved into history.
 			output.LinesMissed = closed.erased(opened) || closed.row < opened.row
 			request.Start = tmux.CaptureLine(-now.historySize)
 			if end < 0 {
@@ -548,50 +428,23 @@ func attachCommandOutput(
 		output.OutputUnavailable = err.Error()
 		return
 	}
-	// A blank row is an empty line, and a capture that is nothing but empty
-	// lines arrives as no lines at all. The rows the marks counted are the
-	// answer: a command whose whole output is blank lines printed them, and
-	// reporting nothing says it printed nothing. Only when the capture came
-	// back empty -- a short one otherwise is wrapped rows rejoined.
+	// tmux collapses an all-blank capture, so recover its marked row count.
 	if len(lines) == 0 && rows > 0 {
 		lines = make([]string, rows)
 	}
-	// Rejoining preserves the spaces a row is padded with, and tmux only trims
-	// them itself from 3.4. Trimming here rather than leaving it to tmux is
-	// what makes one command's output read the same on every supported
-	// version. Nothing is lost: a terminal grid pads every row to its width, so
-	// a space at the end of a row is the grid's rather than the command's.
+	// tmux before 3.4 keeps grid padding after rejoining wrapped rows.
 	for index, line := range lines {
 		lines[index] = strings.TrimRight(line, " ")
 	}
-	// On every path, not only the recovery one. The rows the marks pick out can
-	// begin above the command's own output whenever the grid moved under them,
-	// and the echo is never something a command printed, so its presence is the
-	// signal rather than which branch got here. After the trim, because a row's
-	// padding would otherwise land in the middle of the text being looked for.
+	// Grid movement can put the wrapper echo before captured output on any path.
 	lines = afterTheWrapperEcho(lines, sourceScriptFor(openedPath))
 	kept, report := limits.apply(lines)
 	output.Output = kept
 	output.truncation = report
 }
 
-// moved reports the grid shifting under the marks, so the rows they name no
-// longer hold what they measured.
-//
-// A mark is history_size plus cursor_y added together, which is stable while a
-// pane only scrolls: a row leaving the screen for the scrollback adds one to
-// the first and takes one from the second. Anything that moves rows between
-// the two WITHOUT the cursor advancing breaks that, and the sum hides it by
-// construction. Erasing the scrollback does it downward; clearing the screen
-// does it upward, pushing what was displayed into the history and homing the
-// cursor. Both leave the sum where it was, which reads as a command that
-// printed nothing.
-//
-// The size has to be unchanged for the count to mean anything. tmux rewraps the
-// scrollback when a pane's width changes and moves rows between the screen and
-// the history when its height does, so the count moves on its own: measured 78
-// to 42 growing a pane from 24 rows to 60, and 162 to 42 widening one holding
-// wrapped lines, while short lines at the same widths did not move at all.
+// moved reports grid renumbering at a stable pane size. Resize-induced history
+// changes are not comparable.
 func (f mark) moved(opened mark) bool {
 	if f.width != opened.width || f.height != opened.height {
 		return false
@@ -599,36 +452,13 @@ func (f mark) moved(opened mark) bool {
 	return f.historySize != opened.historySize && f.row <= opened.row
 }
 
-// erased reports that scrollback went missing between the two marks.
-//
-// A row comparison alone cannot see it. Erasing one line of history while the
-// cursor moves down one leaves the sum that makes up a row unchanged, which
-// reads as a command that printed nothing and returns silence for one that
-// printed. The history count says plainly what the sum hides.
-//
-// It says it only at an unchanged size. Both dimensions are checked and
-// neither is redundant, because they move the count by different means: width
-// rewraps the scrollback, so it moves nothing unless lines were long enough to
-// wrap, while height moves rows between the screen and the history whatever
-// they hold. Measured at 80 columns, widening to 220 left 100 short lines at
-// 78, and growing from 24 rows to 60 took the same 78 to 42. A person widening
-// a terminal or closing a split does either mid-command without touching
-// anything.
+// erased reports scrollback loss only while pane dimensions remain comparable.
 func (f mark) erased(opened mark) bool {
 	return f.moved(opened) && f.historySize < opened.historySize
 }
 
-// afterTheWrapperEcho drops what stood above the command's own output.
-//
-// Recovering from an erase means reading from the top of the grid, and the top
-// of an erased grid holds the prompt and the line that sourced the wrapper.
-// run_command exists so a caller never has to tell those from output, and a
-// contaminated reply is worse than an empty one: silence is obviously wrong
-// and gets retried, a plausible first line gets believed.
-//
-// The echo is matched across the joined lines rather than within one of them.
-// A long prompt wraps it, and an erase drops the flag that would otherwise let
-// tmux rejoin the pieces, so the directory name appears in no single line.
+// afterTheWrapperEcho removes the sourced wrapper line, including an echo split
+// across wrapped rows.
 func afterTheWrapperEcho(lines []string, echo string) []string {
 	// Compared without spaces. A wrapped row that breaks on one of the echo's
 	// own spaces loses it to the padding trim, which cannot tell a space the
@@ -651,24 +481,7 @@ func afterTheWrapperEcho(lines []string, echo string) []string {
 			}
 		}
 	}
-	// Then past any later remnant of the same line, and over the whole grid
-	// when no complete draw was found at all.
-	//
-	// An interactive shell draws the line it read and redraws it under the
-	// prompt, and that second draw can be cut short: its start overwritten, the
-	// prompt row left without its marker, and only the tail of the path
-	// surviving as a row of its own. Sometimes neither draw survives whole --
-	// the first gone, the second's start overwritten -- and then there is no
-	// anchor to find, which used to mean the reply carried the prompt and the
-	// PREVIOUS command's output as its own.
-	//
-	// A remnant is a row that is WHOLLY a tail of the echo, not merely a row
-	// ending in one. The wrapper's file is always named the same, so the echo's
-	// last characters are the same on every call this server makes, and a row
-	// that merely ends in them is something a command printed: rm and git both
-	// quote a filename that way, and a name ending in "cript" is all it takes.
-	// A row the redraw left behind is a piece of the line itself, so the whole
-	// row matches.
+	// Drop only full-row echo suffixes; suffixes inside ordinary output remain.
 	for i := last + 1; i < len(lines); i++ {
 		row := compacted[i]
 		if len(row) >= echoRemnant && strings.HasSuffix(wanted, row) {
@@ -676,16 +489,10 @@ func afterTheWrapperEcho(lines []string, echo string) []string {
 		}
 	}
 	if last < 0 {
-		// Nothing of the line reached the grid, which is what a shell that did
-		// not echo looks like. The lines are the caller's best answer rather
-		// than something to discard.
+		// A shell that did not echo leaves no wrapper line to remove.
 		return lines
 	}
-	// The blank rows between the echo and the output are the grid's, not the
-	// command's: this only runs when the echo was found, which means the rows
-	// were picked from somewhere other than where the command started writing.
-	// A command whose own output opens with a blank line keeps it, because a
-	// healthy read never sees the echo.
+	// Recovery-only blank rows precede the command output.
 	rest := lines[last+1:]
 	for len(rest) > 0 && rest[0] == "" {
 		rest = rest[1:]
@@ -693,9 +500,8 @@ func afterTheWrapperEcho(lines []string, echo string) []string {
 	return rest
 }
 
-// echoRemnant is how much of the echo's tail a row has to be before it reads as
-// the wreckage of a redraw rather than as output. The shortest observed one was
-// six characters, closing quote included.
+// echoRemnant is the shortest observed shell-redraw suffix, including its
+// closing quote.
 const echoRemnant = 6
 
 // withoutSpaces is the form rows and the echo are compared in.
@@ -727,15 +533,8 @@ type mark struct {
 	column int
 }
 
-// readMark reads one position the wrapper recorded, as tmux printed it: a
-// history size, a cursor row, and a cursor column.
-// markMissing explains an absent opening mark, which is the ordinary way this
-// fails and the one a caller can act on.
-//
-// The wrapper writes that mark as its first act, so its absence means the pane
-// never ran the wrapper: the keys went to whatever the pane is running as that
-// program's input. Reporting the failed open names a path inside this server
-// and leaves the reader with a filesystem error for a tmux problem.
+// markMissing translates an absent opening mark into a pane-level diagnostic;
+// the wrapper never ran.
 func markMissing(ctx context.Context, pane tmux.Pane, err error) string {
 	if !errors.Is(err, os.ErrNotExist) {
 		return err.Error()
@@ -753,6 +552,7 @@ func markMissing(ctx context.Context, pane tmux.Pane, err error) string {
 		"respawn_pane gives the pane a shell again", running)
 }
 
+// readMark parses one cursor position recorded by the wrapper.
 func readMark(path string) (mark, error) {
 	recorded, err := os.ReadFile(path)
 	if err != nil {
@@ -880,22 +680,9 @@ type waitForTextOutput struct {
 	truncation
 }
 
-// waitForText blocks until a pane writes something, reading tmux's stream of
-// what the pane produced rather than its screen.
-//
-// This is the tool for output the client did not author: a program that
-// announces itself when it is ready. Nothing is polled, so the answer costs
-// one call and arrives when the text does rather than at the next look.
-//
-// Text the pane has already shown counts as found, because a client cannot
-// start a program and wait for it in the same request: by the time the wait
-// begins, a quick program has already said its piece. The reply says so, and
-// sinceEntry turns it off for a client asking whether something happened again
-// rather than whether it has happened.
-//
-// A shell still echoes what was typed into it. Waiting for text that appears in
-// a command the client itself just sent will match that echo, which is why
-// run_command exists for commands this client runs.
+// waitForText follows pane output without polling. Existing screen text counts
+// unless SinceEntry is set. Shell echo may match, so authored commands should
+// use run_command.
 func (t *tools) waitForText(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -928,16 +715,8 @@ func (t *tools) waitForText(
 	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
 	output.TimeoutClamped = clamped
 
-	// What the pane already shows counts unless the caller said otherwise. A
-	// client cannot start a program and wait for it in the same request, so by
-	// the time the wait begins the announcement it is waiting for may already
-	// have been made, and a wait that only watched the stream would miss it
-	// and time out while the text sat on the screen.
-	//
-	// The screen is read even when sinceEntry says to ignore it, because a
-	// caller that asked to ignore it still needs to be told when that is why
-	// the wait found nothing. A timeout on text that sat on the screen
-	// throughout otherwise reads as a pattern that does not work.
+	// Read entry text even when ignored so a timeout can report that the match
+	// was already present rather than implying the pattern failed.
 	presentAtEntry := false
 	if len(patterns) > 0 || len(stops) > 0 {
 		if lines, captureErr := pane.Capture(ctx, tmux.CapturePaneRequest{}); captureErr == nil {

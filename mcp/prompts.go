@@ -9,44 +9,23 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Prompts name the jobs this server is for.
-//
-// Tools are verbs and resources are nouns; neither says what a person actually
-// wants done. A prompt is the job with its method attached, invoked by name
-// from a client's own menu, so someone who has never read a tool list can ask
-// for the thing they want and the model is told which tools do it and in what
-// order.
-//
-// These are deliberately few. A prompt for every tool would be a second, worse
-// tool list; these are the tasks that take several tools in a particular order,
-// which is exactly what a tool list cannot express.
+// Prompts describe multi-tool workflows rather than individual verbs.
 
 // RecipeToolEnvironmentVariable names the variable that also offers the
 // recipes as a tool, for clients that do not speak the prompts protocol. It
 // matches the Python server so an operator configuring both writes one thing.
 const RecipeToolEnvironmentVariable = "LIBTMUX_MCP_PROMPTS_AS_TOOLS"
 
-// recipe is one job, with the method that does it.
-//
-// The same text answers a prompt and the tool below, because a client that
-// cannot read prompts should not be told something different from one that
-// can. Writing it twice is how the two would come to disagree.
+// recipe serves identical text through prompt and optional tool surfaces.
 type recipe struct {
-	name        string
-	title       string
-	description string
-	// argument is what the job needs to know, and what a client completes.
-	argument string
-	// argumentHelp describes it in a client's own picker.
+	name         string
+	title        string
+	description  string
+	argument     string
 	argumentHelp string
-	// mutates marks a recipe that tells the model to change tmux, which a
-	// read-only server should not offer: it would be advice it cannot carry
-	// out.
-	mutates bool
-	// capabilities are every grant the recipe's steps require.
+	mutates      bool
 	capabilities []Capability
-	// build writes the recipe for one argument, and says what it is.
-	build func(argument string) (summary, text string)
+	build        func(argument string) (summary, text string)
 }
 
 // recipes are the jobs worth naming.
@@ -143,18 +122,7 @@ func promptFor(offered recipe) mcp.PromptHandler {
 	}
 }
 
-// The recipes are worth reaching even from a client that cannot read prompts.
-//
-// Most of what is written here about which tool to use and in what order is in
-// the prompts, and a client that does not implement the prompts protocol shows
-// a model none of it. Offering them as one tool puts the same text somewhere
-// every client can reach.
-//
-// It is off unless an operator asks for it, because a server that offers both
-// is offering the same four things twice, and the tool list is the expensive
-// place to say anything. One tool rather than the two a mirror of the prompts
-// protocol would need: the names are few enough to list in its own
-// description, so choosing one costs no call of its own.
+// The optional recipe tool exposes prompts to clients without prompt support.
 
 // getRecipeInput names the job to be told how to do.
 type getRecipeInput struct {

@@ -11,16 +11,8 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// orientationSnapshot reads the server for the tools that answer "what is
-// there", and reports a server that is not running as one holding nothing.
-//
-// The tmux module declines to make that call, because it cannot tell an absent
-// server from a socket path a program got wrong, and answering either with an
-// empty result would hide the second. Here the call is answerable: a client
-// asking what panes exist before starting anything is the ordinary opening
-// move, and failing it would make every session begin with an error. A socket
-// this server cannot use still fails, because [tmux.ErrNoServer] classifies
-// only what tmux refused before running the command.
+// orientationSnapshot treats [tmux.ErrNoServer] as an empty topology; other
+// failures remain errors.
 func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, bool, error) {
 	snapshot, err := t.tmux().Snapshot(ctx)
 	if errors.Is(err, tmux.ErrNoServer) {
@@ -29,15 +21,10 @@ func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, bool, e
 	return snapshot, err == nil, err
 }
 
-// noServerNote is what a listing says rather than describing an absent server
-// as an empty one. tmux exits when its last pane goes, so a listing of nothing
-// is not an idle server: it is no server, which is usually the wrong socket
-// rather than a quiet machine, and a caller that reads it as quiet goes on to
-// look for a pane that was never going to be there.
+// noServerNote distinguishes an absent daemon from an empty result.
 const noServerNote = "no tmux server is running on this socket; " +
 	"get_server_info says which socket that is, and create_session starts one"
 
-// noteWhenAbsent is noServerNote when there is no server, and empty otherwise.
 func noteWhenAbsent(running bool) string {
 	if running {
 		return ""
@@ -45,89 +32,38 @@ func noteWhenAbsent(running bool) string {
 	return noServerNote
 }
 
-// A listing narrows where it is read rather than where it is used.
-//
-// Every one of these tools used to answer with the whole server, which is the
-// answer to a question nobody asks: a caller wants the pane running the dev
-// server, not the forty around it. The cost of the difference is paid in the
-// caller's context, once per call, and it grows with somebody else's tmux
-// rather than with the question.
-//
-// The criteria are matched here against the snapshot already taken, not pushed
-// into tmux as a -f expression. tmux's filter language is a format, and a
-// format containing #(...) runs it as a shell command against the server's own
-// client -- which this server holds open, so it would run rather than losing
-// the teardown race a one-shot tmux client wins. Compiling a caller's words
-// into that language would make every listing tool an execution vector while
-// still reporting readOnlyHint. Matching in Go has no such surface, and the
-// pushdown it gives up is a local pipe carrying a few kilobytes.
-//
-// Every reply reports the total it selected from, so a caller can tell a
-// filter that matched one pane from a server that only has one, and can see
-// what the filter saved it.
+// Listing filters run against a snapshot in Go; tmux -f expressions may execute
+// #() shell commands.
 
-// Detail levels a listing may be read at.
 const (
-	// detailStandard is what a listing has always returned: identity,
-	// position, and the current command.
 	detailStandard = "standard"
-	// detailFull adds the per-pane state a supervising caller would otherwise
-	// call get_pane_info once per pane to learn.
-	detailFull = "full"
+	detailFull     = "full"
 )
 
-// listPanesInput narrows which panes are listed and how much is said about
-// each. Every field is optional; omitting all of them lists the server.
 type listPanesInput struct {
-	// SessionName limits the listing to one session's panes.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"list only this session's panes"`
-	// WindowID limits the listing to one window's panes.
-	WindowID string `json:"windowId,omitempty" jsonschema:"list only this window's panes, such as @1"`
-	// Command keeps panes whose current command contains this text, ignoring
-	// case. Substring rather than exact because tmux reports the foreground
-	// program, which is "node" for something a caller thinks of as npm.
-	Command string `json:"command,omitempty" jsonschema:"keep panes whose current command contains this text, ignoring case"`
-	// PathUnder keeps panes whose working directory is at or below this path.
-	PathUnder string `json:"pathUnder,omitempty" jsonschema:"keep panes whose working directory is at or below this path"`
-	// Dead keeps panes whose process has exited, or only those still running.
-	Dead *bool `json:"dead,omitempty" jsonschema:"keep only panes whose process has exited, or only those still running"`
-	// Active keeps only each window's active pane, or only the others.
-	Active *bool `json:"active,omitempty" jsonschema:"keep only active panes, or only inactive ones"`
-	// Detail chooses how much is reported per pane.
-	Detail string `json:"detail,omitempty" jsonschema:"how much to report per pane; full adds exit status, path, title, and history size"`
+	WindowID    string `json:"windowId,omitempty" jsonschema:"list only this window's panes, such as @1"`
+	Command     string `json:"command,omitempty" jsonschema:"keep panes whose current command contains this text, ignoring case"`
+	PathUnder   string `json:"pathUnder,omitempty" jsonschema:"keep panes whose working directory is at or below this path"`
+	Dead        *bool  `json:"dead,omitempty" jsonschema:"keep only panes whose process has exited, or only those still running"`
+	Active      *bool  `json:"active,omitempty" jsonschema:"keep only active panes, or only inactive ones"`
+	Detail      string `json:"detail,omitempty" jsonschema:"how much to report per pane; full adds exit status, path, title, and history size"`
 }
 
-// listedPane is a pane as a listing reports it: the shape every other tool
-// uses, plus the state only a full listing carries.
 type listedPane struct {
 	paneSummary
-	// Status is present only at detail full.
 	Status *paneStatus `json:"status,omitempty"`
 }
 
-// listPanesOutput carries the pane list.
-//
-// Panes is always an array, including when nothing matched, so a client can
-// count what it got without first checking that the field is there. Every
-// return below sets it for that reason: the MCP SDK validates structured
-// output against its generated schema even when a tool reports failure, and a
-// nil slice is not an array.
 type listPanesOutput struct {
-	// Panes are the panes that matched.
-	Panes []listedPane `json:"panes"`
-	// Total is how many panes the server held before the criteria were
-	// applied, so a caller can see what its filter selected from.
-	Total int `json:"total"`
-	// Skipped is how many the criteria left out. Without it a caller
-	// reads a shorter list against a larger total as a reply that was
-	// shortened, which is what the tools returning pane text do.
-	Skipped int `json:"skipped,omitempty"`
-	// ServerNote is present only when there is no tmux server on the socket at
-	// all, which an empty list alone does not say.
-	ServerNote string `json:"serverNote,omitempty"`
+	// Panes encodes as an array in successful structured results, including
+	// when no panes match.
+	Panes      []listedPane `json:"panes"`
+	Total      int          `json:"total"`
+	Skipped    int          `json:"skipped,omitempty"`
+	ServerNote string       `json:"serverNote,omitempty"`
 }
 
-// listPanes reports the panes matching a caller's criteria.
 func (t *tools) listPanes(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -137,15 +73,13 @@ func (t *tools) listPanes(
 	if err != nil {
 		return nil, listPanesOutput{Panes: []listedPane{}}, err
 	}
-	// One snapshot rather than a listing per pane, so session and window names
-	// come from the same observation as the panes themselves.
+	// One snapshot keeps pane and relation data observationally consistent.
 	snapshot, running, err := t.orientationSnapshot(ctx)
 	if err != nil {
 		return nil, listPanesOutput{Panes: []listedPane{}}, err
 	}
 
-	// The socket is read once rather than per pane: every pane in one snapshot
-	// belongs to the same server, which the snapshot itself guarantees.
+	// Every pane in one snapshot belongs to the same server.
 	socket := t.socketPath(ctx)
 	caller := t.callerIdentityFor(ctx)
 
@@ -168,8 +102,7 @@ func (t *tools) listPanes(
 	}, nil
 }
 
-// keeps reports whether one pane satisfies every criterion given. Criteria
-// combine with AND, which is what a caller naming two of them means.
+// keeps combines all supplied criteria with AND.
 func (in listPanesInput) keeps(pane tmux.Pane, summary paneSummary) bool {
 	formats := pane.Formats()
 	switch {
@@ -197,9 +130,8 @@ func (in listPanesInput) keeps(pane tmux.Pane, summary paneSummary) bool {
 	return true
 }
 
-// resolveDetail validates the level a caller asked for. An unknown level is
-// refused rather than treated as the default, because a caller that asked for
-// more and silently got less would report the absent fields as absent state.
+// resolveDetail rejects unknown values instead of silently omitting requested
+// fields.
 func resolveDetail(level string) (string, error) {
 	switch level {
 	case "", detailStandard:
@@ -211,16 +143,12 @@ func resolveDetail(level string) (string, error) {
 	}
 }
 
-// containsFold reports whether text contains part, ignoring case, matching how
-// search_panes treats the text a caller repeats from prose.
 func containsFold(text, part string) bool {
 	return strings.Contains(strings.ToLower(text), strings.ToLower(part))
 }
 
-// isAtOrUnder reports whether path is the directory root or inside it.
-//
-// The separator check is what keeps /home/work from matching a filter for
-// /home/wo, which a plain prefix test would accept.
+// The separator prevents sibling-prefix matches such as /home/work and
+// /home/wo.
 func isAtOrUnder(path, root string) bool {
 	cleanPath := filepath.Clean(path)
 	cleanRoot := filepath.Clean(root)
@@ -230,37 +158,19 @@ func isAtOrUnder(path, root string) bool {
 	return strings.HasPrefix(cleanPath, strings.TrimSuffix(cleanRoot, "/")+"/")
 }
 
-// listWindowsInput narrows which windows are listed. Every field is optional.
 type listWindowsInput struct {
-	// SessionName limits the listing to one session's windows.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"list only this session's windows"`
-	// Name keeps windows whose name contains this text, ignoring case.
-	Name string `json:"name,omitempty" jsonschema:"keep windows whose name contains this text, ignoring case"`
-	// Active keeps only each session's current window, or only the others.
-	Active *bool `json:"active,omitempty" jsonschema:"keep only current windows, or only the others"`
+	Name        string `json:"name,omitempty" jsonschema:"keep windows whose name contains this text, ignoring case"`
+	Active      *bool  `json:"active,omitempty" jsonschema:"keep only current windows, or only the others"`
 }
 
-// listWindowsOutput reports the windows found.
 type listWindowsOutput struct {
-	// Windows are the windows that matched.
-	Windows []windowSummary `json:"windows"`
-	// Total is how many windows the server held before the criteria were
-	// applied.
-	Total int `json:"total"`
-	// Skipped is how many the criteria left out. Without it a caller
-	// reads a shorter list against a larger total as a reply that was
-	// shortened, which is what the tools returning pane text do.
-	Skipped int `json:"skipped,omitempty"`
-	// ServerNote is present only when there is no tmux server on the socket at
-	// all, which an empty list alone does not say.
-	ServerNote string `json:"serverNote,omitempty"`
+	Windows    []windowSummary `json:"windows"`
+	Total      int             `json:"total"`
+	Skipped    int             `json:"skipped,omitempty"`
+	ServerNote string          `json:"serverNote,omitempty"`
 }
 
-// listWindows reports the windows matching a caller's criteria.
-//
-// A client orienting itself asks what windows exist before it asks about
-// panes, and a window is what a person switches between, so this is usually
-// the first question rather than a coarser form of the second.
 func (t *tools) listWindows(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -273,8 +183,6 @@ func (t *tools) listWindows(
 	windows := snapshot.Windows()
 	summaries := make([]windowSummary, 0, len(windows))
 	for _, window := range windows {
-		// Snapshot records carry their relations, so the pane count is there
-		// to read rather than another listing.
 		panes, _ := window.Panes()
 		summary := summarizeWindow(window, len(panes))
 		switch {
@@ -293,32 +201,18 @@ func (t *tools) listWindows(
 	}, nil
 }
 
-// listSessionsInput narrows which sessions are listed. Every field is optional.
 type listSessionsInput struct {
-	// Name keeps sessions whose name contains this text, ignoring case.
-	Name string `json:"name,omitempty" jsonschema:"keep sessions whose name contains this text, ignoring case"`
-	// Attached keeps only sessions a client is attached to, or only those
-	// nobody is looking at.
-	Attached *bool `json:"attached,omitempty" jsonschema:"keep only sessions a client is attached to, or only those nobody is watching"`
+	Name     string `json:"name,omitempty" jsonschema:"keep sessions whose name contains this text, ignoring case"`
+	Attached *bool  `json:"attached,omitempty" jsonschema:"keep only sessions a client is attached to, or only those nobody is watching"`
 }
 
-// listSessionsOutput reports the sessions found.
 type listSessionsOutput struct {
-	// Sessions are the sessions that matched.
-	Sessions []sessionSummary `json:"sessions"`
-	// Total is how many sessions the server held before the criteria were
-	// applied.
-	Total int `json:"total"`
-	// Skipped is how many the criteria left out. Without it a caller
-	// reads a shorter list against a larger total as a reply that was
-	// shortened, which is what the tools returning pane text do.
-	Skipped int `json:"skipped,omitempty"`
-	// ServerNote is present only when there is no tmux server on the socket at
-	// all, which an empty list alone does not say.
-	ServerNote string `json:"serverNote,omitempty"`
+	Sessions   []sessionSummary `json:"sessions"`
+	Total      int              `json:"total"`
+	Skipped    int              `json:"skipped,omitempty"`
+	ServerNote string           `json:"serverNote,omitempty"`
 }
 
-// listSessions reports the sessions matching a caller's criteria.
 func (t *tools) listSessions(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -347,22 +241,14 @@ func (t *tools) listSessions(
 	}, nil
 }
 
-// selectWindowInput chooses the window a session shows.
 type selectWindowInput struct {
-	// WindowID is the tmux window id to make current, such as @1.
 	WindowID string `json:"windowId" jsonschema:"the tmux window id to make current"`
 }
 
-// selectWindowOutput reports the window that is now current.
 type selectWindowOutput struct {
-	// WindowID is the window that is now its session's current one.
 	WindowID string `json:"windowId"`
 }
 
-// selectWindow makes a window its session's current one.
-//
-// Nothing else here changes what a session shows, so an agent that created a
-// window had no way to put a person in front of it.
 func (t *tools) selectWindow(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -379,8 +265,6 @@ func (t *tools) selectWindow(
 	return nil, selectWindowOutput{WindowID: selected.ID().String()}, nil
 }
 
-// addOrientationTools advertises the tools a client uses to find its way
-// around before it does anything.
 func addOrientationTools(server *mcp.Server, t *tools) {
 	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "list_panes",

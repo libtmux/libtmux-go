@@ -9,49 +9,28 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// paneGeometry is where a pane sits in its window, in terminal cells.
-//
-// A client that knows only a pane's index cannot say which pane is above
-// another, because an index is creation order rather than position. These are
-// tmux's own coordinates: Left and Top are the pane's first column and row,
-// counted from the window's top left.
+// paneGeometry uses tmux terminal-cell coordinates; pane indexes do not encode
+// spatial order.
 type paneGeometry struct {
-	// Left is the pane's first column.
-	Left int `json:"left"`
-	// Top is the pane's first row.
-	Top int `json:"top"`
-	// Width is the pane's width in cells.
-	Width int `json:"width"`
-	// Height is the pane's height in cells.
+	Left   int `json:"left"`
+	Top    int `json:"top"`
+	Width  int `json:"width"`
 	Height int `json:"height"`
 }
 
-// findPaneByPositionInput selects the pane on one side of another.
 type findPaneByPositionInput struct {
-	// PaneID is the pane to look from. Empty looks from the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id to look from; empty looks from the active pane"`
-	// SessionName picks the session when PaneID is empty.
+	PaneID      string `json:"paneId,omitempty" jsonschema:"the tmux pane id to look from; empty looks from the active pane"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to look from when paneId is empty"`
-	// Direction is the side to look toward: above, below, left, or right.
-	Direction string `json:"direction" jsonschema:"the side to look toward"`
+	Direction   string `json:"direction" jsonschema:"the side to look toward"`
 }
 
-// findPaneByPositionOutput reports the neighbour, if there is one.
 type findPaneByPositionOutput struct {
-	// PaneID is the neighbour's tmux id, empty when nothing is on that side.
-	PaneID string `json:"paneId"`
-	// Found reports whether a pane borders that side.
-	Found bool `json:"found"`
-	// Geometry is where the neighbour sits, when one was found.
+	PaneID   string       `json:"paneId"`
+	Found    bool         `json:"found"`
 	Geometry paneGeometry `json:"geometry"`
 }
 
-// findPaneByPosition reports the pane bordering one side of another.
-//
-// It reads tmux's coordinates rather than moving the active pane, so asking
-// what is above a pane does not change which pane a person is looking at. A
-// neighbour is a pane whose facing edge meets this one's and whose span across
-// the other axis overlaps, which is how a person reads a split screen.
+// findPaneByPosition reads coordinates without changing the active pane.
 func (t *tools) findPaneByPosition(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -94,8 +73,6 @@ func (t *tools) findPaneByPosition(
 	return nil, findPaneByPositionOutput{}, nil
 }
 
-// readPaneGeometry reads a pane's coordinates. A pane whose formats are missing
-// reports zeroes, which borders nothing.
 func readPaneGeometry(pane tmux.Pane) paneGeometry {
 	formats := pane.Formats()
 	left, _ := formats.PaneLeft()
@@ -105,10 +82,7 @@ func readPaneGeometry(pane tmux.Pane) paneGeometry {
 	return paneGeometry{Left: left, Top: top, Width: width, Height: height}
 }
 
-// bordersOn reports whether at is the pane on one side of from.
-//
-// tmux leaves a one-cell divider between panes, so the far edge and the near
-// edge differ by one rather than meeting exactly.
+// tmux leaves a one-cell divider between adjacent panes.
 func bordersOn(direction string, from, at paneGeometry) bool {
 	overlapsHorizontally := at.Left <= from.Left+from.Width && from.Left <= at.Left+at.Width
 	overlapsVertically := at.Top <= from.Top+from.Height && from.Top <= at.Top+at.Height
@@ -125,7 +99,6 @@ func bordersOn(direction string, from, at paneGeometry) bool {
 	return false
 }
 
-// addPositionTools advertises the tool that answers where a pane sits.
 func addPositionTools(server *mcp.Server, t *tools) {
 	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "find_pane_by_position",
