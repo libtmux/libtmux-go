@@ -83,7 +83,11 @@ func (o *PaneObservation) NextNotification(
 	}
 	notification, err := o.client.nextNotificationAfter(ctx, o.after)
 	if err != nil {
-		return ControlNotification{}, state.classifyReadError(ctx, err)
+		return ControlNotification{}, state.classifyReadError(
+			ctx,
+			err,
+			o.client.closeRequested.Load(),
+		)
 	}
 	arguments := notification.Arguments()
 	if notification.Kind() == ControlNotificationUnlinkedWindowClose &&
@@ -122,7 +126,11 @@ func (s *paneObservationState) releaseReadToken() {
 	s.readToken <- struct{}{}
 }
 
-func (s *paneObservationState) classifyReadError(ctx context.Context, err error) error {
+func (s *paneObservationState) classifyReadError(
+	ctx context.Context,
+	err error,
+	closeRequested bool,
+) error {
 	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
 		return err
 	}
@@ -131,6 +139,9 @@ func (s *paneObservationState) classifyReadError(ctx context.Context, err error)
 	}
 	if _, ok := errors.AsType[*ControlNotificationError](err); ok {
 		return err
+	}
+	if closeRequested {
+		return os.ErrClosed
 	}
 	s.loss = fmt.Errorf("%w: %w", ErrPaneObservationLost, err)
 	return s.loss

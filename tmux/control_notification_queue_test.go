@@ -277,17 +277,40 @@ func TestPaneObservationKeepsNotificationErrorsRetryable(t *testing.T) {
 	}
 }
 
-func TestPaneObservationCloseIsNotLoss(t *testing.T) {
+func TestPaneObservationExplicitCloseIsNotLoss(t *testing.T) {
 	t.Parallel()
 
 	queue := newControlNotificationQueue(128)
-	if err := queue.Close(); err != nil {
-		t.Fatal(err)
-	}
+	t.Cleanup(func() { _ = queue.Close() })
 	observation := newTestPaneObservation(queue)
-	if _, err := observation.NextNotification(context.Background()); !errors.Is(err, os.ErrClosed) || errors.Is(err, ErrPaneObservationLost) {
-		t.Fatalf("NextNotification() error = %v, want closed without observation loss", err)
+	wake := &doneObservedContext{
+		Context:  context.Background(),
+		observed: make(chan struct{}),
 	}
+	result := make(chan error, 1)
+	go func() {
+		_, err := observation.NextNotification(wake)
+		result <- err
+	}()
+	select {
+	case <-wake.observed:
+	case err := <-result:
+		t.Fatalf("NextNotification() returned before close: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("NextNotification() did not reach notification waiting")
+	}
+
+	observation.client.closeRequested.Store(true)
+	queue.finish(nil)
+	assertClosed := func(read int, err error) {
+		t.Helper()
+		if !errors.Is(err, os.ErrClosed) || errors.Is(err, ErrPaneObservationLost) {
+			t.Fatalf("NextNotification() read %d error = %v, want closed without observation loss", read, err)
+		}
+	}
+	assertClosed(1, <-result)
+	_, err := observation.NextNotification(context.Background())
+	assertClosed(2, err)
 }
 
 func newTestPaneObservation(queue *controlNotificationQueue) *PaneObservation {
