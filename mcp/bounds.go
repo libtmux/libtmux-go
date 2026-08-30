@@ -75,8 +75,10 @@ func (b bounds) apply(lines []string) ([]string, truncation) {
 	}
 	if len(kept) == 1 && len(kept[0]) > b.bytes {
 		// Keep the tail and discard any partial leading UTF-8 rune.
-		report.TruncatedBytes += len(kept[0]) - b.bytes
-		kept = []string{strings.ToValidUTF8(kept[0][len(kept[0])-b.bytes:], "")}
+		original := kept[0]
+		tail := strings.ToValidUTF8(original[len(original)-b.bytes:], "")
+		report.TruncatedBytes += len(original) - len(tail)
+		kept = []string{tail}
 	}
 
 	report.Truncated = report.TruncatedLines > 0 || report.TruncatedBytes > 0
