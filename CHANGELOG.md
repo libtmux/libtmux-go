@@ -46,6 +46,9 @@ Modules are tagged per directory, so each carries its own version: the core as
   `OpIndeterminate` and returns `ErrOutcomeUnknown`. The `Marked` planner and
   `Dispatch.Marked` are removed; use `Sequential` for exact attribution.
   (#9)
+- `Plan.RunWith` also returns `ErrOutcomeUnknown` and marks a started
+  subprocess operation `OpIndeterminate` when cancellation can no longer
+  prove that tmux did not receive it. (#9)
 - `Pane.SendKeySequence` sends an ordered key sequence in one tmux operation.
   (#9)
 
@@ -87,6 +90,10 @@ Modules are tagged per directory, so each carries its own version: the core as
   them in cleartext. (#9)
 - `AdvertisedTools` and `libtmux-mcp -tools` report the configured tool
   surface without resolving or contacting tmux. (#9)
+- MCP output truncation reports the exact number of UTF-8 bytes removed,
+  including bytes discarded from a partial leading code point. (#9)
+- MCP construction and `AdvertisedTools` return schema errors instead of
+  silently registering tools with missing or unresolved schemas. (#9)
 - `mcp-swap` validates configuration and completes an MCP handshake before
   changing files. Updates are atomic, preserve TOML and JSONC syntax, and
   `--dry-run` performs the same validation without writing. (#9)
