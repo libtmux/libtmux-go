@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -156,8 +155,8 @@ func containsFold(text, part string) bool {
 // The separator prevents sibling-prefix matches such as /home/work and
 // /home/wo.
 func isAtOrUnder(path, root string) bool {
-	cleanPath := filepath.Clean(path)
-	cleanRoot := filepath.Clean(root)
+	cleanPath := resolvePath(path)
+	cleanRoot := resolvePath(root)
 	if cleanPath == cleanRoot {
 		return true
 	}
