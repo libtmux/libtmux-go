@@ -40,6 +40,16 @@ func TestListServersUsesTargetsFrozenExecutionBinding(t *testing.T) {
 		ProcessEnvironment: frozenEnvironment,
 	})
 	target := mustInternalTmuxServer(t, options)
+	targetSelection, err := target.SocketSelection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory = targetSelection.NamedDirectory
+	sibling = filepath.Join(directory, filepath.Base(sibling))
+	ambient, err = filepath.EvalSymlinks(ambient)
+	if err != nil {
+		t.Fatal(err)
+	}
 	instance := mustInternalMCPServer(t, target)
 	instance.runtime.deps.probeSessions = func(
 		context.Context,

@@ -241,8 +241,14 @@ func TestBootstrapWaitsForAnUnboundRequestToDrain(t *testing.T) {
 func TestDiscoveryWaitsForAnUnboundRequestToDrain(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	//nolint:usetesting // t.TempDir can exceed the Unix socket path limit.
+	directory, err := os.MkdirTemp("", "mcp-lease-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
 	target, err := tmux.NewServer(tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "runtime-discovery-lease.sock"),
+		SocketPath: filepath.Join(directory, "s"),
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -41,6 +41,12 @@ func TestListServersMarksAnAbsentImplicitTarget(t *testing.T) {
 				SocketName:         testCase.socketName,
 				ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
 			}))
+			selection, err := target.SocketSelection()
+			if err != nil {
+				t.Fatal(err)
+			}
+			directory = selection.NamedDirectory
+			targetPath = selection.Path
 			session, ctx := connectTarget(t, target)
 
 			var listed struct {
@@ -115,6 +121,16 @@ func TestListServersUsesTargetsFrozenSocketDirectory(t *testing.T) {
 		t.Fatalf("fixture executable = %q, want %q", options.Binary, executable)
 	}
 	target := mustTmuxServer(t, options)
+	selection, err := target.SocketSelection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory = selection.NamedDirectory
+	sibling = filepath.Join(directory, filepath.Base(sibling))
+	ambient, err = filepath.EvalSymlinks(ambient)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	instance := mustMCPServer(t, target)
