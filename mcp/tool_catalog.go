@@ -17,7 +17,9 @@ func AdvertisedTools(ctx context.Context) (tools []*sdk.Tool, err error) {
 		Name:    "libtmux",
 		Version: Version,
 	}, nil)
-	registerToolGroups(server, newToolRegistry())
+	if err := registerToolGroups(server, newToolRegistry()); err != nil {
+		return nil, err
+	}
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)

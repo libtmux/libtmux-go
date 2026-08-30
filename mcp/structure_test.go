@@ -12,9 +12,38 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+type unsupportedSchemaInput struct {
+	Callback func() `json:"callback"`
+}
+
+func TestToolSchemaFailuresAreExplicit(t *testing.T) {
+	tool := &mcp.Tool{Name: "unsupported_schema"}
+
+	_, err := prepareToolSchemas[unsupportedSchemaInput, struct{}](tool)
+	if err == nil {
+		t.Fatal("unsupported input schema was accepted")
+	}
+	if !strings.Contains(err.Error(), "unsupported_schema input schema") {
+		t.Fatalf("schema error = %q", err)
+	}
+
+	tool = &mcp.Tool{
+		Name:        "unresolved_schema",
+		InputSchema: &jsonschema.Schema{Ref: "https://example.invalid/schema"},
+	}
+	_, err = prepareToolSchemas[struct{}, struct{}](tool)
+	if err == nil {
+		t.Fatal("unresolved input schema was accepted")
+	}
+	if !strings.Contains(err.Error(), "unresolved_schema input schema") {
+		t.Fatalf("schema error = %q", err)
+	}
+}
 
 func TestKeysReachAPaneOnlyThroughTheDeliveryResolver(t *testing.T) {
 	// Ways of putting a keystroke into a pane. paste_buffer reaches tmux by a

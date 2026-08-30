@@ -143,6 +143,9 @@ func registerHandler[In, Out any](
 	if !t.level.permits(tool.Annotations) || !t.capabilities.permits(capability) {
 		return
 	}
+	if t.registrationErr != nil {
+		return
+	}
 	if tool.Meta == nil {
 		tool.Meta = mcp.Meta{}
 	}
@@ -150,24 +153,10 @@ func registerHandler[In, Out any](
 	if withRuntime {
 		handler = withRequestRuntime(t, handler)
 	}
-	// Infer early so closed argument enums can be applied before registration.
-	if tool.InputSchema == nil {
-		if schema, err := jsonschema.For[In](nil); err == nil {
-			constrain(tool.Name, schema)
-			tool.InputSchema = schema
-		}
-	}
-	// Normalize inferred slices to the non-null reply contract.
-	if tool.OutputSchema == nil {
-		if schema, err := jsonschema.For[Out](nil); err == nil {
-			listsAreLists(schema)
-			tool.OutputSchema = schema
-		}
-	}
-	// Retain the direct-call schema for batch validation.
-	var resolved *jsonschema.Resolved
-	if schema, ok := tool.InputSchema.(*jsonschema.Schema); ok {
-		resolved, _ = schema.Resolve(nil)
+	resolved, err := prepareToolSchemas[In, Out](tool)
+	if err != nil {
+		t.registrationErr = err
+		return
 	}
 	mcp.AddTool(server, tool, handler)
 	if !t.batchable {
@@ -185,6 +174,36 @@ func registerHandler[In, Out any](
 			return batched(ctx, request, handler, arguments, resolved)
 		},
 	}
+}
+
+func prepareToolSchemas[In, Out any](tool *mcp.Tool) (*jsonschema.Resolved, error) {
+	// Infer early so closed argument enums can be applied before registration.
+	if tool.InputSchema == nil {
+		schema, err := jsonschema.For[In](nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s input schema: %w", tool.Name, err)
+		}
+		constrain(tool.Name, schema)
+		tool.InputSchema = schema
+	}
+	// Normalize inferred slices to the non-null reply contract.
+	if tool.OutputSchema == nil {
+		schema, err := jsonschema.For[Out](nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s output schema: %w", tool.Name, err)
+		}
+		listsAreLists(schema)
+		tool.OutputSchema = schema
+	}
+	// Retain the direct-call schema for batch validation.
+	if schema, ok := tool.InputSchema.(*jsonschema.Schema); ok {
+		resolved, err := schema.Resolve(nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s input schema: %w", tool.Name, err)
+		}
+		return resolved, nil
+	}
+	return nil, nil
 }
 
 // toolGroups keeps each registration group beside its handlers.
@@ -248,7 +267,10 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	}
 	server.AddReceivingMiddleware(instance.scoped)
 
-	registerToolGroups(server, tools)
+	if err := registerToolGroups(server, tools); err != nil {
+		_ = instance.Close()
+		return nil, fmt.Errorf("construct MCP server: %w", err)
+	}
 	addResources(server, tools)
 	addPrompts(server, tools)
 
@@ -269,10 +291,14 @@ func newToolRegistry() *tools {
 	}
 }
 
-func registerToolGroups(server *mcp.Server, tools *tools) {
+func registerToolGroups(server *mcp.Server, tools *tools) error {
 	for _, add := range toolGroups {
 		add(server, tools)
+		if tools.registrationErr != nil {
+			return tools.registrationErr
+		}
 	}
+	return nil
 }
 
 // Run serves target over stdin and stdout until ctx is done.
@@ -297,7 +323,8 @@ type tools struct {
 	dispatchers          map[string]dispatcher
 	unbatchable          map[string]struct{}
 	// Batch tools set batchable false to prevent nested dispatch.
-	batchable bool
+	batchable       bool
+	registrationErr error
 	// A process cannot change its containing pane. Failed discovery is not
 	// cached because cancellation or transport loss may be transient.
 	callerMutex  sync.Mutex
