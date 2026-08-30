@@ -270,9 +270,14 @@ func (t *tools) listServers(
 	candidates := make([]candidate, 0, limit)
 	if target != "" {
 		output.Total++
-		candidates = append(candidates, candidate{
-			path: target, name: filepath.Base(target), isTarget: true, probe: targetProbe,
-		})
+		targetName := filepath.Base(target)
+		if input.Name != "" && !containsFold(targetName, input.Name) {
+			output.Skipped++
+		} else {
+			candidates = append(candidates, candidate{
+				path: target, name: targetName, isTarget: true, probe: targetProbe,
+			})
+		}
 	}
 	entries, truncated, err := readServerDirectory(directory, limit+1)
 	if err != nil {

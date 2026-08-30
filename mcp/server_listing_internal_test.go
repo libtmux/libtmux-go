@@ -201,6 +201,28 @@ func TestListServersBoundsSiblingProbesByMaxServers(t *testing.T) {
 	}
 }
 
+func TestListServersNameFilterStillAppliesToTarget(t *testing.T) {
+	root := t.TempDir()
+	target := mustInternalTmuxServer(t, executableFixtureOptions(t, fixtureNoServer, tmux.ServerOptions{
+		SocketPath:         filepath.Join(t.TempDir(), "target"),
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
+	}))
+	instance := mustInternalMCPServer(t, target)
+
+	_, output, err := instance.tools.listServers(
+		t.Context(), nil, listServersInput{Name: "does-not-match"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(output.Servers) != 0 {
+		t.Fatalf("servers = %#v, want the non-matching target filtered out", output.Servers)
+	}
+	if output.Skipped != 1 {
+		t.Fatalf("skipped = %d, want 1", output.Skipped)
+	}
+}
+
 func TestListServersReportsSocketDirectoryReadFailure(t *testing.T) {
 	notDirectory := filepath.Join(t.TempDir(), "not-a-directory")
 	if err := os.WriteFile(notDirectory, nil, 0o600); err != nil {
