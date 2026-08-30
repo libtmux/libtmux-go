@@ -70,3 +70,25 @@ func TestPlanDegradationReportsWarning(t *testing.T) {
 		t.Fatalf("warning = %#v, want one unsupported empty warning", warnings[0])
 	}
 }
+
+func TestPlanMarksStartedSubprocessCancellationIndeterminate(t *testing.T) {
+	t.Parallel()
+
+	runner := &versionQueueRunner{responses: []versionResponse{{
+		err: &tmuxcmd.OutcomeUnknownError{Err: context.Canceled},
+	}}}
+	server := serverWithRunner(runner)
+	plan := NewPlan()
+	plan.Cmd(Ref{}, "display-message", "started")
+
+	result, err := plan.Run(context.Background(), server)
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrOutcomeUnknown) {
+		t.Fatalf("Run() error = %v, want outcome-unknown context cancellation", err)
+	}
+	if len(result.Ops) != 1 || result.Ops[0].Status != OpIndeterminate {
+		t.Fatalf("Run() result = %#v, want one indeterminate operation", result)
+	}
+	if !errors.Is(result.Ops[0].Err, ErrOutcomeUnknown) {
+		t.Fatalf("operation error = %v, want ErrOutcomeUnknown", result.Ops[0].Err)
+	}
+}

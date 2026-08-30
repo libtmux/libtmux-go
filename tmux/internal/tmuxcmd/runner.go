@@ -45,6 +45,15 @@ type Result struct {
 	ExitCode  int
 }
 
+// OutcomeUnknownError reports a failure after tmux process execution began.
+type OutcomeUnknownError struct {
+	Err error
+}
+
+func (e *OutcomeUnknownError) Error() string { return e.Err.Error() }
+
+func (e *OutcomeUnknownError) Unwrap() error { return e.Err }
+
 // Runner executes tmux subprocess requests.
 type Runner struct {
 	WaitDelay time.Duration
@@ -136,6 +145,9 @@ func classifyRunError(runErr, contextErr error, outcome processOutcome) error {
 		return nil
 	}
 	if contextErr != nil {
+		if outcome == processOutcomeCanceled {
+			return &OutcomeUnknownError{Err: contextErr}
+		}
 		return contextErr
 	}
 	if isExitError {

@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 // ErrUnknownColor identifies an unsupported tmux color mode. It is matched by
@@ -86,6 +88,9 @@ func (e *commandTransportError) Unwrap() error { return e.err }
 func commandTransportFailure(err error) error {
 	if errors.Is(err, ErrDaemonReplaced) {
 		return err
+	}
+	if _, ok := errors.AsType[*tmuxcmd.OutcomeUnknownError](err); ok {
+		return outcomeUnknown(err)
 	}
 	if _, ok := errors.AsType[*exec.Error](err); ok {
 		return err
