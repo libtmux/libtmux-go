@@ -19,8 +19,12 @@ func TestSocketSelectionUsesFrozenTmuxPrecedenceAndWorkingDirectory(t *testing.T
 	if err := os.Mkdir(relativeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	resolvedRoot, err := filepath.EvalSymlinks(relativeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
 	namedDirectory := filepath.Join(
-		relativeRoot,
+		resolvedRoot,
 		"tmux-"+strconv.Itoa(os.Getuid()),
 	)
 
@@ -149,6 +153,10 @@ func TestSocketSelectionResolvesTmuxTmpdirSymlinks(t *testing.T) {
 	if err := os.Symlink(realRoot, link); err != nil {
 		t.Fatal(err)
 	}
+	resolvedRoot, err := filepath.EvalSymlinks(link)
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := serverWithSocketSelection(t, cwd, ServerOptions{
 		SocketName:         "named",
 		ProcessEnvironment: []string{"TMUX_TMPDIR=socket-root"},
@@ -157,7 +165,7 @@ func TestSocketSelectionResolvesTmuxTmpdirSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantDirectory := filepath.Join(realRoot, "tmux-"+strconv.Itoa(os.Getuid()))
+	wantDirectory := filepath.Join(resolvedRoot, "tmux-"+strconv.Itoa(os.Getuid()))
 	if selection.NamedDirectory != wantDirectory ||
 		selection.Path != filepath.Join(wantDirectory, "named") {
 		t.Fatalf("SocketSelection() = %#v, want symlink-resolved root %q", selection, realRoot)
