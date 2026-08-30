@@ -1130,7 +1130,7 @@ Reads only. Repeating it changes nothing.
 | Argument | Type | |
 | --- | --- | --- |
 | `includeDead` | boolean | include socket files with no server running, which tmux leaves behind when a server exits |
-| `maxServers` | integer | how many servers to report at most; the target is always kept |
+| `maxServers` | integer | how many servers to report at most (default 100, maximum 1000); the target is always kept |
 | `name` | string | keep servers whose name contains this text, ignoring case |
 
 | Returns | Type |
@@ -1138,6 +1138,7 @@ Reads only. Repeating it changes nothing.
 | `searchedIn` **required** | string |
 | `servers` **required** | array |
 | `total` **required** | integer |
+| `truncated` **required** | boolean |
 | `skipped` | integer |
 | `unreachableNote` | string |
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -157,6 +158,63 @@ func TestListServersProbesSiblingSocketsConcurrently(t *testing.T) {
 	got := <-returned
 	if got.err != nil || got.output.Total != siblingCount+1 {
 		t.Fatalf("list_servers = (total %d, %v), want total %d", got.output.Total, got.err, siblingCount+1)
+	}
+}
+
+func TestListServersBoundsSiblingProbesByMaxServers(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, fmt.Sprintf("tmux-%d", os.Getuid()))
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const siblingCount = 8
+	for index := range siblingCount {
+		leaveInternalDeadUnixSocket(t, filepath.Join(directory, fmt.Sprintf("sibling-%d", index)))
+	}
+	targetPath := filepath.Join(t.TempDir(), "target")
+	target := mustInternalTmuxServer(t, executableFixtureOptions(t, fixtureNoServer, tmux.ServerOptions{
+		SocketPath:         targetPath,
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root},
+	}))
+	instance := mustInternalMCPServer(t, target)
+	var probes atomic.Int64
+	instance.runtime.deps.probeSibling = func(context.Context, tmux.Server) (bool, int) {
+		probes.Add(1)
+		return false, 0
+	}
+
+	_, output, err := instance.tools.listServers(
+		t.Context(), nil, listServersInput{IncludeDead: true, MaxServers: 2},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if probes.Load() != 1 {
+		t.Fatalf("maxServers 2 launched %d sibling probes, want 1", probes.Load())
+	}
+	if len(output.Servers) != 2 || !output.Servers[0].IsTarget ||
+		output.Servers[0].SocketPath != targetPath {
+		t.Fatalf("servers = %#v, want target plus at most one sibling", output.Servers)
+	}
+	if !output.Truncated {
+		t.Fatal("bounded socket directory scan was not reported as truncated")
+	}
+}
+
+func TestListServersReportsSocketDirectoryReadFailure(t *testing.T) {
+	notDirectory := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(notDirectory, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := mustInternalTmuxServer(t, executableFixtureOptions(t, fixtureNoServer, tmux.ServerOptions{
+		SocketName:         "target",
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + notDirectory},
+	}))
+	instance := mustInternalMCPServer(t, target)
+
+	_, _, err := instance.tools.listServers(t.Context(), nil, listServersInput{})
+	if err == nil {
+		t.Fatal("list_servers swallowed a socket directory read failure")
 	}
 }
 

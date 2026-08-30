@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -169,7 +171,7 @@ func summarizeClients(clients []tmux.Client) []attachedClient {
 type listServersInput struct {
 	Name        string `json:"name,omitempty" jsonschema:"keep servers whose name contains this text, ignoring case"`
 	IncludeDead bool   `json:"includeDead,omitempty" jsonschema:"include socket files with no server running, which tmux leaves behind when a server exits"`
-	MaxServers  int    `json:"maxServers,omitempty" jsonschema:"how many servers to report at most; the target is always kept"`
+	MaxServers  int    `json:"maxServers,omitempty" jsonschema:"how many servers to report at most (default 100, maximum 1000); the target is always kept"`
 }
 
 type serverSummary struct {
@@ -183,18 +185,56 @@ type serverSummary struct {
 const (
 	serverProbeConcurrency = 16
 	serverProbeTimeout     = time.Second
+	defaultMaxServers      = 100
+	ceilingMaxServers      = 1000
 )
 
 type listServersOutput struct {
 	// Servers is always an array with the target first when present.
 	Servers []serverSummary `json:"servers"`
-	// Total includes directory entries and an explicit target absent from that
-	// directory, before filtering and limits.
+	// Total includes inspected sockets and the explicit target before filters.
+	// It is a lower bound when Truncated is true.
 	Total      int    `json:"total"`
 	Skipped    int    `json:"skipped,omitempty"`
 	SearchedIn string `json:"searchedIn"`
+	// Truncated reports that the bounded directory scan did not reach its end.
+	Truncated bool `json:"truncated"`
 	// UnreachableNote explains that discovered servers cannot be retargeted.
 	UnreachableNote string `json:"unreachableNote,omitempty"`
+}
+
+func resolveServerLimit(requested int) (int, error) {
+	if requested < 0 {
+		return 0, errors.New("maxServers must not be negative")
+	}
+	if requested == 0 {
+		return defaultMaxServers, nil
+	}
+	return min(requested, ceilingMaxServers), nil
+}
+
+func readServerDirectory(path string, maxEntries int) ([]os.DirEntry, bool, error) {
+	directory, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("open tmux socket directory: %w", err)
+	}
+	entries, readErr := directory.ReadDir(maxEntries + 1)
+	closeErr := directory.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return nil, false, fmt.Errorf("read tmux socket directory: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, false, fmt.Errorf("close tmux socket directory: %w", closeErr)
+	}
+	truncated := readErr == nil
+	if len(entries) > maxEntries {
+		entries = entries[:maxEntries]
+		truncated = true
+	}
+	return entries, truncated, nil
 }
 
 // listServers discovers sockets without retargeting this server.
@@ -214,43 +254,62 @@ func (t *tools) listServers(
 	}
 	directory := selection.NamedDirectory
 	output := listServersOutput{SearchedIn: directory, Servers: []serverSummary{}}
+	limit, err := resolveServerLimit(input.MaxServers)
+	if err != nil {
+		return nil, output, err
+	}
 
 	target := selection.Path
 	targetPath := resolvePath(target)
-	entries, _ := os.ReadDir(directory)
-	targetFound := false
 	type candidate struct {
 		path     string
 		name     string
 		isTarget bool
 		probe    tmux.Server
 	}
-	candidates := make([]candidate, 0, len(entries)+1)
-	for _, entry := range entries {
-		info, infoErr := entry.Info()
-		if infoErr != nil || info.Mode()&os.ModeSocket == 0 {
-			continue
-		}
-		output.Total++
-		path := filepath.Join(directory, entry.Name())
-		isTarget := target != "" && resolvePath(path) == targetPath
-		probe := targetProbe
-		if !isTarget {
-			var err error
-			probe, err = binding.WithSocketPath(path)
-			if err != nil {
-				return nil, output, err
-			}
-		}
-		targetFound = targetFound || isTarget
-		candidates = append(candidates, candidate{
-			path: path, name: entry.Name(), isTarget: isTarget, probe: probe,
-		})
-	}
-	if target != "" && !targetFound {
+	candidates := make([]candidate, 0, limit)
+	if target != "" {
 		output.Total++
 		candidates = append(candidates, candidate{
 			path: target, name: filepath.Base(target), isTarget: true, probe: targetProbe,
+		})
+	}
+	entries, truncated, err := readServerDirectory(directory, limit+1)
+	if err != nil {
+		return nil, output, err
+	}
+	output.Truncated = truncated
+	for _, entry := range entries {
+		path := filepath.Join(directory, entry.Name())
+		if target != "" && resolvePath(path) == targetPath {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			if errors.Is(infoErr, os.ErrNotExist) {
+				continue
+			}
+			return nil, output, fmt.Errorf("inspect tmux socket: %w", infoErr)
+		}
+		if info.Mode()&os.ModeSocket == 0 {
+			continue
+		}
+		output.Total++
+		if input.Name != "" && !containsFold(entry.Name(), input.Name) {
+			output.Skipped++
+			continue
+		}
+		if len(candidates) == limit {
+			output.Skipped++
+			output.Truncated = true
+			continue
+		}
+		probe, err := binding.WithSocketPath(path)
+		if err != nil {
+			return nil, output, err
+		}
+		candidates = append(candidates, candidate{
+			path: path, name: entry.Name(), probe: probe,
 		})
 	}
 
@@ -264,9 +323,6 @@ func (t *tools) listServers(
 			SocketPath: candidate.path,
 			Name:       candidate.name,
 			IsTarget:   candidate.isTarget,
-		}
-		if input.Name != "" && !containsFold(summary.Name, input.Name) {
-			return probeResult{skipped: true}
 		}
 		probeCtx := ctx
 		cancelProbe := func() {}
@@ -367,11 +423,6 @@ sendCandidates:
 		}
 		return strings.Compare(a.Name, b.Name)
 	})
-	// Cap after sorting so the target is retained.
-	if input.MaxServers > 0 && len(output.Servers) > input.MaxServers {
-		output.Skipped += len(output.Servers) - input.MaxServers
-		output.Servers = output.Servers[:input.MaxServers]
-	}
 	return nil, output, nil
 }
 
