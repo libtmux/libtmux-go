@@ -18,7 +18,7 @@ import (
 // from build metadata; source builds use fallbackVersion.
 var Version = buildVersion()
 
-const fallbackVersion = "v0.0.1-alpha.7"
+const fallbackVersion = "v0.0.1-alpha.8"
 
 // minimumTmuxVersion follows the terminal Connection capability floor because
 // every MCP runtime owns one.
