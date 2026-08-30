@@ -5,9 +5,6 @@ import (
 	"strings"
 )
 
-// shellQuote wraps a value so a POSIX shell reads it as one word, which the
-// paths and channel names below need because this process chooses them and a
-// temporary directory may contain anything the platform allows.
 // wrapperScript renders the bookkeeping wrapper the pane runs. Sourcing the
 // caller's script inside a subshell keeps its syntax, and an `exit` in it, from
 // changing this structure. After timeout cleanup removes the directory a
@@ -40,6 +37,7 @@ func publishRecord(producer, path string) string {
 		producer, temporary, temporary, shellQuote(path))
 }
 
+// shellQuote makes a POSIX shell read one value as one word.
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
