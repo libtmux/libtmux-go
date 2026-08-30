@@ -34,7 +34,7 @@ type sendKeysBatchInput struct {
 type sendKeysBatchOutput struct {
 	// PaneID is the pane that received the keys.
 	PaneID string `json:"paneId"`
-	// Sent is how many keys were delivered.
+	// Sent is how many keys tmux accepted when the call succeeds.
 	Sent int `json:"sent"`
 }
 
@@ -61,17 +61,12 @@ func (t *tools) sendKeysBatch(
 			return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: index},
 				fmt.Errorf("key %d is empty", index)
 		}
-		name := key
-		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-			Command:   &name,
-			SkipEnter: true,
-			Literal:   input.Literal,
-		}); err != nil {
-			// The keys already sent were delivered and cannot be taken back,
-			// so the count says how far it got rather than implying none were.
-			return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: index},
-				fmt.Errorf("sending key %q: %w", key, err)
-		}
+	}
+	if err := pane.SendKeySequence(ctx, tmux.SendKeySequenceRequest{
+		Keys: input.Keys, Literal: input.Literal,
+	}); err != nil {
+		return nil, sendKeysBatchOutput{PaneID: pane.ID().String()},
+			fmt.Errorf("sending keys: %w", err)
 	}
 	return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: len(input.Keys)}, nil
 }

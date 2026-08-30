@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"context"
+	"slices"
 	"strconv"
 )
 
@@ -45,6 +46,80 @@ type SendKeysRequest struct {
 	// KeyName routes keys through the selected client's key table rather than
 	// delivering them to the pane.
 	KeyName bool
+}
+
+// SendKeySequenceRequest configures ordered pane key delivery. Keys must
+// contain at least one nonempty operand. SendKeySequence copies Keys before
+// I/O; callers must not mutate it concurrently with the call.
+type SendKeySequenceRequest struct {
+	// Keys are tmux key names sent in order.
+	Keys []string
+	// Literal treats every key as literal UTF-8 instead of a tmux key name.
+	Literal bool
+}
+
+// SendKeySequence sends the requested keys to the receiver's exact linked
+// pane in one tmux command. It does not append Enter. Literal changes tmux key
+// parsing but does not bypass interpretation by the pane's application.
+//
+// A returned error does not establish how many keys tmux delivered.
+func (p Pane) SendKeySequence(ctx context.Context, request SendKeySequenceRequest) error {
+	request.Keys = slices.Clone(request.Keys)
+	if err := validateSendKeySequenceRequest(p, request); err != nil {
+		return err
+	}
+	target, err := exactPaneTarget(p)
+	if err != nil {
+		return err
+	}
+	arguments, err := sendKeySequenceArguments(target, request)
+	if err != nil {
+		return err
+	}
+	result, err := p.server.literalCmd(ctx, arguments...)
+	return requireRedactedServerCommandNoStderr("send-keys", result, err)
+}
+
+func sendKeySequenceArguments(
+	target string,
+	request SendKeySequenceRequest,
+) ([]string, error) {
+	if err := validateServerCommandArgument(
+		"send-keys", "Target", target, true,
+	); err != nil {
+		return nil, err
+	}
+	arguments := []string{"send-keys", "-t", target}
+	if request.Literal {
+		arguments = append(arguments, "-l")
+	}
+	arguments = append(arguments, "--")
+	return append(arguments, request.Keys...), nil
+}
+
+func validateSendKeySequenceRequest(p Pane, request SendKeySequenceRequest) error {
+	if err := validateTypedTarget(
+		"send-keys", "Pane", "pane", p.paneID.String(),
+	); err != nil {
+		return err
+	}
+	if len(request.Keys) == 0 {
+		return invalidServerCommandRequest(
+			"send-keys", "Keys", "", "must contain at least one key",
+		)
+	}
+	for index, key := range request.Keys {
+		field := "Keys[" + strconv.Itoa(index) + "]"
+		if key == "" {
+			return invalidServerCommandRequest(
+				"send-keys", field, "", "must not be empty",
+			)
+		}
+		if err := validateServerCommandArgument("send-keys", field, key, true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SendKeys invokes tmux send-keys with the receiver's exact linked
