@@ -285,6 +285,7 @@ func TestSendKeysBatchDrivesAProgramThatReadsKeys(t *testing.T) {
 	session, _, ctx := connect(t)
 	workspace(ctx, t, session, "session_name: keys\nwindows:\n  - panes:\n      - {}\n")
 	pane := firstPane(ctx, t, session)
+	run(ctx, t, session, pane, "true")
 
 	var sent struct {
 		Sent   int    `json:"sent"`
