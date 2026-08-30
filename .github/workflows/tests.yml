@@ -9,6 +9,9 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
 # Every job below names its modules one at a time. `go test ./...` stops at a
 # module boundary, so the consumer modules and the benchmarks are invisible to
 # the core module's wildcard and would rot unchecked. Go also skips a directory
