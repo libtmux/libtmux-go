@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"regexp"
+	"slices"
 )
 
 // SelectLayoutRequest selects one layout operation. Its zero value reapplies
@@ -73,15 +74,26 @@ var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 // checksum, which is what makes it distinguishable from a name.
 var layoutStringPattern = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
 
-// validateLayout rejects a layout that is neither a preset nor one of tmux's
-// layout strings.
-//
-// This is checked here rather than left to tmux because tmux 3.3a does not
-// reject it: an unrecognised layout crashes the server, taking every session on
-// the socket with it, including sessions that have nothing to do with the
-// caller. Every other supported version returns an error, so refusing here
-// costs those versions nothing but the message, and it is the only place a
-// caller can be told before the damage.
+// layoutPanePattern matches one layout cell that holds a pane. tmux dumps such
+// a cell as width x height, offsets, and the pane's own number; cells that only
+// arrange other cells stop after the offsets.
+var layoutPanePattern = regexp.MustCompile(`[0-9]+x[0-9]+,-?[0-9]+,-?[0-9]+,([0-9]+)`)
+
+// layoutListsPane reports whether layout still arranges pane. A layout holding
+// no readable cell reports true, so an arrangement this does not recognise is
+// never mistaken for a pane that closed.
+func layoutListsPane(layout string, pane PaneID) bool {
+	cells := layoutPanePattern.FindAllStringSubmatch(layout, -1)
+	if len(cells) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(cells, func(cell []string) bool {
+		return PaneID("%"+cell[1]) == pane
+	})
+}
+
+// tmux 3.3a exits the server for an unknown layout instead of returning an
+// error, so reject names that are neither presets nor layout strings.
 func validateLayout(layout string, version Version) error {
 	if layout == "" || layoutPresets[layout] || layoutStringPattern.MatchString(layout) {
 		return nil

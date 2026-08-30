@@ -10,7 +10,9 @@ result, and report the shape of what it built.
 The client and server are joined in memory rather than over a pipe, so this is
 one program rather than two. Everything else — tool names, arguments, the shape
 of what comes back — is exactly what a client speaking to `libtmux-mcp` over
-stdin and stdout sees.
+stdin and stdout sees. The example selects the `operate` capability profile
+when the environment does not select one, because the metadata-only default
+cannot build the demonstrated workspace.
 
 ## Running it
 

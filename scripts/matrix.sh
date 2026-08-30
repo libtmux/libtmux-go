@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run every module's tests against every tmux release this repository supports.
+# Run each module's compatible tests against the tmux releases it supports.
 #
 # The ordinary gate runs against whichever tmux is on PATH, which is one
 # version, and version-specific breakage is not hypothetical: tmux 3.4 stopped
@@ -9,10 +9,11 @@
 # either.
 #
 # It is separate from the ordinary gate because it is slow -- five modules
-# against eight tmux builds -- and because it needs a matrix of tmux builds a
+# against nine tmux builds -- and because it needs a matrix of tmux builds a
 # checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
 # <version>/bin/tmux, or let it look where the matrix is usually built. Narrow
-# what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS.
+# what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS. Set
+# LIBTMUX_MATRIX_REQUIRED=1 when absence must fail rather than skip.
 
 set -uo pipefail
 
@@ -20,7 +21,19 @@ script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 repository_root=$(cd "$script_directory/.." && pwd -P)
 
 matrix=${LIBTMUX_TMUX_MATRIX:-$HOME/.local/share/libtmux-tmux-matrix}
+required=${LIBTMUX_MATRIX_REQUIRED:-0}
+case $required in
+    0 | 1) ;;
+    *)
+        echo "matrix: LIBTMUX_MATRIX_REQUIRED must be 0 or 1, got $required" >&2
+        exit 1
+        ;;
+esac
 if [[ ! -d $matrix ]]; then
+    if [[ $required == 1 ]]; then
+        echo "matrix: required matrix directory does not exist: $matrix" >&2
+        exit 1
+    fi
     cat >&2 <<MESSAGE
 matrix: no tmux matrix at $matrix
 
@@ -28,7 +41,7 @@ Set LIBTMUX_TMUX_MATRIX to a directory holding one subdirectory per version,
 each with bin/tmux inside it:
 
     \$LIBTMUX_TMUX_MATRIX/3.2a/bin/tmux
-    \$LIBTMUX_TMUX_MATRIX/3.7b/bin/tmux
+    \$LIBTMUX_TMUX_MATRIX/3.7c/bin/tmux
 
 Skipping rather than failing: a checkout without a matrix can still run every
 other gate, and reporting a pass this did not earn would be worse than saying
@@ -47,12 +60,40 @@ unset TMUX TMUX_PANE
 # The workspace stays on. This sweep asks what each tmux release does to the
 # code in this tree, and mcp carries no replace directive, so GOWORK=off would
 # aim every one of its runs at the core release its require names instead.
-# Resolving without a workspace is TestEveryModuleResolvesWithoutAWorkspace's
+# Resolving without a workspace is the standalone module-metadata test's
 # question, and it does not vary by tmux version.
 
+all_modules=(. examples workspace mcp benchmarks)
+modules=()
+if [[ ${LIBTMUX_MATRIX_MODULES+x} ]]; then
+    read -r -a modules <<< "$LIBTMUX_MATRIX_MODULES"
+else
+    modules=("${all_modules[@]}")
+fi
+if (( ${#modules[@]} == 0 )); then
+    echo "matrix: no modules selected" >&2
+    exit 1
+fi
+for module in "${modules[@]}"; do
+    case $module in
+        . | examples | workspace | mcp | benchmarks) ;;
+        *)
+            echo "matrix: unknown module \"$module\"" >&2
+            exit 1
+            ;;
+    esac
+    if [[ ! -f "$repository_root/$module/go.mod" ]]; then
+        echo "matrix: module \"$module\" has no go.mod" >&2
+        exit 1
+    fi
+done
+
+supported_versions=(3.2a 3.3a 3.4 3.5 3.6 3.7 3.7a 3.7b 3.7c)
 versions=()
 if [[ -n ${LIBTMUX_MATRIX_VERSIONS:-} ]]; then
     read -r -a versions <<< "$LIBTMUX_MATRIX_VERSIONS"
+elif [[ $required == 1 ]]; then
+    versions=("${supported_versions[@]}")
 else
     for candidate in "$matrix"/*/; do
         version=$(basename "$candidate")
@@ -65,19 +106,37 @@ if (( ${#versions[@]} == 0 )); then
     echo "matrix: $matrix holds no version with bin/tmux in it" >&2
     exit 1
 fi
+for version in "${versions[@]}"; do
+    tmux_binary="$matrix/$version/bin/tmux"
+    if [[ ! -x $tmux_binary ]]; then
+        echo "matrix: $tmux_binary is not executable" >&2
+        exit 1
+    fi
+    if ! reported=$("$tmux_binary" -V 2>&1); then
+        echo "matrix: $tmux_binary could not report its version: $reported" >&2
+        exit 1
+    fi
+    expected="tmux $version"
+    if [[ $reported != "$expected" ]]; then
+        printf 'matrix: %s: expected "%s", got "%s"\n' \
+            "$tmux_binary" "$expected" "$reported" >&2
+        exit 1
+    fi
+done
 
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 
 failed=()
+selected_cells=$(( ${#versions[@]} * ${#modules[@]} ))
+run_cells=0
 for version in "${versions[@]}"; do
-    tmux_binary="$matrix/$version/bin/tmux"
-    printf 'matrix: %s (%s)\n' "$version" "$("$tmux_binary" -V 2>&1 || true)"
+    printf 'matrix: %s (tmux %s)\n' "$version" "$version"
 
-    for module in ${LIBTMUX_MATRIX_MODULES:-. examples workspace mcp benchmarks}; do
+    for module in "${modules[@]}"; do
         directory="$repository_root/$module"
-        [[ -f "$directory/go.mod" ]] || continue
-        if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" go test ./... > "$log" 2>&1); then
+        run_cells=$((run_cells + 1))
+        if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" go test -count=1 ./... > "$log" 2>&1); then
             printf '  %-14s ok\n' "$module"
         else
             printf '  %-14s FAILED\n' "$module"
@@ -88,9 +147,15 @@ for version in "${versions[@]}"; do
 done
 
 echo
+if (( run_cells != selected_cells )); then
+    printf 'matrix: ran %d of %d selected cells\n' "$run_cells" "$selected_cells" >&2
+    exit 1
+fi
 if (( ${#failed[@]} == 0 )); then
-    printf 'matrix: %d tmux versions, all green\n' "${#versions[@]}"
+    printf 'matrix: %d cells across %d tmux versions, all green\n' \
+        "$run_cells" "${#versions[@]}"
     exit 0
 fi
-printf 'matrix: %d failed: %s\n' "${#failed[@]}" "${failed[*]}"
+printf 'matrix: %d of %d cells failed: %s\n' \
+    "${#failed[@]}" "$selected_cells" "${failed[*]}"
 exit 1

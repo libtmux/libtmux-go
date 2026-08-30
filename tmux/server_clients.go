@@ -36,7 +36,8 @@ type ServerAccessRequest struct {
 type RefreshClientRequest struct {
 	// TargetClient selects a stable client; zero selects tmux's current client.
 	TargetClient ClientName
-	// RequestClipboard requests clipboard data; tmux before 3.4 ends the server on it, so it is withheld; see UnsupportedPolicy.
+	// RequestClipboard requests clipboard data and requires tmux 3.4; older tmux
+	// versions may exit when given the flag, so it follows UnsupportedPolicy.
 	RequestClipboard bool
 }
 
@@ -152,8 +153,7 @@ func (s Server) LockServer(ctx context.Context) error {
 }
 
 // RefreshClient redraws a client, or tmux's current client when no target is set.
-// RequestClipboard requires tmux 3.4; older supported versions synchronously
-// call [WarningHandler] and omit that flag.
+// RequestClipboard requires tmux 3.4 and follows [UnsupportedPolicy].
 func (s Server) RefreshClient(ctx context.Context, request RefreshClientRequest) error {
 	targetClient, hasTargetClient, err := requestClientTarget(request.TargetClient)
 	if err != nil {

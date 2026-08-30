@@ -12,17 +12,9 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// TestKeysThatRunACommandDoNotShiftTheReplies covers a control connection that
-// answers the wrong question from then on.
-//
-// tmux writes a guard block for every command it runs on this client's behalf,
-// not only the ones this client sent: keys delivered into a pane that is in a
-// mode are looked up as bindings, and the command a binding runs gets a block
-// of its own. tmux marks the difference in the guard's flags -- 1 for a command
-// that arrived over the control channel, 0 for anything else -- and reading the
-// stranger's block as a reply shifts every later reply by one, permanently. The
-// caller after it reads somebody else's answer as its own, which is how a
-// server identity probe came back holding a session listing.
+// tmux emits guard blocks for both control-channel commands and client-binding
+// commands. Only flag-1 blocks are replies; consuming flag-0 blocks permanently
+// shifts later replies.
 //
 //libtmux:real-tmux
 func TestKeysThatRunACommandDoNotShiftTheReplies(t *testing.T) {

@@ -8,14 +8,6 @@ import (
 	"testing"
 )
 
-// TestAFrameThatIsNotJSONIsDroppedRatherThanFatal covers the byte that should
-// not cost a session.
-//
-// The SDK decodes the stream rather than the line, so a syntax error leaves
-// its decoder with nothing to resync on and ends the process. Dropping the
-// line before the decoder sees it is what keeps the rest of the connection
-// working, and skipping the error afterwards does not: the decoder cannot find
-// the next frame either.
 func TestAFrameThatIsNotJSONIsDroppedRatherThanFatal(t *testing.T) {
 	const good = `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
 	stream := strings.Join([]string{
@@ -26,10 +18,11 @@ func TestAFrameThatIsNotJSONIsDroppedRatherThanFatal(t *testing.T) {
 		"",
 		"   ",
 		"\x00\x01binary",
+		"[garbage",
+		"[1,2,3]",
 		// Valid JSON that is not a JSON-RPC message ends the read loop just as
 		// a syntax error does, so the filter has to reject it too.
 		"{}",
-		"[1,2,3]",
 		`{"jsonrpc":"2.0"}`,
 		good,
 	}, "\n") + "\n"
@@ -53,15 +46,12 @@ func TestAFrameThatIsNotJSONIsDroppedRatherThanFatal(t *testing.T) {
 	if got := strings.Count(string(passed), good); got != 2 {
 		t.Errorf("kept %d of the 2 good frames", got)
 	}
-	if dropped := strings.Count(notified.String(), "ignoring a frame"); dropped != 7 {
-		t.Errorf("reported %d dropped frames, want the 7 the decoder rejects:\n%s",
+	if dropped := strings.Count(notified.String(), "ignoring a frame"); dropped != 8 {
+		t.Errorf("reported %d dropped frames, want the 8 the decoder rejects:\n%s",
 			dropped, notified.String())
 	}
 }
 
-// TestALongFrameSurvivesTheFilter covers the reason this reads lines rather
-// than scanning tokens: a capture of a wide pane's scrollback is a legitimate
-// frame far past any default buffer.
 func TestALongFrameSurvivesTheFilter(t *testing.T) {
 	encoded, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -82,8 +72,23 @@ func TestALongFrameSurvivesTheFilter(t *testing.T) {
 	}
 }
 
-// TestTheFilterEndsWhenThePipeDoes is the other half: dropping bad lines must
-// not turn a closed pipe into a read that never returns.
+func TestAnOversizedFrameIsBoundedAndTheNextFrameSurvives(t *testing.T) {
+	const good = `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`
+	stream := strings.Repeat("x", jsonRPCFrameMaxBytes+1) + "\n" + good + "\n"
+	var notified bytes.Buffer
+	reader := wholeJSONLines(io.NopCloser(strings.NewReader(stream)), &notified)
+	passed, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(passed)) != good {
+		t.Fatalf("frame after oversized input = %q, want valid next frame", passed)
+	}
+	if !strings.Contains(notified.String(), "past 8388608 bytes") {
+		t.Fatalf("oversized frame diagnostic = %q", notified.String())
+	}
+}
+
 func TestTheFilterEndsWhenThePipeDoes(t *testing.T) {
 	reader := wholeJSONLines(io.NopCloser(strings.NewReader("{ bad\n")), io.Discard)
 	if _, err := io.ReadAll(reader); err != nil {

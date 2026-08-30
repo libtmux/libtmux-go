@@ -12,11 +12,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// TestRunInPaneReachesAnAssertionInFourLines is the shape the package is for: a
-// program under test, a pane running it, and assertions about what it drew.
-//
-// It is also what the README shows, generated from here so that the snippet
-// cannot claim something this does not do.
+// This test is the generated README quickstart and must remain runnable.
 func TestRunInPaneReachesAnAssertionInFourLines(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -30,9 +26,7 @@ func TestRunInPaneReachesAnAssertionInFourLines(t *testing.T) {
 	// docs:end
 }
 
-// TestScreenDropsTmuxPadding proves a read returns what the program drew rather
-// than the pane's height. tmux pads a capture to the full pane, and an
-// assertion counting lines, or a failure message printing them, wants neither.
+// tmux pads captures to pane height; Screen removes that padding.
 func TestScreenDropsTmuxPadding(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -54,9 +48,7 @@ func TestScreenDropsTmuxPadding(t *testing.T) {
 	}
 }
 
-// TestTypeSendsCharactersTmuxWouldOtherwiseRead pins the literal send. A value
-// holding tmux's own separators has to arrive as written, or a test asserting
-// on it is asserting on tmux's parsing instead of the program's output.
+// Type must send tmux syntax literally.
 func TestTypeSendsCharactersTmuxWouldOtherwiseRead(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -84,13 +76,8 @@ func TestWaitForScreenTakesAConditionOfItsOwn(t *testing.T) {
 	})
 }
 
-// TestWaitFailureReportsTheScreen is the gate on the reason these waits exist
-// rather than a hand-rolled poll.
-//
-// A wait that reports only that it timed out sends the reader back to add a
-// print statement and run it again. The failure has to carry the screen, the
-// pane, and what was wanted, because that is the whole of what the reader would
-// have gone looking for.
+// Timeout diagnostics must include the pane, wanted condition, and captured
+// screen.
 func TestWaitFailureReportsTheScreen(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -133,9 +120,7 @@ func TestWaitForScreenRejectsANilCondition(t *testing.T) {
 	}
 }
 
-// TestWaitForShellReadyPrecedesTheFirstCommand proves the readiness wait is
-// load-bearing rather than decorative: a command typed at a pane whose shell
-// has not started is dropped, and nothing reports it.
+// A command sent before the shell is ready may be dropped without an error.
 func TestWaitForShellReadyPrecedesTheFirstCommand(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -196,10 +181,7 @@ func (r *recordingTB) record(message string) {
 	runtime.Goexit()
 }
 
-// TestTypeAndWaitReturnsAfterTheCommandIsOver proves the wait is about the
-// command rather than about its output: the screen is read once TypeAndWait
-// returns, with nothing else waited for, and the command's own last line is
-// already there.
+// TypeAndWait returns after the command exits and its final output is visible.
 func TestTypeAndWaitReturnsAfterTheCommandIsOver(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -217,9 +199,7 @@ func TestTypeAndWaitReturnsAfterTheCommandIsOver(t *testing.T) {
 	}
 }
 
-// TestTypeAndWaitReturnsForACommandThatFailed keeps the wait about finishing
-// rather than succeeding. A test asserting on what a failing command left
-// behind needs it to return.
+// TypeAndWait waits for completion, not success.
 func TestTypeAndWaitReturnsForACommandThatFailed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

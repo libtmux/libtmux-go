@@ -15,13 +15,17 @@ import (
 // libtmux:parity libtmux._internal.env.socket_path_from_env#parameter-branch:env:0b9565d05bf8
 // libtmux:parity libtmux._internal.env.socket_path_from_env#parameter-branch:env:536dade749bb
 func TestNewServerFromEnvRightSplitsCommaSocketWithoutExecution(t *testing.T) {
-	t.Setenv("PATH", "")
+	t.Parallel()
 
-	server, err := NewServerFromEnv(map[string]string{
-		"TMUX": "/tmp/with,comma/socket,not-a-pid,stale-session",
-	})
+	server, err := newServerFromEnvironmentForTest(
+		t,
+		map[string]string{
+			"TMUX": "/tmp/with,comma/socket,not-a-pid,stale-session",
+		},
+		func() []string { return []string{"SYSTEMROOT=frozen"} },
+	)
 	if err != nil {
-		t.Fatalf("NewServerFromEnv() error = %v", err)
+		t.Fatalf("newServerFromEnvironmentForTest() error = %v", err)
 	}
 	if got := server.SocketPath(); got != "/tmp/with,comma/socket" {
 		t.Fatalf("NewServerFromEnv().SocketPath() = %q, want right-split socket", got)
@@ -31,9 +35,13 @@ func TestNewServerFromEnvRightSplitsCommaSocketWithoutExecution(t *testing.T) {
 func TestNewServerFromEnvDoesNotValidateStalePIDOrSessionComponents(t *testing.T) {
 	t.Parallel()
 
-	server, err := NewServerFromEnv(map[string]string{"TMUX": "/sock,,"})
+	server, err := newServerFromEnvironmentForTest(
+		t,
+		map[string]string{"TMUX": "/sock,,"},
+		func() []string { return []string{"SYSTEMROOT=frozen"} },
+	)
 	if err != nil {
-		t.Fatalf("NewServerFromEnv() error = %v", err)
+		t.Fatalf("newServerFromEnvironmentForTest() error = %v", err)
 	}
 	if got := server.SocketPath(); got != "/sock" {
 		t.Fatalf("NewServerFromEnv().SocketPath() = %q, want /sock", got)
@@ -41,19 +49,147 @@ func TestNewServerFromEnvDoesNotValidateStalePIDOrSessionComponents(t *testing.T
 }
 
 // libtmux:parity libtmux._internal.env.resolve_env
-// libtmux:parity libtmux._internal.env.resolve_env#parameter-branch:env:a03c3102158d
-func TestNewServerFromEnvDistinguishesNilFromEmptyEnvironment(t *testing.T) {
-	t.Setenv("TMUX", "/tmp/process.sock,1,0")
+func TestNewServerFromEnvSnapshotsProcessEnvironmentOnce(t *testing.T) {
+	t.Parallel()
 
-	server, err := NewServerFromEnv(nil)
+	processEnvironment := []string{
+		"TMUX=/tmp/process.sock,1,0",
+		"KEEP=before",
+		"SYSTEMROOT=frozen",
+	}
+	calls := 0
+	server, err := newServerFromEnvironmentForTest(t, nil, func() []string {
+		calls++
+		return processEnvironment
+	})
 	if err != nil {
-		t.Fatalf("NewServerFromEnv(nil) error = %v", err)
+		t.Fatalf("newServerFromEnvironmentForTest(nil) error = %v", err)
 	}
 	if got := server.SocketPath(); got != "/tmp/process.sock" {
-		t.Fatalf("NewServerFromEnv(nil).SocketPath() = %q, want process environment", got)
+		t.Fatalf("server.SocketPath() = %q, want process environment", got)
 	}
-	if _, err := NewServerFromEnv(map[string]string{}); !errors.Is(err, ErrNotInsideTmux) {
-		t.Fatalf("NewServerFromEnv(empty) error = %v, want ErrNotInsideTmux", err)
+	processEnvironment[1] = "KEEP=after"
+	if value, ok := processEnvironmentValue(server.state.config.processEnvironment, "KEEP"); !ok || value != "before" {
+		t.Fatalf("snapshotted KEEP = (%q, %t), want (before, true)", value, ok)
+	}
+	if calls != 1 {
+		t.Fatalf("process environment reads = %d, want one", calls)
+	}
+}
+
+// libtmux:parity libtmux._internal.env.resolve_env#parameter-branch:env:a03c3102158d
+func TestNewServerFromEnvOverridesOneProcessSnapshot(t *testing.T) {
+	t.Parallel()
+
+	processEnvironment := []string{
+		"TMUX=/tmp/process.sock,1,0",
+		"KEEP=parent",
+		"CHOICE=parent",
+		"SYSTEMROOT=frozen",
+	}
+	overrides := map[string]string{
+		"ADDED":  "provided",
+		"CHOICE": "override",
+		"TMUX":   "/tmp/override.sock,2,1",
+	}
+	calls := 0
+	server, err := newServerFromEnvironmentForTest(t, overrides, func() []string {
+		calls++
+		return processEnvironment
+	})
+	if err != nil {
+		t.Fatalf("newServerFromEnvironmentForTest(overrides) error = %v", err)
+	}
+	processEnvironment[1] = "KEEP=mutated"
+	overrides["CHOICE"] = "mutated"
+	overrides["TMUX"] = "/tmp/mutated.sock,3,2"
+
+	if got := server.SocketPath(); got != "/tmp/override.sock" {
+		t.Fatalf("server.SocketPath() = %q, want override socket", got)
+	}
+	environment := server.state.config.processEnvironment
+	for name, want := range map[string]string{
+		"ADDED":  "provided",
+		"CHOICE": "override",
+		"KEEP":   "parent",
+		"TMUX":   "/tmp/override.sock,2,1",
+	} {
+		if got, ok := processEnvironmentValue(environment, name); !ok || got != want {
+			t.Errorf("effective %s = (%q, %t), want (%q, true)", name, got, ok, want)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("process environment reads = %d, want one", calls)
+	}
+}
+
+func TestNewServerFromEnvDistinguishesEmptyEnvironment(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	_, err := newServerFromEnvironmentForTest(t, map[string]string{}, func() []string {
+		calls++
+		return []string{
+			"TMUX=/tmp/process.sock,1,0",
+			"SYSTEMROOT=frozen",
+		}
+	})
+	if !errors.Is(err, ErrNotInsideTmux) {
+		t.Fatalf("empty environment error = %v, want ErrNotInsideTmux", err)
+	}
+	if calls != 1 {
+		t.Fatalf("process environment reads = %d, want one", calls)
+	}
+}
+
+func TestDiscoveryEnvironmentUsesPlatformNameSemantics(t *testing.T) {
+	t.Parallel()
+
+	caseInsensitive := processEnvironmentKey("tmux") == processEnvironmentKey("TMUX")
+	process := environmentFromEntries([]string{
+		"tmux=/tmp/lower.sock,1,0",
+		"tmux_pane=%7",
+	})
+	if got, ok := environmentValue(process, "TMUX"); ok != caseInsensitive ||
+		ok && got != "/tmp/lower.sock,1,0" {
+		t.Fatalf("process TMUX lookup = (%q, %t), want platform case semantics", got, ok)
+	}
+
+	explicit, _, err := snapshotDiscoveryEnvironment(
+		map[string]string{"tmux": "/tmp/explicit.sock,1,0"},
+		func() []string { return nil },
+	)
+	if err != nil {
+		t.Fatalf("snapshotDiscoveryEnvironment() error = %v", err)
+	}
+	if got, ok := environmentValue(explicit, "TMUX"); ok != caseInsensitive ||
+		ok && got != "/tmp/explicit.sock,1,0" {
+		t.Fatalf("explicit TMUX lookup = (%q, %t), want platform case semantics", got, ok)
+	}
+
+	_, _, err = snapshotDiscoveryEnvironment(
+		map[string]string{"TMUX": "first", "tmux": "second"},
+		func() []string { return nil },
+	)
+	if caseInsensitive && !errors.Is(err, ErrInvalidServerOptions) {
+		t.Fatalf("case-equivalent names error = %v, want ErrInvalidServerOptions", err)
+	}
+	if !caseInsensitive && err != nil {
+		t.Fatalf("case-distinct names error = %v", err)
+	}
+
+	canonical, err := canonicalDiscoveryEnvironment(
+		map[string]string{"tmux": "/tmp/canonical.sock,1,0"},
+		strings.ToLower,
+	)
+	if err != nil || canonical["tmux"] != "/tmp/canonical.sock,1,0" {
+		t.Fatalf("canonical environment = (%#v, %v), want lowercase tmux", canonical, err)
+	}
+	if _, err := canonicalDiscoveryEnvironment(
+		map[string]string{"TMUX": "first", "tmux": "second"},
+		strings.ToLower,
+	); !errors.Is(err, ErrInvalidServerOptions) {
+		t.Fatalf("canonical duplicate error = %v, want ErrInvalidServerOptions", err)
 	}
 }
 
@@ -100,19 +236,16 @@ func TestNewServerFromEnvRejectsMalformedValuesWithoutDisclosingThem(t *testing.
 // libtmux:parity libtmux._internal.env.TMUX_PANE
 // libtmux:parity libtmux._internal.env.pane_id_from_env
 // libtmux:parity libtmux._internal.env.pane_id_from_env#parameter-branch:env:1437a3b4f272
-func TestPaneFromEnvRejectsMalformedStableIDsWithoutExecutionOrDisclosure(t *testing.T) {
+func TestPaneIDFromEnvironmentRejectsMalformedStableIDsWithoutDisclosure(t *testing.T) {
 	t.Parallel()
 
 	for _, paneID := range []string{"", "7", "private-pane-value"} {
 		t.Run(paneID, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := PaneFromEnv(context.Background(), map[string]string{
-				"TMUX":      "/tmp/unused.sock,1,0",
-				"TMUX_PANE": paneID,
-			})
+			_, err := paneIDFromEnvironment(map[string]string{"TMUX_PANE": paneID})
 			if !errors.Is(err, ErrNotInsideTmux) {
-				t.Fatalf("PaneFromEnv() error = %v, want ErrNotInsideTmux", err)
+				t.Fatalf("paneIDFromEnvironment() error = %v, want ErrNotInsideTmux", err)
 			}
 			var envErr *FromEnvError
 			if !errors.As(err, &envErr) || envErr.Variable != "TMUX_PANE" {
@@ -316,29 +449,6 @@ func TestPaneEnvironmentAcceptsAnyNonemptyPercentTargetAndLetsTmuxClassifyIt(t *
 	}
 }
 
-func TestHierarchyFromNilEnvironmentSnapshotsProcessEntriesOnce(t *testing.T) {
-	t.Parallel()
-
-	calls := 0
-	_, _, _, err := hierarchyFromEnvironmentWithProcess(
-		context.Background(),
-		nil,
-		func() []string {
-			calls++
-			return []string{
-				"TMUX=/tmp/process.sock,1,0",
-				"TMUX_PANE=not-a-pane",
-			}
-		},
-	)
-	if !errors.Is(err, ErrNotInsideTmux) {
-		t.Fatalf("hierarchyFromEnvironmentWithProcess() error = %v, want pane environment error", err)
-	}
-	if calls != 1 {
-		t.Fatalf("process environment reads = %d, want one snapshot", calls)
-	}
-}
-
 func TestDiscoverEnvironmentHierarchyDistinguishesMissingPaneFromDeadServer(t *testing.T) {
 	t.Parallel()
 
@@ -391,4 +501,28 @@ func TestDiscoverEnvironmentHierarchyDistinguishesMissingPaneFromDeadServer(t *t
 			}
 		})
 	}
+}
+
+func newServerFromEnvironmentForTest(
+	t *testing.T,
+	environment map[string]string,
+	processEnvironment func() []string,
+) (Server, error) {
+	t.Helper()
+
+	discovery, effective, err := snapshotDiscoveryEnvironment(
+		environment,
+		processEnvironment,
+	)
+	if err != nil {
+		return Server{}, err
+	}
+	socketPath, err := socketPathFromEnvironment(discovery)
+	if err != nil {
+		return Server{}, err
+	}
+	return newServer(ServerOptions{
+		SocketPath:         socketPath,
+		ProcessEnvironment: effective,
+	}, testServerDependencies(t, effective))
 }

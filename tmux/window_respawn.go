@@ -13,10 +13,8 @@ import (
 // mutually exclusive fields. Arguments and environment entries are validated
 // before execution.
 //
-// Respawn methods read pointer and map values during argument construction and
-// retain none of that caller-owned storage. Callers must not mutate those
-// values concurrently; this request does not provide a broader goroutine-safety
-// guarantee.
+// Methods read pointer and map values during argument construction; do not
+// mutate them concurrently.
 type RespawnRequest struct {
 	// Command is omitted when nil so tmux reuses the stored command. A
 	// nonnil empty string remains an explicit operand.
@@ -35,12 +33,9 @@ type RespawnRequest struct {
 // winlink. It does not select the window or promise any client focus. Respawn
 // returns a canonical freshly materialized [Window], which may use another
 // linked session for the same WindowID. If the command succeeds but refresh
-// fails, it returns the receiver with that error; validation or transport
-// failure returns a zero Window. A completed command is treated as an error
-// only when tmux writes stderr, in which case Respawn returns a [CommandError]
-// and a zero Window. A nonzero exit without stderr is ignored and refresh
-// proceeds. A transport or context error can be delivery-ambiguous and no
-// rollback is attempted.
+// fails, it returns the receiver with that error; earlier failures return zero.
+// Completed stderr produces a redacted [CommandError]; nonzero exits without
+// stderr are followed by refresh.
 func (w Window) Respawn(ctx context.Context, request RespawnRequest) (Window, error) {
 	target, err := exactWindowTarget(w)
 	if err != nil {

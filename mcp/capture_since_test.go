@@ -3,15 +3,19 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -23,11 +27,6 @@ import (
 // gone and the reply must say so — a gap reported as completeness is the one
 // outcome a caller cannot detect.
 
-// TestATrimmedAnchorIsReportedAsLinesMissed covers what tmux does to a cursor:
-// when tmux trims scrollback, the absolute row the cursor recorded stops
-// meaning the row it recorded, and the delta silently starts too late.
-// linesMissed stays false, so the gap is invisible.
-//
 //libtmux:real-tmux
 func TestATrimmedAnchorIsReportedAsLinesMissed(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -102,14 +101,6 @@ func TestATrimmedAnchorIsReportedAsLinesMissed(t *testing.T) {
 	}
 }
 
-// TestATrimThatKeepsTheAnchorLosesNothing isolates the mechanism from the loss.
-//
-// The pane is trimmed by less than the distance from the anchor to the start of
-// history, so the anchor row itself is still retained and every line after it
-// is still readable. If the delta is computed from the absolute row the cursor
-// recorded, it starts exactly the trimmed amount too late, and the lines it
-// skips are ones tmux still has.
-//
 //libtmux:real-tmux
 func TestATrimThatKeepsTheAnchorLosesNothing(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -173,6 +164,63 @@ func TestATrimThatKeepsTheAnchorLosesNothing(t *testing.T) {
 }
 
 // firstLine reports the first line, for the probe's log.
+//
+//libtmux:real-tmux
+func TestATrimmedAnchorTakenAtTheTopIsStillReported(t *testing.T) {
+	// A fixed shell draws one short prompt, so the pane this takes a cursor on
+	// is at its first row with nothing in history: the state that carries no
+	// leading fingerprint.
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
+
+	workspace(ctx, t, session, "session_name: top-anchor\nwindows:\n  - panes:\n      - {}\n")
+	if result := call(ctx, t, session, "set_option", map[string]any{
+		"scope": "session", "sessionName": "top-anchor",
+		"name": "history-limit", "value": "50",
+	}, nil); result.IsError {
+		t.Fatalf("set history-limit: %#v", result.Content)
+	}
+	var made struct {
+		PaneID string `json:"paneId"`
+	}
+	if result := call(ctx, t, session, "create_window", map[string]any{
+		"sessionName": "top-anchor", "name": "top",
+	}, &made); result.IsError {
+		t.Fatalf("create_window: %#v", result.Content)
+	}
+	pane := made.PaneID
+
+	var first struct {
+		Cursor string `json:"cursor"`
+	}
+	call(ctx, t, session, "capture_since", map[string]any{"paneId": pane}, &first)
+	if first.Cursor == "" {
+		t.Fatal("no cursor")
+	}
+
+	// Overflow the history, so tmux drops rows and renumbers the grid under an
+	// anchor that was recorded by its position.
+	run(ctx, t, session, pane, "for i in $(seq 1 200); do echo c-$i; done")
+
+	var delta struct {
+		Lines       []string `json:"lines"`
+		LinesMissed bool     `json:"linesMissed"`
+	}
+	call(ctx, t, session, "capture_since", map[string]any{"cursor": first.Cursor}, &delta)
+	joined := strings.Join(delta.Lines, "\n")
+
+	var absent []string
+	for i := 1; i <= 200; i++ {
+		marker := fmt.Sprintf("c-%d", i)
+		if !containsWord(joined, marker) {
+			absent = append(absent, marker)
+		}
+	}
+	if len(absent) > 0 && !delta.LinesMissed {
+		t.Fatalf("%d lines are missing from the delta and linesMissed is false; "+
+			"first missing %v", len(absent), absent[:min(6, len(absent))])
+	}
+}
+
 func firstLine(lines []string) string {
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {
@@ -187,18 +235,13 @@ func containsWord(haystack, marker string) bool {
 	return slices.Contains(strings.Fields(haystack), marker)
 }
 
-// TestASubscriberThatArrivedFirstIsStillTold covers the ordinary case a
-// give-up-once watcher got wrong: a client is pointed at a socket before
-// anyone has made a session on it, subscribes, and has to hear about the
-// sessions that appear afterwards.
-//
 //libtmux:real-tmux
 func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -207,7 +250,9 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +275,6 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	}
 
 	workspace(ctx, t, session, "session_name: late\nwindows:\n  - panes:\n      - {}\n")
-	pane := firstPane(ctx, t, session)
-	send(ctx, t, session, pane, "echo LATE-OUTPUT")
 
 	select {
 	case <-updated:
@@ -240,31 +283,13 @@ func TestASubscriberThatArrivedFirstIsStillTold(t *testing.T) {
 	}
 }
 
-// TestASubscriptionWritingThePaneSigilIsStillTold covers the spelling a client
-// reaches for first.
-//
-// A pane arrives from every tool as %1, so a client addressing it as a resource
-// writes tmux://panes/%1/content. Reading accepts that; subscribing accepted it
-// too and then never delivered, because updates are addressed by the sigil-less
-// form alone. Nothing distinguished that from a pane which never wrote.
-//
-// TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched covers the gap in
-// the middle of a rebuild.
-//
-// A control connection ends whenever the set of sessions changes, and the
-// whole set is rebuilt from scratch. Between the two, tmux reports a pane's
-// output to nobody, and tmux keeps no record to catch up from: a write in that
-// window was never mentioned again, so a subscriber sat silent while the pane
-// it was watching filled. Somebody else creating a session anywhere on the
-// server was enough.
-//
 //libtmux:real-tmux
 func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -273,7 +298,9 @@ func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
 
 	updated := make(chan string, 64)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,13 +347,19 @@ func TestASubscriberIsToldAboutWhatHappenedWhileNothingWatched(t *testing.T) {
 		call(ctx, t, session, "create_session", map[string]any{
 			"name": fmt.Sprintf("churn-%d", round), "command": "sleep 300",
 		}, nil)
-		// Long enough to be past the connection ending and inside the gap.
-		time.Sleep(150 * time.Millisecond)
+		select {
+		case <-updated: // the structural change, not pane-output evidence
+		case <-time.After(20 * time.Second):
+			t.Fatalf("round %d: session creation was never reported", round)
+		}
+		drain()
+		// Put the next write outside the structural update's coalescing window.
+		time.Sleep(300 * time.Millisecond)
 		send(ctx, t, session, pane, fmt.Sprintf("echo round-%d", round))
 		select {
 		case <-updated:
 		case <-time.After(20 * time.Second):
-			t.Fatalf("round %d: a write during a rebuild was never reported", round)
+			t.Fatalf("round %d: pane output after the handoff was never reported", round)
 		}
 	}
 }
@@ -337,7 +370,7 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -346,7 +379,9 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,22 +424,13 @@ func TestASubscriptionWritingThePaneSigilIsStillTold(t *testing.T) {
 	}
 }
 
-// TestAPaneIsWatchedWhicheverSessionHoldsIt covers the session a subscriber
-// happens to be interested in.
-//
-// tmux reports a pane's output only to a client attached to that pane's
-// session. Watching held one connection, to the first session, so a pane in
-// any other was subscribed to and never reported — silence indistinguishable
-// from a pane that never wrote, for anyone with more than one session, which
-// is most people.
-//
 //libtmux:real-tmux
 func TestAPaneIsWatchedWhicheverSessionHoldsIt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	t.Cleanup(cancel)
 
 	socket := filepath.Join(t.TempDir(), "tmux.sock")
-	target := tmux.NewServer(tmux.ServerOptions{SocketPath: socket})
+	target := mustTmuxServer(t, tmux.ServerOptions{SocketPath: socket})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -413,7 +439,9 @@ func TestAPaneIsWatchedWhicheverSessionHoldsIt(t *testing.T) {
 
 	updated := make(chan string, 16)
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(t, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,14 +544,6 @@ func awaitURI(ctx context.Context, t *testing.T, updated <-chan string, want, co
 	}
 }
 
-// TestTheBackstopRefusesAnOversizedReply covers the cap that exists for the
-// tool that forgets to bound itself.
-//
-// Every tool that returns pane text bounds its own reply, which is the right
-// place for it. This is the floor under that convention: a reply past what
-// this server will send is refused with a message that names the tool, because
-// the alternative is spending a caller's whole context on one answer.
-//
 //libtmux:real-tmux
 func TestTheBackstopRefusesAnOversizedReply(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -545,10 +565,6 @@ func TestTheBackstopRefusesAnOversizedReply(t *testing.T) {
 	}
 }
 
-// TestEveryTextToolBoundsItself is the convention the backstop is a floor
-// under: a tool that returns pane lines takes maxLines, so a caller can ask
-// for less and the default is not the pane's whole history.
-//
 //libtmux:real-tmux
 func TestEveryTextToolBoundsItself(t *testing.T) {
 	session, _, ctx := connect(t)
@@ -584,24 +600,15 @@ func TestEveryTextToolBoundsItself(t *testing.T) {
 	}
 }
 
-// TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere covers the timeout that
-// looks like a broken pattern.
-//
-// A caller cannot start a program and wait for it in one request, so a fast
-// program has already printed by the time the wait begins. sinceEntry then
-// correctly refuses to match it and the wait runs to its deadline — reporting
-// only that nothing was found, which reads as a pattern that does not work and
-// sends the reader looking for the fault in their regular expression. The
-// server knows the text was there and has to say so.
-//
 //libtmux:real-tmux
 func TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere(t *testing.T) {
-	session, _, ctx := connect(t)
+	session, _, ctx := connectWith(t, tmuxtest.ServerOptions{FixedShell: true})
 	workspace(ctx, t, session, "session_name: entry\nwindows:\n  - panes:\n      - {}\n")
 	pane := firstPane(ctx, t, session)
 
-	// Print it, and let it land before the wait starts.
-	send(ctx, t, session, pane, "echo ALREADY-PRINTED")
+	// Keep the awaited marker out of the typed command, then let its output
+	// land before the wait starts.
+	send(ctx, t, session, pane, "printf '%s%s\\n' 'ALREADY-' 'PRINTED'")
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		var shown struct {
@@ -646,14 +653,8 @@ func TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere(t *testing.T) {
 		"sinceEntry": true, "timeoutSeconds": 3,
 	}, &waited)
 
-	// Whether the wait times out is not this test's claim, and cannot be made
-	// one: attaching a control connection makes tmux re-send recent pane
-	// output, so text written moments ago can arrive as new. The claim is what
-	// a timeout says when it happens -- that the pattern was on the screen the
-	// whole time, which is the difference between a puzzle and an answer.
-	if waited.Outcome == "timeout" && !waited.MatchedAtEntry {
-		t.Error("the wait timed out on text that was on the screen the whole " +
-			"time and did not say so")
+	if waited.Outcome != "timeout" || waited.Found || !waited.MatchedAtEntry {
+		t.Errorf("sinceEntry reused text from before attachment: %+v", waited)
 	}
 
 	// Without sinceEntry the same call matches, and says it was already there.
@@ -663,5 +664,140 @@ func TestSinceEntrySaysWhenItIgnoredAMatchAlreadyThere(t *testing.T) {
 	}, &waited)
 	if !waited.Found || !waited.MatchedAtEntry {
 		t.Errorf("without sinceEntry the match on entry was not reported: %+v", waited)
+	}
+}
+
+//libtmux:real-tmux
+func TestWaitForTextClassifiesPreAttachOutputAsEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the attach gate is a POSIX shell wrapper")
+	}
+	realTmux, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skipf("tmux is not installed: %v", err)
+	}
+	directory := t.TempDir()
+	wrapper := filepath.Join(directory, "tmux-gated")
+	arm := filepath.Join(directory, "armed")
+	gate := filepath.Join(directory, "attach-started")
+	release := filepath.Join(directory, "release")
+	const script = `#!/bin/sh
+control=false
+attach=false
+for argument in "$@"; do
+    [ "$argument" = "-C" ] && control=true
+    case "$argument" in *attach-session*) attach=true;; esac
+done
+if $control && $attach && [ -e "$LIBTMUX_TEST_ARM" ]; then
+    : > "$LIBTMUX_TEST_GATE"
+    while [ ! -e "$LIBTMUX_TEST_RELEASE" ]; do sleep 0.01; done
+fi
+exec "$LIBTMUX_REAL_TMUX" "$@"
+`
+	if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	environment := append(os.Environ(),
+		"LIBTMUX_REAL_TMUX="+realTmux,
+		"LIBTMUX_TEST_ARM="+arm,
+		"LIBTMUX_TEST_GATE="+gate,
+		"LIBTMUX_TEST_RELEASE="+release,
+	)
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		Binary: wrapper, SocketPath: filepath.Join(directory, "tmux.sock"),
+		ProcessEnvironment: environment,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	created, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "attach-gap"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = target.Kill(context.Background()) })
+	pane, ok, err := created.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		t.Fatalf("resolve active pane = (%#v, %t, %v)", pane, ok, err)
+	}
+
+	client, mcpCtx := connectTarget(t, target)
+	call(mcpCtx, t, client, "list_sessions", map[string]any{}, nil)
+	if err := os.WriteFile(arm, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	type waitResult struct {
+		result *sdk.CallToolResult
+		err    error
+	}
+	waited := make(chan waitResult, 1)
+	go func() {
+		result, callErr := client.CallTool(mcpCtx, &sdk.CallToolParams{
+			Name: "wait_for_text",
+			Arguments: map[string]any{
+				"paneId": pane.ID().String(), "patterns": []string{"GAP-ONLY"},
+				"timeoutSeconds": 10,
+			},
+		})
+		waited <- waitResult{result: result, err: callErr}
+	}()
+	for {
+		if _, err := os.Stat(gate); err == nil {
+			break
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		select {
+		case <-mcpCtx.Done():
+			t.Fatalf("wait never reached its attach boundary: %v", mcpCtx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	command := "printf 'GAP-ONLY\\n'"
+	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command, Literal: true}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		lines, captureErr := pane.Capture(ctx, tmux.CapturePaneRequest{Start: tmux.CaptureBoundary})
+		if captureErr != nil {
+			t.Fatal(captureErr)
+		}
+		shown := strings.Join(lines, "\n")
+		if strings.Contains(shown, "GAP-ONLY") {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("gap output did not settle: %v", ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err := os.WriteFile(release, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := <-waited
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if result.result.IsError {
+		t.Fatalf("wait_for_text failed: %s", resultText(result.result))
+	}
+	var answer struct {
+		Found          bool   `json:"found"`
+		Outcome        string `json:"outcome"`
+		Matched        string `json:"matched"`
+		MatchedAtEntry bool   `json:"matchedAtEntry"`
+	}
+	encoded, err := json.Marshal(result.result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &answer); err != nil {
+		t.Fatal(err)
+	}
+	if !answer.Found || answer.Outcome != "matched" ||
+		answer.Matched != "GAP-ONLY" || !answer.MatchedAtEntry {
+		t.Fatalf("wait_for_text = %+v, want pre-attach output classified as entry", answer)
 	}
 }

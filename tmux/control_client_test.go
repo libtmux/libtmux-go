@@ -16,19 +16,316 @@ import (
 func TestOpenControlRejectsInvalidSessionBeforeStartingProcess(t *testing.T) {
 	t.Parallel()
 
-	_, err := (Server{}).OpenControl(context.Background(), Session{})
+	server := serverWithOptionsAndRunner(
+		ServerOptions{SocketName: "one"},
+		&versionQueueRunner{},
+	)
+	_, err := server.OpenControl(context.Background(), Session{})
 	if !errors.Is(err, ErrInvalidServerCommandRequest) {
 		t.Fatalf("OpenControl() error = %v, want ErrInvalidServerCommandRequest", err)
 	}
 
-	other := NewServer(ServerOptions{SocketName: "other"})
+	other := serverWithOptionsAndRunner(
+		ServerOptions{SocketName: "other"},
+		&versionQueueRunner{},
+	)
 	session := Session{server: other, sessionID: "$1"}
-	_, err = NewServer(ServerOptions{SocketName: "one"}).OpenControl(
+	_, err = server.OpenControl(
 		context.Background(),
 		session,
 	)
 	if !errors.Is(err, ErrInvalidServerCommandRequest) {
 		t.Fatalf("OpenControl(other server) error = %v, want request error", err)
+	}
+}
+
+func TestControlAttachFramesRecognizeTheDaemonGuard(t *testing.T) {
+	t.Parallel()
+
+	guard := &daemonCommandGuard{failure: "__replacement__"}
+	for _, test := range []struct {
+		name   string
+		frames []controlFrame
+		guard  *daemonCommandGuard
+		want   error
+	}{
+		{
+			name:   "ordinary attach",
+			frames: []controlFrame{{}},
+		},
+		{
+			name:   "guarded attach",
+			frames: []controlFrame{{}, {}},
+			guard:  guard,
+		},
+		{
+			name: "replacement",
+			frames: []controlFrame{{
+				failed:    true,
+				rawStdout: []byte("unknown command: __replacement__\n"),
+			}},
+			guard: guard,
+			want:  ErrDaemonReplaced,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			client := &ControlClient{
+				frames:  make(chan controlFrame, len(test.frames)),
+				closing: make(chan struct{}),
+			}
+			for _, frame := range test.frames {
+				client.frames <- frame
+			}
+			err := client.acceptAttach(context.Background(), test.guard)
+			if !errors.Is(err, test.want) || (test.want == nil && err != nil) {
+				t.Fatalf("acceptAttach() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestControlClientCollectsAliasFramesThroughReplyFence(t *testing.T) {
+	t.Parallel()
+
+	client, reader := newRequestLoopTestClient(t)
+	response := make(chan controlResponse, 1)
+	go func() {
+		results, err := client.Call(context.Background(), "two-commands")
+		response <- controlResponse{results: results, err: err}
+	}()
+
+	if got := readRequestLoopLine(t, reader); got != "'two-commands'" {
+		t.Fatalf("command line = %q, want %q", got, "'two-commands'")
+	}
+	readRequestLoopFence(t, reader)
+	client.frames <- controlFrame{flags: 0, rawStdout: []byte("queued hook\n")}
+	client.frames <- controlFrame{flags: 1, rawStdout: []byte("one\n")}
+	client.frames <- controlFrame{flags: 1, rawStdout: []byte("two\n")}
+	client.frames <- replyFenceFrame(client.replyFence.first)
+	select {
+	case got := <-response:
+		t.Fatalf("Call() stopped at fence A: (%#v, %v)", got.results, got.err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	client.frames <- replyFenceFrame(client.replyFence.second)
+
+	select {
+	case got := <-response:
+		if got.err != nil || len(got.results) != 2 ||
+			string(got.results[0].RawStdout) != "one\n" ||
+			string(got.results[1].RawStdout) != "two\n" {
+			t.Fatalf("Call() = (%#v, %v), want two frames", got.results, got.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Call() did not reach its reply fence")
+	}
+}
+
+func TestControlClientCollectsNoFramesBeforeReplyFence(t *testing.T) {
+	t.Parallel()
+
+	client, reader := newRequestLoopTestClient(t)
+	response := make(chan controlResponse, 1)
+	go func() {
+		results, err := client.Call(context.Background(), "empty-alias")
+		response <- controlResponse{results: results, err: err}
+	}()
+
+	_ = readRequestLoopLine(t, reader)
+	readRequestLoopFence(t, reader)
+	completeControlRequest(client)
+
+	select {
+	case got := <-response:
+		if got.err != nil || len(got.results) != 0 {
+			t.Fatalf("Call() = (%#v, %v), want no frames", got.results, got.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Call() did not reach its empty reply fence")
+	}
+}
+
+func TestControlClientCmdRejectsVariableReplyCount(t *testing.T) {
+	t.Parallel()
+
+	for name, frames := range map[string][]controlFrame{
+		"none": nil,
+		"two": {
+			{rawStdout: []byte("one\n")},
+			{rawStdout: []byte("two\n")},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			client, reader := newRequestLoopTestClient(t)
+			result := make(chan error, 1)
+			go func() {
+				_, err := client.Cmd(context.Background(), "variable-alias")
+				result <- err
+			}()
+			_ = readRequestLoopLine(t, reader)
+			readRequestLoopFence(t, reader)
+			completeControlRequest(client, frames...)
+
+			select {
+			case err := <-result:
+				if !errors.Is(err, ErrControlReplyCount) {
+					t.Fatalf("Cmd() error = %v, want ErrControlReplyCount", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("Cmd() did not reject the variable reply count")
+			}
+		})
+	}
+}
+
+func TestControlClientPreservesAResultThatMatchesFenceA(t *testing.T) {
+	t.Parallel()
+
+	client, reader := newRequestLoopTestClient(t)
+	response := make(chan controlResponse, 1)
+	go func() {
+		results, err := client.Call(context.Background(), "malformed-alias")
+		response <- controlResponse{results: results, err: err}
+	}()
+	_ = readRequestLoopLine(t, reader)
+	readRequestLoopFence(t, reader)
+
+	client.frames <- replyFenceFrame(client.replyFence.first)
+	client.frames <- replyFenceFrame(client.replyFence.first)
+	select {
+	case got := <-response:
+		t.Fatalf("Call() stopped on overlapping A,A: (%#v, %v)", got.results, got.err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	client.frames <- replyFenceFrame(client.replyFence.second)
+
+	select {
+	case got := <-response:
+		if got.err != nil || len(got.results) != 1 || !got.results[0].Failed ||
+			string(got.results[0].RawStdout) != client.replyFence.first.rawStdout {
+			t.Fatalf("Call() = (%#v, %v), want one request-owned A", got.results, got.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Call() did not finish on overlapping A,A,B")
+	}
+}
+
+func TestControlClientCloseContextStartsWithCanceledContext(t *testing.T) {
+	command := exec.Command(
+		os.Args[0],
+		"-test.run=^TestServerCommandHelperProcess$",
+		"--",
+		"block",
+	)
+	command.Stdout = io.Discard
+	command.Stderr = io.Discard
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
+	client := &ControlClient{
+		command:       command,
+		stdin:         &controlSignalWriteCloser{wrote: make(chan struct{}, 1)},
+		stdout:        io.NopCloser(strings.NewReader("")),
+		stderr:        &controlLockedBuffer{},
+		notifications: queue,
+		frames:        make(chan controlFrame),
+		requests:      make(chan *controlRequest),
+		stopRequests:  make(chan struct{}),
+		requestDone:   make(chan struct{}),
+		closing:       make(chan struct{}),
+		done:          make(chan struct{}),
+		closeDone:     make(chan struct{}),
+	}
+	go client.waitProcess()
+	go client.runRequests()
+	t.Cleanup(func() {
+		_ = command.Process.Kill()
+		_ = queue.Close()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := client.CloseContext(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("CloseContext() error = %v, want context canceled", err)
+	}
+	select {
+	case <-client.closeDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("canceled CloseContext did not start shutdown")
+	}
+}
+
+func TestControlClientCancellationBeforeWriteIsNotIndeterminate(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	request := &controlRequest{ctx: ctx}
+	request.state.Store(uint32(controlRequestAccepted))
+	client := &ControlClient{stdin: controlRejectWriteCloser{t: t}}
+
+	response, keepRunning := client.executeControlRequest(request)
+	if !keepRunning || !errors.Is(response.err, context.Canceled) ||
+		errors.Is(response.err, ErrOutcomeUnknown) {
+		t.Fatalf("executeControlRequest() = (%#v, %t), want plain cancellation",
+			response, keepRunning)
+	}
+}
+
+func TestControlClientReturnsProvenFramesWhenStreamEndsBeforeFence(t *testing.T) {
+	t.Parallel()
+
+	client, reader := newRequestLoopTestClient(t)
+	response := make(chan controlResponse, 1)
+	go func() {
+		results, err := client.Call(context.Background(), "partial-alias")
+		response <- controlResponse{results: results, err: err}
+	}()
+
+	_ = readRequestLoopLine(t, reader)
+	readRequestLoopFence(t, reader)
+	client.frames <- controlFrame{flags: 1, rawStdout: []byte("proven\n")}
+	close(client.frames)
+
+	select {
+	case got := <-response:
+		if len(got.results) != 1 || string(got.results[0].RawStdout) != "proven\n" ||
+			!errors.Is(got.err, ErrOutcomeUnknown) || !errors.Is(got.err, ErrControlClosed) {
+			t.Fatalf("Call() = (%#v, %v), want proven frame and unknown outcome",
+				got.results, got.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Call() did not report the interrupted reply")
+	}
+}
+
+func TestControlClientPublishesFinishedStateWithReplyBoundary(t *testing.T) {
+	t.Parallel()
+
+	client := &ControlClient{
+		stdin:   &controlSignalWriteCloser{wrote: make(chan struct{}, 1)},
+		frames:  make(chan controlFrame, 2),
+		closing: make(chan struct{}),
+		replyFence: controlReplyFence{
+			first:  controlFrameFingerprint{flags: 1, rawStdout: "first fence\n"},
+			second: controlFrameFingerprint{flags: 1, rawStdout: "second fence\n"},
+		},
+	}
+	client.frames <- replyFenceFrame(client.replyFence.first)
+	client.frames <- replyFenceFrame(client.replyFence.second)
+	request := &controlRequest{ctx: context.Background(), line: "'display-message'"}
+	request.state.Store(uint32(controlRequestAccepted))
+
+	response, keepRunning := client.executeControlRequest(request)
+	if response.err != nil || !keepRunning {
+		t.Fatalf("executeControlRequest() = (%#v, %t)", response, keepRunning)
+	}
+	if got := controlRequestState(request.state.Load()); got != controlRequestFinished {
+		t.Fatalf("request state = %v, want finished before response publication", got)
 	}
 }
 
@@ -46,11 +343,12 @@ func TestControlClientDrainsCanceledWrittenCommandBeforeNextWrite(t *testing.T) 
 	if want, _ := encodeControlCommand([]string{"display-message", "first"}, false); firstLine != want {
 		t.Fatalf("first command line = %q, want %q", firstLine, want)
 	}
+	readRequestLoopFence(t, reader)
 	cancelFirst()
 	select {
 	case err := <-firstResult:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("first Cmd() error = %v, want context canceled", err)
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrOutcomeUnknown) {
+			t.Fatalf("first Cmd() error = %v, want canceled unknown outcome", err)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("first Cmd() did not return after cancellation")
@@ -74,7 +372,7 @@ func TestControlClientDrainsCanceledWrittenCommandBeforeNextWrite(t *testing.T) 
 	case <-time.After(30 * time.Millisecond):
 	}
 
-	client.frames <- controlFrame{number: 1, rawStdout: []byte("first\n")}
+	completeControlRequest(client, controlFrame{number: 1, rawStdout: []byte("first\n")})
 	select {
 	case line := <-secondLine:
 		line = line[:len(line)-1]
@@ -82,10 +380,11 @@ func TestControlClientDrainsCanceledWrittenCommandBeforeNextWrite(t *testing.T) 
 		if line != want {
 			t.Fatalf("second command line = %q, want %q", line, want)
 		}
+		readRequestLoopFence(t, reader)
 	case <-time.After(time.Second):
 		t.Fatal("second command was not written after first frame")
 	}
-	client.frames <- controlFrame{number: 2, rawStdout: []byte("second\n")}
+	completeControlRequest(client, controlFrame{number: 2, rawStdout: []byte("second\n")})
 	select {
 	case response := <-secondResult:
 		if response.err != nil || response.results[0].Number != 2 ||
@@ -130,15 +429,16 @@ func TestControlClientSerializesConcurrentCommands(t *testing.T) {
 	}
 	for number := uint64(1); number <= uint64(len(commands)); number++ {
 		line := readRequestLoopLine(t, reader)
+		readRequestLoopFence(t, reader)
 		command, ok := expected[line]
 		if !ok {
 			t.Fatalf("unexpected encoded command %q", line)
 		}
 		delete(expected, line)
-		client.frames <- controlFrame{
+		completeControlRequest(client, controlFrame{
 			number:    number,
 			rawStdout: []byte(command[1] + "\n"),
-		}
+		})
 	}
 	for range commands {
 		response := <-results
@@ -154,7 +454,7 @@ func TestControlClientDoesNotSubmitCommandsAfterClosing(t *testing.T) {
 
 	closing := make(chan struct{})
 	close(closing)
-	requests := make(chan controlRequest, 256)
+	requests := make(chan *controlRequest, 256)
 	client := &ControlClient{
 		requests:     requests,
 		stopRequests: make(chan struct{}),
@@ -183,6 +483,7 @@ func TestControlClientRequestStopWaitsForAcceptedFrame(t *testing.T) {
 		result <- controlResponse{results: []ControlCommandResult{value}, err: err}
 	}()
 	_ = readRequestLoopLine(t, reader)
+	readRequestLoopFence(t, reader)
 
 	client.closeRequested.Store(true)
 	close(client.stopRequests)
@@ -192,7 +493,7 @@ func TestControlClientRequestStopWaitsForAcceptedFrame(t *testing.T) {
 	case <-time.After(30 * time.Millisecond):
 	}
 
-	client.frames <- controlFrame{number: 1, rawStdout: []byte("accepted\n")}
+	completeControlRequest(client, controlFrame{number: 1, rawStdout: []byte("accepted\n")})
 	select {
 	case response := <-result:
 		if response.err != nil || string(response.results[0].RawStdout) != "accepted\n" {
@@ -219,6 +520,7 @@ func TestControlClientRequestStopReleasesQueuedCommands(t *testing.T) {
 		results <- err
 	}()
 	_ = readRequestLoopLine(t, reader)
+	readRequestLoopFence(t, reader)
 	for _, value := range []string{"queued-one", "queued-two"} {
 		go func() {
 			_, err := client.Cmd(context.Background(), "display-message", value)
@@ -253,21 +555,16 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	spool, err := newControlRecordSpool()
-	if err != nil {
-		_ = command.Process.Kill()
-		_ = command.Wait()
-		t.Fatal(err)
-	}
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
 	writer := &controlSignalWriteCloser{wrote: make(chan struct{}, 1)}
 	client := &ControlClient{
 		command:       command,
 		stdin:         writer,
 		stdout:        io.NopCloser(strings.NewReader("")),
 		stderr:        &controlLockedBuffer{},
-		notifications: spool,
+		notifications: queue,
 		frames:        make(chan controlFrame),
-		requests:      make(chan controlRequest),
+		requests:      make(chan *controlRequest),
 		stopRequests:  make(chan struct{}),
 		requestDone:   make(chan struct{}),
 		closing:       make(chan struct{}),
@@ -284,7 +581,7 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 			t.Error("control helper process did not exit")
 		}
 		close(client.frames)
-		_ = spool.Close()
+		_ = queue.Close()
 	})
 
 	commandResult := make(chan error, 1)
@@ -315,18 +612,15 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 func TestControlClientNotificationReaderDrainsBeforeProtocolError(t *testing.T) {
 	t.Parallel()
 
-	spool, err := newControlRecordSpool()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = spool.Close() })
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
+	t.Cleanup(func() { _ = queue.Close() })
 	closing := make(chan struct{})
 	close(closing)
 	client := &ControlClient{
 		stdout: io.NopCloser(strings.NewReader(
 			"%session-renamed $1 renamed\n%end malformed\n",
 		)),
-		notifications: spool,
+		notifications: queue,
 		frames:        make(chan controlFrame, 1),
 		closing:       closing,
 		readDone:      make(chan struct{}),
@@ -345,7 +639,7 @@ func TestControlClientNotificationReaderDrainsBeforeProtocolError(t *testing.T) 
 func TestNotificationsReportAnUnreadableRecordAndKeepGoing(t *testing.T) {
 	t.Parallel()
 
-	client := newSpooledNotificationClient(t,
+	client := newQueuedNotificationClient(t,
 		"%session-renamed $1 first\n"+
 			"%not-a-notification-this-package-knows arguments\n"+
 			"%session-renamed $1 second\n",
@@ -372,7 +666,7 @@ func TestNotificationsReportAnUnreadableRecordAndKeepGoing(t *testing.T) {
 func TestNotificationsStopAtAnErrorThatEndedTheStream(t *testing.T) {
 	t.Parallel()
 
-	client := newSpooledNotificationClient(t,
+	client := newQueuedNotificationClient(t,
 		"%session-renamed $1 first\n%end malformed\n",
 	)
 
@@ -396,7 +690,7 @@ func TestNotificationsStopAtAnErrorThatEndedTheStream(t *testing.T) {
 func TestNotificationsLeaveTheRestOfTheQueueForTheNextReader(t *testing.T) {
 	t.Parallel()
 
-	client := newSpooledNotificationClient(t,
+	client := newQueuedNotificationClient(t,
 		"%session-renamed $1 first\n%session-renamed $1 second\n",
 	)
 
@@ -414,22 +708,19 @@ func TestNotificationsLeaveTheRestOfTheQueueForTheNextReader(t *testing.T) {
 	}
 }
 
-// newSpooledNotificationClient returns a control client whose notification
+// newQueuedNotificationClient returns a control client whose notification
 // queue holds what stream carries, without a tmux process: the stream is read
 // to its end before the client is returned.
-func newSpooledNotificationClient(t *testing.T, stream string) *ControlClient {
+func newQueuedNotificationClient(t *testing.T, stream string) *ControlClient {
 	t.Helper()
 
-	spool, err := newControlRecordSpool()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = spool.Close() })
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
+	t.Cleanup(func() { _ = queue.Close() })
 	closing := make(chan struct{})
 	close(closing)
 	client := &ControlClient{
 		stdout:        io.NopCloser(strings.NewReader(stream)),
-		notifications: spool,
+		notifications: queue,
 		frames:        make(chan controlFrame, 1),
 		closing:       closing,
 		readDone:      make(chan struct{}),
@@ -444,10 +735,14 @@ func newRequestLoopTestClient(t *testing.T) (*ControlClient, *bufio.Reader) {
 	client := &ControlClient{
 		stdin:        writer,
 		frames:       make(chan controlFrame, 1),
-		requests:     make(chan controlRequest),
+		requests:     make(chan *controlRequest),
 		stopRequests: make(chan struct{}),
 		requestDone:  make(chan struct{}),
 		closing:      make(chan struct{}),
+		replyFence: controlReplyFence{
+			first:  controlFrameFingerprint{flags: 1, rawStdout: "bad octal escape\n"},
+			second: controlFrameFingerprint{flags: 1, rawStdout: "bad unicode escape\n"},
+		},
 	}
 	go client.runRequests()
 	t.Cleanup(func() {
@@ -474,6 +769,33 @@ func readRequestLoopLine(t *testing.T, reader *bufio.Reader) string {
 	return line[:len(line)-1]
 }
 
+func readRequestLoopFence(t *testing.T, reader *bufio.Reader) {
+	t.Helper()
+	if got := readRequestLoopLine(t, reader); got != `\400` {
+		t.Fatalf("first fence line = %q, want %q", got, `\400`)
+	}
+	if got := readRequestLoopLine(t, reader); got != `\uZZZZ` {
+		t.Fatalf("second fence line = %q, want %q", got, `\uZZZZ`)
+	}
+}
+
+func replyFenceFrame(fingerprint controlFrameFingerprint) controlFrame {
+	return controlFrame{
+		flags:     fingerprint.flags,
+		rawStdout: []byte(fingerprint.rawStdout),
+		failed:    true,
+	}
+}
+
+func completeControlRequest(client *ControlClient, frames ...controlFrame) {
+	for _, frame := range frames {
+		frame.flags = 1
+		client.frames <- frame
+	}
+	client.frames <- replyFenceFrame(client.replyFence.first)
+	client.frames <- replyFenceFrame(client.replyFence.second)
+}
+
 type controlSignalWriteCloser struct {
 	wrote chan struct{}
 }
@@ -487,3 +809,15 @@ func (w *controlSignalWriteCloser) Write(data []byte) (int, error) {
 }
 
 func (w *controlSignalWriteCloser) Close() error { return nil }
+
+type controlRejectWriteCloser struct {
+	t *testing.T
+}
+
+func (w controlRejectWriteCloser) Write([]byte) (int, error) {
+	w.t.Helper()
+	w.t.Fatal("control command was written after pre-write cancellation")
+	return 0, nil
+}
+
+func (controlRejectWriteCloser) Close() error { return nil }

@@ -12,25 +12,14 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// tmux's paste buffers, which is how text gets from anywhere to a pane.
-//
-// A buffer is what a person's copy lands in and what a paste comes from, so
-// this is the shared surface between what someone selected in their terminal
-// and what a client can read. It is also how a client stages something too
-// large or too awkward to type: load_buffer puts it there, paste_buffer
-// delivers it.
-//
-// There is no tool that lists buffers. A person's buffers hold whatever they
-// have copied, which is their clipboard history and none of a client's
-// business; a client reads back the buffers it named itself, which it can do
-// because it knows their names.
+// Buffers bridge client text and panes. Tools are limited to the
+// libtmux-mcp- namespace, not to buffers whose provenance can be proved.
 
-// bufferSequence names each buffer this server creates apart from the last.
+// bufferSequence provides unique suffixes for generated buffer names.
 var bufferSequence atomic.Int64
 
-// bufferPrefix marks the buffers this server made, so show_buffer and
-// delete_buffer can be limited to them without a client having to be trusted
-// to stay out of a person's own.
+// bufferPrefix limits access to one namespace; it does not prove who created a
+// colliding name.
 const bufferPrefix = "libtmux-mcp-"
 
 // loadBufferInput stages text in a tmux buffer.
@@ -42,7 +31,7 @@ type loadBufferInput struct {
 	Name string `json:"name,omitempty" jsonschema:"a name for the buffer; empty makes one up"`
 }
 
-// bufferRef identifies a buffer this server owns.
+// bufferRef identifies a buffer in the server's namespace.
 type bufferRef struct {
 	// Name is the buffer's tmux name, which paste_buffer and show_buffer take.
 	Name string `json:"name"`
@@ -50,11 +39,7 @@ type bufferRef struct {
 	Bytes int `json:"bytes"`
 }
 
-// loadBuffer puts text into a named tmux buffer.
-//
-// It is a staging step rather than a delivery: nothing reaches a pane until
-// paste_buffer, which is what makes it useful for text a client wants to
-// deliver more than once or into more than one pane.
+// loadBuffer stages text without delivering it to a pane.
 func (t *tools) loadBuffer(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -67,7 +52,7 @@ func (t *tools) loadBuffer(
 	if err != nil {
 		return nil, bufferRef{}, err
 	}
-	if err := t.tmux().SetBuffer(ctx, tmux.SetBufferRequest{
+	if err := t.tmux(ctx).SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
 		Name: &name,
 	}); err != nil {
@@ -96,11 +81,7 @@ type showBufferOutput struct {
 	truncation
 }
 
-// showBuffer reads back a buffer this server created.
-//
-// Only this server's own buffers, which is the point: tmux's buffer list is
-// where a person's copies land, and a tool that read any buffer by name would
-// be a tool for reading what someone copied.
+// showBuffer reads a buffer in the libtmux-mcp- namespace.
 func (t *tools) showBuffer(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -114,15 +95,17 @@ func (t *tools) showBuffer(
 	if err != nil {
 		return nil, showBufferOutput{}, err
 	}
-	contents, err := t.tmux().ShowBuffer(ctx, &name)
+	process, err := t.runtime.process(ctx)
 	if err != nil {
-		// tmux says only that show-buffer failed, which reads as a broken tool
-		// rather than a buffer that is not there. Naming what was looked for
-		// also shows the prefix, which is why a person's own buffer name does
-		// not resolve here.
+		return nil, showBufferOutput{}, err
+	}
+	contents, err := process.ShowBuffer(ctx, &name)
+	if err != nil {
+		// tmux reports only that show-buffer failed; include the normalized
+		// namespace name so the missing target is visible.
 		return nil, showBufferOutput{}, fmt.Errorf(
-			"no buffer named %q: only buffers staged by this server can be read, "+
-				"and load_buffer returns the name to use: %w", name, err)
+			"no buffer named %q in the libtmux-mcp- namespace: "+
+				"use the name load_buffer returned: %w", name, err)
 	}
 	kept, report := limits.apply(strings.Split(contents, "\n"))
 	return textResult(kept), showBufferOutput{
@@ -187,7 +170,7 @@ type deleteBufferOutput struct {
 	Deleted string `json:"deleted"`
 }
 
-// deleteBuffer removes a buffer this server created.
+// deleteBuffer removes a buffer in the libtmux-mcp- namespace.
 func (t *tools) deleteBuffer(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -197,18 +180,14 @@ func (t *tools) deleteBuffer(
 	if err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
-	if err := t.tmux().DeleteBuffer(ctx, &name); err != nil {
+	if err := t.tmux(ctx).DeleteBuffer(ctx, &name); err != nil {
 		return nil, deleteBufferOutput{}, err
 	}
 	return nil, deleteBufferOutput{Deleted: name}, nil
 }
 
-// bufferName validates a name a client chose, or makes one up.
-//
-// tmux reads a buffer name as a plain argument, so whitespace would be read as
-// further arguments and a leading dash as a flag. The prefix is added rather
-// than required, so a client that named a buffer "notes" gets a buffer it can
-// find again and a person's own buffers keep their names to themselves.
+// bufferName allocates or validates a namespaced buffer name. User names gain
+// bufferPrefix so unprefixed foreign buffers remain unreachable.
 func bufferName(requested string) (string, error) {
 	name := strings.TrimSpace(requested)
 	if name == "" {
@@ -223,17 +202,9 @@ func bufferName(requested string) (string, error) {
 	return bufferPrefix + name, nil
 }
 
-// usableBufferName refuses what tmux would not hand back unchanged.
-//
-// From 3.7 tmux cleans a name for display before storing it and doubles a
-// backslash doing so, while lookup does not repeat the cleaning. The buffer
-// then answers to a spelling the caller was never told, so the handle these
-// tools return would address nothing. Below 3.7 the same name round-trips,
-// which is why it is refused rather than left to the tmux underneath.
+// usableBufferName rejects backslashes because tmux 3.7+ stores a
+// display-escaped spelling that lookup does not accept.
 func usableBufferName(requested, name string) error {
-	if strings.ContainsAny(name, " \t\n") {
-		return fmt.Errorf("buffer name %q must not contain whitespace", requested)
-	}
 	if strings.Contains(name, `\`) {
 		return fmt.Errorf(
 			"buffer name %q must not contain a backslash: tmux 3.7 stores it "+
@@ -243,7 +214,7 @@ func usableBufferName(requested, name string) error {
 	return nil
 }
 
-// ownBufferName refuses a name this server did not create.
+// ownBufferName normalizes a name into the libtmux-mcp- namespace.
 func ownBufferName(requested string) (string, error) {
 	name := strings.TrimSpace(requested)
 	if name == "" {
@@ -262,30 +233,30 @@ func ownBufferName(requested string) (string, error) {
 
 // addBufferTools advertises the tools for tmux's paste buffers.
 func addBufferTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "load_buffer",
 		Annotations: mutating("Stage Text in a tmux Buffer"),
 		Description: "Put text into a named tmux buffer, ready to paste into a " +
 			"pane once or several times. paste_text is the shorter road when the " +
 			"text goes into one pane once.",
 	}, t.loadBuffer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "paste_buffer",
 		Annotations: mutating("Paste a tmux Buffer"),
 		Description: "Deliver a staged buffer into a pane as text, with no tmux " +
 			"key names read. The name load_buffer returned reaches the buffer, " +
 			"and so does the short one passed to it.",
 	}, t.pasteBuffer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_buffer",
 		Annotations: readOnly("Read a tmux Buffer"),
-		Description: "Read back a buffer this server staged. Only those: tmux's " +
-			"other buffers hold whatever a person copied.",
+		Description: "Read a buffer in the libtmux-mcp- namespace. Names outside " +
+			"it are prefixed before lookup, so other tmux buffers remain unreachable.",
 	}, t.showBuffer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "delete_buffer",
 		Annotations: settling("Delete a tmux Buffer"),
-		Description: "Remove a buffer this server staged, once nothing else " +
+		Description: "Remove a buffer in the libtmux-mcp- namespace once nothing else " +
 			"will paste it. A buffer left behind stays on the tmux server for " +
 			"anyone attached to paste by hand, and tmux keeps a bounded stack " +
 			"of them, so the oldest is dropped to make room for a new one.",

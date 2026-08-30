@@ -15,15 +15,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// TestTheTwoListsThatAnswerWithoutAServer covers the exception to the rule that
-// a list against an empty socket reports no server.
-//
-// tmux marks list-keys and list-commands as starting a server, so a client runs
-// them against one it starts for the purpose. The server holds no sessions and
-// exits immediately, leaving its socket file behind. Every other list this
-// package wraps reports [tmux.ErrNoServer] instead, and a caller reaching for
-// one of these two to ask whether a server is up gets an answer to a different
-// question.
+// list-keys and list-commands start a transient server on an empty socket, so
+// their success cannot establish that a daemon was already alive.
 //
 //libtmux:real-tmux
 func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
@@ -36,10 +29,13 @@ func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "tmux-"+strconv.Itoa(os.Getuid())), 0o700); err != nil {
 		t.Fatalf("Mkdir() = %v", err)
 	}
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName:         "empty",
 		ProcessEnvironment: []string{"TMUX_TMPDIR=" + root, "PATH=" + os.Getenv("PATH")},
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 
 	if alive, err := server.IsAlive(ctx); err != nil || alive {
 		t.Fatalf("IsAlive() = (%t, %v), want (false, nil) before anything runs", alive, err)

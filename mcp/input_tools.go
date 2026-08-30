@@ -12,15 +12,8 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Three ways to put something into a pane, because they are not the same
-// thing and picking the wrong one is how an agent corrupts a file.
-//
-// send_keys types a command and presses Enter, and tmux reads its own key
-// names on the way, so "C-c" is an interrupt rather than three characters.
-// send_keys_batch is the same lookup without the Enter, for driving a program
-// that reads keys rather than lines. paste_text delivers text as text, with no
-// key names read at all, which is the only safe way to put arbitrary content
-// into a pane: a line of it beginning with "Escape" would otherwise be a key.
+// Input tools distinguish a command plus Enter, a sequence of tmux key names,
+// and literal text that tmux must not interpret as keys.
 
 // sendKeysBatchInput sends several keys to a pane in order.
 type sendKeysBatchInput struct {
@@ -41,7 +34,7 @@ type sendKeysBatchInput struct {
 type sendKeysBatchOutput struct {
 	// PaneID is the pane that received the keys.
 	PaneID string `json:"paneId"`
-	// Sent is how many keys were delivered.
+	// Sent is how many keys tmux accepted when the call succeeds.
 	Sent int `json:"sent"`
 }
 
@@ -68,17 +61,12 @@ func (t *tools) sendKeysBatch(
 			return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: index},
 				fmt.Errorf("key %d is empty", index)
 		}
-		name := key
-		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-			Command:   &name,
-			SkipEnter: true,
-			Literal:   input.Literal,
-		}); err != nil {
-			// The keys already sent were delivered and cannot be taken back,
-			// so the count says how far it got rather than implying none were.
-			return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: index},
-				fmt.Errorf("sending key %q: %w", key, err)
-		}
+	}
+	if err := pane.SendKeySequence(ctx, tmux.SendKeySequenceRequest{
+		Keys: input.Keys, Literal: input.Literal,
+	}); err != nil {
+		return nil, sendKeysBatchOutput{PaneID: pane.ID().String()},
+			fmt.Errorf("sending keys: %w", err)
 	}
 	return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: len(input.Keys)}, nil
 }
@@ -113,17 +101,8 @@ type pasteTextOutput struct {
 	Bytes int `json:"bytes"`
 }
 
-// pasteText puts text into a pane without tmux reading any of it as keys.
-//
-// send_keys looks up tmux key names, so text containing "Escape", "C-c", or a
-// leading dash is not delivered as itself. Anything a client did not write by
-// hand — a file, a message, a generated command — goes through here, because
-// the client cannot know in advance whether it contains a word tmux claims.
-//
-// The text is staged in a tmux buffer and pasted from it, which is how tmux
-// delivers bytes rather than keys. The buffer is named for this call and
-// removed afterwards, so it does not join the buffers a person pastes from by
-// hand.
+// pasteText stages text in a per-call buffer so tmux cannot interpret key
+// names, then removes the buffer after delivery.
 func (t *tools) pasteText(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -138,7 +117,7 @@ func (t *tools) pasteText(
 	}
 	output := pasteTextOutput{PaneID: pane.ID().String()}
 
-	server := t.tmux()
+	server := t.tmux(ctx)
 	name := "libtmux-mcp-paste-" + strconv.FormatInt(pasteSequence.Add(1), 10)
 	if err := server.SetBuffer(ctx, tmux.SetBufferRequest{
 		Data: input.Text,
@@ -158,8 +137,8 @@ func (t *tools) pasteText(
 		DeleteAfter: true,
 		Bracket:     bracket,
 	}); err != nil {
-		_ = server.DeleteBuffer(ctx, &name)
-		return nil, output, err
+		cleanupErr := server.DeleteBuffer(ctx, &name)
+		return nil, output, errors.Join(err, cleanupErr)
 	}
 	if input.Enter {
 		enter := "Enter"
@@ -167,6 +146,7 @@ func (t *tools) pasteText(
 			Command:   &enter,
 			SkipEnter: true,
 		}); err != nil {
+			t.runtime.observe(err)
 			// The text arrived; only the Enter did not. Reporting the paste as
 			// a failure would invite a client to send it again.
 			return toolFailure(fmt.Errorf("text pasted but Enter was not sent: %w", err)),
@@ -177,11 +157,7 @@ func (t *tools) pasteText(
 	return nil, output, nil
 }
 
-// exitCopyModeInput returns a pane to passing keys to the program in it.
-//
-// Entering and leaving take separate types even though leaving needs nothing
-// extra, because sharing one put scrollUp in the schema of a tool that cannot
-// act on it, and a client reading the schema had no way to know that.
+// exitCopyModeInput omits fields that only entering copy mode can use.
 type exitCopyModeInput struct {
 	// PaneID is the tmux pane id. Empty uses the active pane.
 	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
@@ -208,14 +184,8 @@ type copyModeOutput struct {
 	InCopyMode bool `json:"inCopyMode"`
 }
 
-// enterCopyMode puts a pane into copy mode.
-//
-// A pane in copy mode reads keys as tmux's own rather than passing them to the
-// program in it, which is what a client needs in order to scroll and select.
-// It is also a trap worth naming: a client that leaves a pane in copy mode has
-// left a person's keystrokes going somewhere they do not expect, and every
-// send_keys after it goes to tmux rather than to the shell. get_pane_info
-// reports inMode, and exit_copy_mode is the way back.
+// enterCopyMode redirects subsequent keys to tmux rather than the pane's
+// program. get_pane_info reports inMode; exit_copy_mode restores input.
 func (t *tools) enterCopyMode(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -235,17 +205,8 @@ func (t *tools) enterCopyMode(
 	return nil, copyModeOutput{PaneID: pane.ID().String(), InCopyMode: true}, nil
 }
 
-// refuseAPaneInAMode declines to type into a pane that is not listening.
-//
-// A pane in copy mode reads keys as that mode's bindings rather than passing
-// them to the program, so the text never arrives and something else happens
-// instead: a binding that copies a selection, moves the cursor, or waits for a
-// further key. The last one is why this is a refusal rather than a warning: the
-// client that sent such a key never gets its reply, and supplying the key the
-// binding waits for does not release it. It is the sender that blocks rather
-// than control clients in particular, which is what makes refusing here a whole
-// fix -- another client doing it, or a person doing it at a keyboard, costs
-// this connection nothing.
+// refuseAPaneThatCannotRead rejects dead or modal panes before input can be
+// lost or interpreted as tmux bindings.
 func refuseAPaneThatCannotRead(pane tmux.Pane, tool string) error {
 	formats := pane.Formats()
 	// Before the mode, because a pane can be dead and in a mode at once -- a
@@ -340,7 +301,7 @@ type sendKeysOutput struct {
 
 // addInputTools advertises the tools that put something into a pane.
 func addInputTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "send_keys",
 		Annotations: mutating("Send Keys to a Pane"),
 		Description: "Type into one pane and press Enter. tmux key names are " +
@@ -349,21 +310,21 @@ func addInputTools(server *mcp.Server, t *tools) {
 			"paste_text for content you did not write by hand, and run_command " +
 			"when you want the exit status.",
 	}, t.sendKeys)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "send_keys_batch",
 		Annotations: mutating("Send a Sequence of Keys"),
 		Description: "Send several tmux key names to a pane in order, with no " +
 			"Enter appended. This is how to drive a program that reads keys " +
 			"rather than lines: quit a pager, answer a prompt, leave an editor.",
 	}, t.sendKeysBatch)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "paste_text",
 		Annotations: mutating("Paste Text into a Pane"),
 		Description: "Deliver text into a pane exactly, with no tmux key names " +
 			"read. Use this for anything you did not write by hand: a word like " +
 			"\"Escape\" in the middle of it would otherwise be sent as that key.",
 	}, t.pasteText)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "enter_copy_mode",
 		Annotations: mutating("Enter Copy Mode"),
 		Description: "Put a pane into tmux's copy mode, where keys scroll and " +
@@ -371,7 +332,7 @@ func addInputTools(server *mcp.Server, t *tools) {
 			"exit_copy_mode: keys sent to a pane still in copy mode do not reach " +
 			"the shell.",
 	}, t.enterCopyMode)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "exit_copy_mode",
 		Annotations: settling("Leave Copy Mode"),
 		Description: "Return a pane from copy mode to passing keys to the " +

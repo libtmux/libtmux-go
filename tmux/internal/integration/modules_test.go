@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,59 @@ const tmuxModulePath = "github.com/libtmux/libtmux-go"
 
 // modules are every module in this repository, by directory.
 var modules = []string{".", "examples", "workspace", "mcp", "benchmarks"}
+
+func TestGeneratedJobCoversEveryModuleWithGenerators(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "tests.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, module := range modules {
+		if !moduleHasGenerator(t, root, module) {
+			continue
+		}
+		command := "go generate ./..."
+		if module != "." {
+			command = "go -C " + filepath.ToSlash(module) + " generate ./..."
+		}
+		if !strings.Contains(string(workflow), command) {
+			t.Errorf("generated job does not run %q for module %s", command, module)
+		}
+	}
+}
+
+func moduleHasGenerator(t *testing.T, root, module string) bool {
+	t.Helper()
+
+	directory := filepath.Join(root, module)
+	found := false
+	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && path != directory {
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if found || filepath.Ext(path) != ".go" {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		found = strings.Contains(string(content), "//go:"+"generate ")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
 
 // publishedModules maps a module of this repository that is tagged and
 // consumed to the directory holding it. examples and benchmarks are neither.
@@ -38,23 +92,9 @@ var ownRequirement = regexp.MustCompile(
 	`(github\.com/libtmux/libtmux-go(?:/[a-z]+)?) (v\d\S*)`,
 )
 
-// TestEveryRequirementNamesTheNewestRelease gates a pin against the tag list
-// rather than against the other pins.
-//
-// The gate this replaces compared the require directives with each other, which
-// a uniformly stale set satisfies and did: all four named v0.0.1-alpha.1 for the
-// whole life of v0.0.1-alpha.2. That is invisible in three of them, where a
-// replace directive beside the require sends the go command next door instead.
-// It is not invisible in mcp, which carries no replace, so its require is the
-// one the go command resolves -- and it resolved a release the working tree had
-// left nineteen commits behind.
-//
-// Being behind is the only failure available. A require cannot name a release
-// that does not exist yet, so unlike the version a build reports there is no
-// legal state ahead of the tags.
-//
-// Documentation is not a source of versions; see
-// TestNoDocumentationPinsAModuleVersion for why it must not be one.
+// Consumer modules must require the newest published release. Comparing pins
+// only with each other misses a uniformly stale set, especially behind local
+// replace directives.
 func TestEveryRequirementNamesTheNewestRelease(t *testing.T) {
 	t.Parallel()
 
@@ -124,40 +164,76 @@ func longestModulePrefix(packagePath string) (string, bool) {
 	return best, best != ""
 }
 
-// TestEveryModuleResolvesWithoutAWorkspace gates the difference between a
-// repository that works and one that only works here.
-//
-// A go.work file stitches these modules together on a developer's machine, and
-// in doing so it hides a module whose own go.mod cannot resolve what it
-// imports. A consumer has no workspace, so GOWORK=off is how a consumer sees
-// them, and it is the only way this repository finds out before they do.
-func TestEveryModuleResolvesWithoutAWorkspace(t *testing.T) {
+// TestEveryModuleBuildsWithWorkspaceSources proves the current source graph is
+// coherent. Release metadata is a separate claim: sibling modules cannot name
+// an unreleased core version.
+func TestEveryModuleBuildsWithWorkspaceSources(t *testing.T) {
 	root := repositoryRoot(t)
+	workspace := filepath.Join(root, "go.work")
 	for _, module := range modules {
 		t.Run(module, func(t *testing.T) {
-			// Build into a temporary directory. A module holding a main
-			// package would otherwise have a binary written into it, which
-			// is a build artefact this repository deletes rather than
-			// ignores -- and one a wildcard commit would carry in.
-			build := exec.Command("go", "build", "-o", t.TempDir()+string(os.PathSeparator), "./...")
+			build := exec.Command(
+				"go", "build", "-o", t.TempDir()+string(os.PathSeparator), "./...",
+			)
 			build.Dir = filepath.Join(root, module)
-			build.Env = append(os.Environ(), "GOWORK=off")
+			build.Env = append(os.Environ(), "GOWORK="+workspace)
 			if output, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("module %s does not resolve on its own: %v\n%s",
+				t.Fatalf("module %s does not build with repository sources: %v\n%s",
 					module, err, output)
 			}
 		})
 	}
 }
 
-// TestTheCoreKeepsItsPrivatePackagesToItself gates the boundary that moving
-// internal beneath the package bought.
+// TestEveryModuleMetadataResolvesWithoutAWorkspace gates standalone go.mod and
+// go.sum files without pretending current source can compile against sibling
+// versions that have not been released yet.
 //
-// Go allows an internal package to be imported from anywhere under the parent
-// of its internal directory, and a module boundary does not narrow that. The
-// parent here is the tmux package, so the consumer modules are outside it and
-// the compiler refuses them. That is a property of where the directory sits,
-// which means moving it back would silently give the consumers access again.
+// A go.work file stitches these modules together on a developer's machine, and
+// in doing so it hides incomplete module metadata. A consumer has no workspace,
+// so GOWORK=off is how a consumer resolves it. go mod tidy -diff checks that
+// graph without compiling unreleased source against released siblings.
+func TestEveryModuleMetadataResolvesWithoutAWorkspace(t *testing.T) {
+	root := repositoryRoot(t)
+	for _, module := range modules {
+		t.Run(module, func(t *testing.T) {
+			tidy := exec.Command("go", "mod", "tidy", "-diff")
+			tidy.Dir = filepath.Join(root, module)
+			tidy.Env = append(os.Environ(), "GOWORK=off")
+			if output, err := tidy.CombinedOutput(); err != nil {
+				t.Fatalf("module %s metadata is not standalone and tidy: %v\n%s",
+					module, err, output)
+			}
+		})
+	}
+}
+
+// TestInstallableModuleHasNoLocalOverrides keeps the MCP command installable as
+// a versioned module. Go rejects replace and exclude directives in that mode.
+func TestInstallableModuleHasNoLocalOverrides(t *testing.T) {
+	root := repositoryRoot(t)
+	edit := exec.Command("go", "mod", "edit", "-json")
+	edit.Dir = filepath.Join(root, "mcp")
+	edit.Env = append(os.Environ(), "GOWORK=off")
+	output, err := edit.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata struct {
+		Replace []json.RawMessage
+		Exclude []json.RawMessage
+	}
+	if err := json.Unmarshal(output, &metadata); err != nil {
+		t.Fatalf("decode mcp/go.mod: %v", err)
+	}
+	if len(metadata.Replace) != 0 || len(metadata.Exclude) != 0 {
+		t.Fatalf("mcp/go.mod has %d replace and %d exclude directives; want none",
+			len(metadata.Replace), len(metadata.Exclude))
+	}
+}
+
+// Go internal visibility follows directory ancestry, not module boundaries.
+// Keeping internal beneath tmux prevents sibling consumer modules importing it.
 func TestTheCoreKeepsItsPrivatePackagesToItself(t *testing.T) {
 	root := repositoryRoot(t)
 	probe := filepath.Join(root, "mcp", "zz_internal_boundary_probe.go")
@@ -180,19 +256,21 @@ func TestTheCoreKeepsItsPrivatePackagesToItself(t *testing.T) {
 	}
 }
 
-// TestTheServerInstallsFromItsOwnModule gates the path a user types.
-//
-// The command lives in a module of its own, so the go command resolves it
-// through mcp/go.mod rather than the core's. Building it by that path is what
-// confirms the install path a reader is given actually names something.
-func TestTheServerInstallsFromItsOwnModule(t *testing.T) {
-	root := repositoryRoot(t)
-	build := exec.Command("go", "build", "-o", filepath.Join(t.TempDir(), "libtmux-mcp"),
-		"./cmd/libtmux-mcp")
-	build.Dir = filepath.Join(root, "mcp")
-	build.Env = append(os.Environ(), "GOWORK=off")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("the documented install path does not build: %v\n%s", err, output)
+// TestLatestPublishedServerInstalls gates the path a user types. A version
+// suffix makes go install resolve the published module rather than the
+// checkout's go.mod. Current source compilation is covered separately because
+// its sibling versions may not have been released in dependency order yet.
+func TestLatestPublishedServerInstalls(t *testing.T) {
+	install := exec.Command(
+		"go", "install", "github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest",
+	)
+	install.Env = append(
+		os.Environ(),
+		"GOWORK=off",
+		"GOBIN="+t.TempDir(),
+	)
+	if output, err := install.CombinedOutput(); err != nil {
+		t.Fatalf("the documented @latest install path does not build: %v\n%s", err, output)
 	}
 }
 
@@ -230,24 +308,8 @@ func moduleRootFrom(t *testing.T, directory string) string {
 	}
 }
 
-// TestNoDocumentationPinsAModuleVersion gates the treadmill rather than one
-// lap of it.
-//
-// A README that names a version to fetch is a copy of the tag list, and it went
-// stale exactly as a copy does: two of them told a reader to install
-// v0.0.1-alpha.1 for the whole life of v0.0.1-alpha.4, and that version is
-// retracted, so the command they were given refuses to run. The gate above did
-// not see it, because it read only the README at the repository root and
-// compared what it found against the other written-down values rather than
-// against the tags -- so a set that agreed with itself and with nothing else
-// passed.
-//
-// The rule that cannot rot is to pin nothing: @latest resolves whatever is
-// newest, and the alpha notice already tells a reader to pin an exact version
-// in their own go.mod, which is the file where a pin belongs and is checked.
-//
-// CHANGELOG.md is exempt. Naming released versions is the whole point of it,
-// and an entry describing a release is a record rather than an instruction.
+// Installation prose must not duplicate release pins. CHANGELOG.md is exempt
+// because released versions there are historical records.
 func TestNoDocumentationPinsAModuleVersion(t *testing.T) {
 	root := repositoryRoot(t)
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {

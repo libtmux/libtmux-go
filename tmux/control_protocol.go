@@ -32,8 +32,9 @@ func (e *ControlProtocolError) Unwrap() error { return ErrControlProtocol }
 
 // ControlCommandResult is one completed control-mode command frame. A failed
 // tmux command remains result data through Failed; local, protocol, transport,
-// and context failures are returned separately by [ControlClient.Cmd]. All
-// slices are owned by the caller.
+// and context failures are returned separately by [Connection.Call],
+// [ControlClient.Cmd], and [ControlClient.Call]. All slices are owned by the
+// caller.
 type ControlCommandResult struct {
 	// Command is the safely encoded command's original argument vector.
 	Command []string
@@ -50,6 +51,11 @@ type ControlCommandResult struct {
 	Flags int
 	// Failed reports whether tmux closed the frame with %error instead of %end.
 	Failed bool
+
+	// notificationSequence is the control-wire position of this frame's
+	// closing guard. It remains private because only an observation created by
+	// the originating client can use the position safely.
+	notificationSequence uint64
 }
 
 type controlGuardKind uint8
@@ -68,21 +74,23 @@ type controlGuard struct {
 }
 
 type controlFrame struct {
-	timestamp int64
-	number    uint64
-	flags     int
-	rawStdout []byte
-	failed    bool
+	timestamp    int64
+	number       uint64
+	flags        int
+	rawStdout    []byte
+	failed       bool
+	wireSequence uint64
 }
 
 func (f controlFrame) result(command []string) ControlCommandResult {
 	return ControlCommandResult{
-		Command:   slices.Clone(command),
-		RawStdout: bytes.Clone(f.rawStdout),
-		Timestamp: f.timestamp,
-		Number:    f.number,
-		Flags:     f.flags,
-		Failed:    f.failed,
+		Command:              slices.Clone(command),
+		RawStdout:            bytes.Clone(f.rawStdout),
+		Timestamp:            f.timestamp,
+		Number:               f.number,
+		Flags:                f.flags,
+		Failed:               f.failed,
+		notificationSequence: f.wireSequence,
 	}
 }
 
@@ -180,14 +188,9 @@ func parseControlGuard(
 	}, true, nil
 }
 
-// encodeControlCommand renders one control-mode command line. Every argument is
-// quoted, so a value needs no escaping to survive.
-//
-// commandList admits the one element that is syntax rather than a value: a bare
-// ";" separating two commands. Quoting that would hand tmux a literal semicolon
-// as an argument, which a command taking trailing operands accepts silently --
-// send-keys would type the rest of the list into a pane. It is therefore
-// written only when the caller says the argv carries a command list.
+// encodeControlCommand quotes every value. A bare semicolon is emitted only for
+// command lists; quoting it makes it an operand, and send-keys may type the
+// remaining commands into a pane.
 func encodeControlCommand(arguments []string, commandList bool) (string, error) {
 	if len(arguments) == 0 || arguments[0] == "" {
 		return "", invalidServerCommandRequest(

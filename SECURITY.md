@@ -45,5 +45,5 @@ tools built on them return it verbatim.
 
 ## Supported versions
 
-Alpha releases: only the most recent tag is supported. Go 1.26 or newer, tmux
-3.2a through 3.7b.
+Alpha releases: only the most recent tag is supported. Go 1.26 or newer. The
+core, workspace, and MCP modules support tmux 3.2a through 3.7c.

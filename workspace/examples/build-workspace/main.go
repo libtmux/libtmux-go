@@ -1,18 +1,11 @@
-// Command build-workspace loads a tmuxp-style YAML workspace and builds it,
-// then reports what tmux actually created.
-//
-// It reads the workspace from its own source rather than from a file so the
-// program runs anywhere, and it counts the tmux processes the build started.
-// That count barely moves as a file grows, because the build runs over a
-// control connection: the windows and panes below cost about what a file ten
-// times the size would.
+// Command build-workspace builds an embedded tmuxp-style workspace, then
+// reports its topology.
 package main
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -55,20 +48,12 @@ func run() error {
 		return fmt.Errorf("parse: %w", err)
 	}
 
-	var mutex sync.Mutex
-	var processes int
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-build-workspace",
-		Runner: tmux.CommandRunnerFunc(func(
-			ctx context.Context,
-			request tmux.CommandRequest,
-		) (tmux.CommandResult, error) {
-			mutex.Lock()
-			processes++
-			mutex.Unlock()
-			return tmux.SubprocessRunner().Run(ctx, request)
-		}),
 	})
+	if err != nil {
+		return fmt.Errorf("construct tmux server: %w", err)
+	}
 	defer func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -88,12 +73,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("search windows: %w", err)
 	}
-	mutex.Lock()
-	started := processes
-	mutex.Unlock()
-
-	fmt.Printf("built %q with %d windows, using %d tmux processes\n",
-		described.SessionName, len(windows), started)
+	fmt.Printf("built %q with %d windows\n", described.SessionName, len(windows))
 	for _, window := range windows {
 		name, _ := window.Formats().WindowName()
 		index, _ := window.Formats().WindowIndex()

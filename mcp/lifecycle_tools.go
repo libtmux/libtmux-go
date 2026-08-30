@@ -10,50 +10,33 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Ending something, and naming it.
-//
-// Everything here that ends something is annotated destructive, so an operator
-// running at the mutating level does not offer any of it, and a client that
-// can create a session cannot by that fact remove one. Renaming is grouped
-// with them because it is the other half of the same job: a client that made a
-// window is the one that wants to label it.
-//
-// Nothing here resolves a target loosely. tmux matches a bare name by prefix
-// and by pattern, so "test" names "test-production" when the first does not
-// exist, and a kill is not the place to find that out. Every name is anchored,
-// and every id is an id.
+// Kill tools are destructive and resolve targets exactly; tmux prefix and
+// pattern matching must never select a kill target.
 
-// killSessionInput selects the session to kill.
 type killSessionInput struct {
-	// SessionName is the exact session name. tmux would otherwise accept a
-	// prefix or a pattern, so a name that does not match a session exactly is
-	// refused rather than resolved to a neighbour.
 	SessionName string `json:"sessionName" jsonschema:"the exact name of the session to kill"`
 }
 
-// killSessionOutput reports the killed session.
 type killSessionOutput struct {
-	// Killed is the session name that was killed.
 	Killed string `json:"killed"`
 }
 
-// killSession ends one session and everything running in it.
 func (t *tools) killSession(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input killSessionInput,
 ) (*mcp.CallToolResult, killSessionOutput, error) {
-	// An empty name is what a model sends when it does not know one, and tmux
-	// reads it as "the current session", so it would destroy a session nobody
-	// named.
+	// tmux treats an empty target as current, so require an explicit name.
 	if strings.TrimSpace(input.SessionName) == "" {
 		return nil, killSessionOutput{}, errors.New("sessionName is required")
 	}
-	// tmux resolves a bare target by prefix and pattern, so "alph" kills
-	// "alpha". The "=" prefix anchors it to an exact name, which is what this
-	// tool documents and what a model expects when it repeats a name it read.
+	// The "=" prefix anchors the target against tmux prefix and pattern matching.
 	holdsCaller := false
-	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+	caller, inside, err := t.callerPaneOnThisServer(ctx)
+	if err != nil {
+		return nil, killSessionOutput{}, err
+	}
+	if inside {
 		name, _ := caller.Formats().SessionName()
 		holdsCaller = name == input.SessionName
 	}
@@ -61,34 +44,22 @@ func (t *tools) killSession(
 		"session "+input.SessionName); err != nil {
 		return nil, killSessionOutput{}, err
 	}
-	if err := t.tmux().KillSession(ctx, "="+input.SessionName); err != nil {
+	if err := t.tmux(ctx).KillSession(ctx, "="+input.SessionName); err != nil {
 		return nil, killSessionOutput{}, err
 	}
 	return nil, killSessionOutput{Killed: input.SessionName}, nil
 }
 
-// killWindowInput selects the window to kill.
 type killWindowInput struct {
-	// WindowID is the tmux window id, such as @1. An id rather than a name,
-	// because window names are not unique and a kill must not guess.
 	WindowID string `json:"windowId" jsonschema:"the tmux window id to kill, such as @1"`
 }
 
-// killWindowOutput reports the killed window.
 type killWindowOutput struct {
-	// Killed is the window id that was killed.
-	Killed string `json:"killed"`
-	// SessionEnded reports that the window was its session's last, so tmux
-	// ended the session with it.
-	SessionEnded bool `json:"sessionEnded"`
+	Killed       string `json:"killed"`
+	SessionEnded bool   `json:"sessionEnded"`
 }
 
-// killWindow ends one window and the panes in it.
-//
-// A window that was its session's last takes the session with it, which tmux
-// does without saying so. The reply says so, because a client that killed one
-// window of what it believed were several has just ended the session it was
-// working in.
+// killWindow reports when tmux also ends the window's now-empty session.
 func (t *tools) killWindow(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -97,12 +68,16 @@ func (t *tools) killWindow(
 	if strings.TrimSpace(input.WindowID) == "" {
 		return nil, killWindowOutput{}, errors.New("windowId is required")
 	}
-	window, err := t.tmux().Window(ctx, tmux.WindowID(input.WindowID))
+	window, err := t.tmux(ctx).Window(ctx, tmux.WindowID(input.WindowID))
 	if err != nil {
 		return nil, killWindowOutput{}, notFound(err, "window", input.WindowID, "list_windows")
 	}
 	holdsCaller := false
-	if caller, inside := t.callerPaneOnThisServer(ctx); inside {
+	caller, inside, err := t.callerPaneOnThisServer(ctx)
+	if err != nil {
+		return nil, killWindowOutput{}, err
+	}
+	if inside {
 		holdsCaller = caller.WindowID() == window.ID()
 	}
 	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
@@ -114,30 +89,23 @@ func (t *tools) killWindow(
 		return nil, killWindowOutput{}, err
 	}
 	output := killWindowOutput{Killed: input.WindowID}
-	// A session that is gone cannot be looked up, which is the answer rather
-	// than a failure.
-	if _, err := t.tmux().Session(ctx, sessionID); err != nil {
+	// Any failed post-kill lookup is reported as the source session ending; the
+	// requested window kill has already succeeded.
+	if _, err := t.tmux(ctx).Session(ctx, sessionID); err != nil {
 		output.SessionEnded = true
 	}
 	return nil, output, nil
 }
 
-// killPaneInput selects the pane to kill.
 type killPaneInput struct {
-	// PaneID is the tmux pane id, such as %1.
 	PaneID string `json:"paneId" jsonschema:"the tmux pane id to kill, such as %1"`
 }
 
-// killPaneOutput reports the killed pane.
 type killPaneOutput struct {
-	// Killed is the pane id that was killed.
-	Killed string `json:"killed"`
-	// WindowEnded reports that the pane was its window's last, so tmux ended
-	// the window with it.
-	WindowEnded bool `json:"windowEnded"`
+	Killed      string `json:"killed"`
+	WindowEnded bool   `json:"windowEnded"`
 }
 
-// killPane ends one pane and the program in it.
 func (t *tools) killPane(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -146,14 +114,12 @@ func (t *tools) killPane(
 	if strings.TrimSpace(input.PaneID) == "" {
 		return nil, killPaneOutput{}, errors.New("paneId is required")
 	}
-	pane, err := t.tmux().Pane(ctx, tmux.PaneID(input.PaneID))
+	pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(input.PaneID))
 	if err != nil {
 		return nil, killPaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
 	}
-	// Named rather than resolved, so the guard is asked for here rather than
-	// by the resolver every other write goes through.
-	// Never remembered: this ends the pane the conversation is happening in,
-	// and a yes about typing there is not a yes about that.
+	// Killing the caller pane always requires fresh consent; ordinary write
+	// consent does not cover destroying it.
 	if err := t.confirmCallerWrite(ctx, request, pane, "ending it", false); err != nil {
 		return nil, killPaneOutput{}, err
 	}
@@ -162,34 +128,20 @@ func (t *tools) killPane(
 		return nil, killPaneOutput{}, err
 	}
 	output := killPaneOutput{Killed: input.PaneID}
-	if _, err := t.tmux().Window(ctx, windowID); err != nil {
+	if _, err := t.tmux(ctx).Window(ctx, windowID); err != nil {
 		output.WindowEnded = true
 	}
 	return nil, output, nil
 }
 
-// killServerInput takes a confirmation rather than nothing.
 type killServerInput struct {
-	// Confirm must be true. A tool that takes no arguments is one a model can
-	// call by naming it, and this one ends every session on the server at
-	// once; requiring a field means the call cannot be made without having
-	// filled something in.
 	Confirm bool `json:"confirm" jsonschema:"must be true; this ends every session on the server"`
 }
 
-// killServerOutput reports what the server held when it was killed.
 type killServerOutput struct {
-	// SessionsKilled is how many sessions ended with it.
 	SessionsKilled int `json:"sessionsKilled"`
 }
 
-// killServer ends the whole tmux server.
-//
-// This is the largest thing any tool here does: every session, every window,
-// every program in them. It is offered because a client that created a server
-// for a piece of work should be able to clean it up, and because the
-// alternative is a client killing sessions one at a time and racing tmux's own
-// teardown of the last one.
 func (t *tools) killServer(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -198,53 +150,36 @@ func (t *tools) killServer(
 	if !input.Confirm {
 		return nil, killServerOutput{}, errors.New("confirm must be true: this ends every session on the tmux server")
 	}
-	_, holdsCaller := t.callerPaneOnThisServer(ctx)
+	_, holdsCaller, err := t.callerPaneOnThisServer(ctx)
+	if err != nil {
+		return nil, killServerOutput{}, err
+	}
 	if err := t.confirmCallerLoss(ctx, request, holdsCaller,
 		"this tmux server"); err != nil {
 		return nil, killServerOutput{}, err
 	}
-	// Counted before rather than after, because after there is nothing to ask.
-	sessions, _ := t.tmux().Sessions(ctx)
-	if err := t.tmux().Kill(ctx); err != nil {
+	sessions, _ := t.tmux(ctx).Sessions(ctx)
+	if err := t.tmux(ctx).Kill(ctx); err != nil {
 		return nil, killServerOutput{}, err
 	}
 	return nil, killServerOutput{SessionsKilled: len(sessions)}, nil
 }
 
-// respawnPaneInput restarts the program in a pane.
 type respawnPaneInput struct {
-	// PaneID is the tmux pane id. Empty restarts the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id to restart; empty uses the active pane"`
-	// SessionName picks the session when PaneID is empty.
+	PaneID      string `json:"paneId,omitempty" jsonschema:"the tmux pane id to restart; empty uses the active pane"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to restart when paneId is empty"`
-	// Command replaces what the pane runs. Empty restarts what it ran before.
-	Command string `json:"command,omitempty" jsonschema:"a command to run instead; empty restarts what the pane ran before"`
-	// Kill ends a program that is still running. Without it, tmux refuses to
-	// respawn a pane that has not exited.
-	Kill bool `json:"kill,omitempty" jsonschema:"end a program that is still running first"`
+	Command     string `json:"command,omitempty" jsonschema:"a command to run instead; empty restarts what the pane ran before"`
+	Kill        bool   `json:"kill,omitempty" jsonschema:"end a program that is still running first"`
 }
 
-// respawnPaneOutput reports the restarted pane.
 type respawnPaneOutput struct {
-	// PaneID is the pane that was restarted, which keeps its id.
 	PaneID string `json:"paneId"`
-	// Gone reports that the pane was reaped before it could be read back,
-	// which is what a command that exits leaves behind: tmux takes the pane
-	// with the process, and the window too when it held nothing else. The
-	// respawn itself ran; there is simply no pane left to describe.
+	// Gone reports a successful respawn whose replacement process exited before
+	// readback, allowing tmux to reap the pane.
 	Gone bool `json:"gone,omitempty"`
 }
 
-// respawnPane restarts what a pane runs, in the pane it already has.
-//
-// A pane whose program exited is dead but still there, holding its output. A
-// client that wants the program back would otherwise kill the pane and split a
-// new one, which loses the layout and gives it a new id to track. This keeps
-// both.
-//
-// The pane keeps its id and gets a new process. Anything holding a
-// capture_since cursor for it will be told the process changed rather than
-// quietly reading the new program's output as the old one's.
+// respawnPane preserves the pane ID; capture_since detects the process change.
 func (t *tools) respawnPane(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -254,9 +189,7 @@ func (t *tools) respawnPane(
 	if err != nil {
 		return nil, respawnPaneOutput{}, err
 	}
-	// tmux refuses a live pane without -k, and says only that respawn-pane
-	// exited 1. The caller's way out is one argument away, so it is named here
-	// rather than left to be guessed from tmux's exit code.
+	// Replace tmux's generic exit status with the actionable missing flag.
 	if !input.Kill {
 		if dead, ok := pane.Formats().PaneDead(); ok && !dead {
 			return nil, respawnPaneOutput{}, fmt.Errorf(
@@ -272,11 +205,8 @@ func (t *tools) respawnPane(
 	}
 	respawned, err := pane.Respawn(ctx, respawn)
 	if err != nil {
-		// Reading the pane back is the last thing a respawn does, and a
-		// command that exits can be gone before that read lands -- reliably so
-		// on a machine slower than the one this was written on. The respawn
-		// ran; reporting it as a failure would say the opposite of what
-		// happened.
+		// The mutation succeeded even when a short-lived replacement exits
+		// before readback.
 		if errors.Is(err, tmux.ErrSnapshotNotFound) {
 			return nil, respawnPaneOutput{PaneID: pane.ID().String(), Gone: true}, nil
 		}
@@ -285,8 +215,6 @@ func (t *tools) respawnPane(
 	return nil, respawnPaneOutput{PaneID: respawned.ID().String()}, nil
 }
 
-// currentCommandOf names what a pane is running, for an error that reads
-// better with it than with a placeholder.
 func currentCommandOf(pane tmux.Pane) string {
 	if command, ok := pane.Formats().PaneCurrentCommand(); ok && command != "" {
 		return command
@@ -294,28 +222,16 @@ func currentCommandOf(pane tmux.Pane) string {
 	return "a program"
 }
 
-// renameSessionInput gives a session a new name.
 type renameSessionInput struct {
-	// SessionName is the exact session to rename. Empty renames the only one.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the exact session to rename; empty uses the only session"`
-	// Name is what to call it.
-	Name string `json:"name" jsonschema:"the new session name"`
+	Name        string `json:"name" jsonschema:"the new session name"`
 }
 
-// renameSessionOutput reports the renamed session.
 type renameSessionOutput struct {
-	// SessionID is the session's id, which a rename does not change and which
-	// is therefore what to keep hold of.
 	SessionID string `json:"sessionId"`
-	// Name is what it is called now.
-	Name string `json:"name"`
+	Name      string `json:"name"`
 }
 
-// renameSession renames a session.
-//
-// A name is how a person finds a session and how kill_session addresses one,
-// so a client that created a session named by tmux gives it a name someone
-// will recognise. The id does not change, which is why the reply reports it.
 func (t *tools) renameSession(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -336,29 +252,17 @@ func (t *tools) renameSession(
 	return nil, renameSessionOutput{SessionID: renamed.ID().String(), Name: name}, nil
 }
 
-// renameWindowInput gives a window a new name.
 type renameWindowInput struct {
-	// WindowID is the tmux window id. Empty renames the current window.
-	WindowID string `json:"windowId,omitempty" jsonschema:"the tmux window id to rename; empty uses the current window"`
-	// SessionName picks the session when WindowID is empty.
+	WindowID    string `json:"windowId,omitempty" jsonschema:"the tmux window id to rename; empty uses the current window"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's current window to rename when windowId is empty"`
-	// Name is what to call it.
-	Name string `json:"name" jsonschema:"the new window name"`
+	Name        string `json:"name" jsonschema:"the new window name"`
 }
 
-// renameWindowOutput reports the renamed window.
 type renameWindowOutput struct {
-	// WindowID is the window's id, unchanged by the rename.
 	WindowID string `json:"windowId"`
-	// Name is what it is called now.
-	Name string `json:"name"`
+	Name     string `json:"name"`
 }
 
-// renameWindow renames a window.
-//
-// tmux renames a window to whatever is running in it unless something has
-// named it, so a window a client labelled keeps the label and one it did not
-// changes under it.
 func (t *tools) renameWindow(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -379,30 +283,18 @@ func (t *tools) renameWindow(
 	return nil, renameWindowOutput{WindowID: renamed.ID().String(), Name: name}, nil
 }
 
-// setPaneTitleInput gives a pane a title.
 type setPaneTitleInput struct {
-	// PaneID is the tmux pane id. Empty titles the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id to title; empty uses the active pane"`
-	// SessionName picks the session when PaneID is empty.
+	PaneID      string `json:"paneId,omitempty" jsonschema:"the tmux pane id to title; empty uses the active pane"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to title when paneId is empty"`
-	// Title is what to call it.
-	Title string `json:"title" jsonschema:"the new pane title"`
+	Title       string `json:"title" jsonschema:"the new pane title"`
 }
 
-// setPaneTitleOutput reports the titled pane.
 type setPaneTitleOutput struct {
-	// PaneID is the pane that was titled.
 	PaneID string `json:"paneId"`
-	// Title is what it is called now.
-	Title string `json:"title"`
+	Title  string `json:"title"`
 }
 
-// setPaneTitle gives a pane a title.
-//
-// A pane's title is what tmux draws on its border, so a client laying out
-// several panes can label which is which for the person who will read them.
-// A program in the pane can overwrite it, which is why the reply reports what
-// tmux settled on rather than what was asked for.
+// setPaneTitle reports tmux's final title, which the pane process may replace.
 func (t *tools) setPaneTitle(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -420,33 +312,32 @@ func (t *tools) setPaneTitle(
 	return nil, setPaneTitleOutput{PaneID: titled.ID().String(), Title: title}, nil
 }
 
-// addLifecycleTools advertises the tools that end or rename something.
 func addLifecycleTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_session",
 		Annotations: destructive("Kill a tmux Session"),
 		Description: "End one session by its exact name, and every window and " +
 			"program in it. Nothing brings it back.",
 	}, t.killSession)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_window",
 		Annotations: destructive("Kill a tmux Window"),
 		Description: "End one window and its panes. A window that was its " +
 			"session's last takes the session with it, which the reply says.",
 	}, t.killWindow)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_pane",
 		Annotations: destructive("Kill a tmux Pane"),
 		Description: "End one pane and the program running in it. A pane that " +
 			"was its window's last takes the window with it, which the reply says.",
 	}, t.killPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxDestroy, &mcp.Tool{
 		Name:        "kill_server",
 		Annotations: destructive("Kill the tmux Server"),
 		Description: "End the whole tmux server: every session, every window, " +
 			"every program. Requires confirm to be true.",
 	}, t.killServer)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityWorkspaceCreate, &mcp.Tool{
 		Name:        "respawn_pane",
 		Annotations: mutating("Restart a Pane's Program"),
 		Description: "Restart what a pane runs, keeping the pane and its place " +
@@ -456,19 +347,19 @@ func addLifecycleTools(server *mcp.Server, t *tools) {
 			"set remain-on-exit on the window first to keep it as a dead pane " +
 			"list_panes can report.",
 	}, t.respawnPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "rename_session",
 		Annotations: settling("Rename a tmux Session"),
 		Description: "Give a session a name a person will recognise. Its id does " +
 			"not change.",
 	}, t.renameSession)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "rename_window",
 		Annotations: settling("Rename a tmux Window"),
 		Description: "Name a window, which also stops tmux renaming it after " +
 			"whatever is running in it.",
 	}, t.renameWindow)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxLayout, &mcp.Tool{
 		Name:        "set_pane_title",
 		Annotations: settling("Title a tmux Pane"),
 		Description: "Set the title tmux draws on a pane's border, which is how " +

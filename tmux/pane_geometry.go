@@ -81,11 +81,8 @@ type ResizePaneRequest struct {
 // receiver with that error.
 //
 // Invalid requests fail before execution. A completed command produces a
-// [CommandError] only when tmux writes stderr; the library-created error
-// retains only the exit code. A nonzero exit without stderr is followed by
-// refresh. Transport and context errors return a zero Pane and may be
-// delivery-ambiguous. Context errors remain detectable with [errors.Is], and
-// cancellation cannot roll back an accepted resize.
+// redacted [CommandError] only for stderr; nonzero exits without stderr are
+// followed by refresh. Transport errors return zero and are delivery-ambiguous.
 func (p Pane) Resize(ctx context.Context, request ResizePaneRequest) (Pane, error) {
 	if err := validateTypedTarget(
 		"resize-pane", "Pane", "pane", p.paneID.String(),
@@ -112,8 +109,7 @@ func (p Pane) Resize(ctx context.Context, request ResizePaneRequest) (Pane, erro
 	return refreshed, nil
 }
 
-// resizePaneArguments renders one resize-pane argument vector. It performs no
-// I/O, so a [Plan] can render a resize it has not applied.
+// resizePaneArguments renders a resize for a [Plan] without I/O.
 func resizePaneArguments(
 	target string,
 	request ResizePaneRequest,
@@ -171,11 +167,9 @@ func (p Pane) SetHeight(ctx context.Context, height int) (Pane, error) {
 // linked-session or winlink context. If the mutation is accepted but refresh
 // fails, SetTitle returns the original receiver with that error.
 //
-// A completed command produces a [CommandError] only when tmux writes stderr;
-// the library-created error retains only the exit code. A nonzero exit without
-// stderr is followed by refresh. Transport and context errors return a zero
-// Pane and may be delivery-ambiguous. Context errors remain detectable with
-// [errors.Is], and cancellation cannot roll back an accepted title change.
+// Completed stderr produces a redacted [CommandError]; nonzero exits without
+// stderr are followed by refresh. Transport errors return zero and are
+// delivery-ambiguous.
 func (p Pane) SetTitle(ctx context.Context, title string) (Pane, error) {
 	result, err := p.literalCmd(ctx, "select-pane", "-T", title)
 	if err := requireRedactedServerCommandNoStderr("select-pane", result, err); err != nil {

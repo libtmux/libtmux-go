@@ -27,15 +27,8 @@ func TestValidateSessionNameMatchesTmuxDelimiterRules(t *testing.T) {
 	}
 }
 
-// TestValidateSessionNameRefusesWhatOlderTmuxWouldMangle covers a name whose
-// fate depends on which tmux is running.
-//
-// A control byte in a name is rejected by tmux from 3.7. Before that it is
-// accepted and stored visibility-encoded, so "a\abell" arrives as the five
-// characters a, backslash, a, and so on -- a session under a name nobody
-// asked for. Rejecting it here is what makes one name behave one way across
-// the supported range, which is the same reason the delimiters are rejected
-// rather than left to a tmux that would rewrite them.
+// tmux before 3.7 stores control bytes in names visibility-encoded; tmux 3.7
+// rejects them. Validation rejects them across the supported range.
 func TestValidateSessionNameRefusesWhatOlderTmuxWouldMangle(t *testing.T) {
 	t.Parallel()
 

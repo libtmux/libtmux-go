@@ -7,25 +7,22 @@ import (
 )
 
 // UnsupportedPolicy selects what a request does when it needs an optional tmux
-// capability the running server does not have — a flag added in a later tmux
-// than the one answering.
+// capability the running server does not have.
 //
-// The default refuses, because dropping a flag changes what the command does.
-// A split asked to leave a pane empty otherwise starts a shell in it, a
-// run-shell asked for arguments runs without them, and a kill-session asked for
-// a session group takes one session instead of the group. Each returns success
-// while doing something the caller did not ask for.
+// The default refuses because dropping a flag can change behavior while still
+// returning success.
 //
-// Choosing degradation is how a program stays portable across the supported
-// tmux range when the capability is cosmetic and its absence is acceptable:
+// Choose degradation only when omission is acceptable:
 //
-//	server := tmux.NewServer(tmux.ServerOptions{
+//	server, err := tmux.NewServer(tmux.ServerOptions{
 //		Unsupported:    tmux.DegradeUnsupported,
 //		WarningHandler: func(w tmux.Warning) { log.Printf("tmux: %s", w) },
 //	})
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
-// Set [ServerOptions.WarningHandler] alongside it. Degradation with no handler
-// is the silence this setting exists to make deliberate.
+// Set [ServerOptions.WarningHandler] alongside it to observe omissions.
 type UnsupportedPolicy uint8
 
 const (
@@ -61,16 +58,6 @@ const (
 	// WarningCommandStderr reports stderr from a completed command whose Python
 	// API treats the diagnostic as nonfatal.
 	WarningCommandStderr
-	// WarningControlPoolClosed reports a command that started a tmux process
-	// because the control pool carrying it had been closed. The command ran
-	// and its result is unchanged; only its cost is.
-	WarningControlPoolClosed
-	// WarningControlPoolUnused reports a command that started a tmux process
-	// while a control pool was open on the same configuration, which happens
-	// when the record issuing it was materialized before the pool existed and
-	// so kept the handle it was made on. The command ran and its result is
-	// unchanged; only its cost is.
-	WarningControlPoolUnused
 )
 
 // Warning describes one nonfatal compatibility decision delivered to a
@@ -90,73 +77,32 @@ type Warning struct {
 	Message string
 }
 
-// WarningHandler receives warnings synchronously on the operation's caller
-// goroutine. It is a function type rather than an interface, so a handler is
-// written as a literal and needs no adapter:
+// WarningHandler receives warnings synchronously on the caller goroutine:
 //
-//	tmux.NewServer(tmux.ServerOptions{
+//	server, err := tmux.NewServer(tmux.ServerOptions{
 //		WarningHandler: func(warning tmux.Warning) {
 //			log.Printf("tmux: %s", warning.Message)
 //		},
 //	})
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
-// Server operations may invoke the handler concurrently; callers
-// must synchronize any shared handler state. The library starts no goroutine
-// for warning delivery. Command diagnostics may contain caller-supplied tmux
-// arguments; the library delivers them only to this handler and does not log
-// them.
+// Operations may invoke it concurrently; synchronize shared state. Diagnostics
+// may contain caller-supplied arguments and are delivered only to this handler.
 type WarningHandler func(Warning)
 
-// String implements fmt.Stringer, so a warning can be logged or printed
-// without a caller reaching for a field. It reports the message, which already
-// names the subcommand and the decision.
+// String implements fmt.Stringer by returning Message.
 func (w Warning) String() string { return w.Message }
 
 func (s Server) warn(warning Warning) {
-	handler := s.connectionState().options.WarningHandler
+	if s.state == nil {
+		return
+	}
+	handler := s.state.config.warningHandler
 	if handler != nil {
 		handler(warning)
 	}
-}
-
-func newControlPoolClosedWarning(kind CommandKind) Warning {
-	return Warning{
-		Kind: WarningControlPoolClosed,
-		Message: "control pool is closed: " + kind.String() +
-			" started a tmux process instead",
-	}
-}
-
-func newControlPoolUnusedWarning() Warning {
-	return Warning{
-		Kind: WarningControlPoolUnused,
-		Message: "a control pool is open on this server, but this command " +
-			"started a tmux process: the record issuing it predates the pool; " +
-			"move it with WithServer",
-	}
-}
-
-// warnIfPoolUnused reports a command paying for a tmux process while a
-// connection that could have carried it is open.
-//
-// It completes [WarningControlPoolClosed], which reports the same symptom for a
-// pool that has been closed. Both are the cost of a record holding a handle
-// other than the one the caller meant, and reporting only one of them left the
-// commoner case -- a record materialized before the pool -- to be measured
-// rather than told.
-//
-// Only [CommandServer] is worth reporting. A process command needs its own
-// process whatever is open, and a handle that gave up its engine on purpose,
-// for a read whose result is tmux's exact stdout bytes, is not paying for
-// anything it did not choose.
-func (s Server) warnIfPoolUnused(kind CommandKind) {
-	if kind != CommandServer || s.engineless {
-		return
-	}
-	if s.connectionState().coordination().pools.Load() == 0 {
-		return
-	}
-	s.warn(newControlPoolUnusedWarning())
 }
 
 func newCommandStderrWarning(subcommand string, stderr []string) Warning {
@@ -167,20 +113,14 @@ func newCommandStderrWarning(subcommand string, stderr []string) Warning {
 	}
 }
 
-// unsupportedFeature reports what a request should do about an optional tmux
-// capability the running server does not have. It returns an error under
-// [FailUnsupported], and under [DegradeUnsupported] it reports the decision to
-// [WarningHandler] and returns nil so the caller runs the reduced command.
-//
-// The caller keeps the branch that decides which flag to omit, because only it
-// knows which one this is.
+// unsupportedFeature either refuses or warns before the caller omits its flag.
 func (s Server) unsupportedFeature(
 	subcommand string,
 	feature string,
 	current Version,
 	required Version,
 ) error {
-	if s.connectionState().options.Unsupported == FailUnsupported {
+	if s.state == nil || s.state.config.unsupported == FailUnsupported {
 		return &VersionTooLowError{
 			Current:    current,
 			Minimum:    required,
@@ -214,12 +154,7 @@ func newUnsupportedFeatureWarning(
 	}
 }
 
-// reportUnsupported applies the server's [UnsupportedPolicy] to the warnings an
-// argv renderer produced.
-//
-// The renderers that gate on the tmux version perform no I/O, so a [Plan] can
-// render one without a server. They report a dropped capability rather than
-// deciding what to do about it, and this is where that decision is made.
+// reportUnsupported applies the server's policy to renderer warnings.
 func (s Server) reportUnsupported(warnings []Warning) error {
 	for _, warning := range warnings {
 		if warning.Kind != WarningUnsupportedFeature {
@@ -238,23 +173,30 @@ func (s Server) reportUnsupported(warnings []Warning) error {
 	return nil
 }
 
-// reportUnsupported applies the run's policy to the warnings one step's argv
-// renderer produced. It mirrors the [Server] method so that a step refuses
-// exactly what the same request refuses when issued directly.
-func (p *Plan) reportUnsupported(warnings []Warning) error {
-	if p.unsupported == DegradeUnsupported {
-		return nil
-	}
+// reportUnsupported applies one run's policy to the warnings an operation's
+// renderer produced. It mirrors the [Server] method so a planned operation
+// refuses or reports exactly what the same request does when issued directly.
+func (c planRenderContext) reportUnsupported(warnings []Warning) error {
 	for _, warning := range warnings {
 		if warning.Kind != WarningUnsupportedFeature {
+			c.warn(warning)
 			continue
 		}
-		return &VersionTooLowError{
-			Current:    warning.CurrentVersion,
-			Minimum:    warning.RequiredVersion,
-			Subcommand: warning.Subcommand,
-			Feature:    warning.Feature,
+		if c.unsupported == FailUnsupported {
+			return &VersionTooLowError{
+				Current:    warning.CurrentVersion,
+				Minimum:    warning.RequiredVersion,
+				Subcommand: warning.Subcommand,
+				Feature:    warning.Feature,
+			}
 		}
+		c.warn(warning)
 	}
 	return nil
+}
+
+func (c planRenderContext) warn(warning Warning) {
+	if c.warningHandler != nil {
+		c.warningHandler(warning)
+	}
 }

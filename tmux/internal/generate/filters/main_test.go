@@ -434,10 +434,8 @@ func TestGeneratedFilterDocumentationIsCallerComplete(t *testing.T) {
 	}
 
 	assertGeneratedDocContains(t, file, "SessionFilter",
-		"already-materialized", "never runs tmux", "zero", "non-nil",
-		"AND", "AnyOf", "Not", "[SessionFilter.Predicate]", "[SessionFilter.MarshalJSON]",
-		"validate automatically", "[SessionFilter.Validate]", "[SessionFilter.UnmarshalJSON]",
-		"constructed directly",
+		"materialized", "without tmux I/O", "zero", "non-nil",
+		"AND", "AnyOf", "Not", "[SessionFilter.Validate]", "[ErrInvalidFilter]",
 		"[Session.Windows]")
 	assertGeneratedFieldDocContains(t, file, "PaneFilter", "ID",
 		"stable", "%", "nil pointer", "zero value")
@@ -460,7 +458,7 @@ func TestGeneratedFilterDocumentationIsCallerComplete(t *testing.T) {
 		t.Errorf("SessionFilter.Windows documentation contains a declaration-context link: %q", documentation)
 	}
 	assertGeneratedDocContains(t, file, "WindowRel",
-		"zero", "invalid", "existential", "exclusion", "universal",
+		"zero", "invalid", "existential", "excludes", "universal",
 		"vacuously true", "empty", "conjunctive")
 	assertGeneratedFieldDocContains(t, file, "WindowRel", "Some", "existential")
 	assertGeneratedFieldDocContains(t, file, "WindowRel", "Every", "universal", "vacuously true")
@@ -473,30 +471,31 @@ func TestGeneratedFilterDocumentationIsCallerComplete(t *testing.T) {
 			"generated JSON relation names", "double underscores", "default operator is exact",
 			"eq", "iexact", "contains", "icontains", "startswith", "istartswith",
 			"endswith", "iendswith", "in", "nin", "regex", "iregex",
-			"field-specific", "errors.Is(err,", "[ErrInvalidFilter]")
+			"field-specific", "wrap", "[ErrInvalidFilter]")
 		lookupDocumentation := generatedDeclarationDoc(file, "Parse"+model+"Lookup")
 		if strings.Contains(lookupDocumentation, "`") {
 			t.Errorf("Parse%sLookup documentation contains literal Markdown backticks: %q", model, lookupDocumentation)
 		}
 		assertGeneratedDocContains(t, file, model+"Filter.Validate",
-			"before", "errors.Is(err,", "[ErrInvalidFilter]")
+			"regular expressions", "contradictory", "wrap", "[ErrInvalidFilter]")
 		assertGeneratedDocContains(t, file, model+"Filter.MarshalJSON",
-			"validates", "external", "FilterSchemaVersion", "errors.Is(err,", "[ErrInvalidFilter]")
+			"validates", "encodes", "wrap", "[ErrInvalidFilter]")
 		assertGeneratedDocContains(t, file, model+"Filter.Predicate",
-			"[Snapshot]", "["+model+"]", "relationships already materialized on that candidate",
-			"never runs tmux", "nil candidate", "false", "validates", "errors.Is(err,")
+			"[Snapshot]", "["+model+"]", "loaded relations",
+			"never runs tmux", "nil candidate", "false", "validates")
 		assertGeneratedDocContains(t, file, model+"Filter.UnmarshalJSON",
-			"unknown", "duplicate", "trailing", "clears", "partial", "decode and framing",
-			"validates decoded criteria", "semantic validation",
-			"errors.Is(err,", "[ErrInvalidFilter]")
+			"Unknown", "duplicate", "trailing", "clears", "decoded state", "semantic",
+			"wrap", "[ErrInvalidFilter]")
 	}
 	for _, target := range []string{"Window", "Pane"} {
 		assertGeneratedDocContains(t, file, target+"Rel.MarshalJSON",
-			"validates", "external", "FilterSchemaVersion", "errors.Is(err,", "[ErrInvalidFilter]")
+			"validates", "encodes", "wrap", "[ErrInvalidFilter]")
 		assertGeneratedDocContains(t, file, target+"Rel.UnmarshalJSON",
-			"unknown", "duplicate", "trailing", "clears", "partial", "external",
-			"FilterSchemaVersion", "decode and framing", "validates decoded criteria",
-			"semantic validation", "errors.Is(err,", "[ErrInvalidFilter]")
+			"Unknown", "duplicate", "trailing", "clears", "decoded state", "semantic",
+			"wrap", "[ErrInvalidFilter]")
+	}
+	if strings.Count(string(generated), "[FilterSchemaVersion]") != 0 {
+		t.Error("generated method documentation repeats FilterSchemaVersion metadata")
 	}
 	if documentation := generatedFieldDocumentation(file, "PaneFilter", "IDIn"); strings.Contains(documentation, "sigil to equal") {
 		t.Errorf("PaneFilter.IDIn documentation has awkward grammar: %q", documentation)

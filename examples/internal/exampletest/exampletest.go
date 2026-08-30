@@ -1,22 +1,38 @@
-// Package exampletest gives each example's test the output that example
-// printed.
-//
-// An example's output is what it claims to show. A test that only checks the
-// error it returned asserts that the program did not crash, which every example
-// would pass while printing nothing at all.
+// Package exampletest captures output from executable examples.
 package exampletest
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// Output runs work with os.Stdout replaced by a pipe and returns everything
-// printed to it. It fails the test if work returns an error, quoting whatever
-// had been printed by then, because that is usually the part of the example
-// that got far enough to say something.
+// RequireTmux skips a real-tmux example below its stated feature floor.
+func RequireTmux(
+	ctx context.Context,
+	t *testing.T,
+	server tmux.Server,
+	minimum string,
+) {
+	t.Helper()
+	want, err := tmux.ParseVersion(minimum)
+	if err != nil {
+		t.Fatalf("parse required tmux version %q: %v", minimum, err)
+	}
+	got, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("query tmux version: %v", err)
+	}
+	if !got.AtLeast(want) {
+		t.Skipf("example requires tmux %s or newer; installed %s", want, got)
+	}
+}
+
+// Output returns work's stdout and fails with partial output when work fails.
 func Output(t *testing.T, work func() error) string {
 	t.Helper()
 
@@ -27,9 +43,7 @@ func Output(t *testing.T, work func() error) string {
 	}
 	os.Stdout = writer
 
-	// Drained on another goroutine: a pipe holds a fixed amount, and an example
-	// that printed more than that would block partway through instead of
-	// finishing.
+	// Drain concurrently so output larger than the pipe buffer cannot block.
 	var printed bytes.Buffer
 	drained := make(chan struct{})
 	go func() {

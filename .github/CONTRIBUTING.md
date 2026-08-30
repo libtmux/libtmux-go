@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. This repository holds four Go modules, and the gates below
+Thanks for looking. This repository holds five Go modules, and the gates below
 are what a change has to pass.
 
 This file is how we work. For how we write — doc comments, `CHANGELOG.md`,
@@ -54,14 +54,26 @@ $ for module in examples workspace mcp benchmarks; do (cd "$module" && gofumpt -
 Run them with the workspace on, which is the only way they see the working
 tree. `mcp` carries no `replace` directive — `go install` refuses a module that
 does — so `GOWORK=off` swaps this repository's core for whatever release its
-`require` names, and the tests then pass or fail on code nobody is editing.
+`require` names. Compiling current consumer source in that mode during ordinary
+development confuses source compatibility with whether sibling releases have
+already been published.
 
-`GOWORK=off` still answers a real question, just not that one: whether a module
-resolves for someone who has no workspace. `TestEveryModuleResolvesWithoutAWorkspace`
-asks it per module, so no gate has to be run twice to cover it:
+The repository keeps those claims separate. Workspace-on builds prove the
+current source graph. `go mod tidy -diff` with the workspace off proves each
+module's released dependency graph is standalone and tidy:
 
 ```console
-$ go test ./tmux/internal/integration/ -run TestEveryModuleResolvesWithoutAWorkspace
+$ go test \
+    -run TestEveryModuleMetadataResolvesWithoutAWorkspace \
+    ./tmux/internal/integration/
+```
+
+The install gate runs the documented version-suffixed command, so it tests the
+latest published MCP artifact rather than compiling current source against old
+sibling releases:
+
+```console
+$ go test ./tmux/internal/integration/ -run TestLatestPublishedServerInstalls
 ```
 
 A `require` naming a module of this repository is a copy of a tag, so it is
@@ -72,6 +84,15 @@ the failure that happened:
 ```console
 $ go test ./tmux/internal/integration/ -run TestEveryRequirementNamesTheNewestRelease
 ```
+
+Release sibling modules in dependency order: core, workspace, then MCP. After
+publishing core, update workspace's core requirement and test it with
+`GOWORK=off` before publishing workspace. Then update both requirements in MCP,
+run its complete suite with `GOWORK=off`, publish MCP, and install that explicit
+MCP version. An ordinary feature branch cannot satisfy that release-candidate
+gate because the versions it needs do not exist yet; do not add temporary tags,
+pseudo-versions, compatibility shims, or a checked-in replacement to pretend
+they do.
 
 Coverage has to name the core module rather than defaulting to the package under
 test, because most of what exercises the core lives in `internal/integration`:
@@ -99,8 +120,16 @@ too, quoted from programs that compile and run, so a snippet cannot drift from
 the code it came from. The markers, and what happens when one of them is wrong,
 are in [examples/README.md](../examples/README.md):
 
+Run generators in every module that owns them:
+
 ```console
-$ go generate ./... && git diff --exit-code
+$ for module in . mcp; do (cd "$module" && go generate ./...) || break; done
+```
+
+Then confirm that regeneration changed nothing:
+
+```console
+$ git diff --exit-code
 ```
 
 The race detector is not optional before anything ships:
@@ -113,23 +142,27 @@ One tmux is not enough. The supported range is a claim the README makes, and
 version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
 `-p` flag that 3.3a and 3.5 both take. Everything above runs against whichever
 tmux is on `PATH`, so run the supported releases before anything ships.
-`scripts/matrix.sh` does that for every module, given a directory of tmux builds
-with `<version>/bin/tmux` inside it. With no such directory it skips with an
-explanation rather than reporting a pass it did not earn:
+`scripts/matrix.sh` runs every compatible module suite, given a directory of
+tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
+whole 3.2a-through-3.7c range. With no matrix directory, the script skips with
+an explanation rather than reporting a pass it did not earn. Set
+`LIBTMUX_MATRIX_REQUIRED=1` for a release gate, where absence must fail. With
+no explicit `LIBTMUX_MATRIX_VERSIONS`, required mode checks all nine supported
+builds; setting it intentionally narrows the run:
 
 ```console
-$ bash scripts/matrix.sh
+$ LIBTMUX_MATRIX_REQUIRED=1 bash scripts/matrix.sh
 ```
 
 ### The language floor
 
 The floor tracks upstream's support window, so it moves. Five places state it
 and all five have to agree: the `go` directive in each module's `go.mod`, the
-one in `go.work`, `run.go` in `.golangci.yml`, the version matrix in the tests
-workflow, and the claim README.md makes. `go build` will not catch a
-disagreement — the `go` directive does not gate standard library APIs. `go vet`
-does, reporting `X requires goN.M or later`, which is why vet runs ahead of the
-tests in CI.
+one in `go.work`, `run.go` in every module's `.golangci.yml`, the version matrix
+in the tests workflow, and the claim README.md makes. `go build` will not catch
+a disagreement — the `go` directive does not gate standard library APIs.
+`go vet` does, reporting `X requires goN.M or later`, which is why vet runs
+ahead of the tests in CI.
 
 Raising the floor unlocks syntax, and two tools find it. Neither alone is
 enough.

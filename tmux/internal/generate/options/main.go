@@ -957,10 +957,9 @@ func writeCountConstants(output *bytes.Buffer, spec optionSpec) {
 }
 
 func writeSurface(output *bytes.Buffer, surface generatedSurface) {
-	fmt.Fprintf(output, "// %s is an immutable point-in-time view of known %s values. Its zero value\n", surface.TypeName, surface.Noun)
-	fmt.Fprintf(output, "// has no present values. Obtain it with %s; it may become stale after tmux changes.\n", strings.Join(surface.Sources, " or "))
-	output.WriteString("// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish\n")
-	output.WriteString("// values set at this scope from inherited values.\n")
+	fmt.Fprintf(output, "// %s is an immutable materialized view of known %s values; its zero value is empty and it does not refresh.\n", surface.TypeName, surface.Noun)
+	fmt.Fprintf(output, "// Obtain it with %s. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.\n", strings.Join(surface.Sources, " or "))
+	fmt.Fprintf(output, "// Use %s for caller-named or undecoded values.\n", strings.Join(surface.RawSources, " or "))
 	fmt.Fprintf(output, "type %s struct {\n", surface.TypeName)
 	for _, entry := range surface.Entries {
 		fmt.Fprintf(output, "%s OptionValue[%s]\n", privateName(entry.GoName), entry.GoType)
@@ -1088,10 +1087,8 @@ func writeScalarSetter(output *bytes.Buffer, entry entrySpec, receiver string) {
 	}[receiver]
 	minimum := variantsForScope(entry, scope)[0].Since
 	valuesType, valuesSource := setterValueSurface(receiver)
-	fmt.Fprintf(output, "// %s stores the %q %s option, available since tmux %s.\n", method, entry.Name, scope, minimum)
-	fmt.Fprintf(output, "// It accepts %s and does not expose raw set-option flags.\n", entry.GoType)
-	fmt.Fprintf(output, "// Read it back with [%s.%s] from %s, and [%s.UnsetOption] restores inheritance or the global default.\n", valuesType, entry.GoName, valuesSource, receiver)
-	fmt.Fprintf(output, "// Use [%s.SetOption] for caller-named options or raw values.\n", receiver)
+	fmt.Fprintf(output, "// %s stores the %q %s option as %s (tmux %s or later).\n", method, entry.Name, scope, entry.GoType, minimum)
+	fmt.Fprintf(output, "// Read it with [%s.%s] from %s; [%s.UnsetOption] restores inheritance or the global default.\n", valuesType, entry.GoName, valuesSource, receiver)
 	fmt.Fprintf(output, "func (%s %s) %s(ctx context.Context, value %s) error {\n", receiverName, receiver, method, entry.GoType)
 	switch receiver {
 	case "Server":
@@ -1134,12 +1131,9 @@ func writeArraySetter(output *bytes.Buffer, entry entrySpec, receiver string) {
 	}[receiver]
 	minimum := variantsForScope(entry, scope)[0].Since
 	valuesType, valuesSource := setterValueSurface(receiver)
-	fmt.Fprintf(output, "// %s performs a complete replacement of the %q %s option, available since tmux %s.\n", method, entry.Name, scope, minimum)
-	output.WriteString("// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.\n")
-	fmt.Fprintf(output, "// Read it back with [%s.%s] from %s.\n", valuesType, entry.GoName, valuesSource)
-	fmt.Fprintf(output, "// Use [%s.SetOption] for caller-named options or raw values.\n", receiver)
-	output.WriteString("// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.\n")
-	fmt.Fprintf(output, "// Callers must serialize replacement of the same target and option when final ordering matters. Use [%s.UnsetOption] to restore inheritance or the global default.\n", receiver)
+	fmt.Fprintf(output, "// %s replaces the complete %q %s option array with SparseArray[string], preserving holes and empty values (tmux %s or later).\n", method, entry.Name, scope, minimum)
+	fmt.Fprintf(output, "// Read it with [%s.%s] from %s; [%s.UnsetOption] restores inheritance or the global default.\n", valuesType, entry.GoName, valuesSource, receiver)
+	output.WriteString("// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.\n")
 	fmt.Fprintf(output, "func (%s %s) %s(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {\n", receiverName, receiver, method)
 	switch receiver {
 	case "Server":
@@ -1164,20 +1158,18 @@ func writeArraySetter(output *bytes.Buffer, entry entrySpec, receiver string) {
 
 func writeAccessorDocumentation(output *bytes.Buffer, surface generatedSurface, entry entrySpec) {
 	variants := variantsForScope(entry, surface.Scope)
-	fmt.Fprintf(output, "// %s returns the %q %s value as [OptionValue] with Go value shape OptionValue[%s]. It does not query tmux.\n", entry.GoName, entry.Name, surface.Noun, entry.GoType)
-	fmt.Fprintf(output, "// Its scope-specific minimum tmux version and supported variants are %s.\n", documentedVariants(variants))
+	fmt.Fprintf(output, "// %s returns materialized %q as [OptionValue] with value type OptionValue[%s] from %s values; it does not query tmux.\n", entry.GoName, entry.Name, entry.GoType, surface.Noun)
+	fmt.Fprintf(output, "// Available as %s", documentedVariants(variants))
 	if len(surface.Setters) != 0 {
 		links := make([]string, len(surface.Setters))
 		for index, receiver := range surface.Setters {
 			links[index] = "[" + receiver + "." + setterName(entry) + "]"
 		}
-		fmt.Fprintf(output, "// Set it with %s.\n", strings.Join(links, " or "))
+		fmt.Fprintf(output, "; set it with %s", strings.Join(links, " or "))
 	}
-	fmt.Fprintf(output, "// Use %s for caller-named or undecoded values.\n", strings.Join(surface.RawSources, " or "))
+	output.WriteString(".\n")
 	if entry.Style {
 		output.WriteString("// It is a style option.\n")
-	} else {
-		output.WriteString("// It is not a style option.\n")
 	}
 	if entry.Array {
 		output.WriteString("// Its present SparseArray value preserves assigned tmux indexes, including gaps.\n")

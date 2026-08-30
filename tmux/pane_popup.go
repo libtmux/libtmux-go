@@ -12,8 +12,7 @@ var (
 )
 
 // DisplayPopupRequest configures a popup overlay. Pointer and map values are
-// read and copied before any version probe or command, and the call retains
-// none of the caller's storage. Callers must not mutate them concurrently.
+// copied before I/O and must not be mutated concurrently.
 // Pointer fields distinguish omission from an explicit empty value, with the
 // Command and StartDirectory behavior documented on those fields.
 //
@@ -106,23 +105,16 @@ type displayPopupValues struct {
 // The command carries the receiver's exact linked session-window-pane target,
 // which supplies format and working-directory context. TargetClient selects
 // the overlay client; it does not turn the operation into pane delivery. tmux
-// interprets Command as a shell command. The library's protection for a final
-// semicolon applies only to tmux's outer command parser and does not quote or
-// neutralize the inner shell command.
+// interprets Command as a shell command; outer-parser escaping does not quote
+// or neutralize that inner command.
 //
 // Title, BorderLines, Style, BorderStyle, Environment, and NoBorder require
-// tmux 3.3. CloseOnAnyKey and NoKeys require tmux 3.6. Unsupported requested
-// fields produce synchronous warnings and are omitted.
+// tmux 3.3. CloseOnAnyKey and NoKeys require tmux 3.6. Unsupported fields follow
+// [UnsupportedPolicy].
 //
-// When this call modifies an existing popup, NoKeys resets its automatic-close
-// flags before tmux applies any close flags in this request. CloseOnAnyKey acts
-// only after the popup job exits; while the job is active, keys go to the job.
-//
-// Invalid fields fail before display. A completed invocation produces a
-// [CommandError] only when tmux writes stderr; the library-created error
-// retains only the exit code. A nonzero exit without stderr is ignored.
-// Context errors remain detectable with [errors.Is], but cancellation cannot
-// dismiss or revoke an accepted popup, which may remain visible.
+// Invalid fields fail before display. Only stderr produces a redacted
+// [CommandError]; nonzero exits without stderr are ignored. Cancellation cannot
+// dismiss an accepted popup, which may remain visible.
 func (p Pane) DisplayPopup(ctx context.Context, request DisplayPopupRequest) error {
 	arguments, err := exactPaneCommandArguments(p, "display-popup")
 	if err != nil {

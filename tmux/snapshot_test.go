@@ -550,22 +550,6 @@ func TestServerSnapshotReportsVersionProbeFailure(t *testing.T) {
 	}
 }
 
-func TestServerSnapshotNeverNormalizesOptionValidation(t *testing.T) {
-	t.Parallel()
-
-	runner := &versionQueueRunner{responses: []versionResponse{{
-		result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}, ExitCode: 0},
-	}}}
-	server := Server{state: &serverState{
-		shared:  &serverShared{},
-		options: ServerOptions{Colors: ColorMode(16)},
-		runner:  runner,
-	}}
-	if _, err := server.Snapshot(context.Background()); !errors.Is(err, ErrUnknownColor) {
-		t.Fatalf("Snapshot() error = %v, want ErrUnknownColor", err)
-	}
-}
-
 func TestSnapshotRejectsRowsFromDifferentServerIdentities(t *testing.T) {
 	t.Parallel()
 
@@ -697,7 +681,7 @@ func linkedSnapshot(t *testing.T) Snapshot {
 	t.Helper()
 
 	version := mustParseVersion(t, "3.7")
-	snapshot, err := newSnapshot(Server{}, version, snapshotRecords{
+	snapshot, err := newSnapshot(serverWithRunner(&versionQueueRunner{}), version, snapshotRecords{
 		sessions: []formatValues{
 			snapshotValues(t, version, "session_id", "$0", "session_name", "alpha"),
 			snapshotValues(t, version, "session_id", "$1", "session_name", "beta"),

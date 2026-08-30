@@ -10,11 +10,8 @@ var paneModesVersion35 = Version{raw: "3.5", major: 3, minor: 5}
 // CopyModeRequest configures tmux copy mode. Its zero value enters copy mode
 // on the receiver without scrolling. Fields may be combined. tmux resolves the
 // receiver and optional SourcePane before processing Cancel, so a stale target
-// can fail the request without resetting any mode. After successful resolution,
-// Cancel resets the pane's modes and returns before ScrollUp, ExitOnBottom,
-// MouseDrag, or PageDown has an effect. The library still validates SourcePane
-// and, when PageDown is true, probes the tmux version before invoking copy-mode.
-// SourcePane is a value and is not retained.
+// can prevent reset. After resolution, Cancel takes precedence over other actions,
+// though SourcePane validation and the PageDown version probe still occur first.
 type CopyModeRequest struct {
 	// ScrollUp enters copy mode one page above the current position.
 	ScrollUp bool
@@ -25,8 +22,8 @@ type CopyModeRequest struct {
 	// binding.
 	MouseDrag bool
 	// PageDown enters copy mode one page below the current position. It requires
-	// tmux 3.5; older versions warn and omit the flag. Its version probe still
-	// occurs when Cancel is set.
+	// tmux 3.5 and follows UnsupportedPolicy. Its version probe still occurs
+	// when Cancel is set.
 	PageDown bool
 	// SourcePane selects a stable pane whose content is copied while the
 	// receiver remains the pane placed in copy mode. Zero uses the receiver. A
@@ -57,9 +54,8 @@ const (
 )
 
 // ChooseTreeRequest configures the interactive session and window chooser. Its
-// zero value uses tmux's configured presentation and ordering. Format and
-// Filter are copied before execution; callers retain ownership and must not
-// mutate them concurrently.
+// zero value uses tmux defaults. Format and Filter are copied before execution
+// and must not be mutated concurrently.
 type ChooseTreeRequest struct {
 	// SessionsCollapsed starts with session nodes collapsed.
 	SessionsCollapsed bool
@@ -98,10 +94,9 @@ type FindWindowRequest struct {
 	MatchTitle bool
 }
 
-// DisplayPanesRequest configures pane-number display for tmux's current
-// client. This command is client-scoped and does not inherit the Pane target.
-// Duration is read before execution and is not retained; callers must not
-// mutate it concurrently.
+// DisplayPanesRequest configures pane-number display for tmux's current client
+// and does not inherit the Pane target. Duration is read during the call, not
+// retained, and must not be mutated concurrently.
 type DisplayPanesRequest struct {
 	// Duration is the display time in milliseconds. Nil uses tmux's
 	// display-panes-time option; zero waits for a key press. Negative values are
@@ -114,18 +109,14 @@ type DisplayPanesRequest struct {
 }
 
 // CopyMode enters or cancels copy mode using the receiver's exact linked
-// session-window-pane target. PageDown requires tmux 3.5; older versions emit a
-// synchronous warning and omit that flag. A version-probe error stops the
-// operation. tmux resolves the receiver and optional SourcePane before
+// session-window-pane target. PageDown requires tmux 3.5 and follows
+// [UnsupportedPolicy]. A version-probe error stops the operation. tmux resolves
+// the receiver and optional SourcePane before
 // processing Cancel; a stale target can therefore fail without resetting the
-// current mode. Once resolution succeeds, Cancel resets pane modes before tmux
-// considers the other action fields. SourcePane validation and the PageDown
-// version probe still happen in the library before tmux is invoked.
+// current mode. Cancel then takes precedence over other actions.
 //
-// A completed command produces a [CommandError] only when tmux writes stderr;
-// the library-created error retains only the exit code. A nonzero exit without
-// stderr is ignored. Transport and context errors remain detectable with
-// [errors.Is], but an accepted mode change is not rolled back.
+// Only stderr produces a redacted [CommandError]; nonzero exits without stderr
+// are ignored. Accepted mode changes are not rolled back.
 func (p Pane) CopyMode(ctx context.Context, request CopyModeRequest) error {
 	arguments, err := exactPaneCommandArguments(p, "copy-mode")
 	if err != nil {
@@ -176,29 +167,25 @@ func (p Pane) CopyMode(ctx context.Context, request CopyModeRequest) error {
 	return runRedactedPaneModeCommand(ctx, p.server, "copy-mode", arguments)
 }
 
-// ClockMode enters clock mode using the receiver's exact linked target. A
-// completed-command and cancellation semantics match [Pane.CopyMode].
+// ClockMode enters clock mode using the receiver's exact linked target.
 func (p Pane) ClockMode(ctx context.Context) error {
 	return p.runSimplePaneMode(ctx, "clock-mode")
 }
 
 // ChooseBuffer enters tmux's interactive buffer chooser using the receiver's
-// exact linked target. It requires an attached client. Completed-command and
-// cancellation semantics match [Pane.CopyMode].
+// exact linked target. It requires an attached client.
 func (p Pane) ChooseBuffer(ctx context.Context) error {
 	return p.runSimplePaneMode(ctx, "choose-buffer")
 }
 
 // ChooseClient enters tmux's interactive client chooser using the receiver's
-// exact linked target. It requires an attached client. Completed-command and
-// cancellation semantics match [Pane.CopyMode].
+// exact linked target. It requires an attached client.
 func (p Pane) ChooseClient(ctx context.Context) error {
 	return p.runSimplePaneMode(ctx, "choose-client")
 }
 
 // CustomizeMode enters tmux's interactive option browser using the receiver's
-// exact linked target. It requires an attached client. Completed-command and
-// cancellation semantics match [Pane.CopyMode].
+// exact linked target. It requires an attached client.
 func (p Pane) CustomizeMode(ctx context.Context) error {
 	return p.runSimplePaneMode(ctx, "customize-mode")
 }
@@ -206,11 +193,8 @@ func (p Pane) CustomizeMode(ctx context.Context) error {
 // ChooseTree enters tmux's interactive session, window, and pane chooser using
 // the receiver's exact linked target. It requires an attached client. Format
 // and Filter are tmux expressions; neither is interpreted by a shell.
-// Unsupported sort values and invalid arguments fail before execution. A
-// completed command produces a [CommandError] only when tmux writes stderr;
-// the library-created error retains only the exit code. A nonzero exit without
-// stderr is ignored. Transport and context errors may leave the pane in tree
-// mode and remain detectable with [errors.Is].
+// Unsupported sort values fail before execution. Only stderr produces a
+// redacted [CommandError]; transport errors may leave tree mode active.
 func (p Pane) ChooseTree(ctx context.Context, request ChooseTreeRequest) error {
 	arguments, err := exactPaneCommandArguments(p, "choose-tree")
 	if err != nil {
@@ -266,10 +250,8 @@ func (p Pane) ChooseTree(ctx context.Context, request ChooseTreeRequest) error {
 // FindWindow opens a tree chooser filtered by Match using the receiver's exact
 // linked target. It requires an attached client. Match is passed as one tmux
 // search operand and protected from leading-dash option parsing; it is not a
-// tmux format or shell command. A completed command produces a [CommandError]
-// only when tmux writes stderr; the library-created error retains only the exit
-// code. A nonzero exit without stderr is ignored. Transport and context errors
-// may leave the chooser open and remain detectable with [errors.Is].
+// tmux format or shell command. Only stderr produces a redacted [CommandError];
+// transport errors may leave the chooser open.
 func (p Pane) FindWindow(ctx context.Context, request FindWindowRequest) error {
 	arguments, err := exactPaneCommandArguments(p, "find-window")
 	if err != nil {
@@ -304,10 +286,8 @@ func (p Pane) FindWindow(ctx context.Context, request FindWindowRequest) error {
 // server connection and no pane target. A zero request uses tmux's configured
 // duration and permits number-key selection.
 //
-// A completed command produces a [CommandError] only when tmux writes stderr;
-// the library-created error retains only the exit code. A nonzero exit without
-// stderr is ignored. Transport and context errors remain detectable with
-// [errors.Is], but cancellation cannot revoke an accepted display.
+// Only stderr produces a redacted [CommandError]; nonzero exits without stderr
+// are ignored. Cancellation cannot revoke an accepted display.
 func (p Pane) DisplayPanes(ctx context.Context, request DisplayPanesRequest) error {
 	arguments := []string{"display-panes"}
 	if request.Duration != nil {

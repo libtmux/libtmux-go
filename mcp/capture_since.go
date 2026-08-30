@@ -14,37 +14,16 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Reading a pane again should cost what changed, not what is there.
-//
-// A client watching a pane across turns reads the same screen every turn: the
-// build output it read last turn is still on the screen this turn, and it pays
-// for it again. capture_since answers with what the pane wrote since a cursor
-// a previous call handed out, so a quiet pane costs nothing and a busy one
-// costs its new lines.
-//
-// The cursor is opaque on purpose. It carries where tmux was when it was
-// issued and a fingerprint of the rows there, and both are implementation:
-// a client that parsed it would be depending on how this works rather than
-// on what it promises, which is that passing it back returns what is new.
-//
-// tmux discards scrollback, so "what is new" is not always answerable. When
-// the anchor has been trimmed away the reply is the visible screen with
-// linesMissed set, which is honest about having lost the thread rather than
-// silently returning a gap. A client that sees linesMissed knows its record of
-// the pane is incomplete; one that never sees it knows its record is whole.
+// capture_since returns only output after an opaque cursor. If tmux discarded
+// the cursor's anchor, it returns the visible screen with linesMissed set.
 
 const (
-	// cursorPrefix names the format so a cursor from another version, or from
-	// somewhere else entirely, is refused rather than misread.
+	// cursorPrefix prevents other cursor formats from being misread.
 	cursorPrefix  = "capture-since-v2:"
 	cursorVersion = 2
-	// fingerprintRows is how many rows before the anchor a cursor records.
-	// Enough that the run is unique on a screen of repeated prompts, few
-	// enough that carrying it in every reply costs little.
+	// fingerprintRows balances anchor uniqueness against cursor size.
 	fingerprintRows = 12
-	// stableReadAttempts bounds how often a read is retried when the pane
-	// moved underneath it. A pane writing continuously would otherwise retry
-	// forever; after this many tries the reply says the lines are incomplete.
+	// stableReadAttempts bounds retries while a pane changes continuously.
 	stableReadAttempts = 3
 )
 
@@ -98,16 +77,8 @@ type captureCursor struct {
 	HistorySize int `json:"h"`
 	PaneHeight  int `json:"e"`
 	AnchorAbs   int `json:"n"`
-	// Leading are the rows immediately above the anchor, oldest first, which
-	// is what finds the anchor again after tmux renumbers the grid.
-	//
-	// Above the anchor rather than at or below it, for two reasons. Below is
-	// where a pane sitting at a prompt has nothing — blank rows match
-	// everywhere and therefore nowhere. The anchor row itself is the one a
-	// shell rewrites the instant anything is typed, so a run including it
-	// stops matching precisely when the pane is being used.
-	// Packed rather than a JSON array: every row would otherwise carry two
-	// quotes and a comma, which on a screenful is more than the hashes.
+	// Leading fingerprints rows above the mutable anchor; rows below are often
+	// blank. Packing avoids JSON punctuation per row.
 	Leading packedHashes `json:"l,omitempty"`
 	// AnchorHash is the anchor row as it was, which says whether the row has
 	// been written over since and therefore whether it is new.
@@ -144,11 +115,7 @@ func (h *packedHashes) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// paneState is where tmux's grid stood at one instant.
-//
-// The four values are read in one command because they only mean something
-// together: a history size from one read and a cursor row from another
-// describe no position the pane was ever in.
+// paneState is one tmux expansion so its grid coordinates describe one instant.
 type paneState struct {
 	pid         int
 	historySize int
@@ -157,14 +124,8 @@ type paneState struct {
 	dead        bool
 }
 
-// paneStateFormat asks tmux for the whole state in one expansion.
-//
-// The fields are separated by a printable character rather than a tab. tmux
-// rewrites control characters in format output for a client it does not
-// believe is using UTF-8, which is any client whose environment names no
-// UTF-8 locale — the environment an MCP client commonly starts a server with.
-// A tab comes back as an underscore there, and every value in this reply is a
-// number or a flag, so nothing here can contain the separator either way.
+// paneStateFormat uses a printable separator because tmux may rewrite control
+// characters when the client environment has no UTF-8 locale.
 const paneStateFormat = "#{pane_pid}|#{history_size}|#{pane_height}|#{cursor_y}|#{pane_dead}"
 
 // readPaneState asks tmux where the pane's grid stands.
@@ -238,6 +199,10 @@ func (t *tools) captureSince(
 		// history as this one's, which is worse than refusing.
 		return nil, captureSinceOutput{}, fmt.Errorf(
 			"the cursor belongs to pane %s, not %s", cursor.PaneID, pane.ID())
+	}
+	pane, err = t.processPane(ctx, pane)
+	if err != nil {
+		return nil, captureSinceOutput{}, err
 	}
 
 	read, err := t.readSince(ctx, pane, cursor)
@@ -384,17 +349,8 @@ func readDelta(ctx context.Context, pane tmux.Pane, cursor captureCursor) (paneR
 	return missedRead(ctx, pane, cursor.PanePID)
 }
 
-// locateAnchor finds the anchor row and returns the grid it was found in.
-//
-// The cheap path reads from where the anchor would be if tmux had discarded
-// nothing, starting far enough above it to include the fingerprint, and checks
-// that the fingerprint is there. That is one capture and it is what happens
-// whenever the pane has not reached its history limit.
-//
-// When it is not there, tmux has freed the oldest tenth of the history and
-// shifted the rest up — every row's number changed at once, and tmux publishes
-// no count of what it dropped, so the row cannot be renumbered arithmetically.
-// The whole retained history is read and searched for the fingerprint instead.
+// locateAnchor checks its predicted position first. After tmux renumbers
+// trimmed history without reporting the removed count, it searches all retained rows.
 func locateAnchor(
 	ctx context.Context,
 	pane tmux.Pane,
@@ -402,15 +358,28 @@ func locateAnchor(
 	state paneState,
 ) (rows []string, at int, found bool, err error) {
 	if len(cursor.Leading) == 0 {
-		// A cursor from before this server recorded a fingerprint, or one for
-		// a pane that had written nothing at all. Its position is all there
-		// is, so it is used as-is rather than reporting a loss that may not
-		// have happened.
-		start := cursor.AnchorAbs - state.historySize
+		// The pane had written nothing when this cursor was taken, so its
+		// anchor is the oldest row there is and no row above it can identify
+		// it. Reading from the retained boundary either finds that row still
+		// first, or shows that trimming discarded it.
 		rows, err = captureRawRows(ctx, pane, tmux.CapturePaneRequest{
-			Start: tmux.CaptureLine(start),
+			Start: tmux.CaptureBoundary,
 		})
-		return rows, 0, err == nil, err
+		if err != nil {
+			return nil, 0, false, err
+		}
+		if state.historySize == 0 {
+			// Nothing has scrolled away, so the first row is still the anchor.
+			return rows, 0, true, nil
+		}
+		// Rows have moved into history since, and only an anchor that still
+		// reads the same proves this one was not among those discarded. A blank
+		// row proves nothing: every blank row hashes alike.
+		if len(rows) == 0 || strings.TrimSpace(rows[0]) == "" ||
+			cursor.AnchorHash == "" || lineHash(rows[0]) != cursor.AnchorHash {
+			return nil, 0, false, nil
+		}
+		return rows, 0, true, nil
 	}
 
 	lead := len(cursor.Leading)
@@ -491,14 +460,9 @@ func missedRead(ctx context.Context, pane tmux.Pane, expectPID int) (paneRead, e
 	return read, nil
 }
 
-// captureAnchorRows reads the rows from the cursor row down, which the next
-// cursor fingerprints. A cursor below the screen has none.
-//
-// The rows are read as bytes rather than as lines, because a decoded capture
-// drops every trailing blank row and a pane sitting at a fresh prompt is
-// blank from the cursor down. Decoding gave nothing to fingerprint, and a
-// cursor with no fingerprint cannot be checked against the rows it claims to
-// name — which is how a trimmed grid went unnoticed.
+// captureFingerprintRows reads anchor rows from the cursor down and settled
+// leading rows above it.
+// CaptureBytes preserves trailing blank rows that decoded captures drop.
 func captureFingerprintRows(
 	ctx context.Context,
 	pane tmux.Pane,
@@ -513,10 +477,10 @@ func captureFingerprintRows(
 		}
 	}
 	// The settled rows above the anchor, which may reach back into history
-	// when the pane has written more than a screenful. A cursor at the very
-	// top of a pane that has written nothing has none, and is then located by
-	// its position alone.
-	if state.cursorY > 0 {
+	// when the pane has written more than a screenful. Only a pane that has
+	// written nothing at all has none; a cursor on the first row of a cleared
+	// pane still has history above it, and needs those rows to survive a trim.
+	if state.cursorY > 0 || state.historySize > 0 {
 		leading, err = captureRawRows(ctx, pane, tmux.CapturePaneRequest{
 			Start: tmux.CaptureLine(max(state.cursorY-fingerprintRows, -state.historySize)),
 			End:   tmux.CaptureLine(state.cursorY - 1),
@@ -618,19 +582,25 @@ func dropSeenRows(rows []string, cursor captureCursor) []string {
 // numbers move: tmux renumbers the whole grid when it trims the oldest row.
 func lineHash(line string) string {
 	sum := sha256.Sum256([]byte(line))
-	// Eight bytes of the digest, because the cursor travels in every reply and
-	// carries one of these per row: a full digest made a cursor for a screen of
-	// mostly blank rows cost more than sending that screen would have. These
-	// are compared against the rows of one pane, so even a pane holding a
-	// million rows is nowhere near an accidental collision.
-	//
-	// Base64 rather than hex, which is eleven characters for the same eight
-	// bytes instead of sixteen.
+	// Eight bytes keep per-row cursors compact while making collisions within
+	// one pane negligible; base64 uses eleven characters instead of sixteen.
 	return base64.RawURLEncoding.EncodeToString(sum[:8])
 }
 
 // encodeCursor renders a cursor as one opaque string.
 func encodeCursor(paneID string, state paneState, read paneRead) string {
+	cursor := cursorForRead(paneID, state, read)
+	// Marshaling a value this package owns cannot fail, and there is nothing
+	// useful to say if it somehow did: a cursor that could not be built is
+	// reported as no cursor, which reads as a fresh start.
+	encoded, err := json.Marshal(cursor)
+	if err != nil {
+		return ""
+	}
+	return cursorPrefix + base64.RawURLEncoding.EncodeToString(encoded)
+}
+
+func cursorForRead(paneID string, state paneState, read paneRead) captureCursor {
 	cursor := captureCursor{
 		Version:     cursorVersion,
 		PaneID:      paneID,
@@ -651,14 +621,7 @@ func encodeCursor(paneID string, state paneState, read paneRead) string {
 			cursor.BelowHashes = append(cursor.BelowHashes, lineHash(row))
 		}
 	}
-	// Marshaling a value this package owns cannot fail, and there is nothing
-	// useful to say if it somehow did: a cursor that could not be built is
-	// reported as no cursor, which reads as a fresh start.
-	encoded, err := json.Marshal(cursor)
-	if err != nil {
-		return ""
-	}
-	return cursorPrefix + base64.RawURLEncoding.EncodeToString(encoded)
+	return cursor
 }
 
 // decodeCursor reads a cursor back, refusing anything this server did not
@@ -691,7 +654,7 @@ func decodeCursor(value string) (captureCursor, error) {
 
 // addCaptureTools advertises the tools that read a pane's text.
 func addCaptureTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "capture_pane",
 		Annotations: readOnly("Capture a tmux Pane"),
 		Description: "Read what one pane holds: its visible screen, or its " +
@@ -701,7 +664,7 @@ func addCaptureTools(server *mcp.Server, t *tools) {
 			"strips. Use capture_since instead to read a pane repeatedly without " +
 			"paying for the same screen each time.",
 	}, t.capturePane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "capture_since",
 		Annotations: readOnly("Read What a Pane Wrote Since"),
 		Description: "Read only what a pane wrote since the cursor a previous " +
@@ -711,13 +674,13 @@ func addCaptureTools(server *mcp.Server, t *tools) {
 			"linesMissed reports that tmux discarded scrollback in between, so " +
 			"the reply is the current screen rather than everything since.",
 	}, t.captureSince)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "clear_pane",
 		Annotations: settling("Clear a tmux Pane"),
 		Description: "Clear a pane's screen, and its scrollback when asked. " +
 			"Clearing what has already been read keeps later captures small.",
 	}, t.clearPane)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityPaneControl, &mcp.Tool{
 		Name:        "pipe_pane",
 		Annotations: mutating("Pipe a Pane's Output"),
 		Description: "Send everything a pane writes to a shell command as well " +

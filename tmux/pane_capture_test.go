@@ -360,8 +360,8 @@ func TestCaptureToFileUsesOnlyCommandsThatPrintNothing(t *testing.T) {
 	if len(requests) != 3 {
 		t.Fatalf("runner requests = %#v, want capture, save, and delete", requests)
 	}
-	// tmux prints a reply for none of these three, which is what lets an engine
-	// carry them where a printed capture-pane cannot go.
+	// tmux prints a reply for none of these three, which lets a control
+	// connection carry them where a printed capture-pane cannot go.
 	buffer := requests[0].Arguments[4]
 	if !strings.HasPrefix(buffer, "libtmux-go-capture-") {
 		t.Fatalf("capture buffer = %q, want a name owned by this package", buffer)
@@ -566,10 +566,9 @@ func (r *captureQueueRunner) recordedRequests() []tmuxcmd.Request {
 // exercised through; the default refuses, which
 // TestUnsupportedFeaturesAreRefusedByDefault covers.
 func newCaptureTestPane(runner commandRunner, handler WarningHandler) Pane {
-	server := NewServer(ServerOptions{
+	server := serverWithOptionsAndRunner(ServerOptions{
 		Unsupported:    DegradeUnsupported,
 		WarningHandler: handler,
-	})
-	server.state.runner = runner
+	}, runner)
 	return Pane{server: server, sessionID: "$5", windowID: "@6", paneID: "%7"}
 }

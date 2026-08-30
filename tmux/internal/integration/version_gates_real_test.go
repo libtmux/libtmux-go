@@ -67,18 +67,8 @@ var gatedFlags = []gatedFlag{
 	},
 }
 
-// TestNoFlagIsWithheldFromATmuxThatOffersIt covers the failure the per-feature
-// version tests cannot see.
-//
-// Each of those asserts that a feature is refused below its minimum, so a
-// minimum set too high passes every one of them while denying a capability the
-// running tmux has. This asks the opposite question of the same tmux: for every
-// flag this package gates, being offered and being sent have to agree.
-//
-// A boundary later than the flag's arrival is allowed, but only with a reason,
-// because a flag tmux parses is not always a flag tmux survives. A reason
-// exempts its entry from the check entirely, so the reason is what review is
-// for: it has to name the releases and what they do, not assert a version.
+// Advertised flags and version gates must agree. A later gate needs a recorded
+// tmux failure because parsing a flag does not mean the server survives it.
 //
 //libtmux:real-tmux
 func TestNoFlagIsWithheldFromATmuxThatOffersIt(t *testing.T) {

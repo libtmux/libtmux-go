@@ -54,11 +54,8 @@ func (s Session) PreviousWindow(ctx context.Context) (Window, error) {
 // linked views. The selection is session-scoped; it does not promise focus for
 // clients attached to other sessions.
 //
-// Invalid requests match [ErrInvalidServerCommandRequest] or
-// [ErrInvalidRequest] before execution. A transport or context error can be
-// delivery-ambiguous and no rollback is attempted. Command or refresh failure
-// returns a zero Window because the selected view cannot be identified
-// reliably without refresh.
+// Command or refresh failures return zero because the selected view cannot be
+// identified without refresh. Transport errors are delivery-ambiguous.
 func (s Session) SelectWindow(
 	ctx context.Context,
 	request SelectWindowRequest,

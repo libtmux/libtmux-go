@@ -10,16 +10,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// TestSelectLayoutRefusesWhatWouldKillTheServer is a data-loss gate.
-//
-// tmux 3.3a does not reject an unrecognised layout: it exits, and every session
-// on that socket goes with it, including sessions belonging to somebody else.
-// Every other supported version returns an error. The library therefore refuses
-// the value itself, so the same typo costs the same error everywhere instead of
-// a server on one version.
-//
-// The second session is the assertion. A test that only checked the returned
-// error would pass on 3.3a while the server it was talking to no longer existed.
+// Invalid layouts must never reach tmux 3.3a, which exits the server and destroys
+// unrelated sessions instead of returning an error.
 //
 //libtmux:real-tmux
 func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {

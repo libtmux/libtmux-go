@@ -16,11 +16,8 @@ import (
 //	active := tmux.TmuxFilter("#{==:#{window_active},1}")
 //	windows, err := session.SearchWindows(ctx, &active)
 //
-// tmux evaluates it while listing, so a filter written this way narrows what
-// tmux sends back. The generated PaneFilter and WindowFilter types are the
-// other half of the pair: they are evaluated in Go, after everything has been
-// listed, and are the ones to reach for when the test is easier to write in Go
-// than in a tmux format.
+// tmux evaluates this while listing. Generated model filters run in Go after
+// materialization.
 //
 //revive:disable-next-line:exported TmuxFilter preserves tmux vocabulary beside local model filters.
 type TmuxFilter string
@@ -130,9 +127,8 @@ func (s Server) showBuffer(ctx context.Context, name *string) (CommandResult, er
 		arguments = append(arguments, "-b", *name)
 	}
 	// show-buffer's result is tmux's own stdout, which [Server.ShowBufferBytes]
-	// returns byte for byte, so this read stays on a tmux process whatever
-	// engine the handle selected.
-	result, err := s.withoutEngine().literalCmd(ctx, arguments...)
+	// returns byte for byte, so this read requires a tmux process.
+	result, err := s.requireProcess().literalCmd(ctx, arguments...)
 	if err := requireRedactedServerCommandNoStderr("show-buffer", result, err); err != nil {
 		return result, err
 	}

@@ -12,9 +12,10 @@ option and hook as a typed accessor, and errors classified by what tmux actually
 refused.
 
 - **No runtime dependencies.** The core module imports only the standard library.
-- **Go 1.26+**, tmux **3.2a through 3.7b**, checked against every release in that
-  range on each change. The Go floor tracks upstream's support window, which
-  covers the two most recent releases.
+- **Go 1.26+**, tmux **3.2a through 3.7c** across the core, workspace, and MCP
+  modules. The compatibility matrix checks every release in that range.
+  The Go floor tracks upstream's support window, which covers the two most
+  recent releases.
 - **Records never refresh behind you.** A `Session` you hold is what tmux said
   when you asked, not a live handle that changes underneath.
 
@@ -110,43 +111,54 @@ panes, err := server.SearchPanes(ctx, &filter)
 
 Runnable: [`examples/filter-query`](examples/filter-query).
 
-## Choosing a mode
+## Choosing an execution path
 
-Every command starts a tmux process unless you turn something on. Each switch is
-one line to turn on, one to take back, and independent of the others:
+A plain `Server` uses the executable, environment, working directory, and
+socket selection frozen by `NewServer`. Values derived from it retain that
+subprocess binding. Guards on materialized values assume stable, trusted tmux
+parser primitives and aliases. Establish a connection before socket
+replacement when exact-daemon ownership is required.
 
-| Mode | Turn it on | Cost | Reach for it |
+| Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
-| process | nothing, the default | a tmux process each | one-shot commands |
-| control | `OpenControlPool` | one tmux client | more than a few commands |
-| concurrent | `Connections: N` | N tmux clients | parallel readers |
-| chained | `NewPlan` then `Run` | no records back | builds and layouts |
-| streaming | `Notifications` | a connection | watching what a pane does |
+| process | `NewServer` | one tmux process per operation | one-shot commands |
+| connection | `Session.OpenControl` | one tmux client per lane | repeated commands |
+| concurrent | `ConnectionOptions{Lanes: N}` | N tmux clients | parallel readers |
+| chained | `NewPlan` then `Run` | fewer process starts | builds and layouts |
+| streaming | `Session.OpenNotifications(ctx, NotificationOptions{})` | one tmux client | watching what tmux does |
 
-Each row changes how a command reaches tmux and none changes what it means,
-which is the property the benchmark table gates on. One switch is deliberately
-not a row, because it does change meaning: `ServerOptions.Unsupported` decides
-whether a request naming a flag the running tmux does not have is refused —
-the default — or carried out without it and reported to a warning handler.
+Plans run over either a plain server or a connection-bound server. Unsupported
+capability policy is separate: `ServerOptions.Unsupported` decides whether a
+request naming an unavailable tmux flag is refused — the default — or
+carried out without it and reported to a warning handler.
 
-A control connection carries commands without starting a process for each. It is
-a tmux client while open — it appears in `list-clients` and counts toward
-`session_attached` — which is why it is chosen rather than automatic:
+A connection carries commands without starting a process for each. It appears
+in `list-clients` and counts toward `session_attached`, which is why opening one
+is explicit:
 
 <!-- docs:control-pool -->
 
 ```go
-_, connected, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
+connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 if err != nil {
-	return fmt.Errorf("open control pool: %w", err)
+	return fmt.Errorf("open control connection: %w", err)
 }
-defer func() { _ = pool.Close() }()
+defer func() { _ = connection.Close() }()
+connected := connection.Session()
 ```
 
 <!-- docs:end -->
 
-The pool returns the session bound to the connection. The one passed in still
-starts a process per command, so the returned value is the one to keep.
+Once established, `connection.Server()` and `connection.Session()` are bound
+to that exact daemon. Values derived from them retain that owner. The binding
+is terminal: closing the connection makes later operations return
+`ErrControlClosed`, and an operation that needs a separate process returns
+`ErrConnectionRequiresProcess`. It never falls back or rebinds. The original
+session remains on its frozen subprocess binding.
+
+`Server.NewSessionConnection` creates a session and retains its creating
+control process as the first lane. It returns the ordinary created session and
+an owned connection; use `connection.Session()` for connected operations.
 
 A plan records commands instead of running them, sends the ones needing no
 answer together, and hands back a reference to what a step *will* create — so a
@@ -167,18 +179,34 @@ plan.DisplayMessage(editor, "#{pane_title}")
 
 Runnable: [`examples/fast-path`](examples/fast-path) and
 [`examples/planned-build`](examples/planned-build).
-[`BENCHMARKS.md`](BENCHMARKS.md) is what each mode costs, measured on every
+[`BENCHMARKS.md`](BENCHMARKS.md) is what each path costs, measured on every
 supported tmux.
 
 ## Watching tmux
 
-tmux pushes what happens down an open connection, so a change is heard once,
-when it happens, rather than found by a poll that has to guess how often to ask:
+`Session.OpenNotifications` and `Server.OpenNotifications` return owned
+streams. Zero options retain tmux changes but suppress pane output; set
+`IncludePaneOutput` when watching pane content. tmux pushes each change when it
+happens rather than making a poll guess how often to ask. Before tmux 3.6,
+destroying the attached session follows its `detach-on-destroy` policy and may
+end the stream:
 
 <!-- docs:watching -->
 
 ```go
-for notification, err := range control.Notifications(ctx) {
+stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+if err != nil {
+	return fmt.Errorf("open notification stream: %w", err)
+}
+defer func() { err = errors.Join(err, stream.Close()) }()
+
+// Rename after subscribing; notifications do not include earlier changes.
+if _, err := session.Rename(ctx, "control-example"); err != nil {
+	return fmt.Errorf("rename session: %w", err)
+}
+
+for {
+	notification, err := stream.Next(ctx)
 	if err != nil {
 		return fmt.Errorf("read notification: %w", err)
 	}
@@ -265,8 +293,13 @@ func TestSomething(t *testing.T) {
 }
 ```
 
-For a machine with no tmux at all, `ServerOptions.Runner` replaces process
-execution entirely.
+`NewServer` snapshots its effective environment and working directory, resolves
+one absolute executable, and returns an error before starting tmux when
+configuration or resolution fails. Later environment and directory changes do
+not retarget the handle, and the zero `Server` is invalid. Tests of process
+behavior can point `ServerOptions.Binary` at an executable fixture;
+construction still resolves and freezes it. Use `tmuxtest` when the behavior
+belongs to a real tmux daemon.
 
 ## Documentation
 

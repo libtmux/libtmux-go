@@ -174,7 +174,14 @@ func (s Server) RequireVersion(ctx context.Context, minimum Version) error {
 }
 
 func (s Server) loadVersion(ctx context.Context, refresh bool) (Version, error) {
-	cache := &s.connectionState().coordination().version
+	state, err := s.stateForUse()
+	if err != nil {
+		return Version{}, err
+	}
+	if s.daemon != nil {
+		return s.daemon.version, nil
+	}
+	cache := &state.shared.version
 	for {
 		cache.mu.Lock()
 		if !refresh && cache.valid {

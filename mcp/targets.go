@@ -9,26 +9,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// Resolving what a client named into what tmux addresses.
-//
-// A client that has read a listing has an id, and an id is what every tool
-// prefers. A client that has not read one has a description: the session, or
-// nothing at all because there is only one thing it could mean. Making it read
-// a listing first would be a round trip to learn something the server can work
-// out, so an omitted target resolves to the only candidate when there is one
-// and is refused when there is not.
-//
-// Refused rather than guessed. A tool that picks one of several sessions makes
-// a client's next call address something it did not choose, and the mistake
-// surfaces as a command run in the wrong pane rather than as an error.
-
-// notFound restates a target that does not exist as the call that would have
-// found one.
-//
-// tmux answers with what it looked for -- "snapshot object not found: pane
-// %9" -- which names the mechanism and leaves a caller to guess the way out.
-// A model reading that has no reason to prefer listing over trying another id,
-// and the listing is always the right next move.
+// notFound adds an actionable listing hint while preserving
+// [tmux.ErrSnapshotNotFound].
 func notFound(err error, what, id, lister string) error {
 	if !errors.Is(err, tmux.ErrSnapshotNotFound) {
 		return err
@@ -38,22 +20,18 @@ func notFound(err error, what, id, lister string) error {
 		what, id, lister, what)}
 }
 
-// missing keeps the prose above answerable by errors.Is. Replacing tmux's
-// message with a better one otherwise throws away the one fact a caller might
-// branch on, which is what tells a target that is not there from a server that
-// could not be asked.
+// missing preserves [tmux.ErrSnapshotNotFound] after rewriting its message.
 type missing struct{ error }
 
 func (missing) Is(target error) bool { return target == tmux.ErrSnapshotNotFound }
 
 // resolveSession finds the session a call names, or the only one there is.
 func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, error) {
-	sessions, err := t.tmux().Sessions(ctx)
+	sessions, err := t.tmux(ctx).Sessions(ctx)
 	if err != nil {
 		return tmux.Session{}, err
 	}
-	// A name is matched against the sessions there are rather than turned into
-	// a target: a session id is tmux's own $N, and a name is not one.
+	// Match materialized names; tmux targets also accept prefixes and patterns.
 	if wanted := strings.TrimSpace(name); wanted != "" {
 		for _, session := range sessions {
 			if actual, ok := session.Formats().SessionName(); ok && actual == wanted {
@@ -75,13 +53,10 @@ func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, 
 	}
 }
 
-// resolveWindow finds the window a call names, or the current one.
-//
-// An empty id is the current window of the session resolved the same way,
-// which is what "this window" means to someone looking at a terminal.
+// resolveWindow uses the current window when id is empty.
 func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux.Window, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		window, err := t.tmux().Window(ctx, tmux.WindowID(wanted))
+		window, err := t.tmux(ctx).Window(ctx, tmux.WindowID(wanted))
 		return window, notFound(err, "window", wanted, "list_windows")
 	}
 	session, err := t.resolveSession(ctx, sessionName)
@@ -91,14 +66,10 @@ func (t *tools) resolveWindow(ctx context.Context, id, sessionName string) (tmux
 	return session.ResolveActiveWindow(ctx)
 }
 
-// resolvePane finds the pane a call names, or the active one.
-//
-// An empty id is the active pane of the current window, which is the pane a
-// person is typing in. It is the one a client means by "this pane" and the one
-// it would otherwise spend a list_panes call to name.
+// resolvePane uses the active pane when id is empty.
 func (t *tools) resolvePane(ctx context.Context, id, sessionName string) (tmux.Pane, error) {
 	if wanted := strings.TrimSpace(id); wanted != "" {
-		pane, err := t.tmux().Pane(ctx, tmux.PaneID(wanted))
+		pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(wanted))
 		return pane, notFound(err, "pane", wanted, "list_panes")
 	}
 	window, err := t.resolveWindow(ctx, "", sessionName)
@@ -113,4 +84,14 @@ func (t *tools) resolvePane(ctx context.Context, id, sessionName string) (tmux.P
 		return tmux.Pane{}, fmt.Errorf("window %s has no active pane", window.ID())
 	}
 	return pane, nil
+}
+
+// processPane re-resolves a command-lane pane on the exact daemon's process
+// lane for operations whose stdout bytes cannot cross control mode.
+func (t *tools) processPane(ctx context.Context, pane tmux.Pane) (tmux.Pane, error) {
+	server, err := t.runtime.process(ctx)
+	if err != nil {
+		return tmux.Pane{}, err
+	}
+	return server.Pane(ctx, pane.ID())
 }

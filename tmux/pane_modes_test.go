@@ -97,10 +97,12 @@ func TestCopyModeWarnsAndOmitsPageDownBefore35(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.4"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := degradingServerWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(warning Warning) {
-		warnings = append(warnings, warning)
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			warnings = append(warnings, warning)
+		},
+	}, runner)
 	pane := Pane{server: server, sessionID: "$1", windowID: "@2", paneID: "%3"}
 	if err := pane.CopyMode(context.Background(), CopyModeRequest{PageDown: true}); err != nil {
 		t.Fatalf("CopyMode() error = %v", err)

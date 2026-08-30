@@ -17,11 +17,14 @@ import (
 // launches. [tmuxmcp.Run] holds the process until the client goes away.
 func ExampleRun() {
 	ctx := context.Background()
-	target := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// Fail at startup rather than on the first tool call when tmux cannot be
-	// resolved. A tmux server that is not running yet is not an error: tmux
-	// starts one when something asks it to.
+	// Probe the resolved executable and tmux version at startup rather than on
+	// the first tool call. A tmux server that is not running yet is not an
+	// error: tmux starts one when something asks it to.
 	if _, err := target.Version(ctx); err != nil {
 		log.Fatal(err)
 	}
@@ -30,11 +33,21 @@ func ExampleRun() {
 	}
 }
 
-// Put the server on a transport of your own — an in-memory pair, a pipe, or
-// anything else the SDK speaks — rather than stdin and stdout.
+func ExampleAdvertisedTools() {
+	tools, err := tmuxmcp.AdvertisedTools(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(len(tools) > 0)
+	// Output: true
+}
+
+// Put the server on a transport of your own rather than stdin and stdout. Its
+// Connection must commit each response independently before Write returns nil.
 //
-// [tmuxmcp.NewServer] returns the SDK's own server, so its options, middleware
-// and transports all apply.
+// [tmuxmcp.NewServer] returns an instance that owns the SDK server behind its
+// tracked Connect and Run methods. Close releases resources owned by the tools.
 func ExampleNewServer() {
 	// The work is in a function returning an error so that the session is
 	// closed on every path out of it. An example that logs and exits with a
@@ -46,18 +59,30 @@ func ExampleNewServer() {
 }
 
 func whichPaneAmIIn(ctx context.Context) error {
-	target := tmux.NewServer(tmux.ServerOptions{
+	target, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-which-pane",
 	})
+	if err != nil {
+		return err
+	}
 	defer killExampleServer(target)
 	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work"}); err != nil {
 		return err
 	}
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	if _, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil); err != nil {
+	instance, err := tmuxmcp.NewServer(target)
+	if err != nil {
 		return err
 	}
+	defer func() { _ = instance.Close() }()
+	serverSession, err := instance.Connect(
+		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = serverSession.Close() }()
 	client := sdk.NewClient(&sdk.Implementation{Name: "example", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
@@ -216,25 +241,36 @@ func Example_runningACommand() {
 // real one. Setup failures panic rather than returning: nothing here is part of
 // what the examples demonstrate, and a reader is not shown this function.
 func connectedClient(ctx context.Context) (*sdk.ClientSession, func()) {
-	target := tmux.NewServer(tmux.ServerOptions{
+	target, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-client",
 	})
+	if err != nil {
+		panic(err)
+	}
 	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work"}); err != nil {
 		panic(err)
 	}
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	instance, err := tmuxmcp.NewServer(target)
 	if err != nil {
+		panic(err)
+	}
+	serverSession, err := instance.Connect(ctx, assumeResponseCommit(serverTransport), nil)
+	if err != nil {
+		_ = instance.Close()
 		panic(err)
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "example", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
+		_ = serverSession.Close()
+		_ = instance.Close()
 		panic(err)
 	}
 	return session, func() {
 		_ = session.Close()
 		_ = serverSession.Close()
+		_ = instance.Close()
 		killExampleServer(target)
 	}
 }

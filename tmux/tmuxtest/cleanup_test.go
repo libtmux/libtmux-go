@@ -33,9 +33,13 @@ func TestScrubTmuxEnvironmentRemovesTargetingVariables(t *testing.T) {
 
 func TestCleanupFailureRemainsRegisteredForSuiteRetry(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "unstarted-socket")
+	failingBinary := filepath.Join(t.TempDir(), "failing-tmux")
+	if err := os.WriteFile(failingBinary, []byte("#!/bin/sh\nexit 71\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	record := &serverRecord{
-		server: tmux.NewServer(tmux.ServerOptions{
-			Binary: filepath.Join(t.TempDir(), "missing-tmux"),
+		server: mustNewTmuxServer(t, tmux.ServerOptions{
+			Binary: failingBinary,
 		}),
 		socketPath: socketPath,
 	}
@@ -54,13 +58,7 @@ func TestCleanupFailureRemainsRegisteredForSuiteRetry(t *testing.T) {
 	}
 }
 
-// TestOnlyALiveDaemonKeepsTheSuiteRoot covers which failed cleanups are worth
-// keeping a temporary root for.
-//
-// The root holds the socket, and the socket is the only way left to reach a
-// daemon the suite could not stop. A cleanup that failed with nothing running
-// leaves nothing to reach, so keeping its root only adds a directory nobody
-// reads: the failure diagnostic reports no paths, by design.
+// Keep the suite root only while its socket may still reach a live daemon.
 func TestOnlyALiveDaemonKeepsTheSuiteRoot(t *testing.T) {
 	alive := &serverRecord{pid: os.Getpid()}
 	stopped := &serverRecord{pid: os.Getpid(), daemonStopped: true}
@@ -111,7 +109,7 @@ func TestFailedCleanupPreservesSocketForSuiteRetry(t *testing.T) {
 	if record == nil {
 		t.Fatal("server record was not created")
 	}
-	realServer := tmux.NewServer(tmux.ServerOptions{
+	realServer := mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             realBinary,
 		SocketPath:         record.socketPath,
 		ConfigFile:         record.configFile,
@@ -213,7 +211,7 @@ func TestCleanupTracksReplacementDaemonOnOwnedSocket(t *testing.T) {
 		t.Fatalf("replacement reused first pid %d; test cannot distinguish daemons", firstPID)
 	}
 
-	record.server = tmux.NewServer(tmux.ServerOptions{
+	record.server = mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             proxyPath,
 		SocketPath:         record.socketPath,
 		ConfigFile:         record.configFile,
@@ -289,10 +287,7 @@ func TestCleanupRetryResumesAfterPartialArtifactRemoval(t *testing.T) {
 	}
 }
 
-// TestRetryCleanupWaitsBetweenAttempts covers the wait rather than the retry.
-// What cleanup contends with is a server partway through shutting down, and
-// asking again inside the same moment gets the same answer -- which is how two
-// attempts came to report one failure twice on a loaded machine.
+// Cleanup retries must pause so a server already shutting down can finish.
 func TestRetryCleanupWaitsBetweenAttempts(t *testing.T) {
 	const gap = 20 * time.Millisecond
 	attempts := 0
@@ -357,7 +352,7 @@ func TestCleanupRetriesTransientKillFailure(t *testing.T) {
 	cleaned := false
 	t.Cleanup(func() {
 		if !cleaned {
-			record.server = tmux.NewServer(tmux.ServerOptions{
+			record.server = mustNewTmuxServer(t, tmux.ServerOptions{
 				Binary:             realBinary,
 				SocketPath:         record.socketPath,
 				ConfigFile:         record.configFile,

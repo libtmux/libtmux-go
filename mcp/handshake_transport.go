@@ -2,39 +2,27 @@ package mcp
 
 import (
 	"context"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// notificationToolListChanged is the notification tmux tooling has no reason
-// to send during a handshake, and which the SDK sends anyway.
+// notificationToolListChanged is emitted by the SDK during handshake.
 const notificationToolListChanged = "notifications/tools/list_changed"
 
-// HandshakeOrdered wraps a transport so the server holds its notifications
-// until the client reports itself initialized, which is the order MCP asks for.
+// HandshakeOrdered holds the SDK's early tool-list notification until
+// notifications/initialized; strict legacy clients reject the earlier ordering.
 func HandshakeOrdered(inner mcp.Transport) mcp.Transport {
 	return handshakeOrderedTransport{inner: inner}
 }
 
-// handshakeOrderedTransport holds back server notifications until the client
-// has finished initializing.
-//
-// MCP says a server should not send notifications before it receives
-// notifications/initialized. The SDK announces the tool list as changed once a
-// session exists, which lands between the initialize response and that
-// notification, and a client that enforces the rule never finishes connecting:
-// the MCP Inspector times out its handshake against an otherwise working
-// server. Suppressing this one message is the difference between connecting
-// and not.
-//
-// Held rather than dropped: a client that asked for list-changed notifications
-// should still get one, just not before it is ready for it.
+// handshakeOrderedTransport delays SDK tool-list notifications until
+// notifications/initialized rather than dropping them.
 type handshakeOrderedTransport struct {
 	inner mcp.Transport
 }
 
-// Connect wraps the inner transport's connection.
 func (t handshakeOrderedTransport) Connect(ctx context.Context) (mcp.Connection, error) {
 	connection, err := t.inner.Connect(ctx)
 	if err != nil {
@@ -45,12 +33,11 @@ func (t handshakeOrderedTransport) Connect(ctx context.Context) (mcp.Connection,
 
 type handshakeOrderedConnection struct {
 	inner       mcp.Connection
+	mutex       sync.Mutex
 	initialized bool
-	held        []jsonrpc.Message
+	held        jsonrpc.Message
 }
 
-// Read notes when the client says it is initialized, and releases anything
-// held back until then.
 func (c *handshakeOrderedConnection) Read(ctx context.Context) (jsonrpc.Message, error) {
 	message, err := c.inner.Read(ctx)
 	if err != nil {
@@ -58,33 +45,34 @@ func (c *handshakeOrderedConnection) Read(ctx context.Context) (jsonrpc.Message,
 	}
 	if request, ok := message.(*jsonrpc.Request); ok &&
 		request.Method == "notifications/initialized" {
+		c.mutex.Lock()
 		c.initialized = true
 		held := c.held
 		c.held = nil
-		for _, delayed := range held {
-			if writeErr := c.inner.Write(ctx, delayed); writeErr != nil {
+		if held != nil {
+			if writeErr := c.inner.Write(ctx, held); writeErr != nil {
+				c.mutex.Unlock()
 				return nil, writeErr
 			}
 		}
+		c.mutex.Unlock()
 	}
 	return message, nil
 }
 
-// Write holds a tool-list notification sent before the client is initialized,
-// and passes everything else through untouched.
 func (c *handshakeOrderedConnection) Write(ctx context.Context, message jsonrpc.Message) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if !c.initialized {
 		if request, ok := message.(*jsonrpc.Request); ok &&
 			request.Method == notificationToolListChanged {
-			c.held = append(c.held, message)
+			c.held = message
 			return nil
 		}
 	}
 	return c.inner.Write(ctx, message)
 }
 
-// Close closes the wrapped connection.
 func (c *handshakeOrderedConnection) Close() error { return c.inner.Close() }
 
-// SessionID reports the wrapped connection's session, when it has one.
 func (c *handshakeOrderedConnection) SessionID() string { return c.inner.SessionID() }

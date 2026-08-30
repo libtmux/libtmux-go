@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,11 +22,17 @@ func TestMain(m *testing.M) {
 	os.Exit(tmuxtest.Main(m))
 }
 
-// testServer returns a harness-owned server and the context its test uses.
-//
-// It is a bare server rather than one carrying a session: a workspace builds
-// what it needs, and a session it did not create is state its assertions would
-// have to account for.
+func mustNewServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	return server
+}
+
+// testServer returns a bare server so Build owns all asserted topology.
 func testServer(t *testing.T) (tmux.Server, context.Context) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -78,20 +86,14 @@ windows:
 func TestParseRejectsMisspelledAndIncompleteWorkspaces(t *testing.T) {
 	t.Parallel()
 	for name, document := range map[string]string{
-		"misspelled field": "session_nme: typo\nwindows: [{panes: [echo hi]}]\n",
-		"no session name":  "windows: [{panes: [echo hi]}]\n",
-		"no windows":       "session_name: empty\n",
-		"bad focus":        "session_name: s\nwindows: [{focus: maybe, panes: [echo hi]}]\n",
-		// A custom UnmarshalYAML receives a node, and yaml.Node.Decode does not
-		// inherit the decoder's KnownFields setting, so each level re-checks its
-		// own keys. Without that, a misspelling is silently dropped.
+		"misspelled field":        "session_nme: typo\nwindows: [{panes: [echo hi]}]\n",
+		"no session name":         "windows: [{panes: [echo hi]}]\n",
+		"no windows":              "session_name: empty\n",
+		"bad focus":               "session_name: s\nwindows: [{focus: maybe, panes: [echo hi]}]\n",
 		"unknown workspace field": "session_name: s\nno_such_key: 1\nwindows: [{panes: [echo hi]}]\n",
 		"unknown window field":    "session_name: s\nwindows: [{nope: 1, panes: [echo hi]}]\n",
 		"unknown pane field":      "session_name: s\nwindows: [{panes: [{nope: 1, shell_command: echo hi}]}]\n",
 		"unknown command field":   "session_name: s\nwindows: [{panes: [{shell_command: [{cmd: hi, nope: 1}]}]}]\n",
-		// tmux refuses the second claim on an index, and its refusal is that
-		// new-window exited non-zero -- naming neither the index nor which
-		// window lost. Two windows claiming one place is a document mistake.
 		"window_index claimed twice": "session_name: s\n" +
 			"windows: [{window_index: 5, panes: [echo hi]}, " +
 			"{window_index: 5, panes: [echo hi]}]\n",
@@ -115,10 +117,270 @@ func TestParseAcceptsQuotedBooleans(t *testing.T) {
 	}
 }
 
-// The panes run something that does not finish. A pane whose command exits
-// takes its window, then the session, then the server -- so a test asserting
-// on what was built races that teardown, and answers "no server running" on a
-// machine slow enough to lose.
+func TestInitialSessionRequestCarriesTheFirstPane(t *testing.T) {
+	described := workspace.Workspace{
+		SessionName:    "project",
+		StartDirectory: "/workspace",
+		Windows: []workspace.Window{{
+			Name:           "editor",
+			StartDirectory: "/window",
+			Panes: []workspace.Pane{{
+				StartDirectory: "/pane",
+				Shell:          "sleep 300",
+			}},
+		}},
+	}
+
+	request, err := described.InitialSessionRequest()
+	if err != nil {
+		t.Fatalf("InitialSessionRequest() error = %v", err)
+	}
+	if request.Name != "project" || request.WindowName != "editor" ||
+		request.StartDirectory != "/pane" || request.Command != "sleep 300" {
+		t.Fatalf("InitialSessionRequest() = %+v, want first pane settings", request)
+	}
+}
+
+func TestInitialSessionRequestRejectsAnInvalidWorkspace(t *testing.T) {
+	_, err := (workspace.Workspace{}).InitialSessionRequest()
+	if !errors.Is(err, workspace.ErrInvalidWorkspace) {
+		t.Fatalf("InitialSessionRequest() error = %v, want ErrInvalidWorkspace", err)
+	}
+}
+
+func TestBuildIntoRequiresAMaterializedSession(t *testing.T) {
+	described := workspace.Workspace{
+		SessionName:   "continued",
+		GlobalOptions: map[string]string{"status": "off"},
+		Windows:       []workspace.Window{{Name: "initial"}},
+	}
+	err := workspace.BuildInto(context.Background(), tmux.Session{}, described)
+	if !errors.Is(err, tmux.ErrMissingTarget) {
+		t.Fatalf("BuildInto() error = %v, want ErrMissingTarget", err)
+	}
+	if errors.Is(err, workspace.ErrInvalidWorkspace) {
+		t.Fatalf("BuildInto() classified a missing session as an invalid workspace: %v", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestBuildCreatesTheSessionOnItsOwnedConnection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invocations := filepath.Join(t.TempDir(), "invocations")
+	proxy := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+transport=process
+operation=other
+for argument do
+    if [ "$argument" = -C ]; then transport=control; fi
+    if [ "$argument" = new-session ]; then operation=creation; fi
+done
+printf '%s %s\n' "$transport" "$operation" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
+`), 0o700); err != nil {
+		t.Fatalf("write tmux proxy: %v", err)
+	}
+	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		Binary: proxy,
+		ProcessEnvironment: append(os.Environ(),
+			"LIBTMUX_WORKSPACE_INVOCATIONS="+invocations,
+			"LIBTMUX_WORKSPACE_REAL_TMUX="+realBinary,
+		),
+	})
+
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	described := workspace.Workspace{
+		SessionName: "owned-connection",
+		Windows: []workspace.Window{
+			{Name: "editor", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+			{Name: "shell", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+		},
+	}
+	session, err := workspace.Build(ctx, server, described)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	recorded, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("read tmux invocations: %v", err)
+	}
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if version.AtLeast(minimum) {
+		if !slices.Contains(lines, "control creation") {
+			t.Fatalf("tmux invocations = %q, want control-mode session creation", lines)
+		}
+		if slices.Contains(lines, "process creation") {
+			t.Fatalf("tmux invocations = %q, want no process session creation", lines)
+		}
+	} else if !slices.Contains(lines, "process creation") {
+		t.Fatalf("tmux invocations = %q, want process fallback on tmux %s", lines, version)
+	}
+	if session.Server().ConnectionBound() {
+		t.Fatal("Build() returned a session bound to its closed connection")
+	}
+	windows, err := session.SearchWindows(ctx, nil)
+	if err != nil {
+		t.Fatalf("returned Session.SearchWindows() error = %v", err)
+	}
+	if len(windows) != 2 {
+		t.Fatalf("returned session has %d windows, want 2", len(windows))
+	}
+	clients, err := server.SearchClients(ctx, nil)
+	if err != nil {
+		t.Fatalf("SearchClients() error = %v", err)
+	}
+	if len(clients) != 0 {
+		t.Fatalf("Build() left %d owned clients open", len(clients))
+	}
+}
+
+//libtmux:real-tmux
+func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		globalOptions map[string]string
+		options       map[string]string
+		wantErr       error
+	}{
+		{
+			name:    "destroy-unattached",
+			options: map[string]string{"destroy-unattached": "on"},
+			wantErr: tmux.ErrSnapshotNotFound,
+		},
+		{
+			name:          "exit-unattached",
+			globalOptions: map[string]string{"exit-unattached": "on"},
+			wantErr:       tmux.ErrNoServer,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, ctx := testServer(t)
+			if _, err := server.NewSession(ctx, tmux.NewSessionRequest{
+				Name: "anchor", Command: "sleep 300",
+			}); err != nil {
+				t.Fatalf("create anchor session: %v", err)
+			}
+			described := workspace.Workspace{
+				SessionName:   "detach-policy-" + test.name,
+				GlobalOptions: test.globalOptions,
+				Options:       test.options,
+				Windows: []workspace.Window{{
+					Name:  "work",
+					Panes: []workspace.Pane{{Shell: "sleep 300"}},
+				}},
+			}
+
+			session, err := workspace.Build(ctx, server, described)
+			if session.ID() == "" {
+				t.Fatal("Build() returned a zero session after creating it")
+			}
+			if name, ok := session.Name(); !ok || name != described.SessionName {
+				t.Fatalf("Build() session name = (%q, %t), want (%q, true)", name, ok, described.SessionName)
+			}
+			if err == nil {
+				t.Fatal("Build() error = nil, want destroyed-session lifecycle error")
+			}
+			const prefix = "refresh built session after closing workspace connection: "
+			if !strings.HasPrefix(err.Error(), prefix) {
+				t.Fatalf("Build() error = %q, want prefix %q", err, prefix)
+			}
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("Build() error = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+//libtmux:real-tmux
+func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := filepath.Join(t.TempDir(), "tmux")
+	if err := os.Symlink(realBinary, proxy); err != nil {
+		t.Fatalf("link tmux proxy: %v", err)
+	}
+	configuration := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(configuration, nil, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	server := mustNewServer(t, tmux.ServerOptions{
+		Binary:     proxy,
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		ConfigFile: configuration,
+	})
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = server.Kill(killCtx)
+	})
+	described := workspace.Workspace{
+		SessionName: "continued",
+		Windows: []workspace.Window{
+			{Name: "editor", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+			{Name: "shell", Panes: []workspace.Pane{{Shell: "sleep 300"}}},
+		},
+	}
+	request, err := described.InitialSessionRequest()
+	if err != nil {
+		t.Fatalf("InitialSessionRequest() error = %v", err)
+	}
+	_, connection, err := server.NewSessionConnection(
+		ctx,
+		request,
+		tmux.ConnectionOptions{},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionConnection() error = %v", err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+
+	disabled := proxy + ".disabled"
+	if err := os.Rename(proxy, disabled); err != nil {
+		t.Fatalf("disable tmux proxy: %v", err)
+	}
+	proxyDisabled := true
+	t.Cleanup(func() {
+		if proxyDisabled {
+			_ = os.Rename(disabled, proxy)
+		}
+	})
+	if err := workspace.BuildInto(ctx, connection.Session(), described); err != nil {
+		t.Fatalf("BuildInto() error = %v", err)
+	}
+
+	windows, err := connection.Session().SearchWindows(ctx, nil)
+	if err != nil {
+		t.Fatalf("SearchWindows() error = %v", err)
+	}
+	if len(windows) != 2 {
+		t.Fatalf("BuildInto() left %d windows, want 2", len(windows))
+	}
+	if err := os.Rename(disabled, proxy); err != nil {
+		t.Fatalf("restore tmux proxy: %v", err)
+	}
+	proxyDisabled = false
+}
+
+// Long-lived pane commands prevent teardown from racing topology assertions.
 //
 //libtmux:real-tmux
 func TestBuildCreatesTheDescribedHierarchy(t *testing.T) {
@@ -221,8 +483,6 @@ func TestBuildRunsEveryTmuxpExampleThatThisModuleSupports(t *testing.T) {
 		}
 		workspaceValue, err := workspace.Parse(document)
 		if err != nil {
-			// Unsupported tmuxp features are expected; this test measures how far
-			// the supported subset reaches, not full compatibility.
 			continue
 		}
 		parsed++
@@ -248,10 +508,7 @@ func TestBuildRunsEveryTmuxpExampleThatThisModuleSupports(t *testing.T) {
 	}
 }
 
-// missingShell reports an absolute shell path a workspace names that this
-// machine does not have. Some tmuxp examples pin interpreters by path, and a
-// pane whose command cannot start takes its session with it, which is an
-// environment fact rather than a builder defect.
+// missingShell identifies examples that require an unavailable interpreter.
 func missingShell(described workspace.Workspace) (string, bool) {
 	for _, window := range described.Windows {
 		for _, shell := range append([]string{window.Shell}, paneShells(window)...) {
@@ -274,10 +531,7 @@ func paneShells(window workspace.Window) []string {
 	return shells
 }
 
-// unsetEnvironmentReference reports a ${VAR} the document depends on that this
-// machine does not define. tmuxp expands those before building; this module
-// passes values through, so an unexpanded reference reaches tmux and is
-// rejected. That is an environment fact rather than a builder defect.
+// unsetEnvironmentReference identifies examples requiring an unset variable.
 func unsetEnvironmentReference(document []byte) (string, bool) {
 	for _, match := range environmentReference.FindAllSubmatch(document, -1) {
 		name := string(match[1])
@@ -290,10 +544,7 @@ func unsetEnvironmentReference(document []byte) (string, bool) {
 
 var environmentReference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// TestGlobalOptionsAcceptEveryTableTmuxAccepts covers the canonical tmuxp
-// entry: a workspace writes mode-keys, a window option, into global_options
-// because tmux's own set-option -g resolves a name against whichever table
-// declares it.
+// TestGlobalOptionsAcceptEveryTableTmuxAccepts covers tmuxp's untyped mapping.
 func TestGlobalOptionsAcceptEveryTableTmuxAccepts(t *testing.T) {
 	for _, testCase := range []struct{ name, option, value string }{
 		{"session scope", "status-style", "bg=red"},
@@ -317,9 +568,7 @@ func TestGlobalOptionsAcceptEveryTableTmuxAccepts(t *testing.T) {
 	}
 }
 
-// TestGlobalOptionsRejectAnOptionNoTableDeclares proves the scope fallback
-// reports the name the file got wrong rather than swallowing it after three
-// tries.
+// TestGlobalOptionsRejectAnOptionNoTableDeclares preserves the original name.
 func TestGlobalOptionsRejectAnOptionNoTableDeclares(t *testing.T) {
 	server, ctx := testServer(t)
 	described, err := workspace.Parse([]byte(
@@ -335,9 +584,7 @@ func TestGlobalOptionsRejectAnOptionNoTableDeclares(t *testing.T) {
 	}
 }
 
-// TestFirstPaneShellRunsAsTheWindowCommand covers a shell written on every
-// pane of a window, where tmux creates the first pane with the window and so
-// gives it no creation call of its own to carry a command.
+// TestFirstPaneShellRunsAsTheWindowCommand covers the pane created with a window.
 func TestFirstPaneShellRunsAsTheWindowCommand(t *testing.T) {
 	server, ctx := testServer(t)
 	described, err := workspace.Parse([]byte(
@@ -358,9 +605,7 @@ func TestFirstPaneShellRunsAsTheWindowCommand(t *testing.T) {
 	if len(panes) != 2 {
 		t.Fatalf("got %d panes, want 2", len(panes))
 	}
-	// tmux reports the shell until the pane's command has replaced it, so the
-	// command is waited for rather than read once. Reading once passed only
-	// while the build was slow enough to hide the gap.
+	// tmux briefly reports the shell before exec replaces it, so poll.
 	for index, pane := range panes {
 		if err := tmux.Poll(ctx, 10*time.Millisecond, func(
 			ctx context.Context,
@@ -377,9 +622,7 @@ func TestFirstPaneShellRunsAsTheWindowCommand(t *testing.T) {
 	}
 }
 
-// TestWindowShellAndFirstPaneShellConflict keeps the module's promise that a
-// field is rejected rather than silently ignored: both name the same pane's
-// command, so a file setting both is asking for two.
+// TestWindowShellAndFirstPaneShellConflict rejects two commands for one pane.
 func TestWindowShellAndFirstPaneShellConflict(t *testing.T) {
 	_, err := workspace.Parse([]byte(
 		"session_name: conflict\nwindows:\n  - window_name: probe\n" +
@@ -390,8 +633,6 @@ func TestWindowShellAndFirstPaneShellConflict(t *testing.T) {
 	}
 }
 
-// TestQuotedBooleansAreAcceptedWhereverABooleanIs covers tmuxp's quoted
-// spellings on a command, which are the same key a pane accepts.
 func TestQuotedBooleansAreAcceptedWhereverABooleanIs(t *testing.T) {
 	for _, testCase := range []struct{ name, document string }{
 		{
@@ -413,9 +654,7 @@ func TestQuotedBooleansAreAcceptedWhereverABooleanIs(t *testing.T) {
 	}
 }
 
-// TestACommandReportsItsOwnFailure keeps a command's decode failure from being
-// restated as the shape of the list holding it, which named the wrong line and
-// the wrong mistake.
+// TestACommandReportsItsOwnFailure preserves the inner cause and source line.
 func TestACommandReportsItsOwnFailure(t *testing.T) {
 	_, err := workspace.Parse([]byte(
 		"session_name: a\nwindows:\n  - panes:\n      - shell_command:\n" +
@@ -436,9 +675,7 @@ func TestACommandReportsItsOwnFailure(t *testing.T) {
 	}
 }
 
-// TestPaneIsConstructibleInGo pins the reason Bool is exported: an optional
-// setting is a *Bool, and a caller outside this package cannot make a pointer
-// to a type it cannot name.
+// TestPaneIsConstructibleInGo guards Bool's exported construction contract.
 func TestPaneIsConstructibleInGo(t *testing.T) {
 	enter := workspace.Bool(false)
 	pane := workspace.Pane{Focus: true, Enter: &enter, SuppressHistory: &enter}
@@ -447,8 +684,6 @@ func TestPaneIsConstructibleInGo(t *testing.T) {
 	}
 }
 
-// TestWindowIndexIsHonoredOnEveryWindow covers the first window, which tmux
-// creates with the session and so cannot carry an index into its creation.
 func TestWindowIndexIsHonoredOnEveryWindow(t *testing.T) {
 	server, ctx := testServer(t)
 	described, err := workspace.Parse([]byte(
@@ -479,8 +714,6 @@ func TestWindowIndexIsHonoredOnEveryWindow(t *testing.T) {
 	}
 }
 
-// TestSleepIsRejectedWhereverItIsNegative covers a delay tmux could never
-// wait for, on a pane as well as on a command.
 func TestSleepIsRejectedWhereverItIsNegative(t *testing.T) {
 	for _, testCase := range []struct{ name, document string }{
 		{
@@ -504,8 +737,6 @@ func TestSleepIsRejectedWhereverItIsNegative(t *testing.T) {
 	}
 }
 
-// TestSleepIsReadInSeconds pins the unit, which a time.Duration field would
-// otherwise invite a caller to write as a duration string.
 func TestSleepIsReadInSeconds(t *testing.T) {
 	described, err := workspace.Parse([]byte(
 		"session_name: a\nwindows:\n  - panes:\n" +
@@ -519,9 +750,7 @@ func TestSleepIsReadInSeconds(t *testing.T) {
 	}
 }
 
-// TestARefusedFieldReadsDifferentlyFromATypo covers the two tmuxp fields this
-// module will not grow. Reporting them as unknown reads as a misspelling and
-// sends a reader looking for the spelling that works.
+// TestARefusedFieldReadsDifferentlyFromATypo distinguishes unsupported syntax.
 func TestARefusedFieldReadsDifferentlyFromATypo(t *testing.T) {
 	for _, testCase := range []struct{ name, document, want string }{
 		{
@@ -552,44 +781,7 @@ func TestARefusedFieldReadsDifferentlyFromATypo(t *testing.T) {
 	}
 }
 
-// TestBuildLeavesAChosenTransportAlone covers the way a caller declines the
-// control connection Build otherwise opens. A connection is a tmux client: it
-// appears in list-clients, counts toward session_attached, and fires a
-// client-attached hook, so a caller whose tmux reacts to attachment needs a
-// way to say no.
-func TestBuildLeavesAChosenTransportAlone(t *testing.T) {
-	server, ctx := testServer(t)
-	described, err := workspace.Parse([]byte(
-		"session_name: chosen\nwindows:\n  - window_name: w\n    panes:\n      - {}\n",
-	))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-
-	// Saying so with the engine that runs everything as a tmux process.
-	onProcesses := server.WithEngine(server.SubprocessEngine())
-	session, err := workspace.Build(ctx, onProcesses, described)
-	if err != nil {
-		t.Fatalf("build: %v", err)
-	}
-
-	clients, err := server.SearchClients(ctx, nil)
-	if err != nil {
-		t.Fatalf("search clients: %v", err)
-	}
-	if len(clients) != 0 {
-		t.Errorf("build attached %d clients despite a chosen transport", len(clients))
-	}
-	attached, ok := session.Formats().SessionAttached()
-	if ok && attached != 0 {
-		t.Errorf("session_attached = %d after the build, want 0", attached)
-	}
-}
-
-// TestPanesLandInTheOrderTheFileListsThem covers the order a reader compares
-// against tmuxp. Splitting the window targets whichever pane tmux considers
-// current, which puts every new pane beside the first and reverses the rest,
-// so a layout that reads correctly in the file comes out scrambled.
+// TestPanesLandInTheOrderTheFileListsThem guards split target ordering.
 func TestPanesLandInTheOrderTheFileListsThem(t *testing.T) {
 	server, ctx := testServer(t)
 	var document strings.Builder
@@ -637,9 +829,7 @@ func TestPanesLandInTheOrderTheFileListsThem(t *testing.T) {
 	}
 }
 
-// TestTheFirstPaneStartsWhereItsFileSays covers a directory on a window's
-// first pane, which tmux creates with the window and which therefore has no
-// creation call of its own to carry one.
+// TestTheFirstPaneStartsWhereItsFileSays covers the pane created with a window.
 func TestTheFirstPaneStartsWhereItsFileSays(t *testing.T) {
 	server, ctx := testServer(t)
 	first := t.TempDir()
@@ -672,9 +862,8 @@ func TestTheFirstPaneStartsWhereItsFileSays(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index, want := range []string{first, second} {
-		// tmux gained pane_start_path in 3.3. Before that the directory a pane
-		// was created in is only readable as the directory it is currently in,
-		// which is the same thing for a pane nothing has run in yet.
+		// Before tmux 3.3, use current_path for this idle pane because
+		// pane_start_path is unavailable.
 		got, ok := panes[index].Formats().PaneStartPath()
 		format := "pane_start_path"
 		if !version.AtLeast(minimum33) {
@@ -688,9 +877,7 @@ func TestTheFirstPaneStartsWhereItsFileSays(t *testing.T) {
 	}
 }
 
-// TestSessionOptionsAcceptWhatTmuxAccepts covers a window option written
-// beside session ones, which is what tmuxp's own examples do and what tmux
-// itself resolves without complaint.
+// TestSessionOptionsAcceptWhatTmuxAccepts covers tmuxp's untyped mapping.
 func TestSessionOptionsAcceptWhatTmuxAccepts(t *testing.T) {
 	for _, testCase := range []struct{ name, option, value string }{
 		{"session table", "history-limit", "5000"},
@@ -712,9 +899,7 @@ func TestSessionOptionsAcceptWhatTmuxAccepts(t *testing.T) {
 	}
 }
 
-// TestEnvironmentIsTheSessionsRatherThanThePanes pins what a file gets when
-// two panes name the same variable. tmux keeps one environment per session, so
-// the last value written is what every later process sees.
+// TestEnvironmentIsTheSessionsRatherThanThePanes guards last-write behavior.
 func TestEnvironmentIsTheSessionsRatherThanThePanes(t *testing.T) {
 	server, ctx := testServer(t)
 	described, err := workspace.Parse([]byte(
@@ -738,9 +923,7 @@ func TestEnvironmentIsTheSessionsRatherThanThePanes(t *testing.T) {
 	}
 }
 
-// TestAnUnknownLayoutIsRefusedBeforeAnythingIsBuilt covers a misspelled layout,
-// which otherwise parsed and validated clean and then failed partway through
-// the build, leaving a session half made.
+// TestAnUnknownLayoutIsRefusedBeforeAnythingIsBuilt guards preflight validation.
 func TestAnUnknownLayoutIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
 	for _, testCase := range []struct {
 		name    string
@@ -772,10 +955,7 @@ func TestAnUnknownLayoutIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
 	}
 }
 
-// TestAFirstWindowMayAskForTheIndexItAlreadyHas covers a file that numbers its
-// windows explicitly, which is a common tmuxp idiom. tmux refuses to move a
-// window to the index it already occupies, so asking for the server's
-// base-index failed the whole build.
+// TestAFirstWindowMayAskForTheIndexItAlreadyHas avoids a redundant tmux move.
 func TestAFirstWindowMayAskForTheIndexItAlreadyHas(t *testing.T) {
 	for _, base := range []int{0, 1} {
 		t.Run("base-index "+strconv.Itoa(base), func(t *testing.T) {
@@ -787,7 +967,7 @@ func TestAFirstWindowMayAskForTheIndexItAlreadyHas(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			t.Cleanup(cancel)
-			server := tmux.NewServer(tmux.ServerOptions{
+			server := mustNewServer(t, tmux.ServerOptions{
 				SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
 				ConfigFile: configuration,
 			})
@@ -822,10 +1002,7 @@ func TestAFirstWindowMayAskForTheIndexItAlreadyHas(t *testing.T) {
 	}
 }
 
-// TestAValidationFailureNamesItsLine covers the half of a rejection that
-// arrives after decoding. A decode failure already carried a line; a
-// validation failure named only the window's position in a list, which is not
-// where a reader has to go to fix it.
+// TestAValidationFailureNamesItsLine covers errors found after decoding.
 func TestAValidationFailureNamesItsLine(t *testing.T) {
 	_, err := workspace.Parse([]byte(
 		"session_name: positioned\nwindows:\n  - window_name: first\n" +
@@ -838,8 +1015,6 @@ func TestAValidationFailureNamesItsLine(t *testing.T) {
 		t.Errorf("error does not name the failing window's line: %v", err)
 	}
 
-	// A workspace built in Go has no document, so it says nothing rather than
-	// pointing at a line that does not exist.
 	built := workspace.Workspace{
 		SessionName: "in-go",
 		Windows:     []workspace.Window{{Name: "w", Layout: "main-verticle"}},
@@ -853,8 +1028,7 @@ func TestAValidationFailureNamesItsLine(t *testing.T) {
 	}
 }
 
-// TestValidateReportsEveryProblemAtOnce covers fixing a file: reporting one
-// complaint per run makes the number of runs the number of mistakes.
+// TestValidateReportsEveryProblemAtOnce guards joined validation errors.
 func TestValidateReportsEveryProblemAtOnce(t *testing.T) {
 	_, err := workspace.Parse([]byte(
 		"session_name: many\nwindows:\n" +
@@ -880,9 +1054,7 @@ func TestValidateReportsEveryProblemAtOnce(t *testing.T) {
 	}
 }
 
-// TestMissingDirectoriesReportsWhatTmuxWouldIgnore covers the silence a
-// caller can turn into a message: tmux starts a pane in the home directory
-// when the one it was given does not exist, and reports success.
+// TestMissingDirectoriesReportsWhatTmuxWouldIgnore exposes tmux's fallback.
 func TestMissingDirectoriesReportsWhatTmuxWouldIgnore(t *testing.T) {
 	present := t.TempDir()
 	absent := filepath.Join(t.TempDir(), "not-created")
@@ -896,8 +1068,6 @@ func TestMissingDirectoriesReportsWhatTmuxWouldIgnore(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	// A workspace still loads: a directory a shell_command_before creates is
-	// ordinary, so this is a report rather than a rejection.
 	missing := described.MissingDirectories()
 	if len(missing) != 1 || missing[0] != absent {
 		t.Fatalf("MissingDirectories() = %v, want exactly %q once", missing, absent)
@@ -911,10 +1081,7 @@ func TestMissingDirectoriesReportsWhatTmuxWouldIgnore(t *testing.T) {
 	}
 }
 
-// TestAFailureWithNoLineDoesNotClaimLineZero covers a document the parser
-// rejected before it reached a node. A reader told "line 0" looks for the
-// mistake at a line that cannot exist, when the parser's own message names the
-// real one.
+// TestAFailureWithNoLineDoesNotClaimLineZero covers pre-node parse errors.
 func TestAFailureWithNoLineDoesNotClaimLineZero(t *testing.T) {
 	for name, document := range map[string]string{
 		"empty":     "",

@@ -33,6 +33,96 @@ func TestSendKeysBuildsExactArgumentsAndSeparateEnter(t *testing.T) {
 	assertRequestArguments(t, requests[1], []string{"send-keys", "-t", "$5:0.%7", "--", "Enter"})
 }
 
+func TestSendKeySequenceBuildsOneOrderedInvocation(t *testing.T) {
+	t.Parallel()
+
+	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{}}}}
+	err := paneWithExactTestTarget(serverWithRunner(runner)).SendKeySequence(
+		context.Background(),
+		SendKeySequenceRequest{Keys: []string{"e", "Space", "K"}},
+	)
+	if err != nil {
+		t.Fatalf("SendKeySequence() error = %v", err)
+	}
+	requests := runner.recordedRequests()
+	if len(requests) != 1 {
+		t.Fatalf("runner requests = %#v, want one ordered send", requests)
+	}
+	assertRequestArguments(t, requests[0], []string{
+		"send-keys", "-t", "$5:0.%7", "--", "e", "Space", "K",
+	})
+}
+
+func TestSendKeySequenceAppliesLiteralToEveryOperand(t *testing.T) {
+	t.Parallel()
+
+	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{}}}}
+	err := paneWithExactTestTarget(serverWithRunner(runner)).SendKeySequence(
+		context.Background(),
+		SendKeySequenceRequest{Keys: []string{"Space", "Enter"}, Literal: true},
+	)
+	if err != nil {
+		t.Fatalf("SendKeySequence() error = %v", err)
+	}
+	assertRequestArguments(t, runner.recordedRequests()[0], []string{
+		"send-keys", "-t", "$5:0.%7", "-l", "--", "Space", "Enter",
+	})
+}
+
+func TestSendKeySequenceCopiesKeysBeforeIO(t *testing.T) {
+	t.Parallel()
+
+	keys := []string{"original", "Enter"}
+	runner := &paneInputBlockingRunner{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- paneWithExactTestTarget(serverWithRunner(runner)).SendKeySequence(
+			context.Background(), SendKeySequenceRequest{Keys: keys},
+		)
+	}()
+
+	<-runner.started
+	keys[0] = "mutated"
+	close(runner.release)
+	if err := <-done; err != nil {
+		t.Fatalf("SendKeySequence() error = %v", err)
+	}
+	assertRequestArguments(t, runner.recordedRequests()[0], []string{
+		"send-keys", "-t", "$5:0.%7", "--", "original", "Enter",
+	})
+}
+
+func TestSendKeySequenceRejectsInvalidKeysBeforeExecution(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		keys []string
+	}{
+		{name: "missing"},
+		{name: "empty", keys: []string{"e", ""}},
+		{name: "NUL", keys: []string{"e", "unsafe\x00key"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			runner := &versionQueueRunner{}
+			err := paneWithExactTestTarget(serverWithRunner(runner)).SendKeySequence(
+				context.Background(), SendKeySequenceRequest{Keys: test.keys},
+			)
+			if !errors.Is(err, ErrInvalidServerCommandRequest) {
+				t.Fatalf("SendKeySequence() error = %v, want ErrInvalidServerCommandRequest", err)
+			}
+			if calls := runner.callCount(); calls != 0 {
+				t.Fatalf("runner calls = %d, want 0", calls)
+			}
+		})
+	}
+}
+
 func TestSendKeysPreservesEmptyCommandAsAnOperand(t *testing.T) {
 	t.Parallel()
 
@@ -266,10 +356,12 @@ func TestSendKeysVersionGatesClientAndKeyName(t *testing.T) {
 				{result: tmuxcmd.Result{Stdout: []string{"tmux " + test.version}}},
 				{result: tmuxcmd.Result{}},
 			}}
-			server := degradingServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(warning Warning) {
-				warnings = append(warnings, warning)
-			}
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported: DegradeUnsupported,
+				WarningHandler: func(warning Warning) {
+					warnings = append(warnings, warning)
+				},
+			}, runner)
 			err := paneWithExactTestTarget(server).SendKeys(
 				context.Background(),
 				SendKeysRequest{Reset: true, KeyName: true, TargetClient: client},
@@ -337,8 +429,9 @@ func TestSendKeysVersionFailureDoesNotWarnOrExecute(t *testing.T) {
 
 	warnings := 0
 	runner := &versionQueueRunner{responses: []versionResponse{{err: context.Canceled}}}
-	server := serverWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(Warning) { warnings++ }
+	server := serverWithOptionsAndRunner(ServerOptions{
+		WarningHandler: func(Warning) { warnings++ },
+	}, runner)
 	err := paneWithExactTestTarget(server).SendKeys(
 		context.Background(), SendKeysRequest{Reset: true, KeyName: true},
 	)
@@ -565,10 +658,12 @@ func TestClearHistoryVersionGatesHyperlinkReset(t *testing.T) {
 				{result: tmuxcmd.Result{Stdout: []string{"tmux " + test.version}}},
 				{result: tmuxcmd.Result{}},
 			}}
-			server := degradingServerWithRunner(runner)
-			server.connectionState().options.WarningHandler = func(warning Warning) {
-				warnings = append(warnings, warning)
-			}
+			server := serverWithOptionsAndRunner(ServerOptions{
+				Unsupported: DegradeUnsupported,
+				WarningHandler: func(warning Warning) {
+					warnings = append(warnings, warning)
+				},
+			}, runner)
 			err := paneWithExactTestTarget(server).ClearHistory(
 				context.Background(), ClearHistoryRequest{ResetHyperlinks: true},
 			)
@@ -625,6 +720,11 @@ func TestPaneInputMethodsRejectInvalidTargetBeforeExecution(t *testing.T) {
 	for _, run := range []func(Pane) error{
 		func(pane Pane) error {
 			return pane.SendKeys(context.Background(), SendKeysRequest{Command: &command})
+		},
+		func(pane Pane) error {
+			return pane.SendKeySequence(
+				context.Background(), SendKeySequenceRequest{Keys: []string{"Enter"}},
+			)
 		},
 		func(pane Pane) error { return pane.Enter(context.Background()) },
 		func(pane Pane) error { return pane.SendPrefix(context.Background(), PrefixPrimary) },

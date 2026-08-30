@@ -6,6 +6,9 @@ A control-mode connection is a tmux client that stays open. tmux pushes what
 happens down it, so a change is heard once, when it happens, instead of being
 discovered by a poll that has to guess how often to ask.
 
+The notification stream supports the same tmux 3.2a-through-3.7c range as the
+ordinary process API.
+
 ## Running it
 
 ```console
@@ -26,17 +29,16 @@ The example renames its own session and waits to hear about it.
 be history the stream never mentions — tmux pushes what happens next, not what
 already did.
 
-**Notifications arrive as an iterator.** `Notifications` yields until the
-context ends or the connection closes, and yields an error in the same range, so
-a read failure is handled where the notifications are rather than somewhere
-else.
+**Notifications arrive in wire order.** `Next` waits until tmux sends the next
+notification, the context ends, or the stream closes. A read failure is handled
+at the exact read that observed it.
 
 **More arrives than you asked for.** `%session-changed` comes first here.
 Filtering by `Kind()` is how you pick out the one you are waiting for.
 
-**The connection is a client.** While open it appears in `list-clients` and
-counts toward `session_attached`, which is why opening one is a choice rather
-than something the library does for you.
+**The stream owns a client.** While open it appears in `list-clients` and counts
+toward `session_attached`, which is why opening one is a choice rather than
+something the library does for you.
 
 ## Testing your own version
 

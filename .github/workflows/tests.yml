@@ -9,6 +9,9 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
 # Every job below names its modules one at a time. `go test ./...` stops at a
 # module boundary, so the consumer modules and the benchmarks are invisible to
 # the core module's wildcard and would rot unchecked. Go also skips a directory
@@ -55,9 +58,9 @@ jobs:
       # report the core as uncovered by the tests that cover it.
       #
       # The workspace stays on. GOWORK=off answers whether a module resolves
-      # for a stranger, which is a real question and is why
-      # TestEveryModuleResolvesWithoutAWorkspace asks it -- but it cannot also
-      # answer whether this tree works, because mcp carries no replace
+      # for a stranger, which is a real question answered by the standalone
+      # module-metadata test. It cannot also answer whether this tree works,
+      # because mcp carries no replace
       # directive and so resolves the core from the proxy. Asking one run both
       # questions is how nineteen commits of core reached the mcp job as a
       # release nobody had built against it.
@@ -70,6 +73,7 @@ jobs:
           # entry would prove nothing.
           GOTOOLCHAIN: local
         run: |
+          tmux -V
           go vet ./...
           go test -race -count=1 -coverpkg=./... -coverprofile=coverage.out ./...
 
@@ -90,15 +94,19 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
-          cache-dependency-path: go.mod
+          cache-dependency-path: |
+            go.mod
+            mcp/go.mod
 
       - name: Regenerate
-        run: go generate ./...
+        run: |
+          go generate ./...
+          go -C mcp generate ./...
 
       - name: Report anything regenerating changed
         run: |
           if ! git diff --exit-code; then
-            echo "::error::generated files are out of date; run 'go generate ./...'" >&2
+            echo "::error::generated files are out of date; run both module generators" >&2
             exit 1
           fi
 
@@ -129,11 +137,9 @@ jobs:
             exit 1
           fi
 
-      # verify is off here and run once below. It fetches a JSON schema over
-      # the network, and every module in this matrix shares the one
-      # .golangci.yml at the root, so leaving it on checks the same file five
-      # times and takes five chances that golangci-lint.run is slow. It has
-      # already spent one of them.
+      # verify is off here and run explicitly below. Each module has its own
+      # configuration, including module-specific directive policy, so each one
+      # must be checked from the directory where lint selects it.
       # Must be built with a Go at least as new as the one set up above:
       # golangci-lint typechecks against the toolchain's own export data.
       - uses: golangci/golangci-lint-action@v9
@@ -146,12 +152,87 @@ jobs:
       # configuration key it does not recognise and reports no issues, so a
       # misspelled linter setting silently does nothing without this.
       - name: Verify the lint configuration
-        if: matrix.module == '.'
+        working-directory: ${{ matrix.module }}
         run: golangci-lint config verify
 
       - name: Report known vulnerabilities
         working-directory: ${{ matrix.module }}
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  # Linux is the release matrix because it can build every supported tmux
+  # version. One native macOS run covers its different PTYs, process tree,
+  # socket paths, and command diagnostics against Homebrew's current tmux.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.mod
+            examples/go.mod
+            workspace/go.mod
+            mcp/go.mod
+            benchmarks/go.mod
+
+      - name: Install tmux
+        run: brew install tmux
+
+      - name: Test every module on macOS
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          mkdir -p "$TMUX_TMPDIR"
+          for module in . examples workspace mcp benchmarks; do
+            echo "--- $module ---"
+            (cd "$module" && go test -count=1 ./...)
+          done
+
+  # tmux itself does not run on Windows, but constructor-time executable
+  # resolution follows Windows PATH, PATHEXT, and current-directory rules.
+  # Cross-compilation cannot exercise those filesystem semantics.
+  windows-resolver:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+
+      - name: Test Windows executable resolution
+        run: |
+          go vet ./tmux/internal/tmuxcmd
+          go test -count=1 -run '^TestResolveExecutable' ./tmux/internal/tmuxcmd
+
+  # The fuzz targets already carry regression seeds. A bounded job lets the
+  # engine keep searching without turning an open-ended fuzz run into a gate
+  # that never completes.
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+
+      # go test exits zero with only a warning when -fuzz matches no target.
+      # Check the names first so a rename cannot silently disable this job.
+      - name: Verify fuzz targets
+        run: |
+          test "$(go test ./tmux -list '^FuzzDecodeArgsEscapedValueRoundTrip$' | sed -n '1p')" = 'FuzzDecodeArgsEscapedValueRoundTrip'
+          test "$(go test ./tmux -list '^FuzzDecodeFormatRecordsRoundTrip$' | sed -n '1p')" = 'FuzzDecodeFormatRecordsRoundTrip'
+
+      - name: Fuzz escaped option values
+        run: go test ./tmux -run '^$' -fuzz '^FuzzDecodeArgsEscapedValueRoundTrip$' -fuzztime 30s
+
+      - name: Fuzz format records
+        run: go test ./tmux -run '^$' -fuzz '^FuzzDecodeFormatRecordsRoundTrip$' -fuzztime 30s
 
   # The benchmarks module prints the table BENCHMARKS.md holds. Publishing it
   # here is what lets the checked-in numbers be compared against a run other
@@ -191,7 +272,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tmux-version: ['3.2a', '3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b']
+        tmux-version: ['3.2a', '3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c']
     steps:
       - uses: actions/checkout@v7
 
@@ -222,15 +303,21 @@ jobs:
           ./configure --prefix="$HOME/tmux-builds/tmux-$TMUX_VERSION"
           make && make install
 
-      - name: Test every module against tmux ${{ matrix.tmux-version }}
+      - name: Test compatible module coverage against tmux ${{ matrix.tmux-version }}
         env:
           TMUX_VERSION: ${{ matrix.tmux-version }}
         run: |
           sudo apt-get install --yes libevent-2.1-7
           export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
-          tmux -V
+          actual_version=$(tmux -V)
+          expected_version="tmux $TMUX_VERSION"
+          if [ "$actual_version" != "$expected_version" ]; then
+            echo "::error::expected $expected_version, got $actual_version" >&2
+            exit 1
+          fi
+          printf '%s\n' "$actual_version"
           mkdir -p "$TMUX_TMPDIR"
           for module in . examples workspace mcp benchmarks; do
-            echo "--- $module ---"
+            echo "--- $module: full suite ---"
             (cd "$module" && go test -count=1 ./...)
           done

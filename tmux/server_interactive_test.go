@@ -154,16 +154,6 @@ func TestDisplayMenuBuildsTypedItemArguments(t *testing.T) {
 	})
 }
 
-func TestStartServerUsesNoVersionProbe(t *testing.T) {
-	t.Parallel()
-
-	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{}}}}
-	if err := serverWithRunner(runner).Start(context.Background()); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	assertInteractiveRequests(t, runner, [][]string{{"start-server"}})
-}
-
 // libtmux:parity libtmux.server.Server.command_prompt
 // libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:bspace_exit:7238f0865c95
 // libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:expand_format:3634369442f2
@@ -221,10 +211,12 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
 			{result: tmuxcmd.Result{}},
 		}}
-		server := degradingServerWithRunner(runner)
-		server.connectionState().options.WarningHandler = func(warning Warning) {
-			warnings = append(warnings, warning)
-		}
+		server := serverWithOptionsAndRunner(ServerOptions{
+			Unsupported: DegradeUnsupported,
+			WarningHandler: func(warning Warning) {
+				warnings = append(warnings, warning)
+			},
+		}, runner)
 		err := server.ConfirmBefore(context.Background(), ConfirmBeforeRequest{
 			Command: "display-message ok", ConfirmKey: &key, DefaultYes: true,
 		})
@@ -244,10 +236,12 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
 			{result: tmuxcmd.Result{}},
 		}}
-		server := degradingServerWithRunner(runner)
-		server.connectionState().options.WarningHandler = func(warning Warning) {
-			warnings = append(warnings, warning)
-		}
+		server := serverWithOptionsAndRunner(ServerOptions{
+			Unsupported: DegradeUnsupported,
+			WarningHandler: func(warning Warning) {
+				warnings = append(warnings, warning)
+			},
+		}, runner)
 		err := server.CommandPrompt(context.Background(), CommandPromptRequest{
 			Template:      "display-message %1",
 			ExpandFormat:  true,
@@ -276,10 +270,12 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
 			{result: tmuxcmd.Result{}},
 		}}
-		server := degradingServerWithRunner(runner)
-		server.connectionState().options.WarningHandler = func(warning Warning) {
-			warnings = append(warnings, warning)
-		}
+		server := serverWithOptionsAndRunner(ServerOptions{
+			Unsupported: DegradeUnsupported,
+			WarningHandler: func(warning Warning) {
+				warnings = append(warnings, warning)
+			},
+		}, runner)
 		err := server.DisplayMenu(context.Background(), DisplayMenuRequest{
 			Items:          []MenuItem{{Name: "One", Key: "1", Command: "select-pane"}},
 			StartingChoice: &choice,

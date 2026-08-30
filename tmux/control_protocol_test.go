@@ -176,7 +176,7 @@ func TestControlCommandResultOwnsFrameData(t *testing.T) {
 }
 
 // TestPaneContentCanCloseAFrameEarly pins the hazard that keeps a printed
-// capture on a tmux process no matter which engine a handle selected. Control
+// capture on a tmux process rather than a connection. Control
 // mode escapes %output and does not escape a command's output, so pane content
 // is delivered verbatim and a line identical to the closing guard ends the
 // frame. The cost is not a truncated read: tmux's real guard then arrives with

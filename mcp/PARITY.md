@@ -54,10 +54,10 @@ Three tools are here and not there:
   how a build runs without spending the turn waiting for it.
 - `move_pane` moves a pane between windows, or breaks it out into its own.
 
-One is here behind `LIBTMUX_MCP_RECIPE_TOOL=1`: `get_recipe` offers the same
-text as the MCP prompts, for a client that reads tools and not prompts. The
-Python server has the same idea under `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`, which
-turns each prompt into a tool of its own.
+One is here behind `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`: `get_recipe` offers the
+same text as the MCP prompts, for a client that reads tools and not prompts.
+The Python server has the same idea under `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`,
+which turns each prompt into a tool of its own.
 
 One is there and not here: `show_hook`, for a single hook. Here that is
 `show_hooks` with a `name`.
@@ -88,7 +88,7 @@ This one refuses the same five, and also everything that types into that pane:
 that is hard to notice and impossible to undo — keystrokes land in the terminal
 the conversation is happening in, interrupting the client or answering a prompt
 nobody saw. Rather than refusing outright, it asks the person, through MCP
-elicitation, and only refuses when the client has not said it can be asked.
+elicitation. It refuses when the person declines or the client cannot ask.
 That refusal names the way out: another pane, `split_window`, or `list_panes`
 to find one where `isCaller` is false.
 
@@ -173,14 +173,16 @@ sign begins an escape in a URI and an index changes when a window moves.
 
 Both read `LIBTMUX_SAFETY`, with the same three levels — `readonly`,
 `mutating`, `destructive` — meaning the same things, so an operator running
-both writes one policy.
+both can keep the same operation ceiling. The Go server adds
+`LIBTMUX_MCP_CAPABILITIES` as an independent allowlist and defaults it to
+metadata-only; the Python server has no equivalent capability partition.
 
 ## Testing the server
 
 The two ship different kinds of artefact for it. The Python server has sphinx
 documentation and a `justfile`. This one has an agent skill,
 `.agents/skills/testing-the-mcp-server/`, which carries the socket layout, the
-fidelity layers, and a per-client matrix of isolation levers and what each
-client's failure actually means — because the Go tests drive the server over
-in-memory transports and miss JSON-RPC framing, schema validation on the wire,
-argument coercion by a client, and the handshake itself.
+fidelity layers, an exhaustive real-tmux schema gate, and a per-client matrix
+of isolation levers and what each client's failure actually means. Its raw
+driver covers JSON-RPC framing, protocol negotiation, curated client
+environments, and real handshakes that the in-memory tests do not.

@@ -2,75 +2,94 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// Build creates the workspace on server and returns the created session.
-//
-// Build is not atomic. tmux has no transaction, so a failure partway through
-// leaves the windows and panes created so far in place; the returned session
-// identifies them so a caller can inspect or kill what exists. Build uses
-// strict errors regardless of server's setting, because a workspace that half
-// exists is never the caller's intent.
-//
-// Build runs over a control connection, which carries a tmux command without
-// starting a process for it and takes most of the cost out of a workspace. The
-// connection is a tmux client for the length of the call: it appears in
-// list-clients, counts toward session_attached, and fires a client-attached
-// hook. Hand Build a server carrying [tmux.Server.SubprocessEngine] to decline
-// it, which is what a tmux configuration that reacts to attachment wants.
-//
-// A pane's commands are its workspace, window, and pane shell_command_before
-// entries in that order, then its own shell_command entries. sleep_before and
-// sleep_after pause Build rather than the pane, matching tmuxp: the delay
-// exists to let a previous command settle before the next is typed.
-func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.Session, error) {
-	if err := workspace.Validate(); err != nil {
-		return tmux.Session{}, err
+// InitialSessionRequest validates w and returns the request that creates its
+// session and initial window. Use the resulting materialized session with
+// [BuildInto] to continue the build over a caller-owned transport.
+func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
+	if err := w.Validate(); err != nil {
+		return tmux.NewSessionRequest{}, err
 	}
-
-	first := workspace.Windows[0]
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
-		Name:           workspace.SessionName,
-		StartDirectory: windowDirectory(first, firstWindowDirectory(workspace, first)),
+	first := w.Windows[0]
+	return tmux.NewSessionRequest{
+		Name:           w.SessionName,
+		StartDirectory: windowDirectory(first, firstWindowDirectory(w, first)),
 		WindowName:     first.Name,
 		Command:        windowCommand(first),
-	})
+	}, nil
+}
+
+// Build creates the workspace on server and returns the created session.
+//
+// Build is not atomic. A failure after session creation returns that session;
+// completed mutations remain in tmux. Command failures are not normalized.
+//
+// Build creates the session and an attached control connection in one process,
+// uses that connection for the build, and closes it before returning. The
+// returned Session is not bound to the closed connection. Build verifies that
+// the session remains reachable after closing it. An attached connection may
+// fire client hooks and policies.
+//
+// Each pane receives workspace, window, and pane CommandsBefore, then its own
+// Commands. Sleep values pause Build rather than the pane.
+func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.Session, error) {
+	request, err := workspace.InitialSessionRequest()
 	if err != nil {
-		return session, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
+		return tmux.Session{}, err
+	}
+	created, connection, err := server.NewSessionConnection(
+		ctx,
+		request,
+		tmux.ConnectionOptions{},
+	)
+	if err != nil {
+		return created, fmt.Errorf("create session %q: %w", workspace.SessionName, err)
 	}
 
-	// The rest of the build runs over a control connection, which carries a
-	// tmux command without starting a process for it. A workspace is dozens of
-	// commands, so this is most of the build's cost.
-	//
-	// A handle that already carries an engine is left alone, because its owner
-	// has chosen a transport and the choice includes declining this one.
-	//
-	// The pool closes with this call while the session returned from it does
-	// not. That is safe because a closed pool stops carrying commands rather
-	// than failing them: the returned session goes back to starting a process
-	// per command, exactly as it would have without any of this.
-	if server.Engine() == nil {
-		connected, live, pool, poolErr := server.OpenControlPool(
-			ctx, session, tmux.ControlPoolRequest{},
+	buildErr := BuildInto(ctx, connection.Session(), workspace)
+	closeErr := connection.Close()
+	if closeErr != nil {
+		closeErr = fmt.Errorf("close workspace connection: %w", closeErr)
+	}
+	if err := errors.Join(buildErr, closeErr); err != nil {
+		return created, err
+	}
+	refreshed, err := created.Refresh(ctx)
+	if err != nil {
+		return created, fmt.Errorf(
+			"refresh built session after closing workspace connection: %w",
+			err,
 		)
-		if poolErr == nil {
-			defer func() { _ = pool.Close() }()
-			server = connected
-			session = live
-		}
 	}
+	return refreshed, nil
+}
 
-	// global_options are applied after the session exists because tmux has no
-	// global scope until a server runs, so the first window cannot inherit
-	// them; every later window can.
+// BuildInto populates the initial session described by workspace. The session
+// must already have been created from [Workspace.InitialSessionRequest].
+// BuildInto uses the session's existing server and transport; it neither
+// creates a session nor opens or owns a connection.
+//
+// BuildInto is not atomic. A failure leaves completed mutations in tmux.
+func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) error {
+	if session.ID() == "" {
+		return tmux.ErrMissingTarget
+	}
+	if err := workspace.Validate(); err != nil {
+		return err
+	}
+	server := session.Server()
+
+	// The initial window is created with the session before these values are set;
+	// later windows can inherit them at creation.
 	for name, value := range workspace.GlobalOptions {
 		if err := setGlobalOption(ctx, server, name, value); err != nil {
-			return session, fmt.Errorf("set global option %q: %w", name, err)
+			return fmt.Errorf("set global option %q: %w", name, err)
 		}
 	}
 
@@ -78,12 +97,12 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 		if err := session.SetEnvironment(
 			ctx, name, value, tmux.SetEnvironmentOptions{},
 		); err != nil {
-			return session, fmt.Errorf("set environment %q: %w", name, err)
+			return fmt.Errorf("set environment %q: %w", name, err)
 		}
 	}
 	for name, value := range workspace.Options {
 		if err := setSessionOption(ctx, session, name, value); err != nil {
-			return session, fmt.Errorf("set session option %q: %w", name, err)
+			return fmt.Errorf("set session option %q: %w", name, err)
 		}
 	}
 
@@ -91,7 +110,7 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 	for index, described := range workspace.Windows {
 		window, err := buildWindow(ctx, session, workspace, described, index)
 		if err != nil {
-			return session, err
+			return err
 		}
 		if bool(described.Focus) {
 			focused := window
@@ -101,15 +120,14 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 
 	if focusWindow != nil {
 		if _, err := focusWindow.Select(ctx); err != nil {
-			return session, fmt.Errorf("focus window: %w", err)
+			return fmt.Errorf("focus window: %w", err)
 		}
 	}
-	return session, nil
+	return nil
 }
 
-// buildWindow creates one window and its panes. The first window of a
-// workspace already exists, created with the session, so it is resolved rather
-// than created.
+// buildWindow resolves the session's initial window or creates a later one,
+// then builds its panes.
 func buildWindow(
 	ctx context.Context,
 	session tmux.Session,
@@ -129,13 +147,8 @@ func buildWindow(
 		if err != nil {
 			return window, fmt.Errorf("resolve initial window: %w", err)
 		}
-		// tmux creates the first window with the session and new-session takes
-		// no index, so honouring one means moving the window afterwards. Every
-		// later window carries its index into the call that creates it.
-		// tmux refuses to move a window to the index it already occupies, and a
-		// file naming the server's base-index for its first window asks for
-		// exactly that. Asking is not a mistake, so the move is skipped rather
-		// than the build failed.
+		// new-session cannot choose the initial winlink index, so move it
+		// afterward unless it already occupies the requested index.
 		if described.Index != nil && !windowAlreadyAt(window, *described.Index) {
 			window, err = window.Move(ctx, tmux.MoveWindowRequest{
 				TargetIndex: described.Index,
@@ -203,9 +216,8 @@ func buildWindow(
 	return window, nil
 }
 
-// buildPanes splits the window until it holds one pane per description, then
-// runs each pane's commands. Splitting completes before any command runs so a
-// layout change cannot interleave output between panes.
+// buildPanes creates all panes before running commands so layout changes cannot
+// interleave their output.
 func buildPanes(
 	ctx context.Context,
 	session tmux.Session,
@@ -230,10 +242,7 @@ func buildPanes(
 		if paneDirectory == "" {
 			paneDirectory = directory
 		}
-		// Each pane splits the one before it rather than the window, so the
-		// panes end up in the order the file lists them. Splitting the window
-		// targets whichever pane tmux considers current, which puts every new
-		// pane next to the first and reverses everything after it.
+		// Split the preceding pane so tmux preserves document order.
 		pane, err := panes[index-1].Split(ctx, tmux.SplitPaneRequest{
 			Direction:      tmux.PaneDirectionBelow,
 			StartDirectory: paneDirectory,
@@ -286,8 +295,6 @@ func buildPanes(
 	return panes, nil
 }
 
-// applyPaneDefaults fills each command's unset enter and sleep settings from
-// the pane's, so a pane can state once what every one of its commands does.
 func applyPaneDefaults(pane Pane, commands []Command) []Command {
 	resolved := make([]Command, 0, len(commands))
 	for _, command := range commands {
@@ -306,8 +313,6 @@ func applyPaneDefaults(pane Pane, commands []Command) []Command {
 	return resolved
 }
 
-// paneSuppressHistory resolves the nearest suppress_history setting, pane over
-// window over workspace.
 func paneSuppressHistory(workspace Workspace, window Window, pane Pane) bool {
 	if pane.SuppressHistory != nil {
 		return bool(*pane.SuppressHistory)
@@ -318,7 +323,6 @@ func paneSuppressHistory(workspace Workspace, window Window, pane Pane) bool {
 	return bool(workspace.SuppressHistory)
 }
 
-// sleep waits for the requested delay, or returns early when ctx ends.
 func sleep(ctx context.Context, duration time.Duration) error {
 	if duration <= 0 {
 		return nil
@@ -333,8 +337,6 @@ func sleep(ctx context.Context, duration time.Duration) error {
 	}
 }
 
-// firstWindowDirectory is what the session's own window starts in when neither
-// it nor its first pane names a directory.
 func firstWindowDirectory(workspace Workspace, first Window) string {
 	if first.StartDirectory != "" {
 		return first.StartDirectory
@@ -342,20 +344,14 @@ func firstWindowDirectory(workspace Workspace, first Window) string {
 	return workspace.StartDirectory
 }
 
-// windowAlreadyAt reports whether the window occupies index. A window whose
-// index cannot be read is treated as elsewhere, so the move is attempted and
-// tmux decides.
+// windowAlreadyAt lets tmux decide when the materialized index is unavailable.
 func windowAlreadyAt(window tmux.Window, index int) bool {
 	current, ok := window.Formats().WindowIndex()
 	return ok && current == index
 }
 
-// windowDirectory is the directory a window's first pane starts in.
-//
-// tmux creates that pane with the window, so it has no creation call of its
-// own to carry a directory and its start_directory would otherwise be read and
-// dropped. A pane's own setting is the more specific one, so it wins over the
-// window's, which is how it works for every later pane.
+// The first pane is created with its window, so its directory must be passed
+// to NewWindow. A pane-specific value wins.
 func windowDirectory(described Window, fallback string) string {
 	if len(described.Panes) > 0 && described.Panes[0].StartDirectory != "" {
 		return described.Panes[0].StartDirectory
@@ -363,14 +359,8 @@ func windowDirectory(described Window, fallback string) string {
 	return fallback
 }
 
-// windowCommand is the process a window's first pane runs.
-//
-// tmux creates that pane with the window, so unlike every later pane it is
-// never split into existence and has no creation call of its own to carry a
-// command. A window_shell is therefore the only way to give it one, and a
-// first pane's own shell would otherwise be read and dropped. Validate rejects
-// a workspace that sets both, so the fallback here can never pick between two
-// commands a file actually asked for.
+// The first pane is created with its window, so its command must be passed to
+// NewWindow. Validate rejects competing window and pane commands.
 func windowCommand(described Window) string {
 	if described.Shell != "" {
 		return described.Shell
@@ -381,17 +371,8 @@ func windowCommand(described Window) string {
 	return ""
 }
 
-// setSessionOption applies one of tmuxp's options to the session.
-//
-// tmux resolves a bare "set-option -t" against whichever of its option tables
-// declares the name, so a tmuxp file puts a window option such as
-// main-pane-height beside session options and tmux sorts them out, targeting
-// the session's current window for the window-table ones. The tmux module's
-// scopes are typed instead and reject a name their own table does not declare,
-// so reproducing tmux's dispatch means asking the window as well.
-//
-// The session-scope error is the one returned when neither table declares the
-// name, because it names the option the file actually got wrong.
+// setSessionOption reproduces tmuxp's untyped dispatch across the session and
+// window tables. It returns the session-scope error when neither accepts name.
 func setSessionOption(ctx context.Context, session tmux.Session, name, value string) error {
 	first := session.SetOption(ctx, name, value, tmux.SetOptionOptions{})
 	if first == nil {
@@ -407,18 +388,9 @@ func setSessionOption(ctx context.Context, session tmux.Session, name, value str
 	return first
 }
 
-// setGlobalOption applies one of tmuxp's global_options at tmux's global scope.
-//
-// tmux resolves a bare "set-option -g" against whichever of its three option
-// tables declares the name, so a tmuxp file puts session, window, and server
-// options in one global_options mapping and tmux sorts them out. The tmux
-// module's scopes are typed instead: each one accepts only the names its own
-// table declares, and rejects the rest before a command is built. Reproducing
-// tmux's dispatch therefore means asking the scopes in turn.
-//
-// Only a name no table declares reaches the end, so its session-scope error is
-// the one returned: it names the option the file actually got wrong, rather
-// than reporting it against whichever table happened to be tried last.
+// setGlobalOption reproduces tmuxp's untyped dispatch across the global
+// session, window, and server tables. It returns the session-scope error when
+// none accepts name.
 func setGlobalOption(ctx context.Context, server tmux.Server, name, value string) error {
 	first := server.GlobalSessionScope().SetOption(ctx, name, value, tmux.SetOptionOptions{})
 	if first == nil {

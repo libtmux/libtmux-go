@@ -12,20 +12,8 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Options, environment, and hooks: the settings that explain a pane's
-// behaviour when the pane itself does not.
-//
-// A client that reads a pane and finds nothing wrong is often looking at a
-// setting: history-limit says why scrollback stopped, remain-on-exit says why
-// a dead pane is still there, and a hook says why something happened that no
-// tool here did. These are read because a client that cannot see them
-// misdiagnoses what it can.
-//
-// Hooks are read-only. A hook is a command tmux runs on its own afterwards, so
-// writing one is leaving something behind that outlives this connection and
-// fires when nobody is watching; a person's tmux configuration is where that
-// belongs. Options are writable because they are the ordinary way to make a
-// pane behave, and they die with the object they are set on.
+// Setting tools expose option and environment changes. Hook inspection remains
+// read-only because hooks execute commands after the originating call.
 
 // scopeOption resolves which tmux scope a settings call means.
 const (
@@ -88,7 +76,7 @@ func (t *tools) showOption(
 	var set bool
 	switch scope {
 	case scopeServer:
-		value, set, err = t.tmux().RawOption(ctx, input.Name)
+		value, set, err = t.tmux(ctx).RawOption(ctx, input.Name)
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -169,7 +157,7 @@ func (t *tools) setOption(
 
 	switch scope {
 	case scopeServer:
-		err = t.tmux().SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
+		err = t.tmux(ctx).SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
 	case scopeSession:
 		session, sessionErr := t.resolveSession(ctx, input.SessionName)
 		if sessionErr != nil {
@@ -300,38 +288,8 @@ type showEnvironmentOutput struct {
 	truncation
 }
 
-// showEnvironment reads what new processes in a session will inherit.
-//
-// This is what a pane started later will see, which is not what a pane started
-// earlier got: tmux hands each process the environment as it stood when the
-// process began. A client debugging why a command cannot find something reads
-// this to learn what the next pane would get.
-//
-// tmux keeps two layers and a pane inherits both, the session's overriding the
-// server's, so both are read and merged. Reading only the session's answered a
-// question nobody asked: PATH lives in the server's environment, so a caller
-// asking what a pane would get was told it gets no PATH at all. Each entry
-// says which layer it came from.
-//
-// A listing carries names without values. An environment is where people keep
-// credentials, and a reply that hands every value to a model puts all of them
-// somewhere they cannot be taken back from -- one call on a developer's machine
-// returned eleven live API tokens. Naming a variable returns its value, because
-// that is a caller asking for one thing rather than receiving everything.
-//
-// Redacting by name pattern was the alternative and is worse: TOKEN, KEY and
-// SECRET catch the variables named after what they are, miss the ones named
-// after what they belong to, and leave a caller believing the reply was
-// filtered. A denylist that fails open is worse than none, because it is
-// trusted. This fails closed and costs a caller who wants a value one argument.
-//
-// The names are the answer to most of what this is asked. Which variables a
-// pane will inherit, whether one is set at all, and which layer it comes from
-// are all in a listing; the value matters for the few a caller then names. The
-// scope is what makes that work -- provenance is the one thing a name cannot
-// be reasoned back to, and it is what "does the session override the server"
-// turns on -- and several named reads go in one call_readonly_tools_batch, so
-// wanting a handful of values costs one round trip rather than one each.
+// showEnvironment reports what newly created panes inherit. Listings merge
+// server then session scope and withhold values; naming one variable returns it.
 func (t *tools) showEnvironment(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -351,7 +309,7 @@ func (t *tools) showEnvironment(
 		}
 		scope := environmentScopeSession
 		if !ok {
-			if value, ok, err = t.tmux().GetEnvironment(ctx, wanted); err != nil {
+			if value, ok, err = t.tmux(ctx).GetEnvironment(ctx, wanted); err != nil {
 				return nil, output, err
 			}
 			scope = environmentScopeServer
@@ -369,7 +327,7 @@ func (t *tools) showEnvironment(
 	// The server's layer first, then the session's over the top of it, which is
 	// the order tmux resolves them in for a new process.
 	merged := map[string]environmentEntry{}
-	serverWide, err := t.tmux().ShowEnvironment(ctx)
+	serverWide, err := t.tmux(ctx).ShowEnvironment(ctx)
 	if err != nil {
 		return nil, output, err
 	}
@@ -505,16 +463,8 @@ type showHooksOutput struct {
 	Hooks []hook `json:"hooks"`
 }
 
-// showHooks reads the commands tmux will run on its own.
-//
-// A hook is the explanation for behaviour no tool here caused: a pane that
-// closed itself, a window that renamed itself, a command that ran when
-// something was split. A client debugging a session it did not configure has
-// no other way to see them.
-//
-// Reading only. A hook written here would outlive this connection and fire
-// when nothing is watching, which is a change to someone's tmux rather than to
-// their session; that belongs in their configuration file.
+// showHooks reports commands tmux may run on future events. This server does
+// not expose hook mutation.
 func (t *tools) showHooks(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
@@ -557,7 +507,7 @@ func (t *tools) showHooks(
 		arguments = append(arguments, "-p", "-t", pane.ID().String())
 	}
 
-	result, err := t.tmux().Cmd(ctx, arguments...)
+	result, err := t.tmux(ctx).Cmd(ctx, arguments...)
 	if err != nil {
 		return nil, output, err
 	}
@@ -592,7 +542,7 @@ func hookBaseName(name string) string {
 
 // addSettingsTools advertises the tools for options, environment, and hooks.
 func addSettingsTools(server *mcp.Server, t *tools) {
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_option",
 		Annotations: readOnly("Read a tmux Option"),
 		Description: "Read one tmux option at server, session, window, or pane " +
@@ -600,27 +550,27 @@ func addSettingsTools(server *mcp.Server, t *tools) {
 			"history-limit is why scrollback stopped, remain-on-exit is why a " +
 			"dead pane is still there.",
 	}, t.showOption)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "set_option",
 		Annotations: settling("Set a tmux Option"),
 		Description: "Set one tmux option. Pane scope by default, which affects " +
 			"that pane and nothing else; server scope changes every session the " +
 			"person has open.",
 	}, t.setOption)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_environment",
 		Annotations: readOnly("Read a Session's Environment"),
 		Description: "What new processes in a session will inherit. Panes " +
 			"already running keep the environment they started with, so this is " +
 			"what the next pane gets rather than what the current one has.",
 	}, t.showEnvironment)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
 		Name:        "set_environment",
 		Annotations: settling("Set a Session's Environment"),
 		Description: "Set or remove a variable for processes a session starts " +
 			"from now on. It changes nothing already running.",
 	}, t.setEnvironment)
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityContentRead, &mcp.Tool{
 		Name:        "show_hooks",
 		Annotations: readOnly("Read tmux Hooks"),
 		Description: "The commands tmux will run on its own at a given scope. " +

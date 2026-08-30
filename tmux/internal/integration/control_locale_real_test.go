@@ -11,18 +11,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// A control client opens in an environment that names no UTF-8 locale.
-//
-// tmux rewrites control characters in format output for a client it does not
-// believe is using UTF-8, and a client is not using UTF-8 when its environment
-// names no UTF-8 locale. The registration poll separated its two fields with a
-// tab, which came back as an underscore, so no line ever split, no client was
-// ever recognised, and the open ran until its context ended. A caller whose
-// context has no deadline waited forever.
-//
-// That is the environment a program is commonly started in by something other
-// than a shell: an MCP client spawning a server, a cron entry, a service
-// manager. A shell almost always sets LANG, which is why nothing caught this.
+// The registration poll needs a printable separator because tmux rewrites
+// control characters for clients without a UTF-8 locale.
 //
 //libtmux:real-tmux
 func TestControlClientOpensWithoutAUTF8Locale(t *testing.T) {

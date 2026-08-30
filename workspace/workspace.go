@@ -1,16 +1,6 @@
-// Package workspace loads tmuxp-style YAML workspace files and builds them
-// with the tmux package.
-//
-// It is a consumer of the tmux module rather than part of it: the tmux module
-// takes no runtime dependency, while parsing YAML needs one, so this lives in
-// its own module. Compatibility with tmuxp is deliberate but partial. The
-// fields below are the ones tmuxp's own examples use; anything else in a file
-// is rejected rather than silently ignored, so a workspace that loads is a
-// workspace that was understood.
-//
-// tmuxp features that require a Python runtime are out of scope and stay
-// rejected: plugins loads Python classes, and before_script runs an external
-// script through tmuxp's own process handling.
+// Package workspace loads and builds the supported subset of tmuxp YAML.
+// Unknown fields are rejected. Python-dependent plugins and before_script are
+// unsupported.
 package workspace
 
 import (
@@ -25,12 +15,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ErrInvalidWorkspace identifies a workspace file that could not be decoded or
-// that Validate rejects. It is matched by errors.Is.
-//
-// It does not cover a failure tmux reports while [Build] runs. tmux refusing a
-// layout name or an option name is a command failure, so classify those with
-// the tmux package's own errors rather than with this one.
+// ErrInvalidWorkspace matches parse and validation failures, but not tmux
+// command failures from [Build].
 var ErrInvalidWorkspace = errors.New("workspace: invalid workspace")
 
 // Workspace is one tmuxp-style session description.
@@ -40,15 +26,14 @@ type Workspace struct {
 	// StartDirectory is the default working directory for every window and pane
 	// that does not set its own.
 	StartDirectory string `yaml:"start_directory"`
-	// Environment is set on the session before its windows are created.
+	// Environment is written to the session after its initial pane exists and
+	// before later windows are created.
 	Environment map[string]string `yaml:"environment"`
-	// Options are applied to the session after it exists. Keys are tmux option
-	// names. A name from tmux's window table, such as main-pane-height, is
-	// accepted here as tmux accepts it, and lands on the session's current
-	// window the way tmux would put it there.
+	// Options are applied after session creation. tmux resolves window-option
+	// names against the session's current window.
 	Options map[string]string `yaml:"options"`
-	// GlobalOptions are applied at tmux's global scope before the windows are
-	// created, so a window can inherit them.
+	// GlobalOptions are applied after the initial window exists and before later
+	// windows are created.
 	GlobalOptions map[string]string `yaml:"global_options"`
 	// CommandsBefore run in every pane before that pane's own commands. Window
 	// and pane entries add to this list rather than replacing it.
@@ -76,15 +61,15 @@ type Window struct {
 	Focus Bool `yaml:"focus"`
 	// SuppressHistory overrides the workspace setting for this window's panes.
 	SuppressHistory *Bool `yaml:"suppress_history"`
-	// Options are window options applied before this window's panes are created.
+	// Options are applied after the window's initial pane exists and before
+	// additional panes are split.
 	Options map[string]string `yaml:"options"`
 	// OptionsAfter are window options applied once the panes exist, for settings
 	// that a later split would otherwise overwrite.
 	OptionsAfter map[string]string `yaml:"options_after"`
-	// Environment is set on the session before this window is created. tmux
-	// keeps one environment per session rather than one per window, so a name
-	// used by more than one window keeps the last value written and every
-	// process started later in that session sees it.
+	// Environment is written to the session after this window's initial pane
+	// exists and before additional panes are split. Repeated names keep the last
+	// value written.
 	Environment map[string]string `yaml:"environment"`
 	// CommandsBefore run in each of this window's panes before the pane's own
 	// commands, after the workspace's.
@@ -93,8 +78,6 @@ type Window struct {
 	// each later one splits the window.
 	Panes []Pane `yaml:"panes"`
 
-	// line is where this window began in the document, so a rejection can name
-	// the place to fix rather than only the window's position in a list.
 	line int
 }
 
@@ -107,18 +90,16 @@ type Pane struct {
 	CommandsBefore []Command `yaml:"-"`
 	// StartDirectory overrides the window directory for this pane.
 	StartDirectory string `yaml:"start_directory"`
-	// Shell replaces the command this pane runs. On a window's first pane it
-	// is the window's command, because tmux creates that pane with the window;
-	// setting it alongside window_shell is rejected rather than resolved.
+	// Shell replaces this pane's command. On the first pane it conflicts with
+	// Window.Shell because tmux creates that pane with the window.
 	Shell string `yaml:"shell"`
 	// Focus selects this pane once its window is built.
 	Focus Bool `yaml:"focus"`
 	// SuppressHistory overrides the window setting for this pane.
 	SuppressHistory *Bool `yaml:"suppress_history"`
-	// Environment is set on the session before this pane is created. It is the
-	// session's environment rather than the pane's, so a name used by more
-	// than one pane keeps the last value written, including for panes the user
-	// opens afterwards.
+	// Environment is written to the session after all panes in the window exist
+	// and before this pane's commands are sent. Pane entries are processed in
+	// order, so repeated names keep the last value written.
 	Environment map[string]string `yaml:"environment"`
 	// Enter applies to every command in this pane unless the command sets its
 	// own. Nil presses Enter, matching tmuxp.
@@ -130,12 +111,8 @@ type Pane struct {
 	SleepAfter time.Duration `yaml:"-"`
 }
 
-// Bool is a YAML boolean that also accepts tmuxp's quoted spellings, because
-// tmuxp workspaces in the wild write focus: "true" as often as focus: true.
-//
-// It is exported so that every field holding one can be written in Go as well
-// as read from a file: an optional setting is a *Bool, and a pointer to an
-// unexported type is not something a caller outside this package can make.
+// Bool accepts YAML booleans and tmuxp's quoted spellings. It is exported so
+// callers can construct optional *Bool fields.
 type Bool bool
 
 // UnmarshalYAML decodes a boolean written as a boolean or as a string.
@@ -234,8 +211,6 @@ func (p *Pane) UnmarshalYAML(node *yaml.Node) error {
 	); err != nil {
 		return err
 	}
-	// shell_command and shell_command_before each accept one command or a list,
-	// so they are decoded separately from the plain fields.
 	type paneFields Pane
 	var fields struct {
 		paneFields   `yaml:",inline"`
@@ -287,11 +262,7 @@ func Parse(document []byte) (Workspace, error) {
 	return workspace, nil
 }
 
-// Validate reports whether the workspace describes something buildable.
-//
-// Every problem it finds is reported, not the first, because fixing a file one
-// complaint per run is the slowest way to learn what is wrong with it. The
-// result matches [ErrInvalidWorkspace] however many problems it carries.
+// Validate reports all problems joined under [ErrInvalidWorkspace].
 func (w Workspace) Validate() error {
 	var problems []error
 	if strings.TrimSpace(w.SessionName) == "" {
@@ -309,12 +280,7 @@ func (w Workspace) Validate() error {
 	return errors.Join(problems...)
 }
 
-// indexCollisions reports two windows asking for the same window_index.
-//
-// tmux refuses the second one, and its refusal is that new-window exited
-// non-zero -- which names neither the index nor which of the two windows lost.
-// Two windows in one document claiming one place is a mistake in the document,
-// so it is caught here with the rest of them, where a line number can be given.
+// indexCollisions reports duplicate window indexes before [Build].
 func indexCollisions(windows []Window) []error {
 	claimed := map[int]int{}
 	var problems []error
@@ -335,7 +301,6 @@ func indexCollisions(windows []Window) []error {
 	return problems
 }
 
-// windowProblems reports everything wrong with one window.
 func windowProblems(index int, window Window) []error {
 	var problems []error
 	where := windowPosition(window)
@@ -358,18 +323,13 @@ func windowProblems(index int, window Window) []error {
 	return problems
 }
 
-// refusedFields are tmuxp fields this module will not grow, as opposed to
-// names it does not recognise. Reporting them as unknown reads as a typo and
-// sends a reader looking for the spelling that works.
+// refusedFields distinguishes unsupported tmuxp features from misspellings.
 var refusedFields = map[string]string{
 	"plugins": "it loads Python classes, which needs a Python runtime",
 	"before_script": "it runs a script through tmuxp's own process handling, " +
 		"which needs a Python runtime; run it yourself before calling Build",
 }
 
-// position renders where a window began, for a rejection that happens after
-// decoding and so has no node of its own to point at. A workspace built in Go
-// rather than parsed has no line, and says nothing rather than "line 0".
 func windowPosition(window Window) string {
 	if window.line <= 0 {
 		return ""
@@ -377,11 +337,8 @@ func windowPosition(window Window) string {
 	return "line " + strconv.Itoa(window.line) + ": "
 }
 
-// layoutNames are the layouts tmux's select-layout knows by name. The mirrored
-// pair arrived after the oldest tmux this module supports, so a name is
-// accepted here and left for tmux to refuse on a version that lacks it: this
-// check exists to catch a misspelling before anything is built, not to decide
-// what a given tmux can do.
+// layoutNames includes layouts newer than the support floor. tmux remains the
+// authority for availability on the running version.
 var layoutNames = map[string]bool{
 	"even-horizontal":          true,
 	"even-vertical":            true,
@@ -392,24 +349,13 @@ var layoutNames = map[string]bool{
 	"tiled":                    true,
 }
 
-// validLayout reports whether tmux could accept the layout.
-//
-// select-layout also takes a layout string, which is what tmux prints for a
-// window it has already arranged. Those carry a checksum and geometry
-// separated by commas, so anything with a comma is passed through for tmux to
-// parse rather than matched against the names.
+// validLayout accepts named layouts and serialized layouts containing commas;
+// tmux validates serialized layout syntax.
 func validLayout(layout string) bool {
 	return strings.Contains(layout, ",") || layoutNames[layout]
 }
 
-// nested returns err unchanged when it already carries ErrInvalidWorkspace,
-// so a failure deep in a document reports one sentinel prefix rather than one
-// per nesting level.
-//
-// A failure with no node to point at says nothing rather than "line 0", which
-// is the convention windowPosition follows: a reader given a line number that
-// cannot be a line looks for the mistake there, and the parser's own message
-// usually names the real one.
+// nested adds the sentinel and source line once.
 func nested(line int, err error) error {
 	if errors.Is(err, ErrInvalidWorkspace) {
 		return err
@@ -420,10 +366,8 @@ func nested(line int, err error) error {
 	return fmt.Errorf("%w: line %d: %w", ErrInvalidWorkspace, line, err)
 }
 
-// checkKnownFields rejects mapping keys outside allowed. A custom
-// UnmarshalYAML receives a node rather than the decoder, and yaml.Node.Decode
-// does not inherit the decoder's KnownFields setting, so strictness has to be
-// re-established per type or a misspelled key is silently dropped.
+// checkKnownFields restores strict decoding because yaml.Node.Decode does not
+// inherit the decoder's KnownFields setting.
 func checkKnownFields(node *yaml.Node, allowed ...string) error {
 	if node.Kind != yaml.MappingNode {
 		return nil
@@ -449,19 +393,10 @@ func checkKnownFields(node *yaml.Node, allowed ...string) error {
 	return nil
 }
 
-// MissingDirectories reports the start directories the workspace names that do
-// not exist, in the order they appear.
-//
-// It is separate from [Workspace.Validate] because a missing directory is not
-// necessarily a mistake: a workspace whose shell_command_before creates one is
-// ordinary, and rejecting it would refuse a file that works. tmux does not
-// report one either. It starts the pane in the user's home directory and
-// reports success, so a workspace naming a directory absent on this machine
-// builds and puts panes somewhere other than where its file says.
-//
-// Call it before [Build] to turn that silence into something a caller can
-// report. A name beginning with ~ is resolved against the current user's home
-// directory, as tmux resolves it.
+// MissingDirectories returns absent start directories in document order. It is
+// separate from [Workspace.Validate] because a prior command may create them.
+// tmux otherwise falls back to the user's home directory without an error.
+// Names beginning with ~ are resolved as tmux resolves them.
 func (w Workspace) MissingDirectories() []string {
 	var missing []string
 	seen := make(map[string]bool)

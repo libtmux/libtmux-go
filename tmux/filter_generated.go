@@ -14,12 +14,10 @@ const FilterSchemaVersion = 1
 
 const maxFilterDepth = 64
 
-// SessionFilter evaluates already-materialized [Session] values and never runs tmux.
-// Its zero value matches every non-nil candidate. Ordinary field and relation criteria are ANDed.
-// AnyOf additionally requires at least one branch to match; Not excludes a match.
+// SessionFilter matches materialized [Session] values without tmux I/O.
+// Its zero value matches every non-nil candidate. Criteria are ANDed; AnyOf adds an OR requirement and Not excludes.
 // Field and relation criteria correspond to [Session.ID], [Session.Name], [Session.Attached], [Session.Windows], and [Session.Panes].
-// [SessionFilter.Predicate], [SessionFilter.MarshalJSON], and [SessionFilter.UnmarshalJSON] validate automatically.
-// Use [SessionFilter.Validate] to check a filter constructed directly.
+// [SessionFilter.Validate] and methods that consume the filter reject invalid criteria with [ErrInvalidFilter].
 type SessionFilter struct {
 	// ID exactly matches the stable tmux session identifier from Session.ID, including its $ sigil. A nil pointer leaves ID unset; a non-nil pointer applies it, including when it points to the zero value.
 	ID *SessionID `json:"id,omitempty"`
@@ -45,12 +43,10 @@ type SessionFilter struct {
 	Panes *PaneRel `json:"panes,omitempty"`
 }
 
-// WindowFilter evaluates already-materialized [Window] values and never runs tmux.
-// Its zero value matches every non-nil candidate. Ordinary field and relation criteria are ANDed.
-// AnyOf additionally requires at least one branch to match; Not excludes a match.
+// WindowFilter matches materialized [Window] values without tmux I/O.
+// Its zero value matches every non-nil candidate. Criteria are ANDed; AnyOf adds an OR requirement and Not excludes.
 // Field and relation criteria correspond to [Window.SessionID], [Window.ID], [Window.Index], [Window.Name], [Window.Active], [Window.Session], and [Window.Panes].
-// [WindowFilter.Predicate], [WindowFilter.MarshalJSON], and [WindowFilter.UnmarshalJSON] validate automatically.
-// Use [WindowFilter.Validate] to check a filter constructed directly.
+// [WindowFilter.Validate] and methods that consume the filter reject invalid criteria with [ErrInvalidFilter].
 type WindowFilter struct {
 	// SessionID exactly matches the stable tmux session identifier from Window.SessionID, including its $ sigil. A nil pointer leaves SessionID unset; a non-nil pointer applies it, including when it points to the zero value.
 	SessionID *SessionID `json:"sessionId,omitempty"`
@@ -92,12 +88,10 @@ type WindowFilter struct {
 	Panes *PaneRel `json:"panes,omitempty"`
 }
 
-// PaneFilter evaluates already-materialized [Pane] values and never runs tmux.
-// Its zero value matches every non-nil candidate. Ordinary field and relation criteria are ANDed.
-// AnyOf additionally requires at least one branch to match; Not excludes a match.
+// PaneFilter matches materialized [Pane] values without tmux I/O.
+// Its zero value matches every non-nil candidate. Criteria are ANDed; AnyOf adds an OR requirement and Not excludes.
 // Field and relation criteria correspond to [Pane.SessionID], [Pane.WindowID], [Pane.ID], [Pane.WindowIndex], [Pane.Index], [Pane.CurrentCommand], [Pane.Active], [Pane.Title], [Pane.Session], and [Pane.Window].
-// [PaneFilter.Predicate], [PaneFilter.MarshalJSON], and [PaneFilter.UnmarshalJSON] validate automatically.
-// Use [PaneFilter.Validate] to check a filter constructed directly.
+// [PaneFilter.Validate] and methods that consume the filter reject invalid criteria with [ErrInvalidFilter].
 type PaneFilter struct {
 	// SessionID exactly matches the stable tmux session identifier from Pane.SessionID, including its $ sigil. A nil pointer leaves SessionID unset; a non-nil pointer applies it, including when it points to the zero value.
 	SessionID *SessionID `json:"sessionId,omitempty"`
@@ -163,12 +157,10 @@ type PaneFilter struct {
 	Window *WindowFilter `json:"window,omitempty"`
 }
 
-// ClientFilter evaluates already-materialized [Client] values and never runs tmux.
-// Its zero value matches every non-nil candidate. Ordinary field and relation criteria are ANDed.
-// AnyOf additionally requires at least one branch to match; Not excludes a match.
+// ClientFilter matches materialized [Client] values without tmux I/O.
+// Its zero value matches every non-nil candidate. Criteria are ANDed; AnyOf adds an OR requirement and Not excludes.
 // Field and relation criteria correspond to [Client.Name], [Client.ReadOnly], [Client.AttachedSession], [Client.AttachedWindow], and [Client.AttachedPane].
-// [ClientFilter.Predicate], [ClientFilter.MarshalJSON], and [ClientFilter.UnmarshalJSON] validate automatically.
-// Use [ClientFilter.Validate] to check a filter constructed directly.
+// [ClientFilter.Validate] and methods that consume the filter reject invalid criteria with [ErrInvalidFilter].
 type ClientFilter struct {
 	// Name exactly matches the stable tmux client name from Client.Name. A nil pointer leaves Name unset; a non-nil pointer applies it, including when it points to the zero value.
 	Name *ClientName `json:"name,omitempty"`
@@ -282,9 +274,8 @@ func ClientReadOnlyIs(value bool) ClientFilter {
 	return ClientFilter{ReadOnly: Ptr(value)}
 }
 
-// WindowRel applies quantifiers to a materialized [Window] relation.
-// Its zero value is invalid. Some is existential, None is exclusion, and Every is universal and vacuously true for an empty relation.
-// All enabled quantifiers are conjunctive.
+// WindowRel applies quantifiers to a materialized [Window] relation; its zero value is invalid.
+// Some is existential, Every is universal and vacuously true for an empty relation, and None excludes; enabled quantifiers are conjunctive.
 type WindowRel struct {
 	// Some requires an existential match: at least one related value must match.
 	Some *WindowFilter `json:"some,omitempty"`
@@ -294,9 +285,8 @@ type WindowRel struct {
 	None *WindowFilter `json:"none,omitempty"`
 }
 
-// PaneRel applies quantifiers to a materialized [Pane] relation.
-// Its zero value is invalid. Some is existential, None is exclusion, and Every is universal and vacuously true for an empty relation.
-// All enabled quantifiers are conjunctive.
+// PaneRel applies quantifiers to a materialized [Pane] relation; its zero value is invalid.
+// Some is existential, Every is universal and vacuously true for an empty relation, and None excludes; enabled quantifiers are conjunctive.
 type PaneRel struct {
 	// Some requires an existential match: at least one related value must match.
 	Some *PaneFilter `json:"some,omitempty"`
@@ -672,7 +662,7 @@ func filterPaneRelEqual(left, right *PaneRel) bool {
 // Paths traverse generated JSON relation names and separate segments with double underscores.
 // The default operator is exact. Accepted suffixes are eq, exact, iexact, contains, icontains, startswith, istartswith, endswith, iendswith, in, nin, regex, and iregex; availability is field-specific.
 // The eq suffix aliases exact, nin negates in, scalar operators require one value, and in and nin require one or more.
-// Invalid paths, operators, values, or results return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Invalid paths, operators, values, or results wrap [ErrInvalidFilter].
 func ParseSessionLookup(lookup string, values ...string) (SessionFilter, error) {
 	path, operator, err := splitFilterLookup(lookup)
 	if err != nil {
@@ -696,7 +686,7 @@ func ParseSessionLookup(lookup string, values ...string) (SessionFilter, error) 
 // Paths traverse generated JSON relation names and separate segments with double underscores.
 // The default operator is exact. Accepted suffixes are eq, exact, iexact, contains, icontains, startswith, istartswith, endswith, iendswith, in, nin, regex, and iregex; availability is field-specific.
 // The eq suffix aliases exact, nin negates in, scalar operators require one value, and in and nin require one or more.
-// Invalid paths, operators, values, or results return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Invalid paths, operators, values, or results wrap [ErrInvalidFilter].
 func ParseWindowLookup(lookup string, values ...string) (WindowFilter, error) {
 	path, operator, err := splitFilterLookup(lookup)
 	if err != nil {
@@ -720,7 +710,7 @@ func ParseWindowLookup(lookup string, values ...string) (WindowFilter, error) {
 // Paths traverse generated JSON relation names and separate segments with double underscores.
 // The default operator is exact. Accepted suffixes are eq, exact, iexact, contains, icontains, startswith, istartswith, endswith, iendswith, in, nin, regex, and iregex; availability is field-specific.
 // The eq suffix aliases exact, nin negates in, scalar operators require one value, and in and nin require one or more.
-// Invalid paths, operators, values, or results return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Invalid paths, operators, values, or results wrap [ErrInvalidFilter].
 func ParsePaneLookup(lookup string, values ...string) (PaneFilter, error) {
 	path, operator, err := splitFilterLookup(lookup)
 	if err != nil {
@@ -744,7 +734,7 @@ func ParsePaneLookup(lookup string, values ...string) (PaneFilter, error) {
 // Paths traverse generated JSON relation names and separate segments with double underscores.
 // The default operator is exact. Accepted suffixes are eq, exact, iexact, contains, icontains, startswith, istartswith, endswith, iendswith, in, nin, regex, and iregex; availability is field-specific.
 // The eq suffix aliases exact, nin negates in, scalar operators require one value, and in and nin require one or more.
-// Invalid paths, operators, values, or results return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Invalid paths, operators, values, or results wrap [ErrInvalidFilter].
 func ParseClientLookup(lookup string, values ...string) (ClientFilter, error) {
 	path, operator, err := splitFilterLookup(lookup)
 	if err != nil {
@@ -1693,8 +1683,7 @@ func newFilterValidationState() filterValidationState {
 	}
 }
 
-// Validate checks structure, regular expressions, and contradictory criteria before filter use.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Validate checks structure, regular expressions, and contradictory criteria; failures wrap [ErrInvalidFilter].
 func (filter SessionFilter) Validate() error {
 	state := newFilterValidationState()
 	if err := (&filter).validateStructure(&state, 0); err != nil {
@@ -1914,8 +1903,7 @@ func (filter *SessionFilter) validateCriteria() error {
 	return nil
 }
 
-// Validate checks structure, regular expressions, and contradictory criteria before filter use.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Validate checks structure, regular expressions, and contradictory criteria; failures wrap [ErrInvalidFilter].
 func (filter WindowFilter) Validate() error {
 	state := newFilterValidationState()
 	if err := (&filter).validateStructure(&state, 0); err != nil {
@@ -2101,8 +2089,7 @@ func (filter *WindowFilter) validateCriteria() error {
 	return nil
 }
 
-// Validate checks structure, regular expressions, and contradictory criteria before filter use.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Validate checks structure, regular expressions, and contradictory criteria; failures wrap [ErrInvalidFilter].
 func (filter PaneFilter) Validate() error {
 	state := newFilterValidationState()
 	if err := (&filter).validateStructure(&state, 0); err != nil {
@@ -2265,8 +2252,7 @@ func (filter *PaneFilter) validateCriteria() error {
 	return nil
 }
 
-// Validate checks structure, regular expressions, and contradictory criteria before filter use.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Validate checks structure, regular expressions, and contradictory criteria; failures wrap [ErrInvalidFilter].
 func (filter ClientFilter) Validate() error {
 	state := newFilterValidationState()
 	if err := (&filter).validateStructure(&state, 0); err != nil {
@@ -2397,9 +2383,7 @@ func (filter *ClientFilter) validateCriteria() error {
 	return nil
 }
 
-// MarshalJSON validates the session filter and encodes its JSON wire object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// MarshalJSON validates and encodes the session filter; failures wrap [ErrInvalidFilter].
 func (filter SessionFilter) MarshalJSON() ([]byte, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -2408,9 +2392,7 @@ func (filter SessionFilter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wireSessionFilter(filter))
 }
 
-// MarshalJSON validates the window filter and encodes its JSON wire object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// MarshalJSON validates and encodes the window filter; failures wrap [ErrInvalidFilter].
 func (filter WindowFilter) MarshalJSON() ([]byte, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -2419,9 +2401,7 @@ func (filter WindowFilter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wireWindowFilter(filter))
 }
 
-// MarshalJSON validates the pane filter and encodes its JSON wire object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// MarshalJSON validates and encodes the pane filter; failures wrap [ErrInvalidFilter].
 func (filter PaneFilter) MarshalJSON() ([]byte, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -2430,9 +2410,7 @@ func (filter PaneFilter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wirePaneFilter(filter))
 }
 
-// MarshalJSON validates the client filter and encodes its JSON wire object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// MarshalJSON validates and encodes the client filter; failures wrap [ErrInvalidFilter].
 func (filter ClientFilter) MarshalJSON() ([]byte, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -2463,9 +2441,7 @@ func (relation WindowRel) validate() error {
 	return nil
 }
 
-// MarshalJSON validates and encodes the window relation quantifiers as JSON.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// The zero relation returns [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect it.
+// MarshalJSON validates and encodes the window relation; failures wrap [ErrInvalidFilter].
 func (relation WindowRel) MarshalJSON() ([]byte, error) {
 	if err := relation.validate(); err != nil {
 		return nil, err
@@ -2496,9 +2472,7 @@ func (relation PaneRel) validate() error {
 	return nil
 }
 
-// MarshalJSON validates and encodes the pane relation quantifiers as JSON.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// The zero relation returns [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect it.
+// MarshalJSON validates and encodes the pane relation; failures wrap [ErrInvalidFilter].
 func (relation PaneRel) MarshalJSON() ([]byte, error) {
 	if err := relation.validate(); err != nil {
 		return nil, err
@@ -2507,9 +2481,8 @@ func (relation PaneRel) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wirePaneRel(relation))
 }
 
-// Predicate validates the session filter and returns a local predicate accepting [Session] values already materialized by a [Snapshot]; it never runs tmux.
-// Relation criteria traverse only relationships already materialized on that candidate.
-// The predicate returns false for a nil candidate. Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Predicate validates the session filter and returns a local predicate for [Session] values materialized by a [Snapshot]; it never runs tmux.
+// It traverses only loaded relations and returns false for a nil candidate.
 func (filter SessionFilter) Predicate() (func(*Session) bool, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -2742,9 +2715,8 @@ func (filter *SessionFilter) compile() (func(*Session) bool, error) {
 	}, nil
 }
 
-// Predicate validates the window filter and returns a local predicate accepting [Window] values already materialized by a [Snapshot]; it never runs tmux.
-// Relation criteria traverse only relationships already materialized on that candidate.
-// The predicate returns false for a nil candidate. Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Predicate validates the window filter and returns a local predicate for [Window] values materialized by a [Snapshot]; it never runs tmux.
+// It traverses only loaded relations and returns false for a nil candidate.
 func (filter WindowFilter) Predicate() (func(*Window) bool, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -3002,9 +2974,8 @@ func (filter *WindowFilter) compile() (func(*Window) bool, error) {
 	}, nil
 }
 
-// Predicate validates the pane filter and returns a local predicate accepting [Pane] values already materialized by a [Snapshot]; it never runs tmux.
-// Relation criteria traverse only relationships already materialized on that candidate.
-// The predicate returns false for a nil candidate. Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Predicate validates the pane filter and returns a local predicate for [Pane] values materialized by a [Snapshot]; it never runs tmux.
+// It traverses only loaded relations and returns false for a nil candidate.
 func (filter PaneFilter) Predicate() (func(*Pane) bool, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -3328,9 +3299,8 @@ func (filter *PaneFilter) compile() (func(*Pane) bool, error) {
 	}, nil
 }
 
-// Predicate validates the client filter and returns a local predicate accepting [Client] values already materialized by a [Snapshot]; it never runs tmux.
-// Relation criteria traverse only relationships already materialized on that candidate.
-// The predicate returns false for a nil candidate. Invalid filters return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// Predicate validates the client filter and returns a local predicate for [Client] values materialized by a [Snapshot]; it never runs tmux.
+// It traverses only loaded relations and returns false for a nil candidate.
 func (filter ClientFilter) Predicate() (func(*Client) bool, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, err
@@ -3471,11 +3441,8 @@ func (filter *ClientFilter) compile() (func(*Client) bool, error) {
 	}, nil
 }
 
-// UnmarshalJSON clears the receiver, then decodes a strict session filter JSON object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.
-// On error, the receiver can retain a partial or complete decoded value.
-// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// UnmarshalJSON clears the receiver, strictly decodes a session filter, then validates it.
+// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.
 func (filter *SessionFilter) UnmarshalJSON(data []byte) error {
 	if filter == nil {
 		return invalidFilter("cannot decode into a nil filter")
@@ -3499,11 +3466,8 @@ func (filter *SessionFilter) UnmarshalJSON(data []byte) error {
 	return filter.Validate()
 }
 
-// UnmarshalJSON clears the receiver, then decodes a strict window filter JSON object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.
-// On error, the receiver can retain a partial or complete decoded value.
-// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// UnmarshalJSON clears the receiver, strictly decodes a window filter, then validates it.
+// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.
 func (filter *WindowFilter) UnmarshalJSON(data []byte) error {
 	if filter == nil {
 		return invalidFilter("cannot decode into a nil filter")
@@ -3535,11 +3499,8 @@ func (filter *WindowFilter) UnmarshalJSON(data []byte) error {
 	return filter.Validate()
 }
 
-// UnmarshalJSON clears the receiver, then decodes a strict pane filter JSON object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.
-// On error, the receiver can retain a partial or complete decoded value.
-// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// UnmarshalJSON clears the receiver, strictly decodes a pane filter, then validates it.
+// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.
 func (filter *PaneFilter) UnmarshalJSON(data []byte) error {
 	if filter == nil {
 		return invalidFilter("cannot decode into a nil filter")
@@ -3583,11 +3544,8 @@ func (filter *PaneFilter) UnmarshalJSON(data []byte) error {
 	return filter.Validate()
 }
 
-// UnmarshalJSON clears the receiver, then decodes a strict client filter JSON object.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.
-// On error, the receiver can retain a partial or complete decoded value.
-// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// UnmarshalJSON clears the receiver, strictly decodes a client filter, then validates it.
+// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.
 func (filter *ClientFilter) UnmarshalJSON(data []byte) error {
 	if filter == nil {
 		return invalidFilter("cannot decode into a nil filter")
@@ -3610,11 +3568,8 @@ func (filter *ClientFilter) UnmarshalJSON(data []byte) error {
 	return filter.Validate()
 }
 
-// UnmarshalJSON clears the receiver, then decodes strict window relation quantifiers.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.
-// On error, the receiver can retain a partial or complete decoded value.
-// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// UnmarshalJSON clears the receiver, strictly decodes a window relation, then validates it.
+// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.
 func (relation *WindowRel) UnmarshalJSON(data []byte) error {
 	if relation == nil {
 		return invalidFilter("cannot decode into a nil relation")
@@ -3630,11 +3585,8 @@ func (relation *WindowRel) UnmarshalJSON(data []byte) error {
 	return relation.validate()
 }
 
-// UnmarshalJSON clears the receiver, then decodes strict pane relation quantifiers.
-// [FilterSchemaVersion] remains external metadata and is not embedded in the object.
-// It rejects unknown or duplicate fields and trailing JSON, then validates decoded criteria.
-// On error, the receiver can retain a partial or complete decoded value.
-// All decode and framing failures and semantic validation failures return [ErrInvalidFilter]; use errors.Is(err, [ErrInvalidFilter]) to detect them.
+// UnmarshalJSON clears the receiver, strictly decodes a pane relation, then validates it.
+// Unknown or duplicate fields, trailing data, and semantic failures wrap [ErrInvalidFilter]; the receiver may retain decoded state on error.
 func (relation *PaneRel) UnmarshalJSON(data []byte) error {
 	if relation == nil {
 		return invalidFilter("cannot decode into a nil relation")

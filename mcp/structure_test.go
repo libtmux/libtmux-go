@@ -12,22 +12,39 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// TestKeysReachAPaneOnlyThroughTheDeliveryResolver is the gate under the
-// delivery guard.
-//
-// The guard refuses a pane that cannot read a key, and it is reached by
-// obtaining the pane rather than by remembering to call it. That only holds
-// while every handler that types takes its pane from resolvePaneToDeliver: one
-// that takes resolvePaneToWrite instead, and types anyway, is back to the
-// defect this replaced, and nothing about the code would look wrong.
-//
-// The claim is about the source rather than about behaviour, so it stays true
-// for tools nobody has written yet, which is what a behavioural test of the
-// tools that exist cannot do.
+type unsupportedSchemaInput struct {
+	Callback func() `json:"callback"`
+}
+
+func TestToolSchemaFailuresAreExplicit(t *testing.T) {
+	tool := &mcp.Tool{Name: "unsupported_schema"}
+
+	_, err := prepareToolSchemas[unsupportedSchemaInput, struct{}](tool)
+	if err == nil {
+		t.Fatal("unsupported input schema was accepted")
+	}
+	if !strings.Contains(err.Error(), "unsupported_schema input schema") {
+		t.Fatalf("schema error = %q", err)
+	}
+
+	tool = &mcp.Tool{
+		Name:        "unresolved_schema",
+		InputSchema: &jsonschema.Schema{Ref: "https://example.invalid/schema"},
+	}
+	_, err = prepareToolSchemas[struct{}, struct{}](tool)
+	if err == nil {
+		t.Fatal("unresolved input schema was accepted")
+	}
+	if !strings.Contains(err.Error(), "unresolved_schema input schema") {
+		t.Fatalf("schema error = %q", err)
+	}
+}
+
 func TestKeysReachAPaneOnlyThroughTheDeliveryResolver(t *testing.T) {
 	// Ways of putting a keystroke into a pane. paste_buffer reaches tmux by a
 	// different call than the rest, so both are named.
@@ -90,21 +107,22 @@ func TestKeysReachAPaneOnlyThroughTheDeliveryResolver(t *testing.T) {
 	}
 }
 
-// TestEveryClosedSetReachesTheSchema gates closedArguments against the tools
-// moving out from under it. An argument renamed or a tool withdrawn leaves an
-// entry naming nothing, and the set stops being published while the table
-// still claims it: on the wire the argument goes back to being any string.
 func TestEveryClosedSetReachesTheSchema(t *testing.T) {
 	t.Setenv(SafetyEnvironmentVariable, "destructive")
 	t.Setenv(RecipeToolEnvironmentVariable, "1")
 
 	ctx := context.Background()
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	if _, err := NewServer(
-		tmux.NewServer(tmux.ServerOptions{SocketName: "closed-sets-unused"}),
-	).Connect(ctx, serverTransport, nil); err != nil {
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "closed-sets-unused"})
+	if err != nil {
 		t.Fatal(err)
 	}
+	instance := mustInternalMCPServer(t, target)
+	serverSession, err := instance.Connect(ctx, AssumeResponseCommit(serverTransport), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
 	client := mcp.NewClient(&mcp.Implementation{Name: "closed-sets", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
@@ -154,13 +172,6 @@ func TestEveryClosedSetReachesTheSchema(t *testing.T) {
 	}
 }
 
-// TestASafetyValueThatIsNotALevelIsNamed covers the silent half of failing
-// closed.
-//
-// A misspelled level selects the lowest, which is the right direction: someone
-// who set the variable at all was bounding what a model may do. But the report
-// that exists to explain a short tool list then reads exactly like one from an
-// operator who asked for readonly on purpose.
 func TestASafetyValueThatIsNotALevelIsNamed(t *testing.T) {
 	for _, level := range []struct{ value, rejected string }{
 		{"destructve", "destructve"},
@@ -179,5 +190,92 @@ func TestASafetyValueThatIsNotALevelIsNamed(t *testing.T) {
 	t.Setenv(SafetyEnvironmentVariable, "nonsense")
 	if ResolvedSafetyLevel() != SafetyReadOnly {
 		t.Error("a value that is not a level did not fall back to the lowest")
+	}
+}
+
+func TestSafetyDescriptionsStateTheirBoundary(t *testing.T) {
+	for _, check := range []struct {
+		level SafetyLevel
+		want  string
+	}{
+		{SafetyReadOnly, "sensitive tmux metadata or content"},
+		{SafetyMutating, "may still execute commands"},
+	} {
+		if got := check.level.describe(); !strings.Contains(got, check.want) {
+			t.Errorf("%s description %q does not contain %q", check.level, got, check.want)
+		}
+	}
+}
+
+func TestToolRegistryFreezesEnvironmentConfiguration(t *testing.T) {
+	t.Setenv(SafetyEnvironmentVariable, "readonly")
+	t.Setenv(CapabilitiesEnvironmentVariable, "metadata-read")
+	t.Setenv(WaitCeilingEnvironmentVariable, "7")
+	registry := newToolRegistry()
+
+	t.Setenv(SafetyEnvironmentVariable, "destructive")
+	t.Setenv(CapabilitiesEnvironmentVariable, "all")
+	t.Setenv(WaitCeilingEnvironmentVariable, "1")
+
+	instructions := registry.callerInstructions()
+	for _, frozen := range []string{
+		SafetyReadOnly.describe(),
+		newCapabilitySet([]Capability{CapabilityMetadataRead}).describe(),
+	} {
+		if !strings.Contains(instructions, frozen) {
+			t.Errorf("instructions do not use frozen configuration: %q", instructions)
+		}
+	}
+	if strings.Contains(instructions, SafetyDestructive.describe()) {
+		t.Errorf("instructions use the changed safety level: %q", instructions)
+	}
+
+	timeout, clamped := registry.resolveWaitTimeout(9)
+	if timeout.Seconds() != 7 || !clamped {
+		t.Fatalf("resolved wait = (%v, %t), want frozen seven-second ceiling",
+			timeout, clamped)
+	}
+}
+
+func TestBufferToolDescriptionsStateTheNamespaceBoundary(t *testing.T) {
+	t.Setenv(SafetyEnvironmentVariable, "destructive")
+	t.Setenv(CapabilitiesEnvironmentVariable, "all")
+
+	ctx := context.Background()
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "buffer-docs-unused"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := mustInternalMCPServer(t, target)
+	serverSession, err := instance.Connect(ctx, AssumeResponseCommit(serverTransport), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := mcp.NewClient(&mcp.Implementation{Name: "buffer-docs", Version: "1"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, tool := range listed.Tools {
+		if tool.Name != "show_buffer" && tool.Name != "delete_buffer" {
+			continue
+		}
+		checked++
+		if !strings.Contains(tool.Description, "libtmux-mcp- namespace") ||
+			strings.Contains(tool.Description, "this server staged") {
+			t.Errorf("%s description overstates buffer provenance: %q", tool.Name, tool.Description)
+		}
+	}
+	if checked != 2 {
+		t.Errorf("checked %d buffer tool descriptions, want 2", checked)
 	}
 }

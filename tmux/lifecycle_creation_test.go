@@ -746,10 +746,12 @@ func TestSplitPaneWarnsAndOmitsTmux37FieldsOnOlderTmux(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}, ExitCode: 0}},
 		{result: tmuxcmd.Result{Stderr: []string{"stop after argv capture"}, ExitCode: 7}},
 	}}
-	server := degradingServerWithRunner(runner)
-	server.connectionState().options.WarningHandler = func(warning Warning) {
-		warnings = append(warnings, warning)
-	}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported: DegradeUnsupported,
+		WarningHandler: func(warning Warning) {
+			warnings = append(warnings, warning)
+		},
+	}, runner)
 	_, err := (Window{
 		server: server, sessionID: "$7", windowID: "@8",
 	}).SplitPane(context.Background(), SplitPaneRequest{

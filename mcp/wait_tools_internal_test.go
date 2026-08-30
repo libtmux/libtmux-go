@@ -1,20 +1,82 @@
 package mcp
 
 import (
+	"context"
+	"errors"
 	"slices"
 	"testing"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// TestTheWrapperEchoIsDroppedWhereverItWraps covers the rows a recovery must
-// discard.
-//
-// The echo is one logical line the shell wrapped, so where the grid breaks it
-// is a function of the prompt's width and moves with it. Dropping through the
-// row the path ends on rather than the row the whole echo ends on leaves the
-// tail of the path behind as a line of output.
-// The captured rows carry a stand-in for the prompt's directory at the same
-// widths as the one they were taken from. Where the row breaks is the whole
-// point of them; whose directory it was is not.
+type failingPaneObservation struct{ err error }
+
+func (f failingPaneObservation) NextNotification(
+	context.Context,
+) (tmux.ControlNotification, error) {
+	return tmux.ControlNotification{}, f.err
+}
+
+type onePaneNotification struct {
+	notification tmux.ControlNotification
+	read         bool
+}
+
+func (s *onePaneNotification) NextNotification(
+	context.Context,
+) (tmux.ControlNotification, error) {
+	if s.read {
+		return tmux.ControlNotification{}, errors.New("notification read twice")
+	}
+	s.read = true
+	return s.notification, nil
+}
+
+func TestPaneWaitConsumesTransientNotificationPayload(t *testing.T) {
+	patterns, err := compileNamedMatchers([]string{"TRANSIENT"}, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notification, err := tmux.ParseControlNotification(
+		[]byte(`%output %1 TRANSIENT\015ERASED`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := &onePaneNotification{notification: notification}
+	result := watchPane(
+		t.Context(),
+		source,
+		tmux.PaneID("%1"),
+		patterns,
+		nil,
+		0,
+	)
+	if result.err != nil || result.written != "TRANSIENT\nERASED" ||
+		result.outcome != outcomeMatched || result.matched != "TRANSIENT" {
+		t.Fatalf("watchPane() = (%q, %q, %q, %v), want transient stream match",
+			result.written, result.outcome, result.matched, result.err)
+	}
+}
+
+func TestPaneWaitDoesNotCallAStreamFailureIdle(t *testing.T) {
+	want := errors.New("notification stream failed")
+	result := watchPane(
+		t.Context(),
+		failingPaneObservation{err: want},
+		tmux.PaneID("%1"),
+		nil,
+		nil,
+		time.Minute,
+	)
+	if result.outcome != "" || !errors.Is(result.err, want) ||
+		!errors.Is(result.err, errPaneObservationLost) {
+		t.Fatalf("watchPane() = (%q, %v), want classified stream failure",
+			result.outcome, result.err)
+	}
+}
+
 func TestTheWrapperEchoIsDroppedWhereverItWraps(t *testing.T) {
 	const echo = ". '/tmp/libtmux-mcp-run478228931/script'"
 	for _, probe := range []struct {
@@ -192,15 +254,6 @@ func TestTheWrapperEchoIsDroppedWhereverItWraps(t *testing.T) {
 	}
 }
 
-// TestTheMarksSeeAGridThatMovedUnderThem covers a command whose output came
-// back as nothing because the grid shifted by exactly as much as the cursor.
-//
-// A mark is history_size plus cursor_y. That sum is stable while a pane only
-// scrolls, and anything moving rows between screen and scrollback without the
-// cursor advancing cancels inside it. Erasing the scrollback does it one way
-// and clearing the screen does it the other, and both read as a command that
-// printed nothing. The numbers below were measured against tmux 3.7b at the
-// pane widths named.
 func TestTheMarksSeeAGridThatMovedUnderThem(t *testing.T) {
 	at := func(history, cursor, width int) mark {
 		return mark{historySize: history, row: history + cursor, width: width, height: 24}

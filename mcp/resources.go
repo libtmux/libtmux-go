@@ -13,29 +13,9 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// The tmux hierarchy is addressable as well as callable.
-//
-// A tool is something a model decides to do. A resource is something that can
-// be named, attached to a conversation by a person, browsed by a client that
-// knows no tool names, and read again without a model choosing to. The reads
-// here are the same answers list_panes and capture_pane give; offering them
-// both ways costs a handler each and lets a client use whichever fits.
-//
-// The URIs mirror tmux's own containment, so a reader who knows tmux can guess
-// them: sessions hold windows, windows hold panes, and a pane has content.
-//
-// An id appears without its sigil. tmux writes a pane as %0 and a window as @1,
-// and a percent sign begins an escape in a URI, so tmux://panes/%0/content is
-// not a URI a client can parse at all. The sigil is redundant inside a path
-// already saying panes, and requiring %250 instead would be correct and
-// unusable.
-//
-// A read takes the bare form or the encoded one. It cannot take the raw sigil:
-// a template is matched by a regexp built from it, and a percent that is not
-// followed by two hex digits matches no template, so the SDK answers before
-// this package is reached. A subscription takes all three, because it is routed
-// by the string itself — and it has to, since every tool hands a pane back as
-// %1 and a client that subscribed with one got silence.
+// Resource URIs mirror tmux containment and omit ID sigils; a pane's percent
+// sigil would otherwise begin a URI escape. Subscriptions retain the caller's
+// exact URI spelling for SDK routing.
 const (
 	resourceSessions       = "tmux://sessions"
 	templateSession        = "tmux://sessions/{session}"
@@ -46,20 +26,20 @@ const (
 	templatePaneContent    = "tmux://panes/{pane}/content"
 )
 
-// addResources advertises the readable hierarchy.
-//
-// Every resource here only reads, so the safety level never withholds one: a
-// server offering no tools that change tmux can still be browsed.
+// addResources advertises the parts of the hierarchy the capability allowlist
+// permits. Pane content is separate from topology because it may hold secrets.
 func addResources(server *mcp.Server, t *tools) {
-	server.AddResource(&mcp.Resource{
-		URI:         resourceSessions,
-		Name:        "tmux sessions",
-		Title:       "Every tmux Session",
-		Description: "Every session on this tmux server, with its windows and panes.",
-		MIMEType:    "application/json",
-	}, t.readSessions)
+	if t.capabilities.permits(CapabilityMetadataRead) {
+		server.AddResource(&mcp.Resource{
+			URI:         resourceSessions,
+			Name:        "tmux sessions",
+			Title:       "Every tmux Session",
+			Description: "Every session on this tmux server, with its windows and panes.",
+			MIMEType:    "application/json",
+		}, t.readSessions)
+	}
 
-	for _, template := range []struct {
+	metadata := []struct {
 		uri, name, title, description string
 	}{
 		{
@@ -83,59 +63,69 @@ func addResources(server *mcp.Server, t *tools) {
 			"One pane's identity, position, and what it is running, addressed " +
 				"by pane id without its sigil, so %1 is written 1.",
 		},
-		{
-			templatePaneContent, "tmux pane content", "Contents of One Pane",
-			"What one pane is showing, as text, addressed by pane id without " +
-				"its sigil, so %1 is written 1.",
-		},
-	} {
+	}
+	if t.capabilities.permits(CapabilityMetadataRead) {
+		for _, template := range metadata {
+			server.AddResourceTemplate(&mcp.ResourceTemplate{
+				URITemplate: template.uri,
+				Name:        template.name,
+				Title:       template.title,
+				Description: template.description,
+				MIMEType:    "application/json",
+			}, t.readTemplated)
+		}
+	}
+	if t.capabilities.permits(CapabilityContentRead) {
 		server.AddResourceTemplate(&mcp.ResourceTemplate{
-			URITemplate: template.uri,
-			Name:        template.name,
-			Title:       template.title,
-			Description: template.description,
-			MIMEType:    "application/json",
+			URITemplate: templatePaneContent,
+			Name:        "tmux pane content",
+			Title:       "Contents of One Pane",
+			Description: "What one pane is showing, as text, addressed by pane id without " +
+				"its sigil, so %1 is written 1.",
+			MIMEType: "text/plain",
 		}, t.readTemplated)
 	}
 }
 
-// readSessions answers the whole hierarchy.
 func (t *tools) readSessions(
 	ctx context.Context,
 	request *mcp.ReadResourceRequest,
 ) (*mcp.ReadResourceResult, error) {
-	_, sessions, err := t.listSessions(ctx, nil, listSessionsInput{})
+	requestCtx, acquired, err := t.acquireRequestRuntime(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return jsonResource(request.Params.URI, sessions)
+	defer acquired.release()
+	_, sessions, err := t.listSessions(requestCtx, nil, listSessionsInput{})
+	if err != nil {
+		t.runtime.observe(err)
+		return nil, err
+	}
+	result, err := jsonResource(request.Params.URI, sessions)
+	t.runtime.observe(err)
+	return result, err
 }
 
-// readTemplated answers one of the templated URIs.
-//
-// The SDK matches a request to this handler by template, and the request
-// carries the concrete URI, so the segment that varies is read back from it
-// rather than from a parameter the SDK does not provide.
+// The SDK supplies only the concrete URI, so readTemplated parses its variables.
 func (t *tools) readTemplated(
 	ctx context.Context,
 	request *mcp.ReadResourceRequest,
 ) (*mcp.ReadResourceResult, error) {
-	result, err := t.readOne(ctx, request.Params.URI)
-	return result, resourceError(request.Params.URI, err)
+	requestCtx, acquired, err := t.acquireRequestRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer acquired.release()
+	result, err := t.readOne(requestCtx, request.Params.URI)
+	err = resourceError(request.Params.URI, err)
+	t.runtime.observe(err)
+	return result, err
 }
 
-// resourceError says on the wire that a URI named nothing.
-//
-// The SDK sends a handler's plain error as code 0, which a client cannot tell
-// from a server that broke; the protocol has a code for this and reserves the
-// message for "Resource not found", which says less than the prose here does.
-// Both fit: the code classifies and the message says what to call instead.
+// resourceError maps missing objects to MCP's resource-not-found JSON-RPC code.
 func resourceError(uri string, err error) error {
 	if errors.Is(err, tmux.ErrNoServer) {
-		// The listings answer this with an empty list and a note. A read
-		// cannot: there is no object to hand back. What it can do is say the
-		// same thing the listings say, rather than repeating the tmux command
-		// that failed and the socket file that is not there.
+		// Unlike listings, a resource read has no object to return.
 		return errors.New(noServerNote)
 	}
 	if err == nil || !errors.Is(err, tmux.ErrSnapshotNotFound) {
@@ -165,7 +155,7 @@ func (t *tools) readOne(
 	case strings.HasPrefix(uri, "tmux://panes/"):
 		id := decodeSegment(strings.TrimPrefix(uri, "tmux://panes/"))
 		return t.readPane(ctx, uri, withSigil(id, "%"))
-	// After the suffixed forms above, which these would otherwise swallow.
+	// Keep unsuffixed forms after the prefixes they would otherwise swallow.
 	case strings.HasPrefix(uri, "tmux://sessions/"):
 		name := decodeSegment(strings.TrimPrefix(uri, "tmux://sessions/"))
 		return t.readSession(ctx, uri, name)
@@ -177,15 +167,8 @@ func (t *tools) readOne(
 	}
 }
 
-// decodeSegment turns one path segment back into the text it stands for.
-//
-// A tmux name is not restricted to what a URI may carry: a session called
-// "spaced name" has no spelling but "spaced%20name", and %25 is how a client
-// writes the sigil in %0. Comparing the still-encoded string against tmux's
-// answer never matches, so such an object is unaddressable without this.
-//
-// A segment that will not decode is used as it was given, which is what a
-// name containing a bare percent sign arrives as.
+// decodeSegment unescapes URI path text and preserves malformed input for
+// exact-name fallback.
 func decodeSegment(segment string) string {
 	decoded, err := url.PathUnescape(segment)
 	if err != nil {
@@ -209,7 +192,7 @@ func (t *tools) readWindowPanes(
 	ctx context.Context,
 	uri, id string,
 ) (*mcp.ReadResourceResult, error) {
-	window, err := t.tmux().Window(ctx, tmux.WindowID(id))
+	window, err := t.tmux(ctx).Window(ctx, tmux.WindowID(id))
 	if err != nil {
 		return nil, notFound(err, "window", id, "list_windows")
 	}
@@ -219,14 +202,15 @@ func (t *tools) readWindowPanes(
 	}
 	summaries := make([]listedPane, 0, len(panes))
 	for _, pane := range panes {
-		summaries = append(summaries, listedPane{paneSummary: t.summarize(ctx, pane)})
+		summary, err := t.summarize(ctx, pane)
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, listedPane{paneSummary: summary})
 	}
 	return jsonResource(uri, listPanesOutput{Panes: summaries, Total: len(panes)})
 }
 
-// readSession answers one session, which the hierarchy offered no way to read
-// on its own: the list was there and the leaf was there, and the branch
-// between them was not.
 func (t *tools) readSession(ctx context.Context, uri, name string) (*mcp.ReadResourceResult, error) {
 	_, info, err := t.getSessionInfo(ctx, nil, getSessionInfoInput{SessionName: name})
 	if err != nil {
@@ -235,7 +219,6 @@ func (t *tools) readSession(ctx context.Context, uri, name string) (*mcp.ReadRes
 	return jsonResource(uri, info)
 }
 
-// readWindow answers one window, for the same reason.
 func (t *tools) readWindow(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
 	_, info, err := t.getWindowInfo(ctx, nil, getWindowInfoInput{WindowID: id})
 	if err != nil {
@@ -245,11 +228,15 @@ func (t *tools) readWindow(ctx context.Context, uri, id string) (*mcp.ReadResour
 }
 
 func (t *tools) readPane(ctx context.Context, uri, id string) (*mcp.ReadResourceResult, error) {
-	pane, err := t.tmux().Pane(ctx, tmux.PaneID(id))
+	pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(id))
 	if err != nil {
 		return nil, notFound(err, "pane", id, "list_panes")
 	}
-	return jsonResource(uri, t.summarize(ctx, pane))
+	summary, err := t.summarize(ctx, pane)
+	if err != nil {
+		return nil, err
+	}
+	return jsonResource(uri, summary)
 }
 
 func (t *tools) readPaneContent(
@@ -260,15 +247,8 @@ func (t *tools) readPaneContent(
 	if err != nil {
 		return nil, err
 	}
-	// Text rather than JSON: a pane's contents are what a person would paste
-	// into a conversation, and quoting them as a JSON array helps nobody.
-	//
-	// The trailing newline is what makes an empty pane readable at all. MCP
-	// requires a text resource to carry a text field, the SDK omits that field
-	// when the text is empty, and a client then rejects contents that are
-	// neither text nor binary. A pane showing nothing is a real and ordinary
-	// state, so its contents end in a newline as any line-oriented text does,
-	// and the empty case becomes one empty line rather than nothing at all.
+	// Pane content is text, not JSON. Always append a newline because the SDK
+	// omits an empty Text field and clients reject content with no text or blob.
 	return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
 		URI:      uri,
 		MIMEType: "text/plain",
@@ -276,9 +256,7 @@ func (t *tools) readPaneContent(
 	}}}, nil
 }
 
-// withSigil restores the character tmux writes in front of an id, so a URI can
-// carry either form: the bare number a person can type, or the sigil form a
-// client copied from a tool result and percent-encoded.
+// withSigil accepts bare and percent-decoded tmux identifiers.
 func withSigil(id, sigil string) string {
 	if id == "" || strings.HasPrefix(id, sigil) {
 		return id
@@ -286,7 +264,6 @@ func withSigil(id, sigil string) string {
 	return sigil + id
 }
 
-// jsonResource renders a value as one resource's contents.
 func jsonResource(uri string, value any) (*mcp.ReadResourceResult, error) {
 	encoded, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {

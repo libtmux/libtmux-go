@@ -758,6 +758,24 @@ func TestParityManifestRejectsHostOnlyPublicDestination(t *testing.T) {
 	assertParityIssue(t, issues, "public Python mapping requires a portable Go destination")
 }
 
+func TestParityManifestIndexesPlatformSpecificProofs(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeParityFixtureFiles(t, root, map[string]string{
+		"proof_plan9_test.go": "package fixture_test\n\nimport \"testing\"\n\n" +
+			"// libtmux:parity python.symbol\nfunc TestProof(*testing.T) { exercise() }\n",
+	})
+
+	index, err := indexParityGoSymbols(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof, exists := index["fixture_test.TestProof"]
+	if !exists || !proof.Proof {
+		t.Fatal("platform-specific proof was not indexed")
+	}
+}
+
 func TestParityManifestRejectsCrossPlatformPackageAlias(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
@@ -1861,6 +1879,34 @@ func indexParityGoSymbols(root string) (paritySymbolIndex, error) {
 			)
 		}
 		contextIndexes = append(contextIndexes, index)
+	}
+
+	// A proof may exercise a platform-specific behavior even though public
+	// destinations still have to agree across every target below.
+	for _, index := range contextIndexes {
+		for name, declaration := range index {
+			if !declaration.Proof {
+				continue
+			}
+			current, exists := hostIndex[name]
+			if !exists {
+				hostIndex[name] = declaration
+				continue
+			}
+			if current.Canonical != declaration.Canonical ||
+				current.Fingerprint != declaration.Fingerprint ||
+				current.Package != declaration.Package {
+				return nil, fmt.Errorf("conflicting platform proof declarations for %s", name)
+			}
+			current.Behavior = current.Behavior || declaration.Behavior
+			current.External = current.External || declaration.External
+			current.Proof = true
+			current.RealTmux = current.RealTmux || declaration.RealTmux
+			current.ParityIDs = append(current.ParityIDs, declaration.ParityIDs...)
+			slices.Sort(current.ParityIDs)
+			current.ParityIDs = slices.Compact(current.ParityIDs)
+			hostIndex[name] = current
+		}
 	}
 
 	for name, symbol := range hostIndex {

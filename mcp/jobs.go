@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,42 +15,26 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// A command can outlive the call that started it.
-//
-// run_command waits, which is right when the answer is the point: a caller
-// that needs an exit status before it can do anything else should not have to
-// invent a polling loop to get one. It is wrong when the command is a build
-// and the caller has reading to do meanwhile. Waiting is then not the cost of
-// the answer but the cost of asking, and it is paid in the caller's turn,
-// which is the one thing a model cannot get more of.
-//
-// So the wait is optional. Detaching returns as soon as the command is typed,
-// with a handle; get_job collects it later, either at once or waiting a
-// bounded while. Nothing about the command changes -- the same wrapper records
-// the same exit status against the same tmux channel -- so a detached run and
-// an attached one answer identically, and the difference is only who waits.
-//
-// The state a handle needs is small and lives here rather than in the handle,
-// because the files it names are this process's own. A handle that carried
-// them would be a caller-supplied path this server later reads.
-//
-// Collecting is idempotent. The first read that finds a status keeps it and
-// releases the files; every later read is answered from what was kept. A
-// handle that stopped answering once it had been used would punish the
-// ordinary thing a caller does -- ask again -- with an error that reads like
-// the command was lost, and asking twice is how a caller checks on something.
+// Detached commands keep server-owned state; handles never expose file paths.
+// Completed results are collected idempotently while retained.
 
-// jobsRetained bounds how many uncollected commands are kept. A caller that
-// detaches and never collects would otherwise hold a temporary directory per
-// command for the life of the process; the oldest is dropped instead, which
-// costs that caller its output and nothing else.
-const jobsRetained = 32
+const (
+	// jobsRetained bounds retained handles and results. Adding a job evicts the
+	// oldest retained job and removes any remaining temporary files.
+	jobsRetained = 32
+	// jobCompletionPollInterval bounds how long collection waits to observe a
+	// command's atomically published completion files.
+	jobCompletionPollInterval = 50 * time.Millisecond
+)
 
-// job is one command left running in a pane.
+var (
+	errJobCapacity        = errors.New("all retained jobs are currently being collected")
+	errJobHandleCollision = errors.New("generated job handle already exists")
+)
+
 type job struct {
 	id        string
 	paneID    tmux.PaneID
-	channel   string
 	command   string
 	directory string
 	openedAt  string
@@ -56,184 +42,266 @@ type job struct {
 	statusAt  string
 	started   time.Time
 
-	// finished, exitStatus, and output are what the first successful read
-	// kept, so that later reads answer without the files it released.
-	finished   bool
-	exitStatus int
-	output     []string
-	// atCeiling is what the ceiling dropped before the output was kept. A
-	// later read applies the caller's own bounds to what is left, and would
-	// otherwise report only that second cut, understating the loss.
+	collecting     bool
+	collectionDone chan struct{}
+
+	// Completed results outlive their released temporary files.
+	finished          bool
+	exitStatus        int
+	output            []string
+	outputUnavailable string
+	linesMissed       bool
+	// atCeiling preserves loss before later caller-specific bounds.
 	atCeiling truncation
 	ended     time.Time
 }
 
-// jobs holds the commands that were detached and not yet collected.
 type jobs struct {
 	mutex sync.Mutex
 	byID  map[string]*job
-	// order is the ids oldest first, which is the order they are dropped in.
-	order []string
+	// order is oldest first for eviction.
+	order  []string
+	closed bool
 }
 
 func newJobs() *jobs {
 	return &jobs{byID: map[string]*job{}}
 }
 
-// keep records a detached command, dropping the oldest if there are too many.
-func (j *jobs) keep(entry *job) {
+func (j *jobs) keep(entry *job) error {
 	j.mutex.Lock()
-	defer j.mutex.Unlock()
-	j.byID[entry.id] = entry
+	if j.closed {
+		j.mutex.Unlock()
+		return ErrInstanceClosed
+	}
+	if _, exists := j.byID[entry.id]; exists {
+		j.mutex.Unlock()
+		return errJobHandleCollision
+	}
+	stored := *entry
+	stored.output = slices.Clone(entry.output)
+	j.byID[entry.id] = &stored
 	j.order = append(j.order, entry.id)
+	directories := make([]string, 0)
+	retained := true
 	for len(j.order) > jobsRetained {
-		oldest := j.order[0]
-		j.order = j.order[1:]
-		if dropped, ok := j.byID[oldest]; ok {
-			delete(j.byID, oldest)
-			_ = os.RemoveAll(dropped.directory)
+		dropAt := slices.IndexFunc(j.order, func(id string) bool {
+			candidate := j.byID[id]
+			return candidate != nil && !candidate.collecting
+		})
+		// The newly inserted job is not collecting, so it is the fallback when
+		// every older job has an active collector.
+		if dropAt < 0 {
+			dropAt = len(j.order) - 1
+		}
+		droppedID := j.order[dropAt]
+		j.order = slices.Delete(j.order, dropAt, dropAt+1)
+		dropped := j.byID[droppedID]
+		delete(j.byID, droppedID)
+		retained = retained && droppedID != entry.id
+		if dropped.directory != "" {
+			directories = append(directories, dropped.directory)
+			dropped.directory = ""
 		}
 	}
+	j.mutex.Unlock()
+	removeJobDirectories(directories)
+	if !retained {
+		return errJobCapacity
+	}
+	return nil
 }
 
-// find reports the command a handle names.
-func (j *jobs) find(id string) (*job, bool) {
+// discard removes an admitted job whose command was not delivered.
+func (j *jobs) discard(id string) {
+	j.mutex.Lock()
+	entry := j.byID[id]
+	if entry == nil || entry.collecting || entry.finished {
+		j.mutex.Unlock()
+		return
+	}
+	delete(j.byID, id)
+	if at := slices.Index(j.order, id); at >= 0 {
+		j.order = slices.Delete(j.order, at, at+1)
+	}
+	directory := entry.directory
+	entry.directory = ""
+	j.mutex.Unlock()
+	removeJobDirectories([]string{directory})
+}
+
+func (j *jobs) find(id string) (job, bool) {
 	j.mutex.Lock()
 	defer j.mutex.Unlock()
 	entry, ok := j.byID[id]
-	return entry, ok
+	if !ok {
+		return job{}, false
+	}
+	result := *entry
+	result.output = slices.Clone(entry.output)
+	return result, true
 }
 
-// settle records how a command ended and releases the files it used, keeping
-// the answer so that later reads do not need them.
+// beginCollection elects one caller to collect and settle a job. Followers
+// observe its completion channel instead of touching its temporary files.
+func (j *jobs) beginCollection(id string) (job, bool, chan struct{}, bool) {
+	j.mutex.Lock()
+	defer j.mutex.Unlock()
+	entry, ok := j.byID[id]
+	if !ok {
+		return job{}, false, nil, false
+	}
+	if entry.finished {
+		result := *entry
+		result.output = slices.Clone(entry.output)
+		return result, false, nil, true
+	}
+	if entry.collecting {
+		result := *entry
+		result.output = slices.Clone(entry.output)
+		return result, false, entry.collectionDone, true
+	}
+	entry.collecting = true
+	entry.collectionDone = make(chan struct{})
+	result := *entry
+	result.output = slices.Clone(entry.output)
+	return result, true, entry.collectionDone, true
+}
+
+func (j *jobs) endCollection(id string, done chan struct{}) {
+	j.mutex.Lock()
+	defer j.mutex.Unlock()
+	entry := j.byID[id]
+	if entry == nil || !entry.collecting || entry.collectionDone != done {
+		return
+	}
+	entry.collecting = false
+	entry.collectionDone = nil
+	close(done)
+}
+
+// settle caches the result before releasing its files.
 func (j *jobs) settle(
 	id string,
 	status int,
 	output []string,
 	atCeiling truncation,
+	outputUnavailable string,
+	linesMissed bool,
 	ended time.Time,
-) {
+) (job, bool) {
 	j.mutex.Lock()
-	defer j.mutex.Unlock()
 	entry, ok := j.byID[id]
-	if !ok || entry.finished {
-		return
+	if !ok {
+		j.mutex.Unlock()
+		return job{}, false
 	}
-	entry.finished = true
-	entry.exitStatus = status
-	entry.output = output
-	entry.atCeiling = atCeiling
-	entry.ended = ended
-	_ = os.RemoveAll(entry.directory)
+	if !entry.finished {
+		entry.finished = true
+		entry.exitStatus = status
+		entry.output = slices.Clone(output)
+		entry.atCeiling = atCeiling
+		entry.outputUnavailable = outputUnavailable
+		entry.linesMissed = linesMissed
+		entry.ended = ended
+	}
+	if entry.collecting {
+		close(entry.collectionDone)
+		entry.collecting = false
+		entry.collectionDone = nil
+	}
+	directory := entry.directory
+	entry.directory = ""
+	result := *entry
+	result.output = slices.Clone(entry.output)
+	j.mutex.Unlock()
+	removeJobDirectories([]string{directory})
+	return result, true
 }
 
-// close drops everything, which the server does when it stops.
 func (j *jobs) close() {
 	j.mutex.Lock()
-	defer j.mutex.Unlock()
+	j.closed = true
+	directories := make([]string, 0, len(j.byID))
 	for id, entry := range j.byID {
 		delete(j.byID, id)
-		_ = os.RemoveAll(entry.directory)
+		if entry.collecting {
+			close(entry.collectionDone)
+			entry.collecting = false
+			entry.collectionDone = nil
+		}
+		if entry.directory != "" {
+			directories = append(directories, entry.directory)
+			entry.directory = ""
+		}
 	}
 	j.order = nil
+	j.mutex.Unlock()
+	removeJobDirectories(directories)
 }
 
-// unknownJob explains a handle this server is not holding, distinguishing the
-// two reasons rather than asserting the more likely one.
-//
-// A handle names the process that issued it, so a handle from a previous run
-// is recognisable. Saying that newer commands crowded it out, when in fact the
-// server restarted, sends a caller looking for commands it never started.
-func unknownJob(id string) error {
-	if issuer, ok := jobIssuer(id); ok && issuer != os.Getpid() {
-		return fmt.Errorf(
-			"%q was issued by a different run of this server, which has since "+
-				"restarted; a handle does not outlive the process that made it, "+
-				"and the command it named may still be running in its pane", id)
+func removeJobDirectories(directories []string) {
+	for _, directory := range directories {
+		if directory != "" {
+			_ = os.RemoveAll(directory)
+		}
 	}
+}
+
+func unknownJob(id string) error {
 	return fmt.Errorf(
-		"%q is not a job this server is holding: only the last %d are kept, "+
-			"and older ones are dropped as newer commands are started",
+		"%q is not a job owned by this MCP session: only its last %d are "+
+			"kept, and older ones are dropped as newer commands are started",
 		id, jobsRetained)
 }
 
-// jobIssuer reads the process id out of a handle this server made.
-func jobIssuer(id string) (int, bool) {
-	rest, ok := strings.CutPrefix(id, "libtmux-mcp-")
-	if !ok {
-		return 0, false
-	}
-	issuer, _, ok := strings.Cut(rest, "-")
-	if !ok {
-		return 0, false
-	}
-	pid, err := strconv.Atoi(issuer)
-	if err != nil {
-		return 0, false
-	}
-	return pid, true
-}
-
-// getJobInput collects a command that was left running.
 type getJobInput struct {
-	// JobID is the handle run_command returned when it detached.
 	JobID string `json:"jobId" jsonschema:"the handle a detached run_command returned"`
-	// TimeoutSeconds waits that long for the command to finish. Zero asks
-	// whether it has finished and returns either way, which is what a caller
-	// checking on it between other work wants.
+	// TimeoutSeconds zero polls without waiting.
 	TimeoutSeconds int `json:"timeoutSeconds,omitempty" jsonschema:"wait up to this long for the command to finish; zero reports whether it has and returns at once"`
-	// MaxLines caps the returned output, keeping the last lines.
-	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many lines of output to return at most, keeping the last ones"`
-	// MaxBytes caps the returned output's size, keeping the last lines.
-	MaxBytes int `json:"maxBytes,omitempty" jsonschema:"how many bytes to return at most, keeping the last lines"`
+	MaxLines       int `json:"maxLines,omitempty" jsonschema:"how many lines of output to return at most, keeping the last ones"`
+	MaxBytes       int `json:"maxBytes,omitempty" jsonschema:"how many bytes to return at most, keeping the last lines"`
 }
 
-// getJobOutput reports how a detached command is doing, or how it ended.
 type getJobOutput struct {
-	// JobID is the handle asked about.
-	JobID string `json:"jobId"`
-	// PaneID is the pane the command runs in.
-	PaneID string `json:"paneId"`
-	// Command is what was run, so a caller holding several handles does not
-	// have to remember which is which.
-	Command string `json:"command"`
-	// Finished reports whether the command has ended.
-	Finished bool `json:"finished"`
-	// ExitStatus is its status, present only once it has ended.
-	ExitStatus *int `json:"exitStatus,omitempty"`
-	// ElapsedSeconds is how long it has been running, or how long it ran.
-	ElapsedSeconds float64 `json:"elapsedSeconds"`
+	JobID    string `json:"jobId"`
+	PaneID   string `json:"paneId"`
+	Command  string `json:"command"`
+	Finished bool   `json:"finished"`
+	// CollectionPending reports that the command committed but a zero-time poll
+	// left its pane output for a later call with a positive timeout.
+	CollectionPending bool    `json:"collectionPending,omitempty"`
+	ExitStatus        *int    `json:"exitStatus,omitempty"`
+	ElapsedSeconds    float64 `json:"elapsedSeconds"`
 	// Running is what the pane is running now, reported while the command has
-	// not finished. A shell here means the command ended without recording a
-	// status, which is what interrupting it looks like.
-	Running string `json:"running,omitempty"`
-	// Output is what the command wrote, read from where the pane stood when
-	// it started. It is reported once the command has finished.
-	Output []string `json:"output,omitempty"`
-	// EffectiveTimeoutSeconds is the wait this call ran, reported only when it
-	// was asked to wait at all.
-	EffectiveTimeoutSeconds int `json:"effectiveTimeoutSeconds,omitempty"`
-	// TimeoutClamped reports that the server's ceiling shortened the wait.
-	TimeoutClamped bool `json:"timeoutClamped,omitempty"`
-	// truncation reports what the bounds dropped from Output.
+	// not finished. A shell may mean interruption prevented status recording.
+	Running                 string   `json:"running,omitempty"`
+	Output                  []string `json:"output,omitempty"`
+	OutputUnavailable       string   `json:"outputUnavailable,omitempty"`
+	LinesMissed             bool     `json:"linesMissed,omitempty"`
+	EffectiveTimeoutSeconds int      `json:"effectiveTimeoutSeconds,omitempty"`
+	TimeoutClamped          bool     `json:"timeoutClamped,omitempty"`
 	truncation
 }
 
-// getJob collects a detached command, waiting a bounded while if asked.
-//
-// The first read that finds a status keeps it and releases the files behind
-// it, so a later read is answered without them and asking twice costs a map
-// lookup.
+// getJob caches completed results before deleting their temporary files.
 func (t *tools) getJob(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input getJobInput,
 ) (*mcp.CallToolResult, getJobOutput, error) {
+	if input.TimeoutSeconds < 0 {
+		return nil, getJobOutput{}, errors.New("timeoutSeconds must be zero or greater")
+	}
 	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
 	if err != nil {
 		return nil, getJobOutput{}, err
 	}
-	entry, ok := t.jobs.find(input.JobID)
+	owned, err := t.sessionJobs(request)
+	if err != nil {
+		return nil, getJobOutput{}, err
+	}
+	entry, ok := owned.find(input.JobID)
 	if !ok {
 		return nil, getJobOutput{}, unknownJob(input.JobID)
 	}
@@ -243,73 +311,257 @@ func (t *tools) getJob(
 		Command: entry.command,
 	}
 
-	// Already ended and already read. Nothing here touches tmux or the
-	// filesystem, so asking again costs a map lookup.
 	if entry.finished {
-		status := entry.exitStatus
-		output.Finished = true
-		output.ExitStatus = &status
-		output.ElapsedSeconds = entry.ended.Sub(entry.started).Seconds()
-		output.Output, output.truncation = limits.apply(entry.output)
-		output.truncation = addTruncation(output.truncation, entry.atCeiling)
-		return nil, output, nil
+		return nil, finishJobOutput(output, entry, limits), nil
 	}
-
-	if input.TimeoutSeconds > 0 {
-		timeout, clamped := resolveWaitTimeout(input.TimeoutSeconds)
-		output.EffectiveTimeoutSeconds = int(timeout.Seconds())
-		output.TimeoutClamped = clamped
-		waitCtx, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
-		reporter := newProgressReporter(request, timeout, "waiting for the command to finish")
-		defer reporter.stop()
-		// A handle with no engine, because a command that blocks inside tmux
-		// holds a pooled connection for as long as it blocks.
-		waiter := t.tmux().WithEngine(t.tmux().SubprocessEngine())
-		_ = waiter.WaitFor(waitCtx, tmux.WaitForRequest{Channel: entry.channel})
-	}
-
-	output.ElapsedSeconds = time.Since(entry.started).Seconds()
-	recorded, readErr := os.ReadFile(entry.statusAt)
-	if readErr != nil {
-		// No status yet is the ordinary unfinished case rather than a fault,
-		// so the reply says what the pane is doing instead of failing.
-		if pane, paneErr := t.tmux().Pane(ctx, entry.paneID); paneErr == nil {
-			output.Running, _ = pane.Formats().PaneCurrentCommand()
+	if input.TimeoutSeconds == 0 {
+		output.ElapsedSeconds = time.Since(entry.started).Seconds()
+		status, ready, err := readCompletedJob(entry)
+		if err != nil {
+			return nil, output, err
+		}
+		if ready {
+			output = pendingJobOutput(output, entry, status)
+		} else {
+			// A zero timeout answers from this process alone, so the reason
+			// comes from the job's own marks rather than from the pane.
+			output.OutputUnavailable = unstartedReason(entry.openedAt, "")
 		}
 		return nil, output, nil
 	}
-	status, convertErr := strconv.Atoi(strings.TrimSpace(string(recorded)))
-	if convertErr != nil {
-		return nil, output, fmt.Errorf("unreadable exit status %q", recorded)
-	}
-	output.Finished = true
-	output.ExitStatus = &status
 
-	// Read at the ceiling rather than at this call's bounds, because what is
-	// kept has to answer a later call that asks for more. The caller's bounds
-	// are applied to the reply below.
-	var collected runCommandOutput
-	if pane, paneErr := t.tmux().Pane(ctx, entry.paneID); paneErr == nil {
-		attachCommandOutput(ctx, pane, entry.openedAt, entry.closedAt,
-			bounds{lines: ceilingMaxLines, bytes: ceilingMaxBytes}, &collected)
+	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
+	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+	output.TimeoutClamped = clamped
+	waitCtx, stopWait := context.WithTimeout(ctx, timeout)
+	defer stopWait()
+	reporter := newProgressReporter(ctx, request, timeout, "waiting for the command to finish")
+	defer reporter.stop()
+
+	var collectionDone chan struct{}
+	for {
+		if input.TimeoutSeconds > 0 && waitCtx.Err() != nil {
+			if ctx.Err() != nil {
+				return nil, output, ctx.Err()
+			}
+			if latest, found := owned.find(input.JobID); !found {
+				return nil, getJobOutput{}, unknownJob(input.JobID)
+			} else if latest.finished {
+				return nil, finishJobOutput(output, latest, limits), nil
+			}
+			output.ElapsedSeconds = time.Since(entry.started).Seconds()
+			if describeErr := t.describeUnfinishedJob(ctx, entry, &output); describeErr != nil {
+				return nil, output, describeErr
+			}
+			return nil, output, nil
+		}
+		entry, leader, done, found := owned.beginCollection(input.JobID)
+		if !found {
+			return nil, getJobOutput{}, unknownJob(input.JobID)
+		}
+		if entry.finished {
+			return nil, finishJobOutput(output, entry, limits), nil
+		}
+		if leader {
+			collectionDone = done
+			break
+		}
+		if latest, found := owned.find(input.JobID); !found {
+			return nil, getJobOutput{}, unknownJob(input.JobID)
+		} else if latest.finished {
+			return nil, finishJobOutput(output, latest, limits), nil
+		}
+		if input.TimeoutSeconds == 0 {
+			output.ElapsedSeconds = time.Since(entry.started).Seconds()
+			return nil, output, nil
+		}
+		select {
+		case <-done:
+			continue
+		case <-waitCtx.Done():
+			continue
+		}
 	}
-	ended := time.Now()
-	t.jobs.settle(entry.id, status, collected.Output, collected.truncation, ended)
-	output.ElapsedSeconds = ended.Sub(entry.started).Seconds()
-	output.Output, output.truncation = limits.apply(collected.Output)
-	output.truncation = addTruncation(output.truncation, collected.truncation)
-	return nil, output, nil
+	defer owned.endCollection(entry.id, collectionDone)
+
+	output.ElapsedSeconds = time.Since(entry.started).Seconds()
+	status, ready, readErr := readCompletedJob(entry)
+	if readErr == nil && !ready && input.TimeoutSeconds > 0 {
+		status, ready, readErr = waitForCompletedJob(waitCtx, entry)
+	}
+	if readErr != nil {
+		if t.runtime.isTerminalError(readErr) || !isOwnWaitDeadline(ctx, waitCtx, readErr) {
+			t.runtime.observe(readErr)
+			return nil, output, readErr
+		}
+	}
+	if ctx.Err() != nil {
+		return nil, output, ctx.Err()
+	}
+	if input.TimeoutSeconds > 0 && waitCtx.Err() != nil {
+		if ready {
+			return nil, pendingJobOutput(output, entry, status), nil
+		}
+		output.ElapsedSeconds = time.Since(entry.started).Seconds()
+		if describeErr := t.describeUnfinishedJob(ctx, entry, &output); describeErr != nil {
+			return nil, output, describeErr
+		}
+		return nil, output, nil
+	}
+	if !ready {
+		if latest, found := owned.find(input.JobID); !found {
+			return nil, getJobOutput{}, unknownJob(input.JobID)
+		} else if latest.finished {
+			return nil, finishJobOutput(output, latest, limits), nil
+		}
+		if pane, paneErr := t.tmux(waitCtx).Pane(waitCtx, entry.paneID); paneErr == nil {
+			output.Running, _ = pane.Formats().PaneCurrentCommand()
+		} else if ctx.Err() != nil {
+			return nil, output, ctx.Err()
+		} else if input.TimeoutSeconds > 0 && waitCtx.Err() != nil &&
+			isContextError(paneErr) {
+			output.ElapsedSeconds = time.Since(entry.started).Seconds()
+			return nil, output, nil
+		} else if t.runtime.isTerminalError(paneErr) || isContextError(paneErr) {
+			return nil, output, paneErr
+		}
+		return nil, output, nil
+	}
+
+	// Collect at the ceiling so later calls may request more than this one.
+	var collected runCommandOutput
+	if pane, paneErr := t.tmux(waitCtx).Pane(waitCtx, entry.paneID); paneErr == nil {
+		if outputErr := t.attachCommandOutput(waitCtx, pane, entry.openedAt, entry.closedAt,
+			bounds{lines: ceilingMaxLines, bytes: ceilingMaxBytes}, &collected); outputErr != nil {
+			if ctx.Err() == nil && input.TimeoutSeconds > 0 && waitCtx.Err() != nil &&
+				isContextError(outputErr) {
+				return nil, pendingJobOutput(output, entry, status), nil
+			}
+			return nil, output, outputErr
+		}
+	} else if ctx.Err() != nil {
+		return nil, output, ctx.Err()
+	} else if input.TimeoutSeconds > 0 && waitCtx.Err() != nil &&
+		isContextError(paneErr) {
+		return nil, pendingJobOutput(output, entry, status), nil
+	} else if t.runtime.isTerminalError(paneErr) || isContextError(paneErr) {
+		return nil, output, paneErr
+	} else {
+		collected.OutputUnavailable = paneErr.Error()
+	}
+	settled, ok := owned.settle(
+		entry.id,
+		status,
+		collected.Output,
+		collected.truncation,
+		collected.OutputUnavailable,
+		collected.LinesMissed,
+		time.Now(),
+	)
+	if !ok {
+		return nil, getJobOutput{}, unknownJob(input.JobID)
+	}
+	return nil, finishJobOutput(output, settled, limits), nil
 }
 
-// addTruncation reports two cuts as one, so a caller reading a job whose
-// output was already bounded once is told the whole loss rather than the
-// second half of it.
+// describeUnfinishedJob names what holds the pane and why the command has not
+// started. The wait context is spent by the time a caller needs this, so it
+// runs on the caller's own deadline.
+func (t *tools) describeUnfinishedJob(
+	ctx context.Context,
+	entry job,
+	output *getJobOutput,
+) error {
+	if pane, err := t.tmux(ctx).Pane(ctx, entry.paneID); err == nil {
+		output.Running, _ = pane.Formats().PaneCurrentCommand()
+	} else if t.runtime.isTerminalError(err) {
+		return err
+	}
+	output.OutputUnavailable = unstartedReason(entry.openedAt, output.Running)
+	return nil
+}
+
+func pendingJobOutput(output getJobOutput, entry job, status int) getJobOutput {
+	output.Finished = true
+	output.CollectionPending = true
+	output.ExitStatus = &status
+	output.ElapsedSeconds = time.Since(entry.started).Seconds()
+	return output
+}
+
+func finishJobOutput(output getJobOutput, entry job, limits bounds) getJobOutput {
+	status := entry.exitStatus
+	output.Finished = true
+	output.ExitStatus = &status
+	output.ElapsedSeconds = entry.ended.Sub(entry.started).Seconds()
+	output.Output, output.truncation = limits.apply(entry.output)
+	output.truncation = addTruncation(output.truncation, entry.atCeiling)
+	output.OutputUnavailable = entry.outputUnavailable
+	output.LinesMissed = entry.linesMissed
+	return output
+}
+
+func waitForCompletedJob(
+	waitCtx context.Context,
+	entry job,
+) (status int, ready bool, err error) {
+	ticker := time.NewTicker(jobCompletionPollInterval)
+	defer ticker.Stop()
+	for {
+		status, ready, err = readCompletedJob(entry)
+		if err != nil || ready {
+			return status, ready, err
+		}
+		select {
+		case <-ticker.C:
+		case <-waitCtx.Done():
+			status, ready, err = readCompletedJob(entry)
+			if err != nil || ready {
+				return status, ready, err
+			}
+			return 0, false, waitCtx.Err()
+		}
+	}
+}
+
+// readCompletedJob treats the closing cursor mark as the commit record for a
+// command result. The wrapper publishes it after the status, so status alone
+// is never enough to settle a detached job.
+func readCompletedJob(entry job) (int, bool, error) {
+	recorded, err := os.ReadFile(entry.statusAt)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("read command status: %w", err)
+	}
+	if _, err := readMark(entry.closedAt); errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	} else if err != nil {
+		return 0, false, err
+	}
+	status, err := strconv.Atoi(strings.TrimSpace(string(recorded)))
+	if err != nil {
+		return 0, false, fmt.Errorf("unreadable exit status %q", recorded)
+	}
+	return status, true, nil
+}
+
+func (t *tools) sessionJobs(request *mcp.CallToolRequest) (*jobs, error) {
+	if request == nil || request.Session == nil {
+		return nil, ErrInstanceClosed
+	}
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return nil, err
+	}
+	return scope.jobs, nil
+}
+
+// addTruncation combines loss from collection and caller-specific bounds.
 func addTruncation(caller, earlier truncation) truncation {
 	caller.TruncatedLines += earlier.TruncatedLines
 	caller.TruncatedBytes += earlier.TruncatedBytes
-	// Derived from the totals, as bounds.apply derives it, rather than by
-	// combining two flags that were each derived the same way.
 	caller.Truncated = caller.TruncatedLines > 0 || caller.TruncatedBytes > 0
 	return caller
 }

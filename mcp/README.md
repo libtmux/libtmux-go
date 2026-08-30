@@ -23,7 +23,12 @@ runtime dependency; speaking MCP needs one, so this lives in its own module and
 
 ## Installing it
 
-**Requirements:** Go 1.26+, and `tmux` on `$PATH`.
+**Requirements:** Go 1.26+, and tmux 3.2a or newer on `$PATH`.
+
+On supported releases before 3.6, the initially attached session's
+`detach-on-destroy` setting applies. Destroying that session can end the MCP
+runtime; tmux 3.6 and later can move its control client to another remaining
+session.
 
 ```console
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
@@ -31,6 +36,11 @@ $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 
 That puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client launches it as
 a subprocess and speaks to it over stdin and stdout.
+
+The default server exposes topology metadata only. Set
+`LIBTMUX_MCP_CAPABILITIES=operate` in the server's environment to enable the
+ordinary workspace, pane, content, layout, and settings tools. Destruction
+also requires `LIBTMUX_SAFETY=destructive` and the `tmux-destroy` capability.
 
 ### Claude Code
 
@@ -59,7 +69,8 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "tmux": {
       "command": "libtmux-mcp",
-      "args": ["-socket-name", "my-application"]
+      "args": ["-socket-name", "my-application"],
+      "env": {"LIBTMUX_MCP_CAPABILITIES": "operate"}
     }
   }
 }
@@ -70,22 +81,25 @@ startup, and a client cannot change it afterwards:
 
 | Flag | Meaning |
 | --- | --- |
-| `-socket-name` | tmux socket name; empty uses `LIBTMUX_SOCKET`, then tmux's default socket |
-| `-socket-path` | explicit socket path; overrides `-socket-name` |
-| `-binary` | tmux executable; empty resolves `tmux` through `PATH` |
+| `-socket-path` | explicit socket path; nonempty has highest precedence |
+| `-socket-name` | tmux socket name; nonempty precedes both socket environment variables |
+| `-binary` | tmux executable; empty uses `LIBTMUX_TMUX_BIN`, then resolves `tmux` through `PATH` |
 
-The command resolves the tmux binary before serving, so a misconfigured path
-fails at startup rather than on the first tool call. A tmux server that is not
-running is not an error: tmux starts one on demand.
+Before serving or running `-doctor`, the command resolves the tmux binary once
+from its startup environment and working directory. A bad path fails at
+startup, and later environment or directory changes cannot retarget it. A tmux
+server that is not running is not an error: tmux starts one on demand.
 
-Three more flags answer questions without a client, which is what a
-config entry that will not start actually needs:
+Three more flags answer questions without serving MCP over stdio, which is
+what a config entry that will not start actually needs:
 
 | Flag | Answers |
 | --- | --- |
 | `-version` | which build this is |
-| `-tools` | what a client would be offered, and how the safety level changed it |
+| `-tools` | what a client would be offered, and how safety and capabilities changed it |
 | `-doctor` | which socket it reaches, what is on it, and whether it is running inside that tmux itself |
+
+`-version` and `-tools` do not resolve or contact tmux.
 
 ```console
 $ libtmux-mcp -doctor -socket-name my-application
@@ -97,6 +111,7 @@ libtmux-mcp doctor
   socket:  /tmp/tmux-1000/my-application (from -socket-name)
   holds:   1 sessions, 1 windows, 1 panes, 0 clients attached
   safety:  mutating
+  access:  metadata-read
   caller:  pane %1 of this very server — acting on it acts on
            the terminal this process is running in
 ```
@@ -177,11 +192,9 @@ into it reaches the terminal you are talking to it through. A note in a reply is
 something a model with a task does not always read, so a write to that pane asks
 first, through MCP elicitation, and a decline fails the call.
 
-A client that did not declare the elicitation capability keeps the behaviour it
-had before. This is a guard rail rather than a boundary: a caller with
-`send_keys` can run anything you can, and refusing every write on every client
-that cannot be asked would break them all to enforce something that was never
-enforceable.
+A client that did not declare the elicitation capability is refused. This
+protects the caller pane rather than making the tools a sandbox: a caller with
+`send_keys` can still run anything you can in another pane.
 
 A write reached through a batch asks in the same way a direct one does. The
 question goes to the client that sent the batch, and declining fails that call
@@ -189,7 +202,27 @@ and stops the batch there.
 
 ## Limiting what a client can do
 
-`LIBTMUX_SAFETY` bounds the tools this server advertises:
+Two independent checks bound what the server advertises. A tool must pass both.
+
+`LIBTMUX_MCP_CAPABILITIES` selects the kinds of access granted. Empty or unset
+is `metadata-read` only. It accepts a comma-separated list:
+
+| Capability | Grants |
+| --- | --- |
+| `metadata-read` | identities, topology, process state, and geometry, but no pane contents or configuration values |
+| `content-read` | pane output, buffers, option values, hooks, environment values, jobs, and tmux messages |
+| `pane-control` | pane input and tmux features that may run shell commands, including arbitrary format expansion |
+| `workspace-create` | session, window, pane, and workspace creation, including programs they start |
+| `tmux-layout` | selection, movement, resizing, layouts, and names |
+| `tmux-settings` | buffers, environment variables, and options |
+| `tmux-destroy` | ending panes, windows, sessions, or the server |
+
+Three profiles save spelling: `inspect` is both read capabilities, `operate`
+is every capability except `tmux-destroy`, and `all` is every capability. An
+unknown value is reported and grants nothing; if no value is recognized, the
+server falls back to `metadata-read`.
+
+`LIBTMUX_SAFETY` is the independent operation ceiling:
 
 | Value | Offers |
 | --- | --- |
@@ -202,27 +235,30 @@ An unset or empty variable takes the default. A value naming no level takes
 typo in it must not widen one; `-tools` reports the level in force rather than
 the string that was rejected.
 
-A tool above the level is never advertised, so no prompt reaches it, and a
-batch cannot reach around the level either. The active level is stated in the
-server instructions, so a client meeting a shorter tool list knows tools were
-withheld rather than missing. The level is derived from each tool's own
-annotations, so a tool declaring itself destructive is governed by having said
-so.
+A tool above the level or outside the capability allowlist is never advertised,
+so no prompt reaches it, and a batch cannot reach around either bound. Pane
+content resources and subscriptions require `content-read`; metadata resources
+require `metadata-read`. The active bounds are stated in the server
+instructions, so a shorter tool list is explainable. Safety is derived from
+each tool's annotations, while its capability is declared beside its
+registration.
 
 ## Everything else an operator can set
 
 | Variable | Does |
 | --- | --- |
 | `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
-| `LIBTMUX_SOCKET` | names the tmux socket when no `-socket-name` or `-socket-path` says; a flag wins |
+| `LIBTMUX_MCP_CAPABILITIES` | allowlists independent access classes; defaults to `metadata-read` |
+| `LIBTMUX_SOCKET_PATH` | selects an explicit socket path when both socket flags are empty; it precedes `LIBTMUX_SOCKET` |
+| `LIBTMUX_SOCKET` | names the tmux socket when no path or `-socket-name` selects one |
+| `LIBTMUX_TMUX_BIN` | selects the tmux executable when `-binary` is empty |
 | `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
 | `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
 | `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |
 
 The names match the Python server, so an operator running both writes one
-thing. Which tmux is used is a flag rather than a variable — `-binary`,
-`-socket-name`, `-socket-path` — because the target is fixed when the server
-starts and a client cannot change it.
+thing. Flags override their corresponding variables; both are resolved once
+when the server starts, and a client cannot change the target afterwards.
 
 A wait longer than the ceiling is shortened rather than refused, and the reply
 says so in `effectiveTimeoutSeconds` and `timeoutClamped`. The ceiling bounds
@@ -309,9 +345,9 @@ $ libtmux-mcp -doctor -socket-name my-application
 command from your client's config by hand: a bad `-binary`, or a path that is
 not on the client's `PATH`, fails at startup and says so.
 
-**Tools are missing rather than failing.** `LIBTMUX_SAFETY` withheld them.
-`-tools` prints what is actually offered and at which level; the level is also
-stated in the server instructions the client already received.
+**Tools are missing rather than failing.** `LIBTMUX_SAFETY` or
+`LIBTMUX_MCP_CAPABILITIES` withheld them. `-tools` prints the surface and both
+bounds; both are also stated in the server instructions the client received.
 
 **It reaches the wrong tmux.** `-doctor` names the socket it addresses and
 lists the others on the machine. A client's environment is not your shell's:
@@ -362,19 +398,38 @@ and stdout.
 
 ```go
 import (
-    sdk "github.com/modelcontextprotocol/go-sdk/mcp"
     tmuxmcp "github.com/libtmux/libtmux-go/mcp"
+    "github.com/libtmux/libtmux-go/tmux"
+    sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 ```
 
 ```go
-server := tmuxmcp.NewServer(tmux.NewServer(tmux.ServerOptions{SocketName: "app"}))
-session, err := server.Connect(ctx, transport, nil)
+target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "app"})
+if err != nil {
+    return err
+}
+instance, err := tmuxmcp.NewServer(target)
+if err != nil {
+    return err
+}
+defer instance.Close()
+session, err := instance.Connect(
+    ctx,
+    tmuxmcp.AssumeResponseCommit(transport),
+    nil,
+)
 ```
 
-`NewServer` returns the SDK's `*sdk.Server`, so the usual SDK options,
-middleware, and transports apply. This package is named `mcp` and so is the
-SDK's, so a file using both has to rename one of them.
+`tmuxmcp.NewServer` returns a managed `Instance`; close it after serving. A
+custom transport must commit one response per successful write and use
+`AssumeResponseCommit`, as above. See the [package documentation] for lifecycle,
+capacity, isolation, and transport contracts.
+
+This package is named `mcp` and so is the SDK's, so a file using both has to
+rename one of them.
+
+[package documentation]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp
 
 ## Developing on it
 
@@ -435,8 +490,8 @@ They hold other servers, other settings, and comments explaining why something
 is set the way it is; a decode-and-write reformats all of that. So the entry's
 bytes are located and replaced, and every other byte is left alone. Keys this
 tool does not write survive — grok's `enabled`, for instance — and so does the
-entry's environment, because `LIBTMUX_SAFETY` is configuration rather than a
-choice of build.
+entry's environment, because `LIBTMUX_SAFETY` and
+`LIBTMUX_MCP_CAPABILITIES` are configuration rather than a choice of build.
 
 Each config is copied beside itself before the first change. The first copy is
 kept rather than the latest, so `revert` lands on what was there before any
@@ -451,11 +506,13 @@ swapping started, however many times you have swapped since.
 | `installed` | `libtmux-mcp` from `PATH` | whatever `go install` put there |
 | `released` | `go run <module>/cmd/libtmux-mcp@<ref>` | a published version; `--ref` picks one, default `latest` |
 
-Before writing anything, the chosen build is started once and asked to complete
-an MCP handshake. A build error, a missing binary, or a version the module
-proxy has never heard of otherwise lands in every config at once and shows up
-later as a server that will not start, separately, in each client. Pass
-`--no-preflight` to skip it when offline.
+Before writing anything, every distinct process the selected clients would run
+is started and asked to complete an MCP handshake. Identical entries share one
+check, while preserved client environment is checked separately. A build error,
+a missing binary, or a version the module proxy has never heard of otherwise
+lands in every config at once and shows up later as a server that will not
+start, separately, in each client. Pass `--no-preflight` to skip it when
+offline.
 
 `released` needs the Go module to be published under a tag the proxy can
 resolve. When one cannot be resolved — an unpublished version, or a proxy that

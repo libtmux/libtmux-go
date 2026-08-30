@@ -11,6 +11,8 @@ type openControlSignature func(tmux.Server, context.Context, tmux.Session) (*tmu
 
 type controlCommandSignature func(*tmux.ControlClient, context.Context, ...string) (tmux.ControlCommandResult, error)
 
+type controlCallSignature func(*tmux.ControlClient, context.Context, ...string) ([]tmux.ControlCommandResult, error)
+
 type nextNotificationSignature func(*tmux.ControlClient, context.Context) (tmux.ControlNotification, error)
 
 type reconnectControlSignature func(*tmux.ControlClient, context.Context) (*tmux.ControlClient, error)
@@ -36,9 +38,14 @@ func TestControlClientPublicSurfaceCompiles(_ *testing.T) {
 	_ = result.Flags
 	_ = result.Failed
 	_ = tmux.ErrControlClosed
+	_ = tmux.ErrOutcomeUnknown
+	_ = tmux.ErrControlReplyCount
 	_ = tmux.ErrControlProtocol
+	_ = tmux.ErrControlNotificationOverflow
+	_ = &tmux.ControlNotificationOverflowError{}
 	var _ openControlSignature = tmux.Server.OpenControl
 	var _ controlCommandSignature = (*tmux.ControlClient).Cmd
+	var _ controlCallSignature = (*tmux.ControlClient).Call
 	var _ nextNotificationSignature = (*tmux.ControlClient).NextNotification
 	var _ reconnectControlSignature = (*tmux.ControlClient).Reconnect
 	var _ controlClientNameSignature = (*tmux.ControlClient).ClientName

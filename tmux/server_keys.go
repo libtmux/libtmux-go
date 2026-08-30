@@ -41,7 +41,8 @@ type UnbindKeyRequest struct {
 type ListKeysRequest struct {
 	// KeyTable limits output to one key table.
 	KeyTable *string
-	// Format selects output format; tmux before 3.7 refuses it; see UnsupportedPolicy.
+	// Format selects output format and requires tmux 3.7; see
+	// UnsupportedPolicy.
 	Format *string
 }
 
@@ -138,17 +139,13 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 }
 
 // ListKeys returns an owned snapshot of raw tmux key-binding lines. Format
-// requires tmux 3.7 or newer; older versions synchronously deliver a warning to
-// the caller-goroutine [WarningHandler] before running the reduced command with
-// tmux's default format.
-// tmux 3.7, 3.7a, 3.7b, and 3.7c redirect a table's sole matching binding to a
-// client status message, leaving stdout empty; this method preserves that
-// upstream and Python behavior. Development tmux has corrected the issue.
-// A list failure is returned rather than answered with no rows.
+// requires tmux 3.7 and follows [UnsupportedPolicy]. tmux 3.7 through 3.7c send
+// a table's sole matching binding to client status and leave stdout empty; this
+// method preserves that upstream and Python behavior. Listing failures remain
+// errors.
 //
-// It answers on a socket holding no server, unlike every other list here,
-// because tmux runs list-keys against a server it starts for the purpose. That
-// server holds no sessions and exits at once, leaving its socket file behind.
+// On an unused socket, tmux starts an empty server to answer. With the default
+// exit-empty setting, that server exits at once and leaves its socket file.
 func (s Server) ListKeys(
 	ctx context.Context,
 	request ListKeysRequest,

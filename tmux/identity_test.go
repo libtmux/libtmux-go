@@ -1,8 +1,13 @@
 package tmux
 
 import (
+	"context"
+	"errors"
+	"slices"
 	"strconv"
 	"testing"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 // libtmux:parity libtmux.server.Server.__repr__
@@ -136,24 +141,35 @@ func TestPythonAliasPropertiesUseCanonicalModelValues(t *testing.T) {
 	}
 }
 
-func TestServerIdentityUsesSocketConfiguration(t *testing.T) {
+func TestServerIdentityUsesSelectedSocketPath(t *testing.T) {
 	t.Parallel()
 
-	left := NewServer(ServerOptions{
+	leftRoot := t.TempDir()
+	rightRoot := t.TempDir()
+	left := serverWithOptionsAndRunner(ServerOptions{
 		SocketName:         "work",
 		ConfigFile:         "/one",
-		ProcessEnvironment: []string{"TMUX_TMPDIR=/one"},
-	})
-	right := NewServer(ServerOptions{
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + leftRoot},
+	}, &versionQueueRunner{})
+	right := serverWithOptionsAndRunner(ServerOptions{
 		SocketName:         "work",
 		ConfigFile:         "/two",
-		ProcessEnvironment: []string{"TMUX_TMPDIR=/two"},
-	})
-	other := NewServer(ServerOptions{SocketPath: "/tmp/other.sock"})
-	if !left.Equal(right) || left.Equal(other) {
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + rightRoot},
+	}, &versionQueueRunner{})
+	sameEndpoint := serverWithOptionsAndRunner(ServerOptions{
+		SocketName:         "work",
+		ConfigFile:         "/different",
+		ProcessEnvironment: []string{"TMUX_TMPDIR=" + leftRoot},
+	}, &versionQueueRunner{})
+	other := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/other.sock"},
+		&versionQueueRunner{},
+	)
+	if left.Equal(right) || !left.Equal(sameEndpoint) || left.Equal(other) {
 		t.Fatalf(
-			"server equality = (same selector %t, other selector %t)",
+			"server equality = (different roots %t, same endpoint %t, other selector %t)",
 			left.Equal(right),
+			left.Equal(sameEndpoint),
 			left.Equal(other),
 		)
 	}
@@ -163,8 +179,29 @@ func TestServerIdentityUsesSocketConfiguration(t *testing.T) {
 	if got := other.String(); got != "Server(socket_path=/tmp/other.sock)" {
 		t.Fatalf("path Server.String() = %q", got)
 	}
-	if got := (Server{}).String(); got != "Server(default)" {
+	if got := (Server{}).String(); got != "Server(invalid)" {
 		t.Fatalf("zero Server.String() = %q", got)
+	}
+	if (Server{}).Equal(Server{}) {
+		t.Fatal("zero servers compare equal")
+	}
+}
+
+func TestServerIdentityAnchorsRelativePathsToFrozenWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	left := serverWithSocketSelection(
+		t,
+		t.TempDir(),
+		ServerOptions{SocketPath: "relative.sock"},
+	)
+	right := serverWithSocketSelection(
+		t,
+		t.TempDir(),
+		ServerOptions{SocketPath: "relative.sock"},
+	)
+	if left.Equal(right) {
+		t.Fatal("relative socket paths under different frozen directories compare equal")
 	}
 }
 
@@ -176,9 +213,18 @@ func TestServerIdentityUsesSocketConfiguration(t *testing.T) {
 func TestServerIdentityUsesEffectiveSocketPathSelector(t *testing.T) {
 	t.Parallel()
 
-	left := NewServer(ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "left"})
-	right := NewServer(ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "right"})
-	named := NewServer(ServerOptions{SocketName: "left"})
+	left := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "left"},
+		&versionQueueRunner{},
+	)
+	right := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "right"},
+		&versionQueueRunner{},
+	)
+	named := serverWithOptionsAndRunner(
+		ServerOptions{SocketName: "left"},
+		&versionQueueRunner{},
+	)
 
 	if !left.Equal(right) {
 		t.Fatal("servers with the same effective socket path compare unequal")
@@ -188,5 +234,173 @@ func TestServerIdentityUsesEffectiveSocketPathSelector(t *testing.T) {
 	}
 	if got := left.String(); got != "Server(socket_path=/tmp/shared.sock)" {
 		t.Fatalf("mixed-selector String() = %q, want socket path", got)
+	}
+}
+
+func TestModelEqualityIncludesDaemonProvenance(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	materialize := func(pid string) Snapshot {
+		snapshot, err := newSnapshot(Server{}, version, snapshotRecords{
+			sessions: []formatValues{snapshotValues(
+				t, version, "pid", pid, "session_id", "$0")},
+			windows: []formatValues{snapshotValues(
+				t, version, "pid", pid,
+				"session_id", "$0", "window_id", "@0", "window_index", "0")},
+			panes: []formatValues{snapshotValues(
+				t, version, "pid", pid,
+				"session_id", "$0", "window_id", "@0", "window_index", "0",
+				"pane_id", "%0", "pane_index", "0")},
+			clients: []formatValues{snapshotValues(
+				t, version, "pid", pid, "client_name", "/dev/pts/9")},
+		})
+		if err != nil {
+			t.Fatalf("newSnapshot() error = %v", err)
+		}
+		return snapshot
+	}
+	first := materialize("123")
+	replacement := materialize("999")
+	if first.Sessions()[0].Equal(replacement.Sessions()[0]) ||
+		first.Windows()[0].Equal(replacement.Windows()[0]) ||
+		first.Panes()[0].Equal(replacement.Panes()[0]) ||
+		first.Clients()[0].Equal(replacement.Clients()[0]) {
+		t.Fatal("equal tmux identifiers from different daemons compare equal")
+	}
+
+	left := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/libtmux-left.sock"},
+		&versionQueueRunner{},
+	)
+	right := serverWithOptionsAndRunner(
+		ServerOptions{SocketPath: "/tmp/libtmux-right.sock"},
+		&versionQueueRunner{},
+	)
+	if (Session{server: left, sessionID: "$0"}).Equal(
+		Session{server: right, sessionID: "$0"},
+	) || (Window{server: left, windowID: "@0"}).Equal(
+		Window{server: right, windowID: "@0"},
+	) || (Pane{server: left, paneID: "%0"}).Equal(
+		Pane{server: right, paneID: "%0"},
+	) || (Client{server: left, clientName: "/dev/pts/9"}).Equal(
+		Client{server: right, clientName: "/dev/pts/9"},
+	) {
+		t.Fatal("equal identifiers from partial records on different sockets compare equal")
+	}
+}
+
+type daemonReplacementRunner struct {
+	requests []tmuxcmd.Request
+}
+
+func (r *daemonReplacementRunner) Run(
+	_ context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	r.requests = append(r.requests, request)
+	if index := slices.Index(request.Arguments, "if-shell"); index >= 0 {
+		failure := request.Arguments[len(request.Arguments)-1]
+		return tmuxcmd.Result{
+			ExitCode: 1,
+			Stderr:   []string{"unknown command: " + failure},
+		}, nil
+	}
+	return tmuxcmd.Result{ExitCode: 0}, nil
+}
+
+func TestMaterializedCommandAtomicallyRejectsAReplacement(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &daemonReplacementRunner{}
+	server := serverWithRunner(runner)
+	snapshot, err := newSnapshot(server, version, snapshotRecords{
+		sessions: []formatValues{snapshotValues(
+			t, version,
+			"socket_path", server.SocketPath(),
+			"session_id", "$0",
+		)},
+	})
+	if err != nil {
+		t.Fatalf("newSnapshot() error = %v", err)
+	}
+
+	_, err = snapshot.Sessions()[0].Cmd(
+		context.Background(), "display-message", "-p", "must-not-reach-replacement")
+	if !errors.Is(err, ErrDaemonReplaced) {
+		t.Fatalf("Cmd() error = %v, want ErrDaemonReplaced", err)
+	}
+	if len(runner.requests) != 1 {
+		t.Fatalf("runner calls = %d, want one guarded command", len(runner.requests))
+	}
+}
+
+func TestConnectionBoundCommandSkipsDaemonGuard(t *testing.T) {
+	t.Parallel()
+
+	server := serverWithRunner(&versionQueueRunner{})
+	server = server.withDaemon(snapshotServerIdentity{
+		version:    mustParseVersion(t, "3.7"),
+		pid:        "123",
+		startTime:  "456",
+		socketPath: server.SocketPath(),
+	})
+	server.connection = &Connection{}
+	arguments := []string{"display-message", "-p", "#{pane_id}"}
+
+	guarded, guard, err := server.guardCommand(arguments, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if guard != nil || !slices.Equal(guarded, arguments) {
+		t.Fatalf("connection command = (%q, %#v), want original arguments without a guard", guarded, guard)
+	}
+}
+
+func TestDaemonGuardEscapesFormatSeparators(t *testing.T) {
+	t.Parallel()
+
+	const value = "/tmp/a,b#c:d{e}"
+	if got, want := escapeFormatLiteral(value), "/tmp/a#,b##c#:d#{e#}"; got != want {
+		t.Fatalf("escapeFormatLiteral() = %q, want %q", got, want)
+	}
+}
+
+func TestStreamingDaemonGuardClassifiesAReplacement(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: tmuxcmd.Result{ExitCode: 1}},
+		{result: tmuxcmd.Result{
+			RawStdout: framedSnapshotRecord(
+				snapshotIdentityFields(),
+				snapshotRowValues(version, map[string]string{"pid": "999"}),
+			),
+			ExitCode: 0,
+		}},
+	}}
+	server := serverWithRunner(runner)
+	server = server.withDaemon(snapshotServerIdentity{
+		version:    version,
+		pid:        "123",
+		startTime:  "456",
+		socketPath: server.SocketPath(),
+	})
+
+	result, err := server.runCommand(
+		context.Background(),
+		commandProcess,
+		[]string{"attach-session", "-t", "$0"},
+		&tmuxcmd.Stdio{},
+		false,
+	)
+	if !errors.Is(err, ErrDaemonReplaced) || result.ExitCode != -1 {
+		t.Fatalf("streaming guarded command = (%#v, %v), want replacement refusal", result, err)
+	}
+	requests := runner.recordedRequests()
+	if len(requests) != 2 || requests[0].Stdio == nil || requests[1].Stdio != nil {
+		t.Fatalf("runner requests = %#v, want streamed command then captured identity probe", requests)
 	}
 }

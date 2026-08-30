@@ -43,15 +43,19 @@ like. Everything else returns only an error.
 
 ## The object model
 
-`Server` is an immutable configuration handle — `NewServer` starts nothing.
-`Session` holds `Window` views, each holding `Pane` views.
+`Server` is an immutable configuration handle. `NewServer` validates its
+configuration but does not start tmux. `Session` holds `Window` views, each
+holding `Pane` views.
 
 Returned values are **records, not live handles**. A `Session` you hold is what
-tmux said when you asked. Nothing refreshes behind you; `Session.Refresh` and its
-counterparts get you a new one.
+tmux said when you asked. Nothing refreshes behind you; `Session.Refresh` and
+its counterparts get you a new one.
 
 ```go
-server := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+if err != nil {
+	return err
+}
 
 session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
 if err != nil {
@@ -114,7 +118,7 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 
 The package documentation is the reference and is written to be read start to
 finish. It covers the task index, method-naming rules, snapshots and identity,
-the transport modes, plans, engines, filters, and the compatibility window.
+execution bindings, plans, filters, and the compatibility window.
 
 | | |
 | --- | --- |

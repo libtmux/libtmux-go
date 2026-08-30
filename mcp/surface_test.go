@@ -32,18 +32,6 @@ type step struct {
 	mayFail bool
 }
 
-// TestEveryToolAnswersTheSchemaItPublishes calls the whole surface and holds
-// each reply to the tool's own output schema.
-//
-// Every tool advertises what it returns, and nothing checked that it does. A
-// contract the server publishes and then breaks is a bug no assertion had to
-// be written for: a client that generated types from the schema gets a field
-// that is absent, or null where it declared an array, and the failure surfaces
-// in the client rather than here.
-//
-// The sweep is ordered rather than a set: it builds what it addresses, and
-// the tools that end things come last, on targets made for them.
-//
 //libtmux:real-tmux
 func TestEveryToolAnswersTheSchemaItPublishes(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")

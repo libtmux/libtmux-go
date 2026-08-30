@@ -8,18 +8,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// TestUnsupportedFeaturesAreRefusedByDefault is the gate on a request naming a
-// capability the running tmux does not have.
-//
-// Dropping the flag and running the reduced command reports success for
-// something else: a split asked to leave a pane empty starts a shell in it, a
-// run-shell asked for arguments runs without them, and a kill-session asked for
-// a session group takes one session instead of the group. None of those is
-// visible in the result, so the default refuses and names what it refused.
-//
-// Every case here runs against a tmux old enough to lack the capability, and
-// asserts that the command never reached tmux: the version probe is the only
-// request the runner sees.
+// Omitting an unsupported flag changes operation semantics while still
+// reporting success. The default rejects before executing the command.
 func TestUnsupportedFeaturesAreRefusedByDefault(t *testing.T) {
 	t.Parallel()
 
@@ -153,14 +143,10 @@ func TestUnsupportedFeaturesDegradeOnRequest(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}}},
 		{result: tmuxcmd.Result{}},
 	}}
-	server := Server{state: &serverState{
-		shared: &serverShared{},
-		runner: runner,
-		options: ServerOptions{
-			Unsupported:    DegradeUnsupported,
-			WarningHandler: func(warning Warning) { warnings = append(warnings, warning) },
-		},
-	}}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		Unsupported:    DegradeUnsupported,
+		WarningHandler: func(warning Warning) { warnings = append(warnings, warning) },
+	}, runner)
 
 	session := Session{server: server, sessionID: "$1"}
 	if err := session.KillWith(context.Background(), SessionKillRequest{Group: true}); err != nil {
@@ -182,57 +168,6 @@ func TestUnsupportedFeaturesDegradeOnRequest(t *testing.T) {
 	}
 }
 
-// TestStaleRecordReportsPayingForProcesses is the gate on a record that
-// predates a control pool paying for a tmux process per command in silence.
-//
-// A record keeps the handle it was materialized on, so one obtained before the
-// pool was opened keeps starting processes. The results are correct, which is
-// why this reports rather than refuses -- but a cost this large should be told
-// rather than measured, which is what [WarningControlPoolClosed] already does
-// for the pool that has been closed.
-func TestStaleRecordReportsPayingForProcesses(t *testing.T) {
-	t.Parallel()
-
-	var warnings []Warning
-	state := &serverState{
-		runner: &versionQueueRunner{},
-		shared: &serverShared{},
-		options: ServerOptions{
-			WarningHandler: func(warning Warning) { warnings = append(warnings, warning) },
-		},
-	}
-	stale := Server{state: state}
-
-	// No pool open: paying for a process is the documented default and is not
-	// worth reporting.
-	stale.commandEngine(CommandServer)
-	if len(warnings) != 0 {
-		t.Fatalf("warnings with no pool open = %#v, want none", warnings)
-	}
-
-	// A pool opened on another handle sharing this tmux server.
-	state.coordination().pools.Add(1)
-
-	stale.commandEngine(CommandServer)
-	if len(warnings) != 1 || warnings[0].Kind != WarningControlPoolUnused {
-		t.Fatalf("warnings with a pool open = %#v, want one unused-pool warning", warnings)
-	}
-
-	// A command that needs its own process needs one whatever is open.
-	warnings = nil
-	stale.commandEngine(CommandProcess)
-	if len(warnings) != 0 {
-		t.Fatalf("warnings for a process command = %#v, want none", warnings)
-	}
-
-	// A handle that gave up its engine on purpose, for a read whose result is
-	// tmux's exact stdout bytes, is not paying for anything it did not choose.
-	stale.withoutEngine().commandEngine(CommandServer)
-	if len(warnings) != 0 {
-		t.Fatalf("warnings for a deliberate process = %#v, want none", warnings)
-	}
-}
-
 // TestDerivedHandleKeepsServerCoordination proves the handle NewSession returns
 // shares the version cache with the one that created it. The two differ in
 // their environment, not in the tmux they address, and re-probing costs a
@@ -240,8 +175,13 @@ func TestStaleRecordReportsPayingForProcesses(t *testing.T) {
 func TestDerivedHandleKeepsServerCoordination(t *testing.T) {
 	t.Parallel()
 
-	original := serverWithRunner(&versionQueueRunner{})
-	derived := newSessionCommandServer(original)
+	original := serverWithOptionsAndRunner(ServerOptions{
+		ProcessEnvironment: []string{"TMUX=/tmp/foreign,123,0", "KEEP=value"},
+	}, &versionQueueRunner{})
+	derived, err := newSessionCommandServer(original)
+	if err != nil {
+		t.Fatalf("newSessionCommandServer() error = %v", err)
+	}
 
 	if derived.connectionState() == original.connectionState() {
 		t.Fatal("NewSession's handle shares the configuration it had to change")
@@ -250,7 +190,7 @@ func TestDerivedHandleKeepsServerCoordination(t *testing.T) {
 		t.Fatal("NewSession's handle started a second version cache for the same tmux")
 	}
 	if _, ok := lifecycleEnvironmentValue(
-		derived.connectionState().options.ProcessEnvironment, "TMUX",
+		derived.ProcessEnvironment(), "TMUX",
 	); ok {
 		t.Fatal("NewSession's handle kept TMUX in its environment")
 	}

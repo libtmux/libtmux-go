@@ -9,42 +9,23 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Prompts name the jobs this server is for.
-//
-// Tools are verbs and resources are nouns; neither says what a person actually
-// wants done. A prompt is the job with its method attached, invoked by name
-// from a client's own menu, so someone who has never read a tool list can ask
-// for the thing they want and the model is told which tools do it and in what
-// order.
-//
-// These are deliberately few. A prompt for every tool would be a second, worse
-// tool list; these are the tasks that take several tools in a particular order,
-// which is exactly what a tool list cannot express.
+// Prompts describe multi-tool workflows rather than individual verbs.
 
 // RecipeToolEnvironmentVariable names the variable that also offers the
 // recipes as a tool, for clients that do not speak the prompts protocol. It
 // matches the Python server so an operator configuring both writes one thing.
 const RecipeToolEnvironmentVariable = "LIBTMUX_MCP_PROMPTS_AS_TOOLS"
 
-// recipe is one job, with the method that does it.
-//
-// The same text answers a prompt and the tool below, because a client that
-// cannot read prompts should not be told something different from one that
-// can. Writing it twice is how the two would come to disagree.
+// recipe serves identical text through prompt and optional tool surfaces.
 type recipe struct {
-	name        string
-	title       string
-	description string
-	// argument is what the job needs to know, and what a client completes.
-	argument string
-	// argumentHelp describes it in a client's own picker.
+	name         string
+	title        string
+	description  string
+	argument     string
 	argumentHelp string
-	// mutates marks a recipe that tells the model to change tmux, which a
-	// read-only server should not offer: it would be advice it cannot carry
-	// out.
-	mutates bool
-	// build writes the recipe for one argument, and says what it is.
-	build func(argument string) (summary, text string)
+	mutates      bool
+	capabilities []Capability
+	build        func(argument string) (summary, text string)
 }
 
 // recipes are the jobs worth naming.
@@ -55,6 +36,7 @@ var recipes = []recipe{
 		description:  "Work out what a pane is doing and why it is stuck or failing.",
 		argument:     "pane",
 		argumentHelp: "The pane id to look at, such as %1. Omit to be told how to find it.",
+		capabilities: []Capability{CapabilityMetadataRead, CapabilityContentRead},
 		build:        diagnosePaneText,
 	},
 	{
@@ -64,6 +46,7 @@ var recipes = []recipe{
 			"you have already read.",
 		argument:     "pane",
 		argumentHelp: "The pane id to follow, such as %1. Omit to be told how to find it.",
+		capabilities: []Capability{CapabilityMetadataRead, CapabilityContentRead},
 		build:        followPaneText,
 	},
 	{
@@ -73,7 +56,10 @@ var recipes = []recipe{
 		argument:     "pane",
 		argumentHelp: "The pane that is not answering, such as %1. Omit to be told how to find it.",
 		mutates:      true,
-		build:        recoverPaneText,
+		capabilities: []Capability{
+			CapabilityMetadataRead, CapabilityContentRead, CapabilityPaneControl,
+		},
+		build: recoverPaneText,
 	},
 	{
 		name:         "set_up_workspace",
@@ -82,14 +68,17 @@ var recipes = []recipe{
 		argument:     "task",
 		argumentHelp: "What the workspace is for, such as \"the api and its tests\".",
 		mutates:      true,
-		build:        setUpWorkspaceText,
+		capabilities: []Capability{
+			CapabilityMetadataRead, CapabilityWorkspaceCreate, CapabilityTmuxLayout,
+		},
+		build: setUpWorkspaceText,
 	},
 }
 
 // addPrompts advertises the recipes through the prompts protocol.
-func addPrompts(server *mcp.Server, level SafetyLevel) {
+func addPrompts(server *mcp.Server, t *tools) {
 	for _, offered := range recipes {
-		if offered.mutates && level == SafetyReadOnly {
+		if !t.permitsRecipe(offered) {
 			continue
 		}
 		server.AddPrompt(&mcp.Prompt{
@@ -102,6 +91,18 @@ func addPrompts(server *mcp.Server, level SafetyLevel) {
 			}},
 		}, promptFor(offered))
 	}
+}
+
+func (t *tools) permitsRecipe(offered recipe) bool {
+	if offered.mutates && t.level == SafetyReadOnly {
+		return false
+	}
+	for _, capability := range offered.capabilities {
+		if !t.capabilities.permits(capability) {
+			return false
+		}
+	}
+	return true
 }
 
 // promptFor answers one prompt from the recipe behind it.
@@ -121,18 +122,7 @@ func promptFor(offered recipe) mcp.PromptHandler {
 	}
 }
 
-// The recipes are worth reaching even from a client that cannot read prompts.
-//
-// Most of what is written here about which tool to use and in what order is in
-// the prompts, and a client that does not implement the prompts protocol shows
-// a model none of it. Offering them as one tool puts the same text somewhere
-// every client can reach.
-//
-// It is off unless an operator asks for it, because a server that offers both
-// is offering the same four things twice, and the tool list is the expensive
-// place to say anything. One tool rather than the two a mirror of the prompts
-// protocol would need: the names are few enough to list in its own
-// description, so choosing one costs no call of its own.
+// The optional recipe tool exposes prompts to clients without prompt support.
 
 // getRecipeInput names the job to be told how to do.
 type getRecipeInput struct {
@@ -163,9 +153,9 @@ func (t *tools) getRecipe(
 		if offered.name != input.Name {
 			continue
 		}
-		if offered.mutates && t.level == SafetyReadOnly {
+		if !t.permitsRecipe(offered) {
 			return nil, getRecipeOutput{}, fmt.Errorf(
-				"%s tells you to change tmux, which this server is not allowed to do",
+				"%s needs tools this server has withheld",
 				offered.name)
 		}
 		summary, text := offered.build(input.Argument)
@@ -191,7 +181,7 @@ func addRecipeTools(server *mcp.Server, t *tools) {
 	if os.Getenv(RecipeToolEnvironmentVariable) != "1" {
 		return
 	}
-	register(server, t, &mcp.Tool{
+	register(server, t, CapabilityMetadataRead, &mcp.Tool{
 		Name:        "get_recipe",
 		Annotations: readOnly("Read a tmux Recipe"),
 		Description: "How to do one of the jobs this server is for, in the order " +
@@ -218,7 +208,7 @@ func diagnosePaneText(pane string) (summary, text string) {
 1. get_pane_info first. It says whether the process has exited and with what
    status, and whether the pane is in copy mode, which swallows keys you send
    and is a common reason a pane looks unresponsive.
-2. snapshot_pane for its contents and that state together. Add includeHistory
+2. snapshot_pane for its contents and state in one response. Add includeHistory
    if what went wrong has already scrolled off.
 3. If it is running something and you need to know when that ends, do not read
    the pane in a loop: wait_for_text watches what the pane writes, and stop
@@ -262,11 +252,9 @@ func followPaneText(pane string) (summary, text string) {
 4. If the pane produces more than its scrollback holds, pipe_pane writes every
    byte to a file as it happens and nothing depends on reading in time.
 
-Watching several panes at once is a listing rather than a capture each:
-list_panes with detail full reports every pane's history size, whether its
-process has exited and with what status, without reading any of their
-contents. Compare the history sizes against the last reading to see which
-panes wrote anything, and capture only those.
+Watching several panes at once needs one capture_since cursor or subscription
+per pane. list_panes with detail full reports process state without reading
+contents, but history size alone is not a change signal.
 
 Do not call capture_pane in a loop instead. It returns the whole screen every
 time, most of which you read last turn, and it cannot tell you whether anything

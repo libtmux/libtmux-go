@@ -6,9 +6,6 @@ package tmux
 
 // NewSession records a detached session and returns a [Ref] to it.
 //
-// It mirrors [Server.NewSession] and takes the same request. It acts on the
-// server rather than on an object, so it takes no target.
-//
 // KillExisting is rejected: [Server.NewSession] probes for the named session
 // and removes it before creating, and a plan records without reading. Record
 // [Plan.KillSession] before this instead, which says the same thing in the
@@ -19,7 +16,7 @@ func (p *Plan) NewSession(request NewSessionRequest) Ref {
 		name:      "new-session",
 		untargets: true,
 		creates:   true,
-		build: func(_, _ string, _ Version) ([]string, error) {
+		build: func(_, _ string, _ planRenderContext) ([]string, error) {
 			if request.KillExisting {
 				return nil, invalidLifecycleRequest(
 					"KillExisting probes for an existing session before creating, " +
@@ -32,26 +29,22 @@ func (p *Plan) NewSession(request NewSessionRequest) Ref {
 }
 
 // KillSession records the destruction of the session target names.
-//
-// It mirrors [Session.Kill].
 func (p *Plan) KillSession(target Ref) {
 	p.add(Op{
 		name:   "kill-session",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-session", resolved)
 		},
 	})
 }
 
 // RenameSession records a new name for the session target names.
-//
-// It mirrors [Session.Rename].
 func (p *Plan) RenameSession(target Ref, name string) {
 	p.add(Op{
 		name:   "rename-session",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateLifecycleSessionName("name", name); err != nil {
 				return nil, err
 			}
@@ -61,13 +54,11 @@ func (p *Plan) RenameSession(target Ref, name string) {
 }
 
 // NextWindow records the session target names moving to its next window.
-//
-// It mirrors [Session.NextWindow].
 func (p *Plan) NextWindow(target Ref) {
 	p.add(Op{
 		name:   "next-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("next-window", resolved)
 		},
 	})
@@ -75,13 +66,11 @@ func (p *Plan) NextWindow(target Ref) {
 
 // PreviousWindow records the session target names moving to its previous
 // window.
-//
-// It mirrors [Session.PreviousWindow].
 func (p *Plan) PreviousWindow(target Ref) {
 	p.add(Op{
 		name:   "previous-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("previous-window", resolved)
 		},
 	})
@@ -89,13 +78,11 @@ func (p *Plan) PreviousWindow(target Ref) {
 
 // LastWindow records the session target names returning to its previously
 // current window.
-//
-// It mirrors [Session.LastWindow].
 func (p *Plan) LastWindow(target Ref) {
 	p.add(Op{
 		name:   "last-window",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("last-window", resolved)
 		},
 	})
@@ -103,13 +90,11 @@ func (p *Plan) LastWindow(target Ref) {
 
 // LockSession records every client attached to the session target names being
 // locked.
-//
-// It mirrors [Session.Lock].
 func (p *Plan) LockSession(target Ref) {
 	p.add(Op{
 		name:   "lock-session",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("lock-session", resolved)
 		},
 	})
@@ -117,13 +102,11 @@ func (p *Plan) LockSession(target Ref) {
 
 // DetachClients records every client attached to the session target names being
 // detached.
-//
-// It mirrors [Session.DetachClients].
 func (p *Plan) DetachClients(target Ref) {
 	p.add(Op{
 		name:   "detach-client",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			// detach-client names its session with -s rather than -t, so this
 			// is untargetedArguments with the selector spelled out; it still
 			// validates every argument the way the targeted form does.
@@ -134,13 +117,11 @@ func (p *Plan) DetachClients(target Ref) {
 
 // SetEnvironment records a variable set in the session target names, or in the
 // server when target is the zero [Ref].
-//
-// It mirrors [Server.SetEnvironment] and [Session.SetEnvironment].
 func (p *Plan) SetEnvironment(target Ref, name, value string) {
 	p.add(Op{
 		name:   "set-environment",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateEnvironmentName(name); err != nil {
 				return nil, err
 			}
@@ -154,13 +135,11 @@ func (p *Plan) SetEnvironment(target Ref, name, value string) {
 
 // UnsetEnvironment records a variable removed from the session target names, or
 // from the server when target is the zero [Ref].
-//
-// It mirrors [Server.UnsetEnvironment] and [Session.UnsetEnvironment].
 func (p *Plan) UnsetEnvironment(target Ref, name string) {
 	p.add(Op{
 		name:   "set-environment",
 		target: target,
-		build: func(resolved, _ string, _ Version) ([]string, error) {
+		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateEnvironmentName(name); err != nil {
 				return nil, err
 			}
@@ -170,28 +149,23 @@ func (p *Plan) UnsetEnvironment(target Ref, name string) {
 }
 
 // SourceFile records a tmux configuration file being loaded.
-//
-// It mirrors [Server.SourceFile] and takes the same request. It acts on the
-// server rather than on an object, so it takes no target.
 func (p *Plan) SourceFile(request SourceFileRequest) {
 	p.add(Op{
 		name:      "source-file",
 		untargets: true,
-		build: func(_, _ string, _ Version) ([]string, error) {
+		build: func(_, _ string, _ planRenderContext) ([]string, error) {
 			return sourceFileArguments(request)
 		},
 	})
 }
 
 // KillServer records the tmux server being shut down.
-//
-// It mirrors [Server.Kill]. Nothing recorded after it can run, because there is
-// no server left to run it.
+// Nothing recorded after it can run because the server will be gone.
 func (p *Plan) KillServer() {
 	p.add(Op{
 		name:      "kill-server",
 		untargets: true,
-		build: func(_, _ string, _ Version) ([]string, error) {
+		build: func(_, _ string, _ planRenderContext) ([]string, error) {
 			return untargetedArguments("kill-server")
 		},
 	})

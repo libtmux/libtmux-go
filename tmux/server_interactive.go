@@ -2,12 +2,7 @@ package tmux
 
 import (
 	"context"
-	"os"
-	"slices"
 	"strconv"
-	"strings"
-
-	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 var (
@@ -27,9 +22,11 @@ type ConfirmBeforeRequest struct {
 	Command string
 	// Prompt replaces tmux's prompt when nonnil.
 	Prompt *string
-	// ConfirmKey selects the affirmative key; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// ConfirmKey selects the affirmative key and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	ConfirmKey *string
-	// DefaultYes selects yes by default; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// DefaultYes selects yes by default and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	DefaultYes bool
 	// TargetClient selects the stable client that displays the prompt.
 	TargetClient ClientName
@@ -59,11 +56,14 @@ type CommandPromptRequest struct {
 	Type PromptType
 	// ExpandFormat expands formats in the prompt result.
 	ExpandFormat bool
-	// Literal disables key-name parsing; tmux before 3.6 refuses it; see UnsupportedPolicy.
+	// Literal disables key-name parsing and requires tmux 3.6; see
+	// UnsupportedPolicy.
 	Literal bool
-	// BackspaceExit exits on backspace; tmux before 3.7 refuses it; see UnsupportedPolicy.
+	// BackspaceExit exits on backspace and requires tmux 3.7; see
+	// UnsupportedPolicy.
 	BackspaceExit bool
-	// NoFreeze leaves the pane unfrozen; tmux before 3.7 refuses it; see UnsupportedPolicy.
+	// NoFreeze leaves the pane unfrozen and requires tmux 3.7; see
+	// UnsupportedPolicy.
 	NoFreeze bool
 }
 
@@ -98,55 +98,24 @@ type DisplayMenuRequest struct {
 	X *string
 	// Y is tmux's vertical position expression.
 	Y *string
-	// StartingChoice selects the initial item; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// StartingChoice selects the initial item and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	StartingChoice *string
-	// BorderLines selects border glyphs; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// BorderLines selects border glyphs and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	BorderLines *string
-	// Style selects menu style; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// Style selects menu style and requires tmux 3.4; see UnsupportedPolicy.
 	Style *string
-	// BorderStyle selects border style; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// BorderStyle selects border style and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	BorderStyle *string
-	// SelectedStyle selects highlighted-item style; tmux before 3.4 refuses it; see UnsupportedPolicy.
+	// SelectedStyle selects highlighted-item style and requires tmux 3.4; see
+	// UnsupportedPolicy.
 	SelectedStyle *string
-	// Mouse enables mouse selection; tmux before 3.5 refuses it; see UnsupportedPolicy.
+	// Mouse enables mouse selection and requires tmux 3.5; see UnsupportedPolicy.
 	Mouse bool
 	// StayOpen keeps the menu visible after selecting an item.
 	StayOpen bool
-}
-
-// AttachSessionOptions configures terminal ownership and attach behavior
-// shared by server- and session-scoped attachment. Nil StartDirectory omits
-// its flag and a nonnil empty string is explicit; ClientFlags is copied. The
-// Stdin, Stdout, and Stderr pointers are retained for the attach call and are
-// never owned or closed by this package.
-type AttachSessionOptions struct {
-	// DetachOthers disconnects other clients attached to the target session.
-	DetachOthers bool
-	// DetachParent detaches the invoking client from its parent session first.
-	DetachParent bool
-	// NoUpdateEnvironment preserves the invoking client's environment.
-	NoUpdateEnvironment bool
-	// ReadOnly attaches the client with read-only permissions.
-	ReadOnly bool
-	// StartDirectory selects the attached client's initial directory.
-	StartDirectory *string
-	// ClientFlags are comma-joined client flags copied before attachment starts.
-	ClientFlags []string
-	// Stdin is the attached tmux client's input stream; nil inherits process stdin.
-	Stdin *os.File
-	// Stdout is the attached tmux client's output stream; nil inherits process stdout.
-	Stdout *os.File
-	// Stderr is the attached tmux client's error stream; nil inherits process stderr.
-	Stderr *os.File
-}
-
-// AttachSessionRequest selects a session name or tmux target pattern and
-// configures a blocking terminal attachment. An empty Target lets tmux choose.
-type AttachSessionRequest struct {
-	// Target is a session name or tmux target pattern; empty leaves selection to tmux.
-	Target string
-	// AttachSessionOptions supplies terminal streams and attach flags.
-	AttachSessionOptions
 }
 
 type confirmBeforeValues struct {
@@ -206,26 +175,11 @@ type displayMenuValues struct {
 	hasSelected    bool
 }
 
-type attachSessionValues struct {
-	target              string
-	startDirectory      string
-	clientFlags         []string
-	stdin               *os.File
-	stdout              *os.File
-	stderr              *os.File
-	detachOthers        bool
-	detachParent        bool
-	noUpdateEnvironment bool
-	readOnly            bool
-	hasStartDirectory   bool
-}
-
 // ConfirmBefore asks tmux to display a background confirmation prompt and
 // returns after tmux accepts it, not after the user answers or Command runs.
-// It requires tmux 3.3. ConfirmKey and DefaultYes require tmux 3.4 and are
-// synchronously reported to [WarningHandler] before the reduced command runs
-// on older supported versions. Completed stderr is an error; cancellation does
-// not prove prompt delivery or later command execution did not occur.
+// It requires tmux 3.3. ConfirmKey and DefaultYes require tmux 3.4 and follow
+// [UnsupportedPolicy]. Completed stderr is an error; cancellation does not
+// prove prompt delivery or later command execution did not occur.
 func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest) error {
 	values, err := captureConfirmBeforeRequest(request)
 	if err != nil {
@@ -272,9 +226,8 @@ func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest)
 
 // CommandPrompt asks tmux to display a background command prompt and returns
 // after tmux accepts it, not after input is submitted or Template runs. It
-// requires tmux 3.3. Unsupported later flags synchronously reach
-// [WarningHandler] before the reduced command runs. Completed stderr is an
-// error; cancellation does not prove prompt delivery or later execution did not occur.
+// requires tmux 3.3. Later flags follow [UnsupportedPolicy]. Completed stderr
+// is an error; cancellation does not prove prompt delivery or later execution.
 func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest) error {
 	values, err := captureCommandPromptRequest(request)
 	if err != nil {
@@ -352,9 +305,9 @@ func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest)
 // DisplayMenu displays a menu and waits until tmux closes it. The target
 // client must own a TTY; control-mode clients cannot render menu overlays.
 // It returns no selected value and does not establish whether an item command
-// ran. Unsupported optional flags synchronously reach [WarningHandler] before
-// the reduced command runs; completed stderr is an error, and cancellation
-// does not prove menu delivery or any selected command's effect.
+// ran. Unsupported optional flags follow [UnsupportedPolicy]. Completed stderr
+// is an error, and cancellation does not prove menu delivery or a selected
+// command's effect.
 func (s Server) DisplayMenu(ctx context.Context, request DisplayMenuRequest) error {
 	values, err := captureDisplayMenuRequest(request)
 	if err != nil {
@@ -453,120 +406,6 @@ func (s Server) DisplayMenu(ctx context.Context, request DisplayMenuRequest) err
 
 	result, err := s.literalCmd(ctx, arguments...)
 	return requireRedactedServerCommandNoStderr("display-menu", result, err)
-}
-
-// Start starts the configured tmux server. It is idempotent when that
-// server is already running. Completed stderr is an error; cancellation does
-// not prove that a daemon was not started.
-//
-// tmux's exit-empty default ends a server that holds no sessions, so a server
-// started with nothing in it can be gone before the next command reaches it,
-// and Start still reports success. Create a session to keep one running, or
-// turn exit-empty off in [ServerOptions.ConfigFile], which tmux reads as the
-// server starts. It cannot be turned off by a later command, because that
-// command needs the server the setting exists to keep alive. A later command
-// against a server that has already
-// exited reports the failing tmux command rather than the missing server; use
-// [Server.IsAlive] or [Server.RaiseIfDead] to ask directly.
-func (s Server) Start(ctx context.Context) error {
-	result, err := s.literalCmd(ctx, "start-server")
-	return requireServerCommandNoStderr("start-server", result, err)
-}
-
-// AttachSession attaches the caller's terminal to a matching session and
-// blocks until detach or context cancellation. Nil standard streams inherit
-// the process streams; each stream must be a concrete terminal descriptor.
-// The call retains caller-supplied files while attached and never owns or
-// closes them. A completed nonzero exit returns [CommandError]; cancellation
-// can end waiting but does not prove that attachment or detachment did not occur.
-func (s Server) AttachSession(ctx context.Context, request AttachSessionRequest) error {
-	values, err := captureAttachSessionRequest(request.Target, request.AttachSessionOptions)
-	if err != nil {
-		return err
-	}
-	return s.attachSession(ctx, values)
-}
-
-// Attach attaches the caller's terminal to this session's stable identifier
-// and blocks until detach or context cancellation. It validates the receiver's
-// stable SessionID, retains but never closes caller-supplied streams, and
-// returns [CommandError] for a completed nonzero exit. Cancellation does not
-// prove attachment or detachment did not occur.
-func (s Session) Attach(ctx context.Context, options AttachSessionOptions) error {
-	target := s.sessionID.String()
-	if err := validateTypedTarget(
-		"attach-session", "Target", "session", target,
-	); err != nil {
-		return err
-	}
-	values, err := captureAttachSessionRequest(target, options)
-	if err != nil {
-		return err
-	}
-	return s.server.attachSession(ctx, values)
-}
-
-func (s Server) attachSession(ctx context.Context, values attachSessionValues) error {
-	arguments := []string{"attach-session"}
-	if values.detachOthers {
-		arguments = append(arguments, "-d")
-	}
-	if values.detachParent {
-		arguments = append(arguments, "-x")
-	}
-	if values.noUpdateEnvironment {
-		arguments = append(arguments, "-E")
-	}
-	if values.readOnly {
-		arguments = append(arguments, "-r")
-	}
-	if values.hasStartDirectory {
-		arguments = append(arguments, "-c", values.startDirectory)
-	}
-	if len(values.clientFlags) != 0 {
-		arguments = append(arguments, "-f", strings.Join(values.clientFlags, ","))
-	}
-	if values.target != "" {
-		arguments = append(arguments, "-t", values.target)
-	}
-	result, err := s.streamingLiteralCmd(
-		ctx,
-		tmuxcmd.Stdio{Stdin: values.stdin, Stdout: values.stdout, Stderr: values.stderr},
-		arguments...,
-	)
-	if err != nil {
-		return err
-	}
-	if result.ExitCode != 0 {
-		return newRedactedCommandError("attach-session", result)
-	}
-	return nil
-}
-
-func (s Server) streamingLiteralCmd(
-	ctx context.Context,
-	stdio tmuxcmd.Stdio,
-	args ...string,
-) (CommandResult, error) {
-	if err := validateLiteralCommandArguments(args); err != nil {
-		return CommandResult{ExitCode: -1}, err
-	}
-	state := s.connectionState()
-	if err := validateColorMode(state.options.Colors); err != nil {
-		return CommandResult{ExitCode: -1}, err
-	}
-	if err := validateConnectionArguments(state.options); err != nil {
-		return CommandResult{ExitCode: -1}, err
-	}
-	result, err := s.runCommand(ctx, CommandProcess, args, &stdio, false)
-	commandResult := CommandResult{
-		Command:  slices.Clone(result.Command),
-		ExitCode: result.ExitCode,
-	}
-	if err != nil {
-		return commandResult, commandTransportFailure(err)
-	}
-	return commandResult, nil
 }
 
 func captureConfirmBeforeRequest(request ConfirmBeforeRequest) (confirmBeforeValues, error) {
@@ -799,48 +638,6 @@ func captureDisplayMenuRequest(request DisplayMenuRequest) (displayMenuValues, e
 			"display-menu", "SelectedStyle", values.selectedStyle, false,
 		); err != nil {
 			return displayMenuValues{}, err
-		}
-	}
-	return values, nil
-}
-
-func captureAttachSessionRequest(
-	target string,
-	options AttachSessionOptions,
-) (attachSessionValues, error) {
-	values := attachSessionValues{
-		target:              target,
-		clientFlags:         slices.Clone(options.ClientFlags),
-		stdin:               options.Stdin,
-		stdout:              options.Stdout,
-		stderr:              options.Stderr,
-		detachOthers:        options.DetachOthers,
-		detachParent:        options.DetachParent,
-		noUpdateEnvironment: options.NoUpdateEnvironment,
-		readOnly:            options.ReadOnly,
-	}
-	if err := validateServerCommandArgument(
-		"attach-session", "Target", values.target, true,
-	); err != nil {
-		return attachSessionValues{}, err
-	}
-	if options.StartDirectory != nil {
-		values.startDirectory = *options.StartDirectory
-		values.hasStartDirectory = true
-		if err := validateServerCommandArgument(
-			"attach-session", "StartDirectory", values.startDirectory, true,
-		); err != nil {
-			return attachSessionValues{}, err
-		}
-	}
-	for index, flag := range values.clientFlags {
-		if err := validateServerCommandArgument(
-			"attach-session",
-			"ClientFlags["+strconv.Itoa(index)+"]",
-			flag,
-			true,
-		); err != nil {
-			return attachSessionValues{}, err
 		}
 	}
 	return values, nil

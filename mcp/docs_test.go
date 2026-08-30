@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 )
 
 // referenceRow matches a row of one of the reference's tables, capturing the
@@ -16,17 +18,30 @@ var referenceRow = regexp.MustCompile(`(?m)^\|([^|]*)\|`)
 // a tool or a prompt is written wherever it appears.
 var referenceName = regexp.MustCompile("`([a-z][a-z_]+)`")
 
-// TestTheReferenceNamesEverythingTheServerOffers gates the tool reference
-// against the server rather than against the last time someone read both.
-//
-// TOOLS.md is where a client's operator goes to find out what is here, and a
-// tool missing from it is a tool nobody reaches on purpose. Nothing about
-// adding one to the server adds it to the reference, and nothing about renaming
-// one renames it there, so the failure is silent in both directions: an
-// undocumented tool, and an entry describing a tool that no longer answers.
-//
-// The widest safety level is the one asked, because the reference documents
-// every tool and says which level withholds it.
+func TestOperationalNamesInDocumentationMatchTheBinary(t *testing.T) {
+	checks := []struct {
+		path       string
+		want       string
+		deprecated string
+	}{
+		{"PARITY.md", tmuxmcp.RecipeToolEnvironmentVariable, "LIBTMUX_MCP_RECIPE_TOOL"},
+		{"README.md", tmuxmcp.CapabilitiesEnvironmentVariable, ""},
+		{"cmd/libtmux-mcp/README.md", "libtmux-mcp " + tmuxmcp.Version, ""},
+	}
+	for _, check := range checks {
+		contents, err := os.ReadFile(check.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", check.path, err)
+		}
+		if !strings.Contains(string(contents), check.want) {
+			t.Errorf("%s does not name %q", check.path, check.want)
+		}
+		if check.deprecated != "" && strings.Contains(string(contents), check.deprecated) {
+			t.Errorf("%s still names %q", check.path, check.deprecated)
+		}
+	}
+}
+
 func TestTheReferenceNamesEverythingTheServerOffers(t *testing.T) {
 	t.Setenv("LIBTMUX_SAFETY", "destructive")
 	session, _, ctx := connect(t)

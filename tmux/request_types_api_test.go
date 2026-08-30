@@ -42,6 +42,7 @@ func TestMigratedRequestFieldsHaveExactTypesAndNoObsoleteHelpers(t *testing.T) {
 	intType := reflect.TypeFor[int]()
 	clientNameType := reflect.TypeFor[tmux.ClientName]()
 	paneIDType := reflect.TypeFor[tmux.PaneID]()
+	stringSliceType := reflect.TypeFor[[]string]()
 	valueFields := []requestFieldType{
 		{tmux.NewSessionRequest{}, "Width", intType},
 		{tmux.NewSessionRequest{}, "Height", intType},
@@ -51,6 +52,7 @@ func TestMigratedRequestFieldsHaveExactTypesAndNoObsoleteHelpers(t *testing.T) {
 		{tmux.ResizePaneRequest{}, "Adjustment", intType},
 		{tmux.SendKeysRequest{}, "Repeat", intType},
 		{tmux.SendKeysRequest{}, "TargetClient", clientNameType},
+		{tmux.SendKeySequenceRequest{}, "Keys", stringSliceType},
 		{tmux.DisplayMessageRequest{}, "TargetClient", clientNameType},
 		{tmux.CopyModeRequest{}, "SourcePane", paneIDType},
 		{tmux.ShowMessagesRequest{}, "TargetClient", clientNameType},

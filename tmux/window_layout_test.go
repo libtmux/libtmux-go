@@ -141,12 +141,7 @@ func TestSelectLayoutRejectsMultipleModesBeforeExecution(t *testing.T) {
 func TestSelectLayoutUsesLiteralCommandBoundary(t *testing.T) {
 	t.Parallel()
 
-	// A layout carrying a command separator is refused before it is sent. No
-	// tmux layout contains one, and a name tmux does not recognise kills the
-	// server on 3.3a, so this is the guard rather than the escape it used to
-	// exercise. The escape itself is covered where values legitimately carry a
-	// semicolon: see TestLiteralArgumentsAndRawSeparatorsAgainstRealTmux and
-	// TestTransportsAgreeOnLiteralValues.
+	// Reject separators before tmux 3.3a can exit the server for an unknown layout.
 	t.Run("trailing separator", func(t *testing.T) {
 		t.Parallel()
 

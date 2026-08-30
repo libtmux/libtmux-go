@@ -12,17 +12,17 @@ program runs anywhere without one.
 $ go -C workspace run ./examples/build-workspace
 ```
 
-```
-built "example-project" with 2 windows, using 10 tmux processes
+```text
+built "example-project" with 2 windows
   window 1 editor   2 pane(s)
   window 2 logs     1 pane(s)
 ```
 
 ## What to look at
 
-**The process count barely moves as a file grows.** The build runs over a
-control connection, so a workspace ten times this size costs about the same. The
-count is printed rather than claimed, which is the point of printing it.
+**The builder owns its temporary connection.** Session creation and every build
+command use one retained control connection. The builder closes it before
+returning an ordinary session handle.
 
 **What it reports is what tmux made, not what the file asked for.** The windows
 and panes listed are read back from tmux after the build, so a pane the file

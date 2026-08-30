@@ -12,12 +12,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// TestPlanTargetsWhatItHasNotCreatedYet is the gate on forward references.
-//
-// A plan is worth having only if a step can address what an earlier step is
-// going to create, because that is what lets a build be written in one pass.
-// Here a split is recorded, then keys are sent to the pane it will create and a
-// format is read back from it, all before tmux has been asked for anything.
+// Forward references let later steps target objects created earlier in the
+// same run.
 //
 //libtmux:real-tmux
 func TestPlanTargetsWhatItHasNotCreatedYet(t *testing.T) {
@@ -71,9 +67,7 @@ func TestPlanTargetsWhatItHasNotCreatedYet(t *testing.T) {
 	}
 }
 
-// TestPlanExplainsItsDispatchesBeforeRunning gates the promise that a plan can
-// be read before it is run: what would be sent, and how it would be grouped,
-// with no server involved.
+// Explain reports dispatch grouping without reaching tmux.
 func TestPlanExplainsItsDispatchesBeforeRunning(t *testing.T) {
 	t.Parallel()
 
@@ -112,9 +106,6 @@ func TestPlanExplainsItsDispatchesBeforeRunning(t *testing.T) {
 	}
 }
 
-// TestPlanPreviewLeavesUnresolvedStepsNil gates Preview reporting what it
-// cannot know rather than inventing it: a step targeting an object an earlier
-// step will create has no argument vector until the plan runs.
 func TestPlanPreviewLeavesUnresolvedStepsNil(t *testing.T) {
 	t.Parallel()
 
@@ -139,12 +130,30 @@ func TestPlanPreviewLeavesUnresolvedStepsNil(t *testing.T) {
 	}
 }
 
-// TestPlanRefusesTheZeroRef gates the zero value addressing nothing.
-//
-// A Ref is either an object that exists or the one a numbered step will create,
-// and both are produced by a constructor. The zero value is neither, so a plan
-// holding one refuses rather than resolving it to the first step, which is what
-// a zero-based step index would have made it silently mean.
+//libtmux:real-tmux
+func TestPlanKeepsAnUnsentRenderFailureSkipped(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+
+	plan := tmux.NewPlan()
+	session := plan.NewSession(tmux.NewSessionRequest{Name: "render-boundary"})
+	plan.RenameSession(session, "bad:name")
+
+	result, err := plan.Run(ctx, server)
+	if err == nil {
+		t.Fatal("Run() accepted an invalid forward-referenced request")
+	}
+	if result.Ops[0].Status != tmux.OpComplete {
+		t.Errorf("creation status = %v, want complete", result.Ops[0].Status)
+	}
+	if result.Ops[1].Status != tmux.OpSkipped || result.Ops[1].Err != nil {
+		t.Errorf("unsent rename = (%v, %v), want skipped without an operation error",
+			result.Ops[1].Status, result.Ops[1].Err)
+	}
+}
+
+// A zero Ref must not alias the plan's first step.
 func TestPlanRefusesTheZeroRef(t *testing.T) {
 	t.Parallel()
 
@@ -161,11 +170,78 @@ func TestPlanRefusesTheZeroRef(t *testing.T) {
 	}
 }
 
-// TestPlanStopsAtTheFirstFailure gates the status a caller reads back.
-//
-// tmux abandons a command list at its first failure, so a plan cannot pretend
-// the rest ran. The operations after a failure are skipped, and they are
-// reported as skipped rather than as failures of their own.
+//libtmux:real-tmux
+func TestPlanRefusesReferencesFromDifferentDaemons(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	firstServer := tmuxtest.NewServer(ctx, t)
+	secondServer := tmuxtest.NewServer(ctx, t)
+
+	firstSessions, err := firstServer.Sessions(ctx)
+	if err != nil || len(firstSessions) != 1 {
+		t.Fatalf("first Sessions() = (%d, %v), want one", len(firstSessions), err)
+	}
+	secondSessions, err := secondServer.Sessions(ctx)
+	if err != nil || len(secondSessions) != 1 {
+		t.Fatalf("second Sessions() = (%d, %v), want one", len(secondSessions), err)
+	}
+
+	plan := tmux.NewPlan()
+	plan.RenameSession(firstSessions[0].Ref(), "must-not-run-first")
+	plan.RenameSession(secondSessions[0].Ref(), "must-not-run-second")
+	result, err := plan.Run(ctx, firstServer)
+	var refused *tmux.PlanError
+	if !errors.As(err, &refused) || refused.Step != 1 {
+		t.Fatalf("Run() error = %v, want PlanError at step 1", err)
+	}
+	for index, op := range result.Ops {
+		if op.Status != tmux.OpSkipped {
+			t.Errorf("operation %d = %v, want skipped", index, op.Status)
+		}
+	}
+	for index, session := range []tmux.Session{firstSessions[0], secondSessions[0]} {
+		refreshed, refreshErr := session.Refresh(ctx)
+		if refreshErr != nil {
+			t.Fatalf("refresh session %d: %v", index, refreshErr)
+		}
+		if name, ok := refreshed.Name(); !ok || name != "work" {
+			t.Errorf("session %d name = (%q, %t), want (work, true)", index, name, ok)
+		}
+	}
+}
+
+//libtmux:real-tmux
+func TestPlanAtomicallyRejectsTheWrongServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	origin := tmuxtest.NewServer(ctx, t)
+	other := tmuxtest.NewServer(ctx, t)
+
+	sessions, err := origin.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	plan := tmux.NewPlan()
+	plan.RenameSession(sessions[0].Ref(), "must-not-reach-other")
+	result, err := plan.Run(ctx, other)
+	if !errors.Is(err, tmux.ErrDaemonReplaced) {
+		t.Fatalf("Run() error = %v, want ErrDaemonReplaced", err)
+	}
+	if len(result.Ops) != 1 || result.Ops[0].Status != tmux.OpSkipped {
+		t.Fatalf("operation results = %#v, want one skipped operation", result.Ops)
+	}
+
+	otherSessions, err := other.Sessions(ctx)
+	if err != nil || len(otherSessions) != 1 {
+		t.Fatalf("other Sessions() = (%d, %v), want one", len(otherSessions), err)
+	}
+	if name, ok := otherSessions[0].Name(); !ok || name != "work" {
+		t.Fatalf("other session name = (%q, %t), want (work, true)", name, ok)
+	}
+}
+
+// tmux does not attribute a grouped command-list failure to an individual
+// operation, so every operation in the dispatch is indeterminate.
 //
 //libtmux:real-tmux
 func TestPlanStopsAtTheFirstFailure(t *testing.T) {
@@ -202,11 +278,16 @@ func TestPlanStopsAtTheFirstFailure(t *testing.T) {
 		result.Ops[0].Status,
 		result.Ops[1].Status,
 		result.Ops[2].Status,
+		result.Ops[3].Status,
 	}
-	// All three chain into one dispatch, so tmux blames the dispatch and the
-	// plan blames its first operation; nothing after it ran.
-	if statuses[2] != tmux.OpSkipped {
-		t.Errorf("operation after the failure = %v, want skipped", statuses[2])
+	want := []tmux.OpStatus{
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+	}
+	if !slices.Equal(statuses, want) {
+		t.Errorf("statuses = %v, want %v", statuses, want)
 	}
 	t.Logf("statuses = %v", statuses)
 
@@ -214,11 +295,7 @@ func TestPlanStopsAtTheFirstFailure(t *testing.T) {
 	t.Logf("window name after the failed plan = %q (%t)", name, ok)
 }
 
-// TestPlanRunsIdenticallyOnBothTransports is the equivalence gate for plans.
-//
-// A plan is one of the switches a caller flips, so it has to mean the same
-// thing whichever transport carries it. The results compared here are the whole
-// point: only the cost is allowed to differ.
+// A transport may change plan cost, not results.
 //
 //libtmux:real-tmux
 func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
@@ -230,14 +307,14 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 	if err != nil || len(sessions) == 0 {
 		t.Fatalf("Sessions() = (%d, %v), want at least one", len(sessions), err)
 	}
-	client, err := server.OpenControl(ctx, sessions[0])
+	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
-	connected := server.WithEngine(client.Engine())
+	t.Cleanup(func() { _ = connection.Close() })
+	connected := connection.Server()
 
-	build := func(handle tmux.Server, name string) []string {
+	build := func(handle tmux.Server, transport, name string) []string {
 		t.Helper()
 		window, err := sessions[0].NewWindow(ctx, tmux.NewWindowRequest{Name: tmux.Ptr(name)})
 		if err != nil {
@@ -251,16 +328,16 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 
 		result, err := plan.Run(ctx, handle)
 		if err != nil {
-			t.Fatalf("Run() over %v error = %v", handle.Engine(), err)
+			t.Fatalf("Run() over %s error = %v", transport, err)
 		}
 		if !result.OK() {
-			t.Fatalf("Run() over %v did not complete: %v", handle.Engine(), result.Err())
+			t.Fatalf("Run() over %s did not complete: %v", transport, result.Err())
 		}
 		return result.Ops[3].Stdout
 	}
 
-	viaProcess := build(server, "process")
-	viaControl := build(connected, "control")
+	viaProcess := build(server, "process", "process")
+	viaControl := build(connected, "connection", "control")
 
 	if len(viaProcess) != 1 || len(viaControl) != 1 {
 		t.Fatalf("process = %q, control = %q", viaProcess, viaControl)
@@ -271,13 +348,7 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 	}
 }
 
-// TestPlanBuildsAWorkspaceInOnePass exercises the recorded operations the way a
-// workspace builder uses them: a session, windows inside it, panes inside those,
-// and commands typed into panes that did not exist when the plan was written.
-//
-// It is the coverage gate for the operation surface. Every step targets
-// something an earlier step created, so a mistake in how a Ref resolves shows up
-// as a tmux error rather than as a silently misplaced pane.
+// Every operation after session creation targets a forward reference.
 //
 //libtmux:real-tmux
 func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
@@ -346,11 +417,6 @@ func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
 	}
 }
 
-// TestPlanRecordsTheWiderSurface exercises the operations the workspace test
-// does not: the ones naming two objects, the server-scoped ones, and the option
-// and buffer writers. A plan that only ever names one object at a time would
-// pass every other test here.
-//
 //libtmux:real-tmux
 func TestPlanRecordsTheWiderSurface(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -416,11 +482,7 @@ func TestPlanRecordsTheWiderSurface(t *testing.T) {
 	}
 }
 
-// TestPlanCmdRecordsWhatHasNoRecorder gates the escape hatch.
-//
-// The recorders cover the commands this package wraps; Cmd covers the rest, and
-// the point of it being part of a plan rather than a separate call is that a
-// Ref still names what it acts on. Here it targets a pane the same plan created.
+// Cmd resolves forward references like typed plan operations.
 //
 //libtmux:real-tmux
 func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
@@ -465,13 +527,7 @@ func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
 	}
 }
 
-// TestPlannersAgreeOnResultsAndDifferOnCost is the gate on planners being
-// interchangeable policy.
-//
-// A planner decides only how many times tmux is invoked. Running one plan
-// through each must produce the same per-operation results, including the same
-// captured output and the same created IDs, at a different dispatch count. If
-// that ever stops holding, a planner is changing meaning rather than cost.
+// Planners may change dispatch count, never per-operation results.
 //
 //libtmux:real-tmux
 func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
@@ -491,9 +547,8 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 			t.Fatalf("NewWindow() error = %v", err)
 		}
 		plan := tmux.NewPlan()
-		// The layout comes first so the split is followed only by operations
-		// naming the pane it creates, which is what Marked folds and Folding
-		// cannot.
+		// The layout is chainable; the split and read remain separate because
+		// their output must be attributed exactly.
 		plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 		pane := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 		plan.SetPaneTitle(pane, "decorated")
@@ -504,7 +559,6 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 
 	type outcome struct {
 		dispatches int
-		marked     int
 		statuses   []tmux.OpStatus
 		answer     string
 	}
@@ -515,7 +569,6 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 	}{
 		{"Sequential", tmux.Sequential{}},
 		{"Folding", tmux.Folding{}},
-		{"Marked", tmux.Marked{}},
 	} {
 		plan := build()
 		dispatches := plan.ExplainWith(planner.value)
@@ -542,19 +595,13 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 		if result.Ops[1].Created == "" {
 			t.Errorf("%s: the split reported no pane ID", planner.name)
 		}
-		marked := 0
-		for _, dispatch := range dispatches {
-			if dispatch.Marked {
-				marked++
-			}
-		}
-		outcomes[planner.name] = outcome{len(dispatches), marked, statuses, answer}
+		outcomes[planner.name] = outcome{len(dispatches), statuses, answer}
 		t.Logf("%-10s %d operations in %d tmux invocations, answer %q",
 			planner.name, plan.Len(), len(dispatches), answer)
 	}
 
 	// Same meaning.
-	for _, name := range []string{"Folding", "Marked"} {
+	for _, name := range []string{"Folding"} {
 		if !slices.Equal(outcomes[name].statuses, outcomes["Sequential"].statuses) {
 			t.Errorf("%s statuses = %v, Sequential = %v",
 				name, outcomes[name].statuses, outcomes["Sequential"].statuses)
@@ -568,31 +615,16 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 		t.Errorf("answer = %q, want \"decorated reached\"", outcomes["Sequential"].answer)
 	}
 
-	// Different cost, strictly decreasing as the planner folds more.
-	if outcomes["Sequential"].dispatches <= outcomes["Folding"].dispatches ||
-		outcomes["Folding"].dispatches <= outcomes["Marked"].dispatches {
-		t.Errorf("dispatches were %d/%d/%d for Sequential/Folding/Marked, want strictly fewer",
+	// Folding must use fewer dispatches than the sequential baseline.
+	if outcomes["Sequential"].dispatches <= outcomes["Folding"].dispatches {
+		t.Errorf("dispatches were %d/%d for Sequential/Folding, want fewer",
 			outcomes["Sequential"].dispatches,
-			outcomes["Folding"].dispatches,
-			outcomes["Marked"].dispatches)
-	}
-	// And Marked got there the documented way, rather than by folding less.
-	if outcomes["Marked"].marked != 1 {
-		t.Errorf("Marked produced %d marked dispatches, want 1", outcomes["Marked"].marked)
-	}
-	if outcomes["Folding"].marked != 0 || outcomes["Sequential"].marked != 0 {
-		t.Errorf("a planner other than Marked used the {marked} register")
+			outcomes["Folding"].dispatches)
 	}
 }
 
-// TestPlanSplitsResultsPerOperation gates what a caller reads back from one
-// merged tmux reply.
-//
-// tmux answers a command list with one exit status and one stdout, so the
-// per-operation result is something this package reconstructs rather than
-// something tmux reports. This checks all three statuses in one run, and that
-// output lands on the operation that asked for it rather than on its
-// neighbours.
+// tmux merges command-list replies; Plan must restore per-operation output and
+// status.
 //
 //libtmux:real-tmux
 func TestPlanSplitsResultsPerOperation(t *testing.T) {
@@ -633,12 +665,14 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 		t.Errorf("second read Stdout = %q, want [\"SECOND\"]", got)
 	}
 
-	// All three statuses, in one run.
+	// The grouped send, Enter, and rename cannot be distinguished after a
+	// nonzero exit.
 	want := []tmux.OpStatus{
 		tmux.OpComplete, // the reads ran
 		tmux.OpComplete,
-		tmux.OpFailed,  // tmux refused this one
-		tmux.OpSkipped, // and never saw this one
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
+		tmux.OpIndeterminate,
 	}
 	for index, expected := range want {
 		if got := result.Ops[index].Status; got != expected {
@@ -646,14 +680,16 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 		}
 	}
 
-	// The failure carries tmux's reason, and only the failed operation does.
-	if result.Ops[2].Err == nil {
-		t.Error("the failed operation carries no error")
+	// Every indeterminate operation carries the grouped command's reason.
+	for _, index := range []int{2, 3, 4} {
+		if result.Ops[index].Err == nil {
+			t.Errorf("indeterminate operation %d carries no error", index)
+		}
 	}
 	if !errors.Is(result.Err(), tmux.ErrCommand) {
 		t.Errorf("Err() = %v, want ErrCommand", result.Err())
 	}
-	for _, index := range []int{0, 1, 3} {
+	for _, index := range []int{0, 1} {
 		if result.Ops[index].Err != nil {
 			t.Errorf("operation %d carries an error it did not cause: %v",
 				index, result.Ops[index].Err)
@@ -670,20 +706,6 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 	}
 }
 
-// TestPlannersAgreeWhenAnOperationNamesTwoObjects is the gate on the part of a
-// planner's contract that no single planner can check on its own.
-//
-// A planner may change how many times tmux is invoked and nothing else. Marked
-// is the one that rewrites an operation as it folds it, replacing the target
-// with tmux's {marked} register, so it is the one that can break that promise
-// -- and a command naming two objects is where it breaks quietly. tmux takes an
-// empty second target as the current pane and reports success, so a dropped one
-// is not an error anywhere: the swap simply happens between the wrong panes.
-//
-// Comparing what each planner left behind is therefore the only check that
-// works. Asserting one planner's arguments would pass while the panes ended up
-// the wrong way round.
-//
 //libtmux:real-tmux
 func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -710,9 +732,7 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 			t.Fatalf("SetTitle() error = %v", err)
 		}
 
-		// The split and the two operations naming its pane are what Marked
-		// folds into one command list. The swap is the one that also names a
-		// pane somewhere else.
+		// The swap names both the new pane and one that already exists.
 		plan := tmux.NewPlan()
 		created := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 		plan.SetPaneTitle(created, "beta")
@@ -749,7 +769,6 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 		value tmux.Planner
 	}{
 		{"Folding", tmux.Folding{}},
-		{"Marked", tmux.Marked{}},
 	} {
 		if got := swapWith(planner.value); !slices.Equal(got, want) {
 			t.Errorf("%s left the panes %v, Sequential left them %v",
@@ -758,13 +777,8 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 	}
 }
 
-// TestPlanPreviewReportsWhatTmuxWouldRefuse gates the reason a plan is worth
-// reading before it is sent.
-//
-// A plan is not atomic. An argument only rejected at the last step is rejected
-// after every step before it has already changed tmux, so a preview that
-// reported it the same way it reports a pane that does not exist yet would hide
-// the one of the two that is a defect.
+// Preview must reject invalid requests while leaving forward references
+// unresolved; Run is not atomic.
 func TestPlanPreviewReportsWhatTmuxWouldRefuse(t *testing.T) {
 	t.Parallel()
 
@@ -792,14 +806,8 @@ type countingPlanner struct{ dispatches []tmux.Dispatch }
 // Plan returns the grouping this planner was built with.
 func (p countingPlanner) Plan([]tmux.Op) []tmux.Dispatch { return p.dispatches }
 
-// TestPlanRefusesAGroupingThatIsNotThePlan gates the other half of the Planner
-// contract.
-//
-// A planner decides how many times tmux is invoked. It does not decide what
-// runs, or in what order, and a caller writing their own can get that wrong.
-// Every case here reached tmux or panicked before: an empty group and an index
-// past the end indexed past the end of the plan's own results, and a grouping
-// that covered nothing reported every operation skipped with no error at all.
+// A Planner may group operations but cannot omit, reorder, duplicate, or
+// invent them.
 func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 	t.Parallel()
 
@@ -820,12 +828,18 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 			plan := tmux.NewPlan()
 			plan.RenameWindow(tmux.WindowRef("@1"), "first")
 			plan.RenameWindow(tmux.WindowRef("@1"), "second")
+			server, err := tmux.NewServer(tmux.ServerOptions{
+				SocketName: "libtmux-go-plan-unreachable",
+			})
+			if err != nil {
+				t.Fatalf("NewServer() error = %v", err)
+			}
 
 			// A server that was never started: reaching it would be the failure
 			// this is checking for, so it must not be reachable.
 			result, err := plan.RunWith(
 				context.Background(),
-				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
+				server,
 				countingPlanner{dispatches: malformed.dispatches},
 			)
 			if _, ok := errors.AsType[*tmux.PlanError](err); !ok {
@@ -835,71 +849,6 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 				if op.Status != tmux.OpSkipped {
 					t.Errorf("operation %d = %v, want every one skipped", index, op.Status)
 				}
-			}
-		})
-	}
-}
-
-// markingPlanner marks whatever it is told to, including groups no planner in
-// this package would make.
-type markingPlanner struct{ ops []int }
-
-// Plan returns one marked dispatch carrying the operations it was built with.
-func (p markingPlanner) Plan([]tmux.Op) []tmux.Dispatch {
-	return []tmux.Dispatch{{Ops: p.ops, Marked: true}}
-}
-
-// TestPlanRefusesAMarkedGroupItCannotReportSeparately gates the fail-closed
-// rule on the path that used to skip it.
-//
-// A marked dispatch is a tmux command list like any other, so the same thing is
-// true of it: tmux answers with one merged stdout and says nothing about which
-// command produced what. Marking a read therefore lost that read's output and
-// still reported it complete, which is exactly the result this package refuses
-// to stand behind elsewhere.
-func TestPlanRefusesAMarkedGroupItCannotReportSeparately(t *testing.T) {
-	t.Parallel()
-
-	for _, refused := range []struct {
-		name string
-		plan func() (*tmux.Plan, []int)
-	}{
-		{
-			name: "a read riding with the creation",
-			plan: func() (*tmux.Plan, []int) {
-				plan := tmux.NewPlan()
-				pane := plan.SplitPane(
-					tmux.WindowRef("@1"), tmux.SplitPaneRequest{Attach: true})
-				plan.DisplayMessage(pane, "#{pane_id}")
-				return plan, []int{0, 1}
-			},
-		},
-		{
-			name: "nothing that leaves a pane to mark",
-			plan: func() (*tmux.Plan, []int) {
-				plan := tmux.NewPlan()
-				plan.RenameWindow(tmux.WindowRef("@1"), "first")
-				plan.RenameWindow(tmux.WindowRef("@1"), "second")
-				return plan, []int{0, 1}
-			},
-		},
-	} {
-		t.Run(refused.name, func(t *testing.T) {
-			t.Parallel()
-
-			plan, ops := refused.plan()
-			// Reaching tmux would itself be the failure: this is refused while
-			// the command list is being built, before anything is sent.
-			result, err := plan.RunWith(
-				context.Background(),
-				tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-plan-unreachable"}),
-				markingPlanner{ops: ops},
-			)
-			if _, ok := errors.AsType[*tmux.PlanError](err); !ok {
-				t.Fatalf("RunWith() error = %v, want a plan error", err)
-			}
-			if result.Ops[1].Status != tmux.OpSkipped {
-				t.Errorf("second operation = %v, want skipped", result.Ops[1].Status)
 			}
 		})
 	}

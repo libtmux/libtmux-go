@@ -120,6 +120,42 @@ func TestRunnerReturnsContextDeadline(t *testing.T) {
 	}
 }
 
+func TestRunnerMarksCancellationAfterStartAsOutcomeUnknown(t *testing.T) {
+	t.Parallel()
+
+	ready, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for helper readiness: %v", err)
+	}
+	t.Cleanup(func() { _ = ready.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	request := helperRequest("ready-block")
+	request.Arguments = append(request.Arguments, ready.LocalAddr().String())
+	completed := make(chan error, 1)
+	go func() {
+		_, runErr := (Runner{}).Run(ctx, request)
+		completed <- runErr
+	}()
+
+	if err := ready.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		cancel()
+		t.Fatalf("set readiness deadline: %v", err)
+	}
+	var notification [1]byte
+	if _, _, err := ready.ReadFrom(notification[:]); err != nil {
+		cancel()
+		t.Fatalf("await helper readiness: %v", err)
+	}
+	cancel()
+
+	err = <-completed
+	var unknown *OutcomeUnknownError
+	if !errors.As(err, &unknown) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want outcome-unknown context cancellation", err)
+	}
+}
+
 func TestRunnerNaturalExitWinsCancellationRace(t *testing.T) {
 	ready, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
@@ -221,6 +257,30 @@ func TestClassifyRunErrorPreservesWaitDelayFailure(t *testing.T) {
 	err := classifyRunError(exec.ErrWaitDelay, nil, processOutcomeNatural)
 	if !errors.Is(err, exec.ErrWaitDelay) {
 		t.Fatalf("classifyRunError(ErrWaitDelay) = %v, want ErrWaitDelay", err)
+	}
+}
+
+func TestRunnerReportsWaitDelayWhenDescendantHoldsOutputPipeAfterExit(t *testing.T) {
+	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
+	request := helperRequest("exit-with-orphan-output-pipe")
+	request.Arguments = append(request.Arguments, pidPath)
+
+	result, err := (Runner{WaitDelay: time.Millisecond}).Run(
+		context.Background(),
+		request,
+	)
+	if pidBytes, readErr := os.ReadFile(pidPath); readErr == nil {
+		if pid, parseErr := strconv.Atoi(string(pidBytes)); parseErr == nil {
+			if process, findErr := os.FindProcess(pid); findErr == nil {
+				_ = process.Kill()
+			}
+		}
+	}
+	if !errors.Is(err, exec.ErrWaitDelay) {
+		t.Fatalf("Run() error = %v, want exec.ErrWaitDelay", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("Run() exit code = %d, want the parent process's successful exit", result.ExitCode)
 	}
 }
 
@@ -348,6 +408,42 @@ func TestRunnerHelperProcess(t *testing.T) {
 			t.Fatalf("parse exit code: %v", err)
 		}
 		os.Exit(exitCode)
+	case "ready-block":
+		if separator+2 >= len(os.Args) {
+			t.Fatal("ready-block helper address is missing")
+		}
+		connection, err := net.Dial("udp", os.Args[separator+2])
+		if err != nil {
+			t.Fatalf("notify readiness: %v", err)
+		}
+		if _, err := connection.Write([]byte{1}); err != nil {
+			t.Fatalf("notify readiness: %v", err)
+		}
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	case "exit-with-orphan-output-pipe":
+		if separator+2 >= len(os.Args) {
+			t.Fatal("descendant pid path is missing")
+		}
+		child := exec.Command(
+			os.Args[0],
+			"-test.run=^TestRunnerHelperProcess$",
+			"--",
+			"hold-output-pipe",
+		)
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Start(); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(
+			os.Args[separator+2],
+			[]byte(strconv.Itoa(child.Process.Pid)),
+			0o600,
+		); err != nil {
+			t.Fatal(err)
+		}
+		os.Exit(0)
 	case "orphan-output-pipe":
 		child := exec.Command(
 			os.Args[0],

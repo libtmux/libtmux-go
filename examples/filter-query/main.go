@@ -18,20 +18,19 @@ func main() {
 	}
 }
 
-// start owns the context and the server, so that main does nothing but
-// report a failure. log.Fatal exits without running deferred calls, and the
-// cancel below has to run.
+// start owns cleanup because log.Fatal skips deferred calls in main.
 func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server := tmux.NewServer(tmux.ServerOptions{})
+	server, err := tmux.NewServer(tmux.ServerOptions{})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
 	return run(ctx, server)
 }
 
-// run holds the example itself, so that main runs it against a socket of this
-// example's own and the test beside it runs the same code against a server the
-// test harness throws away.
+// run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-filter"})
 	if err != nil {

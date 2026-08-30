@@ -341,7 +341,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	name, _ := session.Name()
 	producing := session.Server()
 	if session.sessionID != "$7" || name != "alpha" ||
-		producing.connectionState().runner != runner {
+		producing.connectionState().executor != runner {
 		t.Fatalf("NewSession() = %#v with name %q, want live $7 alpha model", session, name)
 	}
 
@@ -483,7 +483,8 @@ func TestNewWindowBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 		t.Fatalf("NewWindow() error = %v", err)
 	}
 	name, _ := window.Name()
-	if window.windowID != "@8" || window.windowIndex != 4 || name != "editor" || window.Server() != server {
+	if window.windowID != "@8" || window.windowIndex != 4 || name != "editor" ||
+		window.Server().connectionState() != server.connectionState() || window.Server().daemon == nil {
 		t.Fatalf("NewWindow() = %#v with name %q, want live @8 index 4 model", window, name)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
@@ -526,7 +527,8 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SplitPane() error = %v", err)
 	}
-	if pane.paneID != "%9" || pane.paneIndex != 1 || pane.Server() != server {
+	if pane.paneID != "%9" || pane.paneIndex != 1 ||
+		pane.Server().connectionState() != server.connectionState() || pane.Server().daemon == nil {
 		t.Fatalf("SplitPane() = %#v, want live %%9 model", pane)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
@@ -903,8 +905,8 @@ func TestCreationReturnsIdentityHandleWhenLiveLookupFails(t *testing.T) {
 					test.wantSameServer,
 				)
 			}
-			if producingServer.connectionState().runner != runner {
-				t.Fatal("partial-success Server() lost the creating command runner")
+			if producingServer.connectionState().executor != runner {
+				t.Fatal("partial-success Server() lost the creating command executor")
 			}
 		})
 	}
@@ -967,8 +969,8 @@ func TestCreationTransportErrorPreservesPrintedIdentity(t *testing.T) {
 			if identity != test.identity {
 				t.Fatalf("transport-error identity = %q, want %q", identity, test.identity)
 			}
-			if producingServer.connectionState().runner != runner {
-				t.Fatal("transport-error handle lost the creating command runner")
+			if producingServer.connectionState().executor != runner {
+				t.Fatal("transport-error handle lost the creating command executor")
 			}
 			if calls := runner.callCount(); calls != 1 {
 				t.Fatalf("runner calls = %d, want no lookup after transport error", calls)
@@ -1330,11 +1332,9 @@ func TestNewSessionScrubsTMUXFromExplicitEnvironment(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
 		Stderr: []string{"stop after environment capture"}, ExitCode: 7,
 	}}}}
-	server := Server{state: &serverState{
-		shared:  &serverShared{},
-		options: ServerOptions{ProcessEnvironment: []string{"TMUX=/tmp/foreign,123,0", "KEEP=value"}},
-		runner:  runner,
-	}}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		ProcessEnvironment: []string{"TMUX=/tmp/foreign,123,0", "KEEP=value"},
+	}, runner)
 
 	_, err := server.NewSession(context.Background(), NewSessionRequest{})
 	if !errors.Is(err, ErrCommand) {
@@ -1343,6 +1343,12 @@ func TestNewSessionScrubsTMUXFromExplicitEnvironment(t *testing.T) {
 	request := runner.recordedRequests()[0]
 	if !slices.Equal(request.Environment, []string{"KEEP=value"}) {
 		t.Fatalf("new-session child environment = %#v, want only KEEP", request.Environment)
+	}
+	if !slices.Contains(request.Arguments, "-S/tmp/foreign") {
+		t.Fatalf(
+			"new-session arguments = %#v, want frozen TMUX socket selector",
+			request.Arguments,
+		)
 	}
 }
 
@@ -1385,7 +1391,7 @@ func TestNewSessionUsesOneScrubbedHandleAcrossTheLifecycle(t *testing.T) {
 		t.Fatal("NewSession() returned the unsanitized input server")
 	}
 	if value, ok := lifecycleEnvironmentValue(
-		producing.connectionState().options.ProcessEnvironment,
+		producing.ProcessEnvironment(),
 		"TMUX",
 	); ok {
 		t.Fatalf("returned server TMUX = %q, want absent", value)

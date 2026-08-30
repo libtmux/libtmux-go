@@ -6,25 +6,13 @@ import (
 	"testing"
 	"time"
 
-	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// What a tool call costs, which is the number a client feels.
-//
-// BENCHMARKS.md measures the ways of reaching tmux. This measures the layer on
-// top: one MCP round trip, decoded and validated, against a real tmux. A
-// regression here shows up as a slower agent rather than as a failing test.
-//
-// Read these as a relative signal, not as a cost. Talking to tmux dominates
-// every number, so the protocol is the smaller part of each, and the wall
-// clock moves with whatever else the machine is running. What is worth
-// comparing is one revision against another on one machine, and the allocation
-// counts, which do not move with load.
-//
-// The transport is the in-memory pair, so the pipe a real client speaks over is
-// excluded and everything else is included.
+// These benchmarks measure decoded and validated in-memory MCP calls against a
+// real tmux. Compare revisions on one machine: tmux dominates wall time, while
+// allocation counts are stable. Stdio framing is excluded.
 
 // benchServer connects one client to one server against a real tmux.
 func benchServer(b *testing.B) (*sdk.ClientSession, context.Context) {
@@ -34,7 +22,9 @@ func benchServer(b *testing.B) (*sdk.ClientSession, context.Context) {
 
 	target := tmuxtest.NewServerWithOptions(ctx, b, tmuxtest.ServerOptions{})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil)
+	serverSession, err := mustMCPServer(b, target).Connect(
+		ctx, assumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -92,14 +82,8 @@ func BenchmarkToolCall(b *testing.B) {
 	}
 }
 
-// BenchmarkBatchAgainstSerial measures what a batch actually saves, which is
-// not server time. Over this transport the two run the same tmux commands and
-// come out level on the clock and level on allocation count; what the batch
-// saves is the bytes of two replies it never builds, and over a real pipe two
-// of the three round trips. Its reason
-// to exist is the caller's turn rather than the server's CPU, so a change that
-// made batching slower per call than its parts would still be worth having and
-// this is here to show which of the two moved.
+// BenchmarkBatchAgainstSerial compares elapsed time and allocations for one
+// batch call with the same three calls made separately.
 func BenchmarkBatchAgainstSerial(b *testing.B) {
 	session, ctx := benchServer(b)
 	calls := []map[string]any{
@@ -135,19 +119,9 @@ func BenchmarkBatchAgainstSerial(b *testing.B) {
 	})
 }
 
-// BenchmarkCaptureSinceAgainstCapturePane measures the trade capture_since
-// makes, which is not a faster call.
-//
-// It costs more on the server than a plain capture: it reads the pane and then
-// fingerprints the rows to mint a cursor, so it does strictly more work. The
-// saving it offers is in what comes back, which is the scarce thing, and it is
-// not free either -- the cursor is around half a kilobyte in every reply.
-//
-// So there is a break-even, and bytes/reply is reported to keep it visible: a
-// screen smaller than the cursor is cheaper to re-send whole. On the 80x24
-// pane of short lines here, capture_pane wins on both counts. capture_since
-// earns its place on a wide pane holding full lines, checked repeatedly --
-// which is what it is for, and is worth knowing is not every pane.
+// BenchmarkCaptureSinceAgainstCapturePane reports server cost and reply bytes.
+// capture_since adds fingerprinting and a cursor, so it wins only when avoiding
+// repeated large captures.
 func BenchmarkCaptureSinceAgainstCapturePane(b *testing.B) {
 	session, ctx := benchServer(b)
 	var pane string

@@ -1807,10 +1807,9 @@ const (
 	generatedPaneHookCount      = 7
 )
 
-// ServerOptionValues is an immutable point-in-time view of known server option values. Its zero value
-// has no present values. Obtain it with [Server.Options]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// ServerOptionValues is an immutable materialized view of known server option values; its zero value is empty and it does not refresh.
+// Obtain it with [Server.Options]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [Server.RawOption] for caller-named or undecoded values.
 type ServerOptionValues struct {
 	backspace                   OptionValue[string]
 	bufferLimit                 OptionValue[int64]
@@ -1839,192 +1838,117 @@ type ServerOptionValues struct {
 	variationSelectorAlwaysWide OptionValue[bool]
 }
 
-// Backspace returns the "backspace" server option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are KEY since tmux 3.2a.
-// Set it with [Server.SetBackspace].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// Backspace returns materialized "backspace" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
+// Available as KEY since tmux 3.2a; set it with [Server.SetBackspace].
 func (v ServerOptionValues) Backspace() OptionValue[string] { return v.backspace }
 
-// BufferLimit returns the "buffer-limit" server option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Server.SetBufferLimit].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// BufferLimit returns materialized "buffer-limit" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Server.SetBufferLimit].
 func (v ServerOptionValues) BufferLimit() OptionValue[int64] { return v.bufferLimit }
 
-// CodepointWidths returns the "codepoint-widths" server option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Server.SetCodepointWidths].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CodepointWidths returns materialized "codepoint-widths" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Server.SetCodepointWidths].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) CodepointWidths() OptionValue[SparseArray[string]] {
 	return v.codepointWidths
 }
 
-// CommandAlias returns the "command-alias" server option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetCommandAlias].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CommandAlias returns materialized "command-alias" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetCommandAlias].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) CommandAlias() OptionValue[SparseArray[string]] { return v.commandAlias }
 
-// CopyCommand returns the "copy-command" server option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetCopyCommand].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CopyCommand returns materialized "copy-command" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetCopyCommand].
 func (v ServerOptionValues) CopyCommand() OptionValue[string] { return v.copyCommand }
 
-// DefaultClientCommand returns the "default-client-command" server option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.6.
-// Set it with [Server.SetDefaultClientCommand].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DefaultClientCommand returns materialized "default-client-command" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
+// Available as COMMAND since tmux 3.6; set it with [Server.SetDefaultClientCommand].
 func (v ServerOptionValues) DefaultClientCommand() OptionValue[string] { return v.defaultClientCommand }
 
-// DefaultTerminal returns the "default-terminal" server option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetDefaultTerminal].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DefaultTerminal returns materialized "default-terminal" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetDefaultTerminal].
 func (v ServerOptionValues) DefaultTerminal() OptionValue[string] { return v.defaultTerminal }
 
-// Editor returns the "editor" server option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetEditor].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// Editor returns materialized "editor" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetEditor].
 func (v ServerOptionValues) Editor() OptionValue[string] { return v.editor }
 
-// EscapeTime returns the "escape-time" server option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Server.SetEscapeTime].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// EscapeTime returns materialized "escape-time" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Server.SetEscapeTime].
 func (v ServerOptionValues) EscapeTime() OptionValue[int64] { return v.escapeTime }
 
-// ExitEmpty returns the "exit-empty" server option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Server.SetExitEmpty].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ExitEmpty returns materialized "exit-empty" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Server.SetExitEmpty].
 func (v ServerOptionValues) ExitEmpty() OptionValue[bool] { return v.exitEmpty }
 
-// ExitUnattached returns the "exit-unattached" server option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Server.SetExitUnattached].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ExitUnattached returns materialized "exit-unattached" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Server.SetExitUnattached].
 func (v ServerOptionValues) ExitUnattached() OptionValue[bool] { return v.exitUnattached }
 
-// ExtendedKeys returns the "extended-keys" server option value as [OptionValue] with Go value shape OptionValue[ExtendedKeys]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "always").
-// Set it with [Server.SetExtendedKeys].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ExtendedKeys returns materialized "extended-keys" as [OptionValue] with value type OptionValue[ExtendedKeys] from server option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "always"); set it with [Server.SetExtendedKeys].
 func (v ServerOptionValues) ExtendedKeys() OptionValue[ExtendedKeys] { return v.extendedKeys }
 
-// ExtendedKeysFormat returns the "extended-keys-format" server option value as [OptionValue] with Go value shape OptionValue[ExtendedKeysFormat]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.5 (choices: "csi-u", "xterm").
-// Set it with [Server.SetExtendedKeysFormat].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ExtendedKeysFormat returns materialized "extended-keys-format" as [OptionValue] with value type OptionValue[ExtendedKeysFormat] from server option values; it does not query tmux.
+// Available as CHOICE since tmux 3.5 (choices: "csi-u", "xterm"); set it with [Server.SetExtendedKeysFormat].
 func (v ServerOptionValues) ExtendedKeysFormat() OptionValue[ExtendedKeysFormat] {
 	return v.extendedKeysFormat
 }
 
-// FocusEvents returns the "focus-events" server option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Server.SetFocusEvents].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// FocusEvents returns materialized "focus-events" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Server.SetFocusEvents].
 func (v ServerOptionValues) FocusEvents() OptionValue[bool] { return v.focusEvents }
 
-// GetClipboard returns the "get-clipboard" server option value as [OptionValue] with Go value shape OptionValue[GetClipboard]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.7 (choices: "off", "buffer", "request", "both").
-// Set it with [Server.SetGetClipboard].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// GetClipboard returns materialized "get-clipboard" as [OptionValue] with value type OptionValue[GetClipboard] from server option values; it does not query tmux.
+// Available as CHOICE since tmux 3.7 (choices: "off", "buffer", "request", "both"); set it with [Server.SetGetClipboard].
 func (v ServerOptionValues) GetClipboard() OptionValue[GetClipboard] { return v.getClipboard }
 
-// HistoryFile returns the "history-file" server option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetHistoryFile].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// HistoryFile returns materialized "history-file" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetHistoryFile].
 func (v ServerOptionValues) HistoryFile() OptionValue[string] { return v.historyFile }
 
-// InputBufferSize returns the "input-buffer-size" server option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.6.
-// Set it with [Server.SetInputBufferSize].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// InputBufferSize returns materialized "input-buffer-size" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// Available as NUMBER since tmux 3.6; set it with [Server.SetInputBufferSize].
 func (v ServerOptionValues) InputBufferSize() OptionValue[int64] { return v.inputBufferSize }
 
-// MessageLimit returns the "message-limit" server option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Server.SetMessageLimit].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MessageLimit returns materialized "message-limit" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Server.SetMessageLimit].
 func (v ServerOptionValues) MessageLimit() OptionValue[int64] { return v.messageLimit }
 
-// PrefixTimeout returns the "prefix-timeout" server option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.5.
-// Set it with [Server.SetPrefixTimeout].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PrefixTimeout returns materialized "prefix-timeout" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// Available as NUMBER since tmux 3.5; set it with [Server.SetPrefixTimeout].
 func (v ServerOptionValues) PrefixTimeout() OptionValue[int64] { return v.prefixTimeout }
 
-// PromptHistoryLimit returns the "prompt-history-limit" server option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.3.
-// Set it with [Server.SetPromptHistoryLimit].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PromptHistoryLimit returns materialized "prompt-history-limit" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// Available as NUMBER since tmux 3.3; set it with [Server.SetPromptHistoryLimit].
 func (v ServerOptionValues) PromptHistoryLimit() OptionValue[int64] { return v.promptHistoryLimit }
 
-// SetClipboard returns the "set-clipboard" server option value as [OptionValue] with Go value shape OptionValue[SetClipboard]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "external", "on").
-// Set it with [Server.SetClipboard].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// SetClipboard returns materialized "set-clipboard" as [OptionValue] with value type OptionValue[SetClipboard] from server option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "external", "on"); set it with [Server.SetClipboard].
 func (v ServerOptionValues) SetClipboard() OptionValue[SetClipboard] { return v.setClipboard }
 
-// TerminalFeatures returns the "terminal-features" server option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetTerminalFeatures].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// TerminalFeatures returns materialized "terminal-features" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetTerminalFeatures].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) TerminalFeatures() OptionValue[SparseArray[string]] {
 	return v.terminalFeatures
 }
 
-// TerminalOverrides returns the "terminal-overrides" server option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetTerminalOverrides].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// TerminalOverrides returns materialized "terminal-overrides" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetTerminalOverrides].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) TerminalOverrides() OptionValue[SparseArray[string]] {
 	return v.terminalOverrides
 }
 
-// UserKeys returns the "user-keys" server option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Server.SetUserKeys].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// UserKeys returns materialized "user-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Server.SetUserKeys].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) UserKeys() OptionValue[SparseArray[string]] { return v.userKeys }
 
-// VariationSelectorAlwaysWide returns the "variation-selector-always-wide" server option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.6.
-// Set it with [Server.SetVariationSelectorAlwaysWide].
-// Use [Server.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// VariationSelectorAlwaysWide returns materialized "variation-selector-always-wide" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
+// Available as FLAG since tmux 3.6; set it with [Server.SetVariationSelectorAlwaysWide].
 func (v ServerOptionValues) VariationSelectorAlwaysWide() OptionValue[bool] {
 	return v.variationSelectorAlwaysWide
 }
@@ -2088,10 +2012,9 @@ func newServerOptionValues(values []decodedOptionValue) ServerOptionValues {
 	return result
 }
 
-// SessionOptionValues is an immutable point-in-time view of known session option values. Its zero value
-// has no present values. Obtain it with [Session.Options] or [GlobalSessionScope.Options]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// SessionOptionValues is an immutable materialized view of known session option values; its zero value is empty and it does not refresh.
+// Obtain it with [Session.Options] or [GlobalSessionScope.Options]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
 type SessionOptionValues struct {
 	activityAction           OptionValue[ActivityAction]
 	assumePasteTime          OptionValue[int64]
@@ -2149,394 +2072,237 @@ type SessionOptionValues struct {
 	wordSeparators           OptionValue[string]
 }
 
-// ActivityAction returns the "activity-action" session option value as [OptionValue] with Go value shape OptionValue[ActivityAction]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "none", "any", "current", "other").
-// Set it with [Session.SetActivityAction] or [GlobalSessionScope.SetActivityAction].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ActivityAction returns materialized "activity-action" as [OptionValue] with value type OptionValue[ActivityAction] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "none", "any", "current", "other"); set it with [Session.SetActivityAction] or [GlobalSessionScope.SetActivityAction].
 func (v SessionOptionValues) ActivityAction() OptionValue[ActivityAction] { return v.activityAction }
 
-// AssumePasteTime returns the "assume-paste-time" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetAssumePasteTime] or [GlobalSessionScope.SetAssumePasteTime].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AssumePasteTime returns materialized "assume-paste-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetAssumePasteTime] or [GlobalSessionScope.SetAssumePasteTime].
 func (v SessionOptionValues) AssumePasteTime() OptionValue[int64] { return v.assumePasteTime }
 
-// BaseIndex returns the "base-index" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetBaseIndex] or [GlobalSessionScope.SetBaseIndex].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// BaseIndex returns materialized "base-index" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetBaseIndex] or [GlobalSessionScope.SetBaseIndex].
 func (v SessionOptionValues) BaseIndex() OptionValue[int64] { return v.baseIndex }
 
-// BellAction returns the "bell-action" session option value as [OptionValue] with Go value shape OptionValue[BellAction]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "none", "any", "current", "other").
-// Set it with [Session.SetBellAction] or [GlobalSessionScope.SetBellAction].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// BellAction returns materialized "bell-action" as [OptionValue] with value type OptionValue[BellAction] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "none", "any", "current", "other"); set it with [Session.SetBellAction] or [GlobalSessionScope.SetBellAction].
 func (v SessionOptionValues) BellAction() OptionValue[BellAction] { return v.bellAction }
 
-// DefaultCommand returns the "default-command" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetDefaultCommand] or [GlobalSessionScope.SetDefaultCommand].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DefaultCommand returns materialized "default-command" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetDefaultCommand] or [GlobalSessionScope.SetDefaultCommand].
 func (v SessionOptionValues) DefaultCommand() OptionValue[string] { return v.defaultCommand }
 
-// DefaultShell returns the "default-shell" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetDefaultShell] or [GlobalSessionScope.SetDefaultShell].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DefaultShell returns materialized "default-shell" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetDefaultShell] or [GlobalSessionScope.SetDefaultShell].
 func (v SessionOptionValues) DefaultShell() OptionValue[string] { return v.defaultShell }
 
-// DefaultSize returns the "default-size" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetDefaultSize] or [GlobalSessionScope.SetDefaultSize].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DefaultSize returns materialized "default-size" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetDefaultSize] or [GlobalSessionScope.SetDefaultSize].
 func (v SessionOptionValues) DefaultSize() OptionValue[string] { return v.defaultSize }
 
-// DestroyUnattached returns the "destroy-unattached" session option value as [OptionValue] with Go value shape OptionValue[DestroyUnattached]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a; CHOICE since tmux 3.4 (choices: "off", "on", "keep-last", "keep-group").
-// Set it with [Session.SetDestroyUnattached] or [GlobalSessionScope.SetDestroyUnattached].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DestroyUnattached returns materialized "destroy-unattached" as [OptionValue] with value type OptionValue[DestroyUnattached] from session option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; CHOICE since tmux 3.4 (choices: "off", "on", "keep-last", "keep-group"); set it with [Session.SetDestroyUnattached] or [GlobalSessionScope.SetDestroyUnattached].
 func (v SessionOptionValues) DestroyUnattached() OptionValue[DestroyUnattached] {
 	return v.destroyUnattached
 }
 
-// DetachOnDestroy returns the "detach-on-destroy" session option value as [OptionValue] with Go value shape OptionValue[DetachOnDestroy]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "no-detached"); CHOICE since tmux 3.4 (choices: "off", "on", "no-detached", "previous", "next").
-// Set it with [Session.SetDetachOnDestroy] or [GlobalSessionScope.SetDetachOnDestroy].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DetachOnDestroy returns materialized "detach-on-destroy" as [OptionValue] with value type OptionValue[DetachOnDestroy] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "no-detached"); CHOICE since tmux 3.4 (choices: "off", "on", "no-detached", "previous", "next"); set it with [Session.SetDetachOnDestroy] or [GlobalSessionScope.SetDetachOnDestroy].
 func (v SessionOptionValues) DetachOnDestroy() OptionValue[DetachOnDestroy] { return v.detachOnDestroy }
 
-// DisplayPanesActiveColour returns the "display-panes-active-colour" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.2a.
-// Set it with [Session.SetDisplayPanesActiveColour] or [GlobalSessionScope.SetDisplayPanesActiveColour].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DisplayPanesActiveColour returns materialized "display-panes-active-colour" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as COLOUR since tmux 3.2a; set it with [Session.SetDisplayPanesActiveColour] or [GlobalSessionScope.SetDisplayPanesActiveColour].
 func (v SessionOptionValues) DisplayPanesActiveColour() OptionValue[string] {
 	return v.displayPanesActiveColour
 }
 
-// DisplayPanesColour returns the "display-panes-colour" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.2a.
-// Set it with [Session.SetDisplayPanesColour] or [GlobalSessionScope.SetDisplayPanesColour].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DisplayPanesColour returns materialized "display-panes-colour" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as COLOUR since tmux 3.2a; set it with [Session.SetDisplayPanesColour] or [GlobalSessionScope.SetDisplayPanesColour].
 func (v SessionOptionValues) DisplayPanesColour() OptionValue[string] { return v.displayPanesColour }
 
-// DisplayPanesTime returns the "display-panes-time" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetDisplayPanesTime] or [GlobalSessionScope.SetDisplayPanesTime].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DisplayPanesTime returns materialized "display-panes-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetDisplayPanesTime] or [GlobalSessionScope.SetDisplayPanesTime].
 func (v SessionOptionValues) DisplayPanesTime() OptionValue[int64] { return v.displayPanesTime }
 
-// DisplayTime returns the "display-time" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetDisplayTime] or [GlobalSessionScope.SetDisplayTime].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// DisplayTime returns materialized "display-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetDisplayTime] or [GlobalSessionScope.SetDisplayTime].
 func (v SessionOptionValues) DisplayTime() OptionValue[int64] { return v.displayTime }
 
-// FocusFollowsMouse returns the "focus-follows-mouse" session option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.7.
-// Set it with [Session.SetFocusFollowsMouse] or [GlobalSessionScope.SetFocusFollowsMouse].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// FocusFollowsMouse returns materialized "focus-follows-mouse" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
+// Available as FLAG since tmux 3.7; set it with [Session.SetFocusFollowsMouse] or [GlobalSessionScope.SetFocusFollowsMouse].
 func (v SessionOptionValues) FocusFollowsMouse() OptionValue[bool] { return v.focusFollowsMouse }
 
-// HistoryLimit returns the "history-limit" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetHistoryLimit] or [GlobalSessionScope.SetHistoryLimit].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// HistoryLimit returns materialized "history-limit" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetHistoryLimit] or [GlobalSessionScope.SetHistoryLimit].
 func (v SessionOptionValues) HistoryLimit() OptionValue[int64] { return v.historyLimit }
 
-// InitialRepeatTime returns the "initial-repeat-time" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.6.
-// Set it with [Session.SetInitialRepeatTime] or [GlobalSessionScope.SetInitialRepeatTime].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// InitialRepeatTime returns materialized "initial-repeat-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.6; set it with [Session.SetInitialRepeatTime] or [GlobalSessionScope.SetInitialRepeatTime].
 func (v SessionOptionValues) InitialRepeatTime() OptionValue[int64] { return v.initialRepeatTime }
 
-// KeyTable returns the "key-table" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetKeyTable] or [GlobalSessionScope.SetKeyTable].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// KeyTable returns materialized "key-table" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetKeyTable] or [GlobalSessionScope.SetKeyTable].
 func (v SessionOptionValues) KeyTable() OptionValue[string] { return v.keyTable }
 
-// LockAfterTime returns the "lock-after-time" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetLockAfterTime] or [GlobalSessionScope.SetLockAfterTime].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// LockAfterTime returns materialized "lock-after-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetLockAfterTime] or [GlobalSessionScope.SetLockAfterTime].
 func (v SessionOptionValues) LockAfterTime() OptionValue[int64] { return v.lockAfterTime }
 
-// LockCommand returns the "lock-command" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetLockCommand] or [GlobalSessionScope.SetLockCommand].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// LockCommand returns materialized "lock-command" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetLockCommand] or [GlobalSessionScope.SetLockCommand].
 func (v SessionOptionValues) LockCommand() OptionValue[string] { return v.lockCommand }
 
-// MessageCommandStyle returns the "message-command-style" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetMessageCommandStyle] or [GlobalSessionScope.SetMessageCommandStyle].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
+// MessageCommandStyle returns materialized "message-command-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetMessageCommandStyle] or [GlobalSessionScope.SetMessageCommandStyle].
 // It is a style option.
 func (v SessionOptionValues) MessageCommandStyle() OptionValue[string] { return v.messageCommandStyle }
 
-// MessageFormat returns the "message-format" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Session.SetMessageFormat] or [GlobalSessionScope.SetMessageFormat].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MessageFormat returns materialized "message-format" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Session.SetMessageFormat] or [GlobalSessionScope.SetMessageFormat].
 func (v SessionOptionValues) MessageFormat() OptionValue[string] { return v.messageFormat }
 
-// MessageLine returns the "message-line" session option value as [OptionValue] with Go value shape OptionValue[MessageLine]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.4 (choices: "0", "1", "2", "3", "4").
-// Set it with [Session.SetMessageLine] or [GlobalSessionScope.SetMessageLine].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MessageLine returns materialized "message-line" as [OptionValue] with value type OptionValue[MessageLine] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.4 (choices: "0", "1", "2", "3", "4"); set it with [Session.SetMessageLine] or [GlobalSessionScope.SetMessageLine].
 func (v SessionOptionValues) MessageLine() OptionValue[MessageLine] { return v.messageLine }
 
-// MessageStyle returns the "message-style" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetMessageStyle] or [GlobalSessionScope.SetMessageStyle].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
+// MessageStyle returns materialized "message-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetMessageStyle] or [GlobalSessionScope.SetMessageStyle].
 // It is a style option.
 func (v SessionOptionValues) MessageStyle() OptionValue[string] { return v.messageStyle }
 
-// Mouse returns the "mouse" session option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Session.SetMouse] or [GlobalSessionScope.SetMouse].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// Mouse returns materialized "mouse" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Session.SetMouse] or [GlobalSessionScope.SetMouse].
 func (v SessionOptionValues) Mouse() OptionValue[bool] { return v.mouse }
 
-// Prefix returns the "prefix" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are KEY since tmux 3.2a.
-// Set it with [Session.SetPrefix] or [GlobalSessionScope.SetPrefix].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// Prefix returns materialized "prefix" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as KEY since tmux 3.2a; set it with [Session.SetPrefix] or [GlobalSessionScope.SetPrefix].
 func (v SessionOptionValues) Prefix() OptionValue[string] { return v.prefix }
 
-// Prefix2 returns the "prefix2" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are KEY since tmux 3.2a.
-// Set it with [Session.SetPrefix2] or [GlobalSessionScope.SetPrefix2].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// Prefix2 returns materialized "prefix2" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as KEY since tmux 3.2a; set it with [Session.SetPrefix2] or [GlobalSessionScope.SetPrefix2].
 func (v SessionOptionValues) Prefix2() OptionValue[string] { return v.prefix2 }
 
-// PromptCommandCursorStyle returns the "prompt-command-cursor-style" session option value as [OptionValue] with Go value shape OptionValue[PromptCommandCursorStyle]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.7 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar").
-// Set it with [Session.SetPromptCommandCursorStyle] or [GlobalSessionScope.SetPromptCommandCursorStyle].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PromptCommandCursorStyle returns materialized "prompt-command-cursor-style" as [OptionValue] with value type OptionValue[PromptCommandCursorStyle] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.7 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Session.SetPromptCommandCursorStyle] or [GlobalSessionScope.SetPromptCommandCursorStyle].
 func (v SessionOptionValues) PromptCommandCursorStyle() OptionValue[PromptCommandCursorStyle] {
 	return v.promptCommandCursorStyle
 }
 
-// PromptCursorColour returns the "prompt-cursor-colour" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.6.
-// Set it with [Session.SetPromptCursorColour] or [GlobalSessionScope.SetPromptCursorColour].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PromptCursorColour returns materialized "prompt-cursor-colour" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as COLOUR since tmux 3.6; set it with [Session.SetPromptCursorColour] or [GlobalSessionScope.SetPromptCursorColour].
 func (v SessionOptionValues) PromptCursorColour() OptionValue[string] { return v.promptCursorColour }
 
-// PromptCursorStyle returns the "prompt-cursor-style" session option value as [OptionValue] with Go value shape OptionValue[PromptCursorStyle]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.6 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar").
-// Set it with [Session.SetPromptCursorStyle] or [GlobalSessionScope.SetPromptCursorStyle].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PromptCursorStyle returns materialized "prompt-cursor-style" as [OptionValue] with value type OptionValue[PromptCursorStyle] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.6 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Session.SetPromptCursorStyle] or [GlobalSessionScope.SetPromptCursorStyle].
 func (v SessionOptionValues) PromptCursorStyle() OptionValue[PromptCursorStyle] {
 	return v.promptCursorStyle
 }
 
-// RenumberWindows returns the "renumber-windows" session option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Session.SetRenumberWindows] or [GlobalSessionScope.SetRenumberWindows].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// RenumberWindows returns materialized "renumber-windows" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Session.SetRenumberWindows] or [GlobalSessionScope.SetRenumberWindows].
 func (v SessionOptionValues) RenumberWindows() OptionValue[bool] { return v.renumberWindows }
 
-// RepeatTime returns the "repeat-time" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetRepeatTime] or [GlobalSessionScope.SetRepeatTime].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// RepeatTime returns materialized "repeat-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetRepeatTime] or [GlobalSessionScope.SetRepeatTime].
 func (v SessionOptionValues) RepeatTime() OptionValue[int64] { return v.repeatTime }
 
-// SetTitles returns the "set-titles" session option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Session.SetTitles] or [GlobalSessionScope.SetTitles].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// SetTitles returns materialized "set-titles" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Session.SetTitles] or [GlobalSessionScope.SetTitles].
 func (v SessionOptionValues) SetTitles() OptionValue[bool] { return v.setTitles }
 
-// SetTitlesString returns the "set-titles-string" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetTitlesString] or [GlobalSessionScope.SetTitlesString].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// SetTitlesString returns materialized "set-titles-string" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetTitlesString] or [GlobalSessionScope.SetTitlesString].
 func (v SessionOptionValues) SetTitlesString() OptionValue[string] { return v.setTitlesString }
 
-// SilenceAction returns the "silence-action" session option value as [OptionValue] with Go value shape OptionValue[SilenceAction]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "none", "any", "current", "other").
-// Set it with [Session.SetSilenceAction] or [GlobalSessionScope.SetSilenceAction].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// SilenceAction returns materialized "silence-action" as [OptionValue] with value type OptionValue[SilenceAction] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "none", "any", "current", "other"); set it with [Session.SetSilenceAction] or [GlobalSessionScope.SetSilenceAction].
 func (v SessionOptionValues) SilenceAction() OptionValue[SilenceAction] { return v.silenceAction }
 
-// Status returns the "status" session option value as [OptionValue] with Go value shape OptionValue[Status]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "2", "3", "4", "5").
-// Set it with [Session.SetStatus] or [GlobalSessionScope.SetStatus].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// Status returns materialized "status" as [OptionValue] with value type OptionValue[Status] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "2", "3", "4", "5"); set it with [Session.SetStatus] or [GlobalSessionScope.SetStatus].
 func (v SessionOptionValues) Status() OptionValue[Status] { return v.status }
 
-// StatusBG returns the "status-bg" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.2a.
-// Set it with [Session.SetStatusBG] or [GlobalSessionScope.SetStatusBG].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusBG returns materialized "status-bg" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as COLOUR since tmux 3.2a; set it with [Session.SetStatusBG] or [GlobalSessionScope.SetStatusBG].
 func (v SessionOptionValues) StatusBG() OptionValue[string] { return v.statusBG }
 
-// StatusFG returns the "status-fg" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.2a.
-// Set it with [Session.SetStatusFG] or [GlobalSessionScope.SetStatusFG].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusFG returns materialized "status-fg" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as COLOUR since tmux 3.2a; set it with [Session.SetStatusFG] or [GlobalSessionScope.SetStatusFG].
 func (v SessionOptionValues) StatusFG() OptionValue[string] { return v.statusFG }
 
-// StatusFormat returns the "status-format" session option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetStatusFormat] or [GlobalSessionScope.SetStatusFormat].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusFormat returns materialized "status-format" as [OptionValue] with value type OptionValue[SparseArray[string]] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetStatusFormat] or [GlobalSessionScope.SetStatusFormat].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionOptionValues) StatusFormat() OptionValue[SparseArray[string]] { return v.statusFormat }
 
-// StatusInterval returns the "status-interval" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetStatusInterval] or [GlobalSessionScope.SetStatusInterval].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusInterval returns materialized "status-interval" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetStatusInterval] or [GlobalSessionScope.SetStatusInterval].
 func (v SessionOptionValues) StatusInterval() OptionValue[int64] { return v.statusInterval }
 
-// StatusJustify returns the "status-justify" session option value as [OptionValue] with Go value shape OptionValue[StatusJustify]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "left", "centre", "right", "absolute-centre").
-// Set it with [Session.SetStatusJustify] or [GlobalSessionScope.SetStatusJustify].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusJustify returns materialized "status-justify" as [OptionValue] with value type OptionValue[StatusJustify] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "left", "centre", "right", "absolute-centre"); set it with [Session.SetStatusJustify] or [GlobalSessionScope.SetStatusJustify].
 func (v SessionOptionValues) StatusJustify() OptionValue[StatusJustify] { return v.statusJustify }
 
-// StatusKeys returns the "status-keys" session option value as [OptionValue] with Go value shape OptionValue[StatusKeys]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "emacs", "vi").
-// Set it with [Session.SetStatusKeys] or [GlobalSessionScope.SetStatusKeys].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusKeys returns materialized "status-keys" as [OptionValue] with value type OptionValue[StatusKeys] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "emacs", "vi"); set it with [Session.SetStatusKeys] or [GlobalSessionScope.SetStatusKeys].
 func (v SessionOptionValues) StatusKeys() OptionValue[StatusKeys] { return v.statusKeys }
 
-// StatusLeft returns the "status-left" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetStatusLeft] or [GlobalSessionScope.SetStatusLeft].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusLeft returns materialized "status-left" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetStatusLeft] or [GlobalSessionScope.SetStatusLeft].
 func (v SessionOptionValues) StatusLeft() OptionValue[string] { return v.statusLeft }
 
-// StatusLeftLength returns the "status-left-length" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetStatusLeftLength] or [GlobalSessionScope.SetStatusLeftLength].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusLeftLength returns materialized "status-left-length" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetStatusLeftLength] or [GlobalSessionScope.SetStatusLeftLength].
 func (v SessionOptionValues) StatusLeftLength() OptionValue[int64] { return v.statusLeftLength }
 
-// StatusLeftStyle returns the "status-left-style" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetStatusLeftStyle] or [GlobalSessionScope.SetStatusLeftStyle].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
+// StatusLeftStyle returns materialized "status-left-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetStatusLeftStyle] or [GlobalSessionScope.SetStatusLeftStyle].
 // It is a style option.
 func (v SessionOptionValues) StatusLeftStyle() OptionValue[string] { return v.statusLeftStyle }
 
-// StatusPosition returns the "status-position" session option value as [OptionValue] with Go value shape OptionValue[StatusPosition]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "top", "bottom").
-// Set it with [Session.SetStatusPosition] or [GlobalSessionScope.SetStatusPosition].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusPosition returns materialized "status-position" as [OptionValue] with value type OptionValue[StatusPosition] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "top", "bottom"); set it with [Session.SetStatusPosition] or [GlobalSessionScope.SetStatusPosition].
 func (v SessionOptionValues) StatusPosition() OptionValue[StatusPosition] { return v.statusPosition }
 
-// StatusRight returns the "status-right" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetStatusRight] or [GlobalSessionScope.SetStatusRight].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusRight returns materialized "status-right" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetStatusRight] or [GlobalSessionScope.SetStatusRight].
 func (v SessionOptionValues) StatusRight() OptionValue[string] { return v.statusRight }
 
-// StatusRightLength returns the "status-right-length" session option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Session.SetStatusRightLength] or [GlobalSessionScope.SetStatusRightLength].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// StatusRightLength returns materialized "status-right-length" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Session.SetStatusRightLength] or [GlobalSessionScope.SetStatusRightLength].
 func (v SessionOptionValues) StatusRightLength() OptionValue[int64] { return v.statusRightLength }
 
-// StatusRightStyle returns the "status-right-style" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetStatusRightStyle] or [GlobalSessionScope.SetStatusRightStyle].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
+// StatusRightStyle returns materialized "status-right-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetStatusRightStyle] or [GlobalSessionScope.SetStatusRightStyle].
 // It is a style option.
 func (v SessionOptionValues) StatusRightStyle() OptionValue[string] { return v.statusRightStyle }
 
-// StatusStyle returns the "status-style" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetStatusStyle] or [GlobalSessionScope.SetStatusStyle].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
+// StatusStyle returns materialized "status-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetStatusStyle] or [GlobalSessionScope.SetStatusStyle].
 // It is a style option.
 func (v SessionOptionValues) StatusStyle() OptionValue[string] { return v.statusStyle }
 
-// UpdateEnvironment returns the "update-environment" session option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetUpdateEnvironment] or [GlobalSessionScope.SetUpdateEnvironment].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// UpdateEnvironment returns materialized "update-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetUpdateEnvironment] or [GlobalSessionScope.SetUpdateEnvironment].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionOptionValues) UpdateEnvironment() OptionValue[SparseArray[string]] {
 	return v.updateEnvironment
 }
 
-// VisualActivity returns the "visual-activity" session option value as [OptionValue] with Go value shape OptionValue[VisualActivity]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "both").
-// Set it with [Session.SetVisualActivity] or [GlobalSessionScope.SetVisualActivity].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// VisualActivity returns materialized "visual-activity" as [OptionValue] with value type OptionValue[VisualActivity] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "both"); set it with [Session.SetVisualActivity] or [GlobalSessionScope.SetVisualActivity].
 func (v SessionOptionValues) VisualActivity() OptionValue[VisualActivity] { return v.visualActivity }
 
-// VisualBell returns the "visual-bell" session option value as [OptionValue] with Go value shape OptionValue[VisualBell]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "both").
-// Set it with [Session.SetVisualBell] or [GlobalSessionScope.SetVisualBell].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// VisualBell returns materialized "visual-bell" as [OptionValue] with value type OptionValue[VisualBell] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "both"); set it with [Session.SetVisualBell] or [GlobalSessionScope.SetVisualBell].
 func (v SessionOptionValues) VisualBell() OptionValue[VisualBell] { return v.visualBell }
 
-// VisualSilence returns the "visual-silence" session option value as [OptionValue] with Go value shape OptionValue[VisualSilence]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "both").
-// Set it with [Session.SetVisualSilence] or [GlobalSessionScope.SetVisualSilence].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// VisualSilence returns materialized "visual-silence" as [OptionValue] with value type OptionValue[VisualSilence] from session option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "both"); set it with [Session.SetVisualSilence] or [GlobalSessionScope.SetVisualSilence].
 func (v SessionOptionValues) VisualSilence() OptionValue[VisualSilence] { return v.visualSilence }
 
-// WordSeparators returns the "word-separators" session option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Session.SetWordSeparators] or [GlobalSessionScope.SetWordSeparators].
-// Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WordSeparators returns materialized "word-separators" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Session.SetWordSeparators] or [GlobalSessionScope.SetWordSeparators].
 func (v SessionOptionValues) WordSeparators() OptionValue[string] { return v.wordSeparators }
 
 func newSessionOptionValues(values []decodedOptionValue) SessionOptionValues {
@@ -2656,10 +2422,9 @@ func newSessionOptionValues(values []decodedOptionValue) SessionOptionValues {
 	return result
 }
 
-// WindowOptionValues is an immutable point-in-time view of known window option values. Its zero value
-// has no present values. Obtain it with [Window.Options] or [GlobalWindowScope.Options]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// WindowOptionValues is an immutable materialized view of known window option values; its zero value is empty and it does not refresh.
+// Obtain it with [Window.Options] or [GlobalWindowScope.Options]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
 type WindowOptionValues struct {
 	aggressiveResize               OptionValue[bool]
 	allowPassthrough               OptionValue[AllowPassthrough]
@@ -2737,575 +2502,381 @@ type WindowOptionValues struct {
 	xTermKeys                      OptionValue[bool]
 }
 
-// AggressiveResize returns the "aggressive-resize" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetAggressiveResize] or [GlobalWindowScope.SetAggressiveResize].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AggressiveResize returns materialized "aggressive-resize" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetAggressiveResize] or [GlobalWindowScope.SetAggressiveResize].
 func (v WindowOptionValues) AggressiveResize() OptionValue[bool] { return v.aggressiveResize }
 
-// AllowPassthrough returns the "allow-passthrough" window option value as [OptionValue] with Go value shape OptionValue[AllowPassthrough]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.3; CHOICE since tmux 3.4 (choices: "off", "on", "all").
-// Set it with [Window.SetAllowPassthrough] or [GlobalWindowScope.SetAllowPassthrough].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AllowPassthrough returns materialized "allow-passthrough" as [OptionValue] with value type OptionValue[AllowPassthrough] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.3; CHOICE since tmux 3.4 (choices: "off", "on", "all"); set it with [Window.SetAllowPassthrough] or [GlobalWindowScope.SetAllowPassthrough].
 func (v WindowOptionValues) AllowPassthrough() OptionValue[AllowPassthrough] {
 	return v.allowPassthrough
 }
 
-// AllowRename returns the "allow-rename" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetAllowRename] or [GlobalWindowScope.SetAllowRename].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AllowRename returns materialized "allow-rename" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetAllowRename] or [GlobalWindowScope.SetAllowRename].
 func (v WindowOptionValues) AllowRename() OptionValue[bool] { return v.allowRename }
 
-// AllowSetTitle returns the "allow-set-title" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.5.
-// Set it with [Window.SetAllowSetTitle] or [GlobalWindowScope.SetAllowSetTitle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AllowSetTitle returns materialized "allow-set-title" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.5; set it with [Window.SetAllowSetTitle] or [GlobalWindowScope.SetAllowSetTitle].
 func (v WindowOptionValues) AllowSetTitle() OptionValue[bool] { return v.allowSetTitle }
 
-// AlternateScreen returns the "alternate-screen" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetAlternateScreen] or [GlobalWindowScope.SetAlternateScreen].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AlternateScreen returns materialized "alternate-screen" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetAlternateScreen] or [GlobalWindowScope.SetAlternateScreen].
 func (v WindowOptionValues) AlternateScreen() OptionValue[bool] { return v.alternateScreen }
 
-// AutomaticRename returns the "automatic-rename" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetAutomaticRename] or [GlobalWindowScope.SetAutomaticRename].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AutomaticRename returns materialized "automatic-rename" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetAutomaticRename] or [GlobalWindowScope.SetAutomaticRename].
 func (v WindowOptionValues) AutomaticRename() OptionValue[bool] { return v.automaticRename }
 
-// AutomaticRenameFormat returns the "automatic-rename-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetAutomaticRenameFormat] or [GlobalWindowScope.SetAutomaticRenameFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AutomaticRenameFormat returns materialized "automatic-rename-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetAutomaticRenameFormat] or [GlobalWindowScope.SetAutomaticRenameFormat].
 func (v WindowOptionValues) AutomaticRenameFormat() OptionValue[string] {
 	return v.automaticRenameFormat
 }
 
-// ClockModeColour returns the "clock-mode-colour" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.2a.
-// Set it with [Window.SetClockModeColour] or [GlobalWindowScope.SetClockModeColour].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ClockModeColour returns materialized "clock-mode-colour" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as COLOUR since tmux 3.2a; set it with [Window.SetClockModeColour] or [GlobalWindowScope.SetClockModeColour].
 func (v WindowOptionValues) ClockModeColour() OptionValue[string] { return v.clockModeColour }
 
-// ClockModeStyle returns the "clock-mode-style" window option value as [OptionValue] with Go value shape OptionValue[ClockModeStyle]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "12", "24"); CHOICE since tmux 3.6 (choices: "12", "24", "12-with-seconds", "24-with-seconds").
-// Set it with [Window.SetClockModeStyle] or [GlobalWindowScope.SetClockModeStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ClockModeStyle returns materialized "clock-mode-style" as [OptionValue] with value type OptionValue[ClockModeStyle] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "12", "24"); CHOICE since tmux 3.6 (choices: "12", "24", "12-with-seconds", "24-with-seconds"); set it with [Window.SetClockModeStyle] or [GlobalWindowScope.SetClockModeStyle].
 func (v WindowOptionValues) ClockModeStyle() OptionValue[ClockModeStyle] { return v.clockModeStyle }
 
-// CopyModeCurrentLineNumberStyle returns the "copy-mode-current-line-number-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Window.SetCopyModeCurrentLineNumberStyle] or [GlobalWindowScope.SetCopyModeCurrentLineNumberStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// CopyModeCurrentLineNumberStyle returns materialized "copy-mode-current-line-number-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Window.SetCopyModeCurrentLineNumberStyle] or [GlobalWindowScope.SetCopyModeCurrentLineNumberStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeCurrentLineNumberStyle() OptionValue[string] {
 	return v.copyModeCurrentLineNumberStyle
 }
 
-// CopyModeCurrentMatchStyle returns the "copy-mode-current-match-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetCopyModeCurrentMatchStyle] or [GlobalWindowScope.SetCopyModeCurrentMatchStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// CopyModeCurrentMatchStyle returns materialized "copy-mode-current-match-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetCopyModeCurrentMatchStyle] or [GlobalWindowScope.SetCopyModeCurrentMatchStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeCurrentMatchStyle() OptionValue[string] {
 	return v.copyModeCurrentMatchStyle
 }
 
-// CopyModeLineNumberStyle returns the "copy-mode-line-number-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Window.SetCopyModeLineNumberStyle] or [GlobalWindowScope.SetCopyModeLineNumberStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// CopyModeLineNumberStyle returns materialized "copy-mode-line-number-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Window.SetCopyModeLineNumberStyle] or [GlobalWindowScope.SetCopyModeLineNumberStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeLineNumberStyle() OptionValue[string] {
 	return v.copyModeLineNumberStyle
 }
 
-// CopyModeLineNumbers returns the "copy-mode-line-numbers" window option value as [OptionValue] with Go value shape OptionValue[CopyModeLineNumbers]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.7 (choices: "off", "default", "absolute", "relative", "hybrid").
-// Set it with [Window.SetCopyModeLineNumbers] or [GlobalWindowScope.SetCopyModeLineNumbers].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CopyModeLineNumbers returns materialized "copy-mode-line-numbers" as [OptionValue] with value type OptionValue[CopyModeLineNumbers] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.7 (choices: "off", "default", "absolute", "relative", "hybrid"); set it with [Window.SetCopyModeLineNumbers] or [GlobalWindowScope.SetCopyModeLineNumbers].
 func (v WindowOptionValues) CopyModeLineNumbers() OptionValue[CopyModeLineNumbers] {
 	return v.copyModeLineNumbers
 }
 
-// CopyModeMarkStyle returns the "copy-mode-mark-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetCopyModeMarkStyle] or [GlobalWindowScope.SetCopyModeMarkStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// CopyModeMarkStyle returns materialized "copy-mode-mark-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetCopyModeMarkStyle] or [GlobalWindowScope.SetCopyModeMarkStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeMarkStyle() OptionValue[string] { return v.copyModeMarkStyle }
 
-// CopyModeMatchStyle returns the "copy-mode-match-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetCopyModeMatchStyle] or [GlobalWindowScope.SetCopyModeMatchStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// CopyModeMatchStyle returns materialized "copy-mode-match-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetCopyModeMatchStyle] or [GlobalWindowScope.SetCopyModeMatchStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeMatchStyle() OptionValue[string] { return v.copyModeMatchStyle }
 
-// CopyModePositionFormat returns the "copy-mode-position-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetCopyModePositionFormat] or [GlobalWindowScope.SetCopyModePositionFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CopyModePositionFormat returns materialized "copy-mode-position-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetCopyModePositionFormat] or [GlobalWindowScope.SetCopyModePositionFormat].
 func (v WindowOptionValues) CopyModePositionFormat() OptionValue[string] {
 	return v.copyModePositionFormat
 }
 
-// CopyModePositionStyle returns the "copy-mode-position-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetCopyModePositionStyle] or [GlobalWindowScope.SetCopyModePositionStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// CopyModePositionStyle returns materialized "copy-mode-position-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetCopyModePositionStyle] or [GlobalWindowScope.SetCopyModePositionStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModePositionStyle() OptionValue[string] {
 	return v.copyModePositionStyle
 }
 
-// CopyModeSelectionStyle returns the "copy-mode-selection-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetCopyModeSelectionStyle] or [GlobalWindowScope.SetCopyModeSelectionStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// CopyModeSelectionStyle returns materialized "copy-mode-selection-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetCopyModeSelectionStyle] or [GlobalWindowScope.SetCopyModeSelectionStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeSelectionStyle() OptionValue[string] {
 	return v.copyModeSelectionStyle
 }
 
-// CursorColour returns the "cursor-colour" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.3.
-// Set it with [Window.SetCursorColour] or [GlobalWindowScope.SetCursorColour].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CursorColour returns materialized "cursor-colour" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as COLOUR since tmux 3.3; set it with [Window.SetCursorColour] or [GlobalWindowScope.SetCursorColour].
 func (v WindowOptionValues) CursorColour() OptionValue[string] { return v.cursorColour }
 
-// CursorStyle returns the "cursor-style" window option value as [OptionValue] with Go value shape OptionValue[CursorStyle]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.3 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar").
-// Set it with [Window.SetCursorStyle] or [GlobalWindowScope.SetCursorStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CursorStyle returns materialized "cursor-style" as [OptionValue] with value type OptionValue[CursorStyle] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.3 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Window.SetCursorStyle] or [GlobalWindowScope.SetCursorStyle].
 func (v WindowOptionValues) CursorStyle() OptionValue[CursorStyle] { return v.cursorStyle }
 
-// FillCharacter returns the "fill-character" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.3.
-// Set it with [Window.SetFillCharacter] or [GlobalWindowScope.SetFillCharacter].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// FillCharacter returns materialized "fill-character" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.3; set it with [Window.SetFillCharacter] or [GlobalWindowScope.SetFillCharacter].
 func (v WindowOptionValues) FillCharacter() OptionValue[string] { return v.fillCharacter }
 
-// MainPaneHeight returns the "main-pane-height" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetMainPaneHeight] or [GlobalWindowScope.SetMainPaneHeight].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MainPaneHeight returns materialized "main-pane-height" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetMainPaneHeight] or [GlobalWindowScope.SetMainPaneHeight].
 func (v WindowOptionValues) MainPaneHeight() OptionValue[string] { return v.mainPaneHeight }
 
-// MainPaneWidth returns the "main-pane-width" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetMainPaneWidth] or [GlobalWindowScope.SetMainPaneWidth].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MainPaneWidth returns materialized "main-pane-width" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetMainPaneWidth] or [GlobalWindowScope.SetMainPaneWidth].
 func (v WindowOptionValues) MainPaneWidth() OptionValue[string] { return v.mainPaneWidth }
 
-// MenuBorderLines returns the "menu-border-lines" window option value as [OptionValue] with Go value shape OptionValue[MenuBorderLines]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.4 (choices: "single", "double", "heavy", "simple", "rounded", "padded", "none").
-// Set it with [Window.SetMenuBorderLines] or [GlobalWindowScope.SetMenuBorderLines].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MenuBorderLines returns materialized "menu-border-lines" as [OptionValue] with value type OptionValue[MenuBorderLines] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.4 (choices: "single", "double", "heavy", "simple", "rounded", "padded", "none"); set it with [Window.SetMenuBorderLines] or [GlobalWindowScope.SetMenuBorderLines].
 func (v WindowOptionValues) MenuBorderLines() OptionValue[MenuBorderLines] { return v.menuBorderLines }
 
-// MenuBorderStyle returns the "menu-border-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.4.
-// Set it with [Window.SetMenuBorderStyle] or [GlobalWindowScope.SetMenuBorderStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// MenuBorderStyle returns materialized "menu-border-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.4; set it with [Window.SetMenuBorderStyle] or [GlobalWindowScope.SetMenuBorderStyle].
 // It is a style option.
 func (v WindowOptionValues) MenuBorderStyle() OptionValue[string] { return v.menuBorderStyle }
 
-// MenuSelectedStyle returns the "menu-selected-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.4.
-// Set it with [Window.SetMenuSelectedStyle] or [GlobalWindowScope.SetMenuSelectedStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// MenuSelectedStyle returns materialized "menu-selected-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.4; set it with [Window.SetMenuSelectedStyle] or [GlobalWindowScope.SetMenuSelectedStyle].
 // It is a style option.
 func (v WindowOptionValues) MenuSelectedStyle() OptionValue[string] { return v.menuSelectedStyle }
 
-// MenuStyle returns the "menu-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.4.
-// Set it with [Window.SetMenuStyle] or [GlobalWindowScope.SetMenuStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// MenuStyle returns materialized "menu-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.4; set it with [Window.SetMenuStyle] or [GlobalWindowScope.SetMenuStyle].
 // It is a style option.
 func (v WindowOptionValues) MenuStyle() OptionValue[string] { return v.menuStyle }
 
-// ModeKeys returns the "mode-keys" window option value as [OptionValue] with Go value shape OptionValue[ModeKeys]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "emacs", "vi").
-// Set it with [Window.SetModeKeys] or [GlobalWindowScope.SetModeKeys].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ModeKeys returns materialized "mode-keys" as [OptionValue] with value type OptionValue[ModeKeys] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "emacs", "vi"); set it with [Window.SetModeKeys] or [GlobalWindowScope.SetModeKeys].
 func (v WindowOptionValues) ModeKeys() OptionValue[ModeKeys] { return v.modeKeys }
 
-// ModeStyle returns the "mode-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetModeStyle] or [GlobalWindowScope.SetModeStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// ModeStyle returns materialized "mode-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetModeStyle] or [GlobalWindowScope.SetModeStyle].
 // It is a style option.
 func (v WindowOptionValues) ModeStyle() OptionValue[string] { return v.modeStyle }
 
-// MonitorActivity returns the "monitor-activity" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetMonitorActivity] or [GlobalWindowScope.SetMonitorActivity].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MonitorActivity returns materialized "monitor-activity" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetMonitorActivity] or [GlobalWindowScope.SetMonitorActivity].
 func (v WindowOptionValues) MonitorActivity() OptionValue[bool] { return v.monitorActivity }
 
-// MonitorBell returns the "monitor-bell" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetMonitorBell] or [GlobalWindowScope.SetMonitorBell].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MonitorBell returns materialized "monitor-bell" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetMonitorBell] or [GlobalWindowScope.SetMonitorBell].
 func (v WindowOptionValues) MonitorBell() OptionValue[bool] { return v.monitorBell }
 
-// MonitorSilence returns the "monitor-silence" window option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Window.SetMonitorSilence] or [GlobalWindowScope.SetMonitorSilence].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// MonitorSilence returns materialized "monitor-silence" as [OptionValue] with value type OptionValue[int64] from window option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Window.SetMonitorSilence] or [GlobalWindowScope.SetMonitorSilence].
 func (v WindowOptionValues) MonitorSilence() OptionValue[int64] { return v.monitorSilence }
 
-// OtherPaneHeight returns the "other-pane-height" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetOtherPaneHeight] or [GlobalWindowScope.SetOtherPaneHeight].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// OtherPaneHeight returns materialized "other-pane-height" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetOtherPaneHeight] or [GlobalWindowScope.SetOtherPaneHeight].
 func (v WindowOptionValues) OtherPaneHeight() OptionValue[string] { return v.otherPaneHeight }
 
-// OtherPaneWidth returns the "other-pane-width" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetOtherPaneWidth] or [GlobalWindowScope.SetOtherPaneWidth].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// OtherPaneWidth returns materialized "other-pane-width" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetOtherPaneWidth] or [GlobalWindowScope.SetOtherPaneWidth].
 func (v WindowOptionValues) OtherPaneWidth() OptionValue[string] { return v.otherPaneWidth }
 
-// PaneActiveBorderStyle returns the "pane-active-border-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a; STRING since tmux 3.7.
-// Set it with [Window.SetPaneActiveBorderStyle] or [GlobalWindowScope.SetPaneActiveBorderStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// PaneActiveBorderStyle returns materialized "pane-active-border-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; STRING since tmux 3.7; set it with [Window.SetPaneActiveBorderStyle] or [GlobalWindowScope.SetPaneActiveBorderStyle].
 // It is a style option.
 func (v WindowOptionValues) PaneActiveBorderStyle() OptionValue[string] {
 	return v.paneActiveBorderStyle
 }
 
-// PaneBaseIndex returns the "pane-base-index" window option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.2a.
-// Set it with [Window.SetPaneBaseIndex] or [GlobalWindowScope.SetPaneBaseIndex].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneBaseIndex returns materialized "pane-base-index" as [OptionValue] with value type OptionValue[int64] from window option values; it does not query tmux.
+// Available as NUMBER since tmux 3.2a; set it with [Window.SetPaneBaseIndex] or [GlobalWindowScope.SetPaneBaseIndex].
 func (v WindowOptionValues) PaneBaseIndex() OptionValue[int64] { return v.paneBaseIndex }
 
-// PaneBorderFormat returns the "pane-border-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a; STRING since tmux 3.3.
-// Set it with [Window.SetPaneBorderFormat] or [GlobalWindowScope.SetPaneBorderFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneBorderFormat returns materialized "pane-border-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; STRING since tmux 3.3; set it with [Window.SetPaneBorderFormat] or [GlobalWindowScope.SetPaneBorderFormat].
 func (v WindowOptionValues) PaneBorderFormat() OptionValue[string] { return v.paneBorderFormat }
 
-// PaneBorderIndicators returns the "pane-border-indicators" window option value as [OptionValue] with Go value shape OptionValue[PaneBorderIndicators]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.3 (choices: "off", "colour", "arrows", "both").
-// Set it with [Window.SetPaneBorderIndicators] or [GlobalWindowScope.SetPaneBorderIndicators].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneBorderIndicators returns materialized "pane-border-indicators" as [OptionValue] with value type OptionValue[PaneBorderIndicators] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.3 (choices: "off", "colour", "arrows", "both"); set it with [Window.SetPaneBorderIndicators] or [GlobalWindowScope.SetPaneBorderIndicators].
 func (v WindowOptionValues) PaneBorderIndicators() OptionValue[PaneBorderIndicators] {
 	return v.paneBorderIndicators
 }
 
-// PaneBorderLines returns the "pane-border-lines" window option value as [OptionValue] with Go value shape OptionValue[PaneBorderLines]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "single", "double", "heavy", "simple", "number"); CHOICE since tmux 3.6 (choices: "single", "double", "heavy", "simple", "number", "spaces").
-// Set it with [Window.SetPaneBorderLines] or [GlobalWindowScope.SetPaneBorderLines].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneBorderLines returns materialized "pane-border-lines" as [OptionValue] with value type OptionValue[PaneBorderLines] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "single", "double", "heavy", "simple", "number"); CHOICE since tmux 3.6 (choices: "single", "double", "heavy", "simple", "number", "spaces"); set it with [Window.SetPaneBorderLines] or [GlobalWindowScope.SetPaneBorderLines].
 func (v WindowOptionValues) PaneBorderLines() OptionValue[PaneBorderLines] { return v.paneBorderLines }
 
-// PaneBorderStatus returns the "pane-border-status" window option value as [OptionValue] with Go value shape OptionValue[PaneBorderStatus]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "top", "bottom").
-// Set it with [Window.SetPaneBorderStatus] or [GlobalWindowScope.SetPaneBorderStatus].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneBorderStatus returns materialized "pane-border-status" as [OptionValue] with value type OptionValue[PaneBorderStatus] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "top", "bottom"); set it with [Window.SetPaneBorderStatus] or [GlobalWindowScope.SetPaneBorderStatus].
 func (v WindowOptionValues) PaneBorderStatus() OptionValue[PaneBorderStatus] {
 	return v.paneBorderStatus
 }
 
-// PaneBorderStyle returns the "pane-border-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a; STRING since tmux 3.7.
-// Set it with [Window.SetPaneBorderStyle] or [GlobalWindowScope.SetPaneBorderStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// PaneBorderStyle returns materialized "pane-border-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; STRING since tmux 3.7; set it with [Window.SetPaneBorderStyle] or [GlobalWindowScope.SetPaneBorderStyle].
 // It is a style option.
 func (v WindowOptionValues) PaneBorderStyle() OptionValue[string] { return v.paneBorderStyle }
 
-// PaneColours returns the "pane-colours" window option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.3.
-// Set it with [Window.SetPaneColours] or [GlobalWindowScope.SetPaneColours].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneColours returns materialized "pane-colours" as [OptionValue] with value type OptionValue[SparseArray[string]] from window option values; it does not query tmux.
+// Available as COLOUR since tmux 3.3; set it with [Window.SetPaneColours] or [GlobalWindowScope.SetPaneColours].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowOptionValues) PaneColours() OptionValue[SparseArray[string]] { return v.paneColours }
 
-// PaneScrollbars returns the "pane-scrollbars" window option value as [OptionValue] with Go value shape OptionValue[PaneScrollbars]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.6 (choices: "off", "modal", "on").
-// Set it with [Window.SetPaneScrollbars] or [GlobalWindowScope.SetPaneScrollbars].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneScrollbars returns materialized "pane-scrollbars" as [OptionValue] with value type OptionValue[PaneScrollbars] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.6 (choices: "off", "modal", "on"); set it with [Window.SetPaneScrollbars] or [GlobalWindowScope.SetPaneScrollbars].
 func (v WindowOptionValues) PaneScrollbars() OptionValue[PaneScrollbars] { return v.paneScrollbars }
 
-// PaneScrollbarsPosition returns the "pane-scrollbars-position" window option value as [OptionValue] with Go value shape OptionValue[PaneScrollbarsPosition]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.6 (choices: "right", "left").
-// Set it with [Window.SetPaneScrollbarsPosition] or [GlobalWindowScope.SetPaneScrollbarsPosition].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneScrollbarsPosition returns materialized "pane-scrollbars-position" as [OptionValue] with value type OptionValue[PaneScrollbarsPosition] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.6 (choices: "right", "left"); set it with [Window.SetPaneScrollbarsPosition] or [GlobalWindowScope.SetPaneScrollbarsPosition].
 func (v WindowOptionValues) PaneScrollbarsPosition() OptionValue[PaneScrollbarsPosition] {
 	return v.paneScrollbarsPosition
 }
 
-// PaneScrollbarsStyle returns the "pane-scrollbars-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetPaneScrollbarsStyle] or [GlobalWindowScope.SetPaneScrollbarsStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// PaneScrollbarsStyle returns materialized "pane-scrollbars-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetPaneScrollbarsStyle] or [GlobalWindowScope.SetPaneScrollbarsStyle].
 // It is a style option.
 func (v WindowOptionValues) PaneScrollbarsStyle() OptionValue[string] { return v.paneScrollbarsStyle }
 
-// PaneStatusCurrentStyle returns the "pane-status-current-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetPaneStatusCurrentStyle] or [GlobalWindowScope.SetPaneStatusCurrentStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// PaneStatusCurrentStyle returns materialized "pane-status-current-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetPaneStatusCurrentStyle] or [GlobalWindowScope.SetPaneStatusCurrentStyle].
 // It is a style option.
 func (v WindowOptionValues) PaneStatusCurrentStyle() OptionValue[string] {
 	return v.paneStatusCurrentStyle
 }
 
-// PaneStatusStyle returns the "pane-status-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetPaneStatusStyle] or [GlobalWindowScope.SetPaneStatusStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// PaneStatusStyle returns materialized "pane-status-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetPaneStatusStyle] or [GlobalWindowScope.SetPaneStatusStyle].
 // It is a style option.
 func (v WindowOptionValues) PaneStatusStyle() OptionValue[string] { return v.paneStatusStyle }
 
-// PopupBorderLines returns the "popup-border-lines" window option value as [OptionValue] with Go value shape OptionValue[PopupBorderLines]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.3 (choices: "single", "double", "heavy", "simple", "rounded", "padded", "none").
-// Set it with [Window.SetPopupBorderLines] or [GlobalWindowScope.SetPopupBorderLines].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PopupBorderLines returns materialized "popup-border-lines" as [OptionValue] with value type OptionValue[PopupBorderLines] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.3 (choices: "single", "double", "heavy", "simple", "rounded", "padded", "none"); set it with [Window.SetPopupBorderLines] or [GlobalWindowScope.SetPopupBorderLines].
 func (v WindowOptionValues) PopupBorderLines() OptionValue[PopupBorderLines] {
 	return v.popupBorderLines
 }
 
-// PopupBorderStyle returns the "popup-border-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.3.
-// Set it with [Window.SetPopupBorderStyle] or [GlobalWindowScope.SetPopupBorderStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// PopupBorderStyle returns materialized "popup-border-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.3; set it with [Window.SetPopupBorderStyle] or [GlobalWindowScope.SetPopupBorderStyle].
 // It is a style option.
 func (v WindowOptionValues) PopupBorderStyle() OptionValue[string] { return v.popupBorderStyle }
 
-// PopupStyle returns the "popup-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.3.
-// Set it with [Window.SetPopupStyle] or [GlobalWindowScope.SetPopupStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// PopupStyle returns materialized "popup-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.3; set it with [Window.SetPopupStyle] or [GlobalWindowScope.SetPopupStyle].
 // It is a style option.
 func (v WindowOptionValues) PopupStyle() OptionValue[string] { return v.popupStyle }
 
-// RemainOnExit returns the "remain-on-exit" window option value as [OptionValue] with Go value shape OptionValue[RemainOnExit]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key").
-// Set it with [Window.SetRemainOnExit] or [GlobalWindowScope.SetRemainOnExit].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// RemainOnExit returns materialized "remain-on-exit" as [OptionValue] with value type OptionValue[RemainOnExit] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key"); set it with [Window.SetRemainOnExit] or [GlobalWindowScope.SetRemainOnExit].
 func (v WindowOptionValues) RemainOnExit() OptionValue[RemainOnExit] { return v.remainOnExit }
 
-// RemainOnExitFormat returns the "remain-on-exit-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.3.
-// Set it with [Window.SetRemainOnExitFormat] or [GlobalWindowScope.SetRemainOnExitFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// RemainOnExitFormat returns materialized "remain-on-exit-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.3; set it with [Window.SetRemainOnExitFormat] or [GlobalWindowScope.SetRemainOnExitFormat].
 func (v WindowOptionValues) RemainOnExitFormat() OptionValue[string] { return v.remainOnExitFormat }
 
-// ScrollOnClear returns the "scroll-on-clear" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.3.
-// Set it with [Window.SetScrollOnClear] or [GlobalWindowScope.SetScrollOnClear].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ScrollOnClear returns materialized "scroll-on-clear" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.3; set it with [Window.SetScrollOnClear] or [GlobalWindowScope.SetScrollOnClear].
 func (v WindowOptionValues) ScrollOnClear() OptionValue[bool] { return v.scrollOnClear }
 
-// SessionStatusCurrentStyle returns the "session-status-current-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetSessionStatusCurrentStyle] or [GlobalWindowScope.SetSessionStatusCurrentStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// SessionStatusCurrentStyle returns materialized "session-status-current-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetSessionStatusCurrentStyle] or [GlobalWindowScope.SetSessionStatusCurrentStyle].
 // It is a style option.
 func (v WindowOptionValues) SessionStatusCurrentStyle() OptionValue[string] {
 	return v.sessionStatusCurrentStyle
 }
 
-// SessionStatusStyle returns the "session-status-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Window.SetSessionStatusStyle] or [GlobalWindowScope.SetSessionStatusStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// SessionStatusStyle returns materialized "session-status-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Window.SetSessionStatusStyle] or [GlobalWindowScope.SetSessionStatusStyle].
 // It is a style option.
 func (v WindowOptionValues) SessionStatusStyle() OptionValue[string] { return v.sessionStatusStyle }
 
-// SynchronizePanes returns the "synchronize-panes" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetSynchronizePanes] or [GlobalWindowScope.SetSynchronizePanes].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// SynchronizePanes returns materialized "synchronize-panes" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetSynchronizePanes] or [GlobalWindowScope.SetSynchronizePanes].
 func (v WindowOptionValues) SynchronizePanes() OptionValue[bool] { return v.synchronizePanes }
 
-// TiledLayoutMaxColumns returns the "tiled-layout-max-columns" window option value as [OptionValue] with Go value shape OptionValue[int64]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are NUMBER since tmux 3.6.
-// Set it with [Window.SetTiledLayoutMaxColumns] or [GlobalWindowScope.SetTiledLayoutMaxColumns].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// TiledLayoutMaxColumns returns materialized "tiled-layout-max-columns" as [OptionValue] with value type OptionValue[int64] from window option values; it does not query tmux.
+// Available as NUMBER since tmux 3.6; set it with [Window.SetTiledLayoutMaxColumns] or [GlobalWindowScope.SetTiledLayoutMaxColumns].
 func (v WindowOptionValues) TiledLayoutMaxColumns() OptionValue[int64] {
 	return v.tiledLayoutMaxColumns
 }
 
-// TreeModePreviewFormat returns the "tree-mode-preview-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Window.SetTreeModePreviewFormat] or [GlobalWindowScope.SetTreeModePreviewFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// TreeModePreviewFormat returns materialized "tree-mode-preview-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Window.SetTreeModePreviewFormat] or [GlobalWindowScope.SetTreeModePreviewFormat].
 func (v WindowOptionValues) TreeModePreviewFormat() OptionValue[string] {
 	return v.treeModePreviewFormat
 }
 
-// TreeModePreviewStyle returns the "tree-mode-preview-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Window.SetTreeModePreviewStyle] or [GlobalWindowScope.SetTreeModePreviewStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// TreeModePreviewStyle returns materialized "tree-mode-preview-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Window.SetTreeModePreviewStyle] or [GlobalWindowScope.SetTreeModePreviewStyle].
 // It is a style option.
 func (v WindowOptionValues) TreeModePreviewStyle() OptionValue[string] { return v.treeModePreviewStyle }
 
-// WindowActiveStyle returns the "window-active-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowActiveStyle] or [GlobalWindowScope.SetWindowActiveStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// WindowActiveStyle returns materialized "window-active-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowActiveStyle] or [GlobalWindowScope.SetWindowActiveStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowActiveStyle() OptionValue[string] { return v.windowActiveStyle }
 
-// WindowPaneCurrentStatusFormat returns the "window-pane-current-status-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Window.SetWindowPaneCurrentStatusFormat] or [GlobalWindowScope.SetWindowPaneCurrentStatusFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WindowPaneCurrentStatusFormat returns materialized "window-pane-current-status-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Window.SetWindowPaneCurrentStatusFormat] or [GlobalWindowScope.SetWindowPaneCurrentStatusFormat].
 func (v WindowOptionValues) WindowPaneCurrentStatusFormat() OptionValue[string] {
 	return v.windowPaneCurrentStatusFormat
 }
 
-// WindowPaneStatusFormat returns the "window-pane-status-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Window.SetWindowPaneStatusFormat] or [GlobalWindowScope.SetWindowPaneStatusFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WindowPaneStatusFormat returns materialized "window-pane-status-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Window.SetWindowPaneStatusFormat] or [GlobalWindowScope.SetWindowPaneStatusFormat].
 func (v WindowOptionValues) WindowPaneStatusFormat() OptionValue[string] {
 	return v.windowPaneStatusFormat
 }
 
-// WindowSize returns the "window-size" window option value as [OptionValue] with Go value shape OptionValue[WindowSize]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "largest", "smallest", "manual", "latest").
-// Set it with [Window.SetWindowSize] or [GlobalWindowScope.SetWindowSize].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WindowSize returns materialized "window-size" as [OptionValue] with value type OptionValue[WindowSize] from window option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "largest", "smallest", "manual", "latest"); set it with [Window.SetWindowSize] or [GlobalWindowScope.SetWindowSize].
 func (v WindowOptionValues) WindowSize() OptionValue[WindowSize] { return v.windowSize }
 
-// WindowStatusActivityStyle returns the "window-status-activity-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusActivityStyle] or [GlobalWindowScope.SetWindowStatusActivityStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// WindowStatusActivityStyle returns materialized "window-status-activity-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusActivityStyle] or [GlobalWindowScope.SetWindowStatusActivityStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusActivityStyle() OptionValue[string] {
 	return v.windowStatusActivityStyle
 }
 
-// WindowStatusBellStyle returns the "window-status-bell-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusBellStyle] or [GlobalWindowScope.SetWindowStatusBellStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// WindowStatusBellStyle returns materialized "window-status-bell-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusBellStyle] or [GlobalWindowScope.SetWindowStatusBellStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusBellStyle() OptionValue[string] {
 	return v.windowStatusBellStyle
 }
 
-// WindowStatusCurrentFormat returns the "window-status-current-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusCurrentFormat] or [GlobalWindowScope.SetWindowStatusCurrentFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WindowStatusCurrentFormat returns materialized "window-status-current-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusCurrentFormat] or [GlobalWindowScope.SetWindowStatusCurrentFormat].
 func (v WindowOptionValues) WindowStatusCurrentFormat() OptionValue[string] {
 	return v.windowStatusCurrentFormat
 }
 
-// WindowStatusCurrentStyle returns the "window-status-current-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusCurrentStyle] or [GlobalWindowScope.SetWindowStatusCurrentStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// WindowStatusCurrentStyle returns materialized "window-status-current-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusCurrentStyle] or [GlobalWindowScope.SetWindowStatusCurrentStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusCurrentStyle() OptionValue[string] {
 	return v.windowStatusCurrentStyle
 }
 
-// WindowStatusFormat returns the "window-status-format" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusFormat] or [GlobalWindowScope.SetWindowStatusFormat].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WindowStatusFormat returns materialized "window-status-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusFormat] or [GlobalWindowScope.SetWindowStatusFormat].
 func (v WindowOptionValues) WindowStatusFormat() OptionValue[string] { return v.windowStatusFormat }
 
-// WindowStatusLastStyle returns the "window-status-last-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusLastStyle] or [GlobalWindowScope.SetWindowStatusLastStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// WindowStatusLastStyle returns materialized "window-status-last-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusLastStyle] or [GlobalWindowScope.SetWindowStatusLastStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusLastStyle() OptionValue[string] {
 	return v.windowStatusLastStyle
 }
 
-// WindowStatusSeparator returns the "window-status-separator" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusSeparator] or [GlobalWindowScope.SetWindowStatusSeparator].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WindowStatusSeparator returns materialized "window-status-separator" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusSeparator] or [GlobalWindowScope.SetWindowStatusSeparator].
 func (v WindowOptionValues) WindowStatusSeparator() OptionValue[string] {
 	return v.windowStatusSeparator
 }
 
-// WindowStatusStyle returns the "window-status-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStatusStyle] or [GlobalWindowScope.SetWindowStatusStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// WindowStatusStyle returns materialized "window-status-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusStyle] or [GlobalWindowScope.SetWindowStatusStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusStyle() OptionValue[string] { return v.windowStatusStyle }
 
-// WindowStyle returns the "window-style" window option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Window.SetWindowStyle] or [GlobalWindowScope.SetWindowStyle].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
+// WindowStyle returns materialized "window-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStyle] or [GlobalWindowScope.SetWindowStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStyle() OptionValue[string] { return v.windowStyle }
 
-// WrapSearch returns the "wrap-search" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetWrapSearch] or [GlobalWindowScope.SetWrapSearch].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// WrapSearch returns materialized "wrap-search" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetWrapSearch] or [GlobalWindowScope.SetWrapSearch].
 func (v WindowOptionValues) WrapSearch() OptionValue[bool] { return v.wrapSearch }
 
-// XTermKeys returns the "xterm-keys" window option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Window.SetXTermKeys] or [GlobalWindowScope.SetXTermKeys].
-// Use [Window.RawOption] or [GlobalWindowScope.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// XTermKeys returns materialized "xterm-keys" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Window.SetXTermKeys] or [GlobalWindowScope.SetXTermKeys].
 func (v WindowOptionValues) XTermKeys() OptionValue[bool] { return v.xTermKeys }
 
 func newWindowOptionValues(values []decodedOptionValue) WindowOptionValues {
@@ -3465,10 +3036,9 @@ func newWindowOptionValues(values []decodedOptionValue) WindowOptionValues {
 	return result
 }
 
-// PaneOptionValues is an immutable point-in-time view of known pane option values. Its zero value
-// has no present values. Obtain it with [Pane.Options]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// PaneOptionValues is an immutable materialized view of known pane option values; its zero value is empty and it does not refresh.
+// Obtain it with [Pane.Options]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [Pane.RawOption] for caller-named or undecoded values.
 type PaneOptionValues struct {
 	allowPassthrough       OptionValue[AllowPassthrough]
 	allowRename            OptionValue[bool]
@@ -3491,139 +3061,87 @@ type PaneOptionValues struct {
 	windowStyle            OptionValue[string]
 }
 
-// AllowPassthrough returns the "allow-passthrough" pane option value as [OptionValue] with Go value shape OptionValue[AllowPassthrough]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.3; CHOICE since tmux 3.4 (choices: "off", "on", "all").
-// Set it with [Pane.SetAllowPassthrough].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AllowPassthrough returns materialized "allow-passthrough" as [OptionValue] with value type OptionValue[AllowPassthrough] from pane option values; it does not query tmux.
+// Available as FLAG since tmux 3.3; CHOICE since tmux 3.4 (choices: "off", "on", "all"); set it with [Pane.SetAllowPassthrough].
 func (v PaneOptionValues) AllowPassthrough() OptionValue[AllowPassthrough] { return v.allowPassthrough }
 
-// AllowRename returns the "allow-rename" pane option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Pane.SetAllowRename].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AllowRename returns materialized "allow-rename" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Pane.SetAllowRename].
 func (v PaneOptionValues) AllowRename() OptionValue[bool] { return v.allowRename }
 
-// AllowSetTitle returns the "allow-set-title" pane option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.5.
-// Set it with [Pane.SetAllowSetTitle].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AllowSetTitle returns materialized "allow-set-title" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
+// Available as FLAG since tmux 3.5; set it with [Pane.SetAllowSetTitle].
 func (v PaneOptionValues) AllowSetTitle() OptionValue[bool] { return v.allowSetTitle }
 
-// AlternateScreen returns the "alternate-screen" pane option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Pane.SetAlternateScreen].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// AlternateScreen returns materialized "alternate-screen" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Pane.SetAlternateScreen].
 func (v PaneOptionValues) AlternateScreen() OptionValue[bool] { return v.alternateScreen }
 
-// CopyModePositionFormat returns the "copy-mode-position-format" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Pane.SetCopyModePositionFormat].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CopyModePositionFormat returns materialized "copy-mode-position-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Pane.SetCopyModePositionFormat].
 func (v PaneOptionValues) CopyModePositionFormat() OptionValue[string] {
 	return v.copyModePositionFormat
 }
 
-// CursorColour returns the "cursor-colour" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.3.
-// Set it with [Pane.SetCursorColour].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CursorColour returns materialized "cursor-colour" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as COLOUR since tmux 3.3; set it with [Pane.SetCursorColour].
 func (v PaneOptionValues) CursorColour() OptionValue[string] { return v.cursorColour }
 
-// CursorStyle returns the "cursor-style" pane option value as [OptionValue] with Go value shape OptionValue[CursorStyle]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.3 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar").
-// Set it with [Pane.SetCursorStyle].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// CursorStyle returns materialized "cursor-style" as [OptionValue] with value type OptionValue[CursorStyle] from pane option values; it does not query tmux.
+// Available as CHOICE since tmux 3.3 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Pane.SetCursorStyle].
 func (v PaneOptionValues) CursorStyle() OptionValue[CursorStyle] { return v.cursorStyle }
 
-// PaneActiveBorderStyle returns the "pane-active-border-style" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Pane.SetPaneActiveBorderStyle].
-// Use [Pane.RawOption] for caller-named or undecoded values.
+// PaneActiveBorderStyle returns materialized "pane-active-border-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Pane.SetPaneActiveBorderStyle].
 // It is a style option.
 func (v PaneOptionValues) PaneActiveBorderStyle() OptionValue[string] { return v.paneActiveBorderStyle }
 
-// PaneBorderFormat returns the "pane-border-format" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.3.
-// Set it with [Pane.SetPaneBorderFormat].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneBorderFormat returns materialized "pane-border-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.3; set it with [Pane.SetPaneBorderFormat].
 func (v PaneOptionValues) PaneBorderFormat() OptionValue[string] { return v.paneBorderFormat }
 
-// PaneBorderStyle returns the "pane-border-style" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Pane.SetPaneBorderStyle].
-// Use [Pane.RawOption] for caller-named or undecoded values.
+// PaneBorderStyle returns materialized "pane-border-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Pane.SetPaneBorderStyle].
 // It is a style option.
 func (v PaneOptionValues) PaneBorderStyle() OptionValue[string] { return v.paneBorderStyle }
 
-// PaneColours returns the "pane-colours" pane option value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COLOUR since tmux 3.3.
-// Set it with [Pane.SetPaneColours].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// PaneColours returns materialized "pane-colours" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane option values; it does not query tmux.
+// Available as COLOUR since tmux 3.3; set it with [Pane.SetPaneColours].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneOptionValues) PaneColours() OptionValue[SparseArray[string]] { return v.paneColours }
 
-// PaneScrollbarsStyle returns the "pane-scrollbars-style" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.6.
-// Set it with [Pane.SetPaneScrollbarsStyle].
-// Use [Pane.RawOption] for caller-named or undecoded values.
+// PaneScrollbarsStyle returns materialized "pane-scrollbars-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.6; set it with [Pane.SetPaneScrollbarsStyle].
 // It is a style option.
 func (v PaneOptionValues) PaneScrollbarsStyle() OptionValue[string] { return v.paneScrollbarsStyle }
 
-// RemainOnExit returns the "remain-on-exit" pane option value as [OptionValue] with Go value shape OptionValue[RemainOnExit]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are CHOICE since tmux 3.2a (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key").
-// Set it with [Pane.SetRemainOnExit].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// RemainOnExit returns materialized "remain-on-exit" as [OptionValue] with value type OptionValue[RemainOnExit] from pane option values; it does not query tmux.
+// Available as CHOICE since tmux 3.2a (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key"); set it with [Pane.SetRemainOnExit].
 func (v PaneOptionValues) RemainOnExit() OptionValue[RemainOnExit] { return v.remainOnExit }
 
-// RemainOnExitFormat returns the "remain-on-exit-format" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.3.
-// Set it with [Pane.SetRemainOnExitFormat].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// RemainOnExitFormat returns materialized "remain-on-exit-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.3; set it with [Pane.SetRemainOnExitFormat].
 func (v PaneOptionValues) RemainOnExitFormat() OptionValue[string] { return v.remainOnExitFormat }
 
-// ScrollOnClear returns the "scroll-on-clear" pane option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.3.
-// Set it with [Pane.SetScrollOnClear].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// ScrollOnClear returns materialized "scroll-on-clear" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
+// Available as FLAG since tmux 3.3; set it with [Pane.SetScrollOnClear].
 func (v PaneOptionValues) ScrollOnClear() OptionValue[bool] { return v.scrollOnClear }
 
-// SynchronizePanes returns the "synchronize-panes" pane option value as [OptionValue] with Go value shape OptionValue[bool]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are FLAG since tmux 3.2a.
-// Set it with [Pane.SetSynchronizePanes].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// SynchronizePanes returns materialized "synchronize-panes" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
+// Available as FLAG since tmux 3.2a; set it with [Pane.SetSynchronizePanes].
 func (v PaneOptionValues) SynchronizePanes() OptionValue[bool] { return v.synchronizePanes }
 
-// TreeModePreviewFormat returns the "tree-mode-preview-format" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.7.
-// Set it with [Pane.SetTreeModePreviewFormat].
-// Use [Pane.RawOption] for caller-named or undecoded values.
-// It is not a style option.
+// TreeModePreviewFormat returns materialized "tree-mode-preview-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.7; set it with [Pane.SetTreeModePreviewFormat].
 func (v PaneOptionValues) TreeModePreviewFormat() OptionValue[string] { return v.treeModePreviewFormat }
 
-// WindowActiveStyle returns the "window-active-style" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Pane.SetWindowActiveStyle].
-// Use [Pane.RawOption] for caller-named or undecoded values.
+// WindowActiveStyle returns materialized "window-active-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Pane.SetWindowActiveStyle].
 // It is a style option.
 func (v PaneOptionValues) WindowActiveStyle() OptionValue[string] { return v.windowActiveStyle }
 
-// WindowStyle returns the "window-style" pane option value as [OptionValue] with Go value shape OptionValue[string]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are STRING since tmux 3.2a.
-// Set it with [Pane.SetWindowStyle].
-// Use [Pane.RawOption] for caller-named or undecoded values.
+// WindowStyle returns materialized "window-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
+// Available as STRING since tmux 3.2a; set it with [Pane.SetWindowStyle].
 // It is a style option.
 func (v PaneOptionValues) WindowStyle() OptionValue[string] { return v.windowStyle }
 
@@ -3674,10 +3192,9 @@ func newPaneOptionValues(values []decodedOptionValue) PaneOptionValues {
 	return result
 }
 
-// ServerHookValues is an immutable point-in-time view of known global session-scope hook values. Its zero value
-// has no present values. Obtain it with [GlobalSessionScope.Hooks]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// ServerHookValues is an immutable materialized view of known global session-scope hook values; its zero value is empty and it does not refresh.
+// Obtain it with [GlobalSessionScope.Hooks]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
 type ServerHookValues struct {
 	afterBindKey         OptionValue[SparseArray[string]]
 	afterCapturePane     OptionValue[SparseArray[string]]
@@ -3738,460 +3255,346 @@ type ServerHookValues struct {
 	windowUnlinked       OptionValue[SparseArray[string]]
 }
 
-// AfterBindKey returns the "after-bind-key" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterBindKey returns materialized "after-bind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterBindKey() OptionValue[SparseArray[string]] { return v.afterBindKey }
 
-// AfterCapturePane returns the "after-capture-pane" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterCapturePane returns materialized "after-capture-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterCapturePane() OptionValue[SparseArray[string]] {
 	return v.afterCapturePane
 }
 
-// AfterCopyMode returns the "after-copy-mode" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterCopyMode returns materialized "after-copy-mode" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterCopyMode() OptionValue[SparseArray[string]] { return v.afterCopyMode }
 
-// AfterDisplayMessage returns the "after-display-message" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterDisplayMessage returns materialized "after-display-message" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterDisplayMessage() OptionValue[SparseArray[string]] {
 	return v.afterDisplayMessage
 }
 
-// AfterDisplayPanes returns the "after-display-panes" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterDisplayPanes returns materialized "after-display-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterDisplayPanes() OptionValue[SparseArray[string]] {
 	return v.afterDisplayPanes
 }
 
-// AfterKillPane returns the "after-kill-pane" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterKillPane returns materialized "after-kill-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterKillPane() OptionValue[SparseArray[string]] { return v.afterKillPane }
 
-// AfterListBuffers returns the "after-list-buffers" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListBuffers returns materialized "after-list-buffers" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListBuffers() OptionValue[SparseArray[string]] {
 	return v.afterListBuffers
 }
 
-// AfterListClients returns the "after-list-clients" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListClients returns materialized "after-list-clients" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListClients() OptionValue[SparseArray[string]] {
 	return v.afterListClients
 }
 
-// AfterListKeys returns the "after-list-keys" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListKeys returns materialized "after-list-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListKeys() OptionValue[SparseArray[string]] { return v.afterListKeys }
 
-// AfterListPanes returns the "after-list-panes" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListPanes returns materialized "after-list-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListPanes() OptionValue[SparseArray[string]] { return v.afterListPanes }
 
-// AfterListSessions returns the "after-list-sessions" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListSessions returns materialized "after-list-sessions" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListSessions() OptionValue[SparseArray[string]] {
 	return v.afterListSessions
 }
 
-// AfterListWindows returns the "after-list-windows" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListWindows returns materialized "after-list-windows" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListWindows() OptionValue[SparseArray[string]] {
 	return v.afterListWindows
 }
 
-// AfterLoadBuffer returns the "after-load-buffer" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterLoadBuffer returns materialized "after-load-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterLoadBuffer() OptionValue[SparseArray[string]] {
 	return v.afterLoadBuffer
 }
 
-// AfterLockServer returns the "after-lock-server" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterLockServer returns materialized "after-lock-server" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterLockServer() OptionValue[SparseArray[string]] {
 	return v.afterLockServer
 }
 
-// AfterNewSession returns the "after-new-session" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterNewSession returns materialized "after-new-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterNewSession() OptionValue[SparseArray[string]] {
 	return v.afterNewSession
 }
 
-// AfterNewWindow returns the "after-new-window" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterNewWindow returns materialized "after-new-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterNewWindow() OptionValue[SparseArray[string]] { return v.afterNewWindow }
 
-// AfterPasteBuffer returns the "after-paste-buffer" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterPasteBuffer returns materialized "after-paste-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterPasteBuffer() OptionValue[SparseArray[string]] {
 	return v.afterPasteBuffer
 }
 
-// AfterPipePane returns the "after-pipe-pane" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterPipePane returns materialized "after-pipe-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterPipePane() OptionValue[SparseArray[string]] { return v.afterPipePane }
 
-// AfterQueue returns the "after-queue" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterQueue returns materialized "after-queue" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterQueue() OptionValue[SparseArray[string]] { return v.afterQueue }
 
-// AfterRefreshClient returns the "after-refresh-client" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterRefreshClient returns materialized "after-refresh-client" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterRefreshClient() OptionValue[SparseArray[string]] {
 	return v.afterRefreshClient
 }
 
-// AfterRenameSession returns the "after-rename-session" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterRenameSession returns materialized "after-rename-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterRenameSession() OptionValue[SparseArray[string]] {
 	return v.afterRenameSession
 }
 
-// AfterRenameWindow returns the "after-rename-window" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterRenameWindow returns materialized "after-rename-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterRenameWindow() OptionValue[SparseArray[string]] {
 	return v.afterRenameWindow
 }
 
-// AfterResizePane returns the "after-resize-pane" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterResizePane returns materialized "after-resize-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterResizePane() OptionValue[SparseArray[string]] {
 	return v.afterResizePane
 }
 
-// AfterResizeWindow returns the "after-resize-window" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterResizeWindow returns materialized "after-resize-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterResizeWindow() OptionValue[SparseArray[string]] {
 	return v.afterResizeWindow
 }
 
-// AfterSaveBuffer returns the "after-save-buffer" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSaveBuffer returns materialized "after-save-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSaveBuffer() OptionValue[SparseArray[string]] {
 	return v.afterSaveBuffer
 }
 
-// AfterSelectLayout returns the "after-select-layout" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSelectLayout returns materialized "after-select-layout" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSelectLayout() OptionValue[SparseArray[string]] {
 	return v.afterSelectLayout
 }
 
-// AfterSelectPane returns the "after-select-pane" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSelectPane returns materialized "after-select-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSelectPane() OptionValue[SparseArray[string]] {
 	return v.afterSelectPane
 }
 
-// AfterSelectWindow returns the "after-select-window" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSelectWindow returns materialized "after-select-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSelectWindow() OptionValue[SparseArray[string]] {
 	return v.afterSelectWindow
 }
 
-// AfterSendKeys returns the "after-send-keys" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSendKeys returns materialized "after-send-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSendKeys() OptionValue[SparseArray[string]] { return v.afterSendKeys }
 
-// AfterSetBuffer returns the "after-set-buffer" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetBuffer returns materialized "after-set-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetBuffer() OptionValue[SparseArray[string]] { return v.afterSetBuffer }
 
-// AfterSetEnvironment returns the "after-set-environment" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetEnvironment returns materialized "after-set-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterSetEnvironment
 }
 
-// AfterSetHook returns the "after-set-hook" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetHook returns materialized "after-set-hook" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetHook() OptionValue[SparseArray[string]] { return v.afterSetHook }
 
-// AfterSetOption returns the "after-set-option" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetOption returns materialized "after-set-option" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetOption() OptionValue[SparseArray[string]] { return v.afterSetOption }
 
-// AfterShowEnvironment returns the "after-show-environment" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterShowEnvironment returns materialized "after-show-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterShowEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterShowEnvironment
 }
 
-// AfterShowMessages returns the "after-show-messages" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterShowMessages returns materialized "after-show-messages" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterShowMessages() OptionValue[SparseArray[string]] {
 	return v.afterShowMessages
 }
 
-// AfterShowOptions returns the "after-show-options" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterShowOptions returns materialized "after-show-options" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterShowOptions() OptionValue[SparseArray[string]] {
 	return v.afterShowOptions
 }
 
-// AfterSplitWindow returns the "after-split-window" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSplitWindow returns materialized "after-split-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSplitWindow() OptionValue[SparseArray[string]] {
 	return v.afterSplitWindow
 }
 
-// AfterUnbindKey returns the "after-unbind-key" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterUnbindKey returns materialized "after-unbind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterUnbindKey() OptionValue[SparseArray[string]] { return v.afterUnbindKey }
 
-// AlertActivity returns the "alert-activity" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AlertActivity returns materialized "alert-activity" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AlertActivity() OptionValue[SparseArray[string]] { return v.alertActivity }
 
-// AlertBell returns the "alert-bell" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AlertBell returns materialized "alert-bell" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AlertBell() OptionValue[SparseArray[string]] { return v.alertBell }
 
-// AlertSilence returns the "alert-silence" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AlertSilence returns materialized "alert-silence" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AlertSilence() OptionValue[SparseArray[string]] { return v.alertSilence }
 
-// ClientActive returns the "client-active" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientActive returns materialized "client-active" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientActive() OptionValue[SparseArray[string]] { return v.clientActive }
 
-// ClientAttached returns the "client-attached" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientAttached returns materialized "client-attached" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientAttached() OptionValue[SparseArray[string]] { return v.clientAttached }
 
-// ClientDarkTheme returns the "client-dark-theme" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.6.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientDarkTheme returns materialized "client-dark-theme" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.6.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientDarkTheme() OptionValue[SparseArray[string]] {
 	return v.clientDarkTheme
 }
 
-// ClientDetached returns the "client-detached" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientDetached returns materialized "client-detached" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientDetached() OptionValue[SparseArray[string]] { return v.clientDetached }
 
-// ClientFocusIn returns the "client-focus-in" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientFocusIn returns materialized "client-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientFocusIn() OptionValue[SparseArray[string]] { return v.clientFocusIn }
 
-// ClientFocusOut returns the "client-focus-out" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientFocusOut returns materialized "client-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientFocusOut() OptionValue[SparseArray[string]] { return v.clientFocusOut }
 
-// ClientLightTheme returns the "client-light-theme" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.6.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientLightTheme returns materialized "client-light-theme" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.6.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientLightTheme() OptionValue[SparseArray[string]] {
 	return v.clientLightTheme
 }
 
-// ClientResized returns the "client-resized" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientResized returns materialized "client-resized" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientResized() OptionValue[SparseArray[string]] { return v.clientResized }
 
-// ClientSessionChanged returns the "client-session-changed" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientSessionChanged returns materialized "client-session-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientSessionChanged() OptionValue[SparseArray[string]] {
 	return v.clientSessionChanged
 }
 
-// CommandError returns the "command-error" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.5.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// CommandError returns materialized "command-error" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.5.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) CommandError() OptionValue[SparseArray[string]] { return v.commandError }
 
-// SessionClosed returns the "session-closed" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionClosed returns materialized "session-closed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionClosed() OptionValue[SparseArray[string]] { return v.sessionClosed }
 
-// SessionCreated returns the "session-created" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionCreated returns materialized "session-created" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionCreated() OptionValue[SparseArray[string]] { return v.sessionCreated }
 
-// SessionRenamed returns the "session-renamed" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionRenamed returns materialized "session-renamed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionRenamed() OptionValue[SparseArray[string]] { return v.sessionRenamed }
 
-// SessionWindowChanged returns the "session-window-changed" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionWindowChanged returns materialized "session-window-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionWindowChanged() OptionValue[SparseArray[string]] {
 	return v.sessionWindowChanged
 }
 
-// WindowLinked returns the "window-linked" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowLinked returns materialized "window-linked" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) WindowLinked() OptionValue[SparseArray[string]] { return v.windowLinked }
 
-// WindowUnlinked returns the "window-unlinked" global session-scope hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [GlobalSessionScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowUnlinked returns materialized "window-unlinked" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) WindowUnlinked() OptionValue[SparseArray[string]] { return v.windowUnlinked }
 
@@ -4318,10 +3721,9 @@ func newServerHookValues(values []decodedOptionValue) ServerHookValues {
 	return result
 }
 
-// SessionHookValues is an immutable point-in-time view of known session hook values. Its zero value
-// has no present values. Obtain it with [Session.Hooks]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// SessionHookValues is an immutable materialized view of known session hook values; its zero value is empty and it does not refresh.
+// Obtain it with [Session.Hooks]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [Session.RawHook] for caller-named or undecoded values.
 type SessionHookValues struct {
 	afterBindKey         OptionValue[SparseArray[string]]
 	afterCapturePane     OptionValue[SparseArray[string]]
@@ -4382,460 +3784,346 @@ type SessionHookValues struct {
 	windowUnlinked       OptionValue[SparseArray[string]]
 }
 
-// AfterBindKey returns the "after-bind-key" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterBindKey returns materialized "after-bind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterBindKey() OptionValue[SparseArray[string]] { return v.afterBindKey }
 
-// AfterCapturePane returns the "after-capture-pane" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterCapturePane returns materialized "after-capture-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterCapturePane() OptionValue[SparseArray[string]] {
 	return v.afterCapturePane
 }
 
-// AfterCopyMode returns the "after-copy-mode" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterCopyMode returns materialized "after-copy-mode" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterCopyMode() OptionValue[SparseArray[string]] { return v.afterCopyMode }
 
-// AfterDisplayMessage returns the "after-display-message" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterDisplayMessage returns materialized "after-display-message" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterDisplayMessage() OptionValue[SparseArray[string]] {
 	return v.afterDisplayMessage
 }
 
-// AfterDisplayPanes returns the "after-display-panes" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterDisplayPanes returns materialized "after-display-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterDisplayPanes() OptionValue[SparseArray[string]] {
 	return v.afterDisplayPanes
 }
 
-// AfterKillPane returns the "after-kill-pane" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterKillPane returns materialized "after-kill-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterKillPane() OptionValue[SparseArray[string]] { return v.afterKillPane }
 
-// AfterListBuffers returns the "after-list-buffers" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListBuffers returns materialized "after-list-buffers" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListBuffers() OptionValue[SparseArray[string]] {
 	return v.afterListBuffers
 }
 
-// AfterListClients returns the "after-list-clients" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListClients returns materialized "after-list-clients" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListClients() OptionValue[SparseArray[string]] {
 	return v.afterListClients
 }
 
-// AfterListKeys returns the "after-list-keys" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListKeys returns materialized "after-list-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListKeys() OptionValue[SparseArray[string]] { return v.afterListKeys }
 
-// AfterListPanes returns the "after-list-panes" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListPanes returns materialized "after-list-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListPanes() OptionValue[SparseArray[string]] { return v.afterListPanes }
 
-// AfterListSessions returns the "after-list-sessions" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListSessions returns materialized "after-list-sessions" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListSessions() OptionValue[SparseArray[string]] {
 	return v.afterListSessions
 }
 
-// AfterListWindows returns the "after-list-windows" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterListWindows returns materialized "after-list-windows" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListWindows() OptionValue[SparseArray[string]] {
 	return v.afterListWindows
 }
 
-// AfterLoadBuffer returns the "after-load-buffer" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterLoadBuffer returns materialized "after-load-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterLoadBuffer() OptionValue[SparseArray[string]] {
 	return v.afterLoadBuffer
 }
 
-// AfterLockServer returns the "after-lock-server" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterLockServer returns materialized "after-lock-server" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterLockServer() OptionValue[SparseArray[string]] {
 	return v.afterLockServer
 }
 
-// AfterNewSession returns the "after-new-session" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterNewSession returns materialized "after-new-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterNewSession() OptionValue[SparseArray[string]] {
 	return v.afterNewSession
 }
 
-// AfterNewWindow returns the "after-new-window" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterNewWindow returns materialized "after-new-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterNewWindow() OptionValue[SparseArray[string]] { return v.afterNewWindow }
 
-// AfterPasteBuffer returns the "after-paste-buffer" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterPasteBuffer returns materialized "after-paste-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterPasteBuffer() OptionValue[SparseArray[string]] {
 	return v.afterPasteBuffer
 }
 
-// AfterPipePane returns the "after-pipe-pane" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterPipePane returns materialized "after-pipe-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterPipePane() OptionValue[SparseArray[string]] { return v.afterPipePane }
 
-// AfterQueue returns the "after-queue" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterQueue returns materialized "after-queue" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterQueue() OptionValue[SparseArray[string]] { return v.afterQueue }
 
-// AfterRefreshClient returns the "after-refresh-client" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterRefreshClient returns materialized "after-refresh-client" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterRefreshClient() OptionValue[SparseArray[string]] {
 	return v.afterRefreshClient
 }
 
-// AfterRenameSession returns the "after-rename-session" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterRenameSession returns materialized "after-rename-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterRenameSession() OptionValue[SparseArray[string]] {
 	return v.afterRenameSession
 }
 
-// AfterRenameWindow returns the "after-rename-window" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterRenameWindow returns materialized "after-rename-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterRenameWindow() OptionValue[SparseArray[string]] {
 	return v.afterRenameWindow
 }
 
-// AfterResizePane returns the "after-resize-pane" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterResizePane returns materialized "after-resize-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterResizePane() OptionValue[SparseArray[string]] {
 	return v.afterResizePane
 }
 
-// AfterResizeWindow returns the "after-resize-window" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterResizeWindow returns materialized "after-resize-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterResizeWindow() OptionValue[SparseArray[string]] {
 	return v.afterResizeWindow
 }
 
-// AfterSaveBuffer returns the "after-save-buffer" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSaveBuffer returns materialized "after-save-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSaveBuffer() OptionValue[SparseArray[string]] {
 	return v.afterSaveBuffer
 }
 
-// AfterSelectLayout returns the "after-select-layout" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSelectLayout returns materialized "after-select-layout" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSelectLayout() OptionValue[SparseArray[string]] {
 	return v.afterSelectLayout
 }
 
-// AfterSelectPane returns the "after-select-pane" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSelectPane returns materialized "after-select-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSelectPane() OptionValue[SparseArray[string]] {
 	return v.afterSelectPane
 }
 
-// AfterSelectWindow returns the "after-select-window" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSelectWindow returns materialized "after-select-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSelectWindow() OptionValue[SparseArray[string]] {
 	return v.afterSelectWindow
 }
 
-// AfterSendKeys returns the "after-send-keys" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSendKeys returns materialized "after-send-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSendKeys() OptionValue[SparseArray[string]] { return v.afterSendKeys }
 
-// AfterSetBuffer returns the "after-set-buffer" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetBuffer returns materialized "after-set-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetBuffer() OptionValue[SparseArray[string]] { return v.afterSetBuffer }
 
-// AfterSetEnvironment returns the "after-set-environment" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetEnvironment returns materialized "after-set-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterSetEnvironment
 }
 
-// AfterSetHook returns the "after-set-hook" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetHook returns materialized "after-set-hook" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetHook() OptionValue[SparseArray[string]] { return v.afterSetHook }
 
-// AfterSetOption returns the "after-set-option" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSetOption returns materialized "after-set-option" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetOption() OptionValue[SparseArray[string]] { return v.afterSetOption }
 
-// AfterShowEnvironment returns the "after-show-environment" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterShowEnvironment returns materialized "after-show-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterShowEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterShowEnvironment
 }
 
-// AfterShowMessages returns the "after-show-messages" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterShowMessages returns materialized "after-show-messages" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterShowMessages() OptionValue[SparseArray[string]] {
 	return v.afterShowMessages
 }
 
-// AfterShowOptions returns the "after-show-options" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterShowOptions returns materialized "after-show-options" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterShowOptions() OptionValue[SparseArray[string]] {
 	return v.afterShowOptions
 }
 
-// AfterSplitWindow returns the "after-split-window" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterSplitWindow returns materialized "after-split-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSplitWindow() OptionValue[SparseArray[string]] {
 	return v.afterSplitWindow
 }
 
-// AfterUnbindKey returns the "after-unbind-key" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AfterUnbindKey returns materialized "after-unbind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterUnbindKey() OptionValue[SparseArray[string]] { return v.afterUnbindKey }
 
-// AlertActivity returns the "alert-activity" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AlertActivity returns materialized "alert-activity" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AlertActivity() OptionValue[SparseArray[string]] { return v.alertActivity }
 
-// AlertBell returns the "alert-bell" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AlertBell returns materialized "alert-bell" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AlertBell() OptionValue[SparseArray[string]] { return v.alertBell }
 
-// AlertSilence returns the "alert-silence" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// AlertSilence returns materialized "alert-silence" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AlertSilence() OptionValue[SparseArray[string]] { return v.alertSilence }
 
-// ClientActive returns the "client-active" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientActive returns materialized "client-active" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientActive() OptionValue[SparseArray[string]] { return v.clientActive }
 
-// ClientAttached returns the "client-attached" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientAttached returns materialized "client-attached" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientAttached() OptionValue[SparseArray[string]] { return v.clientAttached }
 
-// ClientDarkTheme returns the "client-dark-theme" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.6.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientDarkTheme returns materialized "client-dark-theme" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.6.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientDarkTheme() OptionValue[SparseArray[string]] {
 	return v.clientDarkTheme
 }
 
-// ClientDetached returns the "client-detached" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientDetached returns materialized "client-detached" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientDetached() OptionValue[SparseArray[string]] { return v.clientDetached }
 
-// ClientFocusIn returns the "client-focus-in" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientFocusIn returns materialized "client-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientFocusIn() OptionValue[SparseArray[string]] { return v.clientFocusIn }
 
-// ClientFocusOut returns the "client-focus-out" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientFocusOut returns materialized "client-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientFocusOut() OptionValue[SparseArray[string]] { return v.clientFocusOut }
 
-// ClientLightTheme returns the "client-light-theme" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.6.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientLightTheme returns materialized "client-light-theme" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.6.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientLightTheme() OptionValue[SparseArray[string]] {
 	return v.clientLightTheme
 }
 
-// ClientResized returns the "client-resized" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientResized returns materialized "client-resized" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientResized() OptionValue[SparseArray[string]] { return v.clientResized }
 
-// ClientSessionChanged returns the "client-session-changed" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// ClientSessionChanged returns materialized "client-session-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientSessionChanged() OptionValue[SparseArray[string]] {
 	return v.clientSessionChanged
 }
 
-// CommandError returns the "command-error" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.5.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// CommandError returns materialized "command-error" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.5.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) CommandError() OptionValue[SparseArray[string]] { return v.commandError }
 
-// SessionClosed returns the "session-closed" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionClosed returns materialized "session-closed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionClosed() OptionValue[SparseArray[string]] { return v.sessionClosed }
 
-// SessionCreated returns the "session-created" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionCreated returns materialized "session-created" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionCreated() OptionValue[SparseArray[string]] { return v.sessionCreated }
 
-// SessionRenamed returns the "session-renamed" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionRenamed returns materialized "session-renamed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionRenamed() OptionValue[SparseArray[string]] { return v.sessionRenamed }
 
-// SessionWindowChanged returns the "session-window-changed" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// SessionWindowChanged returns materialized "session-window-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionWindowChanged() OptionValue[SparseArray[string]] {
 	return v.sessionWindowChanged
 }
 
-// WindowLinked returns the "window-linked" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowLinked returns materialized "window-linked" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) WindowLinked() OptionValue[SparseArray[string]] { return v.windowLinked }
 
-// WindowUnlinked returns the "window-unlinked" session hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [Session.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowUnlinked returns materialized "window-unlinked" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) WindowUnlinked() OptionValue[SparseArray[string]] { return v.windowUnlinked }
 
@@ -4962,10 +4250,9 @@ func newSessionHookValues(values []decodedOptionValue) SessionHookValues {
 	return result
 }
 
-// WindowHookValues is an immutable point-in-time view of known window hook values. Its zero value
-// has no present values. Obtain it with [Window.Hooks] or [GlobalWindowScope.Hooks]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// WindowHookValues is an immutable materialized view of known window hook values; its zero value is empty and it does not refresh.
+// Obtain it with [Window.Hooks] or [GlobalWindowScope.Hooks]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
 type WindowHookValues struct {
 	paneDied            OptionValue[SparseArray[string]]
 	paneExited          OptionValue[SparseArray[string]]
@@ -4982,104 +4269,78 @@ type WindowHookValues struct {
 	windowUnlinked      OptionValue[SparseArray[string]]
 }
 
-// PaneDied returns the "pane-died" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneDied returns materialized "pane-died" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneDied() OptionValue[SparseArray[string]] { return v.paneDied }
 
-// PaneExited returns the "pane-exited" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneExited returns materialized "pane-exited" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneExited() OptionValue[SparseArray[string]] { return v.paneExited }
 
-// PaneFocusIn returns the "pane-focus-in" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneFocusIn returns materialized "pane-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneFocusIn() OptionValue[SparseArray[string]] { return v.paneFocusIn }
 
-// PaneFocusOut returns the "pane-focus-out" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneFocusOut returns materialized "pane-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneFocusOut() OptionValue[SparseArray[string]] { return v.paneFocusOut }
 
-// PaneModeChanged returns the "pane-mode-changed" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneModeChanged returns materialized "pane-mode-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneModeChanged() OptionValue[SparseArray[string]] {
 	return v.paneModeChanged
 }
 
-// PaneSetClipboard returns the "pane-set-clipboard" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneSetClipboard returns materialized "pane-set-clipboard" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneSetClipboard() OptionValue[SparseArray[string]] {
 	return v.paneSetClipboard
 }
 
-// PaneTitleChanged returns the "pane-title-changed" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneTitleChanged returns materialized "pane-title-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneTitleChanged() OptionValue[SparseArray[string]] {
 	return v.paneTitleChanged
 }
 
-// WindowLayoutChanged returns the "window-layout-changed" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowLayoutChanged returns materialized "window-layout-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowLayoutChanged() OptionValue[SparseArray[string]] {
 	return v.windowLayoutChanged
 }
 
-// WindowLinked returns the "window-linked" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowLinked returns materialized "window-linked" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowLinked() OptionValue[SparseArray[string]] { return v.windowLinked }
 
-// WindowPaneChanged returns the "window-pane-changed" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowPaneChanged returns materialized "window-pane-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowPaneChanged() OptionValue[SparseArray[string]] {
 	return v.windowPaneChanged
 }
 
-// WindowRenamed returns the "window-renamed" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowRenamed returns materialized "window-renamed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowRenamed() OptionValue[SparseArray[string]] { return v.windowRenamed }
 
-// WindowResized returns the "window-resized" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.3.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowResized returns materialized "window-resized" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.3.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowResized() OptionValue[SparseArray[string]] { return v.windowResized }
 
-// WindowUnlinked returns the "window-unlinked" window hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Window.RawHook] or [GlobalWindowScope.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// WindowUnlinked returns materialized "window-unlinked" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowUnlinked() OptionValue[SparseArray[string]] { return v.windowUnlinked }
 
@@ -5118,10 +4379,9 @@ func newWindowHookValues(values []decodedOptionValue) WindowHookValues {
 	return result
 }
 
-// PaneHookValues is an immutable point-in-time view of known pane hook values. Its zero value
-// has no present values. Obtain it with [Pane.Hooks]; it may become stale after tmux changes.
-// Use [OptionValue.Get] to read a present value and [OptionValue.Origin] to distinguish
-// values set at this scope from inherited values.
+// PaneHookValues is an immutable materialized view of known pane hook values; its zero value is empty and it does not refresh.
+// Obtain it with [Pane.Hooks]. [OptionValue.Get] reports presence and [OptionValue.Origin] reports inheritance.
+// Use [Pane.RawHook] for caller-named or undecoded values.
 type PaneHookValues struct {
 	paneDied         OptionValue[SparseArray[string]]
 	paneExited       OptionValue[SparseArray[string]]
@@ -5132,54 +4392,40 @@ type PaneHookValues struct {
 	paneTitleChanged OptionValue[SparseArray[string]]
 }
 
-// PaneDied returns the "pane-died" pane hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Pane.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneDied returns materialized "pane-died" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneDied() OptionValue[SparseArray[string]] { return v.paneDied }
 
-// PaneExited returns the "pane-exited" pane hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Pane.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneExited returns materialized "pane-exited" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneExited() OptionValue[SparseArray[string]] { return v.paneExited }
 
-// PaneFocusIn returns the "pane-focus-in" pane hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Pane.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneFocusIn returns materialized "pane-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneFocusIn() OptionValue[SparseArray[string]] { return v.paneFocusIn }
 
-// PaneFocusOut returns the "pane-focus-out" pane hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Pane.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneFocusOut returns materialized "pane-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneFocusOut() OptionValue[SparseArray[string]] { return v.paneFocusOut }
 
-// PaneModeChanged returns the "pane-mode-changed" pane hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Pane.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneModeChanged returns materialized "pane-mode-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneModeChanged() OptionValue[SparseArray[string]] { return v.paneModeChanged }
 
-// PaneSetClipboard returns the "pane-set-clipboard" pane hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Pane.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneSetClipboard returns materialized "pane-set-clipboard" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneSetClipboard() OptionValue[SparseArray[string]] {
 	return v.paneSetClipboard
 }
 
-// PaneTitleChanged returns the "pane-title-changed" pane hook value as [OptionValue] with Go value shape OptionValue[SparseArray[string]]. It does not query tmux.
-// Its scope-specific minimum tmux version and supported variants are COMMAND since tmux 3.2a.
-// Use [Pane.RawHook] for caller-named or undecoded values.
-// It is not a style option.
+// PaneTitleChanged returns materialized "pane-title-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
+// Available as COMMAND since tmux 3.2a.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneTitleChanged() OptionValue[SparseArray[string]] {
 	return v.paneTitleChanged
@@ -5208,10 +4454,8 @@ func newPaneHookValues(values []decodedOptionValue) PaneHookValues {
 	return result
 }
 
-// SetActivityAction stores the "activity-action" session option, available since tmux 3.2a.
-// It accepts ActivityAction and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.ActivityAction] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetActivityAction stores the "activity-action" session option as ActivityAction (tmux 3.2a or later).
+// Read it with [SessionOptionValues.ActivityAction] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetActivityAction(ctx context.Context, value ActivityAction) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5220,20 +4464,16 @@ func (s Session) SetActivityAction(ctx context.Context, value ActivityAction) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "activity-action", value.String(), true)
 }
 
-// SetActivityAction stores the "activity-action" session option, available since tmux 3.2a.
-// It accepts ActivityAction and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.ActivityAction] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetActivityAction stores the "activity-action" session option as ActivityAction (tmux 3.2a or later).
+// Read it with [SessionOptionValues.ActivityAction] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetActivityAction(ctx context.Context, value ActivityAction) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "activity-action", value.String(), true)
 }
 
-// SetAggressiveResize stores the "aggressive-resize" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AggressiveResize] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetAggressiveResize stores the "aggressive-resize" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AggressiveResize] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAggressiveResize(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5242,20 +4482,16 @@ func (w Window) SetAggressiveResize(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "aggressive-resize", encodeTypedOptionBool(value), false)
 }
 
-// SetAggressiveResize stores the "aggressive-resize" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AggressiveResize] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetAggressiveResize stores the "aggressive-resize" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AggressiveResize] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAggressiveResize(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "aggressive-resize", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowPassthrough stores the "allow-passthrough" window option, available since tmux 3.3.
-// It accepts AllowPassthrough and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AllowPassthrough] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetAllowPassthrough stores the "allow-passthrough" window option as AllowPassthrough (tmux 3.3 or later).
+// Read it with [WindowOptionValues.AllowPassthrough] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5264,20 +4500,16 @@ func (w Window) SetAllowPassthrough(ctx context.Context, value AllowPassthrough)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-passthrough", value.String(), true)
 }
 
-// SetAllowPassthrough stores the "allow-passthrough" window option, available since tmux 3.3.
-// It accepts AllowPassthrough and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AllowPassthrough] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetAllowPassthrough stores the "allow-passthrough" window option as AllowPassthrough (tmux 3.3 or later).
+// Read it with [WindowOptionValues.AllowPassthrough] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-passthrough", value.String(), true)
 }
 
-// SetAllowPassthrough stores the "allow-passthrough" pane option, available since tmux 3.3.
-// It accepts AllowPassthrough and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.AllowPassthrough] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetAllowPassthrough stores the "allow-passthrough" pane option as AllowPassthrough (tmux 3.3 or later).
+// Read it with [PaneOptionValues.AllowPassthrough] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -5286,10 +4518,8 @@ func (p Pane) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "allow-passthrough", value.String(), true)
 }
 
-// SetAllowRename stores the "allow-rename" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AllowRename] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetAllowRename stores the "allow-rename" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AllowRename] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAllowRename(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5298,20 +4528,16 @@ func (w Window) SetAllowRename(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowRename stores the "allow-rename" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AllowRename] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetAllowRename stores the "allow-rename" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AllowRename] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAllowRename(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowRename stores the "allow-rename" pane option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.AllowRename] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetAllowRename stores the "allow-rename" pane option as bool (tmux 3.2a or later).
+// Read it with [PaneOptionValues.AllowRename] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetAllowRename(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -5320,10 +4546,8 @@ func (p Pane) SetAllowRename(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "allow-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowSetTitle stores the "allow-set-title" window option, available since tmux 3.5.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AllowSetTitle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetAllowSetTitle stores the "allow-set-title" window option as bool (tmux 3.5 or later).
+// Read it with [WindowOptionValues.AllowSetTitle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAllowSetTitle(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5332,20 +4556,16 @@ func (w Window) SetAllowSetTitle(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-set-title", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowSetTitle stores the "allow-set-title" window option, available since tmux 3.5.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AllowSetTitle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetAllowSetTitle stores the "allow-set-title" window option as bool (tmux 3.5 or later).
+// Read it with [WindowOptionValues.AllowSetTitle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAllowSetTitle(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-set-title", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowSetTitle stores the "allow-set-title" pane option, available since tmux 3.5.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.AllowSetTitle] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetAllowSetTitle stores the "allow-set-title" pane option as bool (tmux 3.5 or later).
+// Read it with [PaneOptionValues.AllowSetTitle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetAllowSetTitle(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -5354,10 +4574,8 @@ func (p Pane) SetAllowSetTitle(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "allow-set-title", encodeTypedOptionBool(value), false)
 }
 
-// SetAlternateScreen stores the "alternate-screen" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AlternateScreen] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetAlternateScreen stores the "alternate-screen" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AlternateScreen] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAlternateScreen(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5366,20 +4584,16 @@ func (w Window) SetAlternateScreen(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "alternate-screen", encodeTypedOptionBool(value), false)
 }
 
-// SetAlternateScreen stores the "alternate-screen" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AlternateScreen] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetAlternateScreen stores the "alternate-screen" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AlternateScreen] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAlternateScreen(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "alternate-screen", encodeTypedOptionBool(value), false)
 }
 
-// SetAlternateScreen stores the "alternate-screen" pane option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.AlternateScreen] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetAlternateScreen stores the "alternate-screen" pane option as bool (tmux 3.2a or later).
+// Read it with [PaneOptionValues.AlternateScreen] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetAlternateScreen(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -5388,10 +4602,8 @@ func (p Pane) SetAlternateScreen(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "alternate-screen", encodeTypedOptionBool(value), false)
 }
 
-// SetAssumePasteTime stores the "assume-paste-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.AssumePasteTime] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetAssumePasteTime stores the "assume-paste-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.AssumePasteTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetAssumePasteTime(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5400,20 +4612,16 @@ func (s Session) SetAssumePasteTime(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetAssumePasteTime stores the "assume-paste-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.AssumePasteTime] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetAssumePasteTime stores the "assume-paste-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.AssumePasteTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetAssumePasteTime(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetAutomaticRename stores the "automatic-rename" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AutomaticRename] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetAutomaticRename stores the "automatic-rename" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AutomaticRename] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAutomaticRename(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5422,20 +4630,16 @@ func (w Window) SetAutomaticRename(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAutomaticRename stores the "automatic-rename" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AutomaticRename] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetAutomaticRename stores the "automatic-rename" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AutomaticRename] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAutomaticRename(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAutomaticRenameFormat stores the "automatic-rename-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AutomaticRenameFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetAutomaticRenameFormat stores the "automatic-rename-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AutomaticRenameFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAutomaticRenameFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5444,30 +4648,24 @@ func (w Window) SetAutomaticRenameFormat(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename-format", value, false)
 }
 
-// SetAutomaticRenameFormat stores the "automatic-rename-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.AutomaticRenameFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetAutomaticRenameFormat stores the "automatic-rename-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.AutomaticRenameFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAutomaticRenameFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename-format", value, false)
 }
 
-// SetBackspace stores the "backspace" server option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.Backspace] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetBackspace stores the "backspace" server option as string (tmux 3.2a or later).
+// Read it with [ServerOptionValues.Backspace] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetBackspace(ctx context.Context, value string) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "backspace", value, false)
 }
 
-// SetBaseIndex stores the "base-index" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.BaseIndex] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetBaseIndex stores the "base-index" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.BaseIndex] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetBaseIndex(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5476,20 +4674,16 @@ func (s Session) SetBaseIndex(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetBaseIndex stores the "base-index" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.BaseIndex] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetBaseIndex stores the "base-index" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.BaseIndex] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetBaseIndex(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetBellAction stores the "bell-action" session option, available since tmux 3.2a.
-// It accepts BellAction and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.BellAction] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetBellAction stores the "bell-action" session option as BellAction (tmux 3.2a or later).
+// Read it with [SessionOptionValues.BellAction] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetBellAction(ctx context.Context, value BellAction) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5498,30 +4692,24 @@ func (s Session) SetBellAction(ctx context.Context, value BellAction) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "bell-action", value.String(), true)
 }
 
-// SetBellAction stores the "bell-action" session option, available since tmux 3.2a.
-// It accepts BellAction and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.BellAction] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetBellAction stores the "bell-action" session option as BellAction (tmux 3.2a or later).
+// Read it with [SessionOptionValues.BellAction] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetBellAction(ctx context.Context, value BellAction) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "bell-action", value.String(), true)
 }
 
-// SetBufferLimit stores the "buffer-limit" server option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.BufferLimit] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetBufferLimit stores the "buffer-limit" server option as int64 (tmux 3.2a or later).
+// Read it with [ServerOptionValues.BufferLimit] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetBufferLimit(ctx context.Context, value int64) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "buffer-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetClockModeColour stores the "clock-mode-colour" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ClockModeColour] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetClockModeColour stores the "clock-mode-colour" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ClockModeColour] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetClockModeColour(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5530,20 +4718,16 @@ func (w Window) SetClockModeColour(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-colour", value, false)
 }
 
-// SetClockModeColour stores the "clock-mode-colour" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ClockModeColour] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetClockModeColour stores the "clock-mode-colour" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ClockModeColour] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetClockModeColour(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-colour", value, false)
 }
 
-// SetClockModeStyle stores the "clock-mode-style" window option, available since tmux 3.2a.
-// It accepts ClockModeStyle and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ClockModeStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetClockModeStyle stores the "clock-mode-style" window option as ClockModeStyle (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ClockModeStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetClockModeStyle(ctx context.Context, value ClockModeStyle) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5552,30 +4736,24 @@ func (w Window) SetClockModeStyle(ctx context.Context, value ClockModeStyle) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-style", value.String(), true)
 }
 
-// SetClockModeStyle stores the "clock-mode-style" window option, available since tmux 3.2a.
-// It accepts ClockModeStyle and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ClockModeStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetClockModeStyle stores the "clock-mode-style" window option as ClockModeStyle (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ClockModeStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetClockModeStyle(ctx context.Context, value ClockModeStyle) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-style", value.String(), true)
 }
 
-// SetCopyCommand stores the "copy-command" server option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.CopyCommand] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetCopyCommand stores the "copy-command" server option as string (tmux 3.2a or later).
+// Read it with [ServerOptionValues.CopyCommand] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetCopyCommand(ctx context.Context, value string) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "copy-command", value, false)
 }
 
-// SetCopyModeCurrentLineNumberStyle stores the "copy-mode-current-line-number-style" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeCurrentLineNumberStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModeCurrentLineNumberStyle stores the "copy-mode-current-line-number-style" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.CopyModeCurrentLineNumberStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeCurrentLineNumberStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5584,20 +4762,16 @@ func (w Window) SetCopyModeCurrentLineNumberStyle(ctx context.Context, value str
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-current-line-number-style", value, false)
 }
 
-// SetCopyModeCurrentLineNumberStyle stores the "copy-mode-current-line-number-style" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeCurrentLineNumberStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModeCurrentLineNumberStyle stores the "copy-mode-current-line-number-style" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.CopyModeCurrentLineNumberStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeCurrentLineNumberStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-current-line-number-style", value, false)
 }
 
-// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeCurrentMatchStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.CopyModeCurrentMatchStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeCurrentMatchStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5606,20 +4780,16 @@ func (w Window) SetCopyModeCurrentMatchStyle(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-current-match-style", value, false)
 }
 
-// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeCurrentMatchStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.CopyModeCurrentMatchStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeCurrentMatchStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-current-match-style", value, false)
 }
 
-// SetCopyModeLineNumberStyle stores the "copy-mode-line-number-style" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeLineNumberStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModeLineNumberStyle stores the "copy-mode-line-number-style" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.CopyModeLineNumberStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeLineNumberStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5628,20 +4798,16 @@ func (w Window) SetCopyModeLineNumberStyle(ctx context.Context, value string) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-line-number-style", value, false)
 }
 
-// SetCopyModeLineNumberStyle stores the "copy-mode-line-number-style" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeLineNumberStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModeLineNumberStyle stores the "copy-mode-line-number-style" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.CopyModeLineNumberStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeLineNumberStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-line-number-style", value, false)
 }
 
-// SetCopyModeLineNumbers stores the "copy-mode-line-numbers" window option, available since tmux 3.7.
-// It accepts CopyModeLineNumbers and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeLineNumbers] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModeLineNumbers stores the "copy-mode-line-numbers" window option as CopyModeLineNumbers (tmux 3.7 or later).
+// Read it with [WindowOptionValues.CopyModeLineNumbers] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeLineNumbers(ctx context.Context, value CopyModeLineNumbers) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5650,20 +4816,16 @@ func (w Window) SetCopyModeLineNumbers(ctx context.Context, value CopyModeLineNu
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-line-numbers", value.String(), true)
 }
 
-// SetCopyModeLineNumbers stores the "copy-mode-line-numbers" window option, available since tmux 3.7.
-// It accepts CopyModeLineNumbers and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeLineNumbers] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModeLineNumbers stores the "copy-mode-line-numbers" window option as CopyModeLineNumbers (tmux 3.7 or later).
+// Read it with [WindowOptionValues.CopyModeLineNumbers] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeLineNumbers(ctx context.Context, value CopyModeLineNumbers) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-line-numbers", value.String(), true)
 }
 
-// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeMarkStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.CopyModeMarkStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeMarkStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5672,20 +4834,16 @@ func (w Window) SetCopyModeMarkStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-mark-style", value, false)
 }
 
-// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeMarkStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.CopyModeMarkStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeMarkStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-mark-style", value, false)
 }
 
-// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeMatchStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.CopyModeMatchStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeMatchStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5694,20 +4852,16 @@ func (w Window) SetCopyModeMatchStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-match-style", value, false)
 }
 
-// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeMatchStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.CopyModeMatchStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeMatchStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-match-style", value, false)
 }
 
-// SetCopyModePositionFormat stores the "copy-mode-position-format" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModePositionFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModePositionFormat stores the "copy-mode-position-format" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.CopyModePositionFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModePositionFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5716,20 +4870,16 @@ func (w Window) SetCopyModePositionFormat(ctx context.Context, value string) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-position-format", value, false)
 }
 
-// SetCopyModePositionFormat stores the "copy-mode-position-format" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModePositionFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModePositionFormat stores the "copy-mode-position-format" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.CopyModePositionFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModePositionFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-position-format", value, false)
 }
 
-// SetCopyModePositionFormat stores the "copy-mode-position-format" pane option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.CopyModePositionFormat] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetCopyModePositionFormat stores the "copy-mode-position-format" pane option as string (tmux 3.6 or later).
+// Read it with [PaneOptionValues.CopyModePositionFormat] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetCopyModePositionFormat(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -5738,10 +4888,8 @@ func (p Pane) SetCopyModePositionFormat(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "copy-mode-position-format", value, false)
 }
 
-// SetCopyModePositionStyle stores the "copy-mode-position-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModePositionStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModePositionStyle stores the "copy-mode-position-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.CopyModePositionStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModePositionStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5750,20 +4898,16 @@ func (w Window) SetCopyModePositionStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-position-style", value, false)
 }
 
-// SetCopyModePositionStyle stores the "copy-mode-position-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModePositionStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModePositionStyle stores the "copy-mode-position-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.CopyModePositionStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModePositionStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-position-style", value, false)
 }
 
-// SetCopyModeSelectionStyle stores the "copy-mode-selection-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeSelectionStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCopyModeSelectionStyle stores the "copy-mode-selection-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.CopyModeSelectionStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeSelectionStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5772,20 +4916,16 @@ func (w Window) SetCopyModeSelectionStyle(ctx context.Context, value string) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-selection-style", value, false)
 }
 
-// SetCopyModeSelectionStyle stores the "copy-mode-selection-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CopyModeSelectionStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCopyModeSelectionStyle stores the "copy-mode-selection-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.CopyModeSelectionStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeSelectionStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-selection-style", value, false)
 }
 
-// SetCursorColour stores the "cursor-colour" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CursorColour] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCursorColour stores the "cursor-colour" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.CursorColour] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCursorColour(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5794,20 +4934,16 @@ func (w Window) SetCursorColour(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-colour", value, false)
 }
 
-// SetCursorColour stores the "cursor-colour" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CursorColour] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCursorColour stores the "cursor-colour" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.CursorColour] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCursorColour(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-colour", value, false)
 }
 
-// SetCursorColour stores the "cursor-colour" pane option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.CursorColour] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetCursorColour stores the "cursor-colour" pane option as string (tmux 3.3 or later).
+// Read it with [PaneOptionValues.CursorColour] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetCursorColour(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -5816,10 +4952,8 @@ func (p Pane) SetCursorColour(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "cursor-colour", value, false)
 }
 
-// SetCursorStyle stores the "cursor-style" window option, available since tmux 3.3.
-// It accepts CursorStyle and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CursorStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetCursorStyle stores the "cursor-style" window option as CursorStyle (tmux 3.3 or later).
+// Read it with [WindowOptionValues.CursorStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -5828,20 +4962,16 @@ func (w Window) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-style", value.String(), true)
 }
 
-// SetCursorStyle stores the "cursor-style" window option, available since tmux 3.3.
-// It accepts CursorStyle and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.CursorStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetCursorStyle stores the "cursor-style" window option as CursorStyle (tmux 3.3 or later).
+// Read it with [WindowOptionValues.CursorStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-style", value.String(), true)
 }
 
-// SetCursorStyle stores the "cursor-style" pane option, available since tmux 3.3.
-// It accepts CursorStyle and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.CursorStyle] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetCursorStyle stores the "cursor-style" pane option as CursorStyle (tmux 3.3 or later).
+// Read it with [PaneOptionValues.CursorStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -5850,20 +4980,16 @@ func (p Pane) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "cursor-style", value.String(), true)
 }
 
-// SetDefaultClientCommand stores the "default-client-command" server option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.DefaultClientCommand] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetDefaultClientCommand stores the "default-client-command" server option as string (tmux 3.6 or later).
+// Read it with [ServerOptionValues.DefaultClientCommand] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetDefaultClientCommand(ctx context.Context, value string) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "default-client-command", value, false)
 }
 
-// SetDefaultCommand stores the "default-command" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DefaultCommand] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDefaultCommand stores the "default-command" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DefaultCommand] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDefaultCommand(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5872,20 +4998,16 @@ func (s Session) SetDefaultCommand(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-command", value, false)
 }
 
-// SetDefaultCommand stores the "default-command" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DefaultCommand] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDefaultCommand stores the "default-command" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DefaultCommand] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDefaultCommand(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-command", value, false)
 }
 
-// SetDefaultShell stores the "default-shell" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DefaultShell] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDefaultShell stores the "default-shell" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DefaultShell] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDefaultShell(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5894,20 +5016,16 @@ func (s Session) SetDefaultShell(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-shell", value, false)
 }
 
-// SetDefaultShell stores the "default-shell" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DefaultShell] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDefaultShell stores the "default-shell" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DefaultShell] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDefaultShell(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-shell", value, false)
 }
 
-// SetDefaultSize stores the "default-size" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DefaultSize] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDefaultSize stores the "default-size" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DefaultSize] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDefaultSize(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5916,30 +5034,24 @@ func (s Session) SetDefaultSize(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-size", value, false)
 }
 
-// SetDefaultSize stores the "default-size" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DefaultSize] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDefaultSize stores the "default-size" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DefaultSize] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDefaultSize(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-size", value, false)
 }
 
-// SetDefaultTerminal stores the "default-terminal" server option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.DefaultTerminal] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetDefaultTerminal stores the "default-terminal" server option as string (tmux 3.2a or later).
+// Read it with [ServerOptionValues.DefaultTerminal] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetDefaultTerminal(ctx context.Context, value string) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "default-terminal", value, false)
 }
 
-// SetDestroyUnattached stores the "destroy-unattached" session option, available since tmux 3.2a.
-// It accepts DestroyUnattached and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DestroyUnattached] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDestroyUnattached stores the "destroy-unattached" session option as DestroyUnattached (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DestroyUnattached] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDestroyUnattached(ctx context.Context, value DestroyUnattached) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5948,20 +5060,16 @@ func (s Session) SetDestroyUnattached(ctx context.Context, value DestroyUnattach
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "destroy-unattached", value.String(), true)
 }
 
-// SetDestroyUnattached stores the "destroy-unattached" session option, available since tmux 3.2a.
-// It accepts DestroyUnattached and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DestroyUnattached] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDestroyUnattached stores the "destroy-unattached" session option as DestroyUnattached (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DestroyUnattached] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDestroyUnattached(ctx context.Context, value DestroyUnattached) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "destroy-unattached", value.String(), true)
 }
 
-// SetDetachOnDestroy stores the "detach-on-destroy" session option, available since tmux 3.2a.
-// It accepts DetachOnDestroy and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DetachOnDestroy] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDetachOnDestroy stores the "detach-on-destroy" session option as DetachOnDestroy (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DetachOnDestroy] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDetachOnDestroy(ctx context.Context, value DetachOnDestroy) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5970,20 +5078,16 @@ func (s Session) SetDetachOnDestroy(ctx context.Context, value DetachOnDestroy) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "detach-on-destroy", value.String(), true)
 }
 
-// SetDetachOnDestroy stores the "detach-on-destroy" session option, available since tmux 3.2a.
-// It accepts DetachOnDestroy and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DetachOnDestroy] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDetachOnDestroy stores the "detach-on-destroy" session option as DetachOnDestroy (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DetachOnDestroy] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDetachOnDestroy(ctx context.Context, value DetachOnDestroy) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "detach-on-destroy", value.String(), true)
 }
 
-// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayPanesActiveColour] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayPanesActiveColour] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayPanesActiveColour(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -5992,20 +5096,16 @@ func (s Session) SetDisplayPanesActiveColour(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-active-colour", value, false)
 }
 
-// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayPanesActiveColour] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayPanesActiveColour] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayPanesActiveColour(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-active-colour", value, false)
 }
 
-// SetDisplayPanesColour stores the "display-panes-colour" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayPanesColour] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDisplayPanesColour stores the "display-panes-colour" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayPanesColour] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayPanesColour(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6014,20 +5114,16 @@ func (s Session) SetDisplayPanesColour(ctx context.Context, value string) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-colour", value, false)
 }
 
-// SetDisplayPanesColour stores the "display-panes-colour" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayPanesColour] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDisplayPanesColour stores the "display-panes-colour" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayPanesColour] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayPanesColour(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-colour", value, false)
 }
 
-// SetDisplayPanesTime stores the "display-panes-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayPanesTime] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDisplayPanesTime stores the "display-panes-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayPanesTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayPanesTime(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6036,20 +5132,16 @@ func (s Session) SetDisplayPanesTime(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetDisplayPanesTime stores the "display-panes-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayPanesTime] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDisplayPanesTime stores the "display-panes-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayPanesTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayPanesTime(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetDisplayTime stores the "display-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayTime] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetDisplayTime stores the "display-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayTime(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6058,80 +5150,64 @@ func (s Session) SetDisplayTime(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetDisplayTime stores the "display-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.DisplayTime] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetDisplayTime stores the "display-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.DisplayTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayTime(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetEditor stores the "editor" server option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.Editor] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetEditor stores the "editor" server option as string (tmux 3.2a or later).
+// Read it with [ServerOptionValues.Editor] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetEditor(ctx context.Context, value string) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "editor", value, false)
 }
 
-// SetEscapeTime stores the "escape-time" server option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.EscapeTime] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetEscapeTime stores the "escape-time" server option as int64 (tmux 3.2a or later).
+// Read it with [ServerOptionValues.EscapeTime] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetEscapeTime(ctx context.Context, value int64) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "escape-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetExitEmpty stores the "exit-empty" server option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.ExitEmpty] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetExitEmpty stores the "exit-empty" server option as bool (tmux 3.2a or later).
+// Read it with [ServerOptionValues.ExitEmpty] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetExitEmpty(ctx context.Context, value bool) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "exit-empty", encodeTypedOptionBool(value), false)
 }
 
-// SetExitUnattached stores the "exit-unattached" server option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.ExitUnattached] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetExitUnattached stores the "exit-unattached" server option as bool (tmux 3.2a or later).
+// Read it with [ServerOptionValues.ExitUnattached] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetExitUnattached(ctx context.Context, value bool) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "exit-unattached", encodeTypedOptionBool(value), false)
 }
 
-// SetExtendedKeys stores the "extended-keys" server option, available since tmux 3.2a.
-// It accepts ExtendedKeys and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.ExtendedKeys] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetExtendedKeys stores the "extended-keys" server option as ExtendedKeys (tmux 3.2a or later).
+// Read it with [ServerOptionValues.ExtendedKeys] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetExtendedKeys(ctx context.Context, value ExtendedKeys) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "extended-keys", value.String(), true)
 }
 
-// SetExtendedKeysFormat stores the "extended-keys-format" server option, available since tmux 3.5.
-// It accepts ExtendedKeysFormat and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.ExtendedKeysFormat] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetExtendedKeysFormat stores the "extended-keys-format" server option as ExtendedKeysFormat (tmux 3.5 or later).
+// Read it with [ServerOptionValues.ExtendedKeysFormat] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetExtendedKeysFormat(ctx context.Context, value ExtendedKeysFormat) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "extended-keys-format", value.String(), true)
 }
 
-// SetFillCharacter stores the "fill-character" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.FillCharacter] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetFillCharacter stores the "fill-character" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.FillCharacter] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetFillCharacter(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6140,30 +5216,24 @@ func (w Window) SetFillCharacter(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "fill-character", value, false)
 }
 
-// SetFillCharacter stores the "fill-character" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.FillCharacter] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetFillCharacter stores the "fill-character" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.FillCharacter] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetFillCharacter(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "fill-character", value, false)
 }
 
-// SetFocusEvents stores the "focus-events" server option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.FocusEvents] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetFocusEvents stores the "focus-events" server option as bool (tmux 3.2a or later).
+// Read it with [ServerOptionValues.FocusEvents] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetFocusEvents(ctx context.Context, value bool) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "focus-events", encodeTypedOptionBool(value), false)
 }
 
-// SetFocusFollowsMouse stores the "focus-follows-mouse" session option, available since tmux 3.7.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.FocusFollowsMouse] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetFocusFollowsMouse stores the "focus-follows-mouse" session option as bool (tmux 3.7 or later).
+// Read it with [SessionOptionValues.FocusFollowsMouse] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetFocusFollowsMouse(ctx context.Context, value bool) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6172,40 +5242,32 @@ func (s Session) SetFocusFollowsMouse(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "focus-follows-mouse", encodeTypedOptionBool(value), false)
 }
 
-// SetFocusFollowsMouse stores the "focus-follows-mouse" session option, available since tmux 3.7.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.FocusFollowsMouse] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetFocusFollowsMouse stores the "focus-follows-mouse" session option as bool (tmux 3.7 or later).
+// Read it with [SessionOptionValues.FocusFollowsMouse] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetFocusFollowsMouse(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "focus-follows-mouse", encodeTypedOptionBool(value), false)
 }
 
-// SetGetClipboard stores the "get-clipboard" server option, available since tmux 3.7.
-// It accepts GetClipboard and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.GetClipboard] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetGetClipboard stores the "get-clipboard" server option as GetClipboard (tmux 3.7 or later).
+// Read it with [ServerOptionValues.GetClipboard] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetGetClipboard(ctx context.Context, value GetClipboard) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "get-clipboard", value.String(), true)
 }
 
-// SetHistoryFile stores the "history-file" server option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.HistoryFile] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetHistoryFile stores the "history-file" server option as string (tmux 3.2a or later).
+// Read it with [ServerOptionValues.HistoryFile] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetHistoryFile(ctx context.Context, value string) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "history-file", value, false)
 }
 
-// SetHistoryLimit stores the "history-limit" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.HistoryLimit] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetHistoryLimit stores the "history-limit" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.HistoryLimit] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetHistoryLimit(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6214,20 +5276,16 @@ func (s Session) SetHistoryLimit(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "history-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetHistoryLimit stores the "history-limit" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.HistoryLimit] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetHistoryLimit stores the "history-limit" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.HistoryLimit] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetHistoryLimit(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "history-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetInitialRepeatTime stores the "initial-repeat-time" session option, available since tmux 3.6.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.InitialRepeatTime] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetInitialRepeatTime stores the "initial-repeat-time" session option as int64 (tmux 3.6 or later).
+// Read it with [SessionOptionValues.InitialRepeatTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetInitialRepeatTime(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6236,30 +5294,24 @@ func (s Session) SetInitialRepeatTime(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "initial-repeat-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetInitialRepeatTime stores the "initial-repeat-time" session option, available since tmux 3.6.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.InitialRepeatTime] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetInitialRepeatTime stores the "initial-repeat-time" session option as int64 (tmux 3.6 or later).
+// Read it with [SessionOptionValues.InitialRepeatTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetInitialRepeatTime(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "initial-repeat-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetInputBufferSize stores the "input-buffer-size" server option, available since tmux 3.6.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.InputBufferSize] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetInputBufferSize stores the "input-buffer-size" server option as int64 (tmux 3.6 or later).
+// Read it with [ServerOptionValues.InputBufferSize] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetInputBufferSize(ctx context.Context, value int64) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "input-buffer-size", encodeTypedOptionInt64(value), false)
 }
 
-// SetKeyTable stores the "key-table" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.KeyTable] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetKeyTable stores the "key-table" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.KeyTable] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetKeyTable(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6268,20 +5320,16 @@ func (s Session) SetKeyTable(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "key-table", value, false)
 }
 
-// SetKeyTable stores the "key-table" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.KeyTable] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetKeyTable stores the "key-table" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.KeyTable] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetKeyTable(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "key-table", value, false)
 }
 
-// SetLockAfterTime stores the "lock-after-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.LockAfterTime] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetLockAfterTime stores the "lock-after-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.LockAfterTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetLockAfterTime(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6290,20 +5338,16 @@ func (s Session) SetLockAfterTime(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetLockAfterTime stores the "lock-after-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.LockAfterTime] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetLockAfterTime stores the "lock-after-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.LockAfterTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetLockAfterTime(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetLockCommand stores the "lock-command" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.LockCommand] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetLockCommand stores the "lock-command" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.LockCommand] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetLockCommand(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6312,20 +5356,16 @@ func (s Session) SetLockCommand(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-command", value, false)
 }
 
-// SetLockCommand stores the "lock-command" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.LockCommand] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetLockCommand stores the "lock-command" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.LockCommand] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetLockCommand(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-command", value, false)
 }
 
-// SetMainPaneHeight stores the "main-pane-height" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MainPaneHeight] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMainPaneHeight stores the "main-pane-height" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MainPaneHeight] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMainPaneHeight(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6334,20 +5374,16 @@ func (w Window) SetMainPaneHeight(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "main-pane-height", value, false)
 }
 
-// SetMainPaneHeight stores the "main-pane-height" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MainPaneHeight] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMainPaneHeight stores the "main-pane-height" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MainPaneHeight] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMainPaneHeight(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "main-pane-height", value, false)
 }
 
-// SetMainPaneWidth stores the "main-pane-width" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MainPaneWidth] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMainPaneWidth stores the "main-pane-width" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MainPaneWidth] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMainPaneWidth(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6356,20 +5392,16 @@ func (w Window) SetMainPaneWidth(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "main-pane-width", value, false)
 }
 
-// SetMainPaneWidth stores the "main-pane-width" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MainPaneWidth] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMainPaneWidth stores the "main-pane-width" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MainPaneWidth] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMainPaneWidth(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "main-pane-width", value, false)
 }
 
-// SetMenuBorderLines stores the "menu-border-lines" window option, available since tmux 3.4.
-// It accepts MenuBorderLines and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuBorderLines] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMenuBorderLines stores the "menu-border-lines" window option as MenuBorderLines (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuBorderLines] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMenuBorderLines(ctx context.Context, value MenuBorderLines) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6378,20 +5410,16 @@ func (w Window) SetMenuBorderLines(ctx context.Context, value MenuBorderLines) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-border-lines", value.String(), true)
 }
 
-// SetMenuBorderLines stores the "menu-border-lines" window option, available since tmux 3.4.
-// It accepts MenuBorderLines and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuBorderLines] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMenuBorderLines stores the "menu-border-lines" window option as MenuBorderLines (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuBorderLines] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMenuBorderLines(ctx context.Context, value MenuBorderLines) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-border-lines", value.String(), true)
 }
 
-// SetMenuBorderStyle stores the "menu-border-style" window option, available since tmux 3.4.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuBorderStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMenuBorderStyle stores the "menu-border-style" window option as string (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuBorderStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMenuBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6400,20 +5428,16 @@ func (w Window) SetMenuBorderStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-border-style", value, false)
 }
 
-// SetMenuBorderStyle stores the "menu-border-style" window option, available since tmux 3.4.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuBorderStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMenuBorderStyle stores the "menu-border-style" window option as string (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuBorderStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMenuBorderStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-border-style", value, false)
 }
 
-// SetMenuSelectedStyle stores the "menu-selected-style" window option, available since tmux 3.4.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuSelectedStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMenuSelectedStyle stores the "menu-selected-style" window option as string (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuSelectedStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMenuSelectedStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6422,20 +5446,16 @@ func (w Window) SetMenuSelectedStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-selected-style", value, false)
 }
 
-// SetMenuSelectedStyle stores the "menu-selected-style" window option, available since tmux 3.4.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuSelectedStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMenuSelectedStyle stores the "menu-selected-style" window option as string (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuSelectedStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMenuSelectedStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-selected-style", value, false)
 }
 
-// SetMenuStyle stores the "menu-style" window option, available since tmux 3.4.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMenuStyle stores the "menu-style" window option as string (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMenuStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6444,20 +5464,16 @@ func (w Window) SetMenuStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-style", value, false)
 }
 
-// SetMenuStyle stores the "menu-style" window option, available since tmux 3.4.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MenuStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMenuStyle stores the "menu-style" window option as string (tmux 3.4 or later).
+// Read it with [WindowOptionValues.MenuStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMenuStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-style", value, false)
 }
 
-// SetMessageCommandStyle stores the "message-command-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageCommandStyle] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetMessageCommandStyle stores the "message-command-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.MessageCommandStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMessageCommandStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6466,20 +5482,16 @@ func (s Session) SetMessageCommandStyle(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-command-style", value, false)
 }
 
-// SetMessageCommandStyle stores the "message-command-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageCommandStyle] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetMessageCommandStyle stores the "message-command-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.MessageCommandStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMessageCommandStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-command-style", value, false)
 }
 
-// SetMessageFormat stores the "message-format" session option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageFormat] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetMessageFormat stores the "message-format" session option as string (tmux 3.7 or later).
+// Read it with [SessionOptionValues.MessageFormat] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMessageFormat(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6488,30 +5500,24 @@ func (s Session) SetMessageFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-format", value, false)
 }
 
-// SetMessageFormat stores the "message-format" session option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageFormat] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetMessageFormat stores the "message-format" session option as string (tmux 3.7 or later).
+// Read it with [SessionOptionValues.MessageFormat] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMessageFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-format", value, false)
 }
 
-// SetMessageLimit stores the "message-limit" server option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.MessageLimit] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetMessageLimit stores the "message-limit" server option as int64 (tmux 3.2a or later).
+// Read it with [ServerOptionValues.MessageLimit] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetMessageLimit(ctx context.Context, value int64) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "message-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetMessageLine stores the "message-line" session option, available since tmux 3.4.
-// It accepts MessageLine and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageLine] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetMessageLine stores the "message-line" session option as MessageLine (tmux 3.4 or later).
+// Read it with [SessionOptionValues.MessageLine] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMessageLine(ctx context.Context, value MessageLine) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6520,20 +5526,16 @@ func (s Session) SetMessageLine(ctx context.Context, value MessageLine) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-line", value.String(), true)
 }
 
-// SetMessageLine stores the "message-line" session option, available since tmux 3.4.
-// It accepts MessageLine and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageLine] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetMessageLine stores the "message-line" session option as MessageLine (tmux 3.4 or later).
+// Read it with [SessionOptionValues.MessageLine] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMessageLine(ctx context.Context, value MessageLine) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-line", value.String(), true)
 }
 
-// SetMessageStyle stores the "message-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageStyle] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetMessageStyle stores the "message-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.MessageStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMessageStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6542,20 +5544,16 @@ func (s Session) SetMessageStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-style", value, false)
 }
 
-// SetMessageStyle stores the "message-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.MessageStyle] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetMessageStyle stores the "message-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.MessageStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMessageStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-style", value, false)
 }
 
-// SetModeKeys stores the "mode-keys" window option, available since tmux 3.2a.
-// It accepts ModeKeys and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ModeKeys] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetModeKeys stores the "mode-keys" window option as ModeKeys (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ModeKeys] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetModeKeys(ctx context.Context, value ModeKeys) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6564,20 +5562,16 @@ func (w Window) SetModeKeys(ctx context.Context, value ModeKeys) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-keys", value.String(), true)
 }
 
-// SetModeKeys stores the "mode-keys" window option, available since tmux 3.2a.
-// It accepts ModeKeys and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ModeKeys] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetModeKeys stores the "mode-keys" window option as ModeKeys (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ModeKeys] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetModeKeys(ctx context.Context, value ModeKeys) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-keys", value.String(), true)
 }
 
-// SetModeStyle stores the "mode-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ModeStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetModeStyle stores the "mode-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ModeStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetModeStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6586,20 +5580,16 @@ func (w Window) SetModeStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-style", value, false)
 }
 
-// SetModeStyle stores the "mode-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ModeStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetModeStyle stores the "mode-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.ModeStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetModeStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-style", value, false)
 }
 
-// SetMonitorActivity stores the "monitor-activity" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MonitorActivity] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMonitorActivity stores the "monitor-activity" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MonitorActivity] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMonitorActivity(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6608,20 +5598,16 @@ func (w Window) SetMonitorActivity(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-activity", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorActivity stores the "monitor-activity" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MonitorActivity] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMonitorActivity stores the "monitor-activity" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MonitorActivity] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMonitorActivity(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-activity", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorBell stores the "monitor-bell" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MonitorBell] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMonitorBell stores the "monitor-bell" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MonitorBell] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMonitorBell(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6630,20 +5616,16 @@ func (w Window) SetMonitorBell(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-bell", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorBell stores the "monitor-bell" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MonitorBell] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMonitorBell stores the "monitor-bell" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MonitorBell] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMonitorBell(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-bell", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorSilence stores the "monitor-silence" window option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MonitorSilence] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetMonitorSilence stores the "monitor-silence" window option as int64 (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MonitorSilence] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMonitorSilence(ctx context.Context, value int64) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6652,20 +5634,16 @@ func (w Window) SetMonitorSilence(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-silence", encodeTypedOptionInt64(value), false)
 }
 
-// SetMonitorSilence stores the "monitor-silence" window option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.MonitorSilence] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetMonitorSilence stores the "monitor-silence" window option as int64 (tmux 3.2a or later).
+// Read it with [WindowOptionValues.MonitorSilence] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMonitorSilence(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-silence", encodeTypedOptionInt64(value), false)
 }
 
-// SetMouse stores the "mouse" session option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Mouse] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetMouse stores the "mouse" session option as bool (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Mouse] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMouse(ctx context.Context, value bool) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -6674,20 +5652,16 @@ func (s Session) SetMouse(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "mouse", encodeTypedOptionBool(value), false)
 }
 
-// SetMouse stores the "mouse" session option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Mouse] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetMouse stores the "mouse" session option as bool (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Mouse] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMouse(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "mouse", encodeTypedOptionBool(value), false)
 }
 
-// SetOtherPaneHeight stores the "other-pane-height" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.OtherPaneHeight] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetOtherPaneHeight stores the "other-pane-height" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.OtherPaneHeight] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetOtherPaneHeight(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6696,20 +5670,16 @@ func (w Window) SetOtherPaneHeight(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-height", value, false)
 }
 
-// SetOtherPaneHeight stores the "other-pane-height" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.OtherPaneHeight] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetOtherPaneHeight stores the "other-pane-height" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.OtherPaneHeight] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetOtherPaneHeight(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-height", value, false)
 }
 
-// SetOtherPaneWidth stores the "other-pane-width" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.OtherPaneWidth] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetOtherPaneWidth stores the "other-pane-width" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.OtherPaneWidth] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetOtherPaneWidth(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6718,20 +5688,16 @@ func (w Window) SetOtherPaneWidth(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-width", value, false)
 }
 
-// SetOtherPaneWidth stores the "other-pane-width" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.OtherPaneWidth] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetOtherPaneWidth stores the "other-pane-width" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.OtherPaneWidth] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetOtherPaneWidth(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-width", value, false)
 }
 
-// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneActiveBorderStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneActiveBorderStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneActiveBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6740,20 +5706,16 @@ func (w Window) SetPaneActiveBorderStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-active-border-style", value, false)
 }
 
-// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneActiveBorderStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneActiveBorderStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneActiveBorderStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-active-border-style", value, false)
 }
 
-// SetPaneActiveBorderStyle stores the "pane-active-border-style" pane option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.PaneActiveBorderStyle] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetPaneActiveBorderStyle stores the "pane-active-border-style" pane option as string (tmux 3.7 or later).
+// Read it with [PaneOptionValues.PaneActiveBorderStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetPaneActiveBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -6762,10 +5724,8 @@ func (p Pane) SetPaneActiveBorderStyle(ctx context.Context, value string) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "pane-active-border-style", value, false)
 }
 
-// SetPaneBaseIndex stores the "pane-base-index" window option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBaseIndex] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneBaseIndex stores the "pane-base-index" window option as int64 (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBaseIndex] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBaseIndex(ctx context.Context, value int64) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6774,20 +5734,16 @@ func (w Window) SetPaneBaseIndex(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetPaneBaseIndex stores the "pane-base-index" window option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBaseIndex] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneBaseIndex stores the "pane-base-index" window option as int64 (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBaseIndex] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBaseIndex(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetPaneBorderFormat stores the "pane-border-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneBorderFormat stores the "pane-border-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6796,20 +5752,16 @@ func (w Window) SetPaneBorderFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-format", value, false)
 }
 
-// SetPaneBorderFormat stores the "pane-border-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneBorderFormat stores the "pane-border-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-format", value, false)
 }
 
-// SetPaneBorderFormat stores the "pane-border-format" pane option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.PaneBorderFormat] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetPaneBorderFormat stores the "pane-border-format" pane option as string (tmux 3.3 or later).
+// Read it with [PaneOptionValues.PaneBorderFormat] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetPaneBorderFormat(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -6818,10 +5770,8 @@ func (p Pane) SetPaneBorderFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "pane-border-format", value, false)
 }
 
-// SetPaneBorderIndicators stores the "pane-border-indicators" window option, available since tmux 3.3.
-// It accepts PaneBorderIndicators and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderIndicators] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneBorderIndicators stores the "pane-border-indicators" window option as PaneBorderIndicators (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PaneBorderIndicators] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderIndicators(ctx context.Context, value PaneBorderIndicators) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6830,20 +5780,16 @@ func (w Window) SetPaneBorderIndicators(ctx context.Context, value PaneBorderInd
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-indicators", value.String(), true)
 }
 
-// SetPaneBorderIndicators stores the "pane-border-indicators" window option, available since tmux 3.3.
-// It accepts PaneBorderIndicators and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderIndicators] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneBorderIndicators stores the "pane-border-indicators" window option as PaneBorderIndicators (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PaneBorderIndicators] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderIndicators(ctx context.Context, value PaneBorderIndicators) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-indicators", value.String(), true)
 }
 
-// SetPaneBorderLines stores the "pane-border-lines" window option, available since tmux 3.2a.
-// It accepts PaneBorderLines and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderLines] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneBorderLines stores the "pane-border-lines" window option as PaneBorderLines (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderLines] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderLines(ctx context.Context, value PaneBorderLines) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6852,20 +5798,16 @@ func (w Window) SetPaneBorderLines(ctx context.Context, value PaneBorderLines) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-lines", value.String(), true)
 }
 
-// SetPaneBorderLines stores the "pane-border-lines" window option, available since tmux 3.2a.
-// It accepts PaneBorderLines and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderLines] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneBorderLines stores the "pane-border-lines" window option as PaneBorderLines (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderLines] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderLines(ctx context.Context, value PaneBorderLines) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-lines", value.String(), true)
 }
 
-// SetPaneBorderStatus stores the "pane-border-status" window option, available since tmux 3.2a.
-// It accepts PaneBorderStatus and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderStatus] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneBorderStatus stores the "pane-border-status" window option as PaneBorderStatus (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderStatus] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderStatus(ctx context.Context, value PaneBorderStatus) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6874,20 +5816,16 @@ func (w Window) SetPaneBorderStatus(ctx context.Context, value PaneBorderStatus)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-status", value.String(), true)
 }
 
-// SetPaneBorderStatus stores the "pane-border-status" window option, available since tmux 3.2a.
-// It accepts PaneBorderStatus and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderStatus] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneBorderStatus stores the "pane-border-status" window option as PaneBorderStatus (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderStatus] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderStatus(ctx context.Context, value PaneBorderStatus) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-status", value.String(), true)
 }
 
-// SetPaneBorderStyle stores the "pane-border-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneBorderStyle stores the "pane-border-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6896,20 +5834,16 @@ func (w Window) SetPaneBorderStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-style", value, false)
 }
 
-// SetPaneBorderStyle stores the "pane-border-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneBorderStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneBorderStyle stores the "pane-border-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.PaneBorderStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-style", value, false)
 }
 
-// SetPaneBorderStyle stores the "pane-border-style" pane option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.PaneBorderStyle] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetPaneBorderStyle stores the "pane-border-style" pane option as string (tmux 3.7 or later).
+// Read it with [PaneOptionValues.PaneBorderStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetPaneBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -6918,10 +5852,8 @@ func (p Pane) SetPaneBorderStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "pane-border-style", value, false)
 }
 
-// SetPaneScrollbars stores the "pane-scrollbars" window option, available since tmux 3.6.
-// It accepts PaneScrollbars and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneScrollbars] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneScrollbars stores the "pane-scrollbars" window option as PaneScrollbars (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneScrollbars] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneScrollbars(ctx context.Context, value PaneScrollbars) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6930,20 +5862,16 @@ func (w Window) SetPaneScrollbars(ctx context.Context, value PaneScrollbars) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-scrollbars", value.String(), true)
 }
 
-// SetPaneScrollbars stores the "pane-scrollbars" window option, available since tmux 3.6.
-// It accepts PaneScrollbars and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneScrollbars] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneScrollbars stores the "pane-scrollbars" window option as PaneScrollbars (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneScrollbars] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneScrollbars(ctx context.Context, value PaneScrollbars) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-scrollbars", value.String(), true)
 }
 
-// SetPaneScrollbarsPosition stores the "pane-scrollbars-position" window option, available since tmux 3.6.
-// It accepts PaneScrollbarsPosition and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneScrollbarsPosition] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneScrollbarsPosition stores the "pane-scrollbars-position" window option as PaneScrollbarsPosition (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneScrollbarsPosition] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneScrollbarsPosition(ctx context.Context, value PaneScrollbarsPosition) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6952,20 +5880,16 @@ func (w Window) SetPaneScrollbarsPosition(ctx context.Context, value PaneScrollb
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-scrollbars-position", value.String(), true)
 }
 
-// SetPaneScrollbarsPosition stores the "pane-scrollbars-position" window option, available since tmux 3.6.
-// It accepts PaneScrollbarsPosition and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneScrollbarsPosition] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneScrollbarsPosition stores the "pane-scrollbars-position" window option as PaneScrollbarsPosition (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneScrollbarsPosition] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneScrollbarsPosition(ctx context.Context, value PaneScrollbarsPosition) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-scrollbars-position", value.String(), true)
 }
 
-// SetPaneScrollbarsStyle stores the "pane-scrollbars-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneScrollbarsStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneScrollbarsStyle stores the "pane-scrollbars-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneScrollbarsStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneScrollbarsStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -6974,20 +5898,16 @@ func (w Window) SetPaneScrollbarsStyle(ctx context.Context, value string) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-scrollbars-style", value, false)
 }
 
-// SetPaneScrollbarsStyle stores the "pane-scrollbars-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneScrollbarsStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneScrollbarsStyle stores the "pane-scrollbars-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneScrollbarsStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneScrollbarsStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-scrollbars-style", value, false)
 }
 
-// SetPaneScrollbarsStyle stores the "pane-scrollbars-style" pane option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.PaneScrollbarsStyle] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetPaneScrollbarsStyle stores the "pane-scrollbars-style" pane option as string (tmux 3.6 or later).
+// Read it with [PaneOptionValues.PaneScrollbarsStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetPaneScrollbarsStyle(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -6996,10 +5916,8 @@ func (p Pane) SetPaneScrollbarsStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "pane-scrollbars-style", value, false)
 }
 
-// SetPaneStatusCurrentStyle stores the "pane-status-current-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneStatusCurrentStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneStatusCurrentStyle stores the "pane-status-current-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneStatusCurrentStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneStatusCurrentStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7008,20 +5926,16 @@ func (w Window) SetPaneStatusCurrentStyle(ctx context.Context, value string) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-status-current-style", value, false)
 }
 
-// SetPaneStatusCurrentStyle stores the "pane-status-current-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneStatusCurrentStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneStatusCurrentStyle stores the "pane-status-current-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneStatusCurrentStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneStatusCurrentStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-status-current-style", value, false)
 }
 
-// SetPaneStatusStyle stores the "pane-status-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneStatusStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPaneStatusStyle stores the "pane-status-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneStatusStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneStatusStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7030,20 +5944,16 @@ func (w Window) SetPaneStatusStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-status-style", value, false)
 }
 
-// SetPaneStatusStyle stores the "pane-status-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneStatusStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPaneStatusStyle stores the "pane-status-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.PaneStatusStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneStatusStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-status-style", value, false)
 }
 
-// SetPopupBorderLines stores the "popup-border-lines" window option, available since tmux 3.3.
-// It accepts PopupBorderLines and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PopupBorderLines] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPopupBorderLines stores the "popup-border-lines" window option as PopupBorderLines (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PopupBorderLines] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPopupBorderLines(ctx context.Context, value PopupBorderLines) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7052,20 +5962,16 @@ func (w Window) SetPopupBorderLines(ctx context.Context, value PopupBorderLines)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-lines", value.String(), true)
 }
 
-// SetPopupBorderLines stores the "popup-border-lines" window option, available since tmux 3.3.
-// It accepts PopupBorderLines and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PopupBorderLines] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPopupBorderLines stores the "popup-border-lines" window option as PopupBorderLines (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PopupBorderLines] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPopupBorderLines(ctx context.Context, value PopupBorderLines) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-lines", value.String(), true)
 }
 
-// SetPopupBorderStyle stores the "popup-border-style" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PopupBorderStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPopupBorderStyle stores the "popup-border-style" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PopupBorderStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPopupBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7074,20 +5980,16 @@ func (w Window) SetPopupBorderStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-style", value, false)
 }
 
-// SetPopupBorderStyle stores the "popup-border-style" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PopupBorderStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPopupBorderStyle stores the "popup-border-style" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PopupBorderStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPopupBorderStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-style", value, false)
 }
 
-// SetPopupStyle stores the "popup-style" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PopupStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetPopupStyle stores the "popup-style" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PopupStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPopupStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7096,20 +5998,16 @@ func (w Window) SetPopupStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-style", value, false)
 }
 
-// SetPopupStyle stores the "popup-style" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PopupStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetPopupStyle stores the "popup-style" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PopupStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPopupStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-style", value, false)
 }
 
-// SetPrefix stores the "prefix" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Prefix] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetPrefix stores the "prefix" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Prefix] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetPrefix(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7118,30 +6016,24 @@ func (s Session) SetPrefix(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prefix", value, false)
 }
 
-// SetPrefix stores the "prefix" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Prefix] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetPrefix stores the "prefix" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Prefix] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetPrefix(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prefix", value, false)
 }
 
-// SetPrefixTimeout stores the "prefix-timeout" server option, available since tmux 3.5.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.PrefixTimeout] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetPrefixTimeout stores the "prefix-timeout" server option as int64 (tmux 3.5 or later).
+// Read it with [ServerOptionValues.PrefixTimeout] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetPrefixTimeout(ctx context.Context, value int64) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "prefix-timeout", encodeTypedOptionInt64(value), false)
 }
 
-// SetPrefix2 stores the "prefix2" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Prefix2] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetPrefix2 stores the "prefix2" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Prefix2] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetPrefix2(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7150,20 +6042,16 @@ func (s Session) SetPrefix2(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prefix2", value, false)
 }
 
-// SetPrefix2 stores the "prefix2" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Prefix2] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetPrefix2 stores the "prefix2" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Prefix2] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetPrefix2(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prefix2", value, false)
 }
 
-// SetPromptCommandCursorStyle stores the "prompt-command-cursor-style" session option, available since tmux 3.7.
-// It accepts PromptCommandCursorStyle and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.PromptCommandCursorStyle] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetPromptCommandCursorStyle stores the "prompt-command-cursor-style" session option as PromptCommandCursorStyle (tmux 3.7 or later).
+// Read it with [SessionOptionValues.PromptCommandCursorStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetPromptCommandCursorStyle(ctx context.Context, value PromptCommandCursorStyle) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7172,20 +6060,16 @@ func (s Session) SetPromptCommandCursorStyle(ctx context.Context, value PromptCo
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prompt-command-cursor-style", value.String(), true)
 }
 
-// SetPromptCommandCursorStyle stores the "prompt-command-cursor-style" session option, available since tmux 3.7.
-// It accepts PromptCommandCursorStyle and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.PromptCommandCursorStyle] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetPromptCommandCursorStyle stores the "prompt-command-cursor-style" session option as PromptCommandCursorStyle (tmux 3.7 or later).
+// Read it with [SessionOptionValues.PromptCommandCursorStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetPromptCommandCursorStyle(ctx context.Context, value PromptCommandCursorStyle) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prompt-command-cursor-style", value.String(), true)
 }
 
-// SetPromptCursorColour stores the "prompt-cursor-colour" session option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.PromptCursorColour] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetPromptCursorColour stores the "prompt-cursor-colour" session option as string (tmux 3.6 or later).
+// Read it with [SessionOptionValues.PromptCursorColour] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetPromptCursorColour(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7194,20 +6078,16 @@ func (s Session) SetPromptCursorColour(ctx context.Context, value string) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prompt-cursor-colour", value, false)
 }
 
-// SetPromptCursorColour stores the "prompt-cursor-colour" session option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.PromptCursorColour] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetPromptCursorColour stores the "prompt-cursor-colour" session option as string (tmux 3.6 or later).
+// Read it with [SessionOptionValues.PromptCursorColour] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetPromptCursorColour(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prompt-cursor-colour", value, false)
 }
 
-// SetPromptCursorStyle stores the "prompt-cursor-style" session option, available since tmux 3.6.
-// It accepts PromptCursorStyle and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.PromptCursorStyle] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetPromptCursorStyle stores the "prompt-cursor-style" session option as PromptCursorStyle (tmux 3.6 or later).
+// Read it with [SessionOptionValues.PromptCursorStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetPromptCursorStyle(ctx context.Context, value PromptCursorStyle) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7216,30 +6096,24 @@ func (s Session) SetPromptCursorStyle(ctx context.Context, value PromptCursorSty
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prompt-cursor-style", value.String(), true)
 }
 
-// SetPromptCursorStyle stores the "prompt-cursor-style" session option, available since tmux 3.6.
-// It accepts PromptCursorStyle and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.PromptCursorStyle] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetPromptCursorStyle stores the "prompt-cursor-style" session option as PromptCursorStyle (tmux 3.6 or later).
+// Read it with [SessionOptionValues.PromptCursorStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetPromptCursorStyle(ctx context.Context, value PromptCursorStyle) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prompt-cursor-style", value.String(), true)
 }
 
-// SetPromptHistoryLimit stores the "prompt-history-limit" server option, available since tmux 3.3.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.PromptHistoryLimit] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetPromptHistoryLimit stores the "prompt-history-limit" server option as int64 (tmux 3.3 or later).
+// Read it with [ServerOptionValues.PromptHistoryLimit] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetPromptHistoryLimit(ctx context.Context, value int64) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "prompt-history-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetRemainOnExit stores the "remain-on-exit" window option, available since tmux 3.2a.
-// It accepts RemainOnExit and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.RemainOnExit] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetRemainOnExit stores the "remain-on-exit" window option as RemainOnExit (tmux 3.2a or later).
+// Read it with [WindowOptionValues.RemainOnExit] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7248,20 +6122,16 @@ func (w Window) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit", value.String(), true)
 }
 
-// SetRemainOnExit stores the "remain-on-exit" window option, available since tmux 3.2a.
-// It accepts RemainOnExit and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.RemainOnExit] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetRemainOnExit stores the "remain-on-exit" window option as RemainOnExit (tmux 3.2a or later).
+// Read it with [WindowOptionValues.RemainOnExit] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit", value.String(), true)
 }
 
-// SetRemainOnExit stores the "remain-on-exit" pane option, available since tmux 3.2a.
-// It accepts RemainOnExit and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.RemainOnExit] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetRemainOnExit stores the "remain-on-exit" pane option as RemainOnExit (tmux 3.2a or later).
+// Read it with [PaneOptionValues.RemainOnExit] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -7270,10 +6140,8 @@ func (p Pane) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "remain-on-exit", value.String(), true)
 }
 
-// SetRemainOnExitFormat stores the "remain-on-exit-format" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.RemainOnExitFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetRemainOnExitFormat stores the "remain-on-exit-format" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.RemainOnExitFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7282,20 +6150,16 @@ func (w Window) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit-format", value, false)
 }
 
-// SetRemainOnExitFormat stores the "remain-on-exit-format" window option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.RemainOnExitFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetRemainOnExitFormat stores the "remain-on-exit-format" window option as string (tmux 3.3 or later).
+// Read it with [WindowOptionValues.RemainOnExitFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit-format", value, false)
 }
 
-// SetRemainOnExitFormat stores the "remain-on-exit-format" pane option, available since tmux 3.3.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.RemainOnExitFormat] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetRemainOnExitFormat stores the "remain-on-exit-format" pane option as string (tmux 3.3 or later).
+// Read it with [PaneOptionValues.RemainOnExitFormat] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -7304,10 +6168,8 @@ func (p Pane) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "remain-on-exit-format", value, false)
 }
 
-// SetRenumberWindows stores the "renumber-windows" session option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.RenumberWindows] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetRenumberWindows stores the "renumber-windows" session option as bool (tmux 3.2a or later).
+// Read it with [SessionOptionValues.RenumberWindows] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetRenumberWindows(ctx context.Context, value bool) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7316,20 +6178,16 @@ func (s Session) SetRenumberWindows(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "renumber-windows", encodeTypedOptionBool(value), false)
 }
 
-// SetRenumberWindows stores the "renumber-windows" session option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.RenumberWindows] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetRenumberWindows stores the "renumber-windows" session option as bool (tmux 3.2a or later).
+// Read it with [SessionOptionValues.RenumberWindows] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetRenumberWindows(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "renumber-windows", encodeTypedOptionBool(value), false)
 }
 
-// SetRepeatTime stores the "repeat-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.RepeatTime] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetRepeatTime stores the "repeat-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.RepeatTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetRepeatTime(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7338,20 +6196,16 @@ func (s Session) SetRepeatTime(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetRepeatTime stores the "repeat-time" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.RepeatTime] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetRepeatTime stores the "repeat-time" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.RepeatTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetRepeatTime(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encodeTypedOptionInt64(value), false)
 }
 
-// SetScrollOnClear stores the "scroll-on-clear" window option, available since tmux 3.3.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ScrollOnClear] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetScrollOnClear stores the "scroll-on-clear" window option as bool (tmux 3.3 or later).
+// Read it with [WindowOptionValues.ScrollOnClear] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetScrollOnClear(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7360,20 +6214,16 @@ func (w Window) SetScrollOnClear(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "scroll-on-clear", encodeTypedOptionBool(value), false)
 }
 
-// SetScrollOnClear stores the "scroll-on-clear" window option, available since tmux 3.3.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.ScrollOnClear] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetScrollOnClear stores the "scroll-on-clear" window option as bool (tmux 3.3 or later).
+// Read it with [WindowOptionValues.ScrollOnClear] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetScrollOnClear(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "scroll-on-clear", encodeTypedOptionBool(value), false)
 }
 
-// SetScrollOnClear stores the "scroll-on-clear" pane option, available since tmux 3.3.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.ScrollOnClear] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetScrollOnClear stores the "scroll-on-clear" pane option as bool (tmux 3.3 or later).
+// Read it with [PaneOptionValues.ScrollOnClear] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetScrollOnClear(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -7382,10 +6232,8 @@ func (p Pane) SetScrollOnClear(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "scroll-on-clear", encodeTypedOptionBool(value), false)
 }
 
-// SetSessionStatusCurrentStyle stores the "session-status-current-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.SessionStatusCurrentStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetSessionStatusCurrentStyle stores the "session-status-current-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.SessionStatusCurrentStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetSessionStatusCurrentStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7394,20 +6242,16 @@ func (w Window) SetSessionStatusCurrentStyle(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "session-status-current-style", value, false)
 }
 
-// SetSessionStatusCurrentStyle stores the "session-status-current-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.SessionStatusCurrentStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetSessionStatusCurrentStyle stores the "session-status-current-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.SessionStatusCurrentStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetSessionStatusCurrentStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "session-status-current-style", value, false)
 }
 
-// SetSessionStatusStyle stores the "session-status-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.SessionStatusStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetSessionStatusStyle stores the "session-status-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.SessionStatusStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetSessionStatusStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7416,30 +6260,24 @@ func (w Window) SetSessionStatusStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "session-status-style", value, false)
 }
 
-// SetSessionStatusStyle stores the "session-status-style" window option, available since tmux 3.6.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.SessionStatusStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetSessionStatusStyle stores the "session-status-style" window option as string (tmux 3.6 or later).
+// Read it with [WindowOptionValues.SessionStatusStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetSessionStatusStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "session-status-style", value, false)
 }
 
-// SetClipboard stores the "set-clipboard" server option, available since tmux 3.2a.
-// It accepts SetClipboard and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.SetClipboard] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetClipboard stores the "set-clipboard" server option as SetClipboard (tmux 3.2a or later).
+// Read it with [ServerOptionValues.SetClipboard] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetClipboard(ctx context.Context, value SetClipboard) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "set-clipboard", value.String(), true)
 }
 
-// SetTitles stores the "set-titles" session option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.SetTitles] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetTitles stores the "set-titles" session option as bool (tmux 3.2a or later).
+// Read it with [SessionOptionValues.SetTitles] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetTitles(ctx context.Context, value bool) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7448,20 +6286,16 @@ func (s Session) SetTitles(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles", encodeTypedOptionBool(value), false)
 }
 
-// SetTitles stores the "set-titles" session option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.SetTitles] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetTitles stores the "set-titles" session option as bool (tmux 3.2a or later).
+// Read it with [SessionOptionValues.SetTitles] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetTitles(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles", encodeTypedOptionBool(value), false)
 }
 
-// SetTitlesString stores the "set-titles-string" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.SetTitlesString] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetTitlesString stores the "set-titles-string" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.SetTitlesString] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetTitlesString(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7470,20 +6304,16 @@ func (s Session) SetTitlesString(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles-string", value, false)
 }
 
-// SetTitlesString stores the "set-titles-string" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.SetTitlesString] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetTitlesString stores the "set-titles-string" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.SetTitlesString] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetTitlesString(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles-string", value, false)
 }
 
-// SetSilenceAction stores the "silence-action" session option, available since tmux 3.2a.
-// It accepts SilenceAction and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.SilenceAction] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetSilenceAction stores the "silence-action" session option as SilenceAction (tmux 3.2a or later).
+// Read it with [SessionOptionValues.SilenceAction] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetSilenceAction(ctx context.Context, value SilenceAction) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7492,20 +6322,16 @@ func (s Session) SetSilenceAction(ctx context.Context, value SilenceAction) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "silence-action", value.String(), true)
 }
 
-// SetSilenceAction stores the "silence-action" session option, available since tmux 3.2a.
-// It accepts SilenceAction and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.SilenceAction] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetSilenceAction stores the "silence-action" session option as SilenceAction (tmux 3.2a or later).
+// Read it with [SessionOptionValues.SilenceAction] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetSilenceAction(ctx context.Context, value SilenceAction) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "silence-action", value.String(), true)
 }
 
-// SetStatus stores the "status" session option, available since tmux 3.2a.
-// It accepts Status and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Status] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatus stores the "status" session option as Status (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Status] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatus(ctx context.Context, value Status) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7514,20 +6340,16 @@ func (s Session) SetStatus(ctx context.Context, value Status) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status", value.String(), true)
 }
 
-// SetStatus stores the "status" session option, available since tmux 3.2a.
-// It accepts Status and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.Status] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatus stores the "status" session option as Status (tmux 3.2a or later).
+// Read it with [SessionOptionValues.Status] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatus(ctx context.Context, value Status) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status", value.String(), true)
 }
 
-// SetStatusBG stores the "status-bg" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusBG] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusBG stores the "status-bg" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusBG] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusBG(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7536,20 +6358,16 @@ func (s Session) SetStatusBG(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-bg", value, false)
 }
 
-// SetStatusBG stores the "status-bg" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusBG] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusBG stores the "status-bg" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusBG] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusBG(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-bg", value, false)
 }
 
-// SetStatusFG stores the "status-fg" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusFG] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusFG stores the "status-fg" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusFG] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusFG(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7558,20 +6376,16 @@ func (s Session) SetStatusFG(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-fg", value, false)
 }
 
-// SetStatusFG stores the "status-fg" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusFG] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusFG stores the "status-fg" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusFG] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusFG(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-fg", value, false)
 }
 
-// SetStatusInterval stores the "status-interval" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusInterval] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusInterval stores the "status-interval" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusInterval] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusInterval(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7580,20 +6394,16 @@ func (s Session) SetStatusInterval(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusInterval stores the "status-interval" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusInterval] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusInterval stores the "status-interval" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusInterval] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusInterval(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusJustify stores the "status-justify" session option, available since tmux 3.2a.
-// It accepts StatusJustify and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusJustify] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusJustify stores the "status-justify" session option as StatusJustify (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusJustify] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusJustify(ctx context.Context, value StatusJustify) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7602,20 +6412,16 @@ func (s Session) SetStatusJustify(ctx context.Context, value StatusJustify) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-justify", value.String(), true)
 }
 
-// SetStatusJustify stores the "status-justify" session option, available since tmux 3.2a.
-// It accepts StatusJustify and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusJustify] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusJustify stores the "status-justify" session option as StatusJustify (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusJustify] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusJustify(ctx context.Context, value StatusJustify) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-justify", value.String(), true)
 }
 
-// SetStatusKeys stores the "status-keys" session option, available since tmux 3.2a.
-// It accepts StatusKeys and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusKeys] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusKeys stores the "status-keys" session option as StatusKeys (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusKeys] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusKeys(ctx context.Context, value StatusKeys) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7624,20 +6430,16 @@ func (s Session) SetStatusKeys(ctx context.Context, value StatusKeys) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-keys", value.String(), true)
 }
 
-// SetStatusKeys stores the "status-keys" session option, available since tmux 3.2a.
-// It accepts StatusKeys and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusKeys] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusKeys stores the "status-keys" session option as StatusKeys (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusKeys] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusKeys(ctx context.Context, value StatusKeys) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-keys", value.String(), true)
 }
 
-// SetStatusLeft stores the "status-left" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusLeft] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusLeft stores the "status-left" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusLeft] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusLeft(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7646,20 +6448,16 @@ func (s Session) SetStatusLeft(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left", value, false)
 }
 
-// SetStatusLeft stores the "status-left" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusLeft] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusLeft stores the "status-left" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusLeft] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusLeft(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left", value, false)
 }
 
-// SetStatusLeftLength stores the "status-left-length" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusLeftLength] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusLeftLength stores the "status-left-length" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusLeftLength] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusLeftLength(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7668,20 +6466,16 @@ func (s Session) SetStatusLeftLength(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusLeftLength stores the "status-left-length" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusLeftLength] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusLeftLength stores the "status-left-length" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusLeftLength] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusLeftLength(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusLeftStyle stores the "status-left-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusLeftStyle] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusLeftStyle stores the "status-left-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusLeftStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusLeftStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7690,20 +6484,16 @@ func (s Session) SetStatusLeftStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-style", value, false)
 }
 
-// SetStatusLeftStyle stores the "status-left-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusLeftStyle] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusLeftStyle stores the "status-left-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusLeftStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusLeftStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-style", value, false)
 }
 
-// SetStatusPosition stores the "status-position" session option, available since tmux 3.2a.
-// It accepts StatusPosition and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusPosition] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusPosition stores the "status-position" session option as StatusPosition (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusPosition] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusPosition(ctx context.Context, value StatusPosition) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7712,20 +6502,16 @@ func (s Session) SetStatusPosition(ctx context.Context, value StatusPosition) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-position", value.String(), true)
 }
 
-// SetStatusPosition stores the "status-position" session option, available since tmux 3.2a.
-// It accepts StatusPosition and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusPosition] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusPosition stores the "status-position" session option as StatusPosition (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusPosition] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusPosition(ctx context.Context, value StatusPosition) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-position", value.String(), true)
 }
 
-// SetStatusRight stores the "status-right" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusRight] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusRight stores the "status-right" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusRight] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusRight(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7734,20 +6520,16 @@ func (s Session) SetStatusRight(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right", value, false)
 }
 
-// SetStatusRight stores the "status-right" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusRight] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusRight stores the "status-right" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusRight] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusRight(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right", value, false)
 }
 
-// SetStatusRightLength stores the "status-right-length" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusRightLength] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusRightLength stores the "status-right-length" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusRightLength] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusRightLength(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7756,20 +6538,16 @@ func (s Session) SetStatusRightLength(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusRightLength stores the "status-right-length" session option, available since tmux 3.2a.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusRightLength] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusRightLength stores the "status-right-length" session option as int64 (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusRightLength] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusRightLength(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusRightStyle stores the "status-right-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusRightStyle] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusRightStyle stores the "status-right-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusRightStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusRightStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7778,20 +6556,16 @@ func (s Session) SetStatusRightStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-style", value, false)
 }
 
-// SetStatusRightStyle stores the "status-right-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusRightStyle] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusRightStyle stores the "status-right-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusRightStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusRightStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-style", value, false)
 }
 
-// SetStatusStyle stores the "status-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusStyle] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetStatusStyle stores the "status-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7800,20 +6574,16 @@ func (s Session) SetStatusStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-style", value, false)
 }
 
-// SetStatusStyle stores the "status-style" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusStyle] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetStatusStyle stores the "status-style" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-style", value, false)
 }
 
-// SetSynchronizePanes stores the "synchronize-panes" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.SynchronizePanes] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetSynchronizePanes stores the "synchronize-panes" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.SynchronizePanes] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetSynchronizePanes(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7822,20 +6592,16 @@ func (w Window) SetSynchronizePanes(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "synchronize-panes", encodeTypedOptionBool(value), false)
 }
 
-// SetSynchronizePanes stores the "synchronize-panes" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.SynchronizePanes] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetSynchronizePanes stores the "synchronize-panes" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.SynchronizePanes] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetSynchronizePanes(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "synchronize-panes", encodeTypedOptionBool(value), false)
 }
 
-// SetSynchronizePanes stores the "synchronize-panes" pane option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.SynchronizePanes] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetSynchronizePanes stores the "synchronize-panes" pane option as bool (tmux 3.2a or later).
+// Read it with [PaneOptionValues.SynchronizePanes] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetSynchronizePanes(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -7844,10 +6610,8 @@ func (p Pane) SetSynchronizePanes(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "synchronize-panes", encodeTypedOptionBool(value), false)
 }
 
-// SetTiledLayoutMaxColumns stores the "tiled-layout-max-columns" window option, available since tmux 3.6.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.TiledLayoutMaxColumns] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetTiledLayoutMaxColumns stores the "tiled-layout-max-columns" window option as int64 (tmux 3.6 or later).
+// Read it with [WindowOptionValues.TiledLayoutMaxColumns] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetTiledLayoutMaxColumns(ctx context.Context, value int64) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7856,20 +6620,16 @@ func (w Window) SetTiledLayoutMaxColumns(ctx context.Context, value int64) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "tiled-layout-max-columns", encodeTypedOptionInt64(value), false)
 }
 
-// SetTiledLayoutMaxColumns stores the "tiled-layout-max-columns" window option, available since tmux 3.6.
-// It accepts int64 and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.TiledLayoutMaxColumns] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetTiledLayoutMaxColumns stores the "tiled-layout-max-columns" window option as int64 (tmux 3.6 or later).
+// Read it with [WindowOptionValues.TiledLayoutMaxColumns] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetTiledLayoutMaxColumns(ctx context.Context, value int64) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "tiled-layout-max-columns", encodeTypedOptionInt64(value), false)
 }
 
-// SetTreeModePreviewFormat stores the "tree-mode-preview-format" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.TreeModePreviewFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetTreeModePreviewFormat stores the "tree-mode-preview-format" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.TreeModePreviewFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetTreeModePreviewFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7878,20 +6638,16 @@ func (w Window) SetTreeModePreviewFormat(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "tree-mode-preview-format", value, false)
 }
 
-// SetTreeModePreviewFormat stores the "tree-mode-preview-format" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.TreeModePreviewFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetTreeModePreviewFormat stores the "tree-mode-preview-format" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.TreeModePreviewFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetTreeModePreviewFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "tree-mode-preview-format", value, false)
 }
 
-// SetTreeModePreviewFormat stores the "tree-mode-preview-format" pane option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.TreeModePreviewFormat] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetTreeModePreviewFormat stores the "tree-mode-preview-format" pane option as string (tmux 3.7 or later).
+// Read it with [PaneOptionValues.TreeModePreviewFormat] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetTreeModePreviewFormat(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -7900,10 +6656,8 @@ func (p Pane) SetTreeModePreviewFormat(ctx context.Context, value string) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "tree-mode-preview-format", value, false)
 }
 
-// SetTreeModePreviewStyle stores the "tree-mode-preview-style" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.TreeModePreviewStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetTreeModePreviewStyle stores the "tree-mode-preview-style" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.TreeModePreviewStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetTreeModePreviewStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -7912,30 +6666,24 @@ func (w Window) SetTreeModePreviewStyle(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "tree-mode-preview-style", value, false)
 }
 
-// SetTreeModePreviewStyle stores the "tree-mode-preview-style" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.TreeModePreviewStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetTreeModePreviewStyle stores the "tree-mode-preview-style" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.TreeModePreviewStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetTreeModePreviewStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "tree-mode-preview-style", value, false)
 }
 
-// SetVariationSelectorAlwaysWide stores the "variation-selector-always-wide" server option, available since tmux 3.6.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.VariationSelectorAlwaysWide] from [Server.Options], and [Server.UnsetOption] restores inheritance or the global default.
-// Use [Server.SetOption] for caller-named options or raw values.
+// SetVariationSelectorAlwaysWide stores the "variation-selector-always-wide" server option as bool (tmux 3.6 or later).
+// Read it with [ServerOptionValues.VariationSelectorAlwaysWide] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetVariationSelectorAlwaysWide(ctx context.Context, value bool) error {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "variation-selector-always-wide", encodeTypedOptionBool(value), false)
 }
 
-// SetVisualActivity stores the "visual-activity" session option, available since tmux 3.2a.
-// It accepts VisualActivity and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.VisualActivity] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetVisualActivity stores the "visual-activity" session option as VisualActivity (tmux 3.2a or later).
+// Read it with [SessionOptionValues.VisualActivity] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetVisualActivity(ctx context.Context, value VisualActivity) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7944,20 +6692,16 @@ func (s Session) SetVisualActivity(ctx context.Context, value VisualActivity) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-activity", value.String(), true)
 }
 
-// SetVisualActivity stores the "visual-activity" session option, available since tmux 3.2a.
-// It accepts VisualActivity and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.VisualActivity] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetVisualActivity stores the "visual-activity" session option as VisualActivity (tmux 3.2a or later).
+// Read it with [SessionOptionValues.VisualActivity] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetVisualActivity(ctx context.Context, value VisualActivity) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-activity", value.String(), true)
 }
 
-// SetVisualBell stores the "visual-bell" session option, available since tmux 3.2a.
-// It accepts VisualBell and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.VisualBell] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetVisualBell stores the "visual-bell" session option as VisualBell (tmux 3.2a or later).
+// Read it with [SessionOptionValues.VisualBell] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetVisualBell(ctx context.Context, value VisualBell) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7966,20 +6710,16 @@ func (s Session) SetVisualBell(ctx context.Context, value VisualBell) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-bell", value.String(), true)
 }
 
-// SetVisualBell stores the "visual-bell" session option, available since tmux 3.2a.
-// It accepts VisualBell and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.VisualBell] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetVisualBell stores the "visual-bell" session option as VisualBell (tmux 3.2a or later).
+// Read it with [SessionOptionValues.VisualBell] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetVisualBell(ctx context.Context, value VisualBell) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-bell", value.String(), true)
 }
 
-// SetVisualSilence stores the "visual-silence" session option, available since tmux 3.2a.
-// It accepts VisualSilence and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.VisualSilence] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetVisualSilence stores the "visual-silence" session option as VisualSilence (tmux 3.2a or later).
+// Read it with [SessionOptionValues.VisualSilence] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetVisualSilence(ctx context.Context, value VisualSilence) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -7988,20 +6728,16 @@ func (s Session) SetVisualSilence(ctx context.Context, value VisualSilence) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-silence", value.String(), true)
 }
 
-// SetVisualSilence stores the "visual-silence" session option, available since tmux 3.2a.
-// It accepts VisualSilence and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.VisualSilence] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetVisualSilence stores the "visual-silence" session option as VisualSilence (tmux 3.2a or later).
+// Read it with [SessionOptionValues.VisualSilence] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetVisualSilence(ctx context.Context, value VisualSilence) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-silence", value.String(), true)
 }
 
-// SetWindowActiveStyle stores the "window-active-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowActiveStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowActiveStyle stores the "window-active-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowActiveStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowActiveStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8010,20 +6746,16 @@ func (w Window) SetWindowActiveStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-active-style", value, false)
 }
 
-// SetWindowActiveStyle stores the "window-active-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowActiveStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowActiveStyle stores the "window-active-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowActiveStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowActiveStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-active-style", value, false)
 }
 
-// SetWindowActiveStyle stores the "window-active-style" pane option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.WindowActiveStyle] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetWindowActiveStyle stores the "window-active-style" pane option as string (tmux 3.2a or later).
+// Read it with [PaneOptionValues.WindowActiveStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetWindowActiveStyle(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -8032,10 +6764,8 @@ func (p Pane) SetWindowActiveStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "window-active-style", value, false)
 }
 
-// SetWindowPaneCurrentStatusFormat stores the "window-pane-current-status-format" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowPaneCurrentStatusFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowPaneCurrentStatusFormat stores the "window-pane-current-status-format" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.WindowPaneCurrentStatusFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowPaneCurrentStatusFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8044,20 +6774,16 @@ func (w Window) SetWindowPaneCurrentStatusFormat(ctx context.Context, value stri
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-pane-current-status-format", value, false)
 }
 
-// SetWindowPaneCurrentStatusFormat stores the "window-pane-current-status-format" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowPaneCurrentStatusFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowPaneCurrentStatusFormat stores the "window-pane-current-status-format" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.WindowPaneCurrentStatusFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowPaneCurrentStatusFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-pane-current-status-format", value, false)
 }
 
-// SetWindowPaneStatusFormat stores the "window-pane-status-format" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowPaneStatusFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowPaneStatusFormat stores the "window-pane-status-format" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.WindowPaneStatusFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowPaneStatusFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8066,20 +6792,16 @@ func (w Window) SetWindowPaneStatusFormat(ctx context.Context, value string) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-pane-status-format", value, false)
 }
 
-// SetWindowPaneStatusFormat stores the "window-pane-status-format" window option, available since tmux 3.7.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowPaneStatusFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowPaneStatusFormat stores the "window-pane-status-format" window option as string (tmux 3.7 or later).
+// Read it with [WindowOptionValues.WindowPaneStatusFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowPaneStatusFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-pane-status-format", value, false)
 }
 
-// SetWindowSize stores the "window-size" window option, available since tmux 3.2a.
-// It accepts WindowSize and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowSize] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowSize stores the "window-size" window option as WindowSize (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowSize] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowSize(ctx context.Context, value WindowSize) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8088,20 +6810,16 @@ func (w Window) SetWindowSize(ctx context.Context, value WindowSize) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-size", value.String(), true)
 }
 
-// SetWindowSize stores the "window-size" window option, available since tmux 3.2a.
-// It accepts WindowSize and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowSize] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowSize stores the "window-size" window option as WindowSize (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowSize] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowSize(ctx context.Context, value WindowSize) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-size", value.String(), true)
 }
 
-// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusActivityStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusActivityStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusActivityStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8110,20 +6828,16 @@ func (w Window) SetWindowStatusActivityStyle(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-activity-style", value, false)
 }
 
-// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusActivityStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusActivityStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusActivityStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-activity-style", value, false)
 }
 
-// SetWindowStatusBellStyle stores the "window-status-bell-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusBellStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusBellStyle stores the "window-status-bell-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusBellStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusBellStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8132,20 +6846,16 @@ func (w Window) SetWindowStatusBellStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-bell-style", value, false)
 }
 
-// SetWindowStatusBellStyle stores the "window-status-bell-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusBellStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusBellStyle stores the "window-status-bell-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusBellStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusBellStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-bell-style", value, false)
 }
 
-// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusCurrentFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusCurrentFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusCurrentFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8154,20 +6864,16 @@ func (w Window) SetWindowStatusCurrentFormat(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-format", value, false)
 }
 
-// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusCurrentFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusCurrentFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusCurrentFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-format", value, false)
 }
 
-// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusCurrentStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusCurrentStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusCurrentStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8176,20 +6882,16 @@ func (w Window) SetWindowStatusCurrentStyle(ctx context.Context, value string) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-style", value, false)
 }
 
-// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusCurrentStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusCurrentStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusCurrentStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-style", value, false)
 }
 
-// SetWindowStatusFormat stores the "window-status-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusFormat] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusFormat stores the "window-status-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8198,20 +6900,16 @@ func (w Window) SetWindowStatusFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-format", value, false)
 }
 
-// SetWindowStatusFormat stores the "window-status-format" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusFormat] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusFormat stores the "window-status-format" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusFormat(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-format", value, false)
 }
 
-// SetWindowStatusLastStyle stores the "window-status-last-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusLastStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusLastStyle stores the "window-status-last-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusLastStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusLastStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8220,20 +6918,16 @@ func (w Window) SetWindowStatusLastStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-last-style", value, false)
 }
 
-// SetWindowStatusLastStyle stores the "window-status-last-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusLastStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusLastStyle stores the "window-status-last-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusLastStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusLastStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-last-style", value, false)
 }
 
-// SetWindowStatusSeparator stores the "window-status-separator" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusSeparator] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusSeparator stores the "window-status-separator" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusSeparator] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusSeparator(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8242,20 +6936,16 @@ func (w Window) SetWindowStatusSeparator(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-separator", value, false)
 }
 
-// SetWindowStatusSeparator stores the "window-status-separator" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusSeparator] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusSeparator stores the "window-status-separator" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusSeparator] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusSeparator(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-separator", value, false)
 }
 
-// SetWindowStatusStyle stores the "window-status-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStatusStyle stores the "window-status-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8264,20 +6954,16 @@ func (w Window) SetWindowStatusStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-style", value, false)
 }
 
-// SetWindowStatusStyle stores the "window-status-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStatusStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStatusStyle stores the "window-status-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStatusStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-style", value, false)
 }
 
-// SetWindowStyle stores the "window-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStyle] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWindowStyle stores the "window-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8286,20 +6972,16 @@ func (w Window) SetWindowStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-style", value, false)
 }
 
-// SetWindowStyle stores the "window-style" window option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WindowStyle] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWindowStyle stores the "window-style" window option as string (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WindowStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStyle(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-style", value, false)
 }
 
-// SetWindowStyle stores the "window-style" pane option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.WindowStyle] from [Pane.Options], and [Pane.UnsetOption] restores inheritance or the global default.
-// Use [Pane.SetOption] for caller-named options or raw values.
+// SetWindowStyle stores the "window-style" pane option as string (tmux 3.2a or later).
+// Read it with [PaneOptionValues.WindowStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetWindowStyle(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -8308,10 +6990,8 @@ func (p Pane) SetWindowStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "window-style", value, false)
 }
 
-// SetWordSeparators stores the "word-separators" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.WordSeparators] from [Session.Options], and [Session.UnsetOption] restores inheritance or the global default.
-// Use [Session.SetOption] for caller-named options or raw values.
+// SetWordSeparators stores the "word-separators" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.WordSeparators] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetWordSeparators(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -8320,20 +7000,16 @@ func (s Session) SetWordSeparators(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "word-separators", value, false)
 }
 
-// SetWordSeparators stores the "word-separators" session option, available since tmux 3.2a.
-// It accepts string and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.WordSeparators] from [GlobalSessionScope.Options], and [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
+// SetWordSeparators stores the "word-separators" session option as string (tmux 3.2a or later).
+// Read it with [SessionOptionValues.WordSeparators] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetWordSeparators(ctx context.Context, value string) error {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "word-separators", value, false)
 }
 
-// SetWrapSearch stores the "wrap-search" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WrapSearch] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetWrapSearch stores the "wrap-search" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WrapSearch] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWrapSearch(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8342,20 +7018,16 @@ func (w Window) SetWrapSearch(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "wrap-search", encodeTypedOptionBool(value), false)
 }
 
-// SetWrapSearch stores the "wrap-search" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.WrapSearch] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetWrapSearch stores the "wrap-search" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.WrapSearch] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWrapSearch(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "wrap-search", encodeTypedOptionBool(value), false)
 }
 
-// SetXTermKeys stores the "xterm-keys" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.XTermKeys] from [Window.Options], and [Window.UnsetOption] restores inheritance or the global default.
-// Use [Window.SetOption] for caller-named options or raw values.
+// SetXTermKeys stores the "xterm-keys" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.XTermKeys] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetXTermKeys(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8364,46 +7036,35 @@ func (w Window) SetXTermKeys(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "xterm-keys", encodeTypedOptionBool(value), false)
 }
 
-// SetXTermKeys stores the "xterm-keys" window option, available since tmux 3.2a.
-// It accepts bool and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.XTermKeys] from [GlobalWindowScope.Options], and [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
+// SetXTermKeys stores the "xterm-keys" window option as bool (tmux 3.2a or later).
+// Read it with [WindowOptionValues.XTermKeys] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetXTermKeys(ctx context.Context, value bool) error {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "xterm-keys", encodeTypedOptionBool(value), false)
 }
 
-// SetCodepointWidths performs a complete replacement of the "codepoint-widths" server option, available since tmux 3.6.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.CodepointWidths] from [Server.Options].
-// Use [Server.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Server.UnsetOption] to restore inheritance or the global default.
+// SetCodepointWidths replaces the complete "codepoint-widths" server option array with SparseArray[string], preserving holes and empty values (tmux 3.6 or later).
+// Read it with [ServerOptionValues.CodepointWidths] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetCodepointWidths(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "codepoint-widths", value)
 }
 
-// SetCommandAlias performs a complete replacement of the "command-alias" server option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.CommandAlias] from [Server.Options].
-// Use [Server.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Server.UnsetOption] to restore inheritance or the global default.
+// SetCommandAlias replaces the complete "command-alias" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [ServerOptionValues.CommandAlias] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetCommandAlias(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "command-alias", value)
 }
 
-// SetPaneColours performs a complete replacement of the "pane-colours" window option, available since tmux 3.3.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneColours] from [Window.Options].
-// Use [Window.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Window.UnsetOption] to restore inheritance or the global default.
+// SetPaneColours replaces the complete "pane-colours" window option array with SparseArray[string], preserving holes and empty values (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PaneColours] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (w Window) SetPaneColours(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server, scope, err := windowOptionRuntimeScope(w)
 	if err != nil {
@@ -8412,24 +7073,18 @@ func (w Window) SetPaneColours(ctx context.Context, value SparseArray[string]) (
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeWindow, "pane-colours", value)
 }
 
-// SetPaneColours performs a complete replacement of the "pane-colours" window option, available since tmux 3.3.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [WindowOptionValues.PaneColours] from [GlobalWindowScope.Options].
-// Use [GlobalWindowScope.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [GlobalWindowScope.UnsetOption] to restore inheritance or the global default.
+// SetPaneColours replaces the complete "pane-colours" window option array with SparseArray[string], preserving holes and empty values (tmux 3.3 or later).
+// Read it with [WindowOptionValues.PaneColours] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s GlobalWindowScope) SetPaneColours(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s.server
 	scope := []string{"-g", "-w"}
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeWindow, "pane-colours", value)
 }
 
-// SetPaneColours performs a complete replacement of the "pane-colours" pane option, available since tmux 3.3.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [PaneOptionValues.PaneColours] from [Pane.Options].
-// Use [Pane.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Pane.UnsetOption] to restore inheritance or the global default.
+// SetPaneColours replaces the complete "pane-colours" pane option array with SparseArray[string], preserving holes and empty values (tmux 3.3 or later).
+// Read it with [PaneOptionValues.PaneColours] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (p Pane) SetPaneColours(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server, scope, err := paneOptionRuntimeScope(p)
 	if err != nil {
@@ -8438,12 +7093,9 @@ func (p Pane) SetPaneColours(ctx context.Context, value SparseArray[string]) (Se
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopePane, "pane-colours", value)
 }
 
-// SetStatusFormat performs a complete replacement of the "status-format" session option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusFormat] from [Session.Options].
-// Use [Session.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Session.UnsetOption] to restore inheritance or the global default.
+// SetStatusFormat replaces the complete "status-format" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusFormat] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Session) SetStatusFormat(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -8452,48 +7104,36 @@ func (s Session) SetStatusFormat(ctx context.Context, value SparseArray[string])
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "status-format", value)
 }
 
-// SetStatusFormat performs a complete replacement of the "status-format" session option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.StatusFormat] from [GlobalSessionScope.Options].
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [GlobalSessionScope.UnsetOption] to restore inheritance or the global default.
+// SetStatusFormat replaces the complete "status-format" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [SessionOptionValues.StatusFormat] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s GlobalSessionScope) SetStatusFormat(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "status-format", value)
 }
 
-// SetTerminalFeatures performs a complete replacement of the "terminal-features" server option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.TerminalFeatures] from [Server.Options].
-// Use [Server.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Server.UnsetOption] to restore inheritance or the global default.
+// SetTerminalFeatures replaces the complete "terminal-features" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [ServerOptionValues.TerminalFeatures] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetTerminalFeatures(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "terminal-features", value)
 }
 
-// SetTerminalOverrides performs a complete replacement of the "terminal-overrides" server option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.TerminalOverrides] from [Server.Options].
-// Use [Server.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Server.UnsetOption] to restore inheritance or the global default.
+// SetTerminalOverrides replaces the complete "terminal-overrides" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [ServerOptionValues.TerminalOverrides] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetTerminalOverrides(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s
 	scope := []string{"-s"}
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "terminal-overrides", value)
 }
 
-// SetUpdateEnvironment performs a complete replacement of the "update-environment" session option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.UpdateEnvironment] from [Session.Options].
-// Use [Session.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Session.UnsetOption] to restore inheritance or the global default.
+// SetUpdateEnvironment replaces the complete "update-environment" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [SessionOptionValues.UpdateEnvironment] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Session) SetUpdateEnvironment(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
@@ -8502,24 +7142,18 @@ func (s Session) SetUpdateEnvironment(ctx context.Context, value SparseArray[str
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "update-environment", value)
 }
 
-// SetUpdateEnvironment performs a complete replacement of the "update-environment" session option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [SessionOptionValues.UpdateEnvironment] from [GlobalSessionScope.Options].
-// Use [GlobalSessionScope.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [GlobalSessionScope.UnsetOption] to restore inheritance or the global default.
+// SetUpdateEnvironment replaces the complete "update-environment" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [SessionOptionValues.UpdateEnvironment] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s GlobalSessionScope) SetUpdateEnvironment(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s.server
 	scope := []string{"-g"}
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "update-environment", value)
 }
 
-// SetUserKeys performs a complete replacement of the "user-keys" server option, available since tmux 3.2a.
-// It accepts SparseArray[string], preserves sparse holes and explicit empty values, and does not expose raw set-option flags.
-// Read it back with [ServerOptionValues.UserKeys] from [Server.Options].
-// Use [Server.SetOption] for caller-named options or raw values.
-// Replacement is not atomic: the result reports only confirmed writes and failures stop without rollback.
-// Callers must serialize replacement of the same target and option when final ordering matters. Use [Server.UnsetOption] to restore inheritance or the global default.
+// SetUserKeys replaces the complete "user-keys" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// Read it with [ServerOptionValues.UserKeys] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
+// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetUserKeys(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
 	server := s
 	scope := []string{"-s"}

@@ -8,24 +8,9 @@ import (
 	"testing"
 )
 
-// A version written down by hand goes stale the moment it is not, and this one
-// did: it named v0.0.1-alpha.1 for the whole life of v0.0.1-alpha.2, so every
-// build from source reported a release it was not.
-//
-// Nothing can make the constant update itself -- the toolchain has no version
-// to give a working tree, which is the case it exists for. What can be checked
-// is that it is not behind, and that is a comparison against the tags rather
-// than against another written-down value.
-//
-// The rule is the weakest one that catches staleness: the constant may not
-// name a release that has already been tagged unless that release is the most
-// recent. Being ahead of every tag is the ordinary state between the commit
-// that bumps it and the tag that follows, so that stays legal; naming a tag
-// with newer ones behind it is exactly the bug and nothing else is.
-//
-// No version arithmetic, deliberately. Comparing pre-release orderings would
-// need a semver dependency this module does not have, and the question here is
-// membership rather than order.
+// The fallback may name an unreleased version or the newest module tag. A
+// tagged, superseded fallback is stale. Tag membership avoids a semver
+// dependency and permits the unreleased version between a bump and its tag.
 func TestFallbackVersionIsNotBehindTheTags(t *testing.T) {
 	tags := releaseTags(t)
 	if len(tags) == 0 {

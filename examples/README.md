@@ -17,9 +17,9 @@ $ go -C examples run ./quickstart
 | [`snapshot-browser/`](snapshot-browser/) | One read, whole hierarchy | Walking sessions, windows and panes without re-querying |
 | [`option-hook-editing/`](option-hook-editing/) | Typed options and hooks | Reading and writing tmux settings by their Go names |
 | [`environment/`](environment/) | Session and global environment | What tmux passes to the processes it starts |
-| [`fast-path/`](fast-path/) | Control-mode connection | What a transport is worth, counted in tmux processes |
+| [`fast-path/`](fast-path/) | Owned connection | Plain and connected reads, plus their exact-capture boundary |
 | [`planned-build/`](planned-build/) | Recording commands, then sending them | Naming a pane before it exists, and reading a plan before it runs |
-| [`control-mode-subscribe/`](control-mode-subscribe/) | `Notifications` as a range loop | Watching what tmux says on its own |
+| [`control-mode-subscribe/`](control-mode-subscribe/) | An owned notification stream | Watching what tmux says on its own |
 
 Each directory has a page of its own explaining what to look at, and each has a
 test that runs the example against a real tmux and reads what it printed. The

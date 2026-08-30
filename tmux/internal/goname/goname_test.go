@@ -47,9 +47,6 @@ func TestExportedAppliesTheGoNamingConvention(t *testing.T) {
 	}
 }
 
-// TestExportedRejectsMixedCaseInitialisms pins the reason this package exists:
-// a name crossing from tmux or Python must not reach Go as Id or Utf8, which
-// Go programmers read as a style error.
 func TestExportedRejectsMixedCaseInitialisms(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"pane_id", "get_by_id", "client_utf8", "pane_tty"} {

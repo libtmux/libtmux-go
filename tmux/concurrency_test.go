@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
@@ -15,27 +17,22 @@ func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
 
 	const workers = 24
 
-	// This test stands in for tmux with this test binary, which is a far heavier
-	// program than tmux: it starts the testing framework before it echoes
-	// anything. Twenty-four of those at once on a small machine can exit before
-	// the parent has finished draining their pipes, and os/exec then reports
-	// "WaitDelay expired before I/O complete" -- refused rather than normalised,
-	// because a read that stopped early must never be reported as a command that
-	// said nothing. The delay is raised here to fit the stand-in rather than
-	// lowered in the transport, where it protects real callers from a tmux that
-	// exits holding a pipe open.
+	// The test binary starts and drains more slowly than tmux. Give the stand-in
+	// more time without weakening the transport's truncated-read guard.
 	const drainStandInOutput = 30 * time.Second
 
-	server := NewServer(ServerOptions{
-		Binary: os.Args[0],
-		Runner: subprocessRunner(drainStandInOutput),
-	})
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+	dependencies := defaultServerDependencies()
+	dependencies.executor = tmuxcmd.Runner{WaitDelay: drainStandInOutput}
+	server, err := newServer(ServerOptions{Binary: executable}, dependencies)
+	if err != nil {
+		t.Fatalf("newServer() error = %v", err)
+	}
 
-	// Generous, and not part of what is being tested: what is asserted below is
-	// that concurrent commands each get their own answer back, not how quickly
-	// the machine can start them. It stays bounded so a command that never
-	// returns still fails here rather than hanging until the test binary is
-	// killed.
+	// Command startup speed is not under test, but a hung command must stay bounded.
 	const perCommand = 60 * time.Second
 
 	errors := make(chan error, workers)

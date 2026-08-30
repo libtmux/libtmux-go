@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -35,9 +34,13 @@ func killExampleServer(server tmux.Server) {
 func Example() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-workflow",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
@@ -81,12 +84,40 @@ func Example() {
 	// Output: tests 2 true
 }
 
+func ExampleNewPlan() {
+	plan := tmux.NewPlan()
+	session := plan.NewSession(tmux.NewSessionRequest{Name: "project"})
+	plan.RenameSession(session, "renamed")
+	plan.SetEnvironment(session, "APP_MODE", "development")
+
+	preview, err := plan.Preview(tmux.Version{})
+	if err != nil {
+		fmt.Println("preview:", err)
+		return
+	}
+	fmt.Println(preview[0])
+	fmt.Println(preview[1] == nil, preview[2] == nil)
+	for _, dispatch := range plan.Explain() {
+		fmt.Printf("steps %v: %s\n", dispatch.Ops, dispatch.Reason)
+	}
+
+	// Output:
+	// [new-session -P -F#{session_id} -sproject -d]
+	// true true
+	// steps [0]: creates
+	// steps [1 2]: chained
+}
+
 func ExamplePane_SendKeys() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-send-keys",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -140,9 +171,13 @@ func ExamplePane_SendKeys() {
 func ExamplePane_CaptureBytes() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture-bytes",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -173,9 +208,13 @@ func ExamplePane_CaptureBytes() {
 func ExampleServer_Sessions() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-sessions",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{
@@ -207,9 +246,13 @@ func ExampleServer_Sessions() {
 func ExampleServer_Cmd() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-cmd",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -239,9 +282,13 @@ func ExampleServer_Cmd() {
 func ExampleServer_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-open-control",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -270,14 +317,17 @@ func ExampleServer_OpenControl() {
 	// than a decoded string: the frame is what tmux sent.
 	fmt.Printf("%q\n", result.RawStdout)
 
-	// Reconnect replaces the client with one on a new attachment. The old one
-	// is spent, so the result is what later commands go through.
+	// Reconnect registers the replacement before spending the old client. A
+	// non-nil replacement is caller-owned even when closing the old client
+	// also returns an error.
 	reconnected, err := client.Reconnect(ctx)
+	if reconnected != nil {
+		client = reconnected
+	}
 	if err != nil {
 		fmt.Println("reconnect:", err)
 		return
 	}
-	client = reconnected
 
 	result, err = client.Cmd(ctx, "display-message", "-p", "still here")
 	if err != nil {
@@ -293,9 +343,13 @@ func ExampleServer_OpenControl() {
 func ExampleServer_ShowBufferBytes() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-show-buffer",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -324,9 +378,13 @@ func ExampleServer_ShowBufferBytes() {
 func ExampleServer_Snapshot() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-snapshot",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -356,9 +414,13 @@ func ExampleServer_Snapshot() {
 func ExampleSession_ResolveActiveWindow() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-resolve-window",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
@@ -384,9 +446,13 @@ func ExampleSession_ResolveActiveWindow() {
 func ExamplePaneFilter_Predicate() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-pane-filter",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -458,9 +524,13 @@ func ExampleSparseArray() {
 func ExampleErrNoServer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-no-server",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	// Nothing has started a server on this socket yet, which is the state
@@ -498,9 +568,13 @@ func ExampleErrNoServer() {
 func ExampleSession_Options() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-session-options",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -539,9 +613,13 @@ func ExampleSession_Options() {
 func ExampleSession_SetMouse() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-set-mouse",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -570,9 +648,13 @@ func ExampleSession_SetMouse() {
 func ExampleSession_SetUpdateEnvironment() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-update-environment",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -603,9 +685,13 @@ func ExampleSession_SetUpdateEnvironment() {
 func ExampleGlobalSessionScope_SetHook() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-global-hook",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -640,9 +726,13 @@ func ExampleGlobalSessionScope_SetHook() {
 func ExampleServer_SearchPanes() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-server-search-panes",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -673,19 +763,78 @@ func ExampleServer_SearchPanes() {
 }
 
 func ExampleNewServer() {
-	// NewServer records configuration; it does not start tmux.
-	server := tmux.NewServer(tmux.ServerOptions{SocketPath: "/tmp/libtmux-go-example.sock"})
+	// NewServer validates and records configuration; it does not start tmux.
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketPath: "/tmp/libtmux-go-example.sock"})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 
 	fmt.Println(server.SocketPath())
 	// Output: /tmp/libtmux-go-example.sock
 }
 
+func ExampleServer_WithSocketPath() {
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Println("test executable:", err)
+		return
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		Binary:     executable,
+		SocketName: "application",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	sibling, err := server.WithSocketPath("/tmp/sibling.sock")
+	if err != nil {
+		fmt.Println("sibling server:", err)
+		return
+	}
+
+	fmt.Println(server)
+	fmt.Println(sibling)
+	// Output:
+	// Server(socket_name=application)
+	// Server(socket_path=/tmp/sibling.sock)
+}
+
+func ExampleServer_SocketSelection() {
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Println("test executable:", err)
+		return
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		Binary:     executable,
+		SocketPath: "/tmp/application.sock",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	selection, err := server.SocketSelection()
+	if err != nil {
+		fmt.Println("socket selection:", err)
+		return
+	}
+
+	fmt.Println(selection.Path)
+	// Output: /tmp/application.sock
+}
+
 func ExampleServer_NewSession() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-new-session",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -702,9 +851,13 @@ func ExampleServer_NewSession() {
 func ExampleSession_NewWindow() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-new-window",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -729,9 +882,13 @@ func ExampleSession_NewWindow() {
 func ExampleWindow_SplitPane() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-split-pane",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -766,9 +923,13 @@ func ExampleWindow_SplitPane() {
 func ExamplePane_Capture() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -813,30 +974,31 @@ func ExamplePane_Capture() {
 	// Output: build ready
 }
 
-func ExampleServerOptions_Runner() {
-	// Runner substitutes the transport, so code that drives tmux can be tested
-	// without a tmux binary present.
-	fake := tmux.CommandRunnerFunc(
-		func(_ context.Context, request tmux.CommandRequest) (tmux.CommandResult, error) {
-			return tmux.CommandResult{
-				Command: request.Arguments,
-				Stdout:  []string{"tmux 3.7b"},
-			}, nil
-		},
-	)
-	server := tmux.NewServer(tmux.ServerOptions{Runner: fake})
-
-	version, err := server.Version(context.Background())
-	fmt.Println(version, err)
-	// Output: 3.7b <nil>
+func ExampleServerOptions_Binary() {
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Println("test executable:", err)
+		return
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: executable})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	fmt.Println(filepath.IsAbs(server.Executable()))
+	// Output: true
 }
 
 func ExampleServer_Session() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-session-lookup",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	created, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -859,9 +1021,13 @@ func ExampleServer_Session() {
 func ExampleServer_Window() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-window-lookup",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
@@ -890,9 +1056,13 @@ func ExampleServer_Window() {
 func ExampleServer_Pane() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-pane-lookup",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -918,9 +1088,13 @@ func ExampleServer_Pane() {
 func ExampleServer_Client() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-client-lookup",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -930,7 +1104,7 @@ func ExampleServer_Client() {
 
 	// A detached server has no clients, so the lookup reports absence as a
 	// classified error rather than an empty value.
-	_, err := server.Client(ctx, tmux.ClientName("/dev/pts/999"))
+	_, err = server.Client(ctx, tmux.ClientName("/dev/pts/999"))
 	fmt.Println(errors.Is(err, tmux.ErrSnapshotNotFound))
 	// Output: true
 }
@@ -938,9 +1112,13 @@ func ExampleServer_Client() {
 func ExampleWindow_SearchPanes() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-search-panes",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -971,9 +1149,13 @@ func ExampleWindow_SearchPanes() {
 func ExampleWindow_Panes() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-window-panes",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -1031,9 +1213,13 @@ func ExampleWindow_Panes() {
 func ExampleServer_SetOption() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-set-option",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -1055,9 +1241,13 @@ func ExampleServer_SetOption() {
 func ExampleServer_RawOption() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-raw-option",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -1074,9 +1264,13 @@ func ExampleServer_RawOption() {
 func ExampleSession_SetBellAction() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-bell-action",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -1101,12 +1295,16 @@ func ExampleSession_SetBellAction() {
 	// Output: none true
 }
 
-func ExampleServer_WithEngine() {
+func ExampleControlClient_Call() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-with-engine",
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-control-call",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -1114,39 +1312,10 @@ func ExampleServer_WithEngine() {
 		fmt.Println("create session:", err)
 		return
 	}
-
-	// A control-mode client is one persistent tmux process. Selecting its
-	// engine makes the operations below reuse that connection instead of
-	// starting a tmux process each.
-	client, err := server.OpenControl(ctx, session)
-	if err != nil {
-		fmt.Println("open control:", err)
-		return
-	}
-	defer func() { _ = client.Close() }()
-	connected := server.WithEngine(client.Engine())
-
-	window, err := connected.Session(ctx, session.ID())
-	if err != nil {
-		fmt.Println("look up session:", err)
-		return
-	}
-	name, _ := window.Name()
-	fmt.Println(name)
-	// Output: build
-}
-
-func ExampleControlClient_Engine() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-client-engine",
-	})
-	defer killExampleServer(server)
-
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
-	if err != nil {
-		fmt.Println("create session:", err)
+	alias := "go-two=display-message -p one ; display-message -p two"
+	configured, err := server.Cmd(ctx, "set-option", "-s", "command-alias[80]", alias)
+	if err != nil || configured.ExitCode != 0 {
+		fmt.Println("set alias:", err)
 		return
 	}
 	client, err := server.OpenControl(ctx, session)
@@ -1156,30 +1325,30 @@ func ExampleControlClient_Engine() {
 	}
 	defer func() { _ = client.Close() }()
 
-	// The engine borrows the client; closing the client stops the process, and
-	// SubprocessEngine returns a handle to starting one per command again.
-	connected := server.WithEngine(client.Engine())
-	forking := connected.WithEngine(server.SubprocessEngine())
-
-	for _, handle := range []tmux.Server{connected, forking} {
-		sessions, err := handle.Sessions(ctx)
-		if err != nil {
-			fmt.Println("list sessions:", err)
-			return
-		}
-		fmt.Println(len(sessions))
+	// Call preserves every reply from an alias; Cmd requires exactly one.
+	results, err := client.Call(ctx, "go-two")
+	if err != nil {
+		fmt.Println("call alias:", err)
+		return
 	}
-	// Output:
-	// 1
-	// 1
+	fmt.Println(
+		len(results),
+		string(bytes.TrimSpace(results[0].RawStdout)),
+		string(bytes.TrimSpace(results[1].RawStdout)),
+	)
+	// Output: 2 one two
 }
 
 func ExampleServer_WaitFor() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-wait-for",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
@@ -1213,7 +1382,11 @@ func ExampleServer_WaitFor_paneCompletion() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
 	socket := "libtmux-go-example-wait-for-pane"
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: socket})
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: socket})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -1228,8 +1401,11 @@ func ExampleServer_WaitFor_paneCompletion() {
 	}
 
 	// The command signals the channel itself, so the wait ends when the work
-	// ends rather than when a matching line happens to reach the screen.
-	command := "printf 'building\n'; tmux -L " + socket + " wait-for -S built"
+	// ends rather than when a matching line happens to reach the screen. It
+	// names the server's own binary because a pane's PATH may hold another
+	// tmux, and a client cannot signal a server built from a different release.
+	command := "printf 'building\n'; " +
+		server.Executable() + " -L " + socket + " wait-for -S built"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -1245,9 +1421,13 @@ func ExampleServer_WaitFor_paneCompletion() {
 func ExamplePoll() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-poll",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
@@ -1266,14 +1446,8 @@ func ExamplePoll() {
 		return
 	}
 
-	// tmux accepts the keys before the shell runs them, so the read is a wait.
-	// Poll stops when the condition holds or ctx expires, whichever is first.
-	//
-	// slices.Contains compares whole lines on purpose. The shell echoes the
-	// command, so the screen holds printf 'build ready\n' before the program
-	// runs; searching that screen for the substring "build ready" would match
-	// the echo and report success immediately. The echoed line carries the
-	// surrounding command and so never equals the output on its own.
+	// tmux accepts keys before the shell runs them, so poll for output. Match the
+	// whole line because a substring search would match the echoed command first.
 	err = tmux.Poll(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
 		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
 		if err != nil {
@@ -1289,43 +1463,6 @@ func ExamplePoll() {
 	// Output: build ready
 }
 
-// ExampleSubprocessRunner counts the requests that become tmux processes,
-// which is how a caller confirms an engine is carrying work. The wrapper
-// delegates execution, so it stays correct without knowing what a result
-// has to look like.
-func ExampleSubprocessRunner() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	var mutex sync.Mutex
-	var processes int
-	counting := tmux.CommandRunnerFunc(func(
-		ctx context.Context,
-		request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		mutex.Lock()
-		processes++
-		mutex.Unlock()
-		return tmux.SubprocessRunner().Run(ctx, request)
-	})
-
-	server := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-subprocess-runner",
-		Runner:     counting,
-	})
-	defer killExampleServer(server)
-
-	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"}); err != nil {
-		fmt.Println("create session:", err)
-		return
-	}
-	mutex.Lock()
-	counted := processes > 0
-	mutex.Unlock()
-	fmt.Println("requests became processes:", counted)
-	// Output: requests became processes: true
-}
-
 // ExampleControlClient_NextNotification waits for a pane's output without
 // reading the pane. tmux sends what a pane writes as it is written, so nothing
 // polls, nothing forks a tmux process per round, and no screen is searched.
@@ -1335,9 +1472,13 @@ func ExampleSubprocessRunner() {
 func ExampleControlClient_NextNotification() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-output-events",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "stream"})
@@ -1381,92 +1522,19 @@ func ExampleControlClient_NextNotification() {
 	// Output: the pane reported it was ready
 }
 
-// ExamplePane_WithServer counts what a record costs before and after it is
-// moved onto a connected handle. The counter is there because the failure it
-// prevents is silent: a record made before the engine existed keeps starting a
-// tmux process for every command and reports nothing wrong while doing so.
-func ExamplePane_WithServer() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	var mutex sync.Mutex
-	var processes int
-	counting := tmux.CommandRunnerFunc(func(
-		ctx context.Context,
-		request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		mutex.Lock()
-		processes++
-		mutex.Unlock()
-		return tmux.SubprocessRunner().Run(ctx, request)
-	})
-	count := func() int {
-		mutex.Lock()
-		defer mutex.Unlock()
-		return processes
-	}
-
-	server := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-with-server",
-		Runner:     counting,
-	})
-	defer killExampleServer(server)
-
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"})
-	if err != nil {
-		fmt.Println("create session:", err)
-		return
-	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
-		return
-	}
-	// tmux -V is a client-global option rather than a command, so no engine can
-	// carry it. Reading it once now keeps that one process out of the counts.
-	if _, err := server.Version(ctx); err != nil {
-		fmt.Println("read version:", err)
-		return
-	}
-	client, err := server.OpenControl(ctx, session)
-	if err != nil {
-		fmt.Println("open control:", err)
-		return
-	}
-	defer func() { _ = client.Close() }()
-	connected := server.WithEngine(client.Engine())
-
-	before := count()
-	if _, err := pane.Refresh(ctx); err != nil {
-		fmt.Println("refresh the held record:", err)
-		return
-	}
-	fmt.Println("processes for the record made before the engine:", count() > before)
-
-	// The move is a value operation: the pane's handle is configuration, so
-	// nothing is looked up again and no command is sent.
-	pane = pane.WithServer(connected)
-
-	before = count()
-	if _, err := pane.Refresh(ctx); err != nil {
-		fmt.Println("refresh the moved record:", err)
-		return
-	}
-	fmt.Println("processes for the same record after the move:", count()-before)
-	// Output:
-	// processes for the record made before the engine: true
-	// processes for the same record after the move: 0
-}
-
 // ExamplePane_CaptureToFile watches a pane on a connected handle. Every tmux
 // command it sends prints nothing, so the loop reuses the control connection
 // instead of starting a tmux process per round the way Pane.Capture does.
 func ExamplePane_CaptureToFile() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture-to-file",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	// tmux writes this file, so it has to be a path the tmux server can reach.
@@ -1484,18 +1552,17 @@ func ExamplePane_CaptureToFile() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
+	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
+	if err != nil {
+		fmt.Println("open connection:", err)
+		return
+	}
+	defer func() { _ = connection.Close() }()
+	pane, ok, err := connection.Session().ResolveActivePane(ctx)
 	if err != nil || !ok {
 		fmt.Println("resolve pane:", ok, err)
 		return
 	}
-	client, err := server.OpenControl(ctx, session)
-	if err != nil {
-		fmt.Println("open control:", err)
-		return
-	}
-	defer func() { _ = client.Close() }()
-	pane = pane.WithServer(server.WithEngine(client.Engine()))
 
 	command := "printf 'build ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
@@ -1520,14 +1587,18 @@ func ExamplePane_CaptureToFile() {
 	// Output: build ready
 }
 
-// ExampleServer_OpenControlPool puts a handle on a control-mode transport in
-// one call, so the commands that follow start no tmux processes.
-func ExampleServer_OpenControlPool() {
+// ExampleSession_OpenControl binds ordinary model values to owned control-mode
+// lanes.
+func ExampleSession_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-control-pool",
 	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
@@ -1536,20 +1607,162 @@ func ExampleServer_OpenControlPool() {
 		return
 	}
 
-	connected, _, pool, err := server.OpenControlPool(ctx, session, tmux.ControlPoolRequest{})
+	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
-		fmt.Println("open pool:", err)
+		fmt.Println("open control connection:", err)
 		return
 	}
-	defer func() { _ = pool.Close() }()
+	defer func() { _ = connection.Close() }()
 
-	// The session was taken before the pool existed, so it still carries the
-	// forking handle. Moving it across needs no tmux command.
-	windows, err := session.WithServer(connected).SearchWindows(ctx, nil)
+	windows, err := connection.Session().SearchWindows(ctx, nil)
 	if err != nil {
 		fmt.Println("search windows:", err)
 		return
 	}
-	fmt.Println("windows read over the connection:", len(windows))
-	// Output: windows read over the connection: 1
+	fmt.Println("windows:", len(windows))
+	// Output: windows: 1
+}
+
+func ExamplePane_OpenObservation() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-pane-observation",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "observe"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+
+	// The observation owns a dedicated control client. Close releases it.
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	command := "printf 'observation ready\\n'"
+	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
+		fmt.Println("send keys:", err)
+		return
+	}
+	var output []byte
+	for !bytes.Contains(output, []byte("observation ready")) {
+		notification, err := observation.NextNotification(ctx)
+		if err != nil {
+			fmt.Println("next notification:", err)
+			return
+		}
+		paneID, data, isOutput := notification.Output()
+		if isOutput && paneID == pane.ID() {
+			output = append(output, data...)
+		}
+	}
+	fmt.Println("observed:", bytes.Contains(output, []byte("observation ready")))
+
+	if err := observation.Close(); err != nil {
+		fmt.Println("close observation:", err)
+		return
+	}
+	_, err = observation.NextNotification(ctx)
+	fmt.Println("closed:", errors.Is(err, os.ErrClosed))
+	// Output:
+	// observed: true
+	// closed: true
+}
+
+func ExampleServer_OpenNotifications() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-server-notifications",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	stream, err := server.OpenNotifications(ctx, session, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	fmt.Println("opened")
+	// Output: opened
+}
+
+func ExampleSession_OpenNotifications() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-session-notifications",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// The stream owns its observation-only control client. Close releases it.
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	if _, err := session.Rename(ctx, "renamed"); err != nil {
+		fmt.Println("rename session:", err)
+		return
+	}
+	for {
+		notification, err := stream.Next(ctx)
+		if err != nil {
+			fmt.Println("next notification:", err)
+			return
+		}
+		arguments := notification.Arguments()
+		if notification.Kind() == tmux.ControlNotificationSessionRenamed &&
+			len(arguments) == 2 && arguments[1] == "renamed" {
+			fmt.Println("renamed:", arguments[1])
+			break
+		}
+	}
+
+	if err := stream.Close(); err != nil {
+		fmt.Println("close notifications:", err)
+		return
+	}
+	_, err = stream.Next(ctx)
+	fmt.Println("closed:", errors.Is(err, os.ErrClosed))
+	// Output:
+	// renamed: renamed
+	// closed: true
 }

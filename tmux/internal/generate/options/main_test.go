@@ -43,13 +43,18 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 		for _, want := range []string{
 			surface.TypeName,
 			"zero value",
-			"immutable point-in-time",
-			"may become stale",
+			"immutable materialized",
+			"does not refresh",
 			"[OptionValue.Get]",
 			"[OptionValue.Origin]",
 		} {
 			if !strings.Contains(doc, want) {
 				t.Errorf("%s documentation is missing %q: %s", surface.TypeName, want, doc)
+			}
+		}
+		for _, fallback := range surface.RawSources {
+			if !strings.Contains(doc, fallback) {
+				t.Errorf("%s documentation is missing raw fallback %q: %s", surface.TypeName, fallback, doc)
 			}
 		}
 	}
@@ -78,13 +83,14 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 			if !strings.HasPrefix(doc, entry.GoName) {
 				t.Errorf("%s.%s documentation must begin with its identifier: %s", surface.TypeName, entry.GoName, doc)
 			}
-			wantLead := entry.GoName + " returns the " + strconv.Quote(entry.Name) + " " + surface.Noun +
-				" value as [OptionValue] with Go value shape OptionValue[" + entry.GoType + "]."
+			wantLead := entry.GoName + " returns materialized " + strconv.Quote(entry.Name) +
+				" as [OptionValue] with value type OptionValue[" + entry.GoType + "] from " +
+				surface.Noun + " values; it does not query tmux."
 			if !strings.HasPrefix(doc, wantLead) {
 				t.Errorf("%s documentation lead = %q, want prefix %q", key, doc, wantLead)
 			}
-			wantVariants := "Its scope-specific minimum tmux version and supported variants are " +
-				documentedVariants(variantsForScope(entry, surface.Scope)) + "."
+			wantVariants := "Available as " +
+				documentedVariants(variantsForScope(entry, surface.Scope))
 			if !strings.Contains(doc, wantVariants) {
 				t.Errorf("%s documentation is missing exact variants %q: %s", key, wantVariants, doc)
 			}
@@ -103,8 +109,6 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 				"OptionValue[" + entry.GoType + "]",
 				"does not query tmux",
 				"tmux",
-				"scope",
-				"style option",
 			} {
 				if !strings.Contains(doc, want) {
 					t.Errorf("%s.%s documentation is missing %q: %s", surface.TypeName, entry.GoName, want, doc)
@@ -113,10 +117,11 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 			if entry.Array && !strings.Contains(doc, "including gaps") {
 				t.Errorf("%s.%s documentation omits sparse-array semantics: %s", surface.TypeName, entry.GoName, doc)
 			}
-			for _, fallback := range rawFallbacksForSurface(surface.TypeName) {
-				if !strings.Contains(doc, fallback) {
-					t.Errorf("%s.%s documentation is missing raw fallback %q: %s", surface.TypeName, entry.GoName, fallback, doc)
-				}
+			if entry.Style && !strings.Contains(doc, "style option") {
+				t.Errorf("%s.%s documentation omits style metadata: %s", surface.TypeName, entry.GoName, doc)
+			}
+			if !entry.Style && strings.Contains(doc, "style option") {
+				t.Errorf("%s.%s documentation repeats negative style metadata: %s", surface.TypeName, entry.GoName, doc)
 			}
 			for _, receiver := range surface.Setters {
 				want := "[" + receiver + "." + setterName(entry) + "]"
@@ -153,12 +158,11 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 				strconv.Quote(entry.Name),
 				entry.GoType,
 				"tmux " + variantsForScope(entry, scope)[0].Since,
-				"[" + receiver + ".SetOption]",
 				"[" + valuesType + "." + entry.GoName + "]",
 				valuesSource,
 			}
 			if entry.Array {
-				wants = append(wants, "replacement", "not atomic", "serialize", "UnsetOption")
+				wants = append(wants, "replaces", "not atomic", "Serialize", "UnsetOption")
 			}
 			for _, want := range wants {
 				if !strings.Contains(doc, want) {
@@ -166,6 +170,9 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 				}
 			}
 		}
+	}
+	if strings.Contains(string(generated), "It is not a style option.") {
+		t.Error("generated option documentation repeats negative style metadata")
 	}
 
 	for _, test := range []struct {
@@ -258,19 +265,6 @@ func setterScope(receiver string) string {
 		"Server": "server", "Session": "session", "Window": "window", "Pane": "pane",
 		"GlobalSessionScope": "session", "GlobalWindowScope": "window",
 	}[receiver]
-}
-
-func rawFallbacksForSurface(typeName string) []string {
-	return map[string][]string{
-		"ServerOptionValues":  {"[Server.RawOption]"},
-		"SessionOptionValues": {"[Session.RawOption]", "[GlobalSessionScope.RawOption]"},
-		"WindowOptionValues":  {"[Window.RawOption]", "[GlobalWindowScope.RawOption]"},
-		"PaneOptionValues":    {"[Pane.RawOption]"},
-		"ServerHookValues":    {"[GlobalSessionScope.RawHook]"},
-		"SessionHookValues":   {"[Session.RawHook]"},
-		"WindowHookValues":    {"[Window.RawHook]", "[GlobalWindowScope.RawHook]"},
-		"PaneHookValues":      {"[Pane.RawHook]"},
-	}[typeName]
 }
 
 func TestGeneratedNotificationGrammarRendersLiteralMetavariables(t *testing.T) {
@@ -524,7 +518,7 @@ func TestGenerateOptionsIsDeterministicAndEmitsConcreteSurfaces(t *testing.T) {
 		"type WindowOptionValues struct",
 		"type PaneOptionValues struct",
 		"type ServerHookValues struct",
-		"// ServerHookValues is an immutable point-in-time view of known global session-scope hook values.",
+		"// ServerHookValues is an immutable materialized view of known global session-scope hook values; its zero value is empty and it does not refresh.",
 		"type SessionHookValues struct",
 		"type WindowHookValues struct",
 		"type PaneHookValues struct",

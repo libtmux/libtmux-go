@@ -13,10 +13,8 @@ import (
 type Command struct {
 	// Command is the text typed into the pane.
 	Command string `yaml:"cmd"`
-	// SleepBefore delays this command without delaying the ones before it.
-	// YAML writes it as a number of seconds, matching tmuxp, so 0.5 is half a
-	// second; it is not a duration string, which is why it is decoded rather
-	// than taken from this field.
+	// SleepBefore delays this command. YAML expresses the duration in seconds,
+	// so 0.5 is half a second.
 	SleepBefore time.Duration `yaml:"-"`
 	// SleepAfter delays the commands that follow this one, in the same units.
 	SleepAfter time.Duration `yaml:"-"`
@@ -25,7 +23,6 @@ type Command struct {
 	Enter *Bool `yaml:"enter"`
 }
 
-// sends reports whether the command should be followed by Enter.
 func (c Command) sends() bool { return c.Enter == nil || bool(*c.Enter) }
 
 // UnmarshalYAML decodes a command written as a bare string or as a mapping.
@@ -43,8 +40,6 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 	if err := checkKnownFields(node, "cmd", "sleep_before", "sleep_after", "enter"); err != nil {
 		return err
 	}
-	// Durations are written as seconds, so they are decoded as numbers rather
-	// than through time.ParseDuration.
 	type commandFields struct {
 		Command     string  `yaml:"cmd"`
 		SleepBefore float64 `yaml:"sleep_before"`
@@ -70,8 +65,6 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// seconds converts a YAML sleep value to a duration, rejecting values tmux
-// could never wait for.
 func seconds(value float64, line int, field string) (time.Duration, error) {
 	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
 		return 0, fmt.Errorf("%w: line %d: %s must be a nonnegative number of seconds",
@@ -80,7 +73,6 @@ func seconds(value float64, line int, field string) (time.Duration, error) {
 	return time.Duration(value * float64(time.Second)), nil
 }
 
-// commandList decodes a field that accepts one command or a list of them.
 func commandList(node yaml.Node, field string) ([]Command, error) {
 	switch node.Kind {
 	case 0:

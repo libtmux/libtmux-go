@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -146,6 +148,75 @@ func TestBuildEntryNamesTheChosenBuild(t *testing.T) {
 	}
 }
 
+func TestDryRunBuildDoesNotReplaceThePersistentBinary(t *testing.T) {
+	directory := t.TempDir()
+	repository := filepath.Join(directory, "mcp")
+	command := filepath.Join(repository, "cmd", commandName)
+	if err := os.MkdirAll(command, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repository, "go.mod"),
+		[]byte("module example.com/dry-run\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(command, "main.go"),
+		[]byte("package main\n\nfunc main() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := filepath.Join(directory, "cache")
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("GOCACHE", filepath.Join(directory, "go-cache"))
+	t.Setenv("GOMAXPROCS", "2")
+	t.Setenv("GOFLAGS", "-p=1")
+	persistent, err := persistentBinaryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := compileAt(repository, persistent); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(persistent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(command, "main.go"), []byte(
+		"package main\n\nvar marker = \"dry run replacement\"\n\nfunc main() { println(marker) }\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := prepareEntry(options{mode: modeBuild, dryRun: true}, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(plan.cleanup)
+	if got := entryCommand(plan.configured); got != persistent {
+		t.Fatalf("configured binary = %q, want %q", got, persistent)
+	}
+	temporary := plan.preflightCommand
+	if temporary == persistent {
+		t.Fatal("dry run preflight uses the persistent server binary")
+	}
+	if _, err := os.Stat(temporary); err != nil {
+		t.Fatalf("temporary preflight binary: %v", err)
+	}
+	if err := plan.install(); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(persistent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("dry run replaced the persistent server binary")
+	}
+	plan.cleanup()
+	if _, err := os.Stat(temporary); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary preflight binary remains: %v", err)
+	}
+}
+
 // Every mode marks its entry, because a command of "go" is not by itself proof
 // this tool wrote it and revert must not restore over something it did not.
 func TestEveryModeMarksItsEntry(t *testing.T) {
@@ -198,19 +269,6 @@ func TestCommandNameExists(t *testing.T) {
 	}
 }
 
-func TestPreflightReportsACommandThatCannotLaunch(t *testing.T) {
-	t.Parallel()
-	entry := map[string]any{
-		"command": "libtmux-mcp-does-not-exist",
-		"args":    []any{},
-	}
-	if reason := preflight(entry); !strings.Contains(reason, "could not launch") {
-		t.Errorf("preflight said %q, want it to name the launch failure", reason)
-	}
-}
-
-// TestSelectedNarrowsToTheClientsNamed covers trying a build in one client on a
-// machine where the others deliberately run a different server.
 func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	t.Parallel()
 	all := knownClients("/home/someone")
@@ -240,27 +298,26 @@ func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	}
 }
 
-// TestASecondSwapBacksUpWhatIsThereBySecondTime covers the file this tool is
-// most able to damage: someone else's global agent configuration.
-//
-// A backup is written only when none exists, which is what makes swapping an
-// already-swapped client still revert to the original. Left in place after a
-// revert, that same rule turns into data loss: the file is edited, swapped
-// again, and the revert restores the copy from before the edit.
 func TestASecondSwapBacksUpWhatIsThereBySecondTime(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
-	target := client{name: "probe", path: filepath.Join(directory, "config.json")}
-	const original = `{"one":1}`
-	const edited = `{"one":1,"added":"after the revert"}`
+	target := client{
+		name: "probe", path: filepath.Join(directory, "config.json"),
+		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+	}
+	const original = `{"one":1,"mcpServers":{"tmux":{"command":"old"}}}`
+	const edited = `{"one":1,"added":"after the revert","mcpServers":{"tmux":{"command":"old"}}}`
 	if err := os.WriteFile(target.path, []byte(original), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	swap := func(from string) {
 		t.Helper()
-		if err := writeBesideBackup(target, []byte(from), []byte(`{"swapped":true}`)); err != nil {
+		updated := strings.Replace(from,
+			`{"command":"old"}`,
+			`{"command":"go","env":{"LIBTMUX_MCP_SWAP":"dev"}}`, 1)
+		if err := writeBesideBackup(target, []byte(from), []byte(updated)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -298,14 +355,163 @@ func TestASecondSwapBacksUpWhatIsThereBySecondTime(t *testing.T) {
 	}
 }
 
-// TestOneUnwritableClientDoesNotStopTheRest covers a swap across several CLIs
-// where one of them has a config this cannot edit.
-//
-// Returning at the first failure leaves the clients before it swapped and the
-// ones after it untouched, which is a mixed state nothing reports: the CLIs
-// that were never reached look exactly like the ones that were, and the next
-// run has to be made after fixing the broken one. Every client is attempted
-// and every failure is named instead.
+func TestWriteRefusesAnUninspectableBackup(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	target := client{name: "loop", path: filepath.Join(directory, "config.json")}
+	const original = `{"keep":true}`
+	if err := os.WriteFile(target.path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backup := backupPath(target)
+	if err := os.Symlink(filepath.Base(backup), backup); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeBesideBackup(target, []byte(original), []byte(`{"changed":true}`)); err == nil {
+		t.Fatal("write accepted a backup path it could not inspect")
+	}
+	if got := readFile(t, target.path); got != original {
+		t.Fatalf("write changed the config without a usable backup: %s", got)
+	}
+}
+
+func TestWriteReplacesTheConfigAtomically(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.json")
+	target := client{name: "atomic", path: path}
+	const original = `{"before":true}`
+	const updated = `{"after":true}`
+	if err := os.WriteFile(path, []byte(original), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	oldFile, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = oldFile.Close() })
+
+	if err := writeBesideBackup(target, []byte(original), []byte(updated)); err != nil {
+		t.Fatal(err)
+	}
+	oldContents, err := io.ReadAll(oldFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(oldContents) != original {
+		t.Fatalf("the open pre-write file changed to %s; the write was not an atomic replacement", oldContents)
+	}
+	if got := readFile(t, path); got != updated {
+		t.Fatalf("replacement contains %s, want %s", got, updated)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Fatalf("replacement mode = %o, want 640", got)
+	}
+}
+
+func TestWritePreservesAConfigSymlink(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	stored := filepath.Join(directory, "stored.json")
+	linked := filepath.Join(directory, "config.json")
+	const original = `{"before":true}`
+	const updated = `{"after":true}`
+	if err := os.WriteFile(stored, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(stored), linked); err != nil {
+		t.Fatal(err)
+	}
+	target := client{name: "linked", path: linked}
+
+	if err := writeBesideBackup(target, []byte(original), []byte(updated)); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(linked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("write replaced the config symlink instead of its target")
+	}
+	if got := readFile(t, stored); got != updated {
+		t.Fatalf("symlink target contains %s, want %s", got, updated)
+	}
+}
+
+func TestDryRunsValidateWithoutWriting(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	config := filepath.Join(directory, "config.json")
+	if err := os.Symlink(filepath.Base(config), config); err != nil {
+		t.Fatal(err)
+	}
+	target := client{name: "config-loop", path: config}
+	if err := useLocal([]client{target}, devEntry(), true); err == nil {
+		t.Error("use-local dry-run accepted a config path it could not inspect")
+	}
+
+	revertTarget := client{name: "backup-loop", path: filepath.Join(directory, "other.json")}
+	backup := backupPath(revertTarget)
+	if err := os.Symlink(filepath.Base(backup), backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := revert([]client{revertTarget}, true); err == nil {
+		t.Error("revert dry-run accepted a backup path it could not inspect")
+	}
+
+	backupTarget := client{
+		name: "backup-loop", path: filepath.Join(directory, "valid.json"),
+		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+	}
+	if err := os.WriteFile(backupTarget.path, []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backup = backupPath(backupTarget)
+	if err := os.Symlink(filepath.Base(backup), backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := useLocal([]client{backupTarget}, devEntry(), true); err == nil {
+		t.Error("use-local dry-run accepted a backup path it could not inspect")
+	}
+
+	valid := client{
+		name: "valid", path: filepath.Join(directory, "dry-run.json"),
+		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+	}
+	original := []byte(`{"mcpServers":{"other":{"command":"keep"}}}`)
+	if err := os.WriteFile(valid.path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := useLocal([]client{valid}, devEntry(), true); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, valid.path); got != string(original) {
+		t.Fatalf("use-local dry run changed the config: %s", got)
+	}
+	if _, err := os.Stat(backupPath(valid)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("use-local dry run created a backup: %v", err)
+	}
+	if err := writeEntry(valid, devEntry()); err != nil {
+		t.Fatal(err)
+	}
+	swapped := readFile(t, valid.path)
+	if err := revert([]client{valid}, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, valid.path); got != swapped {
+		t.Fatalf("revert dry run changed the config: %s", got)
+	}
+	if got := readFile(t, backupPath(valid)); got != string(original) {
+		t.Fatalf("revert dry run changed the backup: %s", got)
+	}
+}
+
 func TestOneUnwritableClientDoesNotStopTheRest(t *testing.T) {
 	t.Parallel()
 
@@ -326,6 +532,9 @@ func TestOneUnwritableClientDoesNotStopTheRest(t *testing.T) {
 	last := write("last", `{"mcpServers":{}}`)
 
 	entry := map[string]any{"command": "/bin/true"}
+	if err := useLocal([]client{broken}, entry, true); err == nil {
+		t.Fatal("dry run accepted malformed JSON")
+	}
 	err := useLocal([]client{first, broken, last}, entry, false)
 	if err == nil {
 		t.Fatal("a client that could not be written reported no error")

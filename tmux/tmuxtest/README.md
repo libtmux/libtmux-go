@@ -67,8 +67,10 @@ server you build yourself with `ServerOptions.FixedShell`.
 
 ## Testing tmux itself
 
-`NewServer` returns a [`tmux.Server`](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux#Server)
-for a test whose subject is tmux rather than a program running inside it.
+`tmuxtest.NewServer` returns a
+[`tmux.Server`](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux#Server)
+for a test whose subject is tmux rather than a program running inside it. It
+reports construction and startup failures through `t.Fatal`.
 
 ### One server per test
 
@@ -105,21 +107,6 @@ removing its socket.
 - **Verified teardown.** Cleanup probes the daemon answering on the socket and
   confirms *that* daemon died, rather than trusting a PID recorded at startup
   which may have been reused.
-
-## Testing without tmux installed
-
-`ServerOptions.Runner` replaces process execution entirely, so code that drives
-tmux can be unit tested on a machine that has none:
-
-```go
-server := tmux.NewServer(tmux.ServerOptions{
-	Runner: tmux.CommandRunnerFunc(func(
-		ctx context.Context, request tmux.CommandRequest,
-	) (tmux.CommandResult, error) {
-		return tmux.CommandResult{Stdout: []string{"$1"}}, nil
-	}),
-})
-```
 
 ## Keeping your suite to itself
 

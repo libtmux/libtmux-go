@@ -13,9 +13,13 @@ import (
 func Example() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-workspace",
 	})
+	if err != nil {
+		fmt.Println("server:", err)
+		return
+	}
 	defer killExampleServer(server)
 
 	document := []byte(`
@@ -49,6 +53,56 @@ windows:
 	}
 	fmt.Println(name, len(windows))
 	// Output: review 2
+}
+
+// Create the initial session, prefer a retained connection where tmux supports
+// one, then populate the rest of the workspace through that session.
+func ExampleBuildInto() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-workspace-continue",
+	})
+	if err != nil {
+		fmt.Println("server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	described := workspace.Workspace{
+		SessionName: "review",
+		Windows: []workspace.Window{
+			{Name: "editor", Panes: []workspace.Pane{{Shell: "sleep 60"}}},
+			{Name: "tests", Panes: []workspace.Pane{{Shell: "sleep 60"}}},
+		},
+	}
+	request, err := described.InitialSessionRequest()
+	if err != nil {
+		fmt.Println("request:", err)
+		return
+	}
+	_, connection, err := server.NewSessionConnection(
+		ctx,
+		request,
+		tmux.ConnectionOptions{},
+	)
+	if err != nil {
+		fmt.Println("create:", err)
+		return
+	}
+	defer func() { _ = connection.Close() }()
+	session := connection.Session()
+	if err := workspace.BuildInto(ctx, session, described); err != nil {
+		fmt.Println("build:", err)
+		return
+	}
+	windows, err := session.SearchWindows(ctx, nil)
+	if err != nil {
+		fmt.Println("search windows:", err)
+		return
+	}
+	fmt.Println(len(windows))
+	// Output: 2
 }
 
 // A misspelled key fails the parse rather than being dropped, so a workspace

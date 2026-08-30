@@ -41,6 +41,15 @@ func isPTYHelperProcess(arguments []string) bool {
 	return false
 }
 
+func mustNewTmuxServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
+	t.Helper()
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatalf("tmux.NewServer() error = %v", err)
+	}
+	return server
+}
+
 func TestMainShortensBothTemporaryRoots(t *testing.T) {
 	tmpRoot := os.Getenv("TMPDIR")
 	if got := os.Getenv("GOTMPDIR"); got != tmpRoot {
@@ -54,14 +63,8 @@ func TestMainShortensBothTemporaryRoots(t *testing.T) {
 	}
 }
 
-// TestMainKeepsANamedSocketInsideTheSuite covers the socket a test names rather
-// than one it gives a path.
-//
-// tmux resolves a name under TMUX_TMPDIR, so a test naming its own socket --
-// which is what an Example has to do, having no place to put a temporary path --
-// reaches the directory the person running the tests keeps their real sessions
-// in unless the harness redirects it. Nothing about such a test fails: it
-// passes, and leaves a socket behind next to theirs.
+// Named sockets resolve under TMUX_TMPDIR. The harness redirects it so examples
+// cannot leave sockets beside the user's real tmux sessions.
 func TestMainKeepsANamedSocketInsideTheSuite(t *testing.T) {
 	root := os.Getenv("TMPDIR")
 	if got := os.Getenv("TMUX_TMPDIR"); got != root {
@@ -70,7 +73,7 @@ func TestMainKeepsANamedSocketInsideTheSuite(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	server := tmux.NewServer(tmux.ServerOptions{SocketName: "tmuxtest-named-socket"})
+	server := mustNewTmuxServer(t, tmux.ServerOptions{SocketName: "tmuxtest-named-socket"})
 	t.Cleanup(func() {
 		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer killCancel()
@@ -370,7 +373,7 @@ func TestChildEnvironmentIgnoresInheritedTmuxPane(t *testing.T) {
 		t.Fatalf("could not find non-default pane: baseline=%q work=%q other=%q", baseline, work, other)
 	}
 	t.Setenv("TMUX_PANE", injected)
-	contaminated := tmux.NewServer(tmux.ServerOptions{
+	contaminated := mustNewTmuxServer(t, tmux.ServerOptions{
 		SocketPath:         server.SocketPath(),
 		ConfigFile:         server.ConfigFile(),
 		ProcessEnvironment: os.Environ(),

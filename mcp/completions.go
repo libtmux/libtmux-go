@@ -5,19 +5,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// complete offers the values a resource template variable or a prompt argument
-// can actually take.
-//
-// This is the one part of the server a client fills in rather than reads. A
-// model choosing a pane guesses %1 and finds out by failing; a person filling
-// tmux://panes/{pane} in a client's picker is offered the panes that exist.
-// MCP has no completion for tool arguments, so this reaches the resources and
-// prompts and not the twenty tools, which is worth knowing before expecting it
-// everywhere.
+// complete offers live values for resource-template and prompt arguments; MCP
+// does not define tool-argument completion.
 func (t *tools) complete(
 	ctx context.Context,
 	request *mcp.CompleteRequest,
@@ -31,11 +23,9 @@ func (t *tools) complete(
 	forURI := request.Params.Ref == nil || request.Params.Ref.Type != "ref/prompt"
 	values, err := t.completionValues(ctx, argument.Name, already, forURI)
 	if err != nil {
-		// A completion that cannot be computed is an empty list rather than a
-		// failure: a client asking what a value could be should not have its
-		// picker error because tmux is momentarily unreachable.
-		//nolint:nilerr // an unreachable tmux offers nothing to complete, which
-		// is not a failure of the picker someone is typing in.
+		if t.runtime.isTerminalError(err) {
+			return nil, err
+		}
 		return &mcp.CompleteResult{Completion: mcp.CompletionResultDetails{
 			Values: []string{},
 		}}, nil
@@ -47,8 +37,7 @@ func (t *tools) complete(
 			matching = append(matching, value)
 		}
 	}
-	// The protocol caps a page at a hundred, and saying there are more is the
-	// difference between a short list and a truncated one.
+	// MCP caps a completion page at 100 values.
 	const limit = 100
 	details := mcp.CompletionResultDetails{Total: len(matching), Values: matching}
 	if len(matching) > limit {
@@ -58,17 +47,8 @@ func (t *tools) complete(
 	return &mcp.CompleteResult{Completion: details}, nil
 }
 
-// completionValues answers what one variable can be.
-//
-// The names are the ones the resource templates and prompts use, so a variable
-// added there is completed here by having been named the same.
-//
-// The two callers do not speak the same dialect, and a value is only useful in
-// the one that asked. A resource slot is pasted into a path, where an id
-// carries no sigil and a name has to be escaped. A prompt argument is read
-// back by a model and handed to paneId, where tmux's own spelling is the only
-// one any tool accepts. Answering both in the URI dialect is what made a
-// completed prompt name a pane that every tool rejects.
+// completionValues emits URI-safe values for resource slots and tmux-native
+// identifiers for prompt arguments.
 func (t *tools) completionValues(
 	ctx context.Context,
 	name string,
@@ -93,8 +73,6 @@ func (t *tools) completionValues(
 		}
 		values := make([]string, 0, len(windows.Windows))
 		for _, window := range windows.Windows {
-			// A session already chosen narrows the windows offered, which is
-			// the point of being told what is filled in so far.
 			if session := already["session"]; session != "" && window.Session != session {
 				continue
 			}
@@ -119,8 +97,7 @@ func (t *tools) completionValues(
 	}
 }
 
-// withoutSigil drops the sigil for a URI slot and keeps it everywhere else. A
-// percent sign begins an escape, so it is not what a client puts in a path.
+// withoutSigil avoids treating a pane's percent sigil as a URI escape.
 func withoutSigil(id, sigil string, forURI bool) string {
 	if !forURI {
 		return id
@@ -128,8 +105,6 @@ func withoutSigil(id, sigil string, forURI bool) string {
 	return strings.TrimPrefix(id, sigil)
 }
 
-// forPath escapes a name for a URI slot. A session may be called anything, and
-// a client pastes what it is offered straight into the path.
 func forPath(name string, forURI bool) string {
 	if !forURI {
 		return name
@@ -137,12 +112,16 @@ func forPath(name string, forURI bool) string {
 	return url.PathEscape(name)
 }
 
-// completionFor builds the handler the server options take, which is set
-// before the tools value exists.
-func completionFor(target tmux.Server) func(
-	context.Context, *mcp.CompleteRequest,
+func (t *tools) completeObserved(
+	ctx context.Context,
+	request *mcp.CompleteRequest,
 ) (*mcp.CompleteResult, error) {
-	completing := &tools{}
-	completing.reaching.Store(&target)
-	return completing.complete
+	requestCtx, acquired, err := t.acquireRequestRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer acquired.release()
+	result, err := t.complete(requestCtx, request)
+	t.runtime.observe(err)
+	return result, err
 }

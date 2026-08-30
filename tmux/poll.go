@@ -14,15 +14,10 @@ var ErrPollCondition = errors.New("tmux: poll condition is required")
 // Poll checks condition immediately and then after each interval, until it
 // reports true, returns an error, or ctx ends.
 //
-// tmux accepts keys before the program in a pane has run them, so reading a
-// command's output back is a wait rather than a read. This is that wait. It is
-// not [Server.WaitFor], which signals tmux's own wait-for channel between
-// commands and cannot observe what a pane printed.
-//
-// Poll returns ctx.Err when the context ends first, so a caller bounds the wait
-// by giving ctx a deadline rather than by passing a second timeout. A condition
-// receives ctx and must observe it itself; Poll cannot interrupt one that is
-// already running. Condition errors are returned unchanged.
+// A condition receives ctx and must observe cancellation itself; Poll cannot
+// interrupt one already running. Poll returns condition errors unchanged and
+// ctx.Err when ctx ends first. Use Poll to wait for pane output;
+// [Server.WaitFor] signals tmux's separate wait-for channel.
 func Poll(
 	ctx context.Context,
 	interval time.Duration,

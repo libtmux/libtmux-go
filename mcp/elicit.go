@@ -10,34 +10,9 @@ import (
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// The one pane where being wrong is not recoverable.
-//
-// Every pane summary carries isCaller, and until now that was the whole of the
-// protection: the server said which pane it was running in and trusted whoever
-// read it not to type into it. That is a note in a reply, and a model with
-// forty tools and a task does not always read the note. Typing into the caller
-// pane feeds keystrokes to the terminal the conversation is happening in --
-// interrupting the client, or answering a prompt nobody saw -- and no later
-// call undoes it.
-//
-// So a write to that pane asks first. MCP has a way to ask: elicitation puts
-// the question to the person, in their own client, and answers accept, decline,
-// or cancel.
-//
-// What counts as a write is what reaches the person's keyboard or their shell:
-// keys, pasted text, a command, a restart, a clear, an ending, and entering
-// copy mode, which takes their keystrokes away from their shell. Splitting the
-// pane is not one -- an agent that finds its own pane and makes room beside it
-// is the ordinary opening move -- and neither is exit_copy_mode, which is the
-// way out of the one mode that is.
-//
-// A client that cannot be asked is not blocked. Elicitation is negotiated at
-// initialize, so a client that did not declare it gets the behaviour it had
-// before, which is the write going through with isCaller reported beside it.
-// This is a guard rail rather than a boundary, and the package documentation
-// says plainly that the tools are not a sandbox: a caller with send_keys can
-// run anything the user can. Refusing every write on every client that cannot
-// answer would break them all to enforce something that was never enforceable.
+// Caller-pane writes and teardown require elicitation because they can disrupt
+// the terminal carrying the conversation. Clients without elicitation are refused.
+// Entering copy mode is guarded; splitting and exit_copy_mode are not.
 
 // callerWriteGuard is what a caller is told when the person says no.
 const callerWriteGuard = "the person declined: %s is the pane this server " +
@@ -77,23 +52,12 @@ func (t *tools) resolvePaneToWrite(
 	return pane, nil
 }
 
-// resolvePaneToDeliver resolves the pane a keystroke is aimed at and refuses
-// one that cannot read it.
+// resolvePaneToDeliver is the target-resolution seam for input tools, applying
+// caller-pane and input-state guards. Non-input mutations use
+// resolvePaneToWrite so dead panes remain addressable.
 //
-// Tools that type call this instead of resolvePaneToWrite, for the same reason
-// write tools call that instead of resolvePane: a tool added later is guarded
-// by the way it finds its target rather than by remembering to ask. Delivering
-// a tool is what it means to be one of these, so the set cannot be listed
-// wrongly or fall out of date.
-//
-// The tool names itself rather than being read off the request, because a
-// batched call carries the batch's name and a refusal has to say which of its
-// calls stopped it.
-//
-// Tools that change a pane without typing into it keep resolvePaneToWrite. A
-// dead pane is a reasonable target for clearing, for respawning, and for
-// entering a mode: a person attached to that session scrolls a corpse by hand,
-// which no capture does for them.
+// tool is explicit because batched requests name the batch; refusals must
+// identify the nested tool.
 func (t *tools) resolvePaneToDeliver(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -123,7 +87,10 @@ func (t *tools) confirmCallerWrite(
 	if request == nil || request.Session == nil {
 		return nil
 	}
-	caller := t.callerIdentityFor(ctx)
+	caller, err := t.callerIdentityFor(ctx)
+	if err != nil {
+		return err
+	}
 	isCaller := caller.isCaller(pane, t.socketPath(ctx))
 	if isCaller == nil || !*isCaller {
 		return nil
@@ -187,20 +154,23 @@ func (t *tools) confirmCallerLoss(
 
 // callerPaneOnThisServer is the caller's own pane, when this process runs in
 // one of the panes of the server it drives.
-func (t *tools) callerPaneOnThisServer(ctx context.Context) (tmux.Pane, bool) {
-	caller := t.callerIdentityFor(ctx)
+func (t *tools) callerPaneOnThisServer(ctx context.Context) (tmux.Pane, bool, error) {
+	caller, err := t.callerIdentityFor(ctx)
+	if err != nil {
+		return tmux.Pane{}, false, err
+	}
 	if !caller.inside {
-		return tmux.Pane{}, false
+		return tmux.Pane{}, false, nil
 	}
 	socket := t.socketPath(ctx)
 	if socket == "" || resolvePath(socket) != caller.socket {
-		return tmux.Pane{}, false
+		return tmux.Pane{}, false, nil
 	}
-	pane, err := t.tmux().Pane(ctx, tmux.PaneID(caller.paneID))
+	pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(caller.paneID))
 	if err != nil {
-		return tmux.Pane{}, false
+		return tmux.Pane{}, false, err
 	}
-	return pane, true
+	return pane, true, nil
 }
 
 // askAboutTheCaller puts one yes-or-no question to the person and turns the
@@ -232,14 +202,7 @@ func (t *tools) askAboutTheCaller(
 		RequestedSchema: schema,
 	})
 	if err != nil {
-		// A client that cannot be asked is refused rather than waved through.
-		// Letting it through made the guard advisory exactly where it matters
-		// most: the client least able to warn its person is the one that types
-		// into their terminal unannounced, which is what happened -- a session
-		// identifying its own server ran a command against the caller pane and
-		// put the text in its user's prompt box. Writing to the terminal the
-		// conversation is happening in is almost always a mistake, and naming
-		// another pane is the whole of the way out.
+		// Caller-pane writes fail closed when the client cannot elicit consent.
 		logToClient(ctx, request, "debug", map[string]any{
 			"event": "caller-pane write refused, nobody to ask",
 			"pane":  identifier,
@@ -256,37 +219,32 @@ func (t *tools) askAboutTheCaller(
 	return nil
 }
 
-// rememberedSessions bounds how many clients' answers are kept at once.
-//
-// Nothing tells this server that a session has gone -- the SDK offers no
-// closed hook -- so the map would otherwise grow for the life of a hosted
-// server. A stdio server has one session and never reaches this; exceeding it
-// costs one client being asked again, which is the safe direction.
-const rememberedSessions = 32
-
 // allowed reports a pane this session already said yes to for the rest of it.
 func (t *tools) allowed(request *mcp.CallToolRequest, pane string) bool {
-	t.consentMutex.Lock()
-	defer t.consentMutex.Unlock()
-	return t.consented[request.Session][pane]
+	if request == nil || request.Session == nil {
+		return false
+	}
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return false
+	}
+	scope.mutex.Lock()
+	defer scope.mutex.Unlock()
+	return !scope.closed && scope.consent[pane]
 }
 
 // remember keeps one session's yes about one pane.
 func (t *tools) remember(request *mcp.CallToolRequest, pane string) {
-	t.consentMutex.Lock()
-	defer t.consentMutex.Unlock()
-	if t.consented == nil {
-		t.consented = map[*mcp.ServerSession]map[string]bool{}
+	if request == nil || request.Session == nil {
+		return
 	}
-	if _, known := t.consented[request.Session]; !known &&
-		len(t.consented) >= rememberedSessions {
-		// Forgetting everything rather than choosing whose answer to drop:
-		// the choice would need an ordering nothing here keeps, and the cost
-		// of being wrong is one question asked again.
-		clear(t.consented)
+	scope, err := t.instance.scope(request.Session)
+	if err != nil {
+		return
 	}
-	if t.consented[request.Session] == nil {
-		t.consented[request.Session] = map[string]bool{}
+	scope.mutex.Lock()
+	defer scope.mutex.Unlock()
+	if !scope.closed {
+		scope.consent[pane] = true
 	}
-	t.consented[request.Session][pane] = true
 }

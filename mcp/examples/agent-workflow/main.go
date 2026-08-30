@@ -1,14 +1,8 @@
-// Command agent-workflow drives the tmux MCP server the way an agent does.
+// Command agent-workflow demonstrates caller-pane discovery, pane creation,
+// command execution, waiting, and topology inspection.
 //
-// It does the four things an agent needs to do before it can be useful in
-// somebody's terminal: work out which pane it is itself running in, make room
-// beside it, run something there and wait for the result, and report the shape
-// of what it built.
-//
-// The client and the server are joined in memory rather than over a pipe, so
-// this is one program rather than two. Everything else — the tool names, their
-// arguments, the shape of what comes back — is exactly what a client speaking
-// to libtmux-mcp over stdin and stdout sees.
+// Its in-memory client uses the same tool names, arguments, and reply shapes as
+// a stdio client.
 //
 //	go run ./examples/agent-workflow -socket-name my-application
 package main
@@ -29,6 +23,12 @@ import (
 func main() {
 	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default")
 	flag.Parse()
+	if _, set := os.LookupEnv(tmuxmcp.CapabilitiesEnvironmentVariable); !set {
+		if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "operate"); err != nil {
+			fmt.Fprintln(os.Stderr, "agent-workflow:", err)
+			os.Exit(1)
+		}
+	}
 
 	if err := run(*socketName); err != nil {
 		fmt.Fprintln(os.Stderr, "agent-workflow:", err)
@@ -40,11 +40,15 @@ func run(socketName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	session, err := connect(ctx, tmux.NewServer(tmux.ServerOptions{SocketName: socketName}))
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: socketName})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = session.Close() }()
+	session, closeSession, err := connect(ctx, target)
+	if err != nil {
+		return err
+	}
+	defer closeSession()
 
 	// Which tmux is this, and are we inside it? A pane reported with isCaller
 	// true is the terminal this program is running in, so acting on it acts on
@@ -221,19 +225,36 @@ func window(ctx context.Context, session *sdk.ClientSession, paneID string) stri
 // Over a pipe this is the client's job and the server is a subprocess; the
 // tool calls either side of it are the same, which is why an example can do
 // both halves and still show the real thing.
-func connect(ctx context.Context, target tmux.Server) (*sdk.ClientSession, error) {
+func connect(
+	ctx context.Context,
+	target tmux.Server,
+) (*sdk.ClientSession, func(), error) {
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	if _, err := tmuxmcp.NewServer(target).Connect(ctx, serverTransport, nil); err != nil {
-		return nil, fmt.Errorf("start the server: %w", err)
+	instance, err := tmuxmcp.NewServer(target)
+	if err != nil {
+		return nil, nil, fmt.Errorf("construct the server: %w", err)
+	}
+	serverSession, err := instance.Connect(
+		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
+	)
+	if err != nil {
+		_ = instance.Close()
+		return nil, nil, fmt.Errorf("start the server: %w", err)
 	}
 	client := sdk.NewClient(&sdk.Implementation{
 		Name: "agent-workflow", Version: "1",
 	}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
-		return nil, fmt.Errorf("connect a client: %w", err)
+		_ = serverSession.Close()
+		_ = instance.Close()
+		return nil, nil, fmt.Errorf("connect a client: %w", err)
 	}
-	return session, nil
+	return session, func() {
+		_ = session.Close()
+		_ = serverSession.Close()
+		_ = instance.Close()
+	}, nil
 }
 
 // call runs one tool and decodes its structured result.

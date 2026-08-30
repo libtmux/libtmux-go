@@ -40,18 +40,18 @@ import (
 func TestPaneRespawnPasteAndPipeAgainstRealTmux(t *testing.T) {
 	baseServer := tmuxtest.NewServer(context.Background(), t)
 	warnings := make([]tmux.Warning, 0, 1)
-	server := tmux.NewServer(tmux.ServerOptions{
+	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketPath:         baseServer.SocketPath(),
 		ConfigFile:         baseServer.ConfigFile(),
 		ProcessEnvironment: baseServer.ProcessEnvironment(),
-		// This test covers the reduced command and the warning that
-		// reports it. Refusing is the default; see
-		// tmux.TestUnsupportedFeaturesAreRefusedByDefault.
-		Unsupported: tmux.DegradeUnsupported,
+		Unsupported:        tmux.DegradeUnsupported,
 		WarningHandler: func(warning tmux.Warning) {
 			warnings = append(warnings, warning)
 		},
 	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

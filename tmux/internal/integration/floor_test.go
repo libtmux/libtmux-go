@@ -28,21 +28,8 @@ var workflowGoVersions = regexp.MustCompile(`(?m)^\s+go-version:\s*\[([^\]]+)\]`
 // prose wraps and a requirement split across two lines is still a requirement.
 var documentedFloor = regexp.MustCompile(`\bGo\s+(\d+\.\d+)(?:\+|\b)`)
 
-// TestEveryStatementOfTheLanguageFloorAgrees gates a version that several files
-// carry and nothing derives.
-//
-// The floor tracks upstream's support window, so it moves, and every place
-// stating it has to move with it. No tool reports a disagreement: the go
-// directive does not gate standard library APIs, so a build succeeds either
-// way, and go vet reads only the module it runs in. A lint configuration left
-// behind stops offering the syntax the floor unlocked, a workflow left behind
-// tests a release nothing claims to support, and a README left behind is simply
-// wrong.
-//
-// Unlike a require directive there is no upstream to check against -- a floor
-// is a decision rather than a copy of something. The core module's go directive
-// is the one the go command itself obeys, so it is the one the rest are read
-// against.
+// The core go directive is the authoritative language floor. Every module,
+// workflow, linter, and reader-facing statement must agree with it.
 func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 	t.Parallel()
 
@@ -64,9 +51,9 @@ func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 
 	for _, module := range modules {
 		state(filepath.ToSlash(filepath.Join(module, "go.mod")), goDirective)
+		state(filepath.ToSlash(filepath.Join(module, ".golangci.yml")), lintGoVersion)
 	}
 	state("go.work", goDirective)
-	state(".golangci.yml", lintGoVersion)
 	state(".github/workflows/tests.yml", workflowGoVersions)
 
 	// The workflow names a range, and only its oldest entry claims anything
@@ -90,9 +77,7 @@ func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 		}
 	}
 
-	// Every markdown file, rather than the ones remembered as stating it. The
-	// gate that read only the README missed three that told a reader to install
-	// Go 1.23, which the modules had left three raises behind.
+	// Scan every Markdown file so unlisted copies cannot drift.
 	for _, document := range markdownFiles(t, root) {
 		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(document)))
 		if err != nil {

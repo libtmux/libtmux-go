@@ -27,13 +27,7 @@ var documentationLinkPattern = regexp.MustCompile(
 	`\[(?:[A-Z_][A-Za-z0-9_]*(?:\.[A-Z_][A-Za-z0-9_]*)*|[a-z_][A-Za-z0-9_]*\.[A-Z_][A-Za-z0-9_]*(?:\.[A-Z_][A-Za-z0-9_]*)*)\]`,
 )
 
-// exampleWorkflows returns every runnable example program, discovered from the
-// examples module rather than listed.
-//
-// A listed one is a list to keep in step with the directory, and the gates that
-// consume it disagreed once already: an example was added, one list learned
-// about it, and the gate that builds and runs each program did not, so the
-// example nobody remembered to add was the one nothing ran.
+// exampleWorkflows discovers every runnable program in the examples module.
 func exampleWorkflows(t *testing.T) []string {
 	t.Helper()
 
@@ -1162,15 +1156,8 @@ func taskIndexSymbols(t *testing.T) []string {
 	return nil
 }
 
-// TestTaskIndexEntryPointsCarryRunnableExamples holds the package doc's task
-// index to the standard a reader expects of it.
-//
-// The index is the first screen pkg.go.dev renders, and it is where a reader
-// who knows what they want to do finds the symbol that does it. Landing on a
-// symbol page with a signature and prose but nothing to copy is the state this
-// test exists to prevent. It is a gate rather than a one-time sweep because
-// coverage decays: an entry added with the feature it documents passes review
-// while quietly reopening the gap.
+// TestTaskIndexEntryPointsCarryRunnableExamples requires every package
+// task-index entry point to have a runnable example.
 func TestTaskIndexEntryPointsCarryRunnableExamples(t *testing.T) {
 	t.Parallel()
 

@@ -44,25 +44,7 @@ func (s Session) ID() SessionID { return s.sessionID }
 // Server returns the immutable configured handle that produced the session.
 func (s Session) Server() Server { return s.server }
 
-// WithServer returns a copy of the session whose operations run through server.
-// It is the write half of [Session.Server] and queries tmux for nothing: a
-// record holds its handle as a plain field, so moving one onto a handle that
-// selected an [Engine] with [Server.WithEngine] costs a struct copy rather than
-// a second lookup.
-//
-// It exists because a record keeps the handle that produced it. One obtained
-// before an engine was selected keeps starting a tmux process for every command
-// and reports no error while doing so, which is the failure this turns into a
-// one-line fix.
-//
-// Nothing checks that server addresses the same tmux server, because nothing
-// here talks to tmux. A record moved onto a handle with another socket resolves
-// against whatever answers there and reports a missing target at its next
-// command rather than at this call.
-//
-// [Session.Windows] and [Session.Panes] carry the handle of the record they are
-// read from, so one move covers the relations reached through it.
-func (s Session) WithServer(server Server) Session {
+func (s Session) withServer(server Server) Session {
 	s.server = server
 	return s
 }
@@ -71,19 +53,15 @@ func (s Session) WithServer(server Server) Session {
 // winlink views, and reports whether the receiver carries relations at all.
 //
 // It never queries tmux. [Server.Snapshot] and the resolvers carry relations; a
-// targeted point lookup, [Session.Refresh], and [Server.NewSession] do not, and
-// report false rather than no windows. The distinction is not decoration: tmux
-// destroys a session when its last window closes, so a materialized session
-// with no windows does not exist, and reporting one would be a record that
-// silently traverses to nothing. Use [Session.SearchWindows] with a nil filter
-// for the session's current windows.
+// targeted lookup, refresh, or creation reports false rather than an empty
+// relation. Use [Session.SearchWindows] for current live windows.
 func (s Session) Windows() ([]Window, bool) {
 	if s.snapshot == nil || !s.snapshot.listed.holds(listedWindows) {
 		return nil, false
 	}
 	return boundTo(
 		valuesAt(s.snapshot.windows, s.snapshot.windowsBySession[s.sessionID]),
-		Window.WithServer,
+		Window.withServer,
 		s.server,
 	), true
 }
@@ -92,16 +70,15 @@ func (s Session) Windows() ([]Window, bool) {
 // views, and reports whether the receiver carries relations at all.
 //
 // It never queries tmux. [Server.Snapshot] and the resolvers carry relations; a
-// targeted point lookup, [Session.Refresh], and [Server.NewSession] do not, and
-// report false rather than no panes. Use [Session.SearchPanes] with a nil
-// filter for the session's current panes.
+// targeted lookup, refresh, or creation reports false rather than an empty
+// relation. Use [Session.SearchPanes] for current live panes.
 func (s Session) Panes() ([]Pane, bool) {
 	if s.snapshot == nil || !s.snapshot.listed.holds(listedPanes) {
 		return nil, false
 	}
 	return boundTo(
 		valuesAt(s.snapshot.panes, s.snapshot.panesBySession[s.sessionID]),
-		Pane.WithServer,
+		Pane.withServer,
 		s.server,
 	), true
 }
@@ -131,25 +108,7 @@ func (w Window) Index() int { return w.windowIndex }
 // Server returns the configured handle that produced the window.
 func (w Window) Server() Server { return w.server }
 
-// WithServer returns a copy of the window whose operations run through server.
-// It is the write half of [Window.Server] and queries tmux for nothing: a
-// record holds its handle as a plain field, so moving one onto a handle that
-// selected an [Engine] with [Server.WithEngine] costs a struct copy rather than
-// a second lookup.
-//
-// It exists because a record keeps the handle that produced it. One obtained
-// before an engine was selected keeps starting a tmux process for every command
-// and reports no error while doing so, which is the failure this turns into a
-// one-line fix.
-//
-// Nothing checks that server addresses the same tmux server, because nothing
-// here talks to tmux. A record moved onto a handle with another socket resolves
-// against whatever answers there and reports a missing target at its next
-// command rather than at this call.
-//
-// [Window.Session] and [Window.Panes] carry the handle of the record they are
-// read from, so one move covers the relations reached through it.
-func (w Window) WithServer(server Server) Window {
+func (w Window) withServer(server Server) Window {
 	w.server = server
 	return w
 }
@@ -164,19 +123,15 @@ func (w Window) Session() (Session, bool) {
 	if !ok {
 		return Session{}, false
 	}
-	return session.WithServer(w.server), true
+	return session.withServer(w.server), true
 }
 
 // Panes returns newly allocated shallow copies of panes for this exact winlink,
 // and reports whether the receiver carries relations at all.
 //
 // It never queries tmux. [Server.Snapshot], the resolvers, and
-// [Session.NewWindow] carry relations; a targeted point lookup and
-// [Window.Refresh] do not, and report false rather than no panes. tmux destroys
-// a window when its last pane closes, so a materialized window with no panes
-// does not exist: false is the only thing an empty result could honestly mean,
-// and this is where it is said. Use [Window.SearchPanes] with a nil filter for
-// the window's current panes.
+// [Session.NewWindow] carry relations; a targeted lookup or refresh reports
+// false instead. Use [Window.SearchPanes] for current live panes.
 func (w Window) Panes() ([]Pane, bool) {
 	if w.snapshot == nil || !w.snapshot.listed.holds(listedPanes) {
 		return nil, false
@@ -184,7 +139,7 @@ func (w Window) Panes() ([]Pane, bool) {
 	key := winlinkKey{sessionID: w.sessionID, windowID: w.windowID, index: w.windowIndex}
 	return boundTo(
 		valuesAt(w.snapshot.panes, w.snapshot.panesByWinlink[key]),
-		Pane.WithServer,
+		Pane.withServer,
 		w.server,
 	), true
 }
@@ -223,28 +178,7 @@ func (p Pane) Index() int { return p.paneIndex }
 // Server returns the configured handle that produced the pane.
 func (p Pane) Server() Server { return p.server }
 
-// WithServer returns a copy of the pane whose operations run through server. It
-// is the write half of [Pane.Server] and queries tmux for nothing: a record
-// holds its handle as a plain field, so moving one onto a handle that selected
-// an [Engine] with [Server.WithEngine] costs a struct copy rather than a second
-// lookup.
-//
-// It exists because a record keeps the handle that produced it. One obtained
-// before an engine was selected keeps starting a tmux process for every command
-// and reports no error while doing so, which is the failure this turns into a
-// one-line fix.
-//
-// Nothing checks that server addresses the same tmux server, because nothing
-// here talks to tmux. A record moved onto a handle with another socket resolves
-// against whatever answers there and reports a missing target at its next
-// command rather than at this call.
-//
-// [Pane.Session] and [Pane.Window] carry the handle of the record they are read
-// from, so one move covers the relations reached through it. [Pane.Capture] and
-// [Pane.CaptureBytes] still start a process on any handle, because they promise
-// tmux's own stdout bytes; [Pane.CaptureToFile] is the pane read that stays on
-// the engine.
-func (p Pane) WithServer(server Server) Pane {
+func (p Pane) withServer(server Server) Pane {
 	p.server = server
 	return p
 }
@@ -259,7 +193,7 @@ func (p Pane) Session() (Session, bool) {
 	if !ok {
 		return Session{}, false
 	}
-	return session.WithServer(p.server), true
+	return session.withServer(p.server), true
 }
 
 // Window returns this pane's exact winlink record when it remains in the same
@@ -273,7 +207,7 @@ func (p Pane) Window() (Window, bool) {
 	if !ok {
 		return Window{}, false
 	}
-	return window.WithServer(p.server), true
+	return window.withServer(p.server), true
 }
 
 // Client is one materialized tmux client record. It is normally returned by
@@ -300,30 +234,6 @@ type clientAttachment struct {
 // Server returns the configured handle that produced the client.
 func (c Client) Server() Server { return c.server }
 
-// WithServer returns a copy of the client whose operations run through server.
-// It is the write half of [Client.Server] and queries tmux for nothing: a
-// record holds its handle as a plain field, so moving one onto a handle that
-// selected an [Engine] with [Server.WithEngine] costs a struct copy rather than
-// a second lookup.
-//
-// It exists because a record keeps the handle that produced it. One obtained
-// before an engine was selected keeps starting a tmux process for every command
-// and reports no error while doing so, which is the failure this turns into a
-// one-line fix.
-//
-// Nothing checks that server addresses the same tmux server, because nothing
-// here talks to tmux. A record moved onto a handle with another socket resolves
-// against whatever answers there and reports a missing target at its next
-// command rather than at this call.
-//
-// [Client.AttachedSession], [Client.AttachedWindow], and [Client.AttachedPane]
-// carry the handle of the record they are read from, so one move covers the
-// relations reached through it.
-func (c Client) WithServer(server Server) Client {
-	c.server = server
-	return c
-}
-
 // Name returns the stable tmux name of this client.
 func (c Client) Name() ClientName { return c.clientName }
 
@@ -337,7 +247,7 @@ func (c Client) AttachedSession() (Session, bool) {
 	if !ok {
 		return Session{}, false
 	}
-	return session.WithServer(c.server), true
+	return session.withServer(c.server), true
 }
 
 // AttachedWindow returns the client's exact materialized winlink, if present
@@ -355,7 +265,7 @@ func (c Client) AttachedWindow() (Window, bool) {
 	if !ok {
 		return Window{}, false
 	}
-	return window.WithServer(c.server), true
+	return window.withServer(c.server), true
 }
 
 // AttachedPane returns the client's exact materialized pane view, if present
@@ -376,14 +286,10 @@ func (c Client) AttachedPane() (Pane, bool) {
 	if !ok {
 		return Pane{}, false
 	}
-	return pane.WithServer(c.server), true
+	return pane.withServer(c.server), true
 }
 
-// boundTo moves every value onto server through the model's own WithServer
-// method expression. Relation accessors read records out of a snapshot the
-// handle that built it owns, so without this a record moved with WithServer
-// would hand back children still bound to the handle it was moved off, which is
-// the trap WithServer exists to close.
+// boundTo keeps relations on the server handle selected by the parent record.
 func boundTo[T any](values []T, bind func(T, Server) T, server Server) []T {
 	for index := range values {
 		values[index] = bind(values[index], server)

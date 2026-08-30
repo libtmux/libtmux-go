@@ -5,6 +5,8 @@ stdout.
 
 Which tmux server it serves is chosen by flags at startup and cannot be changed
 by a client, so a client reaches only the socket the operator selected.
+It requires tmux 3.2a or newer and refuses an older binary before the MCP
+transport starts.
 
 ## Installing it
 
@@ -22,14 +24,16 @@ $ libtmux-mcp -version
 ```
 
 ```
-libtmux-mcp v0.0.1-alpha.5
+libtmux-mcp v0.0.1-alpha.7
 ```
 
 List every tool the server exposes, as a client would see them:
 
 ```console
-$ libtmux-mcp -tools -socket-name my-application
+$ libtmux-mcp -tools
 ```
+
+Tool listing does not resolve or contact tmux.
 
 Check that the server can reach the tmux it was pointed at:
 
@@ -46,12 +50,15 @@ $ libtmux-mcp -socket-name my-application
 ```
 
 It then waits on stdin. Nothing is printed, because stdout is the protocol.
+With no access configuration it exposes topology metadata only. Set
+`LIBTMUX_MCP_CAPABILITIES=operate` in the client-managed environment for the
+ordinary content, pane, workspace, layout, and settings tools.
 
 ## Worth knowing
 
-**`context canceled` on exit is not a fault.** It is the server handling the
-SIGTERM it gets when a client tears the transport down, including when a
-client's connect timeout fires.
+**`libtmux-mcp: terminated signal received` is not a fault.** It is the server
+handling the SIGTERM it gets when a client tears the transport down, including
+when a client's connect timeout fires.
 
 **Give it the environment a client would.** A client starts its servers with a
 curated environment, not your shell's. Without a UTF-8 locale tmux rewrites

@@ -5,9 +5,7 @@ import "context"
 // PasteBufferRequest configures one tmux paste-buffer operation. Its zero value
 // pastes the top buffer, replaces linefeeds with tmux's default carriage-return
 // separator, and uses the version's default control-character handling.
-// Pointer values are read and copied before any version probe or command; the
-// call retains none of the caller's storage. Callers must not mutate them
-// concurrently.
+// Pointer values are copied before I/O and must not be mutated concurrently.
 type PasteBufferRequest struct {
 	// BufferName selects a named tmux buffer. Nil selects the top buffer;
 	// nonnil empty remains an explicit buffer name.
@@ -25,15 +23,13 @@ type PasteBufferRequest struct {
 	// Separator replaces linefeeds. Nil uses tmux's default carriage return;
 	// nonnil empty removes linefeeds. LinefeedSeparator takes precedence.
 	Separator *string
-	// NoVis requests raw bytes on tmux 3.7 or newer. Older versions already
-	// paste raw bytes; the unsupported flag is omitted with a warning.
+	// NoVis requests raw bytes and requires tmux 3.7. Older versions already
+	// paste raw bytes; see UnsupportedPolicy.
 	NoVis bool
 }
 
-// PipePaneRequest configures a pane pipe. OutputOnly, InputOnly, and Toggle may
-// be combined. Command is read and copied before tmux is called; the call
-// retains none of the caller's storage, and callers must not mutate it
-// concurrently.
+// PipePaneRequest configures a pane pipe. Its flags may be combined. Command is
+// copied before I/O and must not be mutated concurrently.
 type PipePaneRequest struct {
 	// Command is a shell command for tmux's pipe process. Nil closes the current
 	// pipe; nonnil empty is an explicit operand that tmux also treats as stop.
@@ -56,11 +52,8 @@ type PipePaneRequest struct {
 // Respawn refreshes by PaneID, so the returned canonical [Pane] may carry a
 // different linked-session or winlink context. The process may be restarted
 // before refresh fails; in that case Respawn returns the original receiver and
-// the refresh error. Validation, transport, context, or completed-stderr
-// failures return a zero Pane. Completed stderr produces a [CommandError] that
-// retains only the exit code, while a nonzero exit without stderr is followed
-// by refresh. Context errors remain detectable with [errors.Is] but cannot
-// revoke a respawn already accepted by tmux.
+// the refresh error. Earlier failures return zero. Completed stderr produces a
+// redacted [CommandError]; a nonzero exit without stderr is followed by refresh.
 func (p Pane) Respawn(ctx context.Context, request RespawnRequest) (Pane, error) {
 	target, err := exactPaneTarget(p)
 	if err != nil {
@@ -84,8 +77,7 @@ func (p Pane) Respawn(ctx context.Context, request RespawnRequest) (Pane, error)
 	return refreshed, nil
 }
 
-// pipePaneArguments renders one pipe-pane argument vector. It performs no I/O,
-// so a [Plan] can render a pipe it has not opened.
+// pipePaneArguments renders a pipe for a [Plan] without I/O.
 func pipePaneArguments(target string, request PipePaneRequest) ([]string, error) {
 	if request.Command != nil {
 		if err := validateServerCommandArgument(
@@ -113,8 +105,7 @@ func pipePaneArguments(target string, request PipePaneRequest) ([]string, error)
 	return arguments, nil
 }
 
-// respawnArguments renders one respawn-pane or respawn-window argument vector.
-// It performs no I/O, so a [Plan] can render a respawn it has not run.
+// respawnArguments renders a pane or window respawn for a [Plan] without I/O.
 func respawnArguments(
 	command string,
 	target string,
@@ -136,12 +127,9 @@ func respawnArguments(
 // an exited target or missing named buffer fails before deletion, while
 // deletion after disabled pane input does not prove byte delivery.
 //
-// NoVis requires tmux 3.7. Older versions already paste raw bytes, so the flag
-// is omitted with a synchronous unsupported-feature warning. A version-probe
-// error stops execution. A completed command produces a [CommandError] only
-// when tmux writes stderr; the library-created error retains only the exit
-// code. A nonzero exit without stderr is ignored. Transport and context errors
-// remain detectable with [errors.Is], but accepted paste or deletion effects
+// NoVis requires tmux 3.7 and follows [UnsupportedPolicy]; older versions
+// already paste raw bytes. Only stderr produces a redacted [CommandError];
+// nonzero exits without stderr are ignored. Accepted paste or deletion effects
 // are not rolled back.
 func (p Pane) PasteBuffer(ctx context.Context, request PasteBufferRequest) error {
 	target, err := exactPaneTarget(p)
@@ -214,11 +202,8 @@ func copyOptionalString(value *string) *string {
 //
 // A nil Command, and an explicit empty Command under tmux semantics, stops the
 // current pipe. Successful return means tmux installed, toggled, or stopped the
-// pipe; it does not report child-shell success or pipe lifetime. A completed
-// invocation produces a [CommandError] only when tmux writes stderr; the
-// library-created error retains only the exit code. A nonzero exit without
-// stderr is ignored. Transport and context errors remain detectable with
-// [errors.Is], but an accepted pipe change is not rolled back.
+// pipe; it does not report child-shell success or lifetime. Only stderr produces
+// a redacted [CommandError]. Accepted pipe changes are not rolled back.
 func (p Pane) Pipe(ctx context.Context, request PipePaneRequest) error {
 	target, err := exactPaneTarget(p)
 	if err != nil {
