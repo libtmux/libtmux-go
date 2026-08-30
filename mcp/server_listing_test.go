@@ -126,7 +126,6 @@ func TestListServersUsesTargetsFrozenSocketDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	directory = selection.NamedDirectory
-	sibling = filepath.Join(directory, filepath.Base(sibling))
 	ambient, err = filepath.EvalSymlinks(ambient)
 	if err != nil {
 		t.Fatal(err)
