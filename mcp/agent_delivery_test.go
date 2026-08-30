@@ -2,7 +2,10 @@ package mcp_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -285,7 +288,23 @@ func TestSendKeysBatchDrivesAProgramThatReadsKeys(t *testing.T) {
 	session, _, ctx := connect(t)
 	workspace(ctx, t, session, "session_name: keys\nwindows:\n  - panes:\n      - {}\n")
 	pane := firstPane(ctx, t, session)
-	run(ctx, t, session, pane, "true")
+	directory := t.TempDir()
+	ready := filepath.Join(directory, "ready")
+	received := filepath.Join(directory, "received")
+	send(ctx, t, session, pane,
+		"stty -echo -icanon min 9 time 0; printf ready > "+strconv.Quote(ready)+
+			"; dd bs=1 count=9 of="+strconv.Quote(received)+" 2>/dev/null; stty sane")
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if written, err := os.ReadFile(ready); err == nil && string(written) == "ready" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(ready); err != nil {
+		t.Fatalf("the key reader did not become ready: %v", err)
+	}
 
 	var sent struct {
 		Sent   int    `json:"sent"`
@@ -301,19 +320,16 @@ func TestSendKeysBatchDrivesAProgramThatReadsKeys(t *testing.T) {
 		t.Errorf("sent %d keys, want 9", sent.Sent)
 	}
 
-	deadline := time.Now().Add(15 * time.Second)
+	deadline = time.Now().Add(15 * time.Second)
+	var written []byte
 	for time.Now().Before(deadline) {
-		var shown struct {
-			Lines []string `json:"lines"`
-		}
-		call(ctx, t, session, "capture_pane", map[string]any{"paneId": pane}, &shown)
-		if strings.Contains(strings.Join(shown.Lines, "\n"), "echo KEYS") {
-			// Nothing ran, which is the point: no Enter was appended.
+		written, _ = os.ReadFile(received)
+		if string(written) == "echo KEYS" {
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
-	t.Error("the keys did not reach the pane")
+	t.Errorf("the key reader got %q, want %q", written, "echo KEYS")
 }
 
 //libtmux:real-tmux
