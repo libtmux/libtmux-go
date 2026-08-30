@@ -7,6 +7,107 @@ version.
 Modules are tagged per directory, so each carries its own version: the core as
 `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`.
 
+## Unreleased
+
+### tmux
+
+- `NewServer` now reports construction errors, rejects invalid configuration,
+  and freezes the executable, environment, working directory, and socket
+  selection. The zero `Server` is invalid. (#9)
+- `Server.Executable`, `Server.SocketSelection`, and `Server.WithSocketPath`
+  expose and derive the frozen execution target without contacting tmux.
+  `Server.SocketPath` now returns the resolved absolute path. (#9)
+- Remove `CommandRunner`, `Engine`, `ControlPool`, `WithEngine`, the record
+  `WithServer` methods, and `ServerOptions.Runner`. Use an owned `Connection`,
+  re-resolve records on the target server, and use `ServerOptions.Binary` for
+  executable fixtures. (#9)
+- Add `Server.OpenControl`, `Session.OpenControl`, and
+  `Server.NewSessionConnection` for owned control-mode execution. On tmux 3.2a
+  through 3.5, destroying the attached session may close the connection
+  according to `detach-on-destroy`. (#9)
+- `ControlClient.Call` returns every reply frame from aliases that execute zero
+  or multiple commands. `ControlClient.Cmd` now returns
+  `ErrControlReplyCount` unless exactly one frame was produced. (#9)
+- `Session`, `Window`, `Pane`, `Client`, and plan references now retain
+  daemon identity. Values from a replaced daemon fail with
+  `ErrDaemonReplaced`, and matching identifiers from different daemons no
+  longer compare equal. (#9)
+- `Server.OpenNotifications` and `Session.OpenNotifications` add owned,
+  bounded notification streams. A full backlog drains its retained prefix
+  before returning `ErrControlNotificationOverflow`. (#9)
+- `NotificationOptions.PauseAfter` and `NotificationStream.ContinuePane` use
+  tmux's per-pane hold when a reader falls behind. Held output is not replayed,
+  so recapture pane content after continuing. (#9)
+- `Pane.OpenObservation` adds a baseline plus a serialized, gap-checked
+  notification reader. It permanently returns `ErrPaneObservationLost` when
+  the pane leaves its window or the stream ends, preserving tmux's exit reason.
+  (#9)
+- `Plan.RunWith` marks every operation in an ambiguous grouped failure as
+  `OpIndeterminate` and returns `ErrOutcomeUnknown`. The `Marked` planner and
+  `Dispatch.Marked` are removed; use `Sequential` for exact attribution.
+  (#9)
+- `Pane.SendKeySequence` sends an ordered key sequence in one tmux operation.
+  (#9)
+
+### mcp
+
+- MCP now supports tmux 3.2a or newer, lowered from 3.6. On tmux 3.2a through
+  3.5, destroying the attached session may end the instance. (#9)
+- Add `LIBTMUX_MCP_CAPABILITIES` as an independent access allowlist. Empty or
+  unset exposes metadata only; set `operate` to retain the previous
+  non-destructive surface. `display_message` also leaves `readonly`, because
+  tmux formats can execute shell commands. (#9)
+- `mcp.NewServer` now returns an owned `Instance`, and package-level `Connect`
+  is removed. Use `Instance.Connect`, `Run`, and `Close`; mark eligible
+  custom transports with `AssumeResponseCommit`. (#9)
+- `Instance` scopes consent, subscriptions, waits, and detached jobs to one
+  client and bounds unsettled calls. Exceeding a bound closes only the
+  offending client with `ErrRequestCapacity`. (#9)
+- `Instance` no longer adopts a replacement tmux daemon on the same socket.
+  Restart the MCP server after `ErrDaemonReplaced`. (#9)
+- `run_command` applies its effective timeout to setup, execution, and output
+  collection, preserves the pane shell's error mode, and refuses known
+  non-POSIX shells before delivery. (#9)
+- `get_job` now explains every unfinished answer, including zero-timeout polls,
+  and names the pane's current command when available. It distinguishes a
+  shell still starting from another program consuming the input. (#9)
+- `wait_for_text` matches readable terminal text across split UTF-8, control
+  sequences, and carriage-return or backspace overwrites. It also fails as soon
+  as the observed pane leaves its window. (#9)
+- `capture_since` now reports missed lines when tmux discarded a cursor
+  anchored on the pane's first row. (#9)
+- `create_session`, `create_window`, and `build_workspace` retain created
+  identifiers in error results when tmux completed the mutation before later
+  setup failed. (#9)
+- Buffer and wait-channel names now accept embedded whitespace. (#9)
+- Pane-content resources now advertise `text/plain`. Resource subscriptions
+  retain pane output only where requested and hand replacement observers over
+  without a notification gap. (#9)
+- Audit records now digest caller-supplied session names instead of recording
+  them in cleartext. (#9)
+- `AdvertisedTools` and `libtmux-mcp -tools` report the configured tool
+  surface without resolving or contacting tmux. (#9)
+- `mcp-swap` validates configuration and completes an MCP handshake before
+  changing files. Updates are atomic, preserve TOML and JSONC syntax, and
+  `--dry-run` performs the same validation without writing. (#9)
+- `list_panes` with `pathUnder` now treats symlinked directory spellings as
+  the same path while still excluding sibling prefixes. (#9)
+- `send_keys_batch` sends its sequence in one tmux command instead of starting
+  one process per key. (#9)
+- `list_servers` defaults to 100 results, caps requests at 1000, and applies
+  the limit before launching socket probes. A requested target is retained
+  even with a name filter; truncation is reported and directory-read failures
+  surface. (#9)
+
+### workspace
+
+- Add `Workspace.InitialSessionRequest` and `BuildInto`, allowing callers to
+  populate a session over a caller-owned connection without transferring
+  ownership. (#9)
+- `Build` now creates the session and temporary connection together, closes
+  the connection before returning, and verifies that the session survived.
+  (#9)
+
 ## v0.0.1-alpha.4, workspace/v0.0.1-alpha.4, mcp/v0.0.1-alpha.7
 
 ### tmux
