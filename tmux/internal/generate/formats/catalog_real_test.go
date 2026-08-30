@@ -21,7 +21,12 @@ func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	directory := t.TempDir()
+	//nolint:usetesting // t.TempDir can exceed the Unix socket path limit.
+	directory, err := os.MkdirTemp("", "ltg-formats")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
 	socket := filepath.Join(directory, "tmux.sock")
 	config := filepath.Join(directory, "tmux.conf")
 	if err := os.WriteFile(config, nil, 0o600); err != nil {
