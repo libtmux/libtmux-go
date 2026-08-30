@@ -292,44 +292,49 @@ func TestSendKeysBatchDrivesAProgramThatReadsKeys(t *testing.T) {
 	ready := filepath.Join(directory, "ready")
 	received := filepath.Join(directory, "received")
 	send(ctx, t, session, pane,
-		"stty -echo -icanon min 9 time 0; printf ready > "+strconv.Quote(ready)+
-			"; dd bs=1 count=9 of="+strconv.Quote(received)+" 2>/dev/null; stty sane")
-
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		if written, err := os.ReadFile(ready); err == nil && string(written) == "ready" {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if _, err := os.Stat(ready); err != nil {
-		t.Fatalf("the key reader did not become ready: %v", err)
-	}
+		"printf ready > "+strconv.Quote(ready)+
+			"; IFS= read -r first; printf '%s\\n' \"$first\" > "+strconv.Quote(received))
+	waitForDeliveryPath(ctx, t, ready)
 
 	var sent struct {
 		Sent   int    `json:"sent"`
 		PaneID string `json:"paneId"`
 	}
 	result := call(ctx, t, session, "send_keys_batch", map[string]any{
-		"paneId": pane, "keys": []string{"e", "c", "h", "o", "Space", "K", "E", "Y", "S"},
+		"paneId": pane,
+		"keys":   []string{"e", "c", "h", "o", "Space", "K", "E", "Y", "S", "Enter"},
 	}, &sent)
 	if result.IsError {
 		t.Fatalf("send_keys_batch: %#v", result.Content)
 	}
-	if sent.Sent != 9 {
-		t.Errorf("sent %d keys, want 9", sent.Sent)
+	if sent.Sent != 10 {
+		t.Errorf("sent %d keys, want 10", sent.Sent)
 	}
 
-	deadline = time.Now().Add(15 * time.Second)
-	var written []byte
-	for time.Now().Before(deadline) {
-		written, _ = os.ReadFile(received)
-		if string(written) == "echo KEYS" {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	waitForDeliveryPath(ctx, t, received)
+	written, err := os.ReadFile(received)
+	if err != nil {
+		t.Fatal(err)
 	}
-	t.Errorf("the key reader got %q, want %q", written, "echo KEYS")
+	if string(written) != "echo KEYS\n" {
+		t.Errorf("the key reader got %q, want %q", written, "echo KEYS\n")
+	}
+}
+
+func waitForDeliveryPath(ctx context.Context, t *testing.T, path string) {
+	t.Helper()
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("%s was not published: %v", filepath.Base(path), ctx.Err())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
 }
 
 //libtmux:real-tmux
