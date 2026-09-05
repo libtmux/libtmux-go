@@ -22,7 +22,7 @@ func wrapperScript(mark, openedPath, commandPath, statusPath, closedPath string)
 		"  ( set +e; . " + command + " )\n" +
 		"fi\n" +
 		"__libtmux_status=$?\n" +
-		publishRecord(`printf %s "$__libtmux_status"`, statusPath) +
+		publishRecord(`command printf %s "$__libtmux_status"`, statusPath) +
 		publishRecord(mark, closedPath) +
 		"exit 0\n" +
 		")\n"

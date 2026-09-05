@@ -97,6 +97,7 @@ func configuredPaneInputMembership(sourceID string, rows []paneInputSnapshotRow)
 	}
 
 	ids := make([]string, 0, len(configured))
+	seen := make(map[string]struct{}, len(configured))
 	for _, row := range configured {
 		dead, parseErr := parseStrictPaneFlag("pane_dead", row.Dead)
 		if parseErr != nil {
@@ -108,6 +109,10 @@ func configuredPaneInputMembership(sourceID string, rows []paneInputSnapshotRow)
 		if modeErr := requireSafePaneMode(row.InMode); modeErr != nil {
 			return empty, fmt.Errorf("pane %s: %w", row.PaneID, modeErr)
 		}
+		if _, exists := seen[row.PaneID]; exists {
+			continue
+		}
+		seen[row.PaneID] = struct{}{}
 		ids = append(ids, row.PaneID)
 	}
 	slices.Sort(ids)
@@ -221,9 +226,9 @@ type sendKeysBatchInput struct {
 	Literal bool `json:"literal,omitempty" jsonschema:"send the keys as characters rather than as tmux key names"`
 }
 
-// sendKeysBatchOutput reports what was sent.
+// sendKeysBatchOutput reports the source target and accepted key count.
 type sendKeysBatchOutput struct {
-	// PaneID is the pane that received the keys.
+	// PaneID is the resolved source target.
 	PaneID string `json:"paneId"`
 	// Sent is how many keys tmux accepted when the call succeeds.
 	Sent int `json:"sent"`
@@ -294,11 +299,11 @@ type pasteTextInput struct {
 	Enter bool `json:"enter,omitempty" jsonschema:"press Enter after the text"`
 }
 
-// pasteTextOutput reports what was pasted.
+// pasteTextOutput reports the source target and accepted paste byte count.
 type pasteTextOutput struct {
-	// PaneID is the pane that received the text.
+	// PaneID is the resolved source target.
 	PaneID string `json:"paneId"`
-	// Bytes is how many bytes were delivered.
+	// Bytes is how many text bytes tmux accepted for paste.
 	Bytes int `json:"bytes"`
 	// EnterPaneIDs is sorted configured preflight membership for optional Enter.
 	EnterPaneIDs []string `json:"enterPaneIds"`

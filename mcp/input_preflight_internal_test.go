@@ -90,6 +90,11 @@ func TestConfiguredPaneInputMembership(t *testing.T) {
 			want: []string{"%10", "%2"},
 		},
 		{
+			name: "source on deduplicates stable pane ids", source: "%2",
+			rows: []paneInputSnapshotRow{safe("%2", "1"), safe("%2", "1")},
+			want: []string{"%2"},
+		},
+		{
 			name: "source on rejects missing peer sync", source: "%2",
 			rows: []paneInputSnapshotRow{safe("%2", "1"), {PaneID: "%3"}}, errText: "pane_synchronized",
 		},
