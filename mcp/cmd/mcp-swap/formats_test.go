@@ -344,6 +344,10 @@ func TestSwapThenRevertIsByteIdentical(t *testing.T) {
 	}{
 		{"toml", codexConfig, client{key: "mcp_servers", format: formatTOML, dialect: dialectStandard}},
 		{"jsonc", opencodeConfig, client{key: "mcp", format: formatJSONC, dialect: dialectOpencode}},
+		{
+			"json", "{\n    \"theme\": \"system\",\n    \"mcpServers\": {\n        \"tmux\": {\"command\": \"old\"}\n    }\n}\n",
+			client{key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

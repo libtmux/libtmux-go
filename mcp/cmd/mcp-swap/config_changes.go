@@ -211,7 +211,17 @@ func planRestore(c client) (restoreChange, bool, error) {
 		return restoreChange{}, false,
 			errors.New("the current server entry is no longer the one mcp-swap wrote")
 	}
-	restored, err := restoreEntry(c, current, original)
+	// A normal revert can restore the recovery artifact verbatim. If something
+	// else changed after the swap, retain the existing entry-only restore so the
+	// neighbouring edit survives.
+	expected, err := renderEntryChange(c, original, entry)
+	if err != nil {
+		return restoreChange{}, false, fmt.Errorf("reconstruct swapped configuration: %w", err)
+	}
+	restored := original
+	if !bytes.Equal(current, expected) {
+		restored, err = restoreEntry(c, current, original)
+	}
 	if err != nil {
 		return restoreChange{}, false, err
 	}
