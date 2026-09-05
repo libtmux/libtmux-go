@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -435,16 +436,89 @@ func TestCapabilityManifestReadBatchUsesNestedSchemaValidation(t *testing.T) {
 		output.TruncatedBytes <= 0 || output.OnError != onErrorStop {
 		t.Fatalf("oversized batch = (%#v, %v), want retained compact success row", output, err)
 	}
-	encoded, err := json.Marshal(output)
-	if err != nil || len(encoded) > readBatchStructuredMaxBytes {
-		t.Fatalf("encoded oversized batch = %d bytes, limit %d, error %v",
-			len(encoded), readBatchStructuredMaxBytes, err)
+	overhead, err := defaultReadBatchResponseOverhead()
+	if err != nil {
+		t.Fatal(err)
 	}
-	result.StructuredContent = json.RawMessage(encoded)
-	wire, err := json.Marshal(result)
-	if err != nil || len(wire) >= readBatchWireMaxBytes {
-		t.Fatalf("serialized MCP result = %d bytes, cap %d, error %v",
-			len(wire), readBatchWireMaxBytes, err)
+	wireBytes, err := readBatchWireBytes(overhead, output)
+	if err != nil || wireBytes > readBatchWireMaxBytes {
+		t.Fatalf("complete JSON-RPC response = %d bytes, cap %d, error %v",
+			wireBytes, readBatchWireMaxBytes, err)
+	}
+	if got := result.Content[0].(*sdk.TextContent).Text; got != readBatchSummary(output) {
+		t.Fatalf("batch summary = %q, want %q", got, readBatchSummary(output))
+	}
+}
+
+func TestReadBatchBoundsTheCompleteJSONRPCResponse(t *testing.T) {
+	setCapabilityEnvironment(t, "", "call_read_tools_batch", "")
+	surface, err := resolveToolSurface(socketProfile{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := newToolRegistry(surface)
+	server := sdk.NewServer(&sdk.Implementation{Name: "wire-bound", Version: "1"}, nil)
+	if err := registerToolManifest(server, registry); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := strings.Repeat("x", 400_000)
+	registry.dispatchers["get_server_info"] = dispatcher{call: func(
+		context.Context, *sdk.CallToolRequest, json.RawMessage,
+	) (*sdk.CallToolResult, error) {
+		return &sdk.CallToolResult{
+			Content:           []sdk.Content{&sdk.TextContent{Text: payload}},
+			StructuredContent: map[string]any{"value": payload},
+		}, nil
+	}}
+	requestID := strings.Repeat("request-", 30_000)
+	id, err := jsonrpc.MakeID(requestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wireRequest := &jsonrpc.Request{ID: id, Method: "tools/call"}
+	if err := attachResponseOverhead(wireRequest); err != nil {
+		t.Fatal(err)
+	}
+	request := &sdk.CallToolRequest{Extra: wireRequest.Extra.(*sdk.RequestExtra)}
+	result, output, err := registry.runReadBatch(t.Context(), request, batchInput{Calls: []batchCall{
+		{Tool: "get_server_info"},
+		{Tool: "get_server_info"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedOutput, err := json.Marshal(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result.StructuredContent = json.RawMessage(encodedOutput)
+	encodedResult, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire, err := jsonrpc.EncodeMessage(&jsonrpc.Response{ID: id, Result: encodedResult})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wire)+1 > readBatchWireMaxBytes {
+		t.Fatalf("complete JSON-RPC response = %d bytes, cap %d", len(wire)+1, readBatchWireMaxBytes)
+	}
+	overhead, err := readBatchResponseOverhead(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	measured, err := readBatchWireBytes(overhead, output)
+	if err != nil || measured != len(wire)+1 {
+		t.Fatalf("measured response = %d bytes, actual %d, error %v", measured, len(wire)+1, err)
+	}
+	if len(output.Results) != 2 || output.Succeeded != 2 {
+		t.Fatalf("bounded rows = %#v, want every executed row retained", output.Results)
+	}
+	for index, row := range output.Results {
+		if !row.Success || !row.ResultTruncated || row.Result != nil {
+			t.Fatalf("bounded row %d = %#v, want retained truncated success", index, row)
+		}
 	}
 }
 

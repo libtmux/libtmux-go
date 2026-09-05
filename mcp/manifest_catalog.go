@@ -301,7 +301,7 @@ func appendInspectDefinitions(definitions []toolDefinition) []toolDefinition {
 	}
 	definitions = append(definitions, defineTool(toolDefinition{
 		name: "call_read_tools_batch", title: "Call read tools in a batch",
-		details: "Calls up to sixteen eligible inspect tools serially; inner tools receive no separate approval. Retained rows contain full nested envelopes, and oversized nested results are marked resultTruncated.",
+		details: "Calls up to sixteen eligible inspect tools serially; inner tools receive no separate approval. Retained rows contain full nested envelopes, oversized results are marked resultTruncated, and the complete JSON-RPC response is at most 1,000,000 bytes.",
 		toolset: toolsetInspect, processReach: processNone,
 		effects:          effects(effectObserve),
 		outputClasses:    outputs(outputTmuxMetadata),

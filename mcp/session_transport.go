@@ -2,7 +2,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -98,6 +102,10 @@ func (c *sessionReadyConnection) Read(ctx context.Context) (jsonrpc.Message, err
 		c.terminate(nil)
 		return message, errors.Join(err, c.connectionTerminalError())
 	}
+	if err := attachResponseOverhead(message); err != nil {
+		c.terminate(err)
+		return nil, err
+	}
 	c.stateMutex.Lock()
 	for c.active && c.committing {
 		c.changed.Wait()
@@ -124,6 +132,44 @@ func (c *sessionReadyConnection) Read(ctx context.Context) (jsonrpc.Message, err
 		return nil, errors.Join(ErrInstanceClosed, admissionErr)
 	}
 	return message, nil
+}
+
+func attachResponseOverhead(message jsonrpc.Message) error {
+	request, ok := message.(*jsonrpc.Request)
+	if !ok || !request.IsCall() || request.Method != "tools/call" {
+		return nil
+	}
+	overhead, err := jsonRPCResponseOverhead(request.ID)
+	if err != nil {
+		return fmt.Errorf("measure JSON-RPC response overhead: %w", err)
+	}
+	extra, _ := request.Extra.(*mcp.RequestExtra)
+	if extra == nil {
+		extra = &mcp.RequestExtra{}
+	} else {
+		cloned := *extra
+		extra = &cloned
+	}
+	if extra.Header == nil {
+		extra.Header = make(http.Header)
+	} else {
+		extra.Header = extra.Header.Clone()
+	}
+	extra.Header.Set(readBatchResponseOverheadHeader, strconv.Itoa(overhead))
+	request.Extra = extra
+	return nil
+}
+
+func jsonRPCResponseOverhead(id jsonrpc.ID) (int, error) {
+	const placeholder = "null"
+	encoded, err := jsonrpc.EncodeMessage(&jsonrpc.Response{
+		ID: id, Result: json.RawMessage(placeholder),
+	})
+	if err != nil {
+		return 0, err
+	}
+	// The stdio and IO transports terminate each encoded message with a newline.
+	return len(encoded) - len(placeholder) + 1, nil
 }
 
 func (c *sessionReadyConnection) Write(ctx context.Context, message jsonrpc.Message) error {

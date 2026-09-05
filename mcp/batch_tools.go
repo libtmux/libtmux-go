@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -50,11 +52,11 @@ type batchOutput struct {
 }
 
 const (
-	onErrorStop                 = "stop"
-	onErrorContinue             = "continue"
-	readBatchStructuredMaxBytes = 950_000
-	readBatchWireMaxBytes       = 1_000_000
-	readBatchErrorMaxBytes      = 4_096
+	onErrorStop                     = "stop"
+	onErrorContinue                 = "continue"
+	readBatchResponseOverheadHeader = "X-Libtmux-Mcp-Response-Overhead"
+	readBatchWireMaxBytes           = 1_000_000
+	readBatchErrorMaxBytes          = 4_096
 )
 
 // resolveOnError rejects unknown values because the modes leave different state.
@@ -150,7 +152,7 @@ func (t *tools) executeBatch(
 			output.Succeeded++
 		}
 		output.Results = append(output.Results, row)
-		if err := enforceReadBatchLimit(&output); err != nil {
+		if err := enforceReadBatchLimit(request, &output); err != nil {
 			return nil, batchOutput{}, err
 		}
 		if envelope.IsError && onError == onErrorStop {
@@ -159,30 +161,22 @@ func (t *tools) executeBatch(
 			break
 		}
 	}
-	summary := fmt.Sprintf(
-		"Read batch completed: %d succeeded, %d failed.",
-		output.Succeeded,
-		output.Failed,
-	)
-	if output.Truncated {
-		summary = fmt.Sprintf(
-			"Read batch completed: %d succeeded, %d failed; nested result bytes were truncated.",
-			output.Succeeded,
-			output.Failed,
-		)
-	}
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: summary}},
+		Content: []mcp.Content{&mcp.TextContent{Text: readBatchSummary(output)}},
 	}, output, nil
 }
 
-func enforceReadBatchLimit(output *batchOutput) error {
+func enforceReadBatchLimit(request *mcp.CallToolRequest, output *batchOutput) error {
+	overhead, err := readBatchResponseOverhead(request)
+	if err != nil {
+		return err
+	}
 	for {
-		encoded, err := json.Marshal(output)
+		wireBytes, err := readBatchWireBytes(overhead, *output)
 		if err != nil {
-			return fmt.Errorf("measure batch output: %w", err)
+			return err
 		}
-		if len(encoded) <= readBatchStructuredMaxBytes {
+		if wireBytes <= readBatchWireMaxBytes {
 			return nil
 		}
 		candidate := -1
@@ -210,6 +204,62 @@ func enforceReadBatchLimit(output *batchOutput) error {
 			output.TruncatedBytes += candidateSize - len("null")
 		}
 	}
+}
+
+func readBatchSummary(output batchOutput) string {
+	if output.Truncated {
+		return fmt.Sprintf(
+			"Read batch completed: %d succeeded, %d failed; nested result bytes were truncated.",
+			output.Succeeded,
+			output.Failed,
+		)
+	}
+	return fmt.Sprintf(
+		"Read batch completed: %d succeeded, %d failed.",
+		output.Succeeded,
+		output.Failed,
+	)
+}
+
+func readBatchResponseOverhead(request *mcp.CallToolRequest) (int, error) {
+	if request == nil || request.Extra == nil || request.Extra.Header == nil {
+		return defaultReadBatchResponseOverhead()
+	}
+	value := request.Extra.Header.Get(readBatchResponseOverheadHeader)
+	if value == "" {
+		return defaultReadBatchResponseOverhead()
+	}
+	overhead, err := strconv.Atoi(value)
+	if err != nil || overhead <= 0 {
+		return 0, errors.New("invalid batch response overhead")
+	}
+	return overhead, nil
+}
+
+func defaultReadBatchResponseOverhead() (int, error) {
+	id, err := jsonrpc.MakeID(float64(0))
+	if err != nil {
+		return 0, err
+	}
+	return jsonRPCResponseOverhead(id)
+}
+
+func readBatchWireBytes(overhead int, output batchOutput) (int, error) {
+	structured, err := json.Marshal(output)
+	if err != nil {
+		return 0, fmt.Errorf("encode batch output: %w", err)
+	}
+	result := &mcp.CallToolResult{
+		Content:           []mcp.Content{&mcp.TextContent{Text: readBatchSummary(output)}},
+		StructuredContent: json.RawMessage(structured),
+	}
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(result); err != nil {
+		return 0, fmt.Errorf("measure batch response: %w", err)
+	}
+	return overhead + encoded.Len() - 1, nil
 }
 
 func boundedBatchError(message string) string {

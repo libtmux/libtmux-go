@@ -119,7 +119,9 @@ work ceilings with its result.
 Pane-output tools keep the newest lines within their declared bounds and
 report truncation. The read batch executes at most sixteen operations in order,
 retains full nested envelopes when they fit, and marks an oversized nested
-result `resultTruncated`.
+result `resultTruncated`. Its complete JSON-RPC response is at most 1,000,000
+bytes. A separate response backstop refuses any future tool that forgets to
+bound its own result.
 
 ### Waiting rather than looking
 
@@ -417,7 +419,7 @@ metadata sent over MCP. Edit the native definitions, not this generated region.
 
 ### `call_read_tools_batch`
 
-Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Calls up to sixteen eligible inspect tools serially; inner tools receive no separate approval. Retained rows contain full nested envelopes, and oversized nested results are marked resultTruncated.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Calls up to sixteen eligible inspect tools serially; inner tools receive no separate approval. Retained rows contain full nested envelopes, oversized results are marked resultTruncated, and the complete JSON-RPC response is at most 1,000,000 bytes.
 
 Belongs to the `inspect` toolset.
 
