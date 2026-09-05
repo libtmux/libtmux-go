@@ -9,14 +9,14 @@
 //	mcp-swap revert
 //
 // Unless --no-preflight is set, the selected server must complete an MCP
-// handshake before any write. Each config is backed up once; a write failure
-// for one client does not stop updates to the others.
+// handshake before any write. Every selected config and backup destination is
+// prepared before the first update, and each config is backed up once.
 package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,34 +59,44 @@ func knownClients(home string) []client {
 	}
 	return []client{
 		{"claude", filepath.Join(home, ".claude.json"), "mcpServers", formatJSON, dialectStandard},
+		{"codex", filepath.Join(home, ".codex", "config.toml"), "mcp_servers", formatTOML, dialectStandard},
 		{"cursor", filepath.Join(home, ".cursor", "mcp.json"), "mcpServers", formatJSON, dialectStandard},
 		{"gemini", filepath.Join(home, ".gemini", "settings.json"), "mcpServers", formatJSON, dialectStandard},
-		{"antigravity", filepath.Join(home, ".gemini", "config", "mcp_config.json"), "mcpServers", formatJSON, dialectStandard},
-		{"codex", filepath.Join(home, ".codex", "config.toml"), "mcp_servers", formatTOML, dialectStandard},
 		{"grok", filepath.Join(home, ".grok", "config.toml"), "mcp_servers", formatTOML, dialectStandard},
+		{"agy", filepath.Join(home, ".gemini", "config", "mcp_config.json"), "mcpServers", formatJSON, dialectStandard},
 		{"opencode", filepath.Join(config, "opencode", "opencode.jsonc"), "mcp", formatJSONC, dialectOpencode},
+		{"pi", filepath.Join(home, ".pi", "agent", "mcp.json"), "mcpServers", formatJSONC, dialectStandard},
 	}
 }
 
 func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr,
-			"usage: mcp-swap status|use-local|revert [--dry-run]"+
-				" [--mode dev|build|installed|released] [--ref VERSION]"+
-				" [--client NAME] [--no-preflight]\n\n")
-		flag.PrintDefaults()
-	}
-	chosen, err := parseArguments(os.Args[1:])
+	os.Exit(execute(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func execute(arguments []string, stdout, stderr io.Writer) int {
+	chosen, err := parseArguments(arguments)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "mcp-swap:", err)
-		flag.Usage()
-		os.Exit(2)
+		_, _ = fmt.Fprintln(stderr, "mcp-swap:", err)
+		printUsage(stderr)
+		return 2
+	}
+	if chosen.help {
+		printUsage(stdout)
+		return 0
 	}
 
 	if err := run(chosen); err != nil {
-		fmt.Fprintln(os.Stderr, "mcp-swap:", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(stderr, "mcp-swap:", err)
+		return 1
 	}
+	return 0
+}
+
+func printUsage(output io.Writer) {
+	_, _ = fmt.Fprintln(output,
+		"usage: mcp-swap status|use-local|revert [--dry-run]"+
+			" [--mode dev|build|installed|released] [--ref VERSION]"+
+			" [--client NAME] [--no-preflight]")
 }
 
 type options struct {
@@ -96,6 +106,7 @@ type options struct {
 	ref         string
 	noPreflight bool
 	only        []string
+	help        bool
 }
 
 // parseArguments accepts flags after the command and rejects unknown tokens,
@@ -128,6 +139,8 @@ func parseArguments(arguments []string) (options, error) {
 			argument = name
 		}
 		switch argument {
+		case "help", "-h", "--help":
+			chosen.help = true
 		case "--dry-run", "-dry-run":
 			chosen.dryRun = true
 		case "--no-preflight", "-no-preflight":
@@ -153,6 +166,9 @@ func parseArguments(arguments []string) (options, error) {
 	}
 	if expecting != "" {
 		return options{}, fmt.Errorf("%s wants a value", expecting)
+	}
+	if chosen.help {
+		return chosen, nil
 	}
 	if chosen.command == "" {
 		return options{}, errors.New("say status, use-local, or revert")
@@ -231,7 +247,7 @@ func selected(clients []client, only []string) ([]client, error) {
 	wanted := map[string]bool{}
 	for _, name := range only {
 		for part := range strings.SplitSeq(name, ",") {
-			part = strings.TrimSpace(part)
+			part = canonicalClientName(strings.TrimSpace(part))
 			if part == "" {
 				continue
 			}
@@ -249,6 +265,13 @@ func selected(clients []client, only []string) ([]client, error) {
 		}
 	}
 	return chosen, nil
+}
+
+func canonicalClientName(name string) string {
+	if name == "antigravity" {
+		return "agy"
+	}
+	return name
 }
 
 func clientNames(clients []client) []string {

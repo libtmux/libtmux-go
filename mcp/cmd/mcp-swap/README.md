@@ -5,8 +5,8 @@ them back.
 
 An MCP server cannot be exercised without a client, so the development loop is:
 rewrite every client's configuration to run the working tree, try it, restore
-what was there. Doing that by hand across half a dozen config files is why it
-does not get done.
+what was there. Doing that by hand across eight client configurations is why
+it does not get done.
 
 ## Seeing what is configured now
 
@@ -56,6 +56,11 @@ $ go -C mcp run ./cmd/mcp-swap revert
 **It starts the chosen build before writing anything.** The server is run once
 and asked to report itself, so a configuration that could never have worked is
 rejected before it replaces one that did.
+
+**It plans the selected clients before changing any of them.** Every existing
+configuration is parsed and rendered, and every new backup destination is
+checked first. One malformed configuration or unusable backup therefore leaves
+the whole selected set unchanged.
 
 **This edits real configuration files.** `status` and `--dry-run` do not. Run
 one of those first.

@@ -272,6 +272,17 @@ func TestCommandNameExists(t *testing.T) {
 func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	t.Parallel()
 	all := knownClients("/home/someone")
+	wantNames := []string{
+		"claude", "codex", "cursor", "gemini", "grok", "agy", "opencode", "pi",
+	}
+	if got := clientNames(all); !reflect.DeepEqual(got, wantNames) {
+		t.Fatalf("known clients = %v, want %v", got, wantNames)
+	}
+	pi := all[len(all)-1]
+	if pi.path != "/home/someone/.pi/agent/mcp.json" ||
+		pi.key != "mcpServers" || pi.format != formatJSONC || pi.dialect != dialectStandard {
+		t.Fatalf("pi client = %+v, want the adapter's JSONC config", pi)
+	}
 
 	everything, err := selected(all, nil)
 	if err != nil {
@@ -291,10 +302,71 @@ func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 		t.Errorf("selected = %v, want claude then codex", clientNames(some))
 	}
 
+	agy, err := selected(all, []string{"antigravity,agy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := clientNames(agy); !reflect.DeepEqual(got, []string{"agy"}) {
+		t.Errorf("antigravity alias selected %v, want one agy client", got)
+	}
+
 	// A typo that quietly wrote nothing would report success having done
 	// nothing, which is the failure this refusal exists to prevent.
 	if _, err := selected(all, []string{"clod"}); err == nil {
 		t.Error("an unknown client was accepted")
+	}
+}
+
+func TestPiStatusExplainsAdapterAvailability(t *testing.T) {
+	home := t.TempDir()
+	clients := knownClients(home)
+	pi := clients[len(clients)-1]
+	if pi.name != "pi" {
+		t.Fatalf("last client = %q, want pi", pi.name)
+	}
+	if err := os.MkdirAll(filepath.Dir(pi.path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pi.path, []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var output bytes.Buffer
+	if err := reportTo(&output, []client{pi}); err != nil {
+		t.Fatal(err)
+	}
+	const hint = "needs the pi-mcp-adapter package; pi has no built-in MCP client"
+	if !strings.Contains(output.String(), hint) {
+		t.Fatalf("pi status = %q, want adapter diagnostic", output.String())
+	}
+
+	adapter := filepath.Join(filepath.Dir(pi.path), "npm", "node_modules", "pi-mcp-adapter")
+	if err := os.MkdirAll(adapter, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	output.Reset()
+	if err := reportTo(&output, []client{pi}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(output.String(), hint) {
+		t.Fatalf("pi status still reports a missing adapter: %q", output.String())
+	}
+}
+
+func TestHelpExitsSuccessfully(t *testing.T) {
+	for _, argument := range []string{"help", "-h", "--help"} {
+		t.Run(argument, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := execute([]string{argument}, &stdout, &stderr); code != 0 {
+				t.Fatalf("exit code = %d, want 0; stderr = %q", code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "usage: mcp-swap") {
+				t.Fatalf("stdout = %q, want usage", stdout.String())
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+		})
 	}
 }
 
@@ -512,53 +584,61 @@ func TestDryRunsValidateWithoutWriting(t *testing.T) {
 	}
 }
 
-func TestOneUnwritableClientDoesNotStopTheRest(t *testing.T) {
+func TestMalformedLaterClientStopsAllWrites(t *testing.T) {
 	t.Parallel()
 
-	directory := t.TempDir()
-	write := func(name, contents string) client {
-		t.Helper()
-		target := client{
-			name: name, path: filepath.Join(directory, name+".json"),
-			key: "mcpServers", format: formatJSON, dialect: dialectStandard,
-		}
-		if err := os.WriteFile(target.path, []byte(contents), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return target
-	}
-	first := write("first", `{"mcpServers":{}}`)
-	broken := write("broken", `NOT JSON`)
-	last := write("last", `{"mcpServers":{}}`)
+	first := jsonPreflightClient(t, "first", `{"mcpServers":{}}`)
+	broken := jsonPreflightClient(t, "broken", `NOT JSON`)
+	firstOriginal := readFile(t, first.path)
+	brokenOriginal := readFile(t, broken.path)
 
 	entry := map[string]any{"command": "/bin/true"}
-	if err := useLocal([]client{broken}, entry, true); err == nil {
-		t.Fatal("dry run accepted malformed JSON")
-	}
-	err := useLocal([]client{first, broken, last}, entry, false)
+	err := useLocal([]client{first, broken}, entry, false)
 	if err == nil {
-		t.Fatal("a client that could not be written reported no error")
+		t.Fatal("a malformed selected config reported no error")
 	}
 	if !strings.Contains(err.Error(), "broken") {
 		t.Errorf("the error does not name the client that failed: %v", err)
 	}
+	assertConfigWasNotWritten(t, first, firstOriginal)
+	assertConfigWasNotWritten(t, broken, brokenOriginal)
+}
 
-	for _, target := range []client{first, last} {
-		contents, readErr := os.ReadFile(target.path)
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		if !strings.Contains(string(contents), "tmux") {
-			t.Errorf("%s was not swapped, so one broken config stopped the rest: %s",
-				target.name, contents)
-		}
+func TestInvalidLaterBackupDestinationStopsAllWrites(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	first := jsonPreflightClient(t, "first", `{"mcpServers":{}}`)
+	locked := filepath.Join(directory, "locked")
+	if err := os.Mkdir(locked, 0o700); err != nil {
+		t.Fatal(err)
 	}
-	// The one that could not be parsed is left exactly as it was.
-	contents, readErr := os.ReadFile(broken.path)
-	if readErr != nil {
-		t.Fatal(readErr)
+	later := client{
+		name: "later", path: filepath.Join(locked, "later.json"),
+		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
 	}
-	if string(contents) != "NOT JSON" {
-		t.Errorf("the unreadable config was rewritten: %s", contents)
+	if err := os.WriteFile(later.path, []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	firstOriginal := readFile(t, first.path)
+	laterOriginal := readFile(t, later.path)
+	if err := os.Chmod(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+
+	err := useLocal([]client{first, later}, map[string]any{"command": "/bin/true"}, false)
+	if err == nil {
+		t.Fatal("an unusable later backup destination reported no error")
+	}
+	if !strings.Contains(err.Error(), "later") {
+		t.Errorf("the error does not name the client that failed: %v", err)
+	}
+	assertConfigWasNotWritten(t, first, firstOriginal)
+	if got := readFile(t, later.path); got != laterOriginal {
+		t.Fatalf("later config changed: got %q, want %q", got, laterOriginal)
+	}
+	if _, statErr := os.Stat(backupPath(later)); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("later backup exists after refusal: %v", statErr)
 	}
 }

@@ -11,31 +11,52 @@ import (
 	"strings"
 )
 
+const piAdapterHint = "needs the pi-mcp-adapter package; pi has no built-in MCP client"
+
 func report(clients []client) error {
+	return reportTo(os.Stdout, clients)
+}
+
+func reportTo(output io.Writer, clients []client) error {
 	for _, c := range clients {
+		caveat := clientCaveat(c)
 		entry, present, err := entryOf(c)
+		var line string
 		switch {
 		case errors.Is(err, os.ErrNotExist):
-			fmt.Printf("%-12s not installed\n", c.name)
-			continue
+			line = fmt.Sprintf("%-12s not installed%s", c.name, caveat)
 		case err != nil:
-			fmt.Printf("%-12s unreadable: %v\n", c.name, err)
-			continue
-		}
-		switch {
-		case !present:
-			fmt.Printf("%-12s no %q server\n", c.name, serverName)
-		case isLocal(entry):
-			mode, _ := swapMode(entry)
-			fmt.Printf("%-12s %s: %s\n", c.name, mode, describe(entry))
+			line = fmt.Sprintf("%-12s unreadable: %v%s", c.name, err, caveat)
 		default:
-			fmt.Printf("%-12s %s\n", c.name, describe(entry))
+			switch {
+			case !present:
+				line = fmt.Sprintf("%-12s no %q server%s", c.name, serverName, caveat)
+			case isLocal(entry):
+				mode, _ := swapMode(entry)
+				line = fmt.Sprintf("%-12s %s: %s%s", c.name, mode, describe(entry), caveat)
+			default:
+				line = fmt.Sprintf("%-12s %s%s", c.name, describe(entry), caveat)
+			}
+		}
+		if _, err := fmt.Fprintln(output, line); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// useLocal attempts every client and joins named failures.
+func clientCaveat(c client) string {
+	if c.name != "pi" {
+		return ""
+	}
+	adapter := filepath.Join(filepath.Dir(c.path), "npm", "node_modules", "pi-mcp-adapter")
+	if info, err := os.Stat(adapter); err == nil && info.IsDir() {
+		return ""
+	}
+	return " -- " + piAdapterHint
+}
+
+// useLocal plans the complete client selection before applying any change.
 func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 	return usePreparedLocal(clients, entryPlan{
 		configured: entry,
@@ -44,8 +65,9 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 	}, dryRun, false)
 }
 
-// usePreparedLocal renders every client entry before preflight. This validates
-// the command, arguments, and environment that each client will actually use.
+// usePreparedLocal renders every client entry and checks every new backup
+// destination before preflight. This validates the command, arguments, and
+// environment that each client will actually use.
 func usePreparedLocal(clients []client, plan entryPlan, dryRun, check bool) error {
 	var failures []error
 	changes := make([]entryChange, 0, len(clients))
@@ -61,6 +83,9 @@ func usePreparedLocal(clients []client, plan entryPlan, dryRun, check bool) erro
 		}
 		changes = append(changes, change)
 	}
+	if len(failures) != 0 {
+		return errors.Join(failures...)
+	}
 
 	if check {
 		if err := preflightEntryChanges(changes, plan); err != nil {
@@ -71,6 +96,9 @@ func usePreparedLocal(clients []client, plan entryPlan, dryRun, check bool) erro
 	if !dryRun {
 		if err := plan.install(); err != nil {
 			return fmt.Errorf("install build: %w", err)
+		}
+		if err := validateEntryChanges(changes); err != nil {
+			return err
 		}
 	}
 
@@ -347,8 +375,14 @@ func planEntryChange(c client, entry map[string]any) (entryChange, error) {
 	if err != nil {
 		return entryChange{}, err
 	}
-	if _, err := regularFileExists(backupPath(c)); err != nil {
+	backupExists, err := regularFileExists(backupPath(c))
+	if err != nil {
 		return entryChange{}, fmt.Errorf("inspect backup: %w", err)
+	}
+	if !backupExists {
+		if err := preflightBackupDestination(backupPath(c)); err != nil {
+			return entryChange{}, fmt.Errorf("preflight backup: %w", err)
+		}
 	}
 	finalEntry, present, err := entryFromContents(c, updated)
 	if err != nil {
@@ -367,6 +401,13 @@ func planEntryChange(c client, entry map[string]any) (entryChange, error) {
 }
 
 func (c entryChange) apply() error {
+	if err := c.validate(); err != nil {
+		return err
+	}
+	return writeBesideBackup(c.target, c.original, c.updated)
+}
+
+func (c entryChange) validate() error {
 	current, err := os.ReadFile(c.target.path)
 	if err != nil {
 		return fmt.Errorf("re-read configuration: %w", err)
@@ -374,7 +415,17 @@ func (c entryChange) apply() error {
 	if !bytes.Equal(current, c.original) {
 		return errors.New("configuration changed after it was planned")
 	}
-	return writeBesideBackup(c.target, c.original, c.updated)
+	return nil
+}
+
+func validateEntryChanges(changes []entryChange) error {
+	var failures []error
+	for _, change := range changes {
+		if err := change.validate(); err != nil {
+			failures = append(failures, fmt.Errorf("%s: %w", change.target.name, err))
+		}
+	}
+	return errors.Join(failures...)
 }
 
 // writeEntry splices TOML and JSONC so unrelated settings and comments survive.
@@ -483,6 +534,27 @@ func regularFileExists(path string) (bool, error) {
 		return false, fmt.Errorf("%s is not a regular file", filepath.Base(path))
 	}
 	return true, nil
+}
+
+func preflightBackupDestination(path string) error {
+	temporary, err := os.CreateTemp(
+		filepath.Dir(path), "."+filepath.Base(path)+".mcp-swap-preflight-*",
+	)
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer func() {
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
+	}()
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(temporaryPath); err != nil {
+		return err
+	}
+	return nil
 }
 
 // atomicWriteFile replaces path only after its complete contents are durable

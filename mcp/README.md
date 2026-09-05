@@ -508,12 +508,16 @@ them back. It writes only the `tmux` entry, only in global config, and without
 | Client | Config | Format |
 | --- | --- | --- |
 | claude | `~/.claude.json` | JSON |
+| codex | `~/.codex/config.toml` | TOML |
 | cursor | `~/.cursor/mcp.json` | JSON |
 | gemini | `~/.gemini/settings.json` | JSON |
-| antigravity | `~/.gemini/config/mcp_config.json` | JSON |
-| codex | `~/.codex/config.toml` | TOML |
 | grok | `~/.grok/config.toml` | TOML |
+| agy (`antigravity` alias) | `~/.gemini/config/mcp_config.json` | JSON |
 | opencode | `$XDG_CONFIG_HOME/opencode/opencode.jsonc` | JSONC |
+| pi | `~/.pi/agent/mcp.json` | JSONC |
+
+Pi itself has no MCP client. Its configuration is read by the third-party
+`pi-mcp-adapter` extension, and `status` reports when that adapter is absent.
 
 All of them, not the JSON ones only. The entry has one name across every
 client, so swapping some of them leaves two different servers answering to
@@ -526,6 +530,10 @@ bytes are located and replaced, and every other byte is left alone. Keys this
 tool does not write survive — grok's `enabled`, for instance — and so does the
 entry's environment, because toolsets, named filters, and socket selection are
 configuration rather than a choice of build.
+
+The complete selected set is parsed and rendered before any file changes. Each
+new backup destination is checked at the same time, so one malformed config or
+unusable backup leaves every selected client unchanged.
 
 Each config is copied beside itself before the first change. The first copy is
 kept rather than the latest, so `revert` lands on what was there before any

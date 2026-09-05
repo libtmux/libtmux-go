@@ -143,6 +143,28 @@ func TestEntryChangeRejectsAConfigChangedAfterPlanning(t *testing.T) {
 	assertConfigWasNotWritten(t, target, newer)
 }
 
+func TestLaterConfigChangeBeforeApplyStopsAllWrites(t *testing.T) {
+	first := jsonPreflightClient(t, "first", `{"mcpServers":{}}`)
+	second := jsonPreflightClient(t, "second", `{"mcpServers":{}}`)
+	firstOriginal := readFile(t, first.path)
+	const newer = `{"mcpServers":{"other":{"command":"newer"}}}`
+	plan := entryPlan{
+		configured: map[string]any{"command": "replacement", "args": []any{}},
+		install: func() error {
+			return os.WriteFile(second.path, []byte(newer), 0o600)
+		},
+		cleanup: func() {},
+	}
+
+	err := usePreparedLocal([]client{first, second}, plan, false, false)
+	if err == nil || !strings.Contains(err.Error(), "second") ||
+		!strings.Contains(err.Error(), "changed after") {
+		t.Fatalf("use error = %v, want the changed second config named", err)
+	}
+	assertConfigWasNotWritten(t, first, firstOriginal)
+	assertConfigWasNotWritten(t, second, newer)
+}
+
 func preflightTestPlan() entryPlan {
 	return entryPlan{
 		configured: map[string]any{
