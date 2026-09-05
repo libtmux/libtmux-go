@@ -56,7 +56,12 @@
 // # Pane I/O
 //
 // run_shell_command stages a POSIX-compatible command as a private file for a
-// pane shell to source, then returns bounded output and the exit status.
+// pane shell to source, then returns bounded output and the exit status. It
+// requires one effectively synchronized pane before setup and rechecks that
+// singleton before dispatch. Send paths refuse dead or modal configured
+// members before caller confirmation. Paste text is target-only; optional
+// Enter has separate configured membership. Reported pane IDs describe the
+// observed preflight, not atomic delivery.
 // wait_for_text observes control notifications and advances a gap-checked pane
 // cursor, so output between attachment and observation is not lost.
 // capture_since returns output written after an opaque cursor. Search and

@@ -202,6 +202,7 @@ type runShellCommandCapabilityInput struct {
 
 type runShellCommandCapabilityOutput struct {
 	PaneID                  string   `json:"pane_id"`
+	ResolvedPaneIDs         []string `json:"resolved_pane_ids"`
 	ExitStatus              *int     `json:"exit_status,omitempty"`
 	TimedOut                bool     `json:"timed_out"`
 	Running                 string   `json:"running,omitempty"`
@@ -252,6 +253,12 @@ type pasteTextCapabilityInput struct {
 	PaneID string `json:"pane_id" jsonschema:"the pane id, such as %1"`
 	Text   string `json:"text" jsonschema:"the literal text to paste"`
 	Enter  bool   `json:"enter,omitempty" jsonschema:"append a newline that submits the text"`
+}
+
+type pasteTextCapabilityOutput struct {
+	PaneID       string   `json:"pane_id"`
+	Bytes        int      `json:"bytes"`
+	EnterPaneIDs []string `json:"enter_pane_ids"`
 }
 
 type setSynchronizePanesCapabilityInput struct {
@@ -633,7 +640,8 @@ func (t *tools) catalogRunShellCommand(ctx context.Context, request *sdk.CallToo
 		MaxLines: input.MaxLines, SuppressHistory: input.SuppressHistory,
 	})
 	converted := runShellCommandCapabilityOutput{
-		PaneID: output.PaneID, ExitStatus: output.ExitStatus, TimedOut: output.TimedOut,
+		PaneID: output.PaneID, ResolvedPaneIDs: output.ResolvedPaneIDs,
+		ExitStatus: output.ExitStatus, TimedOut: output.TimedOut,
 		Running: output.Running, Output: output.Output, OutputUnavailable: output.OutputUnavailable,
 		LinesMissed:             output.LinesMissed,
 		EffectiveTimeoutSeconds: output.EffectiveTimeoutSeconds,
@@ -642,13 +650,16 @@ func (t *tools) catalogRunShellCommand(ctx context.Context, request *sdk.CallToo
 	if converted.Output == nil {
 		converted.Output = []string{}
 	}
+	if converted.ResolvedPaneIDs == nil {
+		converted.ResolvedPaneIDs = []string{}
+	}
 	return result, converted, err
 }
 
 func (t *tools) catalogSendKeys(ctx context.Context, request *sdk.CallToolRequest, input sendKeysCapabilityInput) (*sdk.CallToolResult, sendKeysCapabilityOutput, error) {
 	result, output, err := t.sendKeysBatch(ctx, request, sendKeysBatchInput{
 		PaneID: input.PaneID, Keys: input.Keys, Literal: input.Literal,
-	})
+	}, "send_keys")
 	return result, sendKeysCapabilityOutput{
 		PaneID: output.PaneID, ResolvedPaneIDs: output.ResolvedPaneIDs, Sent: output.Sent,
 	}, err
@@ -666,7 +677,7 @@ func (t *tools) catalogSendKeysBatch(ctx context.Context, request *sdk.CallToolR
 	for _, operation := range input.Operations {
 		_, sent, callErr := t.sendKeysBatch(ctx, request, sendKeysBatchInput{
 			PaneID: operation.PaneID, Keys: operation.Keys, Literal: operation.Literal,
-		})
+		}, "send_keys_batch")
 		row := sendKeysBatchCapabilityResult{
 			PaneID: sent.PaneID, ResolvedPaneIDs: sent.ResolvedPaneIDs, Sent: sent.Sent,
 		}
@@ -685,8 +696,16 @@ func (t *tools) catalogSendKeysBatch(ctx context.Context, request *sdk.CallToolR
 	return nil, output, nil
 }
 
-func (t *tools) catalogPasteText(ctx context.Context, request *sdk.CallToolRequest, input pasteTextCapabilityInput) (*sdk.CallToolResult, pasteTextOutput, error) {
-	return t.pasteText(ctx, request, pasteTextInput{PaneID: input.PaneID, Text: input.Text, Enter: input.Enter})
+func (t *tools) catalogPasteText(ctx context.Context, request *sdk.CallToolRequest, input pasteTextCapabilityInput) (*sdk.CallToolResult, pasteTextCapabilityOutput, error) {
+	result, output, err := t.pasteText(
+		ctx, request,
+		pasteTextInput{PaneID: input.PaneID, Text: input.Text, Enter: input.Enter},
+	)
+	converted := pasteTextCapabilityOutput(output)
+	if converted.EnterPaneIDs == nil {
+		converted.EnterPaneIDs = []string{}
+	}
+	return result, converted, err
 }
 
 func (t *tools) catalogSetSynchronizePanes(ctx context.Context, _ *sdk.CallToolRequest, input setSynchronizePanesCapabilityInput) (*sdk.CallToolResult, settingCapabilityOutput, error) {

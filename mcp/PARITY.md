@@ -64,7 +64,16 @@ duration ceiling, 300 seconds by default.
 
 `run_shell_command` uses a pane-local framed completion record and returns a
 real exit status plus bounded output. It has no detached mode or background
-handle. A long-running process remains visible and inspectable in its pane.
+handle. It requires one configured input pane before setup and rechecks that
+singleton immediately before dispatch. A long-running process remains visible
+and inspectable in its pane.
+
+Send and optional-Enter paths compute effective per-pane synchronization from
+a fresh snapshot. Source-off membership contains only the source; source-on
+membership contains the window's effective-on panes. Dead, modal, missing, or
+malformed configured state fails closed before caller confirmation or mutation.
+Paste text itself remains target-only. Returned ID arrays name sorted configured
+membership, not proven delivery; tmux can change after an observational check.
 
 ## What the schemas say
 

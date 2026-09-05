@@ -13,6 +13,10 @@ type mcpDependencies struct {
 	newWindow            func(context.Context, tmux.Session, tmux.NewWindowRequest) (tmux.Window, error)
 	refreshWindow        func(context.Context, tmux.Server, tmux.WindowID) (tmux.Window, error)
 	probeSibling         func(context.Context, tmux.Server) (bool, int)
+	sendKeySequence      func(context.Context, tmux.Pane, tmux.SendKeySequenceRequest) error
+	setBuffer            func(context.Context, tmux.Server, tmux.SetBufferRequest) error
+	beforeRunDispatch    func(context.Context) error
+	sendKeys             func(context.Context, tmux.Pane, tmux.SendKeysRequest) error
 }
 
 func defaultMCPDependencies() mcpDependencies {
@@ -56,6 +60,28 @@ func defaultMCPDependencies() mcpDependencies {
 			return server.Window(ctx, id)
 		},
 		probeSibling: probeSiblingServer,
+		sendKeySequence: func(
+			ctx context.Context,
+			pane tmux.Pane,
+			request tmux.SendKeySequenceRequest,
+		) error {
+			return pane.SendKeySequence(ctx, request)
+		},
+		setBuffer: func(
+			ctx context.Context,
+			server tmux.Server,
+			request tmux.SetBufferRequest,
+		) error {
+			return server.SetBuffer(ctx, request)
+		},
+		beforeRunDispatch: func(context.Context) error { return nil },
+		sendKeys: func(
+			ctx context.Context,
+			pane tmux.Pane,
+			request tmux.SendKeysRequest,
+		) error {
+			return pane.SendKeys(ctx, request)
+		},
 	}
 }
 

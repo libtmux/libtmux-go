@@ -488,7 +488,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogRespawnPane),
 		defineTool(toolDefinition{
 			name: "run_shell_command", title: "Run a shell command",
-			details: "Runs one authored command in a pane and waits for its framed completion.",
+			details: "Runs one authored command only for configured singleton membership, checks it before setup and again before dispatch, and waits for framed completion.",
 			toolset: toolsetExecute, processReach: processPaneCommand,
 			effects:          effects(effectObserve, effectChange),
 			outputClasses:    outputs(outputTerminalContent, outputTmuxMetadata),
@@ -501,7 +501,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogRunShellCommand),
 		defineTool(toolDefinition{
 			name: "send_keys", title: "Send keys",
-			details: "Sends input to one pane without waiting for output.",
+			details: "Sends input after validating sorted configured synchronized membership; reported ids describe preflight membership, not proven effects.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,
@@ -512,7 +512,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogSendKeys),
 		defineTool(toolDefinition{
 			name: "send_keys_batch", title: "Send keys in a batch",
-			details: "Sends up to sixty-four ordered pane-input operations.",
+			details: "Sends up to sixty-four ordered pane-input operations, each with a fresh configured-membership preflight.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,
@@ -522,7 +522,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogSendKeysBatch),
 		defineTool(toolDefinition{
 			name: "paste_text", title: "Paste text",
-			details: "Pastes one literal text block into a pane through an ephemeral buffer.",
+			details: "Pastes literal text only to its target through an ephemeral buffer; optional Enter uses validated configured synchronized membership.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,
@@ -533,7 +533,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogPasteText),
 		defineTool(toolDefinition{
 			name: "set_synchronize_panes", title: "Set synchronized panes",
-			details: "When enabled, subsequent input to one pane is copied to every pane in the window.",
+			details: "Sets the window synchronization default; pane-level overrides determine later configured input membership and effects can still differ.",
 			toolset: toolsetExecute, processReach: processNone,
 			effects: effects(effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true, amplifiesFutureInput: true,

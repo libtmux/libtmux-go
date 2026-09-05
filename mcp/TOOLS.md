@@ -74,9 +74,10 @@ set of explicit options. They do not accept commands, environment values, or a
 generic option name/value pair.
 
 `set_synchronize_panes` is the one future-input amplifier. Enabling it means
-subsequent input to one pane is copied to every pane in that window.
-`send_keys` and `send_keys_batch` therefore report the resolved pane target set
-rather than implying only the requested pane received input.
+the window default allows subsequent input to fan out. Pane-level overrides
+determine configured membership for each input preflight. `send_keys` and
+`send_keys_batch` report that sorted membership rather than claiming which
+panes ultimately received input.
 
 ### Starting configured processes and sending input
 
@@ -252,9 +253,25 @@ every operation available in the core library.
 be sent. Use `paste_text` for an arbitrary block whose words must never be
 interpreted as key names.
 
-When `synchronize-panes` is enabled, tmux fans input from one target to every
-pane in the window. Input-tool responses include the resolved pane ids, so a
-caller can see the actual target set before deciding what to do next.
+Input tools read effective `pane_synchronized` values from a fresh pane
+snapshot. A source configured off has source-only membership; a source
+configured on includes the window's effective-on panes. Unreadable flags or a
+dead or modal configured member refuse the whole operation before caller
+confirmation or mutation. These checks observe tmux state but cannot make the
+later input command atomic with that observation.
+
+`send_keys` and each batch row return sorted configured membership in
+`resolved_pane_ids`. `run_shell_command` requires that membership to contain
+one pane both before setup and immediately before dispatch because it returns
+one output stream and exit status. `paste_text` always pastes text only to its
+target; optional Enter uses synchronized configured membership and reports it
+separately in `enter_pane_ids`.
+
+The arrays describe preflight membership, not proven delivery or effects.
+Successful calls and batch rows expose them directly. Ordinary direct-tool
+refusals name relevant membership in error text because the Go dispatcher
+discards structured output with handler errors. A partial paste whose text
+arrived but Enter failed keeps `enter_pane_ids` in its structured error result.
 
 ### Batches
 
@@ -1093,7 +1110,7 @@ Changes tmux state.
 
 ### `paste_text`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes one literal text block into a pane through an ephemeral buffer.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes literal text only to its target through an ephemeral buffer; optional Enter uses validated configured synchronized membership.
 
 Belongs to the `execute` toolset.
 
@@ -1120,7 +1137,8 @@ Changes tmux state.
 | Returns | Type |
 | --- | --- |
 | `bytes` **required** | integer |
-| `paneId` **required** | string |
+| `enter_pane_ids` **required** | array |
+| `pane_id` **required** | string |
 
 ### `rename_session`
 
@@ -1278,7 +1296,7 @@ Belongs to the `execute` toolset.
 
 ### `run_shell_command`
 
-Run a shell command in a pane with your user's permissions. Runs one authored command in a pane and waits for its framed completion.
+Run a shell command in a pane with your user's permissions. Runs one authored command only for configured singleton membership, checks it before setup and again before dispatch, and waits for framed completion.
 
 Belongs to the `execute` toolset.
 
@@ -1308,6 +1326,7 @@ Changes tmux state.
 | --- | --- |
 | `output` **required** | array |
 | `pane_id` **required** | string |
+| `resolved_pane_ids` **required** | array |
 | `timed_out` **required** | boolean |
 | `effective_timeout_seconds` | integer |
 | `exit_status` | integer |
@@ -1441,7 +1460,7 @@ Changes tmux state.
 
 ### `send_keys`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends input to one pane without waiting for output.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends input after validating sorted configured synchronized membership; reported ids describe preflight membership, not proven effects.
 
 Belongs to the `execute` toolset.
 
@@ -1473,7 +1492,7 @@ Changes tmux state.
 
 ### `send_keys_batch`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends up to sixty-four ordered pane-input operations.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends up to sixty-four ordered pane-input operations, each with a fresh configured-membership preflight.
 
 Belongs to the `execute` toolset.
 
@@ -1597,7 +1616,7 @@ Changes tmux state.
 
 ### `set_synchronize_panes`
 
-Change tmux state; no client-supplied executable input. When enabled, subsequent input to one pane is copied to every pane in the window.
+Change tmux state; no client-supplied executable input. Sets the window synchronization default; pane-level overrides determine later configured input membership and effects can still differ.
 
 Belongs to the `execute` toolset.
 

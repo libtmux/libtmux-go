@@ -39,6 +39,8 @@ type runCommandInput struct {
 type runCommandOutput struct {
 	// PaneID is the pane the command ran in.
 	PaneID string `json:"paneId"`
+	// ResolvedPaneIDs is the sorted configured preflight singleton.
+	ResolvedPaneIDs []string `json:"resolvedPaneIds"`
 	// ExitStatus is the command's exit status, absent when the command did not
 	// finish. It is a pointer because zero is what a command reports when it
 	// succeeded, so a timeout reported as zero would read as success to
@@ -86,11 +88,11 @@ func (t *tools) runCommand(
 	request *mcp.CallToolRequest,
 	input runCommandInput,
 ) (*mcp.CallToolResult, runCommandOutput, error) {
+	output := runCommandOutput{ResolvedPaneIDs: []string{}}
 	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
 	if err != nil {
-		return nil, runCommandOutput{}, err
+		return nil, output, err
 	}
-	output := runCommandOutput{}
 	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
 	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
 	output.TimeoutClamped = clamped
@@ -100,6 +102,10 @@ func (t *tools) runCommand(
 		runCtx, request, timeout, "waiting for the command to finish")
 	defer reporter.stop()
 	started, err := t.startCommand(runCtx, request, input)
+	if started != nil {
+		output.PaneID = started.paneID.String()
+		output.ResolvedPaneIDs = append([]string{}, started.configuredIDs...)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, output, ctx.Err()
@@ -112,8 +118,6 @@ func (t *tools) runCommand(
 		}
 		return nil, output, err
 	}
-	output.PaneID = started.paneID.String()
-
 	defer func() { _ = os.RemoveAll(started.directory) }()
 
 	pane, err := t.tmux(runCtx).Pane(runCtx, started.paneID)
@@ -145,40 +149,49 @@ func (t *tools) startCommand(
 	request *mcp.CallToolRequest,
 	input runCommandInput,
 ) (*commandRun, error) {
+	started := &commandRun{configuredIDs: []string{}}
 	if strings.TrimSpace(input.Command) == "" {
-		return nil, errors.New("command is required")
+		return started, errors.New("command is required")
 	}
-	server := t.tmux(ctx)
-	// Resolved for delivery, which refuses a pane that cannot read the keys
-	// before the pane is asked to do anything. Either refusal saves this tool
-	// the whole timeoutSeconds the caller set: a mode reads the command as key
-	// bindings, one of which takes a pending key and never answers the sending
-	// client, and a pane with no process never runs the wrapper at all.
-	pane, err := t.resolvePaneToDeliver(
-		ctx, request, input.PaneID, input.SessionName, "running a command", "run_shell_command")
+	initial, err := t.preflightPaneInput(
+		ctx, input.PaneID, input.SessionName, paneInputConfigured, "run_shell_command",
+	)
 	if err != nil {
-		return nil, err
+		return started, err
 	}
-	if shell := incompatibleRunCommandShell(pane); shell != "" {
-		return nil, fmt.Errorf(
-			"run_shell_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
-				"use send_keys or respawn_pane with a compatible shell",
-			pane.ID(), shell,
+	started.paneID = initial.Source.ID()
+	started.configuredIDs = append([]string{}, initial.ConfiguredIDs...)
+	if len(initial.ConfiguredIDs) != 1 {
+		return started, fmt.Errorf(
+			"run_shell_command refuses configured pane membership %v: one completion, output, and exit status require a configured singleton",
+			initial.ConfiguredIDs,
 		)
 	}
+	if shell := incompatibleRunCommandShell(initial.Source); shell != "" {
+		return started, fmt.Errorf(
+			"run_shell_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
+				"use send_keys or respawn_pane with a compatible shell",
+			initial.Source.ID(), shell,
+		)
+	}
+	if err := t.confirmCallerInputPreflight(ctx, request, initial, "running a command"); err != nil {
+		return started, err
+	}
+
+	server := t.tmux(ctx)
 
 	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil {
-		return nil, err
+		return started, err
 	}
 	if len(socket.Stdout) == 0 || socket.Stdout[0] == "" {
-		return nil, errors.New("tmux did not report its socket path")
+		return started, errors.New("tmux did not report its socket path")
 	}
 	tmuxExecutable := server.Executable()
 
 	directory, err := os.MkdirTemp("", "libtmux-mcp-run")
 	if err != nil {
-		return nil, err
+		return started, err
 	}
 
 	statusPath := filepath.Join(directory, "status")
@@ -195,35 +208,62 @@ func (t *tools) startCommand(
 			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
 		shellQuote(tmuxExecutable),
 		shellQuote(socket.Stdout[0]),
-		shellQuote(pane.ID().String()),
+		shellQuote(initial.Source.ID().String()),
 	)
 	script := wrapperScript(mark, openedPath, commandPath, statusPath, closedPath)
 
 	if err := os.WriteFile(commandPath, []byte(input.Command+"\n"), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
-		return nil, err
+		return started, err
 	}
 	// Source the wrapper so tabs and control bytes bypass the shell's line
 	// editor; only this package-controlled path is typed into the pane.
 	scriptPath := filepath.Join(directory, "script")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
-		return nil, err
+		return started, err
 	}
-	started := &commandRun{
-		paneID:    pane.ID(),
-		directory: directory,
-		openedAt:  openedPath,
-		closedAt:  closedPath,
-		statusAt:  statusPath,
+	started.directory = directory
+	started.openedAt = openedPath
+	started.closedAt = closedPath
+	started.statusAt = statusPath
+	if err := t.runtime.deps.beforeRunDispatch(ctx); err != nil {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command pre-dispatch setup failed for configured pane membership %v: %w",
+			started.configuredIDs, err,
+		)
 	}
+	second, err := t.preflightPaneInput(
+		ctx, initial.Source.ID().String(), "", paneInputConfigured, "run_shell_command",
+	)
+	if err != nil {
+		_ = os.RemoveAll(directory)
+		return started, err
+	}
+	started.configuredIDs = append([]string{}, second.ConfiguredIDs...)
+	if len(second.ConfiguredIDs) != 1 {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refuses configured pane membership %v at dispatch: one completion, output, and exit status require a configured singleton",
+			second.ConfiguredIDs,
+		)
+	}
+	if shell := incompatibleRunCommandShell(second.Source); shell != "" {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refuses configured pane membership %v at dispatch: pane %s is running incompatible shell %s; use send_keys or respawn_pane with a compatible shell",
+			second.ConfiguredIDs, second.Source.ID(), shell,
+		)
+	}
+	started.paneID = second.Source.ID()
 	sourceScript := ". " + shellQuote(scriptPath)
-	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
+	if err := t.runtime.deps.sendKeys(ctx, second.Source, tmux.SendKeysRequest{
 		Command:         &sourceScript,
 		SuppressHistory: input.SuppressHistory,
 	}); err != nil {
 		_ = os.RemoveAll(directory)
-		return nil, err
+		return started, err
 	}
 	return started, nil
 }
@@ -277,11 +317,12 @@ type awaiting struct {
 }
 
 type commandRun struct {
-	paneID    tmux.PaneID
-	directory string
-	openedAt  string
-	closedAt  string
-	statusAt  string
+	paneID        tmux.PaneID
+	directory     string
+	openedAt      string
+	closedAt      string
+	statusAt      string
+	configuredIDs []string
 }
 
 const commandCompletionPollInterval = 50 * time.Millisecond

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -51,25 +52,25 @@ func (t *tools) resolvePaneToWrite(
 	return pane, nil
 }
 
-// resolvePaneToDeliver is the target-resolution seam for input tools, applying
-// caller-pane and input-state guards. Non-input mutations use
-// resolvePaneToWrite so dead panes remain addressable.
-//
-// tool is explicit because batched requests name the batch; refusals must
-// identify the nested tool.
-func (t *tools) resolvePaneToDeliver(
+func (t *tools) confirmCallerInputPreflight(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
-	id, sessionName, action, tool string,
-) (tmux.Pane, error) {
-	pane, err := t.resolvePaneToWrite(ctx, request, id, sessionName, action)
-	if err != nil {
-		return tmux.Pane{}, err
+	preflight paneInputPreflight,
+	action string,
+) error {
+	panes := append([]tmux.Pane(nil), preflight.Panes...)
+	slices.SortFunc(panes, func(left, right tmux.Pane) int {
+		return strings.Compare(left.ID().String(), right.ID().String())
+	})
+	for _, pane := range panes {
+		if err := t.confirmCallerWrite(ctx, request, pane, action, true); err != nil {
+			return fmt.Errorf(
+				"configured pane input membership %v: %w",
+				preflight.ConfiguredIDs, err,
+			)
+		}
 	}
-	if err := refuseAPaneThatCannotRead(pane, tool); err != nil {
-		return tmux.Pane{}, err
-	}
-	return pane, nil
+	return nil
 }
 
 // confirmCallerWrite asks the person before a write lands in the caller pane.

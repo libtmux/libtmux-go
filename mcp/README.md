@@ -203,6 +203,10 @@ A write reached through a batch asks in the same way a direct one does. The
 question goes to the client that sent the batch, and declining fails that call
 and stops the batch there.
 
+Synchronized input protects every configured member, not only the requested
+source. The server validates the complete membership before asking, so a dead
+or modal peer refuses the operation without prompting or changing tmux.
+
 ## Limiting what a client can do
 
 `LIBTMUX_TOOLSETS` selects an unordered subset of `inspect`, `manage`, `execute`,
@@ -347,6 +351,13 @@ Copy mode stays outside the MCP surface. Captures, snapshots, searches, and
 cursors read pane output without taking over an attached person's modal view;
 `get_pane_info` reports when a mode already owns input. The Go tmux module
 retains its copy-mode API for applications that own that interaction.
+
+Input tools read effective pane synchronization from a fresh snapshot. Direct
+sends and batch rows report sorted configured membership, while
+`run_shell_command` requires a configured singleton before setup and again
+before dispatch. `paste_text` is target-only; optional Enter has its own
+configured membership. These IDs describe observed configuration, not proven
+delivery, because tmux state can change after the check.
 
 A second [libtmux-mcp server](https://github.com/tmux-python/libtmux-mcp) for
 tmux is written in Python.

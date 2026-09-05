@@ -122,9 +122,9 @@ func TestCapabilityManifestDefinesTheExactPublicSurface(t *testing.T) {
 			}
 		}
 		if tool.Name == "set_synchronize_panes" &&
-			(!strings.Contains(tool.Description, "subsequent input") ||
-				!strings.Contains(tool.Description, "copied to every pane")) {
-			t.Errorf("set_synchronize_panes description omits future fan-out: %q", tool.Description)
+			(!strings.Contains(tool.Description, "window synchronization default") ||
+				!strings.Contains(tool.Description, "pane-level overrides")) {
+			t.Errorf("set_synchronize_panes description omits configured membership semantics: %q", tool.Description)
 		}
 
 		literalized, ok := capability["inputLiteralization"].(map[string]any)
@@ -906,7 +906,7 @@ func TestRunShellCommandHasNoRetiredJobHandles(t *testing.T) {
 	}
 }
 
-func TestCapabilityManifestDisclosesSynchronizedSendTargets(t *testing.T) {
+func TestCapabilityManifestDisclosesConfiguredInputMembership(t *testing.T) {
 	setCapabilityEnvironment(t, "execute", "", "")
 	tools, err := AdvertisedTools(t.Context())
 	if err != nil {
@@ -922,7 +922,15 @@ func TestCapabilityManifestDisclosesSynchronizedSendTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(encoded), `"resolved_pane_ids"`) {
-		t.Fatal("send_keys_batch rows do not disclose resolved synchronized pane targets")
+		t.Fatal("send_keys_batch rows do not disclose configured pane membership")
+	}
+	run := namedTool(t, tools, "run_shell_command")
+	if _, ok := schemaProperties(t, run.OutputSchema)["resolved_pane_ids"]; !ok {
+		t.Fatal("run_shell_command output does not disclose its configured singleton")
+	}
+	paste := namedTool(t, tools, "paste_text")
+	if _, ok := schemaProperties(t, paste.OutputSchema)["enter_pane_ids"]; !ok {
+		t.Fatal("paste_text output does not disclose configured Enter membership")
 	}
 }
 
