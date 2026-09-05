@@ -653,39 +653,3 @@ func decodeCursor(value string) (captureCursor, error) {
 }
 
 // addCaptureTools advertises the tools that read a pane's text.
-func addCaptureTools(server *mcp.Server, t *tools) {
-	register(server, t, CapabilityContentRead, &mcp.Tool{
-		Name:        "capture_pane",
-		Annotations: readOnly("Capture a tmux Pane"),
-		Description: "Read what one pane holds: its visible screen, or its " +
-			"scrollback too with includeHistory. The reply is bounded and says " +
-			"what it dropped. Pass styles for a program that reports success or " +
-			"failure in colour rather than in words, which a capture otherwise " +
-			"strips. Use capture_since instead to read a pane repeatedly without " +
-			"paying for the same screen each time.",
-	}, t.capturePane)
-	register(server, t, CapabilityContentRead, &mcp.Tool{
-		Name:        "capture_since",
-		Annotations: readOnly("Read What a Pane Wrote Since"),
-		Description: "Read only what a pane wrote since the cursor a previous " +
-			"call returned, and get a cursor for next time. Call it once with no " +
-			"cursor to start. This is how to watch a pane across turns: a quiet " +
-			"pane returns nothing rather than its whole screen again. " +
-			"linesMissed reports that tmux discarded scrollback in between, so " +
-			"the reply is the current screen rather than everything since.",
-	}, t.captureSince)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "clear_pane",
-		Annotations: settling("Clear a tmux Pane"),
-		Description: "Clear a pane's screen, and its scrollback when asked. " +
-			"Clearing what has already been read keeps later captures small.",
-	}, t.clearPane)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "pipe_pane",
-		Annotations: mutating("Pipe a Pane's Output"),
-		Description: "Send everything a pane writes to a shell command as well " +
-			"as to the screen, such as \"cat >> /tmp/build.log\". Use it for " +
-			"output too large for scrollback, which is lost before anyone reads " +
-			"it. Call again with no command to stop.",
-	}, t.pipePane)
-}

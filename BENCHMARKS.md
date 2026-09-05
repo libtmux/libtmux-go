@@ -143,7 +143,7 @@ the server. Compare one revision against another on one machine, and watch the
 allocations.
 
 The table is the median of three 60-iteration samples on the machine named
-above, capped to 10 runtime threads, on Linux with Go 1.26.7 and tmux 3.7c.
+above, capped to 10 runtime threads, on Linux with Go 1.26.5 and tmux 3.7c.
 These calls reuse MCP's provenance-bound control connection instead of starting
 a tmux process for each command. The control protocol allocates more Go objects
 than the older subprocess-backed MCP path; the execution-path tables above show
@@ -151,25 +151,25 @@ the process reduction that trade buys.
 
 | Call | allocs/op |
 | --- | --- |
-| `list_sessions` | 2,379 |
-| `get_server_info` | 2,660 |
-| `list_panes` | 2,796 |
-| `list_panes` with `detail: full` | 3,026 |
-| `display_message` | 6,539 |
-| `capture_pane` | 7,404 |
+| `get_tmux_variables` | 326 |
+| `get_pane_info` | 1,350 |
+| `capture_pane` | 1,946 |
+| `list_sessions` | 2,375 |
+| `get_server_info` | 2,569 |
+| `list_panes` | 2,787 |
 
 Two of these measure a claim rather than a cost.
 
 **A batch saves framing, not server work.** Three listings batched and the same
-three sent one at a time run the same tmux commands. The batch allocates 1.59MB
-against 2.25MB and, over a real pipe rather than the in-memory transport these
+three sent one at a time run the same tmux commands. The batch allocates 1.69MB
+against 2.24MB and, over a real pipe rather than the in-memory transport these
 run on, spends one round trip rather than three. Its reason to exist is the
 caller's turn, not the server's CPU.
 
 **`capture_since` has a break-even.** It reads the pane and then fingerprints
 the rows to mint a cursor, so it costs more than a plain capture and returns a
-cursor in every reply. On an 80x24 pane of short lines that is about 373 bytes
-against 173, and `capture_pane` wins on both counts. It earns its place on a
+cursor in every reply. On an 80x24 pane of short lines that is about 371 bytes
+against 175, and `capture_pane` wins on both counts. It earns its place on a
 wide pane holding full lines, read repeatedly -- which is what it is for, and
 is worth knowing is not every pane.
 

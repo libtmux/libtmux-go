@@ -44,14 +44,14 @@ func TestWaitForChannelRejectsNegativeTimeout(t *testing.T) {
 }
 
 func TestWaitForChannelSchemaRejectsNegativeTimeouts(t *testing.T) {
-	schema, err := jsonschema.For[waitForChannelInput](nil)
+	schema, err := jsonschema.For[waitForChannelCapabilityInput](nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	constrain("wait_for_channel", schema)
-	timeout := schema.Properties["timeoutSeconds"]
+	timeout := schema.Properties["timeout"]
 	if timeout == nil || timeout.Minimum == nil || *timeout.Minimum != 0 {
-		t.Fatalf("wait_for_channel timeoutSeconds minimum = %v, want 0", timeout.Minimum)
+		t.Fatalf("wait_for_channel timeout minimum = %v, want 0", timeout.Minimum)
 	}
 }
 

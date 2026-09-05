@@ -26,16 +26,14 @@ const AuditEnvironmentVariable = "LIBTMUX_AUDIT"
 
 // auditIdentifiers is the cleartext allowlist. User-chosen names remain summarized.
 var auditIdentifiers = map[string]bool{
-	"paneId": true, "windowId": true, "sessionId": true,
-	"direction": true, "scope": true, "layout": true, "withPaneId": true,
-	"maxLines": true, "maxBytes": true, "maxPanes": true, "maxMatchesPerPane": true,
-	"timeoutSeconds": true, "percentage": true, "width": true, "height": true,
-	"index": true, "zoom": true, "regex": true, "matchCase": true,
-	"includeHistory": true, "joinWrapped": true, "sinceEntry": true,
-	"suppressHistory": true, "literal": true, "bracket": true, "enter": true,
-	"kill": true, "confirm": true, "history": true, "unset": true,
-	"delete": true, "spread": true, "keepFocus": true, "scrollUp": true,
-	"startLine": true, "endLine": true, "tool": true,
+	"pane_id": true, "window_id": true, "session_id": true, "other_pane_id": true,
+	"direction": true, "scope": true, "layout": true, "position": true,
+	"max_lines": true, "max_matches_per_pane": true, "timeout": true,
+	"percent": true, "width": true, "height": true, "index": true,
+	"regex": true, "history": true, "effective": true, "suppress_history": true,
+	"literal": true, "enter": true, "attach": true, "enabled": true,
+	"confirm_self": true, "drain_first": true, "lines": true,
+	"on_error": true, "tool": true,
 }
 
 func auditWriter() (io.Writer, io.Closer) {

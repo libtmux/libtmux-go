@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -31,6 +32,13 @@ import (
 )
 
 func main() {
+	if err := runMain(); err != nil {
+		fmt.Fprintln(os.Stderr, "libtmux-mcp:", err)
+		os.Exit(1)
+	}
+}
+
+func runMain() error {
 	socketName := flag.String("socket-name", "", "tmux socket name; nonempty overrides socket environment variables")
 	socketPath := flag.String("socket-path", "", "explicit tmux socket path; nonempty has highest precedence")
 	binary := flag.String("binary", "", "tmux executable; empty uses LIBTMUX_TMUX_BIN, then resolves tmux through PATH")
@@ -41,48 +49,49 @@ func main() {
 
 	if *version {
 		fmt.Println("libtmux-mcp", tmuxmcp.Version)
-		return
+		return nil
 	}
 	if *tools {
-		if err := reportTools(); err != nil {
-			fmt.Fprintln(os.Stderr, "libtmux-mcp:", err)
-			os.Exit(1)
-		}
-		return
+		return reportTools()
 	}
 
-	resolvedName, resolvedPath, socketFrom := resolveSocket(*socketName, *socketPath)
+	resolvedName, resolvedPath, configFile, socketFrom, minimal, err := resolveTarget(*socketName, *socketPath)
+	if err != nil {
+		return err
+	}
+	if minimal {
+		var cleanup func() error
+		configFile, cleanup, err = tmuxmcp.MaterializeMinimalConfig()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cleanup() }()
+	}
 	target, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: resolvedName,
 		SocketPath: resolvedPath,
+		ConfigFile: configFile,
 		Binary:     binaryFrom(*binary),
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "libtmux-mcp:", err)
-		os.Exit(1)
+		return err
 	}
 
-	switch {
-	case *doctor:
-		err = reportDoctor(target, socketFrom)
-	default:
-		err = serve(target)
+	if *doctor {
+		return reportDoctor(target, socketFrom)
 	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "libtmux-mcp:", err)
-		os.Exit(1)
-	}
+	return serve(target, minimal)
 }
 
-func serve(target tmux.Server) error {
+func serve(target tmux.Server, defaultMinimal bool) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Probe the binary at startup; the selected server may start on demand.
-	if _, err := target.Version(ctx); err != nil {
-		return fmt.Errorf("probe tmux version: %w", endedBy(ctx, err))
+	run := tmuxmcp.Run
+	if defaultMinimal {
+		run = tmuxmcp.RunDefaultMinimal
 	}
-	if err := tmuxmcp.Run(ctx, target); err != nil && !isClientHangup(err) {
+	if err := run(ctx, target); err != nil && !isClientHangup(err) {
 		return endedBy(ctx, err)
 	}
 	return nil
@@ -159,40 +168,19 @@ func reportTools() error {
 	slices.SortFunc(tools, func(a, b *sdk.Tool) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	level := string(tmuxmcp.ResolvedSafetyLevel())
-	switch asked := os.Getenv(tmuxmcp.SafetyEnvironmentVariable); {
-	case asked == "":
-		level += " (default)"
-	case !strings.EqualFold(strings.TrimSpace(asked), level):
-		level += fmt.Sprintf(" (%s is not a level, so the lowest was taken)", asked)
-	}
-	fmt.Printf("%d tools at safety level %s\n\n", len(tools), level)
-	capabilities := tmuxmcp.ResolvedCapabilities()
-	capabilityNames := make([]string, 0, len(capabilities))
-	for _, capability := range capabilities {
-		capabilityNames = append(capabilityNames, string(capability))
-	}
-	capabilityLabel := strings.Join(capabilityNames, ", ")
-	if strings.TrimSpace(os.Getenv(tmuxmcp.CapabilitiesEnvironmentVariable)) == "" {
-		capabilityLabel += " (default)"
-	}
-	fmt.Printf("capabilities: %s\n", capabilityLabel)
-	if rejected := tmuxmcp.RejectedCapabilityValues(); len(rejected) > 0 {
-		fmt.Printf("rejected capabilities: %s\n", strings.Join(rejected, ", "))
-	}
-	fmt.Println()
+	fmt.Printf("%d startup-frozen tools\n\n", len(tools))
 	for _, tool := range tools {
-		kind := "changes tmux"
-		switch {
-		case tool.Annotations == nil:
-		case tool.Annotations.ReadOnlyHint:
-			kind = "reads"
-		case tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint:
-			kind = "ends something"
+		capability, _ := tool.Meta[tmuxmcp.CapabilityMetaKey].(map[string]any)
+		toolset, _ := capability["toolset"].(string)
+		reach, _ := capability["processReach"].(string)
+		if toolset == "" {
+			toolset = "unknown"
 		}
-		capability, _ := tool.Meta[tmuxmcp.CapabilityMetaKey].(string)
-		fmt.Printf("  %-28s %-16s %-14s %s\n",
-			tool.Name, capability, kind, firstSentence(tool.Description))
+		if reach == "" {
+			reach = "unknown"
+		}
+		fmt.Printf("  %-28s %-10s %-20s %s\n",
+			tool.Name, toolset, reach, firstSentence(tool.Description))
 	}
 	return nil
 }
@@ -206,18 +194,15 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 	defer done()
 
 	var info struct {
-		SocketPath           string   `json:"socketPath"`
-		Version              string   `json:"version"`
-		Alive                bool     `json:"alive"`
-		Sessions             int      `json:"sessions"`
-		Windows              int      `json:"windows"`
-		Panes                int      `json:"panes"`
-		Clients              int      `json:"clients"`
-		InsideThisServer     bool     `json:"insideThisServer"`
-		CallerPaneID         string   `json:"callerPaneId"`
-		SafetyLevel          string   `json:"safetyLevel"`
-		Capabilities         []string `json:"capabilities"`
-		RejectedCapabilities []string `json:"rejectedCapabilities"`
+		SocketPath       string `json:"socketPath"`
+		Version          string `json:"version"`
+		Alive            bool   `json:"alive"`
+		Sessions         int    `json:"sessions"`
+		Windows          int    `json:"windows"`
+		Panes            int    `json:"panes"`
+		Clients          int    `json:"clients"`
+		InsideThisServer bool   `json:"insideThisServer"`
+		CallerPaneID     string `json:"callerPaneId"`
 	}
 	if err := callInto(ctx, session, "get_server_info", &info); err != nil {
 		return err
@@ -233,18 +218,6 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 		fmt.Println("  holds:   nothing — no tmux server is running on that socket")
 		fmt.Println("           (not a fault; tmux starts one when something asks it to)")
 	}
-	fmt.Printf("  safety:  %s\n", info.SafetyLevel)
-	if rejected := tmuxmcp.RejectedSafetyValue(); rejected != "" {
-		fmt.Printf("           %s is %q, which is not a level; the lowest was taken\n",
-			tmuxmcp.SafetyEnvironmentVariable, rejected)
-	}
-	fmt.Printf("  access:  %s\n", strings.Join(info.Capabilities, ", "))
-	if len(info.RejectedCapabilities) > 0 {
-		fmt.Printf("           rejected %s values: %s\n",
-			tmuxmcp.CapabilitiesEnvironmentVariable,
-			strings.Join(info.RejectedCapabilities, ", "))
-	}
-
 	switch {
 	case info.InsideThisServer:
 		fmt.Printf("  caller:  pane %s of this very server — acting on it acts on\n"+
@@ -255,33 +228,6 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 		fmt.Println("  caller:  not running inside a tmux pane")
 	}
 
-	var servers struct {
-		SearchedIn string `json:"searchedIn"`
-		Servers    []struct {
-			Name     string `json:"name"`
-			Alive    bool   `json:"alive"`
-			IsTarget bool   `json:"isTarget"`
-			Sessions int    `json:"sessions"`
-		} `json:"servers"`
-	}
-	if err := callInto(ctx, session, "list_servers", &servers); err != nil {
-		return nil
-	}
-	fmt.Printf("\n  other tmux sockets in %s:\n", servers.SearchedIn)
-	if len(servers.Servers) == 0 {
-		fmt.Println("    none")
-	}
-	for _, found := range servers.Servers {
-		mark := " "
-		if found.IsTarget {
-			mark = "*"
-		}
-		state := "no server running"
-		if found.Alive {
-			state = fmt.Sprintf("%d sessions", found.Sessions)
-		}
-		fmt.Printf("   %s %-24s %s\n", mark, found.Name, state)
-	}
 	return nil
 }
 
@@ -320,21 +266,57 @@ func orUnknown(value string) string {
 	return value
 }
 
-// resolveSocket reports the selected socket and its operator-controlled source.
-func resolveSocket(name, path string) (socketName, socketPath, origin string) {
+// resolveTarget freezes one socket and configuration before MCP starts.
+func resolveTarget(name, path string) (
+	socketName, socketPath, configFile, origin string,
+	minimal bool,
+	err error,
+) {
+	if name != "" && path != "" {
+		return "", "", "", "", false, errors.New("-socket-name and -socket-path are mutually exclusive")
+	}
+	environmentName, nameSet := os.LookupEnv(tmuxmcp.SocketEnvironmentVariable)
+	environmentPath, pathSet := os.LookupEnv(tmuxmcp.SocketPathEnvironmentVariable)
+	if name == "" && path == "" && nameSet && pathSet {
+		return "", "", "", "", false, fmt.Errorf(
+			"%s and %s are mutually exclusive",
+			tmuxmcp.SocketEnvironmentVariable,
+			tmuxmcp.SocketPathEnvironmentVariable,
+		)
+	}
+	defaultDedicated := false
 	switch {
 	case path != "":
-		return "", path, "-socket-path"
+		socketPath, origin = path, "-socket-path"
 	case name != "":
-		return name, "", "-socket-name"
+		socketName, origin = name, "-socket-name"
+	case pathSet:
+		socketPath, origin = strings.TrimSpace(environmentPath), tmuxmcp.SocketPathEnvironmentVariable
+	case nameSet:
+		socketName, origin = strings.TrimSpace(environmentName), tmuxmcp.SocketEnvironmentVariable
+	default:
+		socketName, origin, defaultDedicated = "libtmux-mcp", "default dedicated socket", true
 	}
-	if path := strings.TrimSpace(os.Getenv(tmuxmcp.SocketPathEnvironmentVariable)); path != "" {
-		return "", path, tmuxmcp.SocketPathEnvironmentVariable
+	if socketName == "" && socketPath == "" {
+		return "", "", "", "", false, fmt.Errorf("%s socket selector is empty", origin)
 	}
-	if named := strings.TrimSpace(os.Getenv(tmuxmcp.SocketEnvironmentVariable)); named != "" {
-		return named, "", tmuxmcp.SocketEnvironmentVariable
+	if socketPath != "" {
+		if !filepath.IsAbs(socketPath) {
+			return "", "", "", "", false, fmt.Errorf("%s socket path must be absolute", origin)
+		}
+		socketPath = filepath.Clean(socketPath)
 	}
-	return "", "", "tmux environment"
+	configured, configuredSet := os.LookupEnv(tmuxmcp.TmuxConfigEnvironmentVariable)
+	if configuredSet {
+		configured = strings.TrimSpace(configured)
+		if configured == "" || !filepath.IsAbs(configured) {
+			return "", "", "", "", false, fmt.Errorf(
+				"%s must be an absolute config path", tmuxmcp.TmuxConfigEnvironmentVariable,
+			)
+		}
+		configFile = filepath.Clean(configured)
+	}
+	return socketName, socketPath, configFile, origin, defaultDedicated && !configuredSet, nil
 }
 
 func binaryFrom(flagged string) string {

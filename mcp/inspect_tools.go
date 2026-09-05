@@ -106,8 +106,13 @@ type paneMatch struct {
 }
 
 type searchPanesOutput struct {
-	Panes     []paneMatch `json:"panes"`
-	MorePanes int         `json:"morePanes,omitempty"`
+	Panes          []paneMatch `json:"panes"`
+	MorePanes      int         `json:"morePanes,omitempty"`
+	PanesInspected int         `json:"panesInspected"`
+	LinesInspected int         `json:"linesInspected"`
+	BytesInspected int         `json:"bytesInspected"`
+	WorkLimited    bool        `json:"workLimited"`
+	WorkTimeLimit  float64     `json:"workTimeLimitSeconds"`
 }
 
 // searchPanes returns matching lines with each pane to avoid follow-up captures.
@@ -125,8 +130,10 @@ func (t *tools) searchPanes(
 	}
 	perPane := clamp(input.MaxMatchesPerPane, searchDefaultMatchesPerPane, searchCeilingMatchesPerPane)
 	paneLimit := clamp(input.MaxPanes, searchDefaultPanes, searchCeilingPanes)
+	workCtx, cancelWork := context.WithTimeout(ctx, searchWorkTimeout)
+	defer cancelWork()
 
-	snapshot, err := t.tmux(ctx).Snapshot(ctx)
+	snapshot, err := t.tmux(workCtx).Snapshot(workCtx)
 	if err != nil {
 		return nil, searchPanesOutput{}, err
 	}
@@ -136,35 +143,51 @@ func (t *tools) searchPanes(
 		request.Start = tmux.CaptureBoundary
 	}
 
-	server, err := t.runtime.process(ctx)
+	server, err := t.runtime.process(workCtx)
 	if err != nil {
 		return nil, searchPanesOutput{}, err
 	}
 	socket := t.socketPath(ctx)
 	caller := callerIdentity{}
 	if len(snapshot.Panes()) > 0 {
-		caller, err = t.callerIdentityFor(ctx)
+		caller, err = t.callerIdentityFor(workCtx)
 		if err != nil {
 			return nil, searchPanesOutput{}, err
 		}
 	}
 	matched := make([]paneMatch, 0)
+	budget := searchWorkBudget{}
+	workLimited := false
+
+search:
 	for _, pane := range snapshot.Panes() {
+		if !budget.startPane() || searchWorkDeadline(ctx, workCtx) {
+			workLimited = true
+			break
+		}
 		if session := strings.TrimSpace(input.SessionName); session != "" {
 			if name, _ := pane.Formats().SessionName(); name != session {
 				continue
 			}
 		}
-		live, err := server.Pane(ctx, pane.ID())
+		live, err := server.Pane(workCtx, pane.ID())
 		if err != nil {
+			if searchWorkDeadline(ctx, workCtx) {
+				workLimited = true
+				break
+			}
 			if t.runtime.isTerminalError(err) {
 				return nil, searchPanesOutput{}, err
 			}
 			// Ignore panes that disappear after the snapshot.
 			continue
 		}
-		lines, err := live.Capture(ctx, request)
+		lines, err := live.Capture(workCtx, request)
 		if err != nil {
+			if searchWorkDeadline(ctx, workCtx) {
+				workLimited = true
+				break
+			}
 			if t.runtime.isTerminalError(err) {
 				return nil, searchPanesOutput{}, err
 			}
@@ -172,6 +195,10 @@ func (t *tools) searchPanes(
 		}
 		hits := make([]matchedLine, 0, perPane)
 		for row, line := range lines {
+			if searchWorkDeadline(ctx, workCtx) || !budget.consumeLine(line) {
+				workLimited = true
+				break search
+			}
 			if matcher(line) {
 				hits = append(hits, matchedLine{Row: row, Text: line})
 			}
@@ -188,7 +215,11 @@ func (t *tools) searchPanes(
 		matched = append(matched, found)
 	}
 
-	output := searchPanesOutput{Panes: matched}
+	output := searchPanesOutput{
+		Panes: matched, PanesInspected: budget.panes, LinesInspected: budget.lines,
+		BytesInspected: budget.bytes, WorkLimited: workLimited,
+		WorkTimeLimit: searchWorkTimeout.Seconds(),
+	}
 	if len(matched) > paneLimit {
 		output.MorePanes = len(matched) - paneLimit
 		output.Panes = matched[:paneLimit]
@@ -196,9 +227,16 @@ func (t *tools) searchPanes(
 	return nil, output, nil
 }
 
+func searchWorkDeadline(parent, work context.Context) bool {
+	return parent.Err() == nil && errors.Is(work.Err(), context.DeadlineExceeded)
+}
+
 // compileMatcher defaults to literal text because terminal output commonly
 // contains regular-expression syntax.
 func compileMatcher(text string, asRegex, matchCase bool) (func(string) bool, error) {
+	if err := validatePatternInputs([]string{text}); err != nil {
+		return nil, err
+	}
 	if asRegex {
 		pattern := text
 		if !matchCase {
@@ -390,43 +428,4 @@ func (t *tools) getSessionInfo(
 		return cmp.Compare(a.Index, b.Index)
 	})
 	return nil, output, nil
-}
-
-func addInspectTools(server *mcp.Server, t *tools) {
-	register(server, t, CapabilityContentRead, &mcp.Tool{
-		Name:        "snapshot_pane",
-		Annotations: readOnly("Snapshot a tmux Pane"),
-		Description: "One pane's contents together with what it is, where it " +
-			"sits, and whether its process has exited. Prefer this to " +
-			"capture_pane followed by get_pane_info when one response is enough. " +
-			"State and content are collected sequentially, not atomically.",
-	}, t.snapshotPane)
-	register(server, t, CapabilityContentRead, &mcp.Tool{
-		Name:        "search_panes",
-		Annotations: readOnly("Search tmux Panes"),
-		Description: "Find which panes show some text, and what they showed. " +
-			"Answers \"which pane has the failing test\" in one call, where " +
-			"capturing each pane in turn costs one per pane.",
-	}, t.searchPanes)
-	register(server, t, CapabilityMetadataRead, &mcp.Tool{
-		Name:        "get_pane_info",
-		Annotations: readOnly("Describe a tmux Pane"),
-		Description: "One pane's state without its contents: what it runs, its " +
-			"process id, whether that process has exited and with what status, " +
-			"how much scrollback there is, and whether the pane is in a mode " +
-			"that will eat the keys you send it.",
-	}, t.getPaneInfo)
-	register(server, t, CapabilityMetadataRead, &mcp.Tool{
-		Name:        "get_window_info",
-		Annotations: readOnly("Describe a tmux Window"),
-		Description: "One window's size, layout string, and panes. The layout " +
-			"string is what select_layout accepts back, so a layout worth " +
-			"keeping can be read here and applied later.",
-	}, t.getWindowInfo)
-	register(server, t, CapabilityMetadataRead, &mcp.Tool{
-		Name:        "get_session_info",
-		Annotations: readOnly("Describe a tmux Session"),
-		Description: "One session's windows, working directory, and when it was " +
-			"created.",
-	}, t.getSessionInfo)
 }

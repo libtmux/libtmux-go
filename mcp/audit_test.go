@@ -9,9 +9,9 @@ import (
 func TestPayloadsAreDigestedRatherThanRecorded(t *testing.T) {
 	t.Parallel()
 	arguments := json.RawMessage(`{
-		"paneId": "%3",
+		"pane_id": "%3",
 		"command": "deploy --token ghp_abcdefghijklmnop",
-		"suppressHistory": true
+		"suppress_history": true
 	}`)
 
 	summary := summarizeArguments(arguments)
@@ -24,11 +24,11 @@ func TestPayloadsAreDigestedRatherThanRecorded(t *testing.T) {
 	if strings.Contains(recorded, "ghp_abcdefghijklmnop") || strings.Contains(recorded, "deploy") {
 		t.Fatalf("the command reached the record: %s", recorded)
 	}
-	if summary["paneId"] != "%3" {
-		t.Errorf("paneId = %v, want it logged as itself", summary["paneId"])
+	if summary["pane_id"] != "%3" {
+		t.Errorf("pane_id = %v, want it logged as itself", summary["pane_id"])
 	}
-	if summary["suppressHistory"] != true {
-		t.Errorf("suppressHistory = %v, want the flag kept", summary["suppressHistory"])
+	if summary["suppress_history"] != true {
+		t.Errorf("suppress_history = %v, want the flag kept", summary["suppress_history"])
 	}
 	command, ok := summary["command"].(map[string]any)
 	if !ok {
@@ -67,21 +67,21 @@ func TestAnUnknownFieldIsTreatedAsAPayload(t *testing.T) {
 func TestUserChosenNamesAreDigested(t *testing.T) {
 	t.Parallel()
 	summary := summarizeArguments(json.RawMessage(`{
-		"sessionName": "customer-secret-project",
-		"paneId": "%3"
+		"session_name": "customer-secret-project",
+		"pane_id": "%3"
 	}`))
-	if _, digested := summary["sessionName"].(map[string]any); !digested {
-		t.Errorf("sessionName was logged in cleartext: %#v", summary["sessionName"])
+	if _, digested := summary["session_name"].(map[string]any); !digested {
+		t.Errorf("session_name was logged in cleartext: %#v", summary["session_name"])
 	}
-	if summary["paneId"] != "%3" {
-		t.Errorf("stable pane id = %v, want %%3", summary["paneId"])
+	if summary["pane_id"] != "%3" {
+		t.Errorf("stable pane id = %v, want %%3", summary["pane_id"])
 	}
 }
 
 func TestNestedArgumentsAreSummarizedToo(t *testing.T) {
 	t.Parallel()
 	summary := summarizeArguments(json.RawMessage(`{
-		"calls": [{"tool": "send_keys", "arguments": {"command": "secret", "paneId": "%1"}}]
+		"operations": [{"tool": "send_keys", "arguments": {"keys": ["secret"], "pane_id": "%1"}}]
 	}`))
 	encoded, err := json.Marshal(summary)
 	if err != nil {

@@ -23,7 +23,7 @@ args = ["--directory", "/repo", "run", "libtmux-mcp"]
 enabled = true
 
 [mcp_servers.tmux.env]
-LIBTMUX_SAFETY = "readonly"
+LIBTMUX_TOOLSETS = "inspect"
 
 [mcp_servers.other]
 command = "other-server"
@@ -60,9 +60,9 @@ func TestATOMLSwapTouchesOnlyItsOwnTable(t *testing.T) {
 	if !strings.Contains(after, "enabled = true") {
 		t.Error("the swap dropped enabled = true")
 	}
-	// The environment is where LIBTMUX_SAFETY lives. A swap changes which
+	// The environment is where tool selection lives. A swap changes which
 	// build answers, not how it is configured.
-	if !strings.Contains(after, `LIBTMUX_SAFETY = "readonly"`) {
+	if !strings.Contains(after, `LIBTMUX_TOOLSETS = "inspect"`) {
 		t.Error("the swap dropped the existing environment")
 	}
 	if !strings.Contains(after, `LIBTMUX_MCP_SWAP = "dev"`) {

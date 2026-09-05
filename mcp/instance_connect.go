@@ -70,7 +70,7 @@ func (i *Instance) Connect(
 			_ = responseConnection.Close()
 		}
 		close(ready)
-		scope.close(i.tools.watchers)
+		scope.close()
 		return nil, err
 	}
 	session := &ServerSession{
@@ -87,7 +87,7 @@ func (i *Instance) Connect(
 		close(ready)
 		scope.stop()
 		_ = connected.Close()
-		scope.close(i.tools.watchers)
+		scope.close()
 		return nil, ErrInstanceClosed
 	}
 	i.sessions[connected] = session

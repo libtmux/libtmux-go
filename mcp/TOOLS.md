@@ -1,563 +1,302 @@
-# Tool reference
+# MCP tool reference
 
 Every tool this server exposes, what a client sends it, and what comes back.
 Reference material: read it by search rather than start to finish.
 
 For installing the server and pointing a client at it, see
-[`README.md`](README.md).
+[README.md](README.md).
 
-**Contents** — [Prompts](#prompts) · [Resources](#resources) · [Tools](#tools) ·
+**Contents** — [Resources](#resources) · [Tools](#tools) ·
 [Recipes](#recipes) · [Gotchas](#gotchas) · [Logs](#logs) ·
-[Keeping a record](#keeping-a-record) · [Error handling](#error-handling)
-
-## Prompts
-
-Invoked by name from a client's own menu:
-
-| Prompt | Is |
-| --- | --- |
-| `diagnose_pane` | work out what a pane is doing and why it is stuck |
-| `watch_pane` | follow a pane across turns without re-reading it |
-| `recover_pane` | get back a pane that has stopped answering |
-| `set_up_workspace` | lay out a session for a piece of work |
-
-Tools are verbs and resources are nouns; neither says what a person wants done.
-A prompt is the job with its method attached, so someone who has never read the
-tool list can ask for the thing they want. There are deliberately few: a prompt
-per tool would be a second, worse tool list. `set_up_workspace` and
-`recover_pane` are withheld on a read-only server, where they would be advice
-the server cannot carry out.
-
-Most of what this server knows about which tool to use, and in what order, is
-in these prompts. A client that does not implement the prompts protocol shows a
-model none of it — so `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1` also offers them as one
-`get_recipe` tool, whose own description names them all. It is off by default,
-because a server that offers both describes the same things twice, and the
-tool list is the expensive place to say anything.
+[Keeping a record](#keeping-a-record) · [Error handling](#error-handling) ·
+[Retired MCP surface](#retired-mcp-surface) · [Every tool](#every-tool)
 
 ## Resources
 
-The tmux hierarchy is addressable as well as callable, so a person can attach a
-pane to a conversation and a client can browse without knowing a tool name:
+`tmux://capabilities` is the only MCP resource. It is a static disclosure of
+the startup-frozen effective surface, not another way to read or mutate tmux.
+It reports the selected socket boundary and provenance, the selection inputs,
+and one complete capability row for every advertised tool.
 
-| URI | Is |
-| --- | --- |
-| `tmux://sessions` | every session, with its windows and panes |
-| `tmux://sessions/{name}/windows` | the windows of one session |
-| `tmux://windows/{id}/panes` | the panes of one window |
-| `tmux://panes/{id}` | one pane's identity, position, and command |
-| `tmux://panes/{id}/content` | what one pane is showing, as text |
+The same row appears on that tool at
+`_meta["com.git-pull.libtmux-mcp/capability"]`. Registration, schemas,
+descriptions, annotations, nested batch authority, this reference, and the
+resource all come from the same native manifest.
 
-An id appears **without** its sigil: `tmux://panes/1`, not `tmux://panes/%1`.
-A percent sign begins an escape in a URI, so the sigil form is not a URI a
-client can parse. The sigil form is accepted if percent-encoded.
-
-A client filling in one of these is offered the values that exist: the panes
-and windows tmux has, narrowing to a session once one is chosen. Prompt
-arguments complete the same way. MCP has no completion for tool arguments, so
-this reaches the resources and prompts only.
-
-Topology resources require the `metadata-read` capability. Pane-content
-resources and subscriptions require `content-read`, so a metadata-only server
-cannot read terminal contents through the resource protocol.
-
-A client that can subscribe may subscribe to any of these instead of re-reading
-them. tmux already publishes what a subscription needs — a control-mode
-connection reports every byte a pane writes and every structural change — so a
-subscriber is told a pane changed rather than asking whether it did. One tmux
-connection serves every subscription, opening with the first and closing with
-the last, and notifications about one resource are coalesced so a pane printing
-a build log does not become a notification per line.
+There are no dynamic resources, prompts, resource subscriptions, or completion
+routes. Topology and pane output are tools so the startup selection governs
+every callable operation in one place.
 
 ## Tools
 
-Every tool carries MCP annotations, so a client can act on what a call does
-without reading its description: a title, `readOnlyHint`, `destructiveHint`,
-`idempotentHint`, and `openWorldHint`. The safety level is derived from them, so
-a tool that declares itself destructive is governed by having said so. A
-separate capability declared at registration must also be granted.
+The four unordered toolsets are `inspect`, `manage`, `execute`, and `teardown`.
+`LIBTMUX_TOOLSETS` selects any subset; `LIBTMUX_TOOLS` adds named tools and
+`LIBTMUX_EXCLUDE_TOOLS` removes named tools last. An empty `LIBTMUX_TOOLSETS`
+is the valid zero subset. Unknown names and malformed comma lists fail startup.
 
-Most tools take an optional `paneId`, `windowId`, or `sessionName`. Omitting it
-means the active pane, the current window, or the only session — refused rather
-than guessed when there is more than one candidate — so a client that has not
-read a listing does not spend a call on one.
+Every tool carries conservative MCP annotations: `readOnlyHint=false`,
+`destructiveHint=true`, `idempotentHint=false`, and `openWorldHint=true`.
+Those hints do not claim that an unknown tmux configuration is harmless. The
+capability row below each tool gives the precise process reach, tmux effects,
+output classes, trust flags, and input interpreter boundaries.
 
 ### Finding out what is there
 
 | Tool | Does |
 | --- | --- |
-| `list_sessions` | Sessions with their window count and attached clients; narrow with `name` or `attached` |
-| `list_windows` | Windows with their session, name, index, pane count, and active flag; narrow with `sessionName`, `name`, or `active` |
-| `list_panes` | Panes with their session, window, index, current command, active flag, and position; narrow with `sessionName`, `windowId`, `command`, `pathUnder`, `dead`, or `active`, and add per-pane state with `detail: full` |
-| `list_servers` | The tmux servers running on this machine, with the addressed one marked; `includeDead` adds the socket files tmux left behind |
-| `get_server_info` | Which socket these tools address, who is attached to it, whether this server runs in one of its panes, and tmux's own message log with `includeMessages` |
-| `get_session_info` | One session's windows, working directory, and creation time |
-| `get_window_info` | One window's size, layout string, and panes |
-| `get_pane_info` | One pane's process, exit status, scrollback size, and mode, without its contents |
-| `find_pane_by_position` | Report the pane bordering one side of another |
-| `display_message` | Expand a tmux format string, for anything no tool here answers |
+| `list_sessions` | Lists sessions and their materialized metadata |
+| `list_windows` | Lists windows, optionally within a named session |
+| `list_panes` | Lists pane identity, geometry, process state, and caller identity without reading terminal content |
+| `get_server_info` | Reports the pinned socket, liveness, topology counts, clients, and whether this process is inside the selected server |
+| `get_session_info` | Reads one session selected by exact id |
+| `get_window_info` | Reads one window's size, layout, and panes by exact id |
+| `get_pane_info` | Reads one pane's process and mode state without its contents |
+| `find_pane_by_position` | Finds a pane at one corner of a window |
+| `get_tmux_variables` | Reads a bounded list of validated variable names without accepting free-form tmux format text |
 
 ### Reading what a pane holds
 
 | Tool | Does |
 | --- | --- |
-| `capture_pane` | What a pane holds: its screen, or its scrollback too; `styles` keeps colour |
-| `capture_since` | Only what a pane wrote since the cursor a previous call returned |
-| `snapshot_pane` | One pane's contents with its state, in one call |
-| `search_panes` | Which panes show some text, and the lines that showed it |
-| `clear_pane` | Clear a pane's screen, and its scrollback when asked |
-| `pipe_pane` | Send everything a pane writes to a shell command as well |
+| `capture_pane` | Reads bounded visible output, or scrollback when requested |
+| `capture_since` | Reads only output after an opaque cursor |
+| `snapshot_pane` | Returns bounded pane content with pane metadata |
+| `search_panes` | Searches pane output under fixed pane, line, byte, pattern, and time ceilings |
+| `wait_for_text` | Waits for one of several success or failure patterns without polling |
+| `show_environment` | Reads the tmux environment; values can contain secrets |
+| `show_hooks` / `show_option` | Reads configured commands and option state |
+| `call_read_tools_batch` | Runs up to sixteen permitted inspect operations serially with typed inner validation |
 
-### Waiting instead of polling
+### Changing tmux without reaching a workload process
 
-| Tool | Does |
-| --- | --- |
-| `run_command` | Run a command in one pane, wait for it, and report its exit status and output; `detach` returns a `jobId` instead of waiting |
-| `get_job` | Collect a detached command: whether it finished, its exit status, and its output |
-| `wait_for_text` | Wait until a pane writes one of several patterns, one of the failure markers you named, or `idleSeconds` of quiet |
-| `wait_for_channel` | Wait until something signals a tmux wait-for channel |
-| `signal_channel` | Signal a channel, releasing whoever waits on it |
+The `manage` tools rename, select, resize, move, swap, title, and change a small
+set of explicit options. They do not accept commands, environment values, or a
+generic option name/value pair.
 
-### Putting something into a pane
+`set_synchronize_panes` is the one future-input amplifier. Enabling it means
+subsequent input to one pane is copied to every pane in that window.
+`send_keys` and `send_keys_batch` therefore report the resolved pane target set
+rather than implying only the requested pane received input.
 
-| Tool | Does |
-| --- | --- |
-| `send_keys` | Type into one pane and press Enter; tmux key names such as `C-c` are read |
-| `send_keys_batch` | Send tmux key names in order with no Enter, for driving a pager or an editor |
-| `paste_text` | Deliver text exactly, with no tmux key names read |
-| `enter_copy_mode` / `exit_copy_mode` | Put a pane into tmux's copy mode and back |
-| `load_buffer` / `paste_buffer` / `show_buffer` / `delete_buffer` | Stage text in a tmux buffer, deliver it, read it back, remove it |
+### Starting configured processes and sending input
 
-### Making and arranging
+`create_session`, `create_window`, `split_window`, and `respawn_pane` start the
+process already configured for the pane. Their schemas deliberately contain no
+command or environment payload.
 
-| Tool | Does |
-| --- | --- |
-| `create_session` | Start one detached session |
-| `create_window` | Add one window to a session, returning its id and first pane |
-| `split_window` | Divide one pane, placing the new one below, above, right, or left |
-| `build_workspace` | Create a session from a tmuxp-style YAML document |
-| `select_window` / `select_pane` | Make a window or pane the current one |
-| `select_layout` | Arrange a window's panes, or restore a layout string |
-| `resize_pane` / `resize_window` | Set a size in cells, or zoom a pane |
-| `swap_pane` / `move_window` | Exchange two panes, or move a window's place or session |
-| `move_pane` | Move a pane into another window, or break it out into one of its own |
-| `rename_session` / `rename_window` / `set_pane_title` | Label what was built |
-| `respawn_pane` | Restart what a pane runs, keeping the pane and its place |
+`run_shell_command` is the one pane-command route. `send_keys`,
+`send_keys_batch`, and `paste_text` reach the program already running in a
+pane. There is no host-command tool: every command payload runs inside the
+selected tmux pane with the user's permissions.
 
-### Settings, batches, and ending things
+### Ending things
 
-| Tool | Does |
-| --- | --- |
-| `show_option` / `set_option` | Read or set a tmux option at server, session, window, or pane scope |
-| `show_environment` / `set_environment` | What new processes in a session will inherit |
-| `show_hooks` | The commands tmux will run on its own, all of them or one by `name`; reading only |
-| `call_readonly_tools_batch` | Run several reading tools in one request |
-| `call_mutating_tools_batch` | Run several tools in one request, stopping at the first failure |
-| `call_destructive_tools_batch` | The same, including the ones that end something |
-| `kill_pane` / `kill_window` / `kill_session` / `kill_server` | End one pane, window, session, or the whole server |
+`clear_pane_scrollback`, `kill_pane`, `kill_window`, and `kill_session` belong
+to `teardown`. A new authenticated product-dedicated server with the bundled
+minimal configuration enables all four toolsets by default. An existing,
+explicitly named, path-selected, or user-configured server omits teardown by
+default; selecting teardown explicitly is the opt-in.
 
 ### Reading a pane repeatedly
 
-`capture_pane` returns the whole screen, most of which a client watching a pane
-across turns has already read. `capture_since` returns what the pane wrote after
-a cursor a previous call handed out, so a quiet pane costs nothing and a busy
-one costs its new lines. The cursor is opaque: it carries where tmux stood and a
-fingerprint of the rows there, because tmux renumbers every row when it trims
-the oldest, and a row number alone would silently drift.
+`capture_pane` returns the screen a caller has often already seen.
+`capture_since` returns what the pane wrote after a cursor from the previous
+call, so a quiet pane costs almost nothing and a busy pane costs only its new
+lines. The cursor is opaque and binds the pane and its process generation.
 
-tmux discards scrollback, so "what is new" is not always answerable. When the
-anchor has been trimmed away the reply is the current screen with `linesMissed`
-set, which says the client's record of the pane has a gap in it rather than
-implying it is whole.
+tmux can discard scrollback. When the cursor anchor is gone, `linesMissed`
+reports that the caller's record has a gap instead of silently treating the
+current screen as complete. Keep the new cursor even after a gap so later
+reads can continue from a known point.
 
-### How large an argument can be
+### Bounded patterns and replies
 
-What a caller sends has a ceiling, and where it sits depends on how this server
-is reaching tmux at the time.
+Patterns are bounded before dispatch: at most 32 patterns, 4,096 bytes each,
+and 16,384 bytes combined. `search_panes` also stops after 200 panes, 20,000
+lines, 1,000,000 inspected bytes, or five seconds, and reports the effective
+work ceilings with its result.
 
-tmux's own client packs a command into one frame of 16,384 bytes, so roughly
-16.3 kB of arguments is all it carries; past that tmux answers `command too
-long`. A control connection does not go through that frame, so while this
-server holds one -- which is the ordinary case -- a much larger value goes
-through. When it has fallen back to running a tmux process per command, which
-happens after the tmux server it was talking to restarts, the frame limit
-applies again and a very large `value`, `title`, `format` or `name` is refused.
-
-Nothing here needs a 16 kB argument, so this matters mainly as an explanation
-for a call that worked earlier in a session and stops working after a restart.
-Pane text is unaffected: `load_buffer` and `paste_text` do not pass their
-content as a command argument.
-
-### Bounded replies
-
-Every tool that returns pane text keeps the last lines within a bound and
-reports what it dropped. A pane's scrollback is measured against a terminal's
-memory and the reply is measured against a caller's context, and the caller
-cannot tell which it is about to get before it asks. Raise the bound with
-`maxLines`; ask for scrollback with `includeHistory`. There is a ceiling rather
-than an off switch, because a caller asking for everything is asking precisely
-when it does not know how much there is — `capture_since` is how to read past
-it.
-
-Pane text also arrives as a text content block rather than only as JSON. A
-terminal reads better as a terminal than as an array of quoted strings.
-
-Under all of that is a flat cap on any tool result, well above what the
-per-tool bounds allow. Nothing should ever reach it; it exists for the tool
-added later that forgets to bound itself, because the cost of forgetting is
-paid by whoever is talking to the model. A reply that hits it is refused with a
-message naming the tool, which is a defect report rather than a limit to work
-around.
-
-### Narrowing a listing
-
-A listing used to answer with the whole server, which is the answer to a
-question nobody asks: a caller wants the pane running the dev server, not the
-forty around it, and pays for the difference in context it cannot get back. The
-listings of sessions, windows, and panes take criteria, combined with AND, and every reply reports
-the `total` it selected from — so a caller can tell a filter that matched one
-pane from a server that only has one.
-
-Measured against a real 18-pane server over stdio: the unfiltered listing is
-7.3 kB, one session's panes 2.2 kB, and `{"command": "vim"}` 535 bytes.
-
-The criteria are matched against the snapshot the tool already takes, not
-pushed into tmux as a `-f` expression. tmux's filter language is a format, and
-a format containing `#(...)` runs it as a shell command — reliably so against a
-long-lived client, which is what this server holds. Compiling a caller's words
-into that language would make every listing tool an execution vector while it
-still reported `readOnlyHint: true`.
-
-`detail: full` adds each matching pane's exit status, working directory, title,
-history size, and whether it is in a mode that swallows keys. Every value comes
-from the snapshot already taken, so it costs no further tmux command. It is how
-to supervise several panes in one call without capturing any of them: a history
-size that has not moved since the last reading means that pane wrote nothing.
-
-### Not waiting at all
-
-`run_command` waits, which is right when the answer is the point and wrong when
-the command is a build and the caller has reading to do. `detach` returns a
-`jobId` as soon as the command is typed; `get_job` collects it later — at once
-to ask whether it has finished, or with `timeoutSeconds` to wait a bounded
-while. The command is identical either way: the same wrapper commits the same
-exit status and closing position, and only who waits changes.
-
-Collecting is idempotent. The first read that finds a status keeps it and
-releases the files behind it; every later read is answered from what was kept.
-Asking twice is how a caller checks on something, and a handle that stopped
-answering once used would report a finished command as a lost one. The last 32
-handles are kept.
-
-A handle does not outlive the process that issued it, and it says which process
-that was, so a handle presented after a restart is refused with that reason
-rather than blamed on newer commands. The command itself is unaffected — it is
-running in a pane, not in this server — so a lost handle is recovered by
-reading the pane. Clients that keep one server per session, which is all of
-them in ordinary use, never see this; a client that respawns the server per
-call, as the MCP Inspector's `--cli` does, sees it every time.
+Pane-output tools keep the newest lines within their declared bounds and
+report truncation. The read batch executes at most sixteen operations in order,
+retains full nested envelopes when they fit, and marks an oversized nested
+result `resultTruncated`.
 
 ### Waiting rather than looking
 
-Prefer `run_command` to `send_keys` followed by `capture_pane`. A shell echoes
-the command it was given, so a screen read finds the request rather than the
-result and reports success before the command has run. `run_command` reads no
-screen to decide the command is done: the wrapper atomically publishes status
-and closing records when it ends. It also returns what the command printed,
-read from marks the wrapper records inside the pane, so a caller does not have
-to guess where in the scrollback its command began.
+Prefer `run_shell_command` to sending a command and immediately capturing the
+screen. A shell echoes input before it executes it, so the capture can find the
+request rather than the result. `run_shell_command` frames one authored command,
+waits for its completion record, and returns its exit status and bounded output.
 
-What the command printed is read back off the pane, so it is what tmux can
-still see there. A tab is the one character that survives this only on newer
-tmux: before 3.6 a tab moved the cursor and left spaces in the grid, and
-`capture-pane` had nothing to reconstruct it from, so `printf 'a\tb'` is
-reported as `a` and `b` separated by spaces. tmux 3.6 preserves tabs for
-capture, and the same command is reported with its tab from there on. Nothing
-in this server can recover it on the older releases; a command whose output is
-parsed by column should be given a separator of its own.
+For output the client did not author, use `wait_for_text`. It can match output
+already present or output that arrives later, and `stop` patterns turn known
+failure text into an early answer. Every wait has a ceiling: 300 seconds by
+default, configurable with `LIBTMUX_MCP_WAIT_MAX_SECONDS`. A longer requested
+timeout is clamped and disclosed in the response.
 
-What comes back is the command's own output and nothing else. Rows the terminal
-wrapped are rejoined, so one line printed is one entry however narrow the pane
-is, and the row the shell draws its prompt into is left out. When the output
-cannot be read at all, `outputUnavailable` says why, which is what separates a
-command that printed nothing from a pane that could not be reached.
+Commands for `run_shell_command` are staged as private files and sourced by the
+pane's POSIX-compatible shell. They do not cross the interactive line editor.
+A command runs in a subshell, so `cd`, `export`, `exit`, and other shell-state
+changes do not persist in the pane's interactive shell.
+A timeout can leave the pane's program running; inspect it with
+`get_pane_info`, then send `C-c` if interruption is intended.
 
-Your POSIX-compatible command is written to a file and sourced, never typed.
-A shell's line editor acts on what arrives as keys, so a command carrying a tab
-would ask it to complete a filename and a command carrying `C-c` would be acted
-on rather than run. Known incompatible shells are refused before delivery.
-Nothing you send crosses that line editor, whatever it contains.
+### How large an argument can be
 
-A command that outlasts its wait leaves the pane holding it, and every later
-`run_command` there times out too; send `C-c` with `send_keys` to get the pane
-back.
+The native schemas cap patterns, operation counts, command output requests, and
+other fields whose cost grows with caller input. Pane text for `paste_text` and
+commands for `run_shell_command` use private files or buffers rather than being
+packed into an unrestricted shell or tmux-format expression. A rejected bound
+is a tool error before its handler reaches tmux.
 
-For output the client did not author — a service announcing it is ready —
-`wait_for_text` counts what the pane has already shown and then reads what it
-produces next, so a program that announced itself before the wait began is still
-found; `sinceEntry` turns that off for a client asking whether something has
-happened *again*. Pass `stop` with the failure markers already known, and a run
-that failed returns in milliseconds instead of at the deadline. The reply says
-why the wait ended rather than only whether it succeeded.
+### Narrowing a listing
 
-When you cannot predict what finishing prints, `idleSeconds` ends the wait once
-the pane has been quiet that long. The window is measured from the pane's own
-output, so a program still working is not mistaken for one that has finished,
-and an `idle` outcome with no lines means the pane never wrote at all — which
-is what a command that was never started looks like.
+Use `list_windows` with a session name when the session is known. `list_panes`
+returns metadata for the pinned server; use its ids with the exact getter tools
+instead of repeatedly capturing unrelated panes. When the question is about
+terminal text, `search_panes` performs the narrowing under its aggregate work
+budget and returns only matching lines.
 
-Every wait is bounded by a ceiling, 300 seconds by default and set by
-`LIBTMUX_MCP_WAIT_MAX_SECONDS`. A larger `timeoutSeconds` is clamped rather
-than refused: the reply carries `effectiveTimeoutSeconds`, and
-`timeoutClamped` when the ceiling was the lower of the two. The ceiling bounds
-the caller rather than the transport — these tools await throughout, so a long
-wait blocks nothing else. What it costs is the turn it happens in, because MCP
-gives a caller no way to change its mind once a call is in flight.
+### No detached jobs
 
-`send_keys` and `run_command` both take `suppressHistory`, which prefixes the
-command with a space so a shell told to ignore such lines keeps it out of its
-history. An agent typing into a person's pane otherwise fills their history with
-commands they never ran.
+The server creates no MCP-side background job or handle. A long-running process
+lives in a tmux pane, where `get_pane_info`, `capture_since`, and
+`wait_for_text` continue to describe it even if the MCP process restarts. This
+keeps lifecycle authority in tmux rather than in an in-memory job registry.
 
 ### The pane this server is running in
 
-Every pane summary carries `isCaller`, and a pane where it is true is the one
-this server runs in: typing into it reaches the terminal the conversation is
-happening in, and no later call undoes it. That was the whole of the
-protection, and a note in a reply is something a model with forty tools and a
-task does not always read.
+Pane summaries carry `isCaller`. A true value identifies the terminal carrying
+this MCP process after both pane id and socket match. Writing to or ending that
+pane can disrupt the conversation, so those routes request MCP elicitation and
+fail closed when the client cannot ask. `confirm_self` never bypasses a missing
+teardown selection; it only confirms the target after the tool exists.
 
-So a write to that pane asks first, through MCP elicitation, and a decline
-fails the call. A write here is what reaches the person's keyboard or their
-shell: `send_keys`, `send_keys_batch`, `paste_text`, `paste_buffer`,
-`run_command`, `respawn_pane`, `clear_pane`, `kill_pane`, and
-`enter_copy_mode`, which takes their keystrokes away from their shell.
-Splitting the pane is not one — finding your own pane and making room beside it
-is the ordinary opening move — and neither is `exit_copy_mode`, which is the
-way out of the one mode that is.
+Splitting beside the caller pane is not blocked because it preserves the pane.
+Exiting copy mode is also allowed as the way out of a mode that consumes the
+user's keys.
 
-A client that did not declare the elicitation capability is refused. This
-protects the caller pane rather than making the tools a sandbox: a caller with
-`send_keys` can still run anything the user can in another pane.
+### Text, keys, and synchronized targets
 
-### Text, keys, and the difference
+`send_keys` and each `send_keys_batch` operation take tmux key names such as
+`C-c`, `Escape`, and `Enter`. Use `literal` when the strings themselves should
+be sent. Use `paste_text` for an arbitrary block whose words must never be
+interpreted as key names.
 
-`send_keys` looks up tmux key names, so text containing `Escape` or `C-c` is not
-delivered as itself. Anything a client did not write by hand — a file, a
-message, a generated command — goes through `paste_text`, which delivers bytes
-rather than keys. `send_keys_batch` is the middle case: key names in order with
-no Enter, for driving a program that reads keys rather than lines.
+When `synchronize-panes` is enabled, tmux fans input from one target to every
+pane in the window. Input-tool responses include the resolved pane ids, so a
+caller can see the actual target set before deciding what to do next.
 
 ### Batches
 
-A batch runs its calls in order, each after the one before it finished. Every
-call is checked against the batch's tier before any of them runs, so a batch
-that would have ended something halfway through is refused whole rather than run
-up to that point. A batch dispatches through the same table registration builds,
-so a tool the safety level withheld is not reachable by naming it in a list. The
-batch tools are not themselves batchable: nesting one inside another buries
-which call failed, and a batch asked to do it says so rather than claiming the
-tool does not exist.
+`call_read_tools_batch` has exact nested authority: every inspect tool except
+itself and `wait_for_text`. Startup exclusions prune that authority even when an
+inner tool is not separately advertised. If no inner authority remains, the
+batch stays advertised with an unsatisfiable operations schema and cannot run.
 
-All three stop at the first failure. `results` holds one entry per call
-attempted, ending with the one that failed and its error; `completed` counts the
-ones before it; and `skipped` names the calls that never ran, in order. That
-last one matters most for the mutating and destructive batches: tmux has no
-transaction, so what already ran stays, and knowing what did *not* run is how a
-caller decides what to do next.
+Operations execute serially and receive the same native schema validation as a
+top-level call. `on_error` is `stop` or `continue`. Each result row carries its
+index, tool, success, error, full retained nested result, and truncation flag;
+the aggregate reports succeeded, failed, stoppedAt, and truncation totals.
 
 ## Recipes
 
-Jobs in the order the calls actually go. The tool list says what exists; these
-say what to reach for and what goes wrong.
+Jobs in the order the calls actually go. The generated entries say what each
+tool accepts; these say what to reach for and where a shortcut goes wrong.
 
-### Start a service and wait for it before running dependent work
+### Start a service and wait before dependent work
 
-**Situation.** A session with no server running. The person wants integration
-tests, and the tests need a live API.
+**Situation.** A session has no service running, and tests need one.
 
-> Start the API server in my backend session and run the integration tests once
-> it is ready.
+**Discover.** Use `list_panes` and `search_panes` to avoid starting a duplicate.
 
-**Discover.** `list_panes` for the session — is something already serving? Then
-`search_panes` for `listening`. Nothing, so nothing to reuse.
+**Act.** Make room with `split_window`. Start the service in that pane with
+`paste_text` and `enter: true`, then call `wait_for_text` with the ready marker
+in `patterns` and known failure markers in `stop`. Once ready, run the tests in
+another pane with `run_shell_command` and inspect its exit status.
 
-**Decide.** A pane of its own, so the server's output stays separate from the
-tests'.
+**The non-obvious part.** The wait replaces a fixed sleep and stops early on
+known failure output. `split_window` carries no hidden command; process creation
+and caller-authored input remain separate decisions.
 
-**Act.** `split_window`, then `send_keys` with `npm run serve` in the new pane.
-Then `wait_for_text` on that pane with `patterns: ["Listening on"]` and
-`stop: ["EADDRINUSE", "Error:"]`. Once it resolves, `run_command` in the
-original pane and read `exitStatus`.
+### Find the failing pane without opening every terminal
 
-**The non-obvious part.** `wait_for_text` replaces `sleep`. The server might
-take two seconds or twenty, and the agent adapts to either. `stop` is what
-keeps a failed start from costing the whole timeout — without it, a port
-collision waits out the full deadline before telling you anything.
+**Situation.** Several panes are working and one failed.
 
-### Find the failing pane without opening random terminals
+**Discover.** Call `search_panes` with a bounded `pattern`, such as `FAILED`,
+`error:`, or `Traceback`. It returns the matching panes and lines.
 
-**Situation.** Several jobs across panes. One went red.
+**Act.** If those lines are insufficient, call `snapshot_pane` for the pane it
+named and request history only when needed.
 
-> Which one failed, and why?
-
-**Discover.** `search_panes` with `text: "FAILED"` — or `error:`, or
-`Traceback`. It returns the panes *and the lines that matched*, so one call
-answers both which and why.
-
-**Decide.** If the matched lines are enough, stop. They usually are.
-
-**Act.** When they are not, `snapshot_pane` on the pane it named, with
-`includeHistory` if the failure has scrolled off.
-
-**The non-obvious part.** Do not capture each pane in turn and search the
-results yourself: that is one call per pane, and every pane's contents pass
-through your context on the way. `search_panes` does the matching where the
-text already is.
+**The non-obvious part.** Capturing every pane sends all terminal content
+through the client's context. Searching where the text already lives is both
+smaller and bounded by the server's aggregate work budget.
 
 ### Watch a long job across several turns
 
-**Situation.** A build that will outlast this exchange.
+Call `capture_since` with the pane id and no cursor, retain the returned cursor,
+then pass both on later calls. Each reply contains only new output. Check
+`linesMissed` before treating the accumulated record as complete.
 
-> Keep an eye on the build and tell me when it breaks.
+There is deliberately no detached job handle. A command that must outlive one
+turn runs visibly in its pane; the pane id and capture cursor are the durable
+observation state.
 
-**Discover.** `capture_since` with no cursor. You get what the pane shows now,
-and a cursor.
+### Check several panes without reading their output
 
-**Decide.** Keep the cursor. It is the whole state you need.
-
-**Act.** Every later turn, `capture_since` with that cursor. You get only what
-was written since, and a fresh cursor to keep instead.
-
-**The non-obvious part.** `capture_pane` in a loop re-sends the same screen
-every turn and cannot tell you whether anything changed. Also: check
-`linesMissed`. True means tmux discarded scrollback between your reads and your
-record of that pane has a hole in it — which is worth saying out loud rather
-than quietly summarising over.
-
-**When it is not your build.** If the pane is running something you started,
-`run_command` with `detach` and `get_job` is cheaper still: no cursor to carry,
-and an exit status at the end.
-
-### Run a build without spending the turn on it
-
-**Situation.** A test suite that takes minutes, and other work to do meanwhile.
-
-> Run the suite and start reading the failing module while it goes.
-
-**Discover.** Nothing to discover: `run_command` with `detach: true` returns a
-`jobId` as soon as the command is typed.
-
-**Decide.** Spend the turn on the other work. Come back with `get_job`.
-
-**Act.** `get_job` with the handle and no timeout reports whether it has
-finished and what the pane is running if it has not. With `timeoutSeconds` it
-waits that long. A finished job carries the exit status and everything the
-command printed.
-
-**The non-obvious part.** Asking again is free and gives the same answer: the
-first read that finds a status keeps it. And `detach` does not change the
-command — the same wrapper commits the same records, so a detached run and a
-waited one report identically.
-
-### Check on eight panes without reading any of them
-
-**Situation.** A workspace you built, several panes into a long job.
-
-> Which of those are still going?
-
-**Discover.** `list_panes` with `detail: full`, narrowed to the session you
-built.
-
-**Decide.** `status.dead` with `status.exitStatus` says which finished and how.
-`status.historyLines` compared against your last reading says which wrote
-anything since.
-
-**Act.** Capture only the panes whose history moved.
-
-**The non-obvious part.** All of it comes from the snapshot the listing already
-takes, so it is one tmux command for every pane, not one per pane — and no
-pane's contents are read, so nothing is paid for output already seen.
+Use `list_panes` for process state, caller identity, and geometry. Follow only
+the panes that need detail with `get_pane_info`; capture terminal content only
+when the task actually requires it. Listing is metadata inspection, not a
+screen read.
 
 ### Recover a pane that stopped answering
 
-**Situation.** A `run_command` timed out. Every later one in that pane times out
-too.
+After a `run_shell_command` timeout, call `get_pane_info`. A non-shell program
+may have consumed the text as input; copy mode may have consumed keys before
+the program saw them; a dead pane reads nothing.
 
-**Discover.** `get_pane_info`. Look at `currentCommand`, `inMode`, and `dead`.
-
-**Decide.** A shell in `currentCommand` means the command is still going and you
-were impatient. Anything else means the pane is busy and read your command as
-that program's input. `inMode` true means the pane is in copy mode and never
-saw your keys at all.
-
-**Act.** For a busy pane, `send_keys` with `C-c`. For copy mode,
-`exit_copy_mode`. Then re-run.
-
-A pane whose program has exited reads no keys at all, so it never reaches this
-situation: `run_command` refuses it outright and names `respawn_pane`, rather
-than waiting out a timeout it cannot win.
-
-**The non-obvious part.** A pane left holding a command poisons every later
-`run_command` there, and the symptom — a timeout — looks identical to a slow
-command. `running` in the timeout result is what tells the two apart, which is
-why it is in the reply at all.
+Use `send_keys` with `C-c` for an intentional interruption, `exit_copy_mode`
+to return keys to the program, or `respawn_pane` to start the configured process
+again. Each is a distinct capability and should be selected deliberately.
 
 ## Gotchas
 
-**Reading a pane right after sending keys is a race.** `send_keys` returns when
-tmux accepts the keystrokes, not when the command finishes, so a capture
-straight afterwards usually catches the shell echoing your own command back.
-For commands you author, `run_command`. For output you did not author,
-`wait_for_text`.
+**Reading immediately after sending input is a race.** Input tools return when
+tmux accepts the input, not when the program finishes. Use
+`run_shell_command` for authored commands or `wait_for_text` for externally
+produced output.
 
-**A busy pane times out forever.** See the recipe above. `send_keys` with `C-c`
-is the way back.
+**Copy mode consumes keys.** `get_pane_info` reports the mode;
+`exit_copy_mode` leaves it.
 
-**Copy mode swallows keys.** A pane in copy mode reads keys as tmux's own, so
-`send_keys` reaches tmux rather than the shell and nothing appears to happen.
-`get_pane_info` reports `inMode`; `exit_copy_mode` returns it.
+**Window names are not unique.** Exact window ids are stable lookup targets
+within a running server. Pane ids are unambiguous while the pane exists but may
+be reused later; capture cursors also bind process identity.
 
-**Window names are not unique.** Two sessions can both have a window called
-`editor`. Window ids (`@1`) are unique; names are for people.
+**Shell-history suppression is best effort.** `suppress_history` prefixes the
+staged command for shells configured to ignore space-prefixed history. It does
+not promise behavior from an unknown user configuration.
 
-**Pane ids are unique but not permanent.** `%3` is unambiguous while it exists
-and may be reused after the pane goes. A `capture_since` cursor notices —
-it records the pane's process too, and refuses rather than reading a different
-program's output as the same one's.
+**Listing is not reading.** Metadata listings do not return terminal content.
+`capture_pane`, `snapshot_pane`, `search_panes`, and `wait_for_text` do.
 
-**Suppressing shell history is best effort.** `suppressHistory` prefixes a
-space, which a shell configured with `HIST_IGNORE_SPACE` keeps out of its
-history. A shell not configured that way keeps it anyway. It is a courtesy to
-the person whose terminal this is, not a guarantee.
-
-**Listing is not reading.** `list_panes` and `list_windows` report names,
-indexes and positions, and with `detail: full` a pane's process state. They
-never report what a pane is *showing* — `search_panes` and `capture_pane` do
-that.
-
-**`run_command` runs in a subshell.** The command is wrapped in `( ... )` so
-that one ending in `exit` ends the subshell rather than the pane's shell, which
-would take the status recording with it. A consequence: `cd`, `export`, and
-anything else that changes the shell itself does not outlive the call. Use
-`send_keys` for those.
-
-**A capture strips colour.** A program that reports whether it passed by
-colouring one word says nothing at all once the colour is gone. `styles` keeps
-tmux's escape sequences.
+**Names and paths can contain tmux format syntax.** Manifest rows mark every
+format-expanding boundary. Fields controlled as literal are escaped exactly
+once by doubling `#`; `get_tmux_variables` accepts only validated variable
+names instead of arbitrary formats.
 
 ## Logs
 
-A client that sets a logging level hears why a wait ended with nothing: which
-pane, what it was running instead, how long it waited. The tool result says
-what happened, the log says why, and a client that never sets a level is sent
-nothing at all.
+A client that sets an MCP logging level can receive why a wait ended without a
+match: which pane was watched, what it was running, and how long the wait took.
+Tool results say what happened; logs add diagnostic context. A client that does
+not set a logging level receives none.
 
 ## Keeping a record
 
-An operator handing this to a model has a reasonable question — what did it
-actually do? `LIBTMUX_AUDIT` answers it: set it to `stderr`, or to a path to
-append to, and every tool call is recorded as one JSON line.
+Set `LIBTMUX_AUDIT` to `stderr` or to an append path to record every tool call
+as one JSON line.
 
 ```console
 $ LIBTMUX_AUDIT=/tmp/tmux-mcp.log libtmux-mcp -socket-name my-application
@@ -566,146 +305,176 @@ $ LIBTMUX_AUDIT=/tmp/tmux-mcp.log libtmux-mcp -socket-name my-application
 ```json
 {"time":"...","level":"INFO","msg":"tool call","tool":"send_keys",
  "outcome":"ok","elapsedMillis":2,
- "arguments":{"paneId":"%0","command":{"len":42,"sha256":"c27651833c4e"}}}
+ "arguments":{"pane_id":"%0","keys":{"len":18,"sha256":"c27651833c4e"}}}
 ```
 
-The commands themselves are not in it. This server types into people's
-terminals, and what gets typed contains what commands contain: a token pasted
-into a deploy, a password in a connection string, the contents of a file. So an
-argument is either an identifier — a pane id, a direction, a bound — and logged
-as itself, or a payload, and logged as its length and a digest prefix. The same
-payload twice gives the same digest, so a loop is visible, and no digest is the
-payload.
-
-The identifiers are an allowlist, so a field added later is a payload until
-somebody decides otherwise. It is off unless asked for: a server that writes
-your command history to your terminal unbidden has answered a question nobody
-put to it.
+Command and text payloads are summarized by byte length and a digest prefix,
+not stored in cleartext. Identifiers and numeric controls come from a small
+allowlist; a new unclassified field defaults to payload treatment. New audit
+files use mode `0600`, and auditing is off unless configured.
 
 ## Error handling
 
-`list_sessions`, `list_windows`, and `list_panes` treat an unreachable server
-as an empty topology and return a `serverNote` explaining the absence. This is
-a deliberate orientation exception. `get_server_info` and `list_servers`
-instead report liveness as data. Reads that require a live object preserve tmux
-failures as tool errors, and writes do the same because a mutation that silently
-did nothing is worse than one that reports a problem.
+`list_sessions`, `list_windows`, and `list_panes` treat a missing server as an
+empty topology and include a `serverNote`. This lets a client orient before
+`create_session`. Reads requiring a live object and every mutation preserve
+tmux failures as tool errors; a mutation that silently did nothing would leave
+the caller with the wrong state.
 
-A tmux failure reaches the client as tool error content carrying tmux's own
-message, so a model can read what went wrong and choose a different call
-instead of seeing an opaque protocol error:
-
-```
+```text
 tmux: command failed: kill-session exited 1: can't find session: no-such-session
 ```
 
-[tmux module]: ../tmux/
-[Go MCP SDK]: https://github.com/modelcontextprotocol/go-sdk
+The startup selectors fail before tmux opens when a tool name or toolset is
+unknown, a nonempty comma list contains an empty token, a socket path or config
+path is relative, or any of the retired `LIBTMUX_SAFETY`,
+`LIBTMUX_MCP_CAPABILITIES`, and `LIBTMUX_MCP_PROMPTS_AS_TOOLS` variables is
+present.
+
+## Retired MCP surface
+
+The capability-model migration intentionally removed routes that bypassed the
+fixed socket boundary, exposed broad interpreters, created background authority,
+or duplicated the 47-tool cross-port inventory. These names are not hidden
+aliases: a client must migrate its calls.
+
+### Selection and resource migration
+
+`LIBTMUX_SAFETY` and the independent `LIBTMUX_MCP_CAPABILITIES` allowlist are
+retired. Their presence stops startup; use the unordered toolset and named
+include/exclude variables described above. The migration table in the
+[MCP README](README.md#moving-from-an-earlier-alpha) maps every earlier tier,
+capability class, and profile.
+
+Per-call socket selection and `list_servers` are gone. Run another pinned
+server process for another socket. Dynamic resources migrate as follows:
+
+| Earlier resource | Current path |
+| --- | --- |
+| `tmux://sessions` | `list_sessions` |
+| `tmux://sessions/{session}` | `get_session_info` |
+| `tmux://sessions/{session}/windows` | `list_windows` with that session |
+| `tmux://windows/{window}` | `get_window_info` |
+| `tmux://windows/{window}/panes` | `list_panes` with that window |
+| `tmux://panes/{pane}` | `get_pane_info` |
+| `tmux://panes/{pane}/content` | `capture_pane` or `capture_since` |
+
+Subscriptions and completions have no replacement. Any present
+`LIBTMUX_MCP_PROMPTS_AS_TOOLS` value stops startup instead of exporting prompts
+through `get_recipe`.
+
+### Retired prompt workflow mapping
+
+- `diagnose_pane`: call `get_pane_info`, then `snapshot_pane`; use
+  `wait_for_text` for progress or `run_shell_command` for bounded work, and
+  `show_option` or `show_hooks` when configured behavior is suspect.
+- `watch_pane`: keep one `capture_since` cursor per pane across turns; use
+  `wait_for_text` instead when waiting for one expected marker.
+- `recover_pane`: inspect `get_pane_info`; use `wait_for_text` when work is
+  merely slow, `send_keys` with `C-c` only when the pane is busy, and
+  `exit_copy_mode` when tmux mode owns input.
+- `set_up_workspace`: compose `create_session`, `create_window`,
+  `split_window`, and the layout, title, and selection tools. Use
+  `run_shell_command` for bounded work, or `paste_text` with `wait_for_text` or
+  `capture_since` for long-lived visible work. Before `select_window`, inspect
+  `get_server_info.attachedClients`; changing the selected window can change
+  what an attached person sees.
+
+### Retired tool mapping
+
+| Earlier tool | Current path |
+| --- | --- |
+| `run_command` | `run_shell_command`; detached mode was removed |
+| `get_job` | no handle; observe the pane with `capture_since` or `wait_for_text` |
+| `call_readonly_tools_batch` | `call_read_tools_batch`, with exact inspect-only nested authority |
+| `call_mutating_tools_batch` / `call_destructive_tools_batch` | no generic mutation batch; call the typed tools explicitly |
+| `clear_pane` | `clear_pane_scrollback`, classified as teardown |
+| `set_option` | constrained tools such as `set_mouse_enabled`, `set_history_limit`, and `set_synchronize_panes` |
+| `set_environment` | no generic caller-controlled process environment route |
+| `display_message` | `get_tmux_variables` for validated variable names; no free-form tmux-format interpreter |
+| `capture_pane styles` / colored output | No current MCP replacement; captures return plain rendered text, so do not infer status from color alone |
+| `build_workspace` | compose `create_session`, `create_window`, `split_window`, and layout tools |
+| `move_pane` | compose the retained layout operations; no direct public MCP replacement |
+| `load_buffer` / `paste_buffer` | `paste_text` stages an ephemeral private buffer internally |
+| `show_buffer` / `delete_buffer` | no public buffer namespace |
+| `pipe_pane` | no shell-command pipe route; use bounded capture/wait tools |
+| `kill_server` | no server-wide teardown route; kill selected sessions explicitly or administer tmux outside MCP |
+
+The old prompt routes, dynamic resources, generic setters, background jobs,
+buffer namespace, pipe route, and broad batch families remain absent from MCP
+registration and dispatch. The prompt workflows above remain available as
+typed-tool guidance. Internal helpers survive only where a retained tool uses
+them.
+
 ## Every tool
 
-The entry for each tool, rendered from its own schema. The sections above say
-when to reach for what; this says exactly what each one takes and returns.
+The entries below are rendered from the same manifest schemas and capability
+metadata sent over MCP. Edit the native definitions, not this generated region.
 
 <!-- toolsref -->
 
-58 tools. Generated from the schemas by `go generate ./...`; edit the tools, not this.
+47 tools. Generated from the schemas by `go generate ./...`; edit the tools, not this.
 
-### `build_workspace`
+### `call_read_tools_batch`
 
-Create a session from a tmuxp-style YAML workspace document: windows, panes, layouts, and the command each pane runs, in one call.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Calls up to sixteen eligible inspect tools serially; inner tools receive no separate approval. Retained rows contain full nested envelopes, and oversized nested results are marked resultTruncated.
 
-Requires the `workspace-create` capability.
+Belongs to the `inspect` toolset.
 
-Changes tmux by a step. Repeating it compounds.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `document` **required** | string | a tmuxp-style YAML workspace document |
-
-| Returns | Type |
+| Capability | Manifest value |
 | --- | --- |
-| `sessionId` **required** | string |
-| `sessionName` **required** | string |
-
-### `call_destructive_tools_batch`
-
-Run several tools in one request, in order, including the ones that end something.
-
-Requires the `tmux-destroy` capability.
-
-**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `calls` **required** | array | the calls to run, in order |
-| `onError` | `""`, `stop`, `continue` | what a failing call does to the calls after it; empty stops the batch |
-
-| Returns | Type |
-| --- | --- |
-| `completed` **required** | integer |
-| `results` **required** | array |
-| `skipped` **required** | array |
-| `failed` | integer |
-
-### `call_mutating_tools_batch`
-
-Run several tools in one request, in order, including ones that change tmux.
-
-Requires the `pane-control` capability.
-
-Changes tmux by a step. Repeating it compounds.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `calls` **required** | array | the calls to run, in order |
-| `onError` | `""`, `stop`, `continue` | what a failing call does to the calls after it; empty stops the batch |
-
-| Returns | Type |
-| --- | --- |
-| `completed` **required** | integer |
-| `results` **required** | array |
-| `skipped` **required** | array |
-| `failed` | integer |
-
-### `call_readonly_tools_batch`
-
-Run several reading tools in one request, in order.
-
-Requires the `metadata-read` capability.
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata`, `terminal-content`, `process-environment`, `configured-command` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | `list_sessions`, `list_windows`, `list_panes`, `get_server_info`, `get_session_info`, `get_window_info`, `get_pane_info`, `capture_pane`, `capture_since`, `snapshot_pane`, `search_panes`, `find_pane_by_position`, `get_tmux_variables`, `show_option`, `show_environment`, `show_hooks` |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `calls` **required** | array | the calls to run, in order |
-| `onError` | `""`, `stop`, `continue` | what a failing call does to the calls after it; empty stops the batch |
+| `operations` **required** | array | up to sixteen inspect operations |
+| `on_error` | `stop`, `continue` | stop or continue; defaults to stop |
 
 | Returns | Type |
 | --- | --- |
-| `completed` **required** | integer |
+| `failed` **required** | integer |
+| `onError` **required** | string |
 | `results` **required** | array |
-| `skipped` **required** | array |
-| `failed` | integer |
+| `stoppedAt` **required** | integer |
+| `succeeded` **required** | integer |
+| `truncated` **required** | boolean |
+| `truncatedBytes` **required** | integer |
 
 ### `capture_pane`
 
-Read what one pane holds: its visible screen, or its scrollback too with includeHistory.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Returns bounded pane content and a cursor.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `terminal-content`, `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `endLine` | integer | last row to read, on the same scale as startLine |
-| `includeHistory` | boolean | read scrollback as well as the visible screen |
-| `joinWrapped` | boolean | rejoin lines the terminal wrapped, as tmux does it; a multi-row shell prompt can be joined to the line after it, so prefer run_command for output you ran yourself |
-| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
-| `maxLines` | integer | how many lines to return at most, keeping the last ones |
-| `paneId` | string | a tmux pane id such as %1; empty reads the active pane |
-| `sessionName` | string | which session's active pane to read when paneId is empty |
-| `startLine` | integer | first row to read; 0 is the top of the screen and negatives are history |
-| `styles` | boolean | keep colour and attribute escape sequences, for a program that says pass or fail in colour rather than in words |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `history` | boolean | include scrollback as well as the visible screen |
+| `max_lines` | integer | maximum lines, keeping the newest |
 
 | Returns | Type |
 | --- | --- |
@@ -717,19 +486,29 @@ Reads only. Repeating it changes nothing.
 
 ### `capture_since`
 
-Read only what a pane wrote since the cursor a previous call returned, and get a cursor for next time.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Returns pane output produced after a cursor.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `terminal-content`, `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `cursor` | string | the cursor a previous capture_since returned; empty starts a new reading |
-| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
-| `maxLines` | integer | how many lines to return at most, keeping the last ones |
-| `paneId` | string | the tmux pane id to read; the cursor already names it |
-| `sessionName` | string | which session's active pane to read when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `cursor` | string | a cursor returned by an earlier capture |
+| `max_lines` | integer | maximum new lines, keeping the newest |
 
 | Returns | Type |
 | --- | --- |
@@ -741,38 +520,61 @@ Reads only. Repeating it changes nothing.
 | `truncatedBytes` | integer |
 | `truncatedLines` | integer |
 
-### `clear_pane`
+### `clear_pane_scrollback`
 
-Clear a pane's screen, and its scrollback when asked.
+Delete tmux state; accepts no command payload. Deletes retained scrollback from one pane.
 
-Requires the `pane-control` capability.
+Belongs to the `teardown` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `delete` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+**Deletes tmux state.** Repeating it can remove more state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `history` | boolean | also discard the pane's scrollback |
-| `paneId` | string | the tmux pane id to clear; empty clears the active pane |
-| `sessionName` | string | which session's active pane to clear when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
 
 | Returns | Type |
 | --- | --- |
-| `historyCleared` **required** | boolean |
-| `paneId` **required** | string |
+| `pane_id` **required** | string |
 
 ### `create_session`
 
-Start one session and return its id and name.
+Start a pane's configured process; accepts no command payload. Creates a detached session whose first pane runs the configured process.
 
-Requires the `workspace-create` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `configured-process` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `command` | string | a command for the first window to run instead of a shell |
-| `name` | string | the new session's name |
-| `startDirectory` | string | the session's working directory |
+| `height` | integer | initial height; supply with width |
+| `session_name` | string | a literal session name |
+| `start_directory` | string | an absolute literal start directory |
+| `width` | integer | initial width; supply with height |
+| `window_name` | string | a literal first-window name |
 
 | Returns | Type |
 | --- | --- |
@@ -781,72 +583,60 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `create_window`
 
-Add one window to a session and return its id and the id of the pane tmux made with it.
+Start a pane's configured process; accepts no command payload. Creates a window whose first pane runs the configured process.
 
-Requires the `workspace-create` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `configured-process` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `command` | string | a command for the window to run instead of a shell |
-| `name` | string | the new window's name |
-| `sessionName` | string | the exact session name to add the window to |
-| `startDirectory` | string | the window's working directory |
+| `session_id` **required** | string | the session id, such as $1 |
+| `attach` | boolean | make the new window active |
+| `direction` | `before`, `after` | before or after |
+| `start_directory` | string | an absolute literal start directory |
+| `window_name` | string | a literal window name |
 
 | Returns | Type |
 | --- | --- |
 | `paneId` **required** | string |
 | `windowId` **required** | string |
 
-### `delete_buffer`
-
-Remove a buffer in the libtmux-mcp- namespace once nothing else will paste it.
-
-Requires the `tmux-settings` capability.
-
-Changes tmux to a state. Repeating it is safe.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `name` **required** | string | the buffer to remove, as load_buffer returned it |
-
-| Returns | Type |
-| --- | --- |
-| `deleted` **required** | string |
-
-### `display_message`
-
-Expand a tmux format; tmux's #() syntax runs a shell command, so treat the format as operator-powerful.
-
-Requires the `pane-control` capability.
-
-Changes tmux by a step. Repeating it compounds.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `format` **required** | string | a tmux format string, such as #{pane_current_path} |
-| `paneId` | string | the pane the format is about; empty uses the active pane |
-| `sessionName` | string | which session's active pane to evaluate against when paneId is empty |
-
-| Returns | Type |
-| --- | --- |
-| `paneId` **required** | string |
-| `value` **required** | string |
-
 ### `enter_copy_mode`
 
-Put a pane into tmux's copy mode, where keys scroll and select rather than reaching the program in the pane.
+Change tmux state; no client-supplied executable input. Puts a pane into copy mode.
 
-Requires the `pane-control` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `paneId` | string | the tmux pane id; empty uses the active pane |
-| `scrollUp` | boolean | enter one page above the bottom |
-| `sessionName` | string | which session's active pane to use when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
 
 | Returns | Type |
 | --- | --- |
@@ -855,16 +645,27 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `exit_copy_mode`
 
-Return a pane from copy mode to passing keys to the program running in it.
+Change tmux state; no client-supplied executable input. Leaves the pane's current mode.
 
-Requires the `pane-control` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `paneId` | string | the tmux pane id; empty uses the active pane |
-| `sessionName` | string | which session's active pane to use when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
 
 | Returns | Type |
 | --- | --- |
@@ -873,17 +674,28 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `find_pane_by_position`
 
-Report the pane bordering one side of another: above, below, left, or right.
+Inspect tmux metadata; accepts no client-supplied executable input. Finds a pane at one of a window's four corners.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `direction` **required** | `above`, `below`, `left`, `right` | the side to look toward |
-| `paneId` | string | the tmux pane id to look from; empty looks from the active pane |
-| `sessionName` | string | which session's active pane to look from when paneId is empty |
+| `position` **required** | `top-left`, `top-right`, `bottom-left`, `bottom-right` | top-left, top-right, bottom-left, or bottom-right |
+| `window_id` **required** | string | the window id, such as @1 |
 
 | Returns | Type |
 | --- | --- |
@@ -891,52 +703,29 @@ Reads only. Repeating it changes nothing.
 | `geometry` **required** | object |
 | `paneId` **required** | string |
 
-### `get_job`
-
-Collect a command started with run_command and detach.
-
-Requires the `content-read` capability.
-
-Reads only. Repeating it changes nothing.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `jobId` **required** | string | the handle a detached run_command returned |
-| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
-| `maxLines` | integer | how many lines of output to return at most, keeping the last ones |
-| `timeoutSeconds` | integer | wait up to this long for the command to finish; zero reports whether it has and returns at once |
-
-| Returns | Type |
-| --- | --- |
-| `command` **required** | string |
-| `elapsedSeconds` **required** | number |
-| `finished` **required** | boolean |
-| `jobId` **required** | string |
-| `paneId` **required** | string |
-| `truncated` **required** | boolean |
-| `collectionPending` | boolean |
-| `effectiveTimeoutSeconds` | integer |
-| `exitStatus` | integer |
-| `linesMissed` | boolean |
-| `output` | array |
-| `outputUnavailable` | string |
-| `running` | string |
-| `timeoutClamped` | boolean |
-| `truncatedBytes` | integer |
-| `truncatedLines` | integer |
-
 ### `get_pane_info`
 
-One pane's state without its contents: what it runs, its process id, whether that process has exited and with what status, how much scrollback there is, and whether the pane is in a mode that will eat the keys you send it.
+Inspect tmux metadata; accepts no client-supplied executable input. Returns metadata for one pane.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `paneId` | string | the tmux pane id to describe; empty describes the active pane |
-| `sessionName` | string | which session's active pane to describe when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
 
 | Returns | Type |
 | --- | --- |
@@ -953,27 +742,31 @@ Reads only. Repeating it changes nothing.
 
 ### `get_server_info`
 
-Which tmux socket these tools address, its version, how much it holds, and whether this MCP server is itself running in one of its panes.
+Inspect tmux metadata; accepts no client-supplied executable input. Reports whether the pinned server exists and its version.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `includeMessages` | boolean | add tmux's own server message log, which records what tmux refused and why |
-| `maxBytes` | integer | how many bytes of log messages to return at most, keeping the most recent |
-| `maxLines` | integer | how many log messages to return at most, keeping the most recent |
 
 | Returns | Type |
 | --- | --- |
 | `alive` **required** | boolean |
 | `attachedClients` **required** | array |
-| `capabilities` **required** | array |
 | `clients` **required** | integer |
 | `insideThisServer` **required** | boolean |
 | `panes` **required** | integer |
-| `safetyLevel` **required** | string |
 | `sessions` **required** | integer |
 | `socketPath` **required** | string |
 | `truncated` **required** | boolean |
@@ -982,21 +775,32 @@ Reads only. Repeating it changes nothing.
 | `callerPaneId` | string |
 | `messages` | array |
 | `messagesUnavailable` | string |
-| `rejectedCapabilities` | array |
 | `truncatedBytes` | integer |
 | `truncatedLines` | integer |
 
 ### `get_session_info`
 
-One session's windows, working directory, and when it was created.
+Inspect tmux metadata; accepts no client-supplied executable input. Returns metadata for one session.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `sessionName` | string | the exact session name; empty uses the only session |
+| `session_id` **required** | string | the session id, such as $1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1006,18 +810,57 @@ Reads only. Repeating it changes nothing.
 | `session` **required** | object |
 | `windows` **required** | array |
 
-### `get_window_info`
+### `get_tmux_variables`
 
-One window's size, layout string, and panes.
+Read configured tmux commands; accepts no client-supplied executable input. Returned values may contain executable configuration. Reads a capped list of validated tmux variable names, not free-form formats.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata`, `configured-command` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `sessionName` | string | which session's current window to describe when windowId is empty |
-| `windowId` | string | the tmux window id to describe; empty describes the current window |
+| `names` **required** | array | variable names matching [A-Za-z][A-Za-z0-9_]* |
+
+| Returns | Type |
+| --- | --- |
+| `values` **required** | object |
+
+### `get_window_info`
+
+Inspect tmux metadata; accepts no client-supplied executable input. Returns metadata for one window.
+
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Reads only. Repeating it changes nothing.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `window_id` **required** | string | the window id, such as @1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1030,48 +873,58 @@ Reads only. Repeating it changes nothing.
 
 ### `kill_pane`
 
-End one pane and the program running in it.
+Delete tmux state; accepts no command payload. Deletes one pane and ends its process.
 
-Requires the `tmux-destroy` capability.
+Belongs to the `teardown` toolset.
 
-**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `delete` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+**Deletes tmux state.** Repeating it can remove more state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `paneId` **required** | string | the tmux pane id to kill, such as %1 |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `confirm_self` | boolean | permit ending the pane this MCP process runs in |
 
 | Returns | Type |
 | --- | --- |
 | `killed` **required** | string |
 | `windowEnded` **required** | boolean |
 
-### `kill_server`
-
-End the whole tmux server: every session, every window, every program.
-
-Requires the `tmux-destroy` capability.
-
-**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `confirm` **required** | boolean | must be true; this ends every session on the server |
-
-| Returns | Type |
-| --- | --- |
-| `sessionsKilled` **required** | integer |
-
 ### `kill_session`
 
-End one session by its exact name, and every window and program in it.
+Delete tmux state; accepts no command payload. Deletes one session and every window and pane in it.
 
-Requires the `tmux-destroy` capability.
+Belongs to the `teardown` toolset.
 
-**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `delete` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+**Deletes tmux state.** Repeating it can remove more state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `sessionName` **required** | string | the exact name of the session to kill |
+| `session_id` **required** | string | the session id, such as $1 |
+| `confirm_self` | boolean | permit ending the pane this MCP process runs in |
 
 | Returns | Type |
 | --- | --- |
@@ -1079,15 +932,28 @@ Requires the `tmux-destroy` capability.
 
 ### `kill_window`
 
-End one window and its panes.
+Delete tmux state; accepts no command payload. Deletes one window and every pane in it.
 
-Requires the `tmux-destroy` capability.
+Belongs to the `teardown` toolset.
 
-**Ends something.** Nothing brings it back, and it is withheld below the `destructive` safety level.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `delete` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+**Deletes tmux state.** Repeating it can remove more state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `windowId` **required** | string | the tmux window id to kill, such as @1 |
+| `window_id` **required** | string | the window id, such as @1 |
+| `confirm_self` | boolean | permit ending the pane this MCP process runs in |
 
 | Returns | Type |
 | --- | --- |
@@ -1096,21 +962,23 @@ Requires the `tmux-destroy` capability.
 
 ### `list_panes`
 
-List tmux panes with their session, window, index, and current command.
+Inspect tmux metadata; accepts no client-supplied executable input. Lists pane metadata and stable pane IDs.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `active` | boolean | keep only active panes, or only inactive ones |
-| `command` | string | keep panes whose current command contains this text, ignoring case |
-| `dead` | boolean | keep only panes whose process has exited, or only those still running |
-| `detail` | `""`, `standard`, `full` | how much to report per pane; full adds exit status, path, title, and history size |
-| `pathUnder` | string | keep panes whose working directory is at or below this path |
-| `sessionName` | string | list only this session's panes |
-| `windowId` | string | list only this window's panes, such as @1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1119,41 +987,25 @@ Reads only. Repeating it changes nothing.
 | `serverNote` | string |
 | `skipped` | integer |
 
-### `list_servers`
-
-The tmux servers running on this machine, with the one these tools address marked.
-
-Requires the `metadata-read` capability.
-
-Reads only. Repeating it changes nothing.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `includeDead` | boolean | include socket files with no server running, which tmux leaves behind when a server exits |
-| `maxServers` | integer | how many servers to report at most (default 100, maximum 1000); the target is always kept |
-| `name` | string | keep servers whose name contains this text, ignoring case |
-
-| Returns | Type |
-| --- | --- |
-| `searchedIn` **required** | string |
-| `servers` **required** | array |
-| `total` **required** | integer |
-| `truncated` **required** | boolean |
-| `skipped` | integer |
-| `unreachableNote` | string |
-
 ### `list_sessions`
 
-Sessions with their name, window count, and how many clients are attached.
+Inspect tmux metadata; accepts no client-supplied executable input. Lists sessions on the pinned tmux server.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `attached` | boolean | keep only sessions a client is attached to, or only those nobody is watching |
-| `name` | string | keep sessions whose name contains this text, ignoring case |
 
 | Returns | Type |
 | --- | --- |
@@ -1164,17 +1016,27 @@ Reads only. Repeating it changes nothing.
 
 ### `list_windows`
 
-Windows with their session, name, index, pane count, and whether each is its session's current one.
+Inspect tmux metadata; accepts no client-supplied executable input. Lists windows, optionally only those in one named session.
 
-Requires the `metadata-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `active` | boolean | keep only current windows, or only the others |
-| `name` | string | keep windows whose name contains this text, ignoring case |
-| `sessionName` | string | list only this session's windows |
+| `session` | string | only windows in this session name |
 
 | Returns | Type |
 | --- | --- |
@@ -1183,60 +1045,31 @@ Reads only. Repeating it changes nothing.
 | `serverNote` | string |
 | `skipped` | integer |
 
-### `load_buffer`
-
-Put text into a named tmux buffer, ready to paste into a pane once or several times.
-
-Requires the `tmux-settings` capability.
-
-Changes tmux by a step. Repeating it compounds.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `text` **required** | string | the text to store in the buffer |
-| `name` | string | a name for the buffer; empty makes one up |
-
-| Returns | Type |
-| --- | --- |
-| `bytes` **required** | integer |
-| `name` **required** | string |
-
-### `move_pane`
-
-Move a pane into another window, or break it out into a window of its own by naming no destination.
-
-Requires the `tmux-layout` capability.
-
-Changes tmux by a step. Repeating it compounds.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `paneId` **required** | string | the tmux pane id to move, such as %1 |
-| `direction` | `""`, `below`, `above`, `right`, `left` | where the moved pane goes in the destination; empty puts it below |
-| `focus` | boolean | make the pane active where it lands, moving what a person sees |
-| `name` | string | the new window's name when breaking the pane out |
-| `percentage` | integer | the moved pane's share of the destination window, 1 to 100 |
-| `toWindowId` | string | the window to move the pane into, such as @2; empty breaks it out into a new window |
-
-| Returns | Type |
-| --- | --- |
-| `brokenOut` **required** | boolean |
-| `paneId` **required** | string |
-| `windowId` **required** | string |
-
 ### `move_window`
 
-Move a window to another index, or into another session.
+Change tmux state; no client-supplied executable input. Moves a window to another session, optionally at an index.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `windowId` **required** | string | the tmux window id to move |
-| `index` | integer | the index to move it to; omit to use the next free one |
-| `sessionName` | string | the session to move it to; empty keeps it in its own |
+| `session_id` **required** | string | the destination session id, such as $1 |
+| `window_id` **required** | string | the window id, such as @1 |
+| `index` | integer | a destination window index; omit for tmux's choice |
 
 | Returns | Type |
 | --- | --- |
@@ -1244,78 +1077,61 @@ Changes tmux to a state. Repeating it is safe.
 | `session` **required** | string |
 | `windowId` **required** | string |
 
-### `paste_buffer`
-
-Deliver a staged buffer into a pane as text, with no tmux key names read.
-
-Requires the `pane-control` capability.
-
-Changes tmux by a step. Repeating it compounds.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `name` **required** | string | the buffer to paste, as load_buffer returned it |
-| `delete` | boolean | remove the buffer once it has been pasted |
-| `paneId` | string | the tmux pane id to paste into; empty uses the active pane |
-| `sessionName` | string | which session's active pane to paste into when paneId is empty |
-
-| Returns | Type |
-| --- | --- |
-| `name` **required** | string |
-| `paneId` **required** | string |
-
 ### `paste_text`
 
-Deliver text into a pane exactly, with no tmux key names read.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes one literal text block into a pane through an ephemeral buffer.
 
-Requires the `pane-control` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `pane-input` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `text` **required** | string | the text to deliver, taken literally |
-| `bracket` | boolean | mark the text as pasted so an editor does not auto-indent it; on by default |
-| `enter` | boolean | press Enter after the text |
-| `paneId` | string | the tmux pane id to paste into; empty uses the active pane |
-| `sessionName` | string | which session's active pane to paste into when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `text` **required** | string | the literal text to paste |
+| `enter` | boolean | append a newline that submits the text |
 
 | Returns | Type |
 | --- | --- |
 | `bytes` **required** | integer |
 | `paneId` **required** | string |
 
-### `pipe_pane`
-
-Send everything a pane writes to a shell command as well as to the screen, such as "cat >> /tmp/build.log".
-
-Requires the `pane-control` capability.
-
-Changes tmux by a step. Repeating it compounds.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `command` | string | a shell command to write the pane's output to, such as cat >> /tmp/build.log; empty stops piping |
-| `paneId` | string | the tmux pane id to pipe; empty uses the active pane |
-| `sessionName` | string | which session's active pane to pipe when paneId is empty |
-
-| Returns | Type |
-| --- | --- |
-| `paneId` **required** | string |
-| `piping` **required** | boolean |
-
 ### `rename_session`
 
-Give a session a name a person will recognise.
+Change tmux state; no client-supplied executable input. Replaces a session's name.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` **required** | string | the new session name |
-| `sessionName` | string | the exact session to rename; empty uses the only session |
+| `new_name` **required** | string | the literal new session name |
+| `session_id` **required** | string | the session id, such as $1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1324,17 +1140,28 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `rename_window`
 
-Name a window, which also stops tmux renaming it after whatever is running in it.
+Change tmux state; no client-supplied executable input. Replaces a window's name.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` **required** | string | the new window name |
-| `sessionName` | string | which session's current window to rename when windowId is empty |
-| `windowId` | string | the tmux window id to rename; empty uses the current window |
+| `new_name` **required** | string | the literal new window name |
+| `window_id` **required** | string | the window id, such as @1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1343,19 +1170,29 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `resize_pane`
 
-Set one pane's width or height in cells, or toggle it between its layout size and the whole window.
+Change tmux state; no client-supplied executable input. Sets a pane's width, height, or both.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `height` | integer | the pane's new height in cells |
-| `paneId` | string | the tmux pane id to resize; empty resizes the active pane |
-| `sessionName` | string | which session's active pane to resize when paneId is empty |
-| `width` | integer | the pane's new width in cells |
-| `zoom` | boolean | toggle the pane between its size and the whole window |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `height` | integer | height in terminal cells; omit to retain it |
+| `width` | integer | width in terminal cells; omit to retain it |
 
 | Returns | Type |
 | --- | --- |
@@ -1365,18 +1202,29 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `resize_window`
 
-Set a window's size in cells.
+Change tmux state; no client-supplied executable input. Sets a window's width, height, or both.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `height` | integer | the window's new height in cells |
-| `sessionName` | string | which session's current window to resize when windowId is empty |
-| `width` | integer | the window's new width in cells |
-| `windowId` | string | the tmux window id to resize; empty uses the current window |
+| `window_id` **required** | string | the window id, such as @1 |
+| `height` | integer | height in terminal cells; omit to retain it |
+| `width` | integer | width in terminal cells; omit to retain it |
 
 | Returns | Type |
 | --- | --- |
@@ -1386,97 +1234,135 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `respawn_pane`
 
-Restart what a pane runs, keeping the pane and its place in the layout.
+Start a pane's configured process; accepts no command payload. Kills the pane's current process and starts its configured process again.
 
-Requires the `workspace-create` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `configured-process` |
+| `tmuxEffects` | `observe`, `change`, `delete` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+**Deletes tmux state.** Repeating it can remove more state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `command` | string | a command to run instead; empty restarts what the pane ran before |
-| `kill` | boolean | end a program that is still running first |
-| `paneId` | string | the tmux pane id to restart; empty uses the active pane |
-| `sessionName` | string | which session's active pane to restart when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `start_directory` | string | an absolute literal start directory |
 
 | Returns | Type |
 | --- | --- |
 | `paneId` **required** | string |
 | `gone` | boolean |
 
-### `run_command`
+### `run_shell_command`
 
-Run a POSIX-compatible shell command in one pane, wait for it to finish, and return its exit status and its output.
+Run a shell command in a pane with your user's permissions. Runs one authored command in a pane and waits for its framed completion.
 
-Requires the `pane-control` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `pane-command` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `terminal-content`, `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `command` **required** | string | the POSIX-compatible shell command to run |
-| `detach` | boolean | return a jobId at once instead of waiting; collect it later with get_job |
-| `maxBytes` | integer | how many bytes of output to return at most, keeping the last lines |
-| `maxLines` | integer | how many lines of output to return at most, keeping the last ones |
-| `paneId` | string | the tmux pane id to run the command in; empty uses the active pane |
-| `sessionName` | string | which session's active pane to run in when paneId is empty |
-| `suppressHistory` | boolean | keep the command out of the shell's history by prefixing a space |
-| `timeoutSeconds` | integer | how long to wait before giving up |
+| `command` **required** | string | the shell command run in the pane's interactive shell |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `max_lines` | integer | maximum output lines, keeping the newest |
+| `suppress_history` | boolean | best-effort persistent history suppression |
+| `timeout` | number | seconds to wait before giving up |
 
 | Returns | Type |
 | --- | --- |
-| `paneId` **required** | string |
-| `timedOut` **required** | boolean |
-| `truncated` **required** | boolean |
-| `detached` | boolean |
-| `effectiveTimeoutSeconds` | integer |
-| `exitStatus` | integer |
-| `jobId` | string |
-| `linesMissed` | boolean |
-| `output` | array |
-| `outputUnavailable` | string |
+| `output` **required** | array |
+| `pane_id` **required** | string |
+| `timed_out` **required** | boolean |
+| `effective_timeout_seconds` | integer |
+| `exit_status` | integer |
+| `lines_missed` | boolean |
+| `output_unavailable` | string |
 | `running` | string |
-| `timeoutClamped` | boolean |
-| `truncatedBytes` | integer |
-| `truncatedLines` | integer |
+| `timeout_clamped` | boolean |
 
 ### `search_panes`
 
-Find which panes show some text, and what they showed.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Searches the visible output of every pane.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `terminal-content`, `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `text` **required** | string | text to look for in each pane's contents |
-| `includeHistory` | boolean | search scrollback as well as the visible screens |
-| `matchCase` | boolean | require the capitalisation to match |
-| `maxMatchesPerPane` | integer | how many matching lines to report per pane |
-| `maxPanes` | integer | how many matching panes to report at most |
-| `regex` | boolean | read text as a regular expression |
-| `sessionName` | string | search only this session's panes |
+| `pattern` **required** | string | bounded text or regular expression to search for |
+| `max_lines` | integer | maximum matching panes to return |
+| `max_matches_per_pane` | integer | maximum matching lines per pane |
+| `regex` | boolean | treat pattern as a regular expression |
 
 | Returns | Type |
 | --- | --- |
+| `bytesInspected` **required** | integer |
+| `linesInspected` **required** | integer |
 | `panes` **required** | array |
+| `panesInspected` **required** | integer |
+| `workLimited` **required** | boolean |
+| `workTimeLimitSeconds` **required** | number |
 | `morePanes` | integer |
 
 ### `select_layout`
 
-Arrange a window's panes with one of tmux's presets (even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, and the mirrored pair from tmux 3.5), spread them evenly, or restore a layout string read from get_window_info.
+Change tmux state; no client-supplied executable input. Applies one built-in tmux layout.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `layout` | string | even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, main-horizontal-mirrored or main-vertical-mirrored from tmux 3.5, or a layout string from get_window_info |
-| `sessionName` | string | which session's current window to arrange when windowId is empty |
-| `spread` | boolean | give every pane an equal share of the space |
-| `windowId` | string | the tmux window id to arrange; empty uses the current window |
+| `layout` **required** | string | a built-in tmux layout name |
+| `window_id` **required** | string | the window id, such as @1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1485,15 +1371,27 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `select_pane`
 
-Make one pane its window's active pane, which is where a person's keystrokes go.
+Change tmux state; no client-supplied executable input. Makes one pane active.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `paneId` **required** | string | the tmux pane id to make active |
+| `pane_id` **required** | string | the pane id, such as %1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1501,15 +1399,27 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `select_window`
 
-Make one window its session's current window, which is what puts a person in front of a window this client created.
+Change tmux state; no client-supplied executable input. Makes one window active.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `windowId` **required** | string | the tmux window id to make current |
+| `window_id` **required** | string | the window id, such as @1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1517,143 +1427,215 @@ Changes tmux to a state. Repeating it is safe.
 
 ### `send_keys`
 
-Type into one pane and press Enter.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends input to one pane without waiting for output.
 
-Requires the `pane-control` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `pane-input` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `command` **required** | string | what to type, read as tmux key names: "C-c" interrupts the pane and "Escape" is a key rather than those letters; use paste_text for text to take literally |
-| `paneId` | string | a tmux pane id such as %1; empty types into the active pane |
-| `sessionName` | string | which session's active pane to type into when paneId is empty |
-| `suppressHistory` | boolean | keep the command out of the shell's history by prefixing a space |
+| `keys` **required** | array | key names or literal strings to send |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `literal` | boolean | send strings literally instead of as key names |
 
 | Returns | Type |
 | --- | --- |
-| `paneId` **required** | string |
-| `sent` **required** | string |
+| `pane_id` **required** | string |
+| `resolved_pane_ids` **required** | array |
+| `sent` **required** | integer |
 
 ### `send_keys_batch`
 
-Send several tmux key names to a pane in order, with no Enter appended.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends up to sixty-four ordered pane-input operations.
 
-Requires the `pane-control` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `pane-input` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `keys` **required** | array | tmux key names to send in order, such as ["C-c", "q", "Enter"] |
-| `literal` | boolean | send the keys as characters rather than as tmux key names |
-| `paneId` | string | the tmux pane id to send to; empty uses the active pane |
-| `sessionName` | string | which session's active pane to send to when paneId is empty |
+| `operations` **required** | array | up to sixty-four ordered pane-input operations |
+| `on_error` | `stop`, `continue` | stop or continue; defaults to stop |
 
 | Returns | Type |
 | --- | --- |
-| `paneId` **required** | string |
-| `sent` **required** | integer |
+| `completed` **required** | integer |
+| `results` **required** | array |
+| `failed` | integer |
 
-### `set_environment`
+### `set_history_limit`
 
-Set or remove a variable for processes a session starts from now on.
+Change tmux state; no client-supplied executable input. Sets a bounded integer scrollback limit for future panes in a session.
 
-Requires the `tmux-settings` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` **required** | string | the variable to set |
-| `sessionName` | string | the session to write; empty uses the only session |
-| `unset` | boolean | remove the variable instead of setting it |
-| `value` | string | the value to set |
+| `lines` **required** | integer | the nonnegative retained line count |
+| `session_id` **required** | string | the session id, such as $1 |
 
 | Returns | Type |
 | --- | --- |
 | `name` **required** | string |
-| `sessionName` **required** | string |
-| `unset` **required** | boolean |
+| `enabled` | boolean |
+| `target` | string |
+| `value` | string |
 
-### `set_option`
+### `set_mouse_enabled`
 
-Set one tmux option.
+Change tmux state; no client-supplied executable input. Enables or disables tmux mouse handling.
 
-Requires the `tmux-settings` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` **required** | string | the tmux option name, such as history-limit |
-| `value` **required** | string | the value to set |
-| `paneId` | string | the pane to set the option on |
-| `scope` | `""`, `server`, `session`, `window`, `pane` | the scope to set at; empty sets at pane scope |
-| `sessionName` | string | the session to set the option on |
-| `windowId` | string | the window to set the option on |
+| `enabled` | boolean | whether the setting is enabled |
 
 | Returns | Type |
 | --- | --- |
 | `name` **required** | string |
-| `scope` **required** | string |
-| `value` **required** | string |
+| `enabled` | boolean |
+| `target` | string |
+| `value` | string |
 
 ### `set_pane_title`
 
-Set the title tmux draws on a pane's border, which is how to label which pane is which in a layout someone else will read.
+Change tmux state; no client-supplied executable input. Replaces a pane's literal title.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux to a state. Repeating it is safe.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `title` **required** | string | the new pane title |
-| `paneId` | string | the tmux pane id to title; empty uses the active pane |
-| `sessionName` | string | which session's active pane to title when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `title` **required** | string | the literal title |
 
 | Returns | Type |
 | --- | --- |
 | `paneId` **required** | string |
 | `title` **required** | string |
 
-### `show_buffer`
+### `set_synchronize_panes`
 
-Read a buffer in the libtmux-mcp- namespace.
+Change tmux state; no client-supplied executable input. When enabled, subsequent input to one pane is copied to every pane in the window.
 
-Requires the `content-read` capability.
+Belongs to the `execute` toolset.
 
-Reads only. Repeating it changes nothing.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `true` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` **required** | string | the buffer to read, as load_buffer returned it |
-| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
-| `maxLines` | integer | how many lines to return at most, keeping the last ones |
+| `window_id` **required** | string | the window id, such as @1 |
+| `enabled` | boolean | whether pane input is synchronized |
 
 | Returns | Type |
 | --- | --- |
 | `name` **required** | string |
-| `truncated` **required** | boolean |
-| `lines` | array |
-| `truncatedBytes` | integer |
-| `truncatedLines` | integer |
+| `enabled` | boolean |
+| `target` | string |
+| `value` | string |
 
 ### `show_environment`
 
-What new processes in a session will inherit.
+Read the tmux environment; accepts no client-supplied executable input. Returned values may contain secrets. Reads the environment tmux passes to processes.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `process-environment` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `maxBytes` | integer | how many bytes of listing to return at most |
-| `maxLines` | integer | how many variables to return at most |
-| `name` | string | one variable to read, with its value; empty lists every name with its scope and no values. Several values at once: put several of these in call_readonly_tools_batch |
-| `sessionName` | string | the session to read; empty uses the only session |
+| `session` | string | a session name; omit for the only session |
 
 | Returns | Type |
 | --- | --- |
@@ -1666,19 +1648,29 @@ Reads only. Repeating it changes nothing.
 
 ### `show_hooks`
 
-The commands tmux will run on its own at a given scope.
+Read configured tmux commands; accepts no client-supplied executable input. Returned values may contain executable configuration. Reads configured tmux hooks.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `configured-command` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` | string | report only this hook, such as pane-died; empty reports every hook in force |
-| `paneId` | string | the pane to read hooks on |
-| `scope` | `""`, `server`, `session`, `window`, `pane` | the scope to read at; empty reads at pane scope |
-| `sessionName` | string | the session to read hooks on |
-| `windowId` | string | the window to read hooks on |
+| `name` | string | one hook name; omit to read all hooks in the scope |
+| `scope` | `""`, `global`, `server`, `session`, `window`, `pane` | global, server, session, window, or pane |
+| `target` | string | the target required by session, window, and pane scopes |
 
 | Returns | Type |
 | --- | --- |
@@ -1687,19 +1679,30 @@ Reads only. Repeating it changes nothing.
 
 ### `show_option`
 
-Read one tmux option at server, session, window, or pane scope.
+Read configured tmux commands; accepts no client-supplied executable input. Returned values may contain executable configuration. Reads one named tmux option.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `tmux-metadata`, `configured-command` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `false` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `name` **required** | string | the tmux option name, such as history-limit |
-| `paneId` | string | the pane to read the option on |
-| `scope` | `""`, `server`, `session`, `window`, `pane` | the scope to read at; empty reads at pane scope |
-| `sessionName` | string | the session to read the option on |
-| `windowId` | string | the window to read the option on |
+| `name` **required** | string | the exact option name |
+| `effective` | boolean | include an inherited value |
+| `scope` | `""`, `global`, `server`, `session`, `window`, `pane` | global, server, session, window, or pane |
+| `target` | string | the target required by session, window, and pane scopes |
 
 | Returns | Type |
 | --- | --- |
@@ -1710,11 +1713,23 @@ Reads only. Repeating it changes nothing.
 
 ### `signal_channel`
 
-Signal a tmux wait-for channel, releasing whoever waits on it.
+Change tmux state; no client-supplied executable input. Signals one server-wide tmux channel.
 
-Requires the `pane-control` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1726,19 +1741,29 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `snapshot_pane`
 
-One pane's contents together with what it is, where it sits, and whether its process has exited.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Returns pane metadata and bounded terminal content together.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `terminal-content`, `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `includeHistory` | boolean | read scrollback as well as the visible screen |
-| `maxBytes` | integer | how many bytes to return at most, keeping the last lines |
-| `maxLines` | integer | how many lines to return at most, keeping the last ones |
-| `paneId` | string | the tmux pane id to describe; empty describes the active pane |
-| `sessionName` | string | which session's active pane to describe when paneId is empty |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `history` | boolean | include scrollback as well as the visible screen |
+| `max_lines` | integer | maximum lines, keeping the newest |
 
 | Returns | Type |
 | --- | --- |
@@ -1752,20 +1777,30 @@ Reads only. Repeating it changes nothing.
 
 ### `split_window`
 
-Divide one pane in two, placing the new one below, above, to the right of, or to the left of it, and return the new pane's id.
+Start a pane's configured process; accepts no command payload. Creates a pane whose configured process starts after the split.
 
-Requires the `workspace-create` capability.
+Belongs to the `execute` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `configured-process` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `command` | string | a command for the new pane to run instead of a shell |
-| `direction` | `""`, `below`, `above`, `right`, `left` | where the new pane goes; empty puts it below |
-| `paneId` | string | the tmux pane id to split; empty splits the active pane |
-| `percentage` | integer | the new pane's share of the space, 1 to 100 |
-| `sessionName` | string | which session's active pane to split when paneId is empty |
-| `startDirectory` | string | the new pane's working directory |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `direction` | `""`, `below`, `above`, `right`, `left` | below, above, left, or right |
+| `percent` | integer | share of the split occupied by the new pane |
+| `start_directory` | string | an absolute literal start directory |
 
 | Returns | Type |
 | --- | --- |
@@ -1773,17 +1808,28 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `swap_pane`
 
-Exchange two panes' positions.
+Change tmux state; no client-supplied executable input. Swaps the positions of two panes.
 
-Requires the `tmux-layout` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `paneId` **required** | string | one of the two panes to exchange |
-| `withPaneId` **required** | string | the other pane to exchange it with |
-| `keepFocus` | boolean | leave the active pane where it was |
+| `other_pane_id` **required** | string | the other pane id, such as %2 |
+| `pane_id` **required** | string | one pane id, such as %1 |
 
 | Returns | Type |
 | --- | --- |
@@ -1792,16 +1838,29 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `wait_for_channel`
 
-Wait until something signals a tmux wait-for channel.
+Change tmux state; no client-supplied executable input. Waits on tmux's channel state with a bounded timeout.
 
-Requires the `pane-control` capability.
+Belongs to the `manage` toolset.
 
-Changes tmux by a step. Repeating it compounds.
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `channel` **required** | string | the tmux wait-for channel to wait on |
-| `timeoutSeconds` | integer | how long to wait before giving up |
+| `channel` **required** | string | a server-wide tmux channel name |
+| `drain_first` | boolean | consume a pending signal before waiting |
+| `timeout` | number | seconds to wait before giving up |
 
 | Returns | Type |
 | --- | --- |
@@ -1811,25 +1870,33 @@ Changes tmux by a step. Repeating it compounds.
 
 ### `wait_for_text`
 
-Wait until a pane writes one of several patterns.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Waits for new pane output without accepting executable input.
 
-Requires the `content-read` capability.
+Belongs to the `inspect` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe` |
+| `outputClasses` | `terminal-content`, `tmux-metadata` |
+| `mayExposeSecrets` | `true` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
 Reads only. Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `idleSeconds` | integer | end the wait once the pane has written nothing for this many seconds |
-| `matchCase` | boolean | require the capitalisation to match |
-| `maxBytes` | integer | how many bytes of output to return at most, keeping the last lines |
-| `maxLines` | integer | how many lines of output to return at most, keeping the last ones |
-| `paneId` | string | the tmux pane id to watch; empty watches the active pane |
-| `patterns` | array | any one of these ends the wait; empty waits for any output |
-| `regex` | boolean | read the patterns as regular expressions |
-| `sessionName` | string | which session's active pane to watch when paneId is empty |
-| `sinceEntry` | boolean | ignore what the pane already shows and match only new output |
-| `stop` | array | markers of failure that end the wait early, such as "error:" |
-| `timeoutSeconds` | integer | how long to wait before giving up |
+| `pane_id` **required** | string | the pane id, such as %1 |
+| `cursor` | string | a cursor returned by an earlier capture |
+| `max_lines` | integer | maximum observed lines to return |
+| `patterns` | array | text to wait for; any one ends the wait |
+| `regex` | boolean | treat patterns and stops as regular expressions |
+| `stop` | array | failure text; any one ends the wait |
+| `timeout` | number | seconds to wait before giving up |
 
 | Returns | Type |
 | --- | --- |

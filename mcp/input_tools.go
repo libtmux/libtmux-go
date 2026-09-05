@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
-	"strings"
 	"sync/atomic"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -36,6 +36,9 @@ type sendKeysBatchOutput struct {
 	PaneID string `json:"paneId"`
 	// Sent is how many keys tmux accepted when the call succeeds.
 	Sent int `json:"sent"`
+	// ResolvedPaneIDs lists every pane that received input after tmux applied
+	// synchronize-panes.
+	ResolvedPaneIDs []string `json:"resolvedPaneIds"`
 }
 
 // sendKeysBatch sends a sequence of keys without pressing Enter.
@@ -58,17 +61,53 @@ func (t *tools) sendKeysBatch(
 	}
 	for index, key := range input.Keys {
 		if key == "" {
-			return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: index},
+			return nil, sendKeysBatchOutput{
+					PaneID: pane.ID().String(), Sent: index,
+					ResolvedPaneIDs: []string{pane.ID().String()},
+				},
 				fmt.Errorf("key %d is empty", index)
 		}
+	}
+	resolved, err := t.resolvedPaneInputTargets(ctx, pane)
+	if err != nil {
+		return nil, sendKeysBatchOutput{
+			PaneID: pane.ID().String(), ResolvedPaneIDs: []string{pane.ID().String()},
+		}, fmt.Errorf("resolve synchronized pane targets: %w", err)
 	}
 	if err := pane.SendKeySequence(ctx, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
 	}); err != nil {
-		return nil, sendKeysBatchOutput{PaneID: pane.ID().String()},
+		return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), ResolvedPaneIDs: resolved},
 			fmt.Errorf("sending keys: %w", err)
 	}
-	return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: len(input.Keys)}, nil
+	return nil, sendKeysBatchOutput{
+		PaneID: pane.ID().String(), Sent: len(input.Keys), ResolvedPaneIDs: resolved,
+	}, nil
+}
+
+func (t *tools) resolvedPaneInputTargets(ctx context.Context, pane tmux.Pane) ([]string, error) {
+	options, err := pane.Options(ctx)
+	if err != nil {
+		return nil, err
+	}
+	synchronized, present := options.SynchronizePanes().Get()
+	if !present || !synchronized {
+		return []string{pane.ID().String()}, nil
+	}
+	window, err := t.tmux(ctx).Window(ctx, pane.WindowID())
+	if err != nil {
+		return nil, err
+	}
+	panes, err := window.SearchPanes(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	targets := make([]string, 0, len(panes))
+	for _, resolved := range panes {
+		targets = append(targets, resolved.ID().String())
+	}
+	slices.Sort(targets)
+	return targets, nil
 }
 
 // pasteSequence names each staged buffer apart from the last, so two pastes at
@@ -247,95 +286,4 @@ func (t *tools) exitCopyMode(
 	return nil, copyModeOutput{PaneID: pane.ID().String()}, nil
 }
 
-// sendKeys types a command into a pane and presses Enter.
-func (t *tools) sendKeys(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input sendKeysInput,
-) (*mcp.CallToolResult, sendKeysOutput, error) {
-	if strings.TrimSpace(input.Command) == "" {
-		return nil, sendKeysOutput{}, errors.New("command is required")
-	}
-	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "sending keys", "send_keys")
-	if err != nil {
-		return nil, sendKeysOutput{}, err
-	}
-	command := input.Command
-	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-		Command:         &command,
-		SuppressHistory: input.SuppressHistory,
-	}); err != nil {
-		return nil, sendKeysOutput{}, err
-	}
-	return nil, sendKeysOutput{PaneID: pane.ID().String(), Sent: command}, nil
-}
-
-// sendKeysInput selects the pane and the command to run in it.
-type sendKeysInput struct {
-	// PaneID is a stable tmux pane identifier such as %1. Empty types into the
-	// active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"a tmux pane id such as %1; empty types into the active pane"`
-	// SessionName picks the session when PaneID is empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to type into when paneId is empty"`
-	// SuppressHistory prefixes the command with a space, which a shell
-	// configured to ignore such lines keeps out of its history. An agent
-	// typing into a person's pane otherwise fills their history with commands
-	// they did not run.
-	SuppressHistory bool `json:"suppressHistory,omitempty" jsonschema:"keep the command out of the shell's history by prefixing a space"`
-	// Command is typed into the pane, then Enter is sent. tmux reads its own
-	// key names here, so "C-c" interrupts what the pane is running and
-	// "Escape" is a key rather than those letters. That is also the way back
-	// from a pane left holding a command by a run_command that timed out,
-	// which would otherwise time out every later command sent to it.
-	Command string `json:"command" jsonschema:"what to type, read as tmux key names: \"C-c\" interrupts the pane and \"Escape\" is a key rather than those letters; use paste_text for text to take literally"`
-}
-
-// sendKeysOutput reports what was sent.
-type sendKeysOutput struct {
-	// PaneID is the pane that received it, which a caller that left it empty
-	// did not know.
-	PaneID string `json:"paneId"`
-	// Sent is the command that was typed into the pane.
-	Sent string `json:"sent"`
-}
-
 // addInputTools advertises the tools that put something into a pane.
-func addInputTools(server *mcp.Server, t *tools) {
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "send_keys",
-		Annotations: mutating("Send Keys to a Pane"),
-		Description: "Type into one pane and press Enter. tmux key names are " +
-			"read, so \"C-c\" interrupts what the pane is running, which is how " +
-			"to recover a pane left busy by a run_command that timed out. Use " +
-			"paste_text for content you did not write by hand, and run_command " +
-			"when you want the exit status.",
-	}, t.sendKeys)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "send_keys_batch",
-		Annotations: mutating("Send a Sequence of Keys"),
-		Description: "Send several tmux key names to a pane in order, with no " +
-			"Enter appended. This is how to drive a program that reads keys " +
-			"rather than lines: quit a pager, answer a prompt, leave an editor.",
-	}, t.sendKeysBatch)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "paste_text",
-		Annotations: mutating("Paste Text into a Pane"),
-		Description: "Deliver text into a pane exactly, with no tmux key names " +
-			"read. Use this for anything you did not write by hand: a word like " +
-			"\"Escape\" in the middle of it would otherwise be sent as that key.",
-	}, t.pasteText)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "enter_copy_mode",
-		Annotations: mutating("Enter Copy Mode"),
-		Description: "Put a pane into tmux's copy mode, where keys scroll and " +
-			"select rather than reaching the program in the pane. Leave it with " +
-			"exit_copy_mode: keys sent to a pane still in copy mode do not reach " +
-			"the shell.",
-	}, t.enterCopyMode)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "exit_copy_mode",
-		Annotations: settling("Leave Copy Mode"),
-		Description: "Return a pane from copy mode to passing keys to the " +
-			"program running in it.",
-	}, t.exitCopyMode)
-}

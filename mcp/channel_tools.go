@@ -45,7 +45,7 @@ type signalChannelOutput struct {
 //
 // It is the coordination primitive tmux already has, so a client can wait on
 // anything that signals one: a shell script, a key binding, another program,
-// or another client of this server. run_command covers a command this client
+// or another client of this server. run_shell_command covers a command this client
 // starts; this covers everything it did not.
 func (t *tools) waitForChannel(
 	ctx context.Context,
@@ -124,17 +124,3 @@ func validChannel(name string) (string, error) {
 }
 
 // addChannelTools advertises the tools that use tmux's own coordination.
-func addChannelTools(server *mcp.Server, t *tools) {
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "wait_for_channel",
-		Annotations: mutating("Wait on a tmux Channel"),
-		Description: "Wait until something signals a tmux wait-for channel. " +
-			"Timeout or cancellation ends this call but cannot remove tmux's global " +
-			"waiter; a later signal may be consumed by it, so do not reuse channel names.",
-	}, t.waitForChannel)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "signal_channel",
-		Annotations: mutating("Signal a tmux Channel"),
-		Description: "Signal a tmux wait-for channel, releasing whoever waits on it.",
-	}, t.signalChannel)
-}

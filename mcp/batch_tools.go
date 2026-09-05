@@ -6,17 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Batches dispatch only registered tools, so withheld tools remain unreachable.
+// Batches dispatch only the aggregate's exclusion-pruned nested authority.
 
 type dispatcher struct {
-	annotations *mcp.ToolAnnotations
 	// The originating request retains the session needed for caller-pane elicitation.
-	call func(context.Context, *mcp.CallToolRequest, json.RawMessage) (any, error)
+	call func(context.Context, *mcp.CallToolRequest, json.RawMessage) (*mcp.CallToolResult, error)
 }
 
 type batchCall struct {
@@ -31,22 +31,30 @@ type batchInput struct {
 }
 
 type batchResult struct {
-	Tool   string         `json:"tool"`
-	Result map[string]any `json:"result,omitempty"`
-	Error  string         `json:"error,omitempty"`
+	Index           int     `json:"index"`
+	Tool            string  `json:"tool"`
+	Success         bool    `json:"success"`
+	Error           *string `json:"error"`
+	Result          any     `json:"result"`
+	ResultTruncated bool    `json:"resultTruncated"`
 }
 
 type batchOutput struct {
-	Results   []batchResult `json:"results"`
-	Completed int           `json:"completed"`
-	// Skipped lists calls not attempted after a stop.
-	Skipped []string `json:"skipped"`
-	Failed  int      `json:"failed,omitempty"`
+	Results        []batchResult `json:"results"`
+	OnError        string        `json:"onError"`
+	Succeeded      int           `json:"succeeded"`
+	Failed         int           `json:"failed"`
+	StoppedAt      *int          `json:"stoppedAt"`
+	Truncated      bool          `json:"truncated"`
+	TruncatedBytes int           `json:"truncatedBytes"`
 }
 
 const (
-	onErrorStop     = "stop"
-	onErrorContinue = "continue"
+	onErrorStop                 = "stop"
+	onErrorContinue             = "continue"
+	readBatchStructuredMaxBytes = 950_000
+	readBatchWireMaxBytes       = 1_000_000
+	readBatchErrorMaxBytes      = 4_096
 )
 
 // resolveOnError rejects unknown values because the modes leave different state.
@@ -61,113 +69,176 @@ func resolveOnError(requested string) (string, error) {
 	}
 }
 
-// callReadOnlyToolsBatch permits only tools annotated read-only.
-func (t *tools) callReadOnlyToolsBatch(
+// runReadBatch dispatches only the aggregate's startup-frozen, exclusion-
+// pruned nested authority. Each dispatcher applies the direct tool's typed
+// schema before invoking its handler.
+func (t *tools) runReadBatch(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input batchInput,
-) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, request, input, SafetyReadOnly)
-}
-
-// Completed mutations are not rolled back after a later failure.
-func (t *tools) callMutatingToolsBatch(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input batchInput,
-) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, request, input, SafetyMutating)
-}
-
-func (t *tools) callDestructiveToolsBatch(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input batchInput,
-) (*mcp.CallToolResult, batchOutput, error) {
-	return t.runBatch(ctx, request, input, SafetyDestructive)
-}
-
-// runBatch preflights registration and safety for every call. Argument schemas
-// are checked immediately before each call executes.
-func (t *tools) runBatch(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input batchInput,
-	tier SafetyLevel,
 ) (*mcp.CallToolResult, batchOutput, error) {
 	if len(input.Calls) == 0 {
 		return nil, batchOutput{}, errors.New("a batch needs at least one call")
 	}
+	if len(input.Calls) > 16 {
+		return nil, batchOutput{}, errors.New("a read batch accepts at most sixteen calls")
+	}
+	aggregate, served := t.surface.byName["call_read_tools_batch"]
+	if !served {
+		return nil, batchOutput{}, errors.New("call_read_tools_batch is not served")
+	}
+	allowed := make(map[string]bool, len(aggregate.nestedAuthority))
+	for _, name := range aggregate.nestedAuthority {
+		allowed[name] = true
+	}
+	for _, call := range input.Calls {
+		if !allowed[call.Tool] {
+			return nil, batchOutput{}, fmt.Errorf(
+				"%q is not in this batch's nested authority, so this batch ran nothing",
+				call.Tool,
+			)
+		}
+		if _, served := t.dispatchers[call.Tool]; !served {
+			return nil, batchOutput{}, fmt.Errorf(
+				"%q has no nested dispatcher, so this batch ran nothing",
+				call.Tool,
+			)
+		}
+	}
+	return t.executeBatch(ctx, request, input)
+}
+
+func (t *tools) executeBatch(
+	ctx context.Context,
+	request *mcp.CallToolRequest,
+	input batchInput,
+) (*mcp.CallToolResult, batchOutput, error) {
 	onError, err := resolveOnError(input.OnError)
 	if err != nil {
 		return nil, batchOutput{}, err
 	}
-	for _, call := range input.Calls {
-		known, served := t.dispatchers[call.Tool]
-		if !served {
-			if _, advertised := t.unbatchable[call.Tool]; advertised {
-				return nil, batchOutput{}, fmt.Errorf(
-					"%q cannot be called from inside a batch, so this batch ran "+
-						"nothing; list its calls here instead", call.Tool)
-			}
-			return nil, batchOutput{}, fmt.Errorf(
-				"%q is not a tool this server serves, so this batch ran nothing", call.Tool)
-		}
-		if !tier.permits(known.annotations) {
-			return nil, batchOutput{}, fmt.Errorf(
-				"%q is beyond what this batch may call, so this batch ran nothing", call.Tool)
-		}
+	output := batchOutput{
+		Results: make([]batchResult, 0, len(input.Calls)),
+		OnError: onError,
 	}
-
-	output := batchOutput{Results: make([]batchResult, 0, len(input.Calls))}
-	for _, call := range input.Calls {
+	for index, call := range input.Calls {
+		var envelope *mcp.CallToolResult
 		encodedArguments, err := json.Marshal(call.Arguments)
 		if err != nil {
-			output.Results = append(output.Results, batchResult{
-				Tool: call.Tool, Error: "arguments could not be encoded: " + err.Error(),
-			})
-			output.Failed++
-			if onError == onErrorStop {
-				break
+			envelope = nestedErrorResult(errors.New("arguments could not be encoded: " + err.Error()))
+		} else {
+			envelope, err = t.dispatchers[call.Tool].call(ctx, request, encodedArguments)
+			callErr := err
+			if callErr != nil {
+				envelope = nestedErrorResult(callErr)
 			}
-			continue
 		}
-		value, err := t.dispatchers[call.Tool].call(ctx, request, encodedArguments)
+		decoded, err := nestedEnvelope(envelope)
 		if err != nil {
-			output.Results = append(output.Results, batchResult{
-				Tool: call.Tool, Error: err.Error(),
-			})
+			decoded, _ = nestedEnvelope(nestedErrorResult(
+				fmt.Errorf("result could not be encoded: %w", err),
+			))
+		}
+		row := batchResult{
+			Index: index, Tool: call.Tool, Success: !envelope.IsError, Result: decoded,
+		}
+		if envelope.IsError {
+			message := boundedBatchError(batchErrorText(envelope))
+			row.Error = &message
 			output.Failed++
-			if onError == onErrorStop {
-				break
-			}
-			continue
+		} else {
+			output.Succeeded++
 		}
-		decoded := map[string]any{}
-		encoded, err := json.Marshal(value)
-		if err == nil {
-			err = json.Unmarshal(encoded, &decoded)
+		output.Results = append(output.Results, row)
+		if err := enforceReadBatchLimit(&output); err != nil {
+			return nil, batchOutput{}, err
 		}
-		if err != nil {
-			output.Results = append(output.Results, batchResult{
-				Tool: call.Tool, Error: "result could not be encoded: " + err.Error(),
-			})
-			output.Failed++
-			if onError == onErrorStop {
-				break
-			}
-			continue
+		if envelope.IsError && onError == onErrorStop {
+			stoppedAt := index
+			output.StoppedAt = &stoppedAt
+			break
 		}
-		output.Results = append(output.Results, batchResult{Tool: call.Tool, Result: decoded})
-		output.Completed++
 	}
+	summary := fmt.Sprintf(
+		"Read batch completed: %d succeeded, %d failed.",
+		output.Succeeded,
+		output.Failed,
+	)
+	if output.Truncated {
+		summary = fmt.Sprintf(
+			"Read batch completed: %d succeeded, %d failed; nested result bytes were truncated.",
+			output.Succeeded,
+			output.Failed,
+		)
+	}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: summary}},
+	}, output, nil
+}
 
-	skipped := input.Calls[len(output.Results):]
-	output.Skipped = make([]string, 0, len(skipped))
-	for _, call := range skipped {
-		output.Skipped = append(output.Skipped, call.Tool)
+func enforceReadBatchLimit(output *batchOutput) error {
+	for {
+		encoded, err := json.Marshal(output)
+		if err != nil {
+			return fmt.Errorf("measure batch output: %w", err)
+		}
+		if len(encoded) <= readBatchStructuredMaxBytes {
+			return nil
+		}
+		candidate := -1
+		candidateSize := -1
+		for index := range output.Results {
+			if output.Results[index].Result == nil {
+				continue
+			}
+			encodedResult, err := json.Marshal(output.Results[index].Result)
+			if err != nil {
+				return fmt.Errorf("measure nested batch result: %w", err)
+			}
+			if len(encodedResult) > candidateSize {
+				candidate = index
+				candidateSize = len(encodedResult)
+			}
+		}
+		if candidate < 0 {
+			return errors.New("batch metadata exceeds its output limit")
+		}
+		output.Results[candidate].Result = nil
+		output.Results[candidate].ResultTruncated = true
+		output.Truncated = true
+		if candidateSize > len("null") {
+			output.TruncatedBytes += candidateSize - len("null")
+		}
 	}
-	return nil, output, nil
+}
+
+func boundedBatchError(message string) string {
+	if len(message) <= readBatchErrorMaxBytes {
+		return message
+	}
+	message = message[:readBatchErrorMaxBytes-len("...")]
+	for !utf8.ValidString(message) {
+		message = message[:len(message)-1]
+	}
+	return message + "..."
+}
+
+func nestedErrorResult(err error) *mcp.CallToolResult {
+	result := &mcp.CallToolResult{}
+	result.SetError(err)
+	return result
+}
+
+func nestedEnvelope(result *mcp.CallToolResult) (map[string]any, error) {
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	decoded := map[string]any{}
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		return nil, err
+	}
+	return decoded, nil
 }
 
 func batched[In, Out any](
@@ -175,12 +246,13 @@ func batched[In, Out any](
 	request *mcp.CallToolRequest,
 	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
 	arguments json.RawMessage,
-	schema *jsonschema.Resolved,
-) (any, error) {
+	inputSchema *jsonschema.Resolved,
+	outputSchema *jsonschema.Resolved,
+) (*mcp.CallToolResult, error) {
 	// The SDK validates direct calls only; batches apply the same schema here.
-	if schema != nil {
-		if err := schema.Validate(argumentValue(arguments)); err != nil {
-			return nil, fmt.Errorf("arguments are not what this tool takes: %w", err)
+	if inputSchema != nil {
+		if err := inputSchema.Validate(argumentValue(arguments)); err != nil {
+			return nestedErrorResult(fmt.Errorf("arguments are not what this tool takes: %w", err)), nil
 		}
 	}
 	// Strict decoding still rejects unknown fields if schema resolution fails.
@@ -189,17 +261,35 @@ func batched[In, Out any](
 		decoder := json.NewDecoder(bytes.NewReader(arguments))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&input); err != nil {
-			return nil, fmt.Errorf("arguments are not what this tool takes: %w", err)
+			return nestedErrorResult(fmt.Errorf("arguments are not what this tool takes: %w", err)), nil
 		}
 	}
 	result, output, err := handler(ctx, request, input)
 	if err != nil {
-		return nil, err
+		return nestedErrorResult(err), nil
 	}
-	if result != nil && result.IsError {
-		return nil, fmt.Errorf("%s", batchErrorText(result))
+	if result == nil {
+		result = &mcp.CallToolResult{}
 	}
-	return output, nil
+	encoded, err := json.Marshal(output)
+	if err != nil {
+		return nil, fmt.Errorf("encode nested output: %w", err)
+	}
+	if outputSchema != nil {
+		var value any
+		if err := json.Unmarshal(encoded, &value); err != nil {
+			return nil, fmt.Errorf("decode nested output: %w", err)
+		}
+		if err := outputSchema.Validate(value); err != nil {
+			return nil, fmt.Errorf("nested output is not what this tool returns: %w", err)
+		}
+	}
+	structured := json.RawMessage(encoded)
+	result.StructuredContent = structured
+	if result.Content == nil {
+		result.Content = []mcp.Content{&mcp.TextContent{Text: string(structured)}}
+	}
+	return result, nil
 }
 
 // Absent arguments validate as an empty object rather than null.
@@ -218,33 +308,4 @@ func batchErrorText(result *mcp.CallToolResult) string {
 		}
 	}
 	return "the call failed without a message"
-}
-
-// Batch tools register last and remain unbatchable to prevent nested batches.
-func addBatchTools(server *mcp.Server, t *tools) {
-	t.batchable = false
-	registerLocal(server, t, CapabilityMetadataRead, &mcp.Tool{
-		Name:        "call_readonly_tools_batch",
-		Annotations: readOnly("Batch of Reading Tools"),
-		Description: "Run several reading tools in one request, in order. " +
-			"Refuses the whole batch if any call would change tmux, so a batch " +
-			"believed to be read-only never alters a session. Stops at the first " +
-			"failure, and names the calls it skipped.",
-	}, t.callReadOnlyToolsBatch)
-	registerLocal(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "call_mutating_tools_batch",
-		Annotations: mutating("Batch of Changing Tools"),
-		Description: "Run several tools in one request, in order, including ones " +
-			"that change tmux. Laying out a window is a split, a resize, and a " +
-			"command per pane; this makes it one call. Stops at the first " +
-			"failure, and what already ran stays, because tmux has no " +
-			"transaction; the reply names the calls it skipped.",
-	}, t.callMutatingToolsBatch)
-	registerLocal(server, t, CapabilityTmuxDestroy, &mcp.Tool{
-		Name:        "call_destructive_tools_batch",
-		Annotations: destructive("Batch of Ending Tools"),
-		Description: "Run several tools in one request, in order, including the " +
-			"ones that end something. Stops at the first failure, and nothing it " +
-			"already ended comes back; the reply names the calls it skipped.",
-	}, t.callDestructiveToolsBatch)
 }

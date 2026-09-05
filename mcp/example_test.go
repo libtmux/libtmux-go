@@ -13,8 +13,8 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Serve one tmux server over stdin and stdout, which is what an agent CLI
-// launches. [tmuxmcp.Run] holds the process until the client goes away.
+// Serve one pinned tmux server over stdin and stdout, which is what an agent
+// CLI launches. [tmuxmcp.Run] holds the process until the client goes away.
 func ExampleRun() {
 	ctx := context.Background()
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
@@ -22,12 +22,8 @@ func ExampleRun() {
 		log.Fatal(err)
 	}
 
-	// Probe the resolved executable and tmux version at startup rather than on
-	// the first tool call. A tmux server that is not running yet is not an
-	// error: tmux starts one when something asks it to.
-	if _, err := target.Version(ctx); err != nil {
-		log.Fatal(err)
-	}
+	// Run validates the startup-frozen tool selection before it probes the
+	// pinned socket. A server that is not running yet is not an error.
 	if err := tmuxmcp.Run(ctx, target); err != nil {
 		log.Fatal(err)
 	}
@@ -46,12 +42,9 @@ func ExampleAdvertisedTools() {
 // Put the server on a transport of your own rather than stdin and stdout. Its
 // Connection must commit each response independently before Write returns nil.
 //
-// [tmuxmcp.NewServer] returns an instance that owns the SDK server behind its
-// tracked Connect and Run methods. Close releases resources owned by the tools.
+// [tmuxmcp.NewServer] owns the SDK server behind its tracked Connect and Run
+// methods. Close releases resources owned by the tools.
 func ExampleNewServer() {
-	// The work is in a function returning an error so that the session is
-	// closed on every path out of it. An example that logs and exits with a
-	// close deferred above would be teaching a leak.
 	if err := whichPaneAmIIn(context.Background()); err != nil {
 		log.Fatal(err)
 	}
@@ -70,29 +63,15 @@ func whichPaneAmIIn(ctx context.Context) error {
 		return err
 	}
 
-	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	instance, err := tmuxmcp.NewServer(target)
+	session, closeSession, err := connectExampleClient(ctx, target)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = instance.Close() }()
-	serverSession, err := instance.Connect(
-		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = serverSession.Close() }()
-	client := sdk.NewClient(&sdk.Implementation{Name: "example", Version: "1"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = session.Close() }()
+	defer closeSession()
 
-	// Which pane is this program running in? A pane the server reports as this
-	// one is the terminal the conversation is happening through. A program
-	// outside the tmux server it drives is told so rather than left to guess.
+	// A matching pane and socket identify the terminal carrying this process.
+	// A program outside the selected tmux server is told so rather than left to
+	// guess from a pane id alone.
 	result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "get_server_info"})
 	if err != nil {
 		return err
@@ -101,11 +80,7 @@ func whichPaneAmIIn(ctx context.Context) error {
 		InsideThisServer bool   `json:"insideThisServer"`
 		CallerPaneID     string `json:"callerPaneId"`
 	}
-	encoded, err := json.Marshal(result.StructuredContent)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(encoded, &info); err != nil {
+	if err := decodeStructured(result, &info); err != nil {
 		return err
 	}
 	if info.InsideThisServer {
@@ -118,22 +93,24 @@ func whichPaneAmIIn(ctx context.Context) error {
 
 // Read a pane repeatedly without paying for its whole screen each time.
 //
-// The first call has no cursor and returns what the pane shows now. Every call
-// after it passes back the cursor from the one before and receives only what
-// was written since. Check linesMissed: true means tmux discarded scrollback
-// between two reads, so what came back is the current screen rather than
-// everything since, and your record of that pane has a hole in it.
+// The first call has no cursor and returns what the pane shows now. Later calls
+// pass the cursor back and receive only new output. linesMissed means tmux
+// discarded scrollback between reads, leaving a hole in the caller's record.
 func Example_watchingAPane() {
 	ctx := context.Background()
-	session, done := connectedClient(ctx) // your MCP client session
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-watch-pane",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	session, paneID, done := connectedExampleClient(ctx, target)
 	defer done()
 
-	// Put something in the pane to be read back. run_command waits for it, so
-	// the first reading below is taken after it has already been printed.
 	if _, err := session.CallTool(ctx, &sdk.CallToolParams{
-		Name: "run_command",
+		Name: "run_shell_command",
 		Arguments: map[string]any{
-			"command": "printf 'deploy finished\\n'", "timeoutSeconds": 30,
+			"pane_id": paneID, "command": "printf 'deploy finished\\n'", "timeout": 30,
 		},
 	}); err != nil {
 		fmt.Println("run the command:", err)
@@ -142,14 +119,11 @@ func Example_watchingAPane() {
 
 	cursor, missed, seen := "", false, false
 	for range 3 {
-		arguments := map[string]any{}
-		if cursor != "" {
-			// The cursor names the pane, so paneId is not needed once you
-			// have one.
-			arguments = map[string]any{"cursor": cursor}
-		}
 		result, err := session.CallTool(ctx, &sdk.CallToolParams{
-			Name: "capture_since", Arguments: arguments,
+			Name: "capture_since",
+			Arguments: map[string]any{
+				"pane_id": paneID, "cursor": cursor,
+			},
 		})
 		if err != nil {
 			fmt.Println("read the pane:", err)
@@ -160,12 +134,7 @@ func Example_watchingAPane() {
 			Lines       []string `json:"lines"`
 			LinesMissed bool     `json:"linesMissed"`
 		}
-		encoded, err := json.Marshal(result.StructuredContent)
-		if err != nil {
-			fmt.Println("encode the reading:", err)
-			return
-		}
-		if err := json.Unmarshal(encoded, &reading); err != nil {
+		if err := decodeStructured(result, &reading); err != nil {
 			fmt.Println("decode the reading:", err)
 			return
 		}
@@ -178,25 +147,114 @@ func Example_watchingAPane() {
 	// Output: false true
 }
 
-// Run a command and get its exit status, rather than reading the screen and
-// guessing whether it finished.
-//
-// A shell echoes the command it was given, so a capture taken straight after
-// send_keys finds the request rather than the result. run_command waits for
-// the command itself and reports what it printed alongside how it ended.
+// Keep long-lived work visible in its pane and carry only an observation
+// cursor across turns. There is no detached server-side job handle to recover.
+func Example_watchingAVisibleCommandAcrossTurns() {
+	ctx := context.Background()
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-visible-command",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	session, paneID, done := connectedExampleClient(ctx, target)
+	defer done()
+
+	first, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "capture_since",
+		Arguments: map[string]any{
+			"pane_id": paneID,
+		},
+	})
+	if err != nil {
+		fmt.Println("start observing the pane:", err)
+		return
+	}
+	var baseline struct {
+		Cursor string `json:"cursor"`
+	}
+	if err := decodeStructured(first, &baseline); err != nil {
+		fmt.Println("decode the first cursor:", err)
+		return
+	}
+
+	if _, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "paste_text",
+		Arguments: map[string]any{
+			"pane_id": paneID,
+			"text":    "sleep 0.1; printf 'ready\\n'",
+			"enter":   true,
+		},
+	}); err != nil {
+		fmt.Println("start the visible command:", err)
+		return
+	}
+
+	waited, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "wait_for_text",
+		Arguments: map[string]any{
+			"pane_id": paneID,
+			"cursor":  baseline.Cursor,
+			"patterns": []string{
+				"^ready$",
+			},
+			"regex":   true,
+			"timeout": 5,
+		},
+	})
+	if err != nil {
+		fmt.Println("wait for the visible command:", err)
+		return
+	}
+	var wait struct {
+		Found bool `json:"found"`
+	}
+	if err := decodeStructured(waited, &wait); err != nil {
+		fmt.Println("decode the wait:", err)
+		return
+	}
+
+	next, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "capture_since",
+		Arguments: map[string]any{
+			"pane_id": paneID,
+			"cursor":  baseline.Cursor,
+		},
+	})
+	if err != nil {
+		fmt.Println("read the visible command:", err)
+		return
+	}
+	var reading struct {
+		Lines []string `json:"lines"`
+	}
+	if err := decodeStructured(next, &reading); err != nil {
+		fmt.Println("decode the new output:", err)
+		return
+	}
+
+	fmt.Println(wait.Found, slices.Contains(reading.Lines, "ready"))
+	// Output: true true
+}
+
+// Run a command and use its framed exit status instead of guessing from a
+// screen capture whether it finished.
 func Example_runningACommand() {
 	ctx := context.Background()
-	session, done := connectedClient(ctx) // your MCP client session
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-run-command",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	session, paneID, done := connectedExampleClient(ctx, target)
 	defer done()
 
 	result, err := session.CallTool(ctx, &sdk.CallToolParams{
-		Name: "run_command",
+		Name: "run_shell_command",
 		Arguments: map[string]any{
-			"command":        "go version",
-			"timeoutSeconds": 300,
-			// A courtesy to whoever's terminal this is: a shell told to ignore
-			// space-prefixed lines keeps it out of their history.
-			"suppressHistory": true,
+			"pane_id": paneID, "command": "printf 'checked\\n'", "timeout": 30,
+			"suppress_history": true,
 		},
 	})
 	if err != nil {
@@ -204,79 +262,96 @@ func Example_runningACommand() {
 		return
 	}
 	var ran struct {
-		ExitStatus *int     `json:"exitStatus"`
-		TimedOut   bool     `json:"timedOut"`
+		ExitStatus *int     `json:"exit_status"`
+		TimedOut   bool     `json:"timed_out"`
 		Running    string   `json:"running"`
 		Output     []string `json:"output"`
 	}
-	encoded, err := json.Marshal(result.StructuredContent)
-	if err != nil {
-		fmt.Println("encode the result:", err)
-		return
-	}
-	if err := json.Unmarshal(encoded, &ran); err != nil {
+	if err := decodeStructured(result, &ran); err != nil {
 		fmt.Println("decode the result:", err)
 		return
 	}
 
 	switch {
 	case ran.TimedOut && ran.Running != "":
-		// Anything but a shell here means the pane was busy and read the
-		// command as that program's input. send_keys with "C-c" gets it back.
 		fmt.Printf("the pane was running %s, not a shell\n", ran.Running)
 	case ran.TimedOut:
 		fmt.Println("still running when the wait ended")
-	case *ran.ExitStatus == 0:
+	case ran.ExitStatus != nil && *ran.ExitStatus == 0:
 		fmt.Println("passed")
-	default:
+	case ran.ExitStatus != nil:
 		fmt.Printf("failed with %d:\n%v\n", *ran.ExitStatus, ran.Output)
+	default:
+		fmt.Println("command status unavailable")
 	}
 	// Output: passed
 }
 
-// connectedClient stands in for however your program got a client session; see
-// [ExampleNewServer] for one way.
-//
-// It serves a tmux server of its own so that the examples above run against a
-// real one. Setup failures panic rather than returning: nothing here is part of
-// what the examples demonstrate, and a reader is not shown this function.
-func connectedClient(ctx context.Context) (*sdk.ClientSession, func()) {
-	target, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-client",
-	})
+func connectedExampleClient(
+	ctx context.Context,
+	target tmux.Server,
+) (*sdk.ClientSession, string, func()) {
+	created, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
 	if err != nil {
 		panic(err)
 	}
-	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work"}); err != nil {
+	pane, ok, err := created.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		killExampleServer(target)
+		if err != nil {
+			panic(err)
+		}
+		panic("new session has no active pane")
+	}
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		killExampleServer(target)
 		panic(err)
 	}
+	return session, pane.ID().String(), func() {
+		closeSession()
+		killExampleServer(target)
+	}
+}
+
+func connectExampleClient(
+	ctx context.Context,
+	target tmux.Server,
+) (*sdk.ClientSession, func(), error) {
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	instance, err := tmuxmcp.NewServer(target)
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
-	serverSession, err := instance.Connect(ctx, assumeResponseCommit(serverTransport), nil)
+	serverSession, err := instance.Connect(
+		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
+	)
 	if err != nil {
 		_ = instance.Close()
-		panic(err)
+		return nil, nil, err
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "example", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		_ = serverSession.Close()
 		_ = instance.Close()
-		panic(err)
+		return nil, nil, err
 	}
 	return session, func() {
 		_ = session.Close()
 		_ = serverSession.Close()
 		_ = instance.Close()
-		killExampleServer(target)
-	}
+	}, nil
 }
 
-// killExampleServer stops an example's server on a context of its own, since
-// an example's own context may already be spent by the time it returns.
+func decodeStructured(result *sdk.CallToolResult, into any) error {
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(encoded, into)
+}
+
 func killExampleServer(server tmux.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

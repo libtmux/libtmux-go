@@ -122,7 +122,7 @@ func (t *tools) confirmCallerWrite(
 //
 // The write guard names one pane, and everything holding it reaches the same
 // terminal one level up: a client refused kill_pane got the same outcome from
-// kill_window, kill_session, or kill_server, and was told nothing -- the answer
+// kill_window or kill_session, and was told nothing -- the answer
 // never arrived, because the pane carrying the reply had gone. holds is worked
 // out by the caller, which already has the container in hand.
 func (t *tools) confirmCallerLoss(

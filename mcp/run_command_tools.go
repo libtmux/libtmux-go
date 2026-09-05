@@ -2,12 +2,12 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,9 +29,6 @@ type runCommandInput struct {
 	// for send_keys. It covers the wrapper too, which is this package's own
 	// bookkeeping and has no business in a person's history either.
 	SuppressHistory bool `json:"suppressHistory,omitempty" jsonschema:"keep the command out of the shell's history by prefixing a space"`
-	// Detach returns as soon as the command is typed, with a handle to collect
-	// it by, instead of waiting for it to finish.
-	Detach bool `json:"detach,omitempty" jsonschema:"return a jobId at once instead of waiting; collect it later with get_job"`
 	// MaxLines caps the returned output, keeping the last lines.
 	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many lines of output to return at most, keeping the last ones"`
 	// MaxBytes caps the returned output's size, keeping the last lines.
@@ -70,19 +67,12 @@ type runCommandOutput struct {
 	// the same word for the same thing.
 	LinesMissed bool `json:"linesMissed,omitempty"`
 	// EffectiveTimeoutSeconds is the budget this call actually used, which is
-	// what timeoutSeconds asked for unless the server's ceiling was lower. It
-	// is absent from a detached run, which waited for nothing.
+	// what timeoutSeconds asked for unless the server's ceiling was lower.
 	EffectiveTimeoutSeconds int `json:"effectiveTimeoutSeconds,omitempty"`
 	// TimeoutClamped reports that the ceiling shortened the wait, so a caller
 	// that asked for longer learns the policy from a reply rather than from a
 	// failed call.
 	TimeoutClamped bool `json:"timeoutClamped,omitempty"`
-	// JobID is the handle a detached run is collected by, and is absent from
-	// one that waited.
-	JobID string `json:"jobId,omitempty"`
-	// Detached reports that the command was left running, so nothing here
-	// describes how it ended yet.
-	Detached bool `json:"detached,omitempty"`
 	// truncation reports what the bounds dropped from Output.
 	truncation
 }
@@ -100,32 +90,21 @@ func (t *tools) runCommand(
 	if err != nil {
 		return nil, runCommandOutput{}, err
 	}
-	var owned *jobs
-	if input.Detach {
-		owned, err = t.sessionJobs(request)
-		if err != nil {
-			return nil, runCommandOutput{}, err
-		}
-	}
 	output := runCommandOutput{}
-	runCtx := ctx
-	if !input.Detach {
-		timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
-		output.EffectiveTimeoutSeconds = int(timeout.Seconds())
-		output.TimeoutClamped = clamped
-		var runCancel context.CancelFunc
-		runCtx, runCancel = context.WithTimeout(ctx, timeout)
-		defer runCancel()
-		reporter := newProgressReporter(
-			runCtx, request, timeout, "waiting for the command to finish")
-		defer reporter.stop()
-	}
-	started, err := t.startCommand(runCtx, request, input, owned)
+	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
+	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+	output.TimeoutClamped = clamped
+	runCtx, runCancel := context.WithTimeout(ctx, timeout)
+	defer runCancel()
+	reporter := newProgressReporter(
+		runCtx, request, timeout, "waiting for the command to finish")
+	defer reporter.stop()
+	started, err := t.startCommand(runCtx, request, input)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, output, ctx.Err()
 		}
-		if !input.Detach && isOwnWaitDeadline(ctx, runCtx, err) {
+		if isOwnWaitDeadline(ctx, runCtx, err) {
 			output.TimedOut = true
 			output.OutputUnavailable = "the effective timeout ended during command setup, " +
 				"before pane output was collected"
@@ -135,13 +114,6 @@ func (t *tools) runCommand(
 	}
 	output.PaneID = started.paneID.String()
 
-	// A detached run is finished here. The handle is what collects it, and the
-	// directory it records itself in outlives this call because of that.
-	if input.Detach {
-		output.JobID = started.id
-		output.Detached = true
-		return nil, output, nil
-	}
 	defer func() { _ = os.RemoveAll(started.directory) }()
 
 	pane, err := t.tmux(runCtx).Pane(runCtx, started.paneID)
@@ -166,18 +138,13 @@ func (t *tools) runCommand(
 	})
 }
 
-// startCommand types a command into a pane and returns the handle that
-// identifies it, without waiting for anything.
-//
-// It is separate from waiting because the two are independent: the wrapper
-// records the same status whether or not this process is the one that reads it,
-// so detaching changes who waits and nothing else.
+// startCommand types a command into a pane and returns its private completion
+// record. The public operation always waits for that record.
 func (t *tools) startCommand(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input runCommandInput,
-	owned *jobs,
-) (*job, error) {
+) (*commandRun, error) {
 	if strings.TrimSpace(input.Command) == "" {
 		return nil, errors.New("command is required")
 	}
@@ -188,13 +155,13 @@ func (t *tools) startCommand(
 	// bindings, one of which takes a pending key and never answers the sending
 	// client, and a pane with no process never runs the wrapper at all.
 	pane, err := t.resolvePaneToDeliver(
-		ctx, request, input.PaneID, input.SessionName, "running a command", "run_command")
+		ctx, request, input.PaneID, input.SessionName, "running a command", "run_shell_command")
 	if err != nil {
 		return nil, err
 	}
 	if shell := incompatibleRunCommandShell(pane); shell != "" {
 		return nil, fmt.Errorf(
-			"run_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
+			"run_shell_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
 				"use send_keys or respawn_pane with a compatible shell",
 			pane.ID(), shell,
 		)
@@ -214,7 +181,6 @@ func (t *tools) startCommand(
 		return nil, err
 	}
 
-	jobID := "libtmux-mcp-" + rand.Text()
 	statusPath := filepath.Join(directory, "status")
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")
@@ -244,32 +210,19 @@ func (t *tools) startCommand(
 		_ = os.RemoveAll(directory)
 		return nil, err
 	}
-	started := &job{
-		id:        jobID,
+	started := &commandRun{
 		paneID:    pane.ID(),
-		command:   input.Command,
 		directory: directory,
 		openedAt:  openedPath,
 		closedAt:  closedPath,
 		statusAt:  statusPath,
-		started:   time.Now(),
-	}
-	if owned != nil {
-		if err := owned.keep(started); err != nil {
-			_ = os.RemoveAll(directory)
-			return nil, err
-		}
 	}
 	sourceScript := ". " + shellQuote(scriptPath)
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
 		Command:         &sourceScript,
 		SuppressHistory: input.SuppressHistory,
 	}); err != nil {
-		if owned != nil {
-			owned.discard(started.id)
-		} else {
-			_ = os.RemoveAll(directory)
-		}
+		_ = os.RemoveAll(directory)
 		return nil, err
 	}
 	return started, nil
@@ -323,6 +276,16 @@ type awaiting struct {
 	output                             runCommandOutput
 }
 
+type commandRun struct {
+	paneID    tmux.PaneID
+	directory string
+	openedAt  string
+	closedAt  string
+	statusAt  string
+}
+
+const commandCompletionPollInterval = 50 * time.Millisecond
+
 // awaitCommand blocks until a started command publishes its commit record, and
 // reads back its status and the rows it wrote.
 func (t *tools) awaitCommand(
@@ -332,12 +295,12 @@ func (t *tools) awaitCommand(
 ) (*mcp.CallToolResult, runCommandOutput, error) {
 	output := waiting.output
 
-	completion := job{
+	completion := commandRun{
 		openedAt: waiting.openedPath,
 		statusAt: waiting.statusPath,
 		closedAt: waiting.closedPath,
 	}
-	status, ready, err := waitForCompletedJob(waitCtx, completion)
+	status, ready, err := waitForCompletedCommand(waitCtx, completion)
 	if err == nil && ready {
 		return t.finishAwaitedCommand(ctx, waitCtx, waiting, output, status)
 	}
@@ -371,11 +334,11 @@ func (t *tools) finishAwaitedCommand(
 }
 
 func finishRunCommandDeadline(
-	completion job,
+	completion commandRun,
 	output runCommandOutput,
 	running string,
 ) (*mcp.CallToolResult, runCommandOutput, error) {
-	status, ready, err := readCompletedJob(completion)
+	status, ready, err := readCompletedCommand(completion)
 	if err != nil {
 		return nil, output, err
 	}
@@ -390,4 +353,48 @@ func finishRunCommandDeadline(
 		output.OutputUnavailable = reason
 	}
 	return nil, output, nil
+}
+
+func waitForCompletedCommand(
+	waitCtx context.Context,
+	entry commandRun,
+) (status int, ready bool, err error) {
+	ticker := time.NewTicker(commandCompletionPollInterval)
+	defer ticker.Stop()
+	for {
+		status, ready, err = readCompletedCommand(entry)
+		if err != nil || ready {
+			return status, ready, err
+		}
+		select {
+		case <-ticker.C:
+		case <-waitCtx.Done():
+			status, ready, err = readCompletedCommand(entry)
+			if err != nil || ready {
+				return status, ready, err
+			}
+			return 0, false, waitCtx.Err()
+		}
+	}
+}
+
+// readCompletedCommand treats the closing cursor mark as the commit record.
+func readCompletedCommand(entry commandRun) (int, bool, error) {
+	recorded, err := os.ReadFile(entry.statusAt)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("read command status: %w", err)
+	}
+	if _, err := readMark(entry.closedAt); errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	} else if err != nil {
+		return 0, false, err
+	}
+	status, err := strconv.Atoi(strings.TrimSpace(string(recorded)))
+	if err != nil {
+		return 0, false, fmt.Errorf("unreadable exit status %q", recorded)
+	}
+	return status, true, nil
 }

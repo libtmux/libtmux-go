@@ -111,7 +111,6 @@ func (i *Instance) shutdown() {
 		}()
 	}
 	closing.Wait()
-	i.tools.watchers.close()
 	failures = append(failures, i.runtime.Close())
 	failures = append(failures, i.terminalCause())
 	if i.audit != nil {
@@ -165,7 +164,7 @@ func (i *Instance) dropSession(session *ServerSession) {
 	i.mutex.Lock()
 	delete(i.sessions, session.sdk)
 	i.mutex.Unlock()
-	session.scope.close(i.tools.watchers)
+	session.scope.close()
 }
 
 func (i *Instance) scope(session *sdk.ServerSession) (*sessionScope, error) {

@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -104,85 +103,6 @@ func (t *tools) showOption(
 	return nil, output, nil
 }
 
-// setOptionInput writes one option.
-type setOptionInput struct {
-	// Name is the option to set.
-	Name string `json:"name" jsonschema:"the tmux option name, such as history-limit"`
-	// Value is what to set it to.
-	Value string `json:"value" jsonschema:"the value to set"`
-	// Scope is where to set it: server, session, window, or pane. Empty sets
-	// it at pane scope, which is the narrowest and affects nothing else.
-	Scope string `json:"scope,omitempty" jsonschema:"the scope to set at; empty sets at pane scope"`
-	// PaneID, WindowID, and SessionName pick the object to set it on.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the pane to set the option on"`
-	// WindowID picks the window for window scope.
-	WindowID string `json:"windowId,omitempty" jsonschema:"the window to set the option on"`
-	// SessionName picks the session for session scope, and resolves the others
-	// when they are empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to set the option on"`
-}
-
-// setOptionOutput reports what was set.
-type setOptionOutput struct {
-	// Name is the option that was set.
-	Name string `json:"name"`
-	// Scope is where it was set.
-	Scope string `json:"scope"`
-	// Value is what it was set to.
-	Value string `json:"value"`
-}
-
-// setOption writes one tmux option.
-//
-// Pane scope by default, because it is the narrowest: an option set there
-// affects the pane and nothing else, where the same option set on the server
-// changes every session a person has open. A client that meant the wider one
-// says so.
-func (t *tools) setOption(
-	ctx context.Context,
-	_ *mcp.CallToolRequest,
-	input setOptionInput,
-) (*mcp.CallToolResult, setOptionOutput, error) {
-	if strings.TrimSpace(input.Name) == "" {
-		return nil, setOptionOutput{}, errors.New("name is required")
-	}
-	scope, err := resolveScope(input.Scope)
-	if err != nil {
-		return nil, setOptionOutput{}, err
-	}
-	if err := scopeUses(scope, input.PaneID, input.WindowID); err != nil {
-		return nil, setOptionOutput{}, err
-	}
-	output := setOptionOutput{Name: input.Name, Scope: scope, Value: input.Value}
-
-	switch scope {
-	case scopeServer:
-		err = t.tmux(ctx).SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
-	case scopeSession:
-		session, sessionErr := t.resolveSession(ctx, input.SessionName)
-		if sessionErr != nil {
-			return nil, output, sessionErr
-		}
-		err = session.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
-	case scopeWindow:
-		window, windowErr := t.resolveWindow(ctx, input.WindowID, input.SessionName)
-		if windowErr != nil {
-			return nil, output, windowErr
-		}
-		err = window.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
-	default:
-		pane, paneErr := t.resolvePane(ctx, input.PaneID, input.SessionName)
-		if paneErr != nil {
-			return nil, output, paneErr
-		}
-		err = pane.SetOption(ctx, input.Name, input.Value, tmux.SetOptionOptions{})
-	}
-	if err != nil {
-		return nil, output, err
-	}
-	return nil, output, nil
-}
-
 // scopeUses reports whether a scope reads the target a caller named, so an
 // argument the scope cannot use is refused rather than discarded.
 //
@@ -240,7 +160,7 @@ type showEnvironmentInput struct {
 	// SessionName is the session to read. Empty reads the only one.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read; empty uses the only session"`
 	// Name reads one variable, with its value. Empty lists the names only.
-	Name string `json:"name,omitempty" jsonschema:"one variable to read, with its value; empty lists every name with its scope and no values. Several values at once: put several of these in call_readonly_tools_batch"`
+	Name string `json:"name,omitempty" jsonschema:"one variable to read, with its value; empty lists every name with its scope and no values. Several values at once: put several of these in call_read_tools_batch"`
 	// MaxLines and MaxBytes bound the listing, whose size belongs to the
 	// environment rather than to the request.
 	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many variables to return at most"`
@@ -262,8 +182,8 @@ type environmentEntry struct {
 	Removed bool `json:"removed,omitempty"`
 	// Scope is the layer this value came from: "session" when the session sets
 	// it, "server" when it comes from the server-wide environment. A caller
-	// changing one needs to know which, because set_environment writes the
-	// session's, which shadows the server's for that session alone.
+	// reading one needs to know which scope supplied it. A session value shadows
+	// the server value for that session alone.
 	Scope string `json:"scope"`
 }
 
@@ -368,62 +288,6 @@ func (t *tools) showEnvironment(
 	kept, report := limits.apply(names)
 	output.Variables = listed[len(listed)-len(kept):]
 	output.truncation = report
-	return nil, output, nil
-}
-
-// setEnvironmentInput writes a session's environment.
-type setEnvironmentInput struct {
-	// SessionName is the session to write. Empty writes the only one.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to write; empty uses the only session"`
-	// Name is the variable to set.
-	Name string `json:"name" jsonschema:"the variable to set"`
-	// Value is what to set it to. Ignored when Unset is true.
-	Value string `json:"value,omitempty" jsonschema:"the value to set"`
-	// Unset removes the variable instead of setting it.
-	Unset bool `json:"unset,omitempty" jsonschema:"remove the variable instead of setting it"`
-}
-
-// setEnvironmentOutput reports what changed.
-type setEnvironmentOutput struct {
-	// SessionName is the session that was written.
-	SessionName string `json:"sessionName"`
-	// Name is the variable that changed.
-	Name string `json:"name"`
-	// Unset reports whether it was removed rather than set.
-	Unset bool `json:"unset"`
-}
-
-// setEnvironment sets what new processes in a session will inherit.
-//
-// It changes nothing already running. A pane that is already open keeps the
-// environment it started with, so a client setting a variable and then
-// wondering why the pane cannot see it needs a new pane, or respawn_pane.
-func (t *tools) setEnvironment(
-	ctx context.Context,
-	_ *mcp.CallToolRequest,
-	input setEnvironmentInput,
-) (*mcp.CallToolResult, setEnvironmentOutput, error) {
-	if strings.TrimSpace(input.Name) == "" {
-		return nil, setEnvironmentOutput{}, errors.New("name is required")
-	}
-	session, err := t.resolveSession(ctx, input.SessionName)
-	if err != nil {
-		return nil, setEnvironmentOutput{}, err
-	}
-	name, _ := session.Formats().SessionName()
-	output := setEnvironmentOutput{SessionName: name, Name: input.Name, Unset: input.Unset}
-
-	if input.Unset {
-		if err := session.UnsetEnvironment(ctx, input.Name); err != nil {
-			return nil, output, err
-		}
-		return nil, output, nil
-	}
-	if err := session.SetEnvironment(
-		ctx, input.Name, input.Value, tmux.SetEnvironmentOptions{},
-	); err != nil {
-		return nil, output, err
-	}
 	return nil, output, nil
 }
 
@@ -541,42 +405,3 @@ func hookBaseName(name string) string {
 }
 
 // addSettingsTools advertises the tools for options, environment, and hooks.
-func addSettingsTools(server *mcp.Server, t *tools) {
-	register(server, t, CapabilityContentRead, &mcp.Tool{
-		Name:        "show_option",
-		Annotations: readOnly("Read a tmux Option"),
-		Description: "Read one tmux option at server, session, window, or pane " +
-			"scope. Options explain behaviour a pane's contents do not: " +
-			"history-limit is why scrollback stopped, remain-on-exit is why a " +
-			"dead pane is still there.",
-	}, t.showOption)
-	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
-		Name:        "set_option",
-		Annotations: settling("Set a tmux Option"),
-		Description: "Set one tmux option. Pane scope by default, which affects " +
-			"that pane and nothing else; server scope changes every session the " +
-			"person has open.",
-	}, t.setOption)
-	register(server, t, CapabilityContentRead, &mcp.Tool{
-		Name:        "show_environment",
-		Annotations: readOnly("Read a Session's Environment"),
-		Description: "What new processes in a session will inherit. Panes " +
-			"already running keep the environment they started with, so this is " +
-			"what the next pane gets rather than what the current one has.",
-	}, t.showEnvironment)
-	register(server, t, CapabilityTmuxSettings, &mcp.Tool{
-		Name:        "set_environment",
-		Annotations: settling("Set a Session's Environment"),
-		Description: "Set or remove a variable for processes a session starts " +
-			"from now on. It changes nothing already running.",
-	}, t.setEnvironment)
-	register(server, t, CapabilityContentRead, &mcp.Tool{
-		Name:        "show_hooks",
-		Annotations: readOnly("Read tmux Hooks"),
-		Description: "The commands tmux will run on its own at a given scope. " +
-			"This is the explanation for behaviour no tool here caused. Pass name " +
-			"to ask about one hook rather than reading the whole table. Reading " +
-			"only: a hook belongs in a person's tmux configuration, not in a " +
-			"connection that will end.",
-	}, t.showHooks)
-}
