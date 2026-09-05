@@ -8,6 +8,13 @@ by a client, so a client reaches only the socket the operator selected.
 It requires tmux 3.2a or newer and refuses an older binary before the MCP
 transport starts.
 
+Without a selector, it uses the dedicated socket `libtmux-mcp` and the shipped
+minimal configuration. A random launch marker proves which process created the
+daemon before default teardown tools are exposed, then disappears from tmux's
+environment. Otherwise set exactly one of `LIBTMUX_SOCKET` and the absolute
+`LIBTMUX_SOCKET_PATH`. `LIBTMUX_TMUX_CONFIG`, when present, must be a nonempty
+absolute path. Explicit or existing targets never gain teardown by default.
+
 ## Installing it
 
 ```console
@@ -50,9 +57,18 @@ $ libtmux-mcp -socket-name my-application
 ```
 
 It then waits on stdin. Nothing is printed, because stdout is the protocol.
-With no access configuration it exposes topology metadata only. Set
-`LIBTMUX_MCP_CAPABILITIES=operate` in the client-managed environment for the
-ordinary content, pane, workspace, layout, and settings tools.
+Use `LIBTMUX_TOOLSETS` in the client-managed environment to select any
+unordered subset of `inspect`, `manage`, `execute`, and `teardown`.
+`LIBTMUX_TOOLS` includes exact names and `LIBTMUX_EXCLUDE_TOOLS` removes exact
+names after inclusion. Unknown names and malformed lists fail before tmux
+opens. `LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, and
+`LIBTMUX_MCP_PROMPTS_AS_TOOLS` are retired and also fail startup.
+
+The selected tools and the static `tmux://capabilities` resource come from one
+native manifest. Every listed tool carries the same capability row under
+`_meta["com.git-pull.libtmux-mcp/capability"]`. The resource also reports its
+schema version, frozen surface, effective names, connection provenance, and
+common trust boundary.
 
 ## Worth knowing
 

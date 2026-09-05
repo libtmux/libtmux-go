@@ -28,9 +28,11 @@ text into a pane is running attacker-controlled commands.
 
 **The MCP server exposes a tmux server to a client.** `mcp/` lets an agent read
 panes, send keys, and run commands on whichever tmux server it was pointed at.
-Its `LIBTMUX_SAFETY` setting hides tools above a chosen tier, which narrows what
-a client can reach but is not a sandbox. Point it at a tmux server you are
-willing to let the client drive.
+Its startup-frozen toolsets and exact-name filters narrow what a client can
+reach but are not a sandbox. Every advertised tool discloses its process reach,
+tmux effects, output classes, secret and untrusted-content flags, and
+schema-keyed input literalization. Detailed input-sink validation stays
+internal. Point it at a tmux server you are willing to let the client drive.
 
 **Captured pane content is whatever was on screen.** A pane may hold secrets a
 person typed or a program printed. `capture_pane`, `capture_since`, and the MCP
