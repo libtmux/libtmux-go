@@ -191,9 +191,9 @@ attached client's view, create a selection, change a key table, or write to the
 clipboard.
 
 Use `snapshot_pane` with the same `history` and `max_lines` controls when the
-decision also needs pane metadata. A snapshot keeps terminal content and pane
-state in one reply, avoiding a race between separate metadata and capture
-calls.
+decision also needs pane metadata. It returns terminal content and pane
+metadata in one MCP round trip; it does not promise an atomic or temporally
+coherent view of a pane that changes while the tool runs.
 
 Use `capture_since` for output after an initial observation. Keep its opaque
 cursor and check `linesMissed` on every continuation. A missing cursor starts a
