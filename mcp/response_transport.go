@@ -112,10 +112,7 @@ func normalizeResponseTransportTrustingOpaque(
 		if _, wrapped := transport.Reader.(*jsonLineReader); wrapped {
 			return transport, nil
 		}
-		return &mcp.IOTransport{
-			Reader: wholeJSONLines(transport.Reader, io.Discard),
-			Writer: transport.Writer,
-		}, nil
+		return jsonLineTransport(transport.Reader, transport.Writer, io.Discard), nil
 	case *mcp.StdioTransport:
 		return stdio(), nil
 	case assumedResponseCommitTransport:

@@ -2,11 +2,13 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -14,17 +16,37 @@ import (
 
 var errJSONRPCBatchUnsupported = errors.New("libtmux MCP: JSON-RPC batches are unsupported")
 
-const jsonRPCFrameMaxBytes = 8 * 1024 * 1024
+const (
+	jsonRPCFrameMaxBytes     = 8 * 1024 * 1024
+	jsonRPCRequestIDMaxBytes = 512 * 1024
+)
 
 // wholeJSONLines passes blank or valid JSON-RPC lines and reports malformed ones.
 func wholeJSONLines(r io.ReadCloser, notify io.Writer) io.ReadCloser {
 	return &jsonLineReader{lines: bufio.NewReader(r), source: r, notify: notify}
 }
 
+// jsonLineTransport serializes SDK replies with pre-dispatch framing errors.
+func jsonLineTransport(
+	reader io.ReadCloser,
+	writer io.WriteCloser,
+	notify io.Writer,
+) *mcp.IOTransport {
+	serialized := &serializedWriteCloser{writer: writer}
+	return &mcp.IOTransport{
+		Reader: &jsonLineReader{
+			lines: bufio.NewReader(reader), source: reader, notify: notify,
+			reply: serialized,
+		},
+		Writer: serialized,
+	}
+}
+
 type jsonLineReader struct {
 	lines   *bufio.Reader
 	source  io.Closer
 	notify  io.Writer
+	reply   io.Writer
 	pending []byte
 }
 
@@ -41,6 +63,12 @@ func (r *jsonLineReader) Read(into []byte) (int, error) {
 				return 0, errJSONRPCBatchUnsupported
 			}
 			if len(trimmed) == 0 || decodable(trimmed) {
+				if oversizedRequestID(trimmed) && r.reply != nil {
+					if err := writeOversizedRequestID(r.reply); err != nil {
+						return 0, err
+					}
+					continue
+				}
 				r.pending = line
 			} else {
 				_, _ = fmt.Fprintf(r.notify,
@@ -100,6 +128,26 @@ func isJSONRPCBatch(frame []byte) bool {
 	return true
 }
 
+func oversizedRequestID(frame []byte) bool {
+	var request struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	if err := json.Unmarshal(frame, &request); err != nil || request.Method == "" {
+		return false
+	}
+	return len(bytes.TrimSpace(request.ID)) > jsonRPCRequestIDMaxBytes
+}
+
+func writeOversizedRequestID(writer io.Writer) error {
+	_, err := fmt.Fprintf(writer,
+		`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":`+
+			`"request id exceeds %d bytes"}}`+"\n",
+		jsonRPCRequestIDMaxBytes,
+	)
+	return err
+}
+
 func trimFrame(line []byte) []byte {
 	end := len(line)
 	for end > 0 && (line[end-1] == '\n' || line[end-1] == '\r' || line[end-1] == ' ' ||
@@ -114,13 +162,27 @@ func trimFrame(line []byte) []byte {
 }
 
 func stdio() *mcp.IOTransport {
-	return &mcp.IOTransport{
-		Reader: wholeJSONLines(os.Stdin, os.Stderr),
-		Writer: nopClose{os.Stdout},
-	}
+	return jsonLineTransport(os.Stdin, nopClose{os.Stdout}, os.Stderr)
 }
 
 // nopClose keeps the SDK from closing this process's stdout.
 type nopClose struct{ io.Writer }
 
 func (nopClose) Close() error { return nil }
+
+type serializedWriteCloser struct {
+	mutex  sync.Mutex
+	writer io.WriteCloser
+}
+
+func (w *serializedWriteCloser) Write(data []byte) (int, error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	return w.writer.Write(data)
+}
+
+func (w *serializedWriteCloser) Close() error {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	return w.writer.Close()
+}
