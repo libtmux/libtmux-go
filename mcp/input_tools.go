@@ -196,54 +196,6 @@ func (t *tools) pasteText(
 	return nil, output, nil
 }
 
-// exitCopyModeInput omits fields that only entering copy mode can use.
-type exitCopyModeInput struct {
-	// PaneID is the tmux pane id. Empty uses the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
-	// SessionName picks the session when PaneID is empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to use when paneId is empty"`
-}
-
-// enterCopyModeInput puts a pane into copy mode.
-type enterCopyModeInput struct {
-	// PaneID is the tmux pane id. Empty uses the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
-	// SessionName picks the session when PaneID is empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to use when paneId is empty"`
-	// ScrollUp enters copy mode one page above the bottom, which is where a
-	// client that wants to look at what scrolled past wants to start.
-	ScrollUp bool `json:"scrollUp,omitempty" jsonschema:"enter one page above the bottom"`
-}
-
-// copyModeOutput reports the pane's mode.
-type copyModeOutput struct {
-	// PaneID is the pane whose mode changed.
-	PaneID string `json:"paneId"`
-	// InCopyMode reports the mode the pane is in now.
-	InCopyMode bool `json:"inCopyMode"`
-}
-
-// enterCopyMode redirects subsequent keys to tmux rather than the pane's
-// program. get_pane_info reports inMode; exit_copy_mode restores input.
-func (t *tools) enterCopyMode(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input enterCopyModeInput,
-) (*mcp.CallToolResult, copyModeOutput, error) {
-	// Guarded like a write, because it is one from the person's side: copy
-	// mode takes their keystrokes away from their shell. exit_copy_mode is
-	// deliberately not guarded, being the way out of exactly that.
-	pane, err := t.resolvePaneToWrite(
-		ctx, request, input.PaneID, input.SessionName, "entering copy mode")
-	if err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	if err := pane.CopyMode(ctx, tmux.CopyModeRequest{ScrollUp: input.ScrollUp}); err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	return nil, copyModeOutput{PaneID: pane.ID().String(), InCopyMode: true}, nil
-}
-
 // refuseAPaneThatCannotRead rejects dead or modal panes before input can be
 // lost or interpreted as tmux bindings.
 func refuseAPaneThatCannotRead(pane tmux.Pane, tool string) error {
@@ -265,25 +217,10 @@ func refuseAPaneThatCannotRead(pane tmux.Pane, tool string) error {
 	return fmt.Errorf(
 		"pane %s is in a mode, so %s would be read as that mode's key bindings "+
 			"rather than reaching the program. To read scrollback, capture_pane "+
-			"with includeHistory and startLine reads it without leaving the mode "+
-			"or sending anything; to reach the program, exit_copy_mode first",
+			"with history reads it without leaving the mode "+
+			"or sending anything; wait for the person to leave the mode before "+
+			"sending input to the program",
 		pane.ID(), tool)
-}
-
-// exitCopyMode returns a pane to passing keys to the program in it.
-func (t *tools) exitCopyMode(
-	ctx context.Context,
-	_ *mcp.CallToolRequest,
-	input exitCopyModeInput,
-) (*mcp.CallToolResult, copyModeOutput, error) {
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
-	if err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	if err := pane.CopyMode(ctx, tmux.CopyModeRequest{Cancel: true}); err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	return nil, copyModeOutput{PaneID: pane.ID().String()}, nil
 }
 
 // addInputTools advertises the tools that put something into a pane.

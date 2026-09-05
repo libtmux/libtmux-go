@@ -40,8 +40,8 @@ var expectedToolsBySet = map[string][]string{
 	"manage": {
 		"rename_session", "rename_window", "select_window", "select_pane",
 		"select_layout", "resize_window", "resize_pane", "move_window", "swap_pane",
-		"set_pane_title", "enter_copy_mode", "exit_copy_mode", "wait_for_channel",
-		"signal_channel", "set_mouse_enabled", "set_history_limit",
+		"set_pane_title", "wait_for_channel", "signal_channel", "set_mouse_enabled",
+		"set_history_limit",
 	},
 	"execute": {
 		"create_session", "create_window", "split_window", "respawn_pane",
@@ -63,7 +63,7 @@ func TestCapabilityManifestDefinesTheExactPublicSurface(t *testing.T) {
 	want := toolsForSets("inspect", "manage", "execute", "teardown")
 	got := toolNames(tools)
 	if !slices.Equal(got, want) {
-		t.Fatalf("tools = %v, want exact 47-tool inventory %v", got, want)
+		t.Fatalf("tools = %v, want exact 45-tool inventory %v", got, want)
 	}
 
 	validReach := setOf("none", "configured-process", "pane-input", "pane-command")
@@ -249,7 +249,6 @@ func TestCapabilityManifestPublishesExactEffectsAndPrunedBatchUnions(t *testing.
 	wantEffects := map[string][]string{
 		"capture_since":         {"observe"},
 		"create_session":        {"observe", "change"},
-		"enter_copy_mode":       {"observe", "change"},
 		"kill_pane":             {"observe", "delete"},
 		"respawn_pane":          {"observe", "change", "delete"},
 		"run_shell_command":     {"observe", "change"},
@@ -714,8 +713,8 @@ func TestOnlyCapabilitiesResourceIsAdvertised(t *testing.T) {
 	if payload.SchemaVersion != 1 || !payload.Frozen {
 		t.Errorf("capability report version/frozen = (%d, %t)", payload.SchemaVersion, payload.Frozen)
 	}
-	if payload.ToolCount != 47 || len(payload.Tools) != 47 ||
-		len(payload.EffectiveTools) != 47 || payload.HostCommandTools != 0 {
+	if payload.ToolCount != 45 || len(payload.Tools) != 45 ||
+		len(payload.EffectiveTools) != 45 || payload.HostCommandTools != 0 {
 		t.Errorf("capability inventory = count %d, rows %d, host commands %d", payload.ToolCount, len(payload.Tools), payload.HostCommandTools)
 	}
 	if payload.ToolFilteringBoundary != "interface-shaping-not-authorization" {
@@ -820,7 +819,7 @@ func TestCapabilityManifestDefaultSocketProvenanceControlsTeardownDefault(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(surface.tools) != 43 {
+	if len(surface.tools) != 41 {
 		t.Fatalf("unverified minimal target defaults to %d tools, want teardown withheld", len(surface.tools))
 	}
 
@@ -835,7 +834,7 @@ func TestCapabilityManifestDefaultSocketProvenanceControlsTeardownDefault(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(surface.tools) != 43 {
+	if len(surface.tools) != 41 {
 		t.Fatalf("existing daemon defaults to %d tools, want teardown withheld", len(surface.tools))
 	}
 

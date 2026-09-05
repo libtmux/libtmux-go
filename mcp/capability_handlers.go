@@ -537,14 +537,6 @@ func (t *tools) catalogSetPaneTitle(ctx context.Context, request *sdk.CallToolRe
 	})
 }
 
-func (t *tools) catalogEnterCopyMode(ctx context.Context, request *sdk.CallToolRequest, input paneCapabilityInput) (*sdk.CallToolResult, copyModeOutput, error) {
-	return t.enterCopyMode(ctx, request, enterCopyModeInput{PaneID: input.PaneID})
-}
-
-func (t *tools) catalogExitCopyMode(ctx context.Context, request *sdk.CallToolRequest, input paneCapabilityInput) (*sdk.CallToolResult, copyModeOutput, error) {
-	return t.exitCopyMode(ctx, request, exitCopyModeInput{PaneID: input.PaneID})
-}
-
 func (t *tools) catalogWaitForChannel(ctx context.Context, request *sdk.CallToolRequest, input waitForChannelCapabilityInput) (*sdk.CallToolResult, waitForChannelOutput, error) {
 	timeout := int(input.Timeout)
 	if input.Timeout > 0 && timeout == 0 {

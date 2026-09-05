@@ -175,8 +175,75 @@ fail closed when the client cannot ask. `confirm_self` never bypasses a missing
 teardown selection; it only confirms the target after the tool exists.
 
 Splitting beside the caller pane is not blocked because it preserves the pane.
-Exiting copy mode is also allowed as the way out of a mode that consumes the
-user's keys.
+The MCP does not enter or cancel pane modes; an attached person's modal state
+stays under that person's control.
+
+### Read retained scrollback without changing pane state
+
+Reading old output does not require copy mode. Call `get_pane_info` first when
+the amount of retained output matters: `historyLines` reports what tmux still
+holds and `historyLimit` reports the configured ceiling.
+
+Call `capture_pane` with `history: true` and a bounded `max_lines` to read the
+newest retained rows together with the visible screen. Its truncation fields
+say when the requested bound omitted older rows. This read does not move an
+attached client's view, create a selection, change a key table, or write to the
+clipboard.
+
+Use `snapshot_pane` with the same `history` and `max_lines` controls when the
+decision also needs pane metadata. A snapshot keeps terminal content and pane
+state in one reply, avoiding a race between separate metadata and capture
+calls.
+
+Use `capture_since` for output after an initial observation. Keep its opaque
+cursor and check `linesMissed` on every continuation. A missing cursor starts a
+new observation; it does not request all older scrollback.
+
+The current `search_panes` schema searches bounded visible output. It has no
+history selector, so use a history capture when the sought text may have
+scrolled away. The MCP also does not expose tmux's mode-screen capture: pane
+captures report terminal content, not a person's copy-mode viewport or
+selection.
+
+| Need | Use | Constraint |
+| --- | --- | --- |
+| Newest visible rows | `capture_pane` | Keep `max_lines` bounded |
+| Retained scrollback | `capture_pane`, `history: true` | Old rows may be gone |
+| Content plus state | `snapshot_pane` | Enable `history` only when needed |
+| New output | `capture_since` | Keep its cursor; check `linesMissed` |
+| A text match across panes | `search_panes` | Searches visible output only |
+
+These reads preserve the distinction between observing terminal state and
+controlling a human terminal interface.
+
+### When a person owns the pane's current mode
+
+`get_pane_info.inMode` reports that tmux, rather than the workload program,
+currently owns the pane's input. It does not identify the mode, its key table,
+its selection, or who entered it. Treat the state as human-owned unless the
+caller has independent lifecycle knowledge.
+
+Input tools refuse a pane while `inMode` is true. Sending `C-c`, `Escape`, or a
+command would otherwise invoke mode bindings instead of reaching the program.
+The MCP does not cancel the mode because a generic cancellation can discard a
+selection or leave a different modal interface than the caller assumed.
+
+Continue with observation while the mode is active:
+
+1. Use `capture_pane` or `snapshot_pane` to read terminal content without
+   changing the view.
+2. Use `capture_since` or `wait_for_text` when progress can be observed from
+   new workload output.
+3. Recheck `get_pane_info`; resume input only after `inMode` becomes false.
+4. Ask the attached person to leave the mode when coordination is required.
+
+Do not poll by sending keys. The transition belongs to the attached client,
+and input is safe only after tmux reports that the program owns it again.
+
+Applications built directly on the Go tmux module still have
+`Pane.CopyMode`. They can pair entry and cleanup when they own the complete
+interaction. The MCP is a curated detached-safe surface, so it does not expose
+every operation available in the core library.
 
 ### Text, keys, and synchronized targets
 
@@ -255,12 +322,13 @@ screen read.
 ### Recover a pane that stopped answering
 
 After a `run_shell_command` timeout, call `get_pane_info`. A non-shell program
-may have consumed the text as input; copy mode may have consumed keys before
-the program saw them; a dead pane reads nothing.
+may have consumed the text as input; a human-owned tmux mode may own input; a
+dead pane reads nothing.
 
-Use `send_keys` with `C-c` for an intentional interruption, `exit_copy_mode`
-to return keys to the program, or `respawn_pane` to start the configured process
-again. Each is a distinct capability and should be selected deliberately.
+If `inMode` is true, keep observing with captures or snapshots and wait for the
+person to leave the mode. Otherwise, use `send_keys` with `C-c` for an
+intentional interruption. Use `respawn_pane` only to restart a configured
+process deliberately; it is not a mode-recovery shortcut.
 
 ## Gotchas
 
@@ -269,8 +337,9 @@ tmux accepts the input, not when the program finishes. Use
 `run_shell_command` for authored commands or `wait_for_text` for externally
 produced output.
 
-**Copy mode consumes keys.** `get_pane_info` reports the mode;
-`exit_copy_mode` leaves it.
+**A pane mode consumes keys.** `get_pane_info` reports `inMode`. Capture output
+without changing it, and wait for the attached person to leave the mode before
+sending input.
 
 **Window names are not unique.** Exact window ids are stable lookup targets
 within a running server. Pane ids are unambiguous while the pane exists but may
@@ -337,7 +406,7 @@ present.
 
 The capability-model migration intentionally removed routes that bypassed the
 fixed socket boundary, exposed broad interpreters, created background authority,
-or duplicated the 47-tool cross-port inventory. These names are not hidden
+or duplicated the 45-tool cross-port inventory. These names are not hidden
 aliases: a client must migrate its calls.
 
 ### Selection and resource migration
@@ -373,8 +442,8 @@ through `get_recipe`.
 - `watch_pane`: keep one `capture_since` cursor per pane across turns; use
   `wait_for_text` instead when waiting for one expected marker.
 - `recover_pane`: inspect `get_pane_info`; use `wait_for_text` when work is
-  merely slow, `send_keys` with `C-c` only when the pane is busy, and
-  `exit_copy_mode` when tmux mode owns input.
+  merely slow, `send_keys` with `C-c` only when `inMode` is false, and leave a
+  human-owned pane mode unchanged while observing it through capture tools.
 - `set_up_workspace`: compose `create_session`, `create_window`,
   `split_window`, and the layout, title, and selection tools. Use
   `run_shell_command` for bounded work, or `paste_text` with `wait_for_text` or
@@ -386,6 +455,7 @@ through `get_recipe`.
 
 | Earlier tool | Current path |
 | --- | --- |
+| `enter_copy_mode`, `exit_copy_mode` | capture; the person owns modes |
 | `run_command` | `run_shell_command`; detached mode was removed |
 | `get_job` | no handle; observe the pane with `capture_since` or `wait_for_text` |
 | `call_readonly_tools_batch` | `call_read_tools_batch`, with exact inspect-only nested authority |
@@ -415,7 +485,7 @@ metadata sent over MCP. Edit the native definitions, not this generated region.
 
 <!-- toolsref -->
 
-47 tools. Generated from the schemas by `go generate ./...`; edit the tools, not this.
+45 tools. Generated from the schemas by `go generate ./...`; edit the tools, not this.
 
 ### `call_read_tools_batch`
 
@@ -615,64 +685,6 @@ Changes tmux state.
 | --- | --- |
 | `paneId` **required** | string |
 | `windowId` **required** | string |
-
-### `enter_copy_mode`
-
-Change tmux state; no client-supplied executable input. Puts a pane into copy mode.
-
-Belongs to the `manage` toolset.
-
-| Capability | Manifest value |
-| --- | --- |
-| `processReach` | `none` |
-| `tmuxEffects` | `observe`, `change` |
-| `outputClasses` | `tmux-metadata` |
-| `mayExposeSecrets` | `false` |
-| `mayReturnUntrustedContent` | `true` |
-| `amplifiesFutureInput` | `false` |
-| `inputLiteralization` | none |
-| `nestedAuthority` | none |
-| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
-
-Changes tmux state.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `pane_id` **required** | string | the pane id, such as %1 |
-
-| Returns | Type |
-| --- | --- |
-| `inCopyMode` **required** | boolean |
-| `paneId` **required** | string |
-
-### `exit_copy_mode`
-
-Change tmux state; no client-supplied executable input. Leaves the pane's current mode.
-
-Belongs to the `manage` toolset.
-
-| Capability | Manifest value |
-| --- | --- |
-| `processReach` | `none` |
-| `tmuxEffects` | `observe`, `change` |
-| `outputClasses` | `tmux-metadata` |
-| `mayExposeSecrets` | `false` |
-| `mayReturnUntrustedContent` | `true` |
-| `amplifiesFutureInput` | `false` |
-| `inputLiteralization` | none |
-| `nestedAuthority` | none |
-| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
-
-Changes tmux state.
-
-| Argument | Type | |
-| --- | --- | --- |
-| `pane_id` **required** | string | the pane id, such as %1 |
-
-| Returns | Type |
-| --- | --- |
-| `inCopyMode` **required** | boolean |
-| `paneId` **required** | string |
 
 ### `find_pane_by_position`
 

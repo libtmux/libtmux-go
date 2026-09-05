@@ -335,13 +335,18 @@ $ publisher publish
 
 ## The tools
 
-Forty-seven tools, each with the arguments a client sends and what comes back,
+Forty-five tools, each with the arguments a client sends and what comes back,
 plus gotchas and what the server logs:
 
 **[Tool reference →](TOOLS.md)**
 
 That page is reference material, read by search rather than read through, which
 is why it is not here.
+
+Copy mode stays outside the MCP surface. Captures, snapshots, searches, and
+cursors read pane output without taking over an attached person's modal view;
+`get_pane_info` reports when a mode already owns input. The Go tmux module
+retains its copy-mode API for applications that own that interaction.
 
 A second [libtmux-mcp server](https://github.com/tmux-python/libtmux-mcp) for
 tmux is written in Python.

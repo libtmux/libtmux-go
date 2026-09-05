@@ -12,7 +12,6 @@ import (
 
 // Caller-pane writes and teardown require elicitation because they can disrupt
 // the terminal carrying the conversation. Clients without elicitation are refused.
-// Entering copy mode is guarded; splitting and exit_copy_mode are not.
 
 // callerWriteGuard is what a caller is told when the person says no.
 const callerWriteGuard = "the person declined: %s is the pane this server " +

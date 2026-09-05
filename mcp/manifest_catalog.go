@@ -112,7 +112,7 @@ func bindAggregateSchema(definition *toolDefinition, byName map[string]toolDefin
 }
 
 func buildToolManifest() []toolDefinition {
-	definitions := make([]toolDefinition, 0, 47)
+	definitions := make([]toolDefinition, 0, 45)
 	definitions = appendInspectDefinitions(definitions)
 	definitions = appendManageDefinitions(definitions)
 	definitions = appendExecuteDefinitions(definitions)
@@ -393,14 +393,6 @@ func appendManageDefinitions(definitions []toolDefinition) []toolDefinition {
 			),
 			toolDefinition{inputLiteralization: map[string]string{"title": "double-hash-once"}},
 		), (*tools).catalogSetPaneTitle),
-		defineTool(manage(
-			"enter_copy_mode", "Enter copy mode", "Puts a pane into copy mode.",
-			sinkMap(input("pane_id", sinkTmuxLookup)), toolDefinition{},
-		), (*tools).catalogEnterCopyMode),
-		defineTool(manage(
-			"exit_copy_mode", "Exit copy mode", "Leaves the pane's current mode.",
-			sinkMap(input("pane_id", sinkTmuxLookup)), toolDefinition{},
-		), (*tools).catalogExitCopyMode),
 	)
 	definitions = append(definitions,
 		defineTool(toolDefinition{

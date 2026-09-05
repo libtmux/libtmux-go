@@ -6,13 +6,13 @@ portable contract before language-specific implementation detail.
 
 This is not the root [PARITY.md](../PARITY.md). That file compares Go library
 symbols with the Python library. This file records how the Go MCP server maps
-the shared 47-tool capability model into its native SDK and core.
+the shared 45-tool capability model into its native SDK and core.
 
 ## The surface, counted
 
 | Surface | Go MCP |
 | --- | --- |
-| Public tools | 47 |
+| Public tools | 45 |
 | Unordered toolsets | `inspect`, `manage`, `execute`, `teardown` |
 | Static resources | one, `tmux://capabilities` |
 | Dynamic resources and templates | none |
@@ -83,6 +83,13 @@ The generated tool reference prints the same native input/output schemas and
 capability fields. It is a projection of the registry, not an independent
 authority.
 
+The public manifest intentionally omits entering and cancelling copy mode.
+Capture, snapshot, search, and cursor tools observe pane output without taking
+ownership of an attached person's modal interface. `get_pane_info` reports
+whether a mode already owns input. The core tmux module still exposes
+`Pane.CopyMode` for applications that own the pane interaction; library parity
+does not require MCP parity.
+
 ## Read-batch authority
 
 `call_read_tools_batch` may invoke every inspect tool except itself and the
@@ -144,7 +151,7 @@ tiers, a parallel capability allowlist, prompts, dynamic hierarchy resources,
 background jobs, generic setters, raw tmux formats, buffers, pipe commands,
 server discovery, and broad mutation batches. Those were useful experiments,
 but together they formed several overlapping authorities and did not match the
-portable 47-tool contract.
+portable 45-tool contract.
 
 The migration keeps the useful workflows while narrowing the routes:
 
@@ -177,12 +184,12 @@ See the [retired tool mapping](TOOLS.md#retired-tool-mapping) for each old name.
 | prompt recipes | documented call sequences | The workflows without a second protocol surface |
 
 This table is historical migration context, not an alternate inventory. The
-generated 47-tool list and each startup-filtered capability report remain the
+generated 45-tool list and each startup-filtered capability report remain the
 authoritative current surfaces.
 
 ## Testing the server
 
-Focused manifest tests enumerate the exact 47 tools, all 16 toolset subsets,
+Focused manifest tests enumerate the exact 45 tools, all 16 toolset subsets,
 named include/exclude precedence, zero-authority batch behavior, schema/sink
 equality, wire metadata/resource parity, the complete 1,000,000-byte JSON-RPC
 batch-response cap, and authenticated startup ownership. Live tests use isolated
