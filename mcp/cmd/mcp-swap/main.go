@@ -299,7 +299,7 @@ func prepareEntry(chosen options, repository string) (entryPlan, error) {
 		install:    func() error { return nil },
 		cleanup:    func() {},
 	}
-	if chosen.mode != modeBuild || (chosen.dryRun && chosen.noPreflight) {
+	if chosen.mode != modeBuild || chosen.dryRun {
 		return plan, nil
 	}
 

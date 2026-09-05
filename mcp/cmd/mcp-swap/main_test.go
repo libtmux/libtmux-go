@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // What a swap writes is someone else's configuration file, so the parts worth
@@ -148,72 +149,36 @@ func TestBuildEntryNamesTheChosenBuild(t *testing.T) {
 	}
 }
 
-func TestDryRunBuildDoesNotReplaceThePersistentBinary(t *testing.T) {
+func TestDryRunBuildDoesNotCompileOrCreateCaches(t *testing.T) {
 	directory := t.TempDir()
-	repository := filepath.Join(directory, "mcp")
-	command := filepath.Join(repository, "cmd", commandName)
-	if err := os.MkdirAll(command, 0o755); err != nil {
+	bin := filepath.Join(directory, "bin")
+	if err := os.Mkdir(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repository, "go.mod"),
-		[]byte("module example.com/dry-run\n\ngo 1.26\n"), 0o600); err != nil {
+	marker := filepath.Join(directory, "go-was-run")
+	goCommand := filepath.Join(bin, "go")
+	if err := os.WriteFile(goCommand, []byte(
+		"#!/bin/sh\nprintf called > \""+marker+"\"\n",
+	), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(command, "main.go"),
-		[]byte("package main\n\nfunc main() {}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	cache := filepath.Join(directory, "cache")
 	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv("GOCACHE", filepath.Join(directory, "go-cache"))
-	t.Setenv("GOMAXPROCS", "2")
-	t.Setenv("GOFLAGS", "-p=1")
-	persistent, err := persistentBinaryPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := compileAt(repository, persistent); err != nil {
-		t.Fatal(err)
-	}
-	before, err := os.ReadFile(persistent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(command, "main.go"), []byte(
-		"package main\n\nvar marker = \"dry run replacement\"\n\nfunc main() { println(marker) }\n",
-	), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("PATH", bin)
 
-	plan, err := prepareEntry(options{mode: modeBuild, dryRun: true}, repository)
+	plan, err := prepareEntry(options{mode: modeBuild, dryRun: true}, directory)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(plan.cleanup)
-	if got := entryCommand(plan.configured); got != persistent {
-		t.Fatalf("configured binary = %q, want %q", got, persistent)
+	if plan.preflightCommand != "" {
+		t.Fatalf("dry run prepared executable %q", plan.preflightCommand)
 	}
-	temporary := plan.preflightCommand
-	if temporary == persistent {
-		t.Fatal("dry run preflight uses the persistent server binary")
-	}
-	if _, err := os.Stat(temporary); err != nil {
-		t.Fatalf("temporary preflight binary: %v", err)
-	}
-	if err := plan.install(); err != nil {
-		t.Fatal(err)
-	}
-	after, err := os.ReadFile(persistent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(after, before) {
-		t.Fatal("dry run replaced the persistent server binary")
-	}
-	plan.cleanup()
-	if _, err := os.Stat(temporary); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("temporary preflight binary remains: %v", err)
+	for _, path := range []string{marker, cache, filepath.Join(directory, "go-cache")} {
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("dry run created %s: %v", filepath.Base(path), err)
+		}
 	}
 }
 
@@ -516,6 +481,55 @@ func TestWritePreservesAConfigSymlink(t *testing.T) {
 	}
 }
 
+func TestRevertRefusesRetargetedConfigSymlink(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	first := filepath.Join(directory, "first.json")
+	second := filepath.Join(directory, "second.json")
+	linked := filepath.Join(directory, "config.json")
+	original := []byte(`{"mcpServers":{"tmux":{"command":"old"}}}`)
+	if err := os.WriteFile(first, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(first), linked); err != nil {
+		t.Fatal(err)
+	}
+	target := client{
+		name: "linked", path: linked,
+		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+	}
+	if err := writeEntry(target, devEntry()); err != nil {
+		t.Fatal(err)
+	}
+	swapped := []byte(readFile(t, first))
+	if err := os.WriteFile(second, swapped, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(linked); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(second), linked); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := revert([]client{target}, false); err == nil {
+		t.Fatal("revert accepted a retargeted config symlink")
+	}
+	if got := readFile(t, first); got != string(swapped) {
+		t.Fatalf("original physical target changed: got %q, want %q", got, swapped)
+	}
+	if got := readFile(t, second); got != string(swapped) {
+		t.Fatalf("replacement physical target changed: got %q, want %q", got, swapped)
+	}
+	if got, err := os.Readlink(linked); err != nil || got != filepath.Base(second) {
+		t.Fatalf("config symlink = (%q, %v), want %q", got, err, filepath.Base(second))
+	}
+	if _, err := os.Stat(backupPath(target)); err != nil {
+		t.Fatalf("revert removed recovery data after refusing: %v", err)
+	}
+}
+
 func TestDryRunsValidateWithoutWriting(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()
@@ -569,6 +583,9 @@ func TestDryRunsValidateWithoutWriting(t *testing.T) {
 	if _, err := os.Stat(backupPath(valid)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("use-local dry run created a backup: %v", err)
 	}
+	if _, err := os.Stat(recoveryStatePath(valid)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("use-local dry run created recovery state: %v", err)
+	}
 	if err := writeEntry(valid, devEntry()); err != nil {
 		t.Fatal(err)
 	}
@@ -581,6 +598,34 @@ func TestDryRunsValidateWithoutWriting(t *testing.T) {
 	}
 	if got := readFile(t, backupPath(valid)); got != string(original) {
 		t.Fatalf("revert dry run changed the backup: %s", got)
+	}
+}
+
+func TestDryRunDoesNotTouchTheConfigDirectory(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	target := client{
+		name: "dry-run", path: filepath.Join(directory, "config.json"),
+		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+	}
+	if err := os.WriteFile(target.path, []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixed := time.Unix(1_700_000_000, 0)
+	if err := os.Chtimes(directory, fixed, fixed); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := useLocal([]client{target}, devEntry(), true); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(fixed) {
+		t.Fatalf("dry run changed directory mtime from %s to %s", fixed, info.ModTime())
 	}
 }
 
@@ -602,6 +647,41 @@ func TestMalformedLaterClientStopsAllWrites(t *testing.T) {
 	}
 	assertConfigWasNotWritten(t, first, firstOriginal)
 	assertConfigWasNotWritten(t, broken, brokenOriginal)
+}
+
+func TestDuplicatePhysicalConfigsStopAllWrites(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	stored := filepath.Join(directory, "shared.json")
+	original := []byte(`{"mcpServers":{"other":{"command":"keep"}}}`)
+	if err := os.WriteFile(stored, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clients := make([]client, 0, 2)
+	for _, name := range []string{"first", "later"} {
+		path := filepath.Join(directory, name+".json")
+		if err := os.Symlink(filepath.Base(stored), path); err != nil {
+			t.Fatal(err)
+		}
+		clients = append(clients, client{
+			name: name, path: path,
+			key: "mcpServers", format: formatJSON, dialect: dialectStandard,
+		})
+	}
+
+	err := useLocal(clients, map[string]any{"command": "/bin/true"}, false)
+	if err == nil {
+		t.Fatal("two selected paths to one physical config were accepted")
+	}
+	if got := readFile(t, stored); got != string(original) {
+		t.Fatalf("shared config changed: got %q, want %q", got, original)
+	}
+	for _, target := range clients {
+		if _, statErr := os.Stat(backupPath(target)); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("%s backup exists after refusal: %v", target.name, statErr)
+		}
+	}
 }
 
 func TestInvalidLaterBackupDestinationStopsAllWrites(t *testing.T) {
@@ -640,5 +720,36 @@ func TestInvalidLaterBackupDestinationStopsAllWrites(t *testing.T) {
 	}
 	if _, statErr := os.Stat(backupPath(later)); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("later backup exists after refusal: %v", statErr)
+	}
+}
+
+func TestApplyFailureRollsBackEarlierConfigs(t *testing.T) {
+	t.Parallel()
+
+	first := jsonPreflightClient(t, "first", `{"mcpServers":{}}`)
+	later := jsonPreflightClient(t, "later", `{"mcpServers":{}}`)
+	firstOriginal := readFile(t, first.path)
+	laterOriginal := readFile(t, later.path)
+	plan := entryPlan{
+		configured: map[string]any{"command": "/bin/true"},
+		install: func() error {
+			backup := backupPath(later)
+			return os.Symlink(filepath.Base(backup), backup)
+		},
+		cleanup: func() {},
+	}
+
+	err := usePreparedLocal([]client{first, later}, plan, false, false)
+	if err == nil {
+		t.Fatal("an apply-time failure reported success")
+	}
+	if got := readFile(t, first.path); got != firstOriginal {
+		t.Fatalf("earlier config was not rolled back: got %q, want %q", got, firstOriginal)
+	}
+	if got := readFile(t, later.path); got != laterOriginal {
+		t.Fatalf("later config changed: got %q, want %q", got, laterOriginal)
+	}
+	if _, statErr := os.Stat(backupPath(first)); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("earlier recovery artifact remains after a proven rollback: %v", statErr)
 	}
 }

@@ -49,15 +49,20 @@ func TestUsePreparedLocalPreflightsDistinctFinalEnvironments(t *testing.T) {
 	assertConfigWasNotWritten(t, second, secondOriginal)
 }
 
-func TestDryRunPreflightsTheFinalOpencodeEntry(t *testing.T) {
+func TestDryRunDoesNotStartAConfiguredServer(t *testing.T) {
 	t.Setenv("GORACE", "atexit_sleep_ms=0")
-	path := filepath.Join(t.TempDir(), "opencode.jsonc")
+	directory := t.TempDir()
+	marker := filepath.Join(directory, "preflight-marker")
+	path := filepath.Join(directory, "opencode.jsonc")
 	original := `{
   "mcp": {
     "tmux": {
       "type": "local",
       "command": ["old-server", "old-argument"],
-      "environment": {"MCP_SWAP_PREFLIGHT_HELPER": "wrong-name"}
+      "environment": {
+        "MCP_SWAP_PREFLIGHT_HELPER": "handshake",
+        "MCP_SWAP_PREFLIGHT_MARKER": "` + filepath.ToSlash(marker) + `"
+      }
     }
   }
 }
@@ -70,13 +75,15 @@ func TestDryRunPreflightsTheFinalOpencodeEntry(t *testing.T) {
 		format: formatJSONC, dialect: dialectOpencode,
 	}
 
-	err := usePreparedLocal(
+	if err := usePreparedLocal(
 		[]client{target}, preflightTestPlan(), true, true,
-	)
-	if err == nil || !strings.Contains(err.Error(), "opencode preflight failed") {
-		t.Fatalf("dry-run preflight error = %v, want the opencode client named", err)
+	); err != nil {
+		t.Fatal(err)
 	}
 	assertConfigWasNotWritten(t, target, original)
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dry run started the configured server: %v", err)
+	}
 }
 
 func TestUsePreparedLocalPreflightsWithoutAClientConfig(t *testing.T) {
@@ -90,7 +97,7 @@ func TestUsePreparedLocalPreflightsWithoutAClientConfig(t *testing.T) {
 		key: "mcpServers", format: formatJSON, dialect: dialectStandard,
 	}
 
-	err := usePreparedLocal([]client{missing}, plan, true, true)
+	err := usePreparedLocal([]client{missing}, plan, false, true)
 	if err == nil || !strings.Contains(err.Error(), "preflight failed, nothing written") {
 		t.Fatalf("preflight error = %v, want the configured build rejected", err)
 	}
@@ -196,5 +203,8 @@ func assertConfigWasNotWritten(t *testing.T, target client, original string) {
 	}
 	if _, err := os.Stat(backupPath(target)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("backup exists after rejected write: %v", err)
+	}
+	if _, err := os.Stat(recoveryStatePath(target)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("recovery state exists after rejected write: %v", err)
 	}
 }
