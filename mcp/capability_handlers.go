@@ -256,9 +256,8 @@ type pasteTextCapabilityInput struct {
 }
 
 type pasteTextCapabilityOutput struct {
-	PaneID       string   `json:"pane_id"`
-	Bytes        int      `json:"bytes"`
-	EnterPaneIDs []string `json:"enter_pane_ids"`
+	PaneID string `json:"pane_id"`
+	Bytes  int    `json:"bytes"`
 }
 
 type setSynchronizePanesCapabilityInput struct {
@@ -702,9 +701,6 @@ func (t *tools) catalogPasteText(ctx context.Context, request *sdk.CallToolReque
 		pasteTextInput{PaneID: input.PaneID, Text: input.Text, Enter: input.Enter},
 	)
 	converted := pasteTextCapabilityOutput(output)
-	if converted.EnterPaneIDs == nil {
-		converted.EnterPaneIDs = []string{}
-	}
 	return result, converted, err
 }
 

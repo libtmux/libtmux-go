@@ -60,12 +60,58 @@ func TestStrictPaneInputFormatsFailClosed(t *testing.T) {
 	}
 }
 
+func TestAttendedPaneInputMembershipFailsClosed(t *testing.T) {
+	strict := func(value string) rawPaneFormat {
+		return rawPaneFormat{Value: value, Present: true}
+	}
+	valid := clientAttentionSnapshotRow{
+		Control: strict("0"), PaneID: strict("%2"), Zoomed: strict("0"),
+	}
+	window := map[string]struct{}{"%2": {}, "%3": {}}
+
+	attended, err := attendedPaneIDs([]clientAttentionSnapshotRow{valid}, window)
+	if err != nil || !attended["%2"] || !attended["%3"] {
+		t.Fatalf("visible window attendance = (%v, %v)", attended, err)
+	}
+	zoomed := valid
+	zoomed.Zoomed = strict("1")
+	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{zoomed}, window)
+	if err != nil || !attended["%2"] || attended["%3"] {
+		t.Fatalf("zoomed attendance = (%v, %v)", attended, err)
+	}
+	control := valid
+	control.Control = strict("1")
+	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{control}, window)
+	if err != nil || len(attended) != 0 {
+		t.Fatalf("control client attendance = (%v, %v)", attended, err)
+	}
+
+	for _, test := range []struct {
+		name string
+		row  clientAttentionSnapshotRow
+	}{
+		{name: "missing control", row: clientAttentionSnapshotRow{PaneID: strict("%2"), Zoomed: strict("0")}},
+		{name: "malformed control", row: clientAttentionSnapshotRow{Control: strict("no"), PaneID: strict("%2"), Zoomed: strict("0")}},
+		{name: "missing pane", row: clientAttentionSnapshotRow{Control: strict("0"), Zoomed: strict("0")}},
+		{name: "noncanonical pane", row: clientAttentionSnapshotRow{Control: strict("0"), PaneID: strict("%02"), Zoomed: strict("0")}},
+		{name: "missing zoom", row: clientAttentionSnapshotRow{Control: strict("0"), PaneID: strict("%2")}},
+		{name: "malformed zoom", row: clientAttentionSnapshotRow{Control: strict("0"), PaneID: strict("%2"), Zoomed: strict("2")}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := attendedPaneIDs([]clientAttentionSnapshotRow{test.row}, window); err == nil {
+				t.Fatal("attendedPaneIDs() accepted an incomplete or malformed client row")
+			}
+		})
+	}
+}
+
 func TestConfiguredPaneInputMembership(t *testing.T) {
 	safe := func(id, synchronized string) paneInputSnapshotRow {
 		return paneInputSnapshotRow{
 			PaneID:       id,
 			Synchronized: rawPaneFormat{Value: synchronized, Present: true},
 			Dead:         rawPaneFormat{Value: "0", Present: true},
+			InputOff:     rawPaneFormat{Value: "0", Present: true},
 			InMode:       rawPaneFormat{Value: "0", Present: true},
 		}
 	}
@@ -117,6 +163,22 @@ func TestConfiguredPaneInputMembership(t *testing.T) {
 				peer.Dead.Value = "1"
 				return []paneInputSnapshotRow{safe("%2", "1"), peer}
 			}(), errText: "no process",
+		},
+		{
+			name: "included input-off peer refuses", source: "%2",
+			rows: func() []paneInputSnapshotRow {
+				peer := safe("%3", "1")
+				peer.InputOff.Value = "1"
+				return []paneInputSnapshotRow{safe("%2", "1"), peer}
+			}(), errText: "input disabled",
+		},
+		{
+			name: "included missing input flag refuses", source: "%2",
+			rows: func() []paneInputSnapshotRow {
+				peer := safe("%3", "1")
+				peer.InputOff = rawPaneFormat{}
+				return []paneInputSnapshotRow{safe("%2", "1"), peer}
+			}(), errText: "pane_input_off",
 		},
 		{
 			name: "off modal dead peer is irrelevant", source: "%2",
@@ -295,34 +357,29 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 		setBufferCalls++
 		return nil
 	}
-	if err := panes[1].CopyMode(ctx, tmux.CopyModeRequest{}); err != nil {
+	if err := panes[0].CopyMode(ctx, tmux.CopyModeRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	_, pasted, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
 		PaneID: panes[0].ID().String(), Text: "blocked", Enter: true,
 	})
-	if err == nil || setBufferCalls != 0 || pasted.EnterPaneIDs == nil || len(pasted.EnterPaneIDs) != 0 {
+	if err == nil || setBufferCalls != 0 || pasted.Bytes != 0 {
 		t.Fatalf("modal paste preflight = (%+v, %v, setBuffer=%d)", pasted, err, setBufferCalls)
 	}
-	if err := panes[1].CopyMode(ctx, tmux.CopyModeRequest{Cancel: true}); err != nil {
+	if err := panes[0].CopyMode(ctx, tmux.CopyModeRequest{Cancel: true}); err != nil {
 		t.Fatal(err)
 	}
-	defaults := defaultMCPDependencies()
-	instance.runtime.deps.setBuffer = defaults.setBuffer
-	enterFailure := errors.New("injected Enter failure")
-	instance.runtime.deps.sendKeys = func(
-		context.Context,
-		tmux.Pane,
-		tmux.SendKeysRequest,
-	) error {
-		return enterFailure
+	if _, err := panes[0].Select(ctx, tmux.PaneSelectRequest{Input: tmux.PaneInputDisable}); err != nil {
+		t.Fatal(err)
 	}
-	result, pasted, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
-		PaneID: panes[0].ID().String(), Text: "partial-paste", Enter: true,
+	_, pasted, err = instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: "disabled",
 	})
-	if err != nil || result == nil || !result.IsError || pasted.Bytes != len("partial-paste") ||
-		!slices.Equal(pasted.EnterPaneIDs, want) {
-		t.Fatalf("partial Enter failure = (%#v, %+v, %v), want ids=%v", result, pasted, err, want)
+	if err == nil || setBufferCalls != 0 || pasted.Bytes != 0 {
+		t.Fatalf("input-off paste preflight = (%+v, %v, setBuffer=%d)", pasted, err, setBufferCalls)
+	}
+	if _, err := panes[0].Select(ctx, tmux.PaneSelectRequest{Input: tmux.PaneInputEnable}); err != nil {
+		t.Fatal(err)
 	}
 
 	runRoot := t.TempDir()
@@ -408,5 +465,85 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "fish") || sendCalls != 0 ||
 		!slices.Equal(ran.ResolvedPaneIDs, []string{panes[0].ID().String()}) {
 		t.Fatalf("second shell run refusal = (%+v, %v, sends=%d)", ran, err, sendCalls)
+	}
+}
+
+//libtmux:real-tmux
+func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	target, window, panes := threePaneInputFixture(ctx, t)
+	if err := window.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	staged := ""
+	instance.runtime.deps.setBuffer = func(
+		bufferCtx context.Context,
+		server tmux.Server,
+		request tmux.SetBufferRequest,
+	) error {
+		staged = request.Data
+		return defaults.setBuffer(bufferCtx, server, request)
+	}
+	separateSends := 0
+	instance.runtime.deps.sendKeys = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeysRequest,
+	) error {
+		separateSends++
+		return errors.New("separate Enter must not be sent")
+	}
+
+	result, output, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: ":", Enter: true,
+	})
+	if err != nil || result != nil || staged != ":\n" || separateSends != 0 ||
+		output.Bytes != 1 {
+		t.Fatalf(
+			"paste = (result %#v, output %+v, error %v, staged %q, sends %d)",
+			result, output, err, staged, separateSends,
+		)
+	}
+}
+
+//libtmux:real-tmux
+func TestPasteRechecksTargetAfterBufferSetup(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	var bufferName *string
+	instance.runtime.deps.setBuffer = func(
+		bufferCtx context.Context,
+		server tmux.Server,
+		request tmux.SetBufferRequest,
+	) error {
+		bufferName = request.Name
+		if err := defaults.setBuffer(bufferCtx, server, request); err != nil {
+			return err
+		}
+		return panes[0].CopyMode(bufferCtx, tmux.CopyModeRequest{})
+	}
+	t.Cleanup(func() {
+		_ = panes[0].CopyMode(context.Background(), tmux.CopyModeRequest{Cancel: true})
+	})
+
+	_, output, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: "must-not-paste",
+	})
+	if err == nil || output.Bytes != 0 {
+		t.Fatalf("paste after mode transition = (%+v, %v), want refusal", output, err)
+	}
+	if bufferName == nil {
+		t.Fatal("paste did not stage its private buffer before the transition")
+	}
+	if _, err := target.ShowBuffer(ctx, bufferName); err == nil {
+		t.Fatalf("refused paste left buffer %q behind", *bufferName)
 	}
 }

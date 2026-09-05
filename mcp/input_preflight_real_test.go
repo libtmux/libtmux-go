@@ -144,26 +144,23 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 	if withoutEnter.IsError {
 		t.Fatalf("target-only paste refusal = %q", callToolResultText(withoutEnter))
 	}
-	if got := structuredStringSlice(t, withoutEnter, "enter_pane_ids"); got == nil || len(got) != 0 {
-		t.Errorf("target-only paste enter membership = %#v, want nonnil empty", got)
-	}
-	if _, camel := structuredMap(t, withoutEnter)["enterPaneIds"]; camel {
-		t.Error("paste_text exposed camel-case Enter membership")
+	if _, present := structuredMap(t, withoutEnter)["enter_pane_ids"]; present {
+		t.Error("paste_text exposed obsolete Enter membership")
 	}
 	clearKey := "C-u"
 	if err := panes[0].SendKeys(ctx, tmux.SendKeysRequest{Command: &clearKey, SkipEnter: true}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := panes[1].CopyMode(ctx, tmux.CopyModeRequest{}); err != nil {
+	if err := panes[0].CopyMode(ctx, tmux.CopyModeRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	modal := callInputTool(ctx, t, client, "paste_text", map[string]any{
 		"pane_id": panes[0].ID().String(), "text": "must-not-stage", "enter": true,
 	})
-	if !modal.IsError || !strings.Contains(callToolResultText(modal), panes[1].ID().String()) {
+	if !modal.IsError || !strings.Contains(callToolResultText(modal), panes[0].ID().String()) {
 		t.Errorf("modal Enter response = (%t, %q), want refusal naming %s",
-			modal.IsError, callToolResultText(modal), panes[1].ID())
+			modal.IsError, callToolResultText(modal), panes[0].ID())
 	}
 	lines, err := panes[0].Capture(ctx, tmux.CapturePaneRequest{})
 	if err != nil {
@@ -172,7 +169,7 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 	if strings.Contains(strings.Join(lines, "\n"), "must-not-stage") {
 		t.Error("paste text reached the target before modal Enter-member refusal")
 	}
-	if err := panes[1].CopyMode(ctx, tmux.CopyModeRequest{Cancel: true}); err != nil {
+	if err := panes[0].CopyMode(ctx, tmux.CopyModeRequest{Cancel: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -182,8 +179,8 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 	if safe.IsError {
 		t.Fatalf("safe paste refusal = %q", callToolResultText(safe))
 	}
-	if got, want := structuredStringSlice(t, safe, "enter_pane_ids"), paneIDs(panes); !slices.Equal(got, want) {
-		t.Errorf("safe Enter configured membership = %v, want %v", got, want)
+	if _, present := structuredMap(t, safe)["enter_pane_ids"]; present {
+		t.Error("safe paste exposed obsolete Enter membership")
 	}
 
 	t.Run("caller source refuses before a buffer", func(t *testing.T) {
@@ -228,7 +225,7 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 		}
 	})
 
-	t.Run("modal member precedes elicitation", func(t *testing.T) {
+	t.Run("non-target modal pane is not part of paste authority", func(t *testing.T) {
 		callerTarget, callerWindow, callerPanes := threePaneInputFixture(ctx, t)
 		if err := callerWindow.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
 			t.Fatal(err)
@@ -244,30 +241,33 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 		}
 		instance.tools.callerCached = true
 		prompts, buffers := 0, 0
+		setBuffer := instance.runtime.deps.setBuffer
 		instance.runtime.deps.setBuffer = func(
-			context.Context,
-			tmux.Server,
-			tmux.SetBufferRequest,
+			bufferCtx context.Context,
+			server tmux.Server,
+			buffer tmux.SetBufferRequest,
 		) error {
 			buffers++
-			return nil
+			return setBuffer(bufferCtx, server, buffer)
 		}
 		client := connectInputTestClient(ctx, t, instance, &sdk.ClientOptions{
 			ElicitationHandler: func(context.Context, *sdk.ElicitRequest) (*sdk.ElicitResult, error) {
 				prompts++
-				return &sdk.ElicitResult{Action: "accept"}, nil
+				return &sdk.ElicitResult{
+					Action: "accept", Content: map[string]any{"remember": true},
+				}, nil
 			},
 		})
-		refused := callInputTool(ctx, t, client, "paste_text", map[string]any{
+		pasted := callInputTool(ctx, t, client, "paste_text", map[string]any{
 			"pane_id": callerPanes[0].ID().String(), "text": "modal-first", "enter": true,
 		})
-		if !refused.IsError || prompts != 0 || buffers != 0 {
-			t.Fatalf("modal configured paste = (%t, prompts=%d, buffers=%d)",
-				refused.IsError, prompts, buffers)
+		if pasted.IsError || prompts != 1 || buffers != 1 {
+			t.Fatalf("target-only modal-peer paste = (%t, prompts=%d, buffers=%d)",
+				pasted.IsError, prompts, buffers)
 		}
 	})
 
-	t.Run("non-source caller member is protected", func(t *testing.T) {
+	t.Run("non-target caller is not affected by paste", func(t *testing.T) {
 		callerTarget, callerWindow, callerPanes := threePaneInputFixture(ctx, t)
 		if err := callerWindow.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
 			t.Fatal(err)
@@ -280,13 +280,14 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 		}
 		instance.tools.callerCached = true
 		prompts, buffers := 0, 0
+		setBuffer := instance.runtime.deps.setBuffer
 		instance.runtime.deps.setBuffer = func(
-			context.Context,
-			tmux.Server,
-			tmux.SetBufferRequest,
+			bufferCtx context.Context,
+			server tmux.Server,
+			buffer tmux.SetBufferRequest,
 		) error {
 			buffers++
-			return nil
+			return setBuffer(bufferCtx, server, buffer)
 		}
 		client := connectInputTestClient(ctx, t, instance, &sdk.ClientOptions{
 			ElicitationHandler: func(context.Context, *sdk.ElicitRequest) (*sdk.ElicitResult, error) {
@@ -294,14 +295,55 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 				return &sdk.ElicitResult{Action: "decline"}, nil
 			},
 		})
-		refused := callInputTool(ctx, t, client, "paste_text", map[string]any{
+		pasted := callInputTool(ctx, t, client, "paste_text", map[string]any{
 			"pane_id": callerPanes[0].ID().String(), "text": "peer-caller", "enter": true,
 		})
-		if !refused.IsError || prompts != 1 || buffers != 0 {
-			t.Fatalf("non-source caller paste = (%t, prompts=%d, buffers=%d)",
-				refused.IsError, prompts, buffers)
+		if pasted.IsError || prompts != 0 || buffers != 1 {
+			t.Fatalf("non-target caller paste = (%t, prompts=%d, buffers=%d)",
+				pasted.IsError, prompts, buffers)
 		}
 	})
+}
+
+//libtmux:real-tmux
+func TestSendRechecksAfterCallerConfirmation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	instance.tools.caller = callerIdentity{
+		paneID: panes[0].ID().String(),
+		socket: resolvePath(target.SocketPath()),
+		inside: true,
+	}
+	instance.tools.callerCached = true
+	t.Cleanup(func() {
+		_ = panes[0].CopyMode(context.Background(), tmux.CopyModeRequest{Cancel: true})
+	})
+	sends := 0
+	instance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		sends++
+		return nil
+	}
+	client := connectInputTestClient(ctx, t, instance, &sdk.ClientOptions{
+		ElicitationHandler: func(promptCtx context.Context, _ *sdk.ElicitRequest) (*sdk.ElicitResult, error) {
+			if err := panes[0].CopyMode(promptCtx, tmux.CopyModeRequest{}); err != nil {
+				return nil, err
+			}
+			return &sdk.ElicitResult{Action: "accept"}, nil
+		},
+	})
+
+	result := callInputTool(ctx, t, client, "send_keys", map[string]any{
+		"pane_id": panes[0].ID().String(), "keys": []string{"C-l"},
+	})
+	if !result.IsError || sends != 0 {
+		t.Fatalf("send after confirmation transition = (error %t, sends %d)", result.IsError, sends)
+	}
 }
 
 func threePaneInputFixture(

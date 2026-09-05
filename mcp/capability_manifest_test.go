@@ -929,8 +929,8 @@ func TestCapabilityManifestDisclosesConfiguredInputMembership(t *testing.T) {
 		t.Fatal("run_shell_command output does not disclose its configured singleton")
 	}
 	paste := namedTool(t, tools, "paste_text")
-	if _, ok := schemaProperties(t, paste.OutputSchema)["enter_pane_ids"]; !ok {
-		t.Fatal("paste_text output does not disclose configured Enter membership")
+	if _, ok := schemaProperties(t, paste.OutputSchema)["enter_pane_ids"]; ok {
+		t.Fatal("paste_text output exposes obsolete configured Enter membership")
 	}
 }
 
