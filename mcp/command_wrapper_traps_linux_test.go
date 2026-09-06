@@ -29,7 +29,6 @@ func TestRunShellCommandPreservesInheritedShellSemantics(t *testing.T) {
 		{name: "dash", arguments: "-i"},
 		{name: "sh", arguments: "-i"},
 	} {
-		shell := shell
 		t.Run(shell.name, func(t *testing.T) {
 			executable, err := exec.LookPath(shell.name)
 			if err != nil {
