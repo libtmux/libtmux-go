@@ -19,7 +19,34 @@ func TestMain(m *testing.M) {
 	if scenario := os.Getenv(preflightHelperEnvironment); scenario != "" {
 		os.Exit(runPreflightHelper(scenario))
 	}
-	os.Exit(m.Run())
+	root, err := os.MkdirTemp("", "libtmux-go-mcp-swap-tests-*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	for name, path := range map[string]string{
+		"HOME":            filepath.Join(root, "home"),
+		"XDG_CACHE_HOME":  filepath.Join(root, "cache"),
+		"XDG_CONFIG_HOME": filepath.Join(root, "config"),
+		"XDG_STATE_HOME":  filepath.Join(root, "state"),
+	} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			_ = os.RemoveAll(root)
+			os.Exit(2)
+		}
+		if err := os.Setenv(name, path); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			_ = os.RemoveAll(root)
+			os.Exit(2)
+		}
+	}
+	code := m.Run()
+	if err := os.RemoveAll(root); err != nil && code == 0 {
+		fmt.Fprintln(os.Stderr, err)
+		code = 2
+	}
+	os.Exit(code)
 }
 
 func runPreflightHelper(scenario string) int {

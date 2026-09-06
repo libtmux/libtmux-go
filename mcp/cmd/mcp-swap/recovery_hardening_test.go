@@ -275,12 +275,12 @@ func TestRestoreCleanupFailureRollsBackAllConfigs(t *testing.T) {
 	}
 	removeFailure := errors.New("injected artifact remove failure")
 	removes := 0
-	err := applyRestoreChangesWith(changes, func(path string) error {
+	err := applyRestoreChangesWith(changes, func(_ string) error {
 		removes++
 		if removes == 2 {
 			return removeFailure
 		}
-		return os.Remove(path)
+		return nil
 	})
 	if !errors.Is(err, removeFailure) {
 		t.Fatalf("applyRestoreChangesWith() error = %v", err)
@@ -318,12 +318,12 @@ func TestPreparedCleanupFailureRetainsCompleteRecovery(t *testing.T) {
 	}
 	removeFailure := errors.New("injected artifact remove failure")
 	removes := 0
-	err = removePreparedBackupsWith([]entryChange{change}, func(path string) error {
+	err = removePreparedBackupsWith([]entryChange{change}, func(_ string) error {
 		removes++
 		if removes == 2 {
 			return removeFailure
 		}
-		return os.Remove(path)
+		return nil
 	})
 	if !errors.Is(err, removeFailure) {
 		t.Fatalf("removePreparedBackupsWith() error = %v", err)

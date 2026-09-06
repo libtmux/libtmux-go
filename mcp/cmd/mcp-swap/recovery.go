@@ -55,6 +55,7 @@ type recoveryPlan struct {
 	backupContents, stateContents []byte
 	backupBinding, stateBinding   destinationBinding
 	exists                        bool
+	guard                         func() error
 }
 
 type parentBinding struct {
@@ -364,12 +365,13 @@ func encodeRecoveryState(record recoveryState) ([]byte, error) {
 func writeRecoveryState(
 	path string,
 	record recoveryState,
+	options ...stageOptions,
 ) ([]byte, destinationBinding, error) {
 	encoded, err := encodeRecoveryState(record)
 	if err != nil {
 		return nil, destinationBinding{}, err
 	}
-	contents, binding, err := writeBoundFileExact(path, encoded, 0o600)
+	contents, binding, err := writeBoundFileExact(path, encoded, 0o600, options...)
 	if !bytes.Equal(contents, encoded) || binding.Resolved != "" && binding.Mode != 0o600 {
 		return contents, binding, errors.Join(
 			err, errors.New("recovery state changed while it was written"),
@@ -382,8 +384,9 @@ func writeBoundFileExact(
 	path string,
 	contents []byte,
 	mode os.FileMode,
+	options ...stageOptions,
 ) ([]byte, destinationBinding, error) {
-	staged, err := stageAtomicFile(path, contents, mode)
+	staged, err := stageAtomicFile(path, contents, mode, options...)
 	if err != nil {
 		return nil, destinationBinding{}, err
 	}
@@ -442,7 +445,12 @@ func (r recoveryPlan) replaceRecord(record recoveryState) (recoveryPlan, error) 
 			return r, fmt.Errorf("recovery state changed before update: %w", err)
 		}
 	}
-	contents, binding, err := writeRecoveryState(r.state, record)
+	option := stageOptions{guard: r.guard}
+	if r.exists {
+		option.expectedContents = r.stateContents
+		option.expectedBinding = &r.stateBinding
+	}
+	contents, binding, err := writeRecoveryState(r.state, record, option)
 	if binding.Resolved != "" {
 		r.record = record
 		r.stateContents = contents
@@ -478,23 +486,32 @@ func publishBoundConfiguration(
 	if err := recovery.validateArtifacts(); err != nil {
 		return binding, recovery, false, err
 	}
-	staged, err := stageAtomicFile(binding.Resolved, updated, os.FileMode(updatedMode))
+	staged, err := stageAtomicFile(
+		binding.Resolved, updated, os.FileMode(updatedMode), stageOptions{
+			guard: recovery.guard, expectedContents: current,
+			expectedBinding: &binding,
+		},
+	)
 	if err != nil {
 		return binding, recovery, false, err
 	}
 	defer staged.cleanup()
 	expected := binding
-	expected.Target = staged.identity
-	expected.Mode = uint32(staged.mode.Perm())
+	expected.Target = staged.sourceBinding.Target
+	expected.Mode = staged.sourceBinding.Mode
 	previous := recovery.record
 	next := recoveryStateForConfiguration(previous, updated, expected)
 	recovery, err = recovery.replaceRecord(next)
 	if err != nil {
-		rolledBack, rollbackErr := recovery.replaceRecord(previous)
+		rollback := recovery
+		rollback.guard = nil
+		rolledBack, rollbackErr := rollback.replaceRecord(previous)
 		return binding, rolledBack, false, errors.Join(err, rollbackErr)
 	}
 	rollbackState := func(cause error) (destinationBinding, recoveryPlan, bool, error) {
-		rolledBack, rollbackErr := recovery.replaceRecord(previous)
+		rollback := recovery
+		rollback.guard = nil
+		rolledBack, rollbackErr := rollback.replaceRecord(previous)
 		return binding, rolledBack, false, errors.Join(cause, rollbackErr)
 	}
 	if beforePublish != nil {
