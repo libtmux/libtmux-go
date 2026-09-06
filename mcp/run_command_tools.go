@@ -517,9 +517,13 @@ func commandRunPresent(
 	pane tmux.Pane,
 	identity paneInputIdentity,
 ) (bool, error) {
-	_, err := pane.Refresh(ctx)
+	refreshed, err := pane.Refresh(ctx)
 	if err == nil {
-		return true, nil
+		dead, present := refreshed.Formats().PaneDead()
+		if !present {
+			return true, errors.New("run_shell_command retained pane_dead state is unavailable")
+		}
+		return !dead, nil
 	}
 	if commandRunDisappeared(err) {
 		return false, nil

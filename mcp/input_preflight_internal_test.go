@@ -401,6 +401,44 @@ func TestCommandRunDisappearanceIsFailClosed(t *testing.T) {
 	}
 }
 
+//libtmux:real-tmux
+func TestCommandRunPresenceTreatsDeadPaneAsEnded(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	_, _, panes := threePaneInputFixture(ctx, t)
+	pane := panes[0]
+	if err := pane.SetRemainOnExit(ctx, tmux.RemainOnExitOn); err != nil {
+		t.Fatal(err)
+	}
+	command := "exit 7"
+	if _, err := pane.Respawn(ctx, tmux.RespawnRequest{Command: &command, Kill: true}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		refreshed, err := pane.Refresh(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dead, present := refreshed.Formats().PaneDead()
+		if present && dead {
+			break
+		}
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
+	}
+
+	present, err := commandRunPresent(ctx, pane, paneInputIdentity{
+		endpointID: 1, serverPID: 1, serverStartTime: 1, paneID: pane.ID().String(),
+	})
+	if err != nil || present {
+		t.Fatalf("dead pane presence = (%t, %v), want ended", present, err)
+	}
+}
+
 func TestRetainedRunRequiresAuthenticatedCompletion(t *testing.T) {
 	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
 	cancelRuntime()
