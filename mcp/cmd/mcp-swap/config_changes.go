@@ -395,13 +395,6 @@ func entryFromContents(c client, contents []byte) (map[string]any, bool, error) 
 	}
 }
 
-func replaceBytes(text []byte, start, end int, replacement []byte) []byte {
-	updated := make([]byte, 0, len(text)-(end-start)+len(replacement))
-	updated = append(updated, text[:start]...)
-	updated = append(updated, replacement...)
-	return append(updated, text[end:]...)
-}
-
 // openCodeEntry normalizes opencode's entry dialect.
 func openCodeEntry(entry map[string]any) map[string]any {
 	if entry == nil {

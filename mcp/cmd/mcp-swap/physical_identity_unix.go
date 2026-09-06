@@ -19,7 +19,7 @@ func physicalIdentityAt(path string, follow bool) (physicalIdentity, error) {
 		return physicalIdentity{}, err
 	}
 	return physicalIdentity{
-		Device: fmt.Sprint(uint64(info.Dev)),
-		File:   fmt.Sprint(uint64(info.Ino)),
+		Device: fmt.Sprint(info.Dev),
+		File:   fmt.Sprint(info.Ino),
 	}, nil
 }

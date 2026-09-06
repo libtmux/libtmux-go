@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -267,52 +266,6 @@ func endOfValueAfterMember(blanked []byte, offset int) int {
 		return after + 1
 	}
 	return end
-}
-
-func removeJSONCMember(text []byte, span jsoncSpan) ([]byte, error) {
-	blanked := blankComments(text)
-	colon := previousNonSpace(blanked, span.valueStart-1)
-	keyEnd := previousNonSpace(blanked, colon-1)
-	if colon < 0 || blanked[colon] != ':' || keyEnd < 0 || blanked[keyEnd] != '"' {
-		return nil, errors.New("cannot locate the server entry key")
-	}
-	keyStart := keyEnd - 1
-	for keyStart >= 0 {
-		if blanked[keyStart] == '"' {
-			backslashes := 0
-			for offset := keyStart - 1; offset >= 0 && blanked[offset] == '\\'; offset-- {
-				backslashes++
-			}
-			if backslashes%2 == 0 {
-				break
-			}
-		}
-		keyStart--
-	}
-	if keyStart < 0 {
-		return nil, errors.New("cannot locate the server entry key")
-	}
-
-	start, end := keyStart, span.valueEnd
-	after := skipSpace(blanked, end)
-	if after < len(blanked) && blanked[after] == ',' {
-		end = after + 1
-	} else if before := previousNonSpace(blanked, start-1); before >= 0 && blanked[before] == ',' {
-		start = before
-	}
-	return replaceBytes(text, start, end, nil), nil
-}
-
-func previousNonSpace(text []byte, offset int) int {
-	for offset >= 0 {
-		switch text[offset] {
-		case ' ', '\t', '\n', '\r':
-			offset--
-		default:
-			return offset
-		}
-	}
-	return -1
 }
 
 func readJSONC(text []byte) (map[string]any, error) {
