@@ -263,15 +263,16 @@ later input command atomic with that observation.
 `send_keys` and each batch row return sorted configured membership in
 `resolved_pane_ids`. `run_shell_command` requires that membership to contain
 one pane both before setup and immediately before dispatch because it returns
-one output stream and exit status. `paste_text` always pastes text only to its
-target; optional Enter uses synchronized configured membership and reports it
-separately in `enter_pane_ids`.
+one output stream and exit status. `paste_text` always delivers only to its
+target. Optional Enter is one newline appended to the same private buffer, so
+neither part is broadcast through synchronized-input key handling.
 
-The arrays describe preflight membership, not proven delivery or effects.
-Successful calls and batch rows expose them directly. Ordinary direct-tool
-refusals name relevant membership in error text because the Go dispatcher
-discards structured output with handler errors. A partial paste whose text
-arrived but Enter failed keeps `enter_pane_ids` in its structured error result.
+The send and run arrays describe preflight membership, not proven delivery or
+effects. Successful calls and batch rows expose them directly. Ordinary
+direct-tool refusals name relevant membership in error text because the Go
+dispatcher discards structured output with handler errors. Paste reports only
+its target and accepted byte count because text and optional newline share one
+target-only buffer operation.
 
 ### Batches
 
@@ -290,27 +291,41 @@ the aggregate reports succeeded, failed, stoppedAt, and truncation totals.
 Jobs in the order the calls actually go. The generated entries say what each
 tool accepts; these say what to reach for and where a shortcut goes wrong.
 
-### Start a service and wait before dependent work
+### Start a service and wait for it before running dependent work
 
-**Situation.** A session has no service running, and tests need one.
+**Situation.** A session has no service running, and integration tests need
+one.
+
+> Start the API server in my backend session and run the integration tests once
+> it is ready.
 
 **Discover.** Use `list_panes` and `search_panes` to avoid starting a duplicate.
 
-**Act.** Make room with `split_window`. Start the service in that pane with
-`paste_text` and `enter: true`, then call `wait_for_text` with the ready marker
-in `patterns` and known failure markers in `stop`. Once ready, run the tests in
-another pane with `run_shell_command` and inspect its exit status.
+**Decide.** Give the service its own pane so its output stays separate from the
+tests.
+
+**Act.** Make room with `split_window`. Take a `capture_since` cursor, start the
+service in that pane with `paste_text` and `enter: true`, then call
+`wait_for_text` with the cursor, the ready marker in `patterns`, and known
+failure markers in `stop`. Once ready, run the tests in another pane with
+`run_shell_command` and inspect its exit status.
 
 **The non-obvious part.** The wait replaces a fixed sleep and stops early on
-known failure output. `split_window` carries no hidden command; process creation
-and caller-authored input remain separate decisions.
+known failure output. Construct a completion marker at execution time instead
+of putting the exact marker in the command text, or the shell's echo can match
+before the service is ready. `split_window` carries no hidden command; process
+creation and caller-authored input remain separate decisions.
 
-### Find the failing pane without opening every terminal
+### Find the failing pane without opening random terminals
 
 **Situation.** Several panes are working and one failed.
 
+> Which one failed, and why?
+
 **Discover.** Call `search_panes` with a bounded `pattern`, such as `FAILED`,
 `error:`, or `Traceback`. It returns the matching panes and lines.
+
+**Decide.** If those lines explain the failure, stop. They usually do.
 
 **Act.** If those lines are insufficient, call `snapshot_pane` for the pane it
 named and request history only when needed.
@@ -321,31 +336,95 @@ smaller and bounded by the server's aggregate work budget.
 
 ### Watch a long job across several turns
 
-Call `capture_since` with the pane id and no cursor, retain the returned cursor,
-then pass both on later calls. Each reply contains only new output. Check
-`linesMissed` before treating the accumulated record as complete.
+**Situation.** A build will outlast this exchange.
+
+> Keep an eye on the build and tell me when it breaks.
+
+**Discover.** Call `capture_since` with the pane id and no cursor. It returns
+the visible baseline and a cursor.
+
+**Decide.** Keep the cursor. It is the only client-side state needed.
+
+**Act.** Pass the pane id and cursor on later `capture_since` calls. Each reply
+contains only new output and a fresh cursor to keep instead. Use
+`wait_for_text` when one ready or failure marker should end the current call.
+
+**The non-obvious part.** Repeated `capture_pane` calls resend the same screen
+and cannot prove whether anything changed. Check `linesMissed` before treating
+the accumulated record as complete: true means tmux discarded scrollback
+between reads and the record has a hole.
 
 There is deliberately no detached job handle. A command that must outlive one
 turn runs visibly in its pane; the pane id and capture cursor are the durable
 observation state.
 
-### Check several panes without reading their output
+### Run a build without spending the turn on it
 
-Use `list_panes` for process state, caller identity, and geometry. Follow only
-the panes that need detail with `get_pane_info`; capture terminal content only
-when the task actually requires it. Listing is metadata inspection, not a
-screen read.
+**Situation.** A test suite takes minutes, and there is other work to do while
+it runs.
+
+> Run the suite and start reading the failing module while it goes.
+
+**Discover.** Select a dedicated shell pane and take a `capture_since` cursor
+before starting the suite.
+
+**Decide.** Keep lifecycle state in tmux rather than in an MCP-side job handle.
+The pane survives a client or MCP server restart.
+
+**Act.** Start the suite with target-only `paste_text` and `enter: true`, then
+continue the other work. On a later turn, use `get_pane_info` to inspect process
+state, `capture_since` to collect only new lines, or `wait_for_text` with known
+completion and failure markers. Use `run_shell_command` instead when the work
+fits inside one bounded call and a framed exit status is the desired result.
+
+**The non-obvious part.** There is no handle to collect and no detached process
+owned by this server. The pane id, capture cursor, visible process, and output
+are recoverable after a restart; the tradeoff is that the client recognizes
+completion from pane state or a marker rather than an in-memory job record.
+
+### Check on eight panes without reading any of them
+
+**Situation.** Eight workspace panes are partway through a long job.
+
+> Which of those are still going?
+
+**Discover.** Use one `list_panes` call for the server-wide identity, active
+state, current command, window relation, caller identity, and geometry.
+
+**Decide.** Narrow those rows to the intended session or window. Follow only
+the panes whose process or mode state matters with `get_pane_info`.
+
+**Act.** Compare current commands and the detailed dead, exit, and history
+metadata with the prior reading. Capture only panes whose terminal output is
+actually needed.
+
+**The non-obvious part.** The first orientation is one snapshot for every pane,
+not one screen read per pane. Listing metadata does not send eight terminals'
+contents through the client's context.
 
 ### Recover a pane that stopped answering
 
-After a `run_shell_command` timeout, call `get_pane_info`. A non-shell program
-may have consumed the text as input; a human-owned tmux mode may own input; a
-dead pane reads nothing.
+**Situation.** A `run_shell_command` timed out, and later input to that pane is
+not making progress.
 
-If `inMode` is true, keep observing with captures or snapshots and wait for the
-person to leave the mode. Otherwise, use `send_keys` with `C-c` for an
-intentional interruption. Use `respawn_pane` only to restart a configured
-process deliberately; it is not a mode-recovery shortcut.
+**Discover.** Call `get_pane_info` and inspect `currentCommand`, `inMode`, and
+`dead`. The timeout result's `running` field also identifies a foreground
+program when one was observed.
+
+**Decide.** A known shell may still be running the command. A different
+foreground program may have owned input. A human-owned tmux mode consumes keys
+before they reach either, and a dead pane reads nothing.
+
+**Act.** If `inMode` is true, keep observing with captures or snapshots and ask
+the attached person to leave the mode. Otherwise, use `send_keys` with `C-c`
+for an intentional interruption. Use `respawn_pane` only to restart a
+configured process deliberately; it is not a mode-recovery shortcut.
+
+**The non-obvious part.** A timeout deliberately leaves authored work visible
+in the pane. Its symptom can resemble a busy foreground program, so inspect
+the pane before interrupting it. Input tools fail closed on dead, modal,
+attended, caller-protected, or malformed configured state rather than waiting
+on an input path that cannot safely complete.
 
 ## Gotchas
 
@@ -443,7 +522,7 @@ server process for another socket. Dynamic resources migrate as follows:
 | `tmux://sessions/{session}` | `get_session_info` |
 | `tmux://sessions/{session}/windows` | `list_windows` with that session |
 | `tmux://windows/{window}` | `get_window_info` |
-| `tmux://windows/{window}/panes` | `list_panes` with that window |
+| `tmux://windows/{window}/panes` | `list_panes`, then select rows with that `windowId` |
 | `tmux://panes/{pane}` | `get_pane_info` |
 | `tmux://panes/{pane}/content` | `capture_pane` or `capture_since` |
 

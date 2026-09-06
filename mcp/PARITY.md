@@ -1,209 +1,269 @@
-# Against the shared capability contract
+# Against the Python server
 
-There are several MCP servers for tmux under the libtmux name. They serve the
-same tmux and answer to the same clients, so a person choosing a port needs the
-portable contract before language-specific implementation detail.
+There are two MCP servers for tmux under the libtmux name: this one, and
+[libtmux-mcp](https://github.com/libtmux/libtmux-mcp) in Python. They serve the
+same tmux and answer to the same clients, so a person choosing between them, or
+running both, wants to know where they differ.
 
 This is not the root [PARITY.md](../PARITY.md). That file compares Go library
-symbols with the Python library. This file records how the Go MCP server maps
-the shared 45-tool capability model into its native SDK and core.
+symbols with the Python library. This file compares two MCP servers. Neither is
+a port of the other, and this comparison is not an API promise.
+
+Every count below was measured over stdio JSON-RPC from this branch and Python
+0.1.0a21 with their full advertised surfaces. Both servers were driven by the
+same raw client; invalid calls were sent rather than inferred from schemas.
 
 ## The surface, counted
 
-| Surface | Go MCP |
-| --- | --- |
-| Public tools | 45 |
-| Unordered toolsets | `inspect`, `manage`, `execute`, `teardown` |
-| Static resources | one, `tmux://capabilities` |
-| Dynamic resources and templates | none |
-| Prompts and completion routes | none |
-| Host-command tools | none |
-| Read-batch nested operations | 16 before named exclusions |
+| Wire surface | Go | Python |
+| --- | ---: | ---: |
+| Tools | 45 | 54 |
+| Argument fields across tool schemas | 103 | 289 |
+| Arguments published with `enum` | 7 | 3 |
+| Tools carrying an output schema | 45 | 54 |
+| Tools carrying annotations | 45 | 54 |
+| Described argument fields | 103 | 287 |
+| Collections published as null-or-array | 0 | 0 |
+| Prompts | 0 | 4 |
+| Listed resources, and templates | 1 and 0 | 0 and 6 |
+| Server-instruction characters | 144 | 1,847 |
 
-The count is generated from one native manifest. It is not a second list
-maintained in this document.
+The Go handshake declares logging, resources, and tools. The Python handshake
+also declares prompts, experimental data, and UI extensions. Both declare
+`listChanged` for tools. Go declares it for its one static resource; Python's
+resource capability reports neither subscriptions nor changing lists.
+
+The Go count is generated from one native manifest and grouped into the shared
+`inspect`, `manage`, `execute`, and `teardown` toolsets. Its unfiltered
+inventory is exactly 18, 14, 9, and 4 tools. A fresh authenticated product-owned
+server defaults to all 45; an existing or explicitly selected server defaults
+to the 41 non-teardown tools.
 
 ## The tools
 
-One immutable Go `toolDefinition` registry owns every public tool's name,
-title, controlled description, toolset, process reach, nonempty direct effect
-set, output classes, secret and untrusted-output flags, future-input amplifier,
-four MCP annotations, native input and output schemas, schema-keyed input
-sinks, tmux-format controls, nested authority, and handler.
+Thirty-nine tool names are common to both measured servers. Six are Go-only:
 
-Registration, list-tools output, dispatch, startup filtering, generated
-[TOOLS.md](TOOLS.md), per-tool wire metadata, and capability reporting all read
-that registry. Missing, extra, or duplicate registrations fail construction.
+- `clear_pane_scrollback`
+- `get_tmux_variables`
+- `run_shell_command`
+- `set_history_limit`
+- `set_mouse_enabled`
+- `set_synchronize_panes`
 
-The schemas use the shared snake_case input names. A schema field and its input
-sink set must match exactly. A value that reaches a tmux format-expanding
-position is either literalized by doubling `#` once or constrained by the
-declared `validated-variable-name` control.
+Fifteen are Python-only:
+
+- `clear_pane`, `delete_buffer`, `display_message`, `enter_copy_mode`, and
+  `exit_copy_mode`
+- `kill_server`, `list_servers`, `load_buffer`, `paste_buffer`, and `pipe_pane`
+- `run_command`, `set_environment`, `set_option`, `show_buffer`, and
+  `show_hook`
+
+Both current schemas use snake_case input names. Moving between the servers no
+longer changes every field's casing, but it still requires inspecting the
+chosen tool's schema: a similarly named workflow may use different selectors,
+bounds, or result fields.
+
+The different inventories express different boundaries. Python offers broader
+buffer, option, environment, server-discovery, copy-mode, and pipe operations.
+Go exposes named settings and validated variable lookup, keeps one socket per
+process, omits human modal-interface control, and uses one bounded pane-command
+route. Go's `run_shell_command` is therefore not a spelling alias for Python's
+`run_command`.
+
+Go deliberately omits entering and cancelling copy mode from its MCP manifest.
+Capture, snapshot, search, and cursor tools observe terminal content without
+taking ownership of an attached person's view or selection. The core tmux
+module still exposes `Pane.CopyMode` for applications that own the complete
+interaction; library parity does not require MCP parity.
+
+One immutable Go `toolDefinition` registry owns each tool's name, controlled
+description, toolset, process reach, effects, output classes, trust flags,
+future-input amplification, annotations, schemas, input sinks, format controls,
+nested authority, and handler. Registration, dispatch, startup filtering,
+per-tool metadata, capability reporting, and generated [TOOLS.md](TOOLS.md) all
+read that registry. A missing, extra, or duplicate registration fails server
+construction.
+
+The Go capability row appears at
+`_meta["com.git-pull.libtmux-mcp/capability"]` on each listed tool and in
+`tmux://capabilities`; those rows are byte-equivalent after JSON normalization.
+It distinguishes `configured-process`, `pane-input`, and `pane-command` reach,
+secret output from untrusted output, and literal input from constrained tmux
+variables. Conservative annotations stay identical because an existing tmux
+server may have user-configured hooks and commands.
+
+Earlier Go alphas exposed more experimental routes. Their useful workflows now
+map to the fixed 45-tool surface:
+
+| Earlier Go route | Current route | What remains available |
+| --- | --- | --- |
+| `get_pane` | `get_pane_info` | Typed metadata for one pane |
+| `server_info` and `whoami` | `get_server_info` plus pane rows | Socket and caller identity |
+| `observe` | `snapshot_pane`, then `capture_since` | Incremental output with an opaque cursor |
+| `run_command` and `get_job` | `run_shell_command` plus pane capture | Bounded status and long-running pane visibility |
+| `display_message` | `get_tmux_variables` | Validated lookup without free-form formats |
+| `new_session` and `new_window` | `create_session` and `create_window` | Commandless configured-process creation |
+| generic option writers | named setters or `run_shell_command` | Typed common settings and explicit execution |
+| public buffer tools | `paste_text` | Literal target-only delivery through a private buffer |
+| dynamic pane resources | inspect tools | Startup-selected topology and content reads |
+| prompt recipes | documented call sequences | Workflows without another callable surface |
+
+See the [retired tool mapping](TOOLS.md#retired-tool-mapping) for every old
+name. It is migration context, not an alternate inventory.
 
 ## Knowing its own pane
 
-The server works out whether it runs in a pane of the tmux it controls from
-`TMUX`, `TMUX_PANE`, and a process-tree fallback. It compares socket identity as
-well as pane id because two servers can both have a `%1`.
+Both servers use `TMUX` and `TMUX_PANE` to decide whether a pane belongs to the
+terminal carrying the MCP process. Both compare socket identity rather than a
+pane id alone, because two independent tmux servers can each have `%1`.
 
-`get_server_info` reports the relationship and pane summaries carry `isCaller`.
-Writing to or ending the caller pane asks through MCP elicitation and fails
-closed when the client cannot ask. The guard is additional to capability
-selection; it never makes an unselected teardown tool reachable.
+Go also falls back to the process tree. A client may start an MCP server with a
+curated environment that omits tmux variables even though the process remains a
+descendant of a pane. Go finds the pane whose foreground process ancestry
+contains its own process. `get_server_info` reports `insideThisServer` and
+`callerPaneId`, and pane summaries carry `isCaller`.
 
-## Watching and waiting
+The protection differs. Python refuses teardown that would end its caller pane,
+window, session, or server. Go protects both teardown and input. Writing to or
+ending the caller asks through MCP elicitation and fails closed when the client
+cannot ask or the person declines. Confirmation cannot make an unselected tool
+reachable.
 
-`capture_since` returns an opaque cursor and only later pane output. The cursor
-binds the pane and process generation, and `linesMissed` reports when tmux has
-discarded history needed for a complete continuation.
+Go input checks one more human boundary. Before send, paste, or command
+dispatch, it freshly lists tmux clients and excludes control-mode clients. A
+non-control client makes its active pane attended while viewing a zoomed
+window, or every visible pane in that window attended otherwise. Malformed or
+incomplete client rows fail closed. Every configured synchronized cohort member
+is checked; `paste_text` remains target-only, but its target must still be
+unattended. This is protection against racing a human terminal, not an
+operating-system sandbox.
 
-`wait_for_text` and `search_panes` bound pattern count and size before regular
-expression compilation. Search work has fixed aggregate ceilings of 200 panes,
-20,000 lines, 1,000,000 bytes, and five seconds. A wait also has a startup-frozen
-duration ceiling, 300 seconds by default.
+## Watching a pane
 
-`run_shell_command` uses a pane-local framed completion record and returns a
-real exit status plus bounded output. It has no detached mode or background
-handle. It requires one configured input pane before setup and rechecks that
-singleton immediately before dispatch. A long-running process remains visible
-and inspectable in its pane.
+Both servers offer `capture_since`, which returns only output after an opaque
+cursor, plus `wait_for_text` and `wait_for_channel`. A client can wait for
+output instead of polling. Go's cursor binds pane and process generation and
+reports `linesMissed` when tmux discarded required history.
 
-Send and optional-Enter paths compute effective per-pane synchronization from
-a fresh snapshot. Source-off membership contains only the source; source-on
-membership contains the window's effective-on panes. Dead, modal, missing, or
-malformed configured state fails closed before caller confirmation or mutation.
-Paste text itself remains target-only. Returned ID arrays name sorted configured
-membership, not proven delivery; tmux can change after an observational check.
+Neither measured handshake offers resource subscriptions. Python publishes six
+dynamic resource templates for hierarchy and content, which a client reads on
+demand. Go publishes no dynamic template: topology and terminal content are
+tools so one startup selection governs every operation. Its one listed resource,
+`tmux://capabilities`, is static disclosure of that selected surface.
+
+Go bounds pattern size before regular-expression compilation. `search_panes`
+also caps aggregate panes, lines, bytes, and elapsed work. `wait_for_text` has a
+startup-frozen duration ceiling. `run_shell_command` returns a framed exit
+status and bounded output for one authored command; long-lived work instead
+stays visible in the pane and is observed with a cursor or marker.
 
 ## What the schemas say
 
-Every direct and nested call goes through the same native input validator and
-handler binding. Arrays and enums are constrained in the generated schema, and
-unknown fields fail rather than being ignored.
+Both servers publish closed value sets as JSON Schema `enum`, output schemas on
+every tool, and arrays rather than null-or-array unions. Both rejected a bad
+enum, an unknown field, and an argument of the wrong type when those calls were
+sent over the wire.
 
-The capability row is published at
-`_meta["com.git-pull.libtmux-mcp/capability"]` on each listed tool. The
-corresponding row in `tmux://capabilities` is byte-equivalent after JSON
-normalization. Conservative annotations are identical on every route because
-an existing or user-configured tmux server can add hooks and commands the MCP
-process did not create.
+Go sends every direct and nested operation through the same native validator
+and handler binding. A schema field and its declared input sink must match.
+Format-expanding tmux inputs are either literalized exactly once or constrained
+to a validated variable name.
 
-The generated tool reference prints the same native input/output schemas and
-capability fields. It is a projection of the registry, not an independent
-authority.
+`call_read_tools_batch` has exact nested authority over 16 inspect operations
+before named exclusions. Startup filtering prunes its schema enum and dispatch
+authority together. With nothing left, it remains advertised with an
+unsatisfiable operations schema rather than becoming a stringly typed escape.
+Calls execute serially and retain typed result envelopes under one
+1,000,000-byte response ceiling.
 
-The public manifest intentionally omits entering and cancelling copy mode.
-Capture, snapshot, search, and cursor tools observe pane output without taking
-ownership of an attached person's modal interface. `get_pane_info` reports
-whether a mode already owns input. The core tmux module still exposes
-`Pane.CopyMode` for applications that own the pane interaction; library parity
-does not require MCP parity.
+Both servers' read batches accept `on_error` as `stop` or `continue` and stop by
+default. Stopping suits a dependent sequence; continuing lets independent reads
+report all their failures. Go additionally prunes nested batch authority from
+the selected startup surface before a call can name an inner tool.
 
-## Read-batch authority
+Go's pane-input arrays describe a fresh configured synchronization cohort, not
+proven delivery. Source-off means source-only; source-on includes the window's
+effective-on panes. Dead, input-disabled, modal, missing, attended, or malformed
+members refuse the complete operation. `run_shell_command` requires a singleton
+cohort in exactly two full checkpoints; `paste_text` sends its text and optional
+newline only through one target's private buffer.
 
-`call_read_tools_batch` may invoke every inspect tool except itself and the
-self-bounded `wait_for_text`: 16 operations in the full surface. Named
-exclusions prune both the schema enum and dispatch authority, even when an
-inner operation is retained only for aggregate use and is not separately
-advertised.
+## Being found
 
-A zero-authority batch remains advertised with direct `observe` effect, empty
-aggregate output classes, and an unsatisfiable operations schema. It cannot be
-used as a stringly typed escape hatch.
+Python publishes four prompts: `build_dev_workspace`,
+`diagnose_failing_pane`, `interrupt_gracefully`, and `run_and_wait`. Its six
+resource templates also make the tmux hierarchy discoverable through resource
+pickers, and its longer server instructions carry operating context.
 
-Calls execute serially. Each row reports index, tool, success, error, full
-retained nested envelope, and `resultTruncated`. The aggregate reports
-`onError`, succeeded and failed counts, `stoppedAt`, `truncated`, and
-`truncatedBytes`; its complete JSON-RPC response is at most 1,000,000 bytes.
+Go publishes no prompt or completion route. It keeps recipes in
+[TOOLS.md](TOOLS.md), whose generated reference comes from the same schemas and
+capability rows as `tools/list`. This trades protocol-level discovery helpers
+for a smaller startup surface and documentation that can be checked for drift.
 
-## Addressing the server
+The static capability resource gives a Go client the effective toolsets, socket
+boundary, provenance, selection inputs, and complete per-tool rows. It does not
+bypass tool selection to expose pane contents.
 
-The server pins one socket for the process. `LIBTMUX_SOCKET` selects a name and
-`LIBTMUX_SOCKET_PATH` selects an absolute path; they are mutually exclusive.
-`LIBTMUX_TMUX_CONFIG` is a nonempty absolute path to a user configuration.
-There is no per-call socket argument and no public server-discovery tool.
+## Addressing the hierarchy
 
-With no socket or config selector, the CLI uses the product-dedicated
-`libtmux-mcp` socket and the bundled minimal configuration. Startup passes a
-random owner nonce into that configuration, starts the daemon, reads back a
-global marker, and removes the nonce from tmux's environment. Only a matching
-marker authenticates that this process created the daemon and permits teardown
-in the default selection. A racing or pre-existing daemon cannot inherit that
-claim.
+Python can select a socket and hierarchy object on individual calls, and its
+resource templates carry socket and session or window selectors. One MCP
+process can therefore inspect several tmux servers over successive requests.
 
-An explicit socket name, explicit path, user configuration, existing daemon,
-or unknown provenance defaults to `inspect,manage,execute`. Teardown requires
-explicit toolset or named-tool selection, with exclusions still winning.
+Go pins one socket for the lifetime of the process. `LIBTMUX_SOCKET` selects a
+name and `LIBTMUX_SOCKET_PATH` an absolute path; they are mutually exclusive.
+`LIBTMUX_TMUX_CONFIG` selects a nonempty absolute configuration path. There is
+no per-call retargeting or public server-discovery tool.
+
+With no selector, Go uses the product-dedicated `libtmux-mcp` socket and bundled
+minimal configuration. Startup gives a new daemon a random owner nonce, reads
+back a global marker, and removes the nonce from tmux's environment. Only a
+matching marker proves process ownership and permits teardown by default. A
+racing, inherited, explicitly named, path-selected, or user-configured daemon
+cannot inherit that claim.
+
+The trade is operational. Python provides broader per-call reach. Go makes the
+operator's startup choice the authority boundary, then addresses sessions,
+windows, and panes by their exact tmux ids inside that server.
 
 ## Limiting what a client can do
 
-`LIBTMUX_TOOLSETS` selects an unordered subset. An entirely empty value is the
-valid zero subset; once nonempty, leading, trailing, or interior empty tokens
-are errors. `LIBTMUX_TOOLS` includes exact names and
-`LIBTMUX_EXCLUDE_TOOLS` removes exact names last.
+Both servers use the shared unordered `inspect`, `manage`, `execute`, and
+`teardown` toolsets selected by `LIBTMUX_TOOLSETS`. Both accept named additions
+and exclusions, and both treat a present retired `LIBTMUX_SAFETY` variable as a
+fatal startup error rather than silently translating it.
 
-Unknown toolsets, unknown tool names, relative paths, and a present retired
-`LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, or
-`LIBTMUX_MCP_PROMPTS_AS_TOOLS` variable fail startup before tmux opens. The
-surface is frozen after construction, so later environment changes cannot widen
-it.
+Go freezes selection at construction. An empty `LIBTMUX_TOOLSETS` value is the
+valid zero subset; a nonempty value with a leading, trailing, or interior empty
+token is malformed. Unknown names, relative socket or configuration paths, and
+the retired
+`LIBTMUX_MCP_CAPABILITIES` or `LIBTMUX_MCP_PROMPTS_AS_TOOLS` variables fail
+before tmux opens. Named exclusions win over additions.
 
-Selection is not an operating-system sandbox. Pane commands and input run with
-the tmux user's permissions. The manifest therefore distinguishes
-`configured-process`, `pane-input`, and `pane-command` reach, marks secret and
-untrusted outputs separately, and prohibits host-command reach.
-
-## Retired surface context
-
-Earlier Go releases exposed ordered `readonly`, `mutating`, and `destructive`
-tiers, a parallel capability allowlist, prompts, dynamic hierarchy resources,
-background jobs, generic setters, raw tmux formats, buffers, pipe commands,
-server discovery, and broad mutation batches. Those were useful experiments,
-but together they formed several overlapping authorities and did not match the
-portable 45-tool contract.
-
-The migration keeps the useful workflows while narrowing the routes:
-
-- `run_command` became bounded `run_shell_command`; `get_job` and detached
-  handles were removed in favor of pane-visible state and capture cursors.
-- `call_readonly_tools_batch` became the typed, exact-authority
-  `call_read_tools_batch`; mutating and destructive generic batches were
-  removed.
-- Generic `set_option`, `set_environment`, and `display_message` routes became
-  constrained named settings and validated tmux variables.
-- Public buffer operations collapsed into the ephemeral internal buffer used
-  by `paste_text`; pipe and server-wide teardown routes were removed.
-- Dynamic topology/content resources became ordinary selected tools. The one
-  static resource now explains the effective trust boundary instead of
-  bypassing it.
-
-See the [retired tool mapping](TOOLS.md#retired-tool-mapping) for each old name.
-
-| Earlier alpha route | Portable route | What remains available |
-| --- | --- | --- |
-| `get_pane` | `get_pane_info` | Typed metadata for one pane |
-| `server_info` and `whoami` | `get_server_info` plus pane rows | Socket and caller-pane identity |
-| `observe` | `snapshot_pane` then `capture_since` | Incremental output with an opaque cursor |
-| `run_command` and `get_job` | `run_shell_command` plus pane capture | Completion status and long-running pane visibility |
-| `display_message` | `get_tmux_variables` | Validated variable lookup without free-form formats |
-| `new_session` and `new_window` | `create_session` and `create_window` | Commandless configured-process creation |
-| generic option writers | named setters or `run_shell_command` | Common typed changes and an explicit execution route |
-| public buffer tools | `paste_text` | Literal text delivery with ephemeral cleanup |
-| dynamic pane resources | inspect tools | Approval-bearing topology and content reads |
-| prompt recipes | documented call sequences | The workflows without a second protocol surface |
-
-This table is historical migration context, not an alternate inventory. The
-generated 45-tool list and each startup-filtered capability report remain the
-authoritative current surfaces.
+Selection limits advertised protocol authority, not what the tmux user can do.
+A pane-command tool runs with that user's permissions, and user configuration
+can attach hooks to otherwise narrow tmux operations. The capability metadata
+states these boundaries; it does not claim sandboxing or exact downstream
+effects.
 
 ## Testing the server
 
-Focused manifest tests enumerate the exact 45 tools, all 16 toolset subsets,
-named include/exclude precedence, zero-authority batch behavior, schema/sink
-equality, wire metadata/resource parity, the complete 1,000,000-byte JSON-RPC
-batch-response cap, and authenticated startup ownership. Live tests use isolated
-socket names and verify that a losing launch does not claim teardown and that
-the nonce is not visible through `show-environment`.
+The measurements in this document use one raw JSON-RPC driver against both
+servers. It counts actual `tools/list`, prompt, resource, initialization,
+schema, annotation, and instruction data, then sends invalid enum, unknown
+field, and wrong-type calls. That keeps the comparison about observable MCP
+behavior rather than source-language conventions.
 
-The generated reference has a check mode, so CI can fail when the checked-in
-schemas or capability rows drift from what the server advertises.
+Python ships Sphinx documentation and project test commands. Go also ships an
+agent testing skill under `.agents/skills/testing-the-mcp-server/`; it defines
+isolated sockets, raw-wire checks, real-client preflights, and which failure
+belongs to the server versus a client adapter.
+
+Go's focused manifest tests enumerate the 45 tools, all 16 toolset subsets,
+named include/exclude precedence, zero-authority batch behavior, schema-to-sink
+equality, wire metadata/resource parity, response caps, and authenticated
+startup ownership. Live tests prove a losing launch cannot claim teardown and
+the ownership nonce does not remain in tmux's environment. They use isolated
+sockets and multiple supported tmux versions. The generated reference has a
+check mode so CI fails when checked-in schemas or capability rows drift from
+the advertised server.

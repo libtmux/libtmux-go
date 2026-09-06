@@ -1,6 +1,6 @@
 // Command agent-workflow demonstrates caller-pane discovery, commandless pane
-// creation, bounded command execution, and topology inspection through the
-// startup-frozen MCP surface.
+// creation, visible long-running work, bounded command execution, waiting, and
+// topology inspection through the startup-frozen MCP surface.
 //
 // Its in-memory client uses the same tool names, arguments, metadata, and reply
 // shapes as a stdio client.
@@ -37,7 +37,7 @@ func main() {
 	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default")
 	flag.Parse()
 	if _, set := os.LookupEnv(tmuxmcp.ToolsetsEnvironmentVariable); !set {
-		if err := os.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "inspect,execute"); err != nil {
+		if err := os.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "inspect,manage,execute"); err != nil {
 			fmt.Fprintln(os.Stderr, "agent-workflow:", err)
 			os.Exit(1)
 		}
@@ -121,9 +121,98 @@ func run(socketName string) error {
 	}
 	fmt.Printf("split into %s\n", split.PaneID)
 
-	// The executable input is a separate pane-command call. It waits with a
-	// fixed ceiling and returns a real exit status and bounded output; there is
-	// no detached background handle to leak across requests.
+	// A pane id says nothing about its window on its own. Resolve the relation
+	// once instead of guessing, then use it to keep later inspection local to
+	// the affected window.
+	windowID, err := window(ctx, session, split.PaneID)
+	if err != nil {
+		return err
+	}
+
+	// Start an observation before starting long-lived work. The cursor, pane,
+	// and tmux scrollback are the durable state; there is no process-local job
+	// handle to lose when an MCP server restarts.
+	var baseline struct {
+		Cursor string `json:"cursor"`
+	}
+	if err := call(ctx, session, "capture_since", map[string]any{
+		"pane_id": split.PaneID,
+	}, &baseline); err != nil {
+		return err
+	}
+
+	// paste_text with Enter starts visible work and returns as soon as the one
+	// private buffer is delivered. The marker is assembled at execution time so
+	// the shell's echoed command cannot satisfy wait_for_text prematurely.
+	if err := call(ctx, session, "paste_text", map[string]any{
+		"pane_id": split.PaneID,
+		"text": "sleep 2; if tmux -V; then printf 'agent-workflow-%s\\n' ready; " +
+			"else printf 'agent-workflow-%s\\n' failed; fi",
+		"enter": true,
+	}, nil); err != nil {
+		return err
+	}
+
+	// Meanwhile, inspect every pane in the window without capturing its screen.
+	// This is one topology snapshot while the long-lived work is still running.
+	var working struct {
+		Panes []paneSummary `json:"panes"`
+		Total int           `json:"total"`
+	}
+	if err := call(ctx, session, "list_panes", nil, &working); err != nil {
+		return err
+	}
+	windowPanes := panesInWindow(working.Panes, windowID)
+	fmt.Printf("%d of %d panes in this window while work runs:\n",
+		len(windowPanes), working.Total)
+	for _, pane := range windowPanes {
+		fmt.Printf("  %s running %s\n", pane.ID, pane.CurrentCommand)
+	}
+
+	// Wait for output rather than sleeping in the client. Known failure text
+	// stops the wait early, and the cursor makes pre-existing screen text
+	// ineligible to satisfy this observation.
+	var waited struct {
+		Found   bool   `json:"found"`
+		Outcome string `json:"outcome"`
+		Matched string `json:"matched"`
+	}
+	if err := call(ctx, session, "wait_for_text", map[string]any{
+		"pane_id": split.PaneID,
+		"cursor":  baseline.Cursor,
+		"patterns": []string{
+			"agent-workflow-ready",
+		},
+		"stop":    []string{"agent-workflow-failed"},
+		"timeout": 30,
+	}, &waited); err != nil {
+		return err
+	}
+	if !waited.Found {
+		return fmt.Errorf("visible work ended with %s (%q)", waited.Outcome, waited.Matched)
+	}
+
+	// Collect only output written after the baseline. linesMissed would mean
+	// tmux discarded part of the scrollback and the record is incomplete.
+	var observed struct {
+		Cursor      string   `json:"cursor"`
+		Lines       []string `json:"lines"`
+		LinesMissed bool     `json:"linesMissed"`
+	}
+	if err := call(ctx, session, "capture_since", map[string]any{
+		"pane_id": split.PaneID,
+		"cursor":  baseline.Cursor,
+	}, &observed); err != nil {
+		return err
+	}
+	if observed.LinesMissed {
+		return fmt.Errorf("tmux discarded output before it could be collected")
+	}
+	fmt.Printf("visible work produced %d new lines; keep the %d-byte cursor\n",
+		len(observed.Lines), len(observed.Cursor))
+
+	// Bounded work is a separate workflow. run_shell_command waits with a fixed
+	// ceiling and returns a framed exit status and bounded output.
 	var ran struct {
 		ExitStatus *int     `json:"exit_status"`
 		TimedOut   bool     `json:"timed_out"`
@@ -131,7 +220,7 @@ func run(socketName string) error {
 	}
 	if err := call(ctx, session, "run_shell_command", map[string]any{
 		"pane_id": split.PaneID,
-		"command": "sleep 2 && tmux -V && echo ready",
+		"command": "printf 'bounded work\\n'",
 		"timeout": 30,
 	}, &ran); err != nil {
 		return err
@@ -145,17 +234,8 @@ func run(socketName string) error {
 		}
 	}
 
-	// Resolve the new pane's window instead of guessing from a pane id, then
-	// inspect the whole window. list_panes checks process state without reading
-	// terminal content; get_window_info returns tmux's layout and geometry.
-	var paneInfo struct {
-		Pane paneSummary `json:"pane"`
-	}
-	if err := call(ctx, session, "get_pane_info", map[string]any{
-		"pane_id": split.PaneID,
-	}, &paneInfo); err != nil {
-		return err
-	}
+	// Report what was built. The layout string is tmux's own, and
+	// select_layout takes it back, so this is also how a useful layout is saved.
 	var after struct {
 		Panes []paneSummary `json:"panes"`
 		Total int           `json:"total"`
@@ -163,7 +243,7 @@ func run(socketName string) error {
 	if err := call(ctx, session, "list_panes", nil, &after); err != nil {
 		return err
 	}
-	windowPanes := panesInWindow(after.Panes, paneInfo.Pane.WindowID)
+	windowPanes = panesInWindow(after.Panes, windowID)
 	fmt.Printf("%d panes in the affected window, %d on the server:\n",
 		len(windowPanes), after.Total)
 	for _, pane := range windowPanes {
@@ -180,12 +260,28 @@ func run(socketName string) error {
 		Panes  []paneSummary `json:"panes"`
 	}
 	if err := call(ctx, session, "get_window_info", map[string]any{
-		"window_id": paneInfo.Pane.WindowID,
+		"window_id": windowID,
 	}, &window); err != nil {
 		return err
 	}
 	fmt.Printf("window %dx%d, layout %s\n", window.Width, window.Height, window.Layout)
 	return nil
+}
+
+// window reports which window a pane is in, so later listings can be narrowed
+// to it. One call is better than a guess: a pane id carries no window relation.
+func window(ctx context.Context, session *sdk.ClientSession, paneID string) (string, error) {
+	var info struct {
+		Pane struct {
+			WindowID string `json:"windowId"`
+		} `json:"pane"`
+	}
+	if err := call(ctx, session, "get_pane_info", map[string]any{
+		"pane_id": paneID,
+	}, &info); err != nil {
+		return "", err
+	}
+	return info.Pane.WindowID, nil
 }
 
 func activePane(panes []paneSummary) string {
@@ -207,8 +303,11 @@ func panesInWindow(panes []paneSummary, windowID string) []paneSummary {
 	return selected
 }
 
-// connect joins a client to the server in memory. A stdio client owns the
-// opposite side of a pipe instead; every tool call around it is identical.
+// connect joins a client to the server in memory.
+//
+// Over stdio this is the client's job and the server is a subprocess. Tool
+// names, arguments, metadata, and result shapes on either side are identical,
+// which lets this example run the same protocol without installing a client.
 func connect(ctx context.Context, target tmux.Server) (*sdk.ClientSession, func(), error) {
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	instance, err := tmuxmcp.NewServer(target)
@@ -236,8 +335,11 @@ func connect(ctx context.Context, target tmux.Server) (*sdk.ClientSession, func(
 	}, nil
 }
 
-// call turns an MCP tool error result into an ordinary Go error and decodes a
-// successful structured result.
+// call runs one tool and decodes its structured result.
+//
+// A failed tool reports through an MCP result rather than a transport error so
+// a model can read the reason and choose another call. A Go program wants that
+// failure as an error, which is what this adapter provides.
 func call(
 	ctx context.Context,
 	session *sdk.ClientSession,
