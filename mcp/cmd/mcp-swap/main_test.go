@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -279,6 +280,59 @@ func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	// nothing, which is the failure this refusal exists to prevent.
 	if _, err := selected(all, []string{"clod"}); err == nil {
 		t.Error("an unknown client was accepted")
+	}
+}
+
+func TestAllEightClientsSwapAndRevertTogether(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".state"))
+	clients := knownClients(home)
+	originals := make(map[string][]byte, len(clients))
+
+	for _, target := range clients {
+		if err := os.MkdirAll(filepath.Dir(target.path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		var contents []byte
+		if target.format == formatTOML {
+			contents = []byte("[" + target.key + ".keep]\ncommand = \"keep\"\n")
+		} else {
+			contents = []byte("{\n  \"" + target.key + "\": {\"keep\": {\"command\": \"keep\"}}\n}\n")
+		}
+		if err := os.WriteFile(target.path, contents, 0o640); err != nil {
+			t.Fatal(err)
+		}
+		originals[target.name] = contents
+	}
+
+	if err := useLocal(clients, devEntry(), false); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range clients {
+		entry, present, err := entryOf(target)
+		if err != nil || !present || !isLocal(entry) {
+			t.Fatalf("%s swapped entry = (%v, %t, %v)", target.name, entry, present, err)
+		}
+	}
+	slices.Reverse(clients)
+	if err := revert(clients, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range clients {
+		if got := []byte(readFile(t, target.path)); !bytes.Equal(got, originals[target.name]) {
+			t.Errorf("%s did not restore its original bytes", target.name)
+		}
+		info, err := os.Stat(target.path)
+		if err != nil || info.Mode().Perm() != 0o640 {
+			t.Errorf("%s restored mode = (%v, %v), want 0640", target.name, info, err)
+		}
+		for _, recovery := range []string{backupPath(target), recoveryStatePath(target)} {
+			if _, err := os.Stat(recovery); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("%s retained recovery path %s: %v", target.name, recovery, err)
+			}
+		}
 	}
 }
 
