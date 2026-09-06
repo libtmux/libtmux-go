@@ -474,29 +474,30 @@ it:
 $ go run ./cmd/libtmux-mcp -socket-name my-application
 ```
 
-Testing it in a real client is better than driving it by hand, and
-`mcp-swap` does the rewiring:
+Testing it in a real client is better than driving it by hand. From the
+repository root, the developer-only [`mcp-swap`](../internal/tools/mcp-swap/)
+command does the rewiring:
 
 ```console
-$ go run ./cmd/mcp-swap status
+$ go run ./internal/tools/mcp-swap status
 ```
 
 ```console
-$ go run ./cmd/mcp-swap use-local --dry-run
+$ go run ./internal/tools/mcp-swap use-local --dry-run
 ```
 
 ```console
-$ go run ./cmd/mcp-swap use-local
+$ go run ./internal/tools/mcp-swap use-local
 ```
 
 ```console
-$ go run ./cmd/mcp-swap revert
+$ go run ./internal/tools/mcp-swap revert
 ```
 
 To try a build in one agent while the others keep whatever they run, name it:
 
 ```console
-$ go run ./cmd/mcp-swap use-local \
+$ go run ./internal/tools/mcp-swap use-local \
     --client claude \
     --mode build
 ```

@@ -17,7 +17,7 @@ import (
 const tmuxModulePath = "github.com/libtmux/libtmux-go"
 
 // modules are every module in this repository, by directory.
-var modules = []string{".", "examples", "workspace", "mcp", "benchmarks"}
+var modules = []string{".", "examples", "workspace", "mcp", "benchmarks", "internal/tools"}
 
 func TestGeneratedJobCoversEveryModuleWithGenerators(t *testing.T) {
 	t.Parallel()
@@ -229,6 +229,24 @@ func TestInstallableModuleHasNoLocalOverrides(t *testing.T) {
 	if len(metadata.Replace) != 0 || len(metadata.Exclude) != 0 {
 		t.Fatalf("mcp/go.mod has %d replace and %d exclude directives; want none",
 			len(metadata.Replace), len(metadata.Exclude))
+	}
+}
+
+func TestPublishedMCPModuleExcludesDeveloperCommands(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	list := exec.Command("go", "list", "./...")
+	list.Dir = filepath.Join(root, "mcp")
+	list.Env = append(os.Environ(), "GOWORK=off")
+	output, err := list.CombinedOutput()
+	if err != nil {
+		t.Fatalf("list published MCP packages: %v\n%s", err, output)
+	}
+	for packagePath := range strings.Lines(string(output)) {
+		if strings.HasSuffix(strings.TrimSpace(packagePath), "/cmd/mcp-swap") {
+			t.Fatalf("published MCP module includes developer command %s", strings.TrimSpace(packagePath))
+		}
 	}
 }
 

@@ -202,12 +202,15 @@ func TestEveryModeMarksItsEntry(t *testing.T) {
 	}
 }
 
-// The module path is written down because an installed binary cannot read the
-// go.mod it was built from, which makes it the one constant here that can
-// drift without anything noticing.
-func TestModulePathMatchesTheModuleThisWasBuiltFrom(t *testing.T) {
+// The released server's module path is written into client entries, so its
+// source module must remain authoritative.
+func TestModulePathMatchesTheReleasedServerModule(t *testing.T) {
 	t.Parallel()
-	contents, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
+	repository, err := mcpModuleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(filepath.Join(repository, "go.mod"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +233,11 @@ func TestModulePathMatchesTheModuleThisWasBuiltFrom(t *testing.T) {
 // client could start, which the preflight would catch and nothing else would.
 func TestCommandNameExists(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat(filepath.Join("..", commandName)); err != nil {
+	repository, rootErr := mcpModuleRoot()
+	if rootErr != nil {
+		t.Fatal(rootErr)
+	}
+	if _, err := os.Stat(filepath.Join(repository, "cmd", commandName)); err != nil {
 		t.Errorf("cmd/%s: %v", commandName, err)
 	}
 }

@@ -8,7 +8,7 @@
 # pane_start_path does not exist before 3.3. A single-version gate cannot see
 # either.
 #
-# It is separate from the ordinary gate because it is slow -- five modules
+# It is separate from the ordinary gate because it is slow -- six modules
 # against nine tmux builds -- and because it needs a matrix of tmux builds a
 # checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
 # <version>/bin/tmux, or let it look where the matrix is usually built. Narrow
@@ -63,7 +63,7 @@ unset TMUX TMUX_PANE
 # Resolving without a workspace is the standalone module-metadata test's
 # question, and it does not vary by tmux version.
 
-all_modules=(. examples workspace mcp benchmarks)
+all_modules=(. examples workspace mcp benchmarks internal/tools)
 modules=()
 if [[ ${LIBTMUX_MATRIX_MODULES+x} ]]; then
     read -r -a modules <<< "$LIBTMUX_MATRIX_MODULES"
@@ -76,7 +76,7 @@ if (( ${#modules[@]} == 0 )); then
 fi
 for module in "${modules[@]}"; do
     case $module in
-        . | examples | workspace | mcp | benchmarks) ;;
+        . | examples | workspace | mcp | benchmarks | internal/tools) ;;
         *)
             echo "matrix: unknown module \"$module\"" >&2
             exit 1

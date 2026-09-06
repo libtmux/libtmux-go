@@ -13,7 +13,7 @@ it does not get done.
 `status` only reads:
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap status
+$ go run ./internal/tools/mcp-swap status
 ```
 
 ```
@@ -29,17 +29,17 @@ configurations, prints what would change, and leaves the configurations and
 cached server binary unchanged:
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap use-local --dry-run
+$ go run ./internal/tools/mcp-swap use-local --dry-run
 ```
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap use-local --mode build
+$ go run ./internal/tools/mcp-swap use-local --mode build
 ```
 
 Put everything back:
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap revert
+$ go run ./internal/tools/mcp-swap revert
 ```
 
 ## Which build `--mode` selects

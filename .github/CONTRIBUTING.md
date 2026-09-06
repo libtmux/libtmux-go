@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. This repository holds five Go modules, and the gates below
+Thanks for looking. This repository holds six Go modules, and the gates below
 are what a change has to pass.
 
 This file is how we work. For how we write — doc comments, `CHANGELOG.md`,
@@ -48,7 +48,7 @@ $ gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...
 Then each of the others, from its own directory:
 
 ```console
-$ for module in examples workspace mcp benchmarks; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
+$ for module in examples workspace mcp benchmarks internal/tools; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
 ```
 
 Run them with the workspace on, which is the only way they see the working
@@ -105,7 +105,7 @@ Known vulnerabilities are checked per module, because each resolves its own
 dependencies:
 
 ```console
-$ for module in . examples workspace mcp benchmarks; do (cd "$module" && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...) || break; done
+$ for module in . examples workspace mcp benchmarks internal/tools; do (cd "$module" && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...) || break; done
 ```
 
 It reports the standard library as well as dependencies, so it fails on a

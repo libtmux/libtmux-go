@@ -31,7 +31,7 @@ const commandName = "libtmux-mcp"
 // outlive this process without adding artifacts to repository generation checks.
 const buildDirectoryName = "libtmux-mcp"
 
-// modulePath is kept in step with this command's go.mod by a test.
+// modulePath is kept in step with the released server's go.mod by a test.
 const modulePath = "github.com/libtmux/libtmux-go/mcp"
 
 type buildMode string
@@ -220,7 +220,7 @@ func run(chosen options) error {
 		// Only checkout-backed modes require a repository root.
 		repository := ""
 		if chosen.mode == modeDev || chosen.mode == modeBuild {
-			if repository, err = repositoryRoot(); err != nil {
+			if repository, err = mcpModuleRoot(); err != nil {
 				return err
 			}
 		}
@@ -401,20 +401,25 @@ func entryArguments(entry map[string]any) []string {
 	return arguments
 }
 
-// repositoryRoot finds the nearest ancestor with a go.mod whose path ends in mcp.
-func repositoryRoot() (string, error) {
+// mcpModuleRoot finds this checkout's released MCP module.
+func mcpModuleRoot() (string, error) {
 	working, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	for directory := working; ; directory = filepath.Dir(directory) {
-		if _, err := os.Stat(filepath.Join(directory, "go.mod")); err == nil {
-			if strings.HasSuffix(directory, "mcp") {
-				return directory, nil
+		candidate := filepath.Join(directory, "mcp", "go.mod")
+		if contents, readErr := os.ReadFile(candidate); readErr == nil {
+			for line := range strings.Lines(string(contents)) {
+				if strings.TrimSpace(line) == "module "+modulePath {
+					return filepath.Dir(candidate), nil
+				}
 			}
+		} else if !errors.Is(readErr, os.ErrNotExist) {
+			return "", readErr
 		}
 		if parent := filepath.Dir(directory); parent == directory {
-			return "", errors.New("run this from inside the mcp module")
+			return "", errors.New("run this from inside the libtmux-go checkout")
 		}
 	}
 }

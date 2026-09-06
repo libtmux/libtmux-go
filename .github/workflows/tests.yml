@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [".", "examples", "workspace", "mcp", "benchmarks"]
+        module: [".", "examples", "workspace", "mcp", "benchmarks", "internal/tools"]
         go-version: ["1.26", "1.27"]
     steps:
       # Whole history, because the gates on staleness compare what is written
@@ -127,7 +127,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [".", "examples", "workspace", "mcp", "benchmarks"]
+        module: [".", "examples", "workspace", "mcp", "benchmarks", "internal/tools"]
     steps:
       - uses: actions/checkout@v7
 
@@ -189,6 +189,7 @@ jobs:
             workspace/go.mod
             mcp/go.mod
             benchmarks/go.mod
+            internal/tools/go.mod
 
       - name: Install tmux
         run: brew install tmux
@@ -198,7 +199,7 @@ jobs:
           GOTOOLCHAIN: local
         run: |
           mkdir -p "$TMUX_TMPDIR"
-          for module in . examples workspace mcp benchmarks; do
+          for module in . examples workspace mcp benchmarks internal/tools; do
             echo "--- $module ---"
             (cd "$module" && go test -count=1 ./...)
           done
@@ -334,7 +335,7 @@ jobs:
           fi
           printf '%s\n' "$actual_version"
           mkdir -p "$TMUX_TMPDIR"
-          for module in . examples workspace mcp benchmarks; do
+          for module in . examples workspace mcp benchmarks internal/tools; do
             echo "--- $module: full suite ---"
             (cd "$module" && go test -count=1 ./...)
           done

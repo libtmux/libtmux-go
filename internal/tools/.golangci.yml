@@ -1,0 +1,49 @@
+version: "2"
+
+run:
+  go: "1.26"
+  modules-download-mode: readonly
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - asciicheck
+    - bidichk
+    - copyloopvar
+    - durationcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - gocheckcompilerdirectives
+    - gocritic
+    - gomoddirectives
+    - goprintffuncname
+    - iotamixing
+    - makezero
+    - misspell
+    - modernize
+    - nilerr
+    - nilnesserr
+    - nolintlint
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - unconvert
+    - usetesting
+    - wastedassign
+  settings:
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+
+formatters:
+  enable:
+    - gofumpt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
