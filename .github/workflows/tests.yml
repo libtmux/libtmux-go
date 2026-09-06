@@ -25,6 +25,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -88,6 +89,7 @@ jobs:
   # stops a snippet drifting from the program it was copied from.
   generated:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -112,6 +114,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -164,6 +167,7 @@ jobs:
   # socket paths, and command diagnostics against Homebrew's current tmux.
   macos:
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -195,6 +199,7 @@ jobs:
   # Cross-compilation cannot exercise those filesystem semantics.
   windows-resolver:
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -213,6 +218,7 @@ jobs:
   # that never completes.
   fuzz:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -239,6 +245,7 @@ jobs:
   # than the one they were recorded on.
   benchmarks:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -269,6 +276,7 @@ jobs:
   # and pane_start_path does not exist before 3.3.
   tmux-matrix:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
