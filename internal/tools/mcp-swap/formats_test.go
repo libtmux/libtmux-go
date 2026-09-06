@@ -369,6 +369,38 @@ func TestSwapThenRevertIsByteIdentical(t *testing.T) {
 	}
 }
 
+func TestConfigFormatsRejectMalformedUTF8(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		contents []byte
+		client   client
+	}{
+		{
+			"json", []byte("{\"note\":\"\xc3(\",\"mcpServers\":{}}"),
+			client{key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		},
+		{
+			"jsonc", []byte("{// keep \xc3(\n\"mcp\":{}}"),
+			client{key: "mcp", format: formatJSONC, dialect: dialectOpencode},
+		},
+		{
+			"toml", []byte("# keep \xc3(\n[mcp_servers]\n"),
+			client{key: "mcp_servers", format: formatTOML, dialect: dialectStandard},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if _, _, err := entryFromContents(test.client, test.contents); err == nil {
+				t.Fatal("read accepted malformed UTF-8")
+			}
+			if _, err := renderEntryChange(test.client, test.contents, devEntry()); err == nil {
+				t.Fatal("update accepted malformed UTF-8")
+			}
+		})
+	}
+}
+
 func TestRevertRefusesChangesOutsideTheServerEntry(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

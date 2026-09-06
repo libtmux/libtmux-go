@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 const piAdapterHint = "needs the pi-mcp-adapter package; pi has no built-in MCP client"
@@ -424,6 +425,9 @@ func entryOf(c client) (map[string]any, bool, error) {
 }
 
 func entryFromContents(c client, contents []byte) (map[string]any, bool, error) {
+	if !utf8.Valid(contents) {
+		return nil, false, errors.New("config is not valid UTF-8")
+	}
 	switch c.format {
 	case formatTOML:
 		entry, found := readTOMLEntry(contents, c.key+"."+serverName)
@@ -869,6 +873,9 @@ func writeEntry(c client, entry map[string]any) error {
 }
 
 func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte, error) {
+	if !utf8.Valid(contents) {
+		return nil, errors.New("config is not valid UTF-8")
+	}
 	switch c.format {
 	case formatTOML:
 		table := c.key + "." + serverName
