@@ -1110,7 +1110,7 @@ Changes tmux state.
 
 ### `paste_text`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes literal text only to its target through an ephemeral buffer; optional Enter uses validated configured synchronized membership.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes literal text only to its target; optional Enter appends one newline to the same private buffer.
 
 Belongs to the `execute` toolset.
 
@@ -1137,7 +1137,6 @@ Changes tmux state.
 | Returns | Type |
 | --- | --- |
 | `bytes` **required** | integer |
-| `enter_pane_ids` **required** | array |
 | `pane_id` **required** | string |
 
 ### `rename_session`

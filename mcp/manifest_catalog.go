@@ -522,7 +522,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogSendKeysBatch),
 		defineTool(toolDefinition{
 			name: "paste_text", title: "Paste text",
-			details: "Pastes literal text only to its target through an ephemeral buffer; optional Enter uses validated configured synchronized membership.",
+			details: "Pastes literal text only to its target; optional Enter appends one newline to the same private buffer.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,

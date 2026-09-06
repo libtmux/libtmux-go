@@ -932,6 +932,10 @@ func TestCapabilityManifestDisclosesConfiguredInputMembership(t *testing.T) {
 	if _, ok := schemaProperties(t, paste.OutputSchema)["enter_pane_ids"]; ok {
 		t.Fatal("paste_text output exposes obsolete configured Enter membership")
 	}
+	if strings.Contains(paste.Description, "synchronized membership") ||
+		!strings.Contains(paste.Description, "same private buffer") {
+		t.Fatalf("paste_text description does not disclose target-only Enter: %q", paste.Description)
+	}
 }
 
 func setCapabilityEnvironment(t *testing.T, toolsets, included, excluded string) {
