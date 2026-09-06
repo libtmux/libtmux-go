@@ -12,6 +12,15 @@ on:
 permissions:
   contents: read
 
+# A superseded push should not keep a matrix this wide running to completion:
+# nothing reads the result once a newer commit exists on the same pull request.
+# Cancelling is scoped to pull requests so a master push is never interrupted,
+# and the SHA in the group key keeps consecutive master pushes in groups of
+# their own rather than queued behind one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Every job below names its modules one at a time. `go test ./...` stops at a
 # module boundary, so the consumer modules and the benchmarks are invisible to
 # the core module's wildcard and would rot unchecked. Go also skips a directory
