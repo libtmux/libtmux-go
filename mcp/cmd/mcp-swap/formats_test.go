@@ -369,27 +369,26 @@ func TestSwapThenRevertIsByteIdentical(t *testing.T) {
 	}
 }
 
-func TestRevertPreservesChangesOutsideTheServerEntry(t *testing.T) {
+func TestRevertRefusesChangesOutsideTheServerEntry(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
-		name        string
-		contents    string
-		before      string
-		after       string
-		wantCommand string
-		client      client
+		name     string
+		contents string
+		before   string
+		after    string
+		client   client
 	}{
 		{
-			"toml", codexConfig, `model = "gpt-5"`, `model = "gpt-5.1"`, "uv",
+			"toml", codexConfig, `model = "gpt-5"`, `model = "gpt-5.1"`,
 			client{key: "mcp_servers", format: formatTOML, dialect: dialectStandard},
 		},
 		{
-			"jsonc", opencodeConfig, `"theme": "system"`, `"theme": "changed"`, "uvx",
+			"jsonc", opencodeConfig, `"theme": "system"`, `"theme": "changed"`,
 			client{key: "mcp", format: formatJSONC, dialect: dialectOpencode},
 		},
 		{
 			"json", `{"theme":"system","mcpServers":{"tmux":{"command":"old"}}}`,
-			`"theme": "system"`, `"theme": "changed"`, "old",
+			`"theme": "system"`, `"theme": "changed"`,
 			client{key: "mcpServers", format: formatJSON, dialect: dialectStandard},
 		},
 	} {
@@ -410,17 +409,13 @@ func TestRevertPreservesChangesOutsideTheServerEntry(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := revert([]client{target}, false); err != nil {
-				t.Fatal(err)
+			if err := revert([]client{target}, false); err == nil {
+				t.Fatal("revert accepted a configuration changed after the swap")
 			}
-			if after := readFile(t, path); !strings.Contains(after, test.after) {
-				t.Fatalf("revert discarded the neighbouring edit:\n%s", after)
+			if after := readFile(t, path); after != changed {
+				t.Fatalf("refused revert changed the configuration:\n%s", after)
 			}
-			entry, present, err := entryOf(target)
-			if err != nil || !present || entryCommand(entry) != test.wantCommand {
-				t.Fatalf("restored entry = (%v, %t, %v), want command %q",
-					entry, present, err, test.wantCommand)
-			}
+			assertRecoveryPairExists(t, target)
 		})
 	}
 }

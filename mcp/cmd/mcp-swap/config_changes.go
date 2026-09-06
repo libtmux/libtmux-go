@@ -103,6 +103,9 @@ func usePreparedLocal(clients []client, plan entryPlan, dryRun, check bool) erro
 		if err := validateEntryChanges(changes); err != nil {
 			return err
 		}
+		if err := validateDistinctTargets(changes); err != nil {
+			return err
+		}
 	}
 
 	if !dryRun {
@@ -223,6 +226,7 @@ func revert(clients []client, dryRun bool) error {
 type restoreChange struct {
 	target            client
 	current, restored []byte
+	currentMode       uint32
 	binding           destinationBinding
 	recovery          recoveryPlan
 }
@@ -244,10 +248,6 @@ func planRestore(c client) (restoreChange, bool, error) {
 	if backupExists != stateExists {
 		return restoreChange{}, false, errors.New("backup and recovery state are incomplete")
 	}
-	original, err := os.ReadFile(backup)
-	if err != nil {
-		return restoreChange{}, false, err
-	}
 	current, binding, err := readBoundFile(c.path)
 	if err != nil {
 		return restoreChange{}, false, err
@@ -256,6 +256,7 @@ func planRestore(c client) (restoreChange, bool, error) {
 	if err != nil {
 		return restoreChange{}, false, err
 	}
+	original := recovery.backupContents
 	entry, present, err := entryFromContents(c, current)
 	if err != nil {
 		return restoreChange{}, false, err
@@ -264,41 +265,34 @@ func planRestore(c client) (restoreChange, bool, error) {
 		return restoreChange{}, false,
 			errors.New("the current server entry is no longer the one mcp-swap wrote")
 	}
-	// A normal revert can restore the recovery artifact verbatim. If something
-	// else changed after the swap, retain the existing entry-only restore so the
-	// neighbouring edit survives.
-	expected, err := renderEntryChange(c, original, entry)
-	if err != nil {
-		return restoreChange{}, false, fmt.Errorf("reconstruct swapped configuration: %w", err)
-	}
-	restored := original
-	if !bytes.Equal(current, expected) {
-		restored, err = restoreEntry(c, current, original)
-	}
-	if err != nil {
-		return restoreChange{}, false, err
-	}
 	return restoreChange{
-		target: c, current: current, restored: restored,
-		binding: binding, recovery: recovery,
+		target: c, current: current, restored: original,
+		currentMode: binding.Mode,
+		binding:     binding, recovery: recovery,
 	}, true, nil
 }
 
 func validateDistinctRestoreTargets(changes []restoreChange) error {
-	for index, change := range changes {
-		for previous := range changes[:index] {
-			if change.binding.Target == changes[previous].binding.Target {
-				return fmt.Errorf(
-					"%s and %s select the same physical configuration",
-					changes[previous].target.name, change.target.name,
-				)
-			}
-		}
+	claims := make([]pathClaim, 0, len(changes)*3)
+	for _, change := range changes {
+		claims = append(claims, recoveryPathClaims(
+			change.target.name, change.binding, change.recovery,
+		)...)
 	}
-	return nil
+	return validateDistinctPathClaims(claims)
 }
 
 func applyRestoreChanges(changes []restoreChange) error {
+	return applyRestoreChangesWith(changes, os.Remove)
+}
+
+func applyRestoreChangesWith(
+	changes []restoreChange,
+	remove func(string) error,
+) error {
+	if err := validateDistinctRestoreTargets(changes); err != nil {
+		return err
+	}
 	applied := make([]restoreChange, 0, len(changes))
 	for _, change := range changes {
 		committed, err := change.commit()
@@ -308,63 +302,49 @@ func applyRestoreChanges(changes []restoreChange) error {
 		}
 		applied = append(applied, committed)
 	}
-	var failures []error
+	recoveries := make([]namedRecovery, 0, len(applied))
 	for _, change := range applied {
-		if err := os.Remove(change.recovery.backup); err != nil {
-			failures = append(failures, fmt.Errorf(
-				"%s: remove backup: %w", change.target.name, err,
-			))
-			continue
-		}
-		if err := os.Remove(change.recovery.state); err != nil {
-			failures = append(failures, fmt.Errorf(
-				"%s: remove recovery state: %w", change.target.name, err,
-			))
-		}
+		recoveries = append(recoveries, namedRecovery{change.target.name, change.recovery})
 	}
-	return errors.Join(failures...)
+	restored, cleanupErr := removeRecoveryArtifacts(recoveries, remove)
+	if cleanupErr == nil {
+		return nil
+	}
+	if restored == nil {
+		return cleanupErr
+	}
+	for index := range applied {
+		applied[index].recovery = restored[index].recovery
+	}
+	return rollbackRestoreChanges(applied, cleanupErr)
 }
 
 func (c restoreChange) commit() (restoreChange, error) {
-	if err := validateBoundContents(c.target.path, c.current, c.binding); err != nil {
-		return restoreChange{}, err
-	}
-	if err := atomicWriteFile(c.binding.Resolved, c.restored, 0o600); err != nil {
-		return restoreChange{}, fmt.Errorf("restore configuration: %w", err)
-	}
-	after, err := captureDestination(c.target.path)
-	if err == nil && !sameTopology(c.binding, after) {
-		err = errors.New("configuration topology changed during restore")
-	}
-	if err == nil {
-		err = validateBoundContents(c.target.path, c.restored, after)
-	}
+	after, recovery, published, err := publishBoundConfiguration(
+		c.target.path, c.current, c.binding, c.restored,
+		c.recovery.record.OriginalMode, c.recovery, nil,
+	)
 	if err != nil {
+		if !published {
+			return restoreChange{}, fmt.Errorf("restore configuration: %w", err)
+		}
+		c.binding = after
+		c.recovery = recovery
 		rollbackErr := c.restoreCurrent()
 		return restoreChange{}, errors.Join(err, rollbackErr)
 	}
 	c.binding = after
+	c.recovery = recovery
 	return c, nil
 }
 
 func (c restoreChange) restoreCurrent() error {
-	if err := atomicWriteFile(c.binding.Resolved, c.current, 0o600); err != nil {
-		return fmt.Errorf("rollback restored configuration: %w", err)
-	}
-	after, err := captureDestination(c.target.path)
+	_, _, _, err := publishBoundConfiguration(
+		c.target.path, c.restored, c.binding, c.current,
+		c.currentMode, c.recovery, nil,
+	)
 	if err != nil {
-		return fmt.Errorf("verify restore rollback: %w", err)
-	}
-	if !sameTopology(c.binding, after) {
-		return errors.New("verify restore rollback: configuration topology changed")
-	}
-	if err := validateBoundContents(c.target.path, c.current, after); err != nil {
-		return fmt.Errorf("verify restore rollback: %w", err)
-	}
-	record := c.recovery.record
-	record.Destination = after
-	if err := writeRecoveryState(c.recovery.state, record); err != nil {
-		return fmt.Errorf("record restore rollback: %w", err)
+		return fmt.Errorf("rollback restored configuration: %w", err)
 	}
 	return nil
 }
@@ -415,51 +395,6 @@ func entryFromContents(c client, contents []byte) (map[string]any, bool, error) 
 	}
 }
 
-func restoreEntry(c client, current, original []byte) ([]byte, error) {
-	path := []string{c.key, serverName}
-	switch c.format {
-	case formatTOML:
-		table := c.key + "." + serverName
-		currentStart, currentEnd, found := tomlTableSpan(current, table)
-		if !found {
-			return nil, fmt.Errorf("current configuration has no %s table", table)
-		}
-		originalStart, originalEnd, originallyPresent := tomlTableSpan(original, table)
-		replacement := []byte(nil)
-		if originallyPresent {
-			replacement = original[originalStart:originalEnd]
-		} else {
-			// Remove the separator that writeEntry added with the table.
-			prefix := []byte("\n")
-			if !bytes.HasSuffix(original, []byte("\n")) {
-				prefix = []byte("\n\n")
-			}
-			if currentStart >= len(prefix) &&
-				bytes.Equal(current[currentStart-len(prefix):currentStart], prefix) {
-				currentStart -= len(prefix)
-			}
-		}
-		return replaceBytes(current, currentStart, currentEnd, replacement), nil
-	case formatJSONC, formatJSON:
-		currentSpan, ok := findJSONCMember(blankComments(current), path)
-		if !ok || !currentSpan.present {
-			return nil, errors.New("current configuration has no server entry")
-		}
-		originalSpan, ok := findJSONCMember(blankComments(original), path)
-		if ok && originalSpan.present {
-			return replaceBytes(
-				current,
-				currentSpan.valueStart,
-				currentSpan.valueEnd,
-				original[originalSpan.valueStart:originalSpan.valueEnd],
-			), nil
-		}
-		return removeJSONCMember(current, currentSpan)
-	default:
-		return nil, fmt.Errorf("unknown configuration format %d", c.format)
-	}
-}
-
 func replaceBytes(text []byte, start, end int, replacement []byte) []byte {
 	updated := make([]byte, 0, len(text)-(end-start)+len(replacement))
 	updated = append(updated, text[:start]...)
@@ -489,6 +424,7 @@ func openCodeEntry(entry map[string]any) map[string]any {
 type entryChange struct {
 	target            client
 	original, updated []byte
+	originalMode      uint32
 	spec              processSpec
 	binding           destinationBinding
 	recovery          recoveryPlan
@@ -520,17 +456,48 @@ func planEntryChange(c client, entry map[string]any) (entryChange, error) {
 	}
 	return entryChange{
 		target: c, original: contents, updated: updated, spec: spec,
-		binding: binding, recovery: recovery,
+		originalMode: binding.Mode,
+		binding:      binding, recovery: recovery,
 	}, nil
 }
 
 func validateDistinctTargets(changes []entryChange) error {
-	for index, change := range changes {
-		for previous := range changes[:index] {
-			if change.binding.Target == changes[previous].binding.Target {
+	claims := make([]pathClaim, 0, len(changes)*3)
+	for _, change := range changes {
+		claims = append(claims, recoveryPathClaims(
+			change.target.name, change.binding, change.recovery,
+		)...)
+	}
+	return validateDistinctPathClaims(claims)
+}
+
+type pathClaim struct {
+	owner, kind, resolved string
+	target                physicalIdentity
+}
+
+func recoveryPathClaims(
+	owner string,
+	configuration destinationBinding,
+	recovery recoveryPlan,
+) []pathClaim {
+	backupTarget := recovery.backupBinding.Target
+	stateTarget := recovery.stateBinding.Target
+	return []pathClaim{
+		{owner: owner, kind: "configuration", resolved: configuration.Resolved, target: configuration.Target},
+		{owner: owner, kind: "backup", resolved: recovery.backupResolved, target: backupTarget},
+		{owner: owner, kind: "recovery state", resolved: recovery.stateResolved, target: stateTarget},
+	}
+}
+
+func validateDistinctPathClaims(claims []pathClaim) error {
+	for index, claim := range claims {
+		for _, previous := range claims[:index] {
+			if claim.resolved == previous.resolved ||
+				(claim.target != (physicalIdentity{}) && claim.target == previous.target) {
 				return fmt.Errorf(
-					"%s and %s select the same physical configuration",
-					changes[previous].target.name, change.target.name,
+					"%s %s and %s %s select the same physical path",
+					previous.owner, previous.kind, claim.owner, claim.kind,
 				)
 			}
 		}
@@ -544,17 +511,21 @@ func (c entryChange) apply() error {
 
 func applyEntryChanges(changes []entryChange) error {
 	prepared := make([]entryChange, 0, len(changes))
-	for _, change := range changes {
-		created, err := change.prepareBackup()
+	for index := range changes {
+		change, created, err := changes[index].prepareBackup()
 		if err != nil {
 			return errors.Join(
 				fmt.Errorf("%s: prepare backup: %w", change.target.name, err),
 				removePreparedBackups(prepared),
 			)
 		}
+		changes[index] = change
 		if created {
 			prepared = append(prepared, change)
 		}
+	}
+	if err := validateDistinctTargets(changes); err != nil {
+		return rollbackEntryChanges(nil, prepared, err)
 	}
 
 	applied := make([]entryChange, 0, len(changes))
@@ -569,78 +540,117 @@ func applyEntryChanges(changes []entryChange) error {
 	return nil
 }
 
-func (c entryChange) prepareBackup() (bool, error) {
+func (c entryChange) prepareBackup() (entryChange, bool, error) {
 	if c.recovery.exists {
-		return false, nil
+		return c, false, nil
 	}
-	if err := atomicWriteFile(c.recovery.backup, c.original, 0o600); err != nil {
-		return false, err
+	if err := validateMissingDestination(
+		c.recovery.backup, c.recovery.backupResolved, c.recovery.backupParent,
+	); err != nil {
+		return c, false, err
 	}
-	if err := writeRecoveryState(c.recovery.state, c.recovery.record); err != nil {
-		return false, errors.Join(err, os.Remove(c.recovery.backup))
+	if err := validateMissingDestination(
+		c.recovery.state, c.recovery.stateResolved, c.recovery.stateParent,
+	); err != nil {
+		return c, false, err
 	}
-	return true, nil
+	backupContents, backupBinding, err := writeBoundFileExact(
+		c.recovery.backup, c.original, 0o600,
+	)
+	if err != nil {
+		if backupBinding.Resolved != "" {
+			err = errors.Join(err, removeRecoveryFile(backupBinding.Resolved, os.Remove))
+		}
+		return c, false, err
+	}
+	if backupBinding.Resolved != c.recovery.backupResolved {
+		return c, false, errors.Join(
+			errors.New("backup destination changed during creation"),
+			removeRecoveryFile(backupBinding.Resolved, os.Remove),
+		)
+	}
+	c.recovery.backupContents = backupContents
+	c.recovery.backupBinding = backupBinding
+	c.recovery.record.Backup = backupBinding
+	recovery, err := c.recovery.replaceRecord(c.recovery.record)
+	if err != nil {
+		c.recovery = recovery
+		if recovery.exists {
+			_, cleanupErr := removeRecoveryArtifacts(
+				[]namedRecovery{{name: c.target.name, recovery: recovery}}, os.Remove,
+			)
+			return c, false, errors.Join(err, cleanupErr)
+		}
+		return c, false, errors.Join(
+			err, removeRecoveryFile(c.recovery.backupBinding.Resolved, os.Remove),
+		)
+	}
+	if recovery.stateBinding.Resolved != c.recovery.stateResolved {
+		return c, false, errors.New("recovery state destination changed during creation")
+	}
+	c.recovery = recovery
+	return c, true, nil
 }
 
 func (c entryChange) commit() (entryChange, error) {
+	return c.commitWith(nil)
+}
+
+func (c entryChange) commitWith(
+	beforePublish func(recoveryState) error,
+) (entryChange, error) {
 	if err := c.validate(); err != nil {
 		return entryChange{}, err
 	}
-	if err := atomicWriteFile(c.binding.Resolved, c.updated, 0o600); err != nil {
-		return entryChange{}, fmt.Errorf("write configuration: %w", err)
-	}
-	after, err := captureDestination(c.target.path)
-	if err == nil && !sameTopology(c.binding, after) {
-		err = errors.New("configuration topology changed during write")
-	}
-	if err == nil {
-		err = validateBoundContents(c.target.path, c.updated, after)
-	}
-	if err == nil {
-		record := c.recovery.record
-		record.Destination = after
-		err = writeRecoveryState(c.recovery.state, record)
-		if err == nil {
-			c.binding = after
-			c.recovery.record = record
-			return c, nil
+	after, recovery, published, err := publishBoundConfiguration(
+		c.target.path, c.original, c.binding, c.updated,
+		c.binding.Mode, c.recovery, beforePublish,
+	)
+	if err != nil {
+		if !published {
+			return entryChange{}, fmt.Errorf("write configuration: %w", err)
 		}
+		c.binding = after
+		c.recovery = recovery
+		_, rollbackErr := c.restoreOriginal()
+		return entryChange{}, errors.Join(err, rollbackErr)
 	}
-	rollbackErr := c.restoreOriginal()
-	return entryChange{}, errors.Join(err, rollbackErr)
+	c.binding = after
+	c.recovery = recovery
+	return c, nil
 }
 
-func (c entryChange) restoreOriginal() error {
-	if err := atomicWriteFile(c.binding.Resolved, c.original, 0o600); err != nil {
-		return fmt.Errorf("rollback configuration: %w", err)
-	}
-	after, err := captureDestination(c.target.path)
+func (c entryChange) restoreOriginal() (entryChange, error) {
+	after, recovery, _, err := publishBoundConfiguration(
+		c.target.path, c.updated, c.binding, c.original,
+		c.originalMode, c.recovery, nil,
+	)
 	if err != nil {
-		return fmt.Errorf("verify rollback: %w", err)
+		return c, fmt.Errorf("rollback configuration: %w", err)
 	}
-	if !sameTopology(c.binding, after) {
-		return errors.New("verify rollback: configuration topology changed")
-	}
-	if err := validateBoundContents(c.target.path, c.original, after); err != nil {
-		return fmt.Errorf("verify rollback: %w", err)
-	}
-	record := c.recovery.record
-	record.Destination = after
-	if err := writeRecoveryState(c.recovery.state, record); err != nil {
-		return fmt.Errorf("record rollback: %w", err)
-	}
-	return nil
+	c.binding = after
+	c.recovery = recovery
+	return c, nil
 }
 
 func rollbackEntryChanges(applied, prepared []entryChange, cause error) error {
 	var failures []error
+	rolledBack := make(map[string]entryChange, len(applied))
 	for index := len(applied) - 1; index >= 0; index-- {
 		change := applied[index]
-		if err := change.restoreOriginal(); err != nil {
+		restored, err := change.restoreOriginal()
+		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: rollback: %w", change.target.name, err))
+		} else {
+			rolledBack[change.target.path] = restored
 		}
 	}
 	if len(failures) == 0 {
+		for index := range prepared {
+			if restored, ok := rolledBack[prepared[index].target.path]; ok {
+				prepared[index] = restored
+			}
+		}
 		if err := removePreparedBackups(prepared); err != nil {
 			failures = append(failures, err)
 		}
@@ -649,26 +659,135 @@ func rollbackEntryChanges(applied, prepared []entryChange, cause error) error {
 }
 
 func removePreparedBackups(prepared []entryChange) error {
-	var failures []error
+	return removePreparedBackupsWith(prepared, os.Remove)
+}
+
+func removePreparedBackupsWith(
+	prepared []entryChange,
+	remove func(string) error,
+) error {
+	recoveries := make([]namedRecovery, 0, len(prepared))
 	for index := len(prepared) - 1; index >= 0; index-- {
 		change := prepared[index]
-		if err := os.Remove(change.recovery.backup); err != nil {
-			failures = append(failures, fmt.Errorf(
-				"%s: remove prepared backup: %w", change.target.name, err,
-			))
-			continue
-		}
-		if err := os.Remove(change.recovery.state); err != nil {
-			failures = append(failures, fmt.Errorf(
-				"%s: remove prepared recovery state: %w", change.target.name, err,
-			))
+		recoveries = append(recoveries, namedRecovery{change.target.name, change.recovery})
+	}
+	_, err := removeRecoveryArtifacts(recoveries, remove)
+	return err
+}
+
+type namedRecovery struct {
+	name     string
+	recovery recoveryPlan
+}
+
+func removeRecoveryArtifacts(
+	recoveries []namedRecovery,
+	remove func(string) error,
+) ([]namedRecovery, error) {
+	for _, item := range recoveries {
+		if err := item.recovery.validateArtifacts(); err != nil {
+			return nil, fmt.Errorf("%s: %w", item.name, err)
 		}
 	}
-	return errors.Join(failures...)
+	var cleanupErr error
+	for _, item := range recoveries {
+		if err := removeRecoveryFile(item.recovery.stateBinding.Resolved, remove); err != nil {
+			cleanupErr = fmt.Errorf("%s: remove recovery state: %w", item.name, err)
+			break
+		}
+		if err := removeRecoveryFile(item.recovery.backupBinding.Resolved, remove); err != nil {
+			cleanupErr = fmt.Errorf("%s: remove backup: %w", item.name, err)
+			break
+		}
+	}
+	if cleanupErr == nil {
+		return recoveries, nil
+	}
+	restored := make([]namedRecovery, len(recoveries))
+	for index, item := range recoveries {
+		recovery, err := restoreRecoveryArtifacts(item.recovery)
+		if err != nil {
+			return nil, errors.Join(cleanupErr,
+				fmt.Errorf("%s: restore recovery artifacts: %w", item.name, err))
+		}
+		restored[index] = namedRecovery{name: item.name, recovery: recovery}
+	}
+	return restored, cleanupErr
+}
+
+func removeRecoveryFile(path string, remove func(string) error) error {
+	if err := remove(path); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func restoreRecoveryArtifacts(recovery recoveryPlan) (recoveryPlan, error) {
+	backupExists, err := regularFileExists(recovery.backup)
+	if err != nil {
+		return recovery, err
+	}
+	if backupExists {
+		if err := validateBoundContents(
+			recovery.backup, recovery.backupContents, recovery.backupBinding,
+		); err != nil {
+			return recovery, fmt.Errorf("retained backup changed: %w", err)
+		}
+	} else {
+		contents, _, writeErr := writeBoundFileExact(
+			recovery.backupBinding.Resolved,
+			recovery.backupContents,
+			os.FileMode(recovery.record.Backup.Mode),
+		)
+		if writeErr != nil {
+			return recovery, writeErr
+		}
+		if !bytes.Equal(contents, recovery.backupContents) {
+			return recovery, errors.New("restored backup content changed")
+		}
+	}
+	backupContents, backupBinding, err := readBoundFile(recovery.backup)
+	if err != nil {
+		return recovery, err
+	}
+	if !bytes.Equal(backupContents, recovery.backupContents) {
+		return recovery, errors.New("restored backup content changed")
+	}
+
+	stateExists, err := regularFileExists(recovery.state)
+	if err != nil {
+		return recovery, err
+	}
+	if stateExists {
+		if err := validateBoundContents(
+			recovery.state, recovery.stateContents, recovery.stateBinding,
+		); err != nil {
+			return recovery, fmt.Errorf("retained recovery state changed: %w", err)
+		}
+	}
+	recovery.record.Backup = backupBinding
+	_, _, err = writeRecoveryState(recovery.stateBinding.Resolved, recovery.record)
+	if err != nil {
+		return recovery, err
+	}
+	stateContents, stateBinding, err := readBoundFile(recovery.state)
+	if err != nil {
+		return recovery, err
+	}
+	recovery.backupBinding = backupBinding
+	recovery.backupResolved = backupBinding.Resolved
+	recovery.stateContents = stateContents
+	recovery.stateBinding = stateBinding
+	recovery.stateResolved = stateBinding.Resolved
+	recovery.exists = true
+	return recovery, nil
 }
 
 func (c entryChange) validate() error {
-	return validateBoundContents(c.target.path, c.original, c.binding)
+	if err := validateBoundContents(c.target.path, c.original, c.binding); err != nil {
+		return err
+	}
+	return c.recovery.validateArtifacts()
 }
 
 func validateEntryChanges(changes []entryChange) error {
@@ -774,7 +893,7 @@ func writeBesideBackup(c client, original, updated []byte) error {
 	return applyEntryChanges([]entryChange{
 		{
 			target: c, original: original, updated: updated,
-			binding: binding, recovery: recovery,
+			originalMode: binding.Mode, binding: binding, recovery: recovery,
 		},
 	})
 }
@@ -815,66 +934,131 @@ func preflightBackupDestination(path string) error {
 	return nil
 }
 
-// atomicWriteFile replaces path only after its complete contents are durable
-// in a sibling temporary file. Existing symlinks continue to point at their
-// targets rather than being replaced by the rename.
-func atomicWriteFile(path string, contents []byte, defaultMode os.FileMode) error {
+type stagedFile struct {
+	temporary string
+	target    string
+	identity  physicalIdentity
+	mode      os.FileMode
+}
+
+func resolveWriteTarget(path string) (string, error) {
 	target := path
 	resolved, err := filepath.EvalSymlinks(path)
 	if err == nil {
 		target = resolved
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("resolve destination: %w", err)
+		return "", fmt.Errorf("resolve destination: %w", err)
 	} else if info, lstatErr := os.Lstat(path); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("destination is a dangling symlink")
+		return "", errors.New("destination is a dangling symlink")
 	} else if lstatErr != nil && !errors.Is(lstatErr, os.ErrNotExist) {
-		return fmt.Errorf("inspect destination: %w", lstatErr)
+		return "", fmt.Errorf("inspect destination: %w", lstatErr)
 	}
+	return target, nil
+}
 
-	mode := defaultMode
+func atomicWriteMode(path string, defaultMode os.FileMode) (os.FileMode, error) {
+	target, err := resolveWriteTarget(path)
+	if err != nil {
+		return 0, err
+	}
+	mode := defaultMode.Perm()
 	if info, statErr := os.Stat(target); statErr == nil {
 		if !info.Mode().IsRegular() {
-			return errors.New("destination is not a regular file")
+			return 0, errors.New("destination is not a regular file")
 		}
 		mode = info.Mode().Perm()
 	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return fmt.Errorf("inspect destination: %w", statErr)
+		return 0, fmt.Errorf("inspect destination: %w", statErr)
 	}
+	return mode, nil
+}
 
+func stageAtomicFile(path string, contents []byte, mode os.FileMode) (stagedFile, error) {
+	target, err := resolveWriteTarget(path)
+	if err != nil {
+		return stagedFile{}, err
+	}
 	temporary, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".mcp-swap-*")
 	if err != nil {
-		return err
+		return stagedFile{}, err
 	}
 	temporaryPath := temporary.Name()
-	removeTemporary := true
-	defer func() {
+	cleanup := func() {
 		_ = temporary.Close()
-		if removeTemporary {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-
-	if err := temporary.Chmod(mode); err != nil {
-		return err
+		_ = os.Remove(temporaryPath)
+	}
+	if err := temporary.Chmod(mode.Perm()); err != nil {
+		cleanup()
+		return stagedFile{}, err
 	}
 	written, err := temporary.Write(contents)
 	if err != nil {
-		return err
+		cleanup()
+		return stagedFile{}, err
 	}
 	if written != len(contents) {
-		return io.ErrShortWrite
+		cleanup()
+		return stagedFile{}, io.ErrShortWrite
 	}
 	if err := temporary.Sync(); err != nil {
-		return err
+		cleanup()
+		return stagedFile{}, err
 	}
 	if err := temporary.Close(); err != nil {
+		cleanup()
+		return stagedFile{}, err
+	}
+	identity, err := physicalIdentityAt(temporaryPath, true)
+	if err != nil {
+		cleanup()
+		return stagedFile{}, err
+	}
+	return stagedFile{
+		temporary: temporaryPath, target: target,
+		identity: identity, mode: mode.Perm(),
+	}, nil
+}
+
+func (s *stagedFile) cleanup() {
+	if s.temporary != "" {
+		_ = os.Remove(s.temporary)
+		s.temporary = ""
+	}
+}
+
+func (s *stagedFile) publish() (bool, error) {
+	if s.temporary == "" {
+		return false, errors.New("staged file is unavailable")
+	}
+	if err := os.Rename(s.temporary, s.target); err != nil {
+		return false, err
+	}
+	s.temporary = ""
+	if err := syncDirectory(filepath.Dir(s.target)); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+// atomicWriteFile replaces path only after its complete contents are durable
+// in a sibling temporary file. Existing symlinks continue to point at their
+// targets rather than being replaced by the rename.
+func atomicWriteFile(path string, contents []byte, defaultMode os.FileMode) error {
+	mode, err := atomicWriteMode(path, defaultMode)
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(temporaryPath, target); err != nil {
+	return atomicWriteFileExact(path, contents, mode)
+}
+
+func atomicWriteFileExact(path string, contents []byte, mode os.FileMode) error {
+	staged, err := stageAtomicFile(path, contents, mode)
+	if err != nil {
 		return err
 	}
-	removeTemporary = false
-	return nil
+	defer staged.cleanup()
+	_, err = staged.publish()
+	return err
 }
 
 func serverEntry(configuration map[string]any, key string) (map[string]any, bool) {
