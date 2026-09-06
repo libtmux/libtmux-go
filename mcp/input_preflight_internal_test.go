@@ -17,6 +17,27 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+func withoutCallerEnvironment(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{"TMUX", "TMUX_PANE"} {
+		t.Setenv(name, "")
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func setPaneInputCallerEnvironment(t *testing.T, server tmux.Server, pane tmux.Pane) {
+	t.Helper()
+	pid, present := pane.Formats().Raw("pid")
+	if !present {
+		t.Fatal("pane snapshot has no server pid")
+	}
+	t.Setenv("TMUX", server.SocketPath()+","+pid+","+
+		strings.TrimPrefix(pane.SessionID().String(), "$"))
+	t.Setenv("TMUX_PANE", pane.ID().String())
+}
+
 func TestStrictPaneInputFormatsFailClosed(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -69,44 +90,87 @@ func TestAttendedPaneInputMembershipFailsClosed(t *testing.T) {
 		return rawPaneFormat{Value: value, Present: true}
 	}
 	valid := clientAttentionSnapshotRow{
-		Control: strict("0"), PaneID: strict("%2"), Zoomed: strict("0"),
+		Control: strict("0"), SessionID: strict("$1"), WindowID: strict("@1"),
+		WindowIndex: strict("0"), PaneID: strict("%2"), Zoomed: strict("0"),
 	}
-	window := map[string]struct{}{"%2": {}, "%3": {}}
+	panes := []paneInputPlacement{
+		{SessionID: "$1", WindowID: "@1", WindowIndex: 0, PaneID: "%2"},
+		{SessionID: "$1", WindowID: "@1", WindowIndex: 0, PaneID: "%3"},
+		{SessionID: "$1", WindowID: "@2", WindowIndex: 1, PaneID: "%4"},
+	}
 
-	attended, err := attendedPaneIDs([]clientAttentionSnapshotRow{valid}, window)
+	attended, err := attendedPaneIDs([]clientAttentionSnapshotRow{valid}, panes, "@1")
 	if err != nil || !attended["%2"] || !attended["%3"] {
 		t.Fatalf("visible window attendance = (%v, %v)", attended, err)
 	}
 	zoomed := valid
 	zoomed.Zoomed = strict("1")
-	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{zoomed}, window)
+	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{zoomed}, panes, "@1")
 	if err != nil || !attended["%2"] || attended["%3"] {
 		t.Fatalf("zoomed attendance = (%v, %v)", attended, err)
 	}
-	control := valid
-	control.Control = strict("1")
-	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{control}, window)
+	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{{
+		Control: strict("1"),
+	}}, panes, "@1")
 	if err != nil || len(attended) != 0 {
 		t.Fatalf("control client attendance = (%v, %v)", attended, err)
+	}
+	otherWindow := valid
+	otherWindow.WindowID = strict("@2")
+	otherWindow.WindowIndex = strict("1")
+	otherWindow.PaneID = strict("%4")
+	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{otherWindow}, panes, "@1")
+	if err != nil || len(attended) != 0 {
+		t.Fatalf("other-window attendance = (%v, %v)", attended, err)
+	}
+	linked := valid
+	linked.SessionID = strict("$2")
+	linked.WindowIndex = strict("7")
+	linkedPanes := append(slices.Clone(panes),
+		paneInputPlacement{SessionID: "$2", WindowID: "@1", WindowIndex: 7, PaneID: "%2"},
+		paneInputPlacement{SessionID: "$2", WindowID: "@1", WindowIndex: 7, PaneID: "%3"},
+	)
+	attended, err = attendedPaneIDs([]clientAttentionSnapshotRow{linked}, linkedPanes, "@1")
+	if err != nil || !attended["%2"] || !attended["%3"] {
+		t.Fatalf("linked-window attendance = (%v, %v)", attended, err)
 	}
 
 	for _, test := range []struct {
 		name string
 		row  clientAttentionSnapshotRow
 	}{
-		{name: "missing control", row: clientAttentionSnapshotRow{PaneID: strict("%2"), Zoomed: strict("0")}},
-		{name: "malformed control", row: clientAttentionSnapshotRow{Control: strict("no"), PaneID: strict("%2"), Zoomed: strict("0")}},
-		{name: "missing pane", row: clientAttentionSnapshotRow{Control: strict("0"), Zoomed: strict("0")}},
-		{name: "noncanonical pane", row: clientAttentionSnapshotRow{Control: strict("0"), PaneID: strict("%02"), Zoomed: strict("0")}},
-		{name: "missing zoom", row: clientAttentionSnapshotRow{Control: strict("0"), PaneID: strict("%2")}},
-		{name: "malformed zoom", row: clientAttentionSnapshotRow{Control: strict("0"), PaneID: strict("%2"), Zoomed: strict("2")}},
+		{name: "missing control", row: clientAttentionSnapshotRow{}},
+		{name: "malformed control", row: clientAttentionSnapshotRow{Control: strict("no")}},
+		{name: "missing session", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.SessionID = rawPaneFormat{} })},
+		{name: "noncanonical session", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.SessionID = strict("$01") })},
+		{name: "missing window", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.WindowID = rawPaneFormat{} })},
+		{name: "noncanonical window", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.WindowID = strict("@01") })},
+		{name: "missing window index", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.WindowIndex = rawPaneFormat{} })},
+		{name: "noncanonical window index", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.WindowIndex = strict("01") })},
+		{name: "missing pane", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.PaneID = rawPaneFormat{} })},
+		{name: "noncanonical pane", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.PaneID = strict("%02") })},
+		{name: "missing zoom", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.Zoomed = rawPaneFormat{} })},
+		{name: "malformed zoom", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.Zoomed = strict("2") })},
+		{name: "zoomed unknown pane", row: mutateClientAttention(zoomed, func(row *clientAttentionSnapshotRow) { row.PaneID = strict("%9") })},
+		{name: "session mismatch", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.SessionID = strict("$2") })},
+		{name: "window mismatch", row: mutateClientAttention(valid, func(row *clientAttentionSnapshotRow) { row.WindowID = strict("@2") })},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := attendedPaneIDs([]clientAttentionSnapshotRow{test.row}, window); err == nil {
+			if _, err := attendedPaneIDs(
+				[]clientAttentionSnapshotRow{test.row}, panes, "@1",
+			); err == nil {
 				t.Fatal("attendedPaneIDs() accepted an incomplete or malformed client row")
 			}
 		})
 	}
+}
+
+func mutateClientAttention(
+	row clientAttentionSnapshotRow,
+	mutate func(*clientAttentionSnapshotRow),
+) clientAttentionSnapshotRow {
+	mutate(&row)
+	return row
 }
 
 func TestConfiguredPaneInputMembership(t *testing.T) {
@@ -222,6 +286,7 @@ func TestConfiguredPaneInputMembership(t *testing.T) {
 func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	withoutCallerEnvironment(t)
 	target, window, panes := threePaneInputFixture(ctx, t)
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
@@ -244,6 +309,21 @@ func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 	if raw, ok := got.Source.Formats().Raw("pane_synchronized"); !ok || raw != "1" {
 		t.Fatalf("fresh source pane_synchronized = (%q, %t), want (1, true)", raw, ok)
 	}
+	if got.Identity.endpoint != resolvePath(target.SocketPath()) ||
+		got.Identity.serverPID == 0 || got.Identity.serverStartTime == 0 ||
+		got.Caller.state != paneInputCallerDetached ||
+		!slices.Equal(got.Identities(), []paneInputIdentity{
+			{
+				endpoint: got.Identity.endpoint, serverPID: got.Identity.serverPID,
+				serverStartTime: got.Identity.serverStartTime, paneID: want[0],
+			},
+			{
+				endpoint: got.Identity.endpoint, serverPID: got.Identity.serverPID,
+				serverStartTime: got.Identity.serverStartTime, paneID: want[1],
+			},
+		}) {
+		t.Fatalf("configured preflight identity = %+v", got)
+	}
 
 	targetOnly, err := instance.tools.preflightPaneInput(
 		callCtx, panes[0].ID().String(), "", paneInputTargetOnly, "paste_text",
@@ -265,13 +345,64 @@ func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestPaneInputSourceComesFromGuardSnapshot(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	if _, err := panes[0].Select(ctx, tmux.PaneSelectRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	instance := mustInternalMCPServer(t, target)
+	defaults := defaultMCPDependencies()
+	instance.runtime.deps.snapshot = func(
+		snapshotCtx context.Context,
+		server tmux.Server,
+	) (tmux.Snapshot, error) {
+		if _, err := panes[1].Select(snapshotCtx, tmux.PaneSelectRequest{}); err != nil {
+			return tmux.Snapshot{}, err
+		}
+		return defaults.snapshot(snapshotCtx, server)
+	}
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	preflight, err := instance.tools.preflightPaneInput(
+		callCtx, "", "work", paneInputConfigured, "send_keys",
+	)
+	if err != nil || preflight.Source.ID() != panes[1].ID() {
+		t.Fatalf("guard-snapshot source = (%s, %v), want %s",
+			preflight.Source.ID(), err, panes[1].ID())
+	}
+}
+
+//libtmux:real-tmux
 func TestConfirmCallerInputPreflight(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	target, _, panes := threePaneInputFixture(ctx, t)
-	t.Setenv("TMUX", target.SocketPath()+",0,0")
+	target, window, panes := threePaneInputFixture(ctx, t)
+	if err := window.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	serverPID, ok := panes[1].Formats().Raw("pid")
+	if !ok {
+		t.Fatal("pane snapshot has no server pid")
+	}
+	t.Setenv("TMUX", target.SocketPath()+","+serverPID+","+
+		strings.TrimPrefix(panes[1].SessionID().String(), "$"))
 	t.Setenv("TMUX_PANE", panes[1].ID().String())
 	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	preflight, err := instance.tools.preflightPaneInput(
+		callCtx, panes[0].ID().String(), "", paneInputConfigured, "send_keys",
+	)
+	if err != nil || preflight.Caller.state != paneInputCallerSelected {
+		t.Fatalf("selected caller preflight = (%+v, %v)", preflight, err)
+	}
+	if err := os.Unsetenv("TMUX"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Unsetenv("TMUX_PANE"); err != nil {
+		t.Fatal(err)
+	}
 
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	serverSession, err := instance.Connect(ctx, AssumeResponseCommit(serverTransport), nil)
@@ -292,12 +423,6 @@ func TestConfirmCallerInputPreflight(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = clientSession.Close() })
 	request := &sdk.CallToolRequest{Session: serverSession.sdk}
-	preflight := paneInputPreflight{
-		Panes: []tmux.Pane{panes[0], panes[1], panes[2]},
-		ConfiguredIDs: []string{
-			panes[0].ID().String(), panes[1].ID().String(), panes[2].ID().String(),
-		},
-	}
 	if err := instance.tools.confirmCallerInputPreflight(
 		ctx, request, preflight, "sending keys",
 	); err != nil {
@@ -311,13 +436,21 @@ func TestConfirmCallerInputPreflight(t *testing.T) {
 	); err != nil || prompts != 1 {
 		t.Fatalf("remembered caller confirmation = (%v, %d prompts)", err, prompts)
 	}
+	changedGeneration := preflight
+	changedGeneration.Caller.serverStartTime++
+	if err := instance.tools.confirmCallerInputPreflight(
+		ctx, request, changedGeneration, "sending keys",
+	); err != nil || prompts != 2 {
+		t.Fatalf("changed-generation confirmation = (%v, %d prompts)", err, prompts)
+	}
 
 	outside := paneInputPreflight{
 		Panes: []tmux.Pane{panes[0]}, ConfiguredIDs: []string{panes[0].ID().String()},
+		Caller: preflight.Caller,
 	}
 	if err := instance.tools.confirmCallerInputPreflight(
 		ctx, request, outside, "sending keys",
-	); err != nil || prompts != 1 {
+	); err != nil || prompts != 2 {
 		t.Fatalf("outside-caller confirmation = (%v, %d prompts)", err, prompts)
 	}
 }
@@ -571,6 +704,50 @@ func TestRunCommandReservationIsSharedAcrossInstances(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestPaneInputRefusesPlacementTransition(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, window, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	var snapshots, dispatches atomic.Int32
+	instance.runtime.deps.snapshot = func(
+		snapshotCtx context.Context,
+		server tmux.Server,
+	) (tmux.Snapshot, error) {
+		if snapshots.Add(1) == 2 {
+			index := 7
+			if _, err := window.Move(snapshotCtx, tmux.MoveWindowRequest{
+				TargetIndex: &index,
+			}); err != nil {
+				return tmux.Snapshot{}, err
+			}
+		}
+		return defaults.snapshot(snapshotCtx, server)
+	}
+	instance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		dispatches.Add(1)
+		return nil
+	}
+
+	_, _, err := instance.tools.sendKeysBatch(
+		callCtx, nil,
+		sendKeysBatchInput{PaneID: panes[0].ID().String(), Keys: []string{"C-l"}},
+		"send_keys",
+	)
+	if err == nil || dispatches.Load() != 0 {
+		t.Fatalf("placement transition = (%v, dispatches %d), want refusal",
+			err, dispatches.Load())
+	}
+}
+
+//libtmux:real-tmux
 func TestTimedOutRunKeepsThePaneReservedUntilCompletion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -701,18 +878,20 @@ func requireRunCommandAvailable(
 func TestRunCommandRepeatsCallerProtectionAtDispatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
 	instance := mustInternalMCPServer(t, target)
 	runRoot := t.TempDir()
 	t.Setenv("TMPDIR", runRoot)
-	instance.tools.caller = callerIdentity{inside: false}
-	instance.tools.callerCached = true
+	serverPID, ok := panes[0].Formats().Raw("pid")
+	if !ok {
+		t.Fatal("pane snapshot has no server pid")
+	}
+	callerTMUX := target.SocketPath() + "," + serverPID + "," +
+		strings.TrimPrefix(panes[0].SessionID().String(), "$")
 	instance.runtime.deps.beforeRunDispatch = func(context.Context) error {
-		instance.tools.callerMutex.Lock()
-		instance.tools.caller = callerIdentity{
-			paneID: panes[0].ID().String(), socket: resolvePath(target.SocketPath()), inside: true,
-		}
-		instance.tools.callerMutex.Unlock()
+		t.Setenv("TMUX", callerTMUX)
+		t.Setenv("TMUX_PANE", panes[0].ID().String())
 		return nil
 	}
 	var dispatches atomic.Int32
@@ -729,12 +908,52 @@ func TestRunCommandRepeatsCallerProtectionAtDispatch(t *testing.T) {
 		"pane_id": panes[0].ID().String(), "command": "true", "timeout": 5,
 	})
 	if !result.IsError || dispatches.Load() != 0 ||
-		!strings.Contains(callToolResultText(result), "cannot be asked") {
+		!strings.Contains(callToolResultText(result), "caller changed") {
 		t.Fatalf("caller transition = (error %t, dispatches %d, text %q)",
 			result.IsError, dispatches.Load(), callToolResultText(result))
 	}
 	if entries, err := os.ReadDir(runRoot); err != nil || len(entries) != 0 {
 		t.Fatalf("caller-refused setup residue = (%v, %v)", entryNames(entries), err)
+	}
+}
+
+//libtmux:real-tmux
+func TestRunCommandRefusesShellIdentityTransition(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	instance.runtime.deps.beforeRunDispatch = func(barrierCtx context.Context) error {
+		command := "exec env PS1=" + shellQuote(tmuxtest.ShellPrompt) +
+			" /bin/bash --noprofile --norc -i"
+		pane, err := panes[0].Respawn(barrierCtx, tmux.RespawnRequest{
+			Command: &command, Kill: true,
+		})
+		if err != nil {
+			return err
+		}
+		tmuxtest.WaitForShellReady(barrierCtx, t, pane)
+		return nil
+	}
+	var dispatches atomic.Int32
+	instance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		dispatches.Add(1)
+		return nil
+	}
+
+	_, _, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+		PaneID: panes[0].ID().String(), Command: "true", TimeoutSeconds: 5,
+	})
+	if err == nil || !strings.Contains(err.Error(), "state or placement changed") ||
+		dispatches.Load() != 0 {
+		t.Fatalf("shell transition = (%v, dispatches %d), want refusal",
+			err, dispatches.Load())
 	}
 }
 
@@ -784,6 +1003,7 @@ func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 func TestPasteRechecksTargetAfterBufferSetup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
@@ -809,6 +1029,44 @@ func TestPasteRechecksTargetAfterBufferSetup(t *testing.T) {
 	})
 	if err == nil || output.Bytes != 0 {
 		t.Fatalf("paste after mode transition = (%+v, %v), want refusal", output, err)
+	}
+	if bufferName == nil {
+		t.Fatal("paste did not stage its private buffer before the transition")
+	}
+	if _, err := target.ShowBuffer(ctx, bufferName); err == nil {
+		t.Fatalf("refused paste left buffer %q behind", *bufferName)
+	}
+}
+
+//libtmux:real-tmux
+func TestPasteRefusesPlacementTransition(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, window, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	var bufferName *string
+	instance.runtime.deps.setBuffer = func(
+		bufferCtx context.Context,
+		server tmux.Server,
+		request tmux.SetBufferRequest,
+	) error {
+		bufferName = request.Name
+		if err := defaults.setBuffer(bufferCtx, server, request); err != nil {
+			return err
+		}
+		index := 7
+		_, err := window.Move(bufferCtx, tmux.MoveWindowRequest{TargetIndex: &index})
+		return err
+	}
+
+	_, output, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: "must-not-paste",
+	})
+	if err == nil || output.Bytes != 0 {
+		t.Fatalf("paste after placement transition = (%+v, %v), want refusal", output, err)
 	}
 	if bufferName == nil {
 		t.Fatal("paste did not stage its private buffer before the transition")

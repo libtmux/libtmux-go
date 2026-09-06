@@ -58,12 +58,24 @@ func (t *tools) confirmCallerInputPreflight(
 	preflight paneInputPreflight,
 	action string,
 ) error {
+	if preflight.Caller.state == paneInputCallerDetached ||
+		preflight.Caller.state == paneInputCallerForeign {
+		return nil
+	}
+	if preflight.Caller.state != paneInputCallerSelected {
+		return errors.New("configured pane input caller identity is malformed")
+	}
 	panes := append([]tmux.Pane(nil), preflight.Panes...)
 	slices.SortFunc(panes, func(left, right tmux.Pane) int {
 		return strings.Compare(left.ID().String(), right.ID().String())
 	})
 	for _, pane := range panes {
-		if err := t.confirmCallerWrite(ctx, request, pane, action, true); err != nil {
+		if pane.ID().String() != preflight.Caller.paneID {
+			continue
+		}
+		if err := t.confirmKnownCallerWrite(
+			ctx, request, pane, action, true, paneInputConsentKey(preflight.Caller),
+		); err != nil {
 			return fmt.Errorf(
 				"configured pane input membership %v: %w",
 				preflight.ConfiguredIDs, err,
@@ -71,6 +83,14 @@ func (t *tools) confirmCallerInputPreflight(
 		}
 	}
 	return nil
+}
+
+func paneInputConsentKey(caller paneInputCaller) string {
+	return fmt.Sprintf(
+		"pane-input:%s:%d:%d:%s:%s",
+		caller.socket, caller.serverPID, caller.serverStartTime,
+		caller.sessionID, caller.paneID,
+	)
 }
 
 // confirmCallerWrite asks the person before a write lands in the caller pane.
@@ -95,9 +115,21 @@ func (t *tools) confirmCallerWrite(
 	if isCaller == nil || !*isCaller {
 		return nil
 	}
+	return t.confirmKnownCallerWrite(
+		ctx, request, pane, action, remembers, pane.ID().String(),
+	)
+}
 
+func (t *tools) confirmKnownCallerWrite(
+	ctx context.Context,
+	request *mcp.CallToolRequest,
+	pane tmux.Pane,
+	action string,
+	remembers bool,
+	consentKey string,
+) error {
 	identifier := pane.ID().String()
-	if remembers && t.allowed(request, identifier) {
+	if remembers && request != nil && request.Session != nil && t.allowed(request, consentKey) {
 		return nil
 	}
 	// "there" belongs to a write and reads wrong on a kill, which reaches the
@@ -106,15 +138,19 @@ func (t *tools) confirmCallerWrite(
 	if !remembers {
 		reaches, guard = "ending", callerEndGuard
 	}
-	return t.askAboutTheCaller(ctx, request, identifier,
+	unaskable := fmt.Sprintf("%s is the pane this server is running in, so %s it "+
+		"reaches the terminal you are talking to it through. This client "+
+		"cannot be asked to allow it, so it is refused: name another pane, "+
+		"make one with split_window or create_session, or list_panes to find "+
+		"one where isCaller is false", identifier, reaches)
+	if request == nil || request.Session == nil {
+		return errors.New(unaskable)
+	}
+	return t.askAboutTheCaller(ctx, request, identifier, consentKey,
 		fmt.Sprintf("%s is the pane this MCP server is running in. %s it "+
 			"reaches the terminal you are talking to it through. Allow it?",
 			identifier, capitalise(action)),
-		fmt.Sprintf("%s is the pane this server is running in, so %s it "+
-			"reaches the terminal you are talking to it through. This client "+
-			"cannot be asked to allow it, so it is refused: name another pane, "+
-			"make one with split_window or create_session, or list_panes to find "+
-			"one where isCaller is false", identifier, reaches),
+		unaskable,
 		fmt.Sprintf(guard, identifier, reaches), remembers)
 }
 
@@ -134,7 +170,7 @@ func (t *tools) confirmCallerLoss(
 	if !holds || request == nil || request.Session == nil {
 		return nil
 	}
-	return t.askAboutTheCaller(ctx, request, subject,
+	return t.askAboutTheCaller(ctx, request, subject, subject,
 		fmt.Sprintf("%s holds the pane this MCP server is running in. Ending it "+
 			"will close the terminal you are talking to it through. Allow it?",
 			subject),
@@ -178,7 +214,7 @@ func (t *tools) callerPaneOnThisServer(ctx context.Context) (tmux.Pane, bool, er
 func (t *tools) askAboutTheCaller(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
-	identifier, question, unaskable, declined string,
+	identifier, consentKey, question, unaskable, declined string,
 	remembers bool,
 ) error {
 	// A yes-or-no question, except where the yes can be kept: the client
@@ -214,7 +250,7 @@ func (t *tools) askAboutTheCaller(
 		return errors.New(declined)
 	}
 	if remember, ok := result.Content["remember"].(bool); ok && remember && remembers {
-		t.remember(request, identifier)
+		t.remember(request, consentKey)
 	}
 	return nil
 }

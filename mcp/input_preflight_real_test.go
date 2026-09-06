@@ -186,12 +186,7 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 	t.Run("caller source refuses before a buffer", func(t *testing.T) {
 		callerTarget, _, callerPanes := threePaneInputFixture(ctx, t)
 		instance := mustInternalMCPServer(t, callerTarget)
-		instance.tools.caller = callerIdentity{
-			paneID: callerPanes[0].ID().String(),
-			socket: resolvePath(callerTarget.SocketPath()),
-			inside: true,
-		}
-		instance.tools.callerCached = true
+		setPaneInputCallerEnvironment(t, callerTarget, callerPanes[0])
 		setBufferCalls := 0
 		instance.runtime.deps.setBuffer = func(
 			context.Context,
@@ -234,12 +229,7 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 			t.Fatal(err)
 		}
 		instance := mustInternalMCPServer(t, callerTarget)
-		instance.tools.caller = callerIdentity{
-			paneID: callerPanes[0].ID().String(),
-			socket: resolvePath(callerTarget.SocketPath()),
-			inside: true,
-		}
-		instance.tools.callerCached = true
+		setPaneInputCallerEnvironment(t, callerTarget, callerPanes[0])
 		prompts, buffers := 0, 0
 		setBuffer := instance.runtime.deps.setBuffer
 		instance.runtime.deps.setBuffer = func(
@@ -273,12 +263,7 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 			t.Fatal(err)
 		}
 		instance := mustInternalMCPServer(t, callerTarget)
-		instance.tools.caller = callerIdentity{
-			paneID: callerPanes[1].ID().String(),
-			socket: resolvePath(callerTarget.SocketPath()),
-			inside: true,
-		}
-		instance.tools.callerCached = true
+		setPaneInputCallerEnvironment(t, callerTarget, callerPanes[1])
 		prompts, buffers := 0, 0
 		setBuffer := instance.runtime.deps.setBuffer
 		instance.runtime.deps.setBuffer = func(
@@ -311,12 +296,7 @@ func TestSendRechecksAfterCallerConfirmation(t *testing.T) {
 	defer cancel()
 	target, _, panes := threePaneInputFixture(ctx, t)
 	instance := mustInternalMCPServer(t, target)
-	instance.tools.caller = callerIdentity{
-		paneID: panes[0].ID().String(),
-		socket: resolvePath(target.SocketPath()),
-		inside: true,
-	}
-	instance.tools.callerCached = true
+	setPaneInputCallerEnvironment(t, target, panes[0])
 	t.Cleanup(func() {
 		_ = panes[0].CopyMode(context.Background(), tmux.CopyModeRequest{Cancel: true})
 	})

@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -21,17 +24,42 @@ type rawPaneFormat struct {
 }
 
 type paneInputSnapshotRow struct {
-	PaneID       string
-	Synchronized rawPaneFormat
-	Dead         rawPaneFormat
-	InputOff     rawPaneFormat
-	InMode       rawPaneFormat
+	PaneID         string
+	Synchronized   rawPaneFormat
+	Dead           rawPaneFormat
+	InputOff       rawPaneFormat
+	InMode         rawPaneFormat
+	CurrentCommand rawPaneFormat
 }
 
 type clientAttentionSnapshotRow struct {
-	Control rawPaneFormat
-	PaneID  rawPaneFormat
-	Zoomed  rawPaneFormat
+	Control     rawPaneFormat
+	SessionID   rawPaneFormat
+	WindowID    rawPaneFormat
+	WindowIndex rawPaneFormat
+	PaneID      rawPaneFormat
+	Zoomed      rawPaneFormat
+}
+
+type paneInputPlacement struct {
+	SessionID   string
+	WindowID    string
+	WindowIndex int
+	PaneID      string
+}
+
+type paneInputMemberSignature struct {
+	Placement      paneInputPlacement
+	Synchronized   string
+	Dead           string
+	InputOff       string
+	InMode         string
+	CurrentCommand rawPaneFormat
+}
+
+type paneInputTransitionSignature struct {
+	Source  paneInputMemberSignature
+	Members []paneInputMemberSignature
 }
 
 type paneInputMembershipKind uint8
@@ -45,6 +73,40 @@ type paneInputPreflight struct {
 	Source        tmux.Pane
 	Panes         []tmux.Pane
 	ConfiguredIDs []string
+	Identity      paneInputServerIdentity
+	Caller        paneInputCaller
+	Signature     paneInputTransitionSignature
+}
+
+type paneInputServerIdentity struct {
+	endpoint        string
+	serverPID       uint64
+	serverStartTime uint64
+}
+
+type paneInputIdentity struct {
+	endpoint        string
+	serverPID       uint64
+	serverStartTime uint64
+	paneID          string
+}
+
+func (p paneInputPreflight) Identities() []paneInputIdentity {
+	identities := make([]paneInputIdentity, 0, len(p.ConfiguredIDs))
+	for _, paneID := range p.ConfiguredIDs {
+		identities = append(identities, paneInputIdentity{
+			endpoint: p.Identity.endpoint, serverPID: p.Identity.serverPID,
+			serverStartTime: p.Identity.serverStartTime, paneID: paneID,
+		})
+	}
+	return identities
+}
+
+func samePaneInputPreflight(initial, final paneInputPreflight) bool {
+	return initial.Identity == final.Identity && initial.Caller == final.Caller &&
+		slices.Equal(initial.ConfiguredIDs, final.ConfiguredIDs) &&
+		initial.Signature.Source == final.Signature.Source &&
+		slices.Equal(initial.Signature.Members, final.Signature.Members)
 }
 
 func parseStrictPaneFlag(name string, raw rawPaneFormat) (bool, error) {
@@ -141,18 +203,19 @@ func (t *tools) preflightPaneInput(
 	tool string,
 ) (paneInputPreflight, error) {
 	empty := paneInputPreflight{ConfiguredIDs: []string{}}
-	resolved, err := t.resolvePane(ctx, id, sessionName)
-	if err != nil {
-		return empty, err
-	}
-	snapshot, err := t.tmux(ctx).Snapshot(ctx)
+	snapshot, err := t.runtime.deps.snapshot(ctx, t.tmux(ctx))
 	if err != nil {
 		return empty, fmt.Errorf("%s preflight pane and client snapshot: %w", tool, err)
+	}
+	resolved, err := resolvePaneInputSource(snapshot, id, sessionName)
+	if err != nil {
+		return empty, err
 	}
 	panes := make([]tmux.Pane, 0)
 	for _, pane := range snapshot.Panes() {
 		if pane.SessionID() == resolved.SessionID() &&
-			pane.WindowID() == resolved.WindowID() {
+			pane.WindowID() == resolved.WindowID() &&
+			pane.WindowIndex() == resolved.WindowIndex() {
 			panes = append(panes, pane)
 		}
 	}
@@ -161,11 +224,12 @@ func (t *tools) preflightPaneInput(
 	for _, pane := range panes {
 		paneID := pane.ID().String()
 		rows = append(rows, paneInputSnapshotRow{
-			PaneID:       paneID,
-			Synchronized: paneRawFormat(pane, "pane_synchronized"),
-			Dead:         paneRawFormat(pane, "pane_dead"),
-			InputOff:     paneRawFormat(pane, "pane_input_off"),
-			InMode:       paneRawFormat(pane, "pane_in_mode"),
+			PaneID:         paneID,
+			Synchronized:   paneRawFormat(pane, "pane_synchronized"),
+			Dead:           paneRawFormat(pane, "pane_dead"),
+			InputOff:       paneRawFormat(pane, "pane_input_off"),
+			InMode:         paneRawFormat(pane, "pane_in_mode"),
+			CurrentCommand: paneRawFormat(pane, "pane_current_command"),
 		})
 		byID[paneID] = pane
 	}
@@ -200,6 +264,9 @@ func (t *tools) preflightPaneInput(
 		if modeErr := requireSafePaneMode(source.InMode); modeErr != nil {
 			return empty, paneInputRefusal(tool, sourceID, modeErr)
 		}
+		if _, parseErr := parseStrictPaneFlag("pane_synchronized", source.Synchronized); parseErr != nil {
+			return empty, paneInputRefusal(tool, sourceID, parseErr)
+		}
 		ids = append(ids, sourceID)
 	} else {
 		ids, err = configuredPaneInputMembership(sourceID, rows)
@@ -207,7 +274,9 @@ func (t *tools) preflightPaneInput(
 			return empty, fmt.Errorf("%s refused: %w; capture_pane reads text without changing pane mode", tool, err)
 		}
 	}
-	attended, err := attendedPaneInputMembership(snapshot.Clients(), byID)
+	attended, err := attendedPaneInputMembership(
+		snapshot.Clients(), snapshot.Panes(), resolved.WindowID().String(),
+	)
 	if err != nil {
 		return empty, fmt.Errorf("%s refused: %w", tool, err)
 	}
@@ -225,63 +294,263 @@ func (t *tools) preflightPaneInput(
 		}
 		selected = append(selected, pane)
 	}
+	sourceSignature, err := paneInputSignature(byID[sourceID], rows)
+	if err != nil {
+		return empty, paneInputRefusal(tool, sourceID, err)
+	}
+	members := make([]paneInputMemberSignature, 0, len(selected))
+	for _, pane := range selected {
+		signature, signatureErr := paneInputSignature(pane, rows)
+		if signatureErr != nil {
+			return empty, paneInputRefusal(tool, pane.ID().String(), signatureErr)
+		}
+		members = append(members, signature)
+	}
+	identity, err := paneInputIdentityForSnapshot(snapshot, byID[sourceID])
+	if err != nil {
+		return empty, fmt.Errorf("%s refused: %w", tool, err)
+	}
+	tmuxVariable, tmuxPresent := os.LookupEnv("TMUX")
+	tmuxPane, panePresent := os.LookupEnv("TMUX_PANE")
+	caller, err := parsePaneInputCaller(tmuxVariable, tmuxPresent, tmuxPane, panePresent)
+	if err != nil {
+		return empty, fmt.Errorf("%s refused: %w", tool, err)
+	}
+	callerPanes := make([]paneInputCallerPane, 0, len(snapshot.Panes()))
+	for _, pane := range snapshot.Panes() {
+		callerPanes = append(callerPanes, paneInputCallerPane{
+			sessionID: pane.SessionID().String(), paneID: pane.ID().String(),
+		})
+	}
+	caller, err = classifyPaneInputCaller(caller, identity, callerPanes)
+	if err != nil {
+		return empty, fmt.Errorf("%s refused: %w", tool, err)
+	}
 	return paneInputPreflight{
 		Source: byID[sourceID], Panes: selected, ConfiguredIDs: ids,
+		Identity: identity, Caller: caller,
+		Signature: paneInputTransitionSignature{Source: sourceSignature, Members: members},
+	}, nil
+}
+
+func paneInputSignature(
+	pane tmux.Pane,
+	rows []paneInputSnapshotRow,
+) (paneInputMemberSignature, error) {
+	placement := paneInputPlacement{
+		SessionID: pane.SessionID().String(), WindowID: pane.WindowID().String(),
+		WindowIndex: pane.WindowIndex(), PaneID: pane.ID().String(),
+	}
+	if !canonicalPaneInputID(placement.SessionID, '$') ||
+		!canonicalPaneInputID(placement.WindowID, '@') ||
+		placement.WindowIndex < 0 || !canonicalPaneID(placement.PaneID) {
+		return paneInputMemberSignature{}, errors.New("pane placement is unavailable or malformed")
+	}
+	for _, row := range rows {
+		if row.PaneID != placement.PaneID {
+			continue
+		}
+		if _, err := parseStrictPaneFlag("pane_synchronized", row.Synchronized); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		if _, err := parseStrictPaneFlag("pane_dead", row.Dead); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		if _, err := parseStrictPaneFlag("pane_input_off", row.InputOff); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		if err := requireSafePaneMode(row.InMode); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		return paneInputMemberSignature{
+			Placement: placement, Synchronized: row.Synchronized.Value,
+			Dead: row.Dead.Value, InputOff: row.InputOff.Value, InMode: row.InMode.Value,
+			CurrentCommand: row.CurrentCommand,
+		}, nil
+	}
+	return paneInputMemberSignature{}, errors.New("pane is absent from its window placement")
+}
+
+func resolvePaneInputSource(
+	snapshot tmux.Snapshot,
+	id string,
+	sessionName string,
+) (tmux.Pane, error) {
+	if wanted := strings.TrimSpace(id); wanted != "" {
+		if !canonicalPaneID(wanted) {
+			return tmux.Pane{}, fmt.Errorf("pane id %q is not canonical", wanted)
+		}
+		pane, err := snapshot.PaneByID(tmux.PaneID(wanted))
+		return pane, notFound(err, "pane", wanted, "list_panes")
+	}
+
+	sessions := snapshot.Sessions()
+	var session tmux.Session
+	if wanted := strings.TrimSpace(sessionName); wanted != "" {
+		found := false
+		for _, candidate := range sessions {
+			name, present := candidate.Name()
+			if !present {
+				return tmux.Pane{}, errors.New("session_name is unavailable")
+			}
+			if name == wanted {
+				session, found = candidate, true
+				break
+			}
+		}
+		if !found {
+			return tmux.Pane{}, missing{fmt.Errorf(
+				"no session named %q on this tmux server; list_sessions reports the sessions that exist",
+				wanted,
+			)}
+		}
+	} else {
+		switch len(sessions) {
+		case 0:
+			return tmux.Pane{}, errors.New("the tmux server has no sessions")
+		case 1:
+			session = sessions[0]
+		default:
+			return tmux.Pane{}, fmt.Errorf(
+				"the tmux server has %d sessions, so sessionName is required", len(sessions),
+			)
+		}
+	}
+	pane, present := session.ActivePane()
+	if !present {
+		return tmux.Pane{}, fmt.Errorf("session %s has no unambiguous active pane", session.ID())
+	}
+	return pane, nil
+}
+
+func paneInputIdentityForSnapshot(
+	snapshot tmux.Snapshot,
+	source tmux.Pane,
+) (paneInputServerIdentity, error) {
+	selection, err := snapshot.Server().SocketSelection()
+	if err != nil {
+		return paneInputServerIdentity{}, fmt.Errorf("resolve pane input endpoint: %w", err)
+	}
+	endpoint, err := filepath.EvalSymlinks(selection.Path)
+	if err != nil {
+		return paneInputServerIdentity{}, fmt.Errorf("resolve pane input endpoint: %w", err)
+	}
+	if !filepath.IsAbs(endpoint) {
+		return paneInputServerIdentity{}, errors.New("resolved pane input endpoint is not absolute")
+	}
+	pidRaw, pidPresent := source.Formats().Raw("pid")
+	pid, err := parseCanonicalPaneInputNumber(pidRaw, false)
+	if err != nil || !pidPresent {
+		return paneInputServerIdentity{}, errors.New("server pid is unavailable or malformed")
+	}
+	startRaw, startPresent := source.Formats().Raw("start_time")
+	startTime, err := parseCanonicalPaneInputNumber(startRaw, false)
+	if err != nil || !startPresent {
+		return paneInputServerIdentity{}, errors.New("server start_time is unavailable or malformed")
+	}
+	return paneInputServerIdentity{
+		endpoint: endpoint, serverPID: pid, serverStartTime: startTime,
 	}, nil
 }
 
 func attendedPaneInputMembership(
 	clients []tmux.Client,
-	windowPanes map[string]tmux.Pane,
+	panes []tmux.Pane,
+	targetWindowID string,
 ) (map[string]bool, error) {
 	rows := make([]clientAttentionSnapshotRow, 0, len(clients))
 	for _, client := range clients {
 		rows = append(rows, clientAttentionSnapshotRow{
-			Control: clientRawFormat(client, "client_control_mode"),
-			PaneID:  clientRawFormat(client, "pane_id"),
-			Zoomed:  clientRawFormat(client, "window_zoomed_flag"),
+			Control:     clientRawFormat(client, "client_control_mode"),
+			SessionID:   clientRawFormat(client, "session_id"),
+			WindowID:    clientRawFormat(client, "window_id"),
+			WindowIndex: clientRawFormat(client, "window_index"),
+			PaneID:      clientRawFormat(client, "pane_id"),
+			Zoomed:      clientRawFormat(client, "window_zoomed_flag"),
 		})
 	}
-	windowPaneIDs := make(map[string]struct{}, len(windowPanes))
-	for paneID := range windowPanes {
-		windowPaneIDs[paneID] = struct{}{}
+	placements := make([]paneInputPlacement, 0, len(panes))
+	for _, pane := range panes {
+		placements = append(placements, paneInputPlacement{
+			SessionID: pane.SessionID().String(), WindowID: pane.WindowID().String(),
+			WindowIndex: pane.WindowIndex(), PaneID: pane.ID().String(),
+		})
 	}
-	return attendedPaneIDs(rows, windowPaneIDs)
+	return attendedPaneIDs(rows, placements, targetWindowID)
 }
 
 func attendedPaneIDs(
 	clients []clientAttentionSnapshotRow,
-	windowPanes map[string]struct{},
+	panes []paneInputPlacement,
+	targetWindowID string,
 ) (map[string]bool, error) {
+	if !canonicalPaneInputID(targetWindowID, '@') {
+		return nil, errors.New("target window_id is unavailable or malformed")
+	}
+	for _, pane := range panes {
+		if !canonicalPaneInputID(pane.SessionID, '$') ||
+			!canonicalPaneInputID(pane.WindowID, '@') ||
+			pane.WindowIndex < 0 || !canonicalPaneID(pane.PaneID) {
+			return nil, errors.New("pane placement is unavailable or malformed")
+		}
+	}
 	attended := make(map[string]bool)
 	for _, client := range clients {
 		control, err := parseStrictPaneFlag("client_control_mode", client.Control)
 		if err != nil {
 			return nil, err
 		}
-		paneRaw := client.PaneID
-		if !paneRaw.Present || !canonicalPaneID(paneRaw.Value) {
-			return nil, errors.New("client pane_id is unavailable or malformed")
+		if control {
+			continue
+		}
+		placement, err := clientPaneInputPlacement(client)
+		if err != nil {
+			return nil, err
 		}
 		zoomed, err := parseStrictPaneFlag("window_zoomed_flag", client.Zoomed)
 		if err != nil {
 			return nil, err
 		}
-		if control {
-			continue
+		matches := 0
+		for _, pane := range panes {
+			if pane == placement {
+				matches++
+			}
 		}
-		if _, viewing := windowPanes[paneRaw.Value]; !viewing {
+		if matches != 1 {
+			return nil, errors.New("client pane placement is unavailable or inconsistent")
+		}
+		if placement.WindowID != targetWindowID {
 			continue
 		}
 		if zoomed {
-			attended[paneRaw.Value] = true
+			attended[placement.PaneID] = true
 			continue
 		}
-		for paneID := range windowPanes {
-			attended[paneID] = true
+		for _, pane := range panes {
+			if pane.WindowID == targetWindowID {
+				attended[pane.PaneID] = true
+			}
 		}
 	}
 	return attended, nil
+}
+
+func clientPaneInputPlacement(row clientAttentionSnapshotRow) (paneInputPlacement, error) {
+	if !row.SessionID.Present || !canonicalPaneInputID(row.SessionID.Value, '$') ||
+		!row.WindowID.Present || !canonicalPaneInputID(row.WindowID.Value, '@') ||
+		!row.PaneID.Present || !canonicalPaneID(row.PaneID.Value) {
+		return paneInputPlacement{}, errors.New("client pane placement is unavailable or malformed")
+	}
+	index, err := strconv.Atoi(row.WindowIndex.Value)
+	if !row.WindowIndex.Present || err != nil || index < 0 ||
+		row.WindowIndex.Value != strconv.Itoa(index) {
+		return paneInputPlacement{}, errors.New("client window_index is unavailable or malformed")
+	}
+	return paneInputPlacement{
+		SessionID: row.SessionID.Value, WindowID: row.WindowID.Value,
+		WindowIndex: index, PaneID: row.PaneID.Value,
+	}, nil
 }
 
 func clientRawFormat(client tmux.Client, name string) rawPaneFormat {
@@ -290,11 +559,15 @@ func clientRawFormat(client tmux.Client, name string) rawPaneFormat {
 }
 
 func canonicalPaneID(value string) bool {
-	if len(value) < 2 || value[0] != '%' {
+	return canonicalPaneInputID(value, '%')
+}
+
+func canonicalPaneInputID(value string, prefix byte) bool {
+	if len(value) < 2 || value[0] != prefix {
 		return false
 	}
 	id, err := strconv.ParseUint(value[1:], 10, 32)
-	return err == nil && value == "%"+strconv.FormatUint(id, 10)
+	return err == nil && value == string(prefix)+strconv.FormatUint(id, 10)
 }
 
 func paneRawFormat(pane tmux.Pane, name string) rawPaneFormat {
@@ -366,6 +639,7 @@ func (t *tools) sendKeysBatch(
 	if err := t.confirmCallerInputPreflight(ctx, request, preflight, "sending keys"); err != nil {
 		return nil, output, err
 	}
+	initial := preflight
 	confirmedIDs := append([]string{}, preflight.ConfiguredIDs...)
 	preflight, err = t.preflightPaneInput(
 		ctx, output.PaneID, "", paneInputConfigured, tool,
@@ -378,6 +652,12 @@ func (t *tools) sendKeysBatch(
 		return nil, output, fmt.Errorf(
 			"%s refused: configured pane input membership changed from %v to %v before dispatch",
 			tool, confirmedIDs, preflight.ConfiguredIDs,
+		)
+	}
+	if !samePaneInputPreflight(initial, preflight) {
+		return nil, output, fmt.Errorf(
+			"%s refused: pane input state, placement, route, caller, or membership changed before dispatch",
+			tool,
 		)
 	}
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
@@ -441,6 +721,7 @@ func (t *tools) pasteText(
 	if err := t.confirmCallerInputPreflight(ctx, request, preflight, "pasting text"); err != nil {
 		return nil, output, err
 	}
+	initial := preflight
 
 	server := t.tmux(ctx)
 	name := "libtmux-mcp-paste-" + strconv.FormatInt(pasteSequence.Add(1), 10)
@@ -459,6 +740,12 @@ func (t *tools) pasteText(
 	)
 	if err != nil {
 		return nil, output, errors.Join(err, server.DeleteBuffer(ctx, &name))
+	}
+	if !samePaneInputPreflight(initial, preflight) {
+		return nil, output, errors.Join(
+			errors.New("paste_text refused: pane input state, placement, route, caller, or membership changed before dispatch"),
+			server.DeleteBuffer(ctx, &name),
+		)
 	}
 	pane = preflight.Source
 	// Deleted with the paste rather than left behind: tmux keeps buffers until

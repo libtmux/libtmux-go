@@ -284,9 +284,27 @@ func (t *tools) startCommand(
 			second.ConfiguredIDs, second.Source.ID(), shell,
 		)
 	}
-	if err := t.confirmCallerInputPreflight(ctx, request, second, "running a command"); err != nil {
+	if initial.Caller != second.Caller {
 		_ = os.RemoveAll(directory)
-		return started, err
+		return started, errors.New(
+			"run_shell_command refused: pane input caller changed before dispatch",
+		)
+	}
+	if initial.Identity != second.Identity ||
+		!slices.Equal(initial.ConfiguredIDs, second.ConfiguredIDs) {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refused for pane %s: its route or configured membership changed before dispatch",
+			second.Source.ID(),
+		)
+	}
+	if initial.Signature.Source != second.Signature.Source ||
+		!slices.Equal(initial.Signature.Members, second.Signature.Members) {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refused for pane %s: its state or placement changed before dispatch",
+			second.Source.ID(),
+		)
 	}
 	secondRoute, err := resolveRunCommandRoute(ctx, server, second.Source.ID().String())
 	if err != nil {
