@@ -380,6 +380,89 @@ func TestPaneInputReservationsCanonicalizeSocketAliases(t *testing.T) {
 	}
 }
 
+func TestCommandRunDisappearanceIsFailClosed(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "pane absent", err: fmt.Errorf("lookup: %w", tmux.ErrSnapshotNotFound), want: true},
+		{name: "daemon unreachable", err: fmt.Errorf("probe: %w", tmux.ErrNoServer)},
+		{name: "daemon replaced", err: fmt.Errorf("probe: %w", tmux.ErrDaemonReplaced), want: true},
+		{name: "ambiguous outcome", err: tmux.ErrOutcomeUnknown},
+		{name: "cancelled probe", err: context.Canceled},
+		{name: "transport failure", err: errors.New("injected transport failure")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := commandRunDisappeared(test.err); got != test.want {
+				t.Fatalf("commandRunDisappeared(%v) = %t, want %t", test.err, got, test.want)
+			}
+		})
+	}
+}
+
+func TestRetainedRunRequiresAuthenticatedCompletion(t *testing.T) {
+	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
+	cancelRuntime()
+	directory := filepath.Join(t.TempDir(), "run")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	closedAt := filepath.Join(directory, "closed")
+	statusAt := filepath.Join(directory, "status")
+	if err := os.WriteFile(closedAt, []byte("0 0 0 80 24\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statusAt, []byte("invalid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	identity := paneInputIdentity{
+		endpointID: 999_001, serverPID: 999_002,
+		serverStartTime: 999_003, paneID: "%999",
+	}
+	lease, err := processPaneInputs.acquire(
+		[]paneInputIdentity{identity}, paneInputReservationRun, "run_shell_command",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { processPaneInputs.release(lease) })
+	registry := &tools{runtime: &tmuxRuntime{ctx: runtimeCtx}}
+	registry.reapCommandRun(commandRun{
+		directory: directory, closedAt: closedAt, statusAt: statusAt,
+		identity: identity, lease: lease,
+	})
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		unexpected, acquireErr := processPaneInputs.acquire(
+			[]paneInputIdentity{identity}, paneInputReservationInput, "send_keys",
+		)
+		if acquireErr == nil {
+			processPaneInputs.release(unexpected)
+			t.Fatal("instance cancellation or invalid status released retained run")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := os.WriteFile(statusAt, []byte("0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		available, acquireErr := processPaneInputs.acquire(
+			[]paneInputIdentity{identity}, paneInputReservationInput, "send_keys",
+		)
+		if acquireErr == nil {
+			processPaneInputs.release(available)
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("valid completion did not release retained run")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 //libtmux:real-tmux
 func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -791,6 +874,24 @@ func TestRunCommandReservationIsSharedAcrossInstances(t *testing.T) {
 		secondSetup.Load() != 0 {
 		t.Fatalf("cross-instance run = (%v, setup calls %d)", err, secondSetup.Load())
 	}
+	var sendCalls atomic.Int32
+	secondInstance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		sendCalls.Add(1)
+		return nil
+	}
+	_, _, sendErr := secondInstance.tools.sendKeysBatch(
+		callCtx, nil,
+		sendKeysBatchInput{PaneID: panes[0].ID().String(), Keys: []string{"C-l"}},
+		"send_keys",
+	)
+	if sendErr == nil || !strings.Contains(sendErr.Error(), "earlier run_shell_command") ||
+		sendCalls.Load() != 0 {
+		t.Fatalf("send during run = (%v, dispatches %d)", sendErr, sendCalls.Load())
+	}
 	close(release)
 	select {
 	case err := <-first:
@@ -1177,6 +1278,116 @@ func TestSendReservationCoversFinalPreflight(t *testing.T) {
 		firstDispatches.Load() != 1 || secondDispatches.Load() != 0 {
 		t.Fatalf("send gap = (first %v/%d, competing %v/%d)",
 			err, firstDispatches.Load(), competingErr, secondDispatches.Load())
+	}
+}
+
+//libtmux:real-tmux
+func TestRunCommandUsesExactlyTwoFullPreflights(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	var snapshots atomic.Int32
+	instance.runtime.deps.snapshot = func(
+		snapshotCtx context.Context,
+		server tmux.Server,
+	) (tmux.Snapshot, error) {
+		snapshots.Add(1)
+		return defaults.snapshot(snapshotCtx, server)
+	}
+	instance.runtime.deps.beforeRunDispatch = func(context.Context) error {
+		if got := snapshots.Load(); got != 1 {
+			return fmt.Errorf("setup saw %d full checks, want 1", got)
+		}
+		return nil
+	}
+	instance.runtime.deps.sendKeySequence = func(
+		dispatchCtx context.Context,
+		pane tmux.Pane,
+		request tmux.SendKeySequenceRequest,
+	) error {
+		if got := snapshots.Load(); got != 2 {
+			return fmt.Errorf("dispatch saw %d full checks, want 2", got)
+		}
+		return defaults.sendKeySequence(dispatchCtx, pane, request)
+	}
+
+	_, output, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+		PaneID: panes[0].ID().String(), Command: "true", TimeoutSeconds: 5,
+	})
+	if err != nil || output.ExitStatus == nil || *output.ExitStatus != 0 ||
+		snapshots.Load() != 2 {
+		t.Fatalf("two-check run = (%+v, %v, snapshots %d)", output, err, snapshots.Load())
+	}
+}
+
+//libtmux:real-tmux
+func TestUncertainRunReleasesOnAuthenticatedDisappearance(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		disappear func(context.Context, tmux.Server, tmux.Pane) error
+	}{
+		{name: "pane", disappear: func(ctx context.Context, _ tmux.Server, pane tmux.Pane) error {
+			return pane.Kill(ctx)
+		}},
+		{name: "daemon generation", disappear: func(ctx context.Context, server tmux.Server, _ tmux.Pane) error {
+			return server.Kill(ctx)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			withoutCallerEnvironment(t)
+			target, _, panes := threePaneInputFixture(ctx, t)
+			instance := mustInternalMCPServer(t, target)
+			callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+			preflight, err := instance.tools.preflightPaneInput(
+				callCtx, panes[0].ID().String(), "", paneInputConfigured, "run_shell_command",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defaults := defaultMCPDependencies()
+			instance.runtime.deps.sendKeySequence = func(
+				dispatchCtx context.Context,
+				pane tmux.Pane,
+				request tmux.SendKeySequenceRequest,
+			) error {
+				if err := defaults.sendKeySequence(dispatchCtx, pane, request); err != nil {
+					return err
+				}
+				return tmux.ErrOutcomeUnknown
+			}
+			_, _, err = instance.tools.runCommand(callCtx, nil, runCommandInput{
+				PaneID: panes[0].ID().String(), Command: "sleep 30", TimeoutSeconds: 5,
+			})
+			if !errors.Is(err, tmux.ErrOutcomeUnknown) {
+				t.Fatalf("ambiguous dispatch = %v", err)
+			}
+			if err := test.disappear(ctx, target, panes[0]); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				lease, acquireErr := processPaneInputs.acquire(
+					preflight.Identities(), paneInputReservationRun, "run_shell_command",
+				)
+				if acquireErr == nil {
+					processPaneInputs.release(lease)
+					break
+				}
+				if !strings.Contains(acquireErr.Error(), "earlier run_shell_command") {
+					t.Fatal(acquireErr)
+				}
+				select {
+				case <-time.After(50 * time.Millisecond):
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
+		})
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -90,6 +91,9 @@ func (t *tools) runCommand(
 	input runCommandInput,
 ) (*mcp.CallToolResult, runCommandOutput, error) {
 	output := runCommandOutput{ResolvedPaneIDs: []string{}}
+	if strings.TrimSpace(input.Command) == "" {
+		return nil, output, errors.New("command is required")
+	}
 	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
 	if err != nil {
 		return nil, output, err
@@ -97,12 +101,17 @@ func (t *tools) runCommand(
 	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
 	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
 	output.TimeoutClamped = clamped
+	initial, err := t.preflightPaneInput(
+		ctx, input.PaneID, input.SessionName, paneInputConfigured, "run_shell_command",
+	)
+	if err != nil {
+		return nil, output, err
+	}
+	output.PaneID = initial.Source.ID().String()
+	output.ResolvedPaneIDs = append([]string{}, initial.ConfiguredIDs...)
 	runCtx, runCancel := context.WithTimeout(ctx, timeout)
 	defer runCancel()
-	reporter := newProgressReporter(
-		runCtx, request, timeout, "waiting for the command to finish")
-	defer reporter.stop()
-	started, err := t.startCommand(runCtx, request, input)
+	started, err := t.startCommand(runCtx, request, input, initial)
 	if started != nil {
 		output.PaneID = started.paneID.String()
 		output.ResolvedPaneIDs = append([]string{}, started.configuredIDs...)
@@ -122,6 +131,9 @@ func (t *tools) runCommand(
 		}
 		return nil, output, err
 	}
+	reporter := newProgressReporter(
+		runCtx, request, timeout, "waiting for the command to finish")
+	defer reporter.stop()
 	completed := false
 	defer func() {
 		if completed {
@@ -131,16 +143,7 @@ func (t *tools) runCommand(
 		}
 	}()
 
-	pane, err := t.tmux(runCtx).Pane(runCtx, started.paneID)
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, output, ctx.Err()
-		}
-		if isOwnWaitDeadline(ctx, runCtx, err) {
-			return finishRunCommandDeadline(*started, output, "")
-		}
-		return nil, output, err
-	}
+	pane := started.pane
 	running, _ := pane.Formats().PaneCurrentCommand()
 	result, output, err := t.awaitCommand(ctx, runCtx, awaiting{
 		pane:       pane,
@@ -161,45 +164,30 @@ func (t *tools) startCommand(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input runCommandInput,
+	initial paneInputPreflight,
 ) (*commandRun, error) {
-	started := &commandRun{configuredIDs: []string{}}
-	if strings.TrimSpace(input.Command) == "" {
-		return started, errors.New("command is required")
+	started := &commandRun{
+		pane: initial.Source, paneID: initial.Source.ID(),
+		configuredIDs: append([]string{}, initial.ConfiguredIDs...),
 	}
-	initial, err := t.preflightPaneInput(
-		ctx, input.PaneID, input.SessionName, paneInputConfigured, "run_shell_command",
-	)
-	if err != nil {
-		return started, err
-	}
-	started.paneID = initial.Source.ID()
-	started.configuredIDs = append([]string{}, initial.ConfiguredIDs...)
 	if len(initial.ConfiguredIDs) != 1 {
 		return started, fmt.Errorf(
 			"run_shell_command refuses configured pane membership %v: one completion, output, and exit status require a configured singleton",
 			initial.ConfiguredIDs,
 		)
 	}
-	server := t.tmux(ctx)
-	route, err := resolveRunCommandRoute(ctx, server, initial.Source.ID().String())
+	lease, err := processPaneInputs.acquire(
+		initial.Identities(), paneInputReservationRun, "run_shell_command",
+	)
 	if err != nil {
 		return started, err
 	}
-	runKey := paneRunKey{
-		socket: resolvePath(route.socketPath), paneID: route.paneID,
-	}
-	lease, acquired := processPaneRuns.acquire(runKey)
-	if !acquired {
-		return started, fmt.Errorf(
-			"run_shell_command refused for pane %s: an earlier run_shell_command is still active",
-			initial.Source.ID(),
-		)
-	}
 	started.lease = lease
+	started.identity = lease.identities[0]
 	dispatched := false
 	defer func() {
 		if !dispatched {
-			processPaneRuns.release(lease)
+			processPaneInputs.release(lease)
 		}
 	}()
 	if shell := incompatibleRunCommandShell(initial.Source); shell != "" {
@@ -211,6 +199,20 @@ func (t *tools) startCommand(
 	}
 	if err := t.confirmCallerInputPreflight(ctx, request, initial, "running a command"); err != nil {
 		return started, err
+	}
+	server := t.tmux(ctx)
+	route, err := resolveRunCommandRoute(ctx, server, initial.Source.ID().String())
+	if err != nil {
+		return started, err
+	}
+	sameEndpoint, err := samePaneInputEndpoint(route.socketPath, initial.Identity.endpoint)
+	if err != nil {
+		return started, fmt.Errorf("run_shell_command resolve pinned tmux endpoint: %w", err)
+	}
+	if !sameEndpoint {
+		return started, errors.New(
+			"run_shell_command refused: the selected and reported tmux endpoints differ",
+		)
 	}
 
 	directory, err := os.MkdirTemp("", "libtmux-mcp-run")
@@ -255,6 +257,11 @@ func (t *tools) startCommand(
 	started.openedAt = openedPath
 	started.closedAt = closedPath
 	started.statusAt = statusPath
+	sourceScript := ". " + shellQuote(scriptPath)
+	if input.SuppressHistory {
+		sourceScript = " " + sourceScript
+	}
+	dispatch := tmux.SendKeySequenceRequest{Keys: []string{sourceScript, "Enter"}}
 	if err := t.runtime.deps.beforeRunDispatch(ctx); err != nil {
 		_ = os.RemoveAll(directory)
 		return started, fmt.Errorf(
@@ -306,35 +313,20 @@ func (t *tools) startCommand(
 			second.Source.ID(),
 		)
 	}
-	secondRoute, err := resolveRunCommandRoute(ctx, server, second.Source.ID().String())
-	if err != nil {
-		_ = os.RemoveAll(directory)
-		return started, err
-	}
-	if secondRoute != route {
-		_ = os.RemoveAll(directory)
-		return started, errors.New(
-			"run_shell_command refused: the tmux executable, socket, or pane route changed before dispatch",
-		)
-	}
-	secondKey := paneRunKey{
-		socket: resolvePath(secondRoute.socketPath), paneID: secondRoute.paneID,
-	}
-	if !processPaneRuns.owns(lease, secondKey) {
+	if !processPaneInputs.owns(lease, second.Identities()) {
 		_ = os.RemoveAll(directory)
 		return started, fmt.Errorf(
-			"run_shell_command refused for pane %s: its active run reservation or route changed before dispatch",
+			"run_shell_command refused for pane %s: its active run reservation changed before dispatch",
 			second.Source.ID(),
 		)
 	}
-	started.paneID = second.Source.ID()
-	sourceScript := ". " + shellQuote(scriptPath)
-	if input.SuppressHistory {
-		sourceScript = " " + sourceScript
+	if route.paneID != second.Source.ID().String() {
+		_ = os.RemoveAll(directory)
+		return started, errors.New("run_shell_command refused: the tmux pane route changed before dispatch")
 	}
-	if err := t.runtime.deps.sendKeySequence(ctx, second.Source, tmux.SendKeySequenceRequest{
-		Keys: []string{sourceScript, "Enter"},
-	}); err != nil {
+	started.pane = second.Source
+	started.paneID = second.Source.ID()
+	if err := t.runtime.deps.sendKeySequence(ctx, second.Source, dispatch); err != nil {
 		if errors.Is(err, tmux.ErrOutcomeUnknown) {
 			dispatched = true
 			started.dispatched = true
@@ -469,30 +461,101 @@ type awaiting struct {
 }
 
 type commandRun struct {
+	pane          tmux.Pane
 	paneID        tmux.PaneID
+	identity      paneInputIdentity
 	directory     string
 	openedAt      string
 	closedAt      string
 	statusAt      string
 	configuredIDs []string
-	lease         paneRunLease
+	lease         paneInputLease
 	dispatched    bool
 }
 
 func (t *tools) finishCommandRun(run commandRun) {
-	processPaneRuns.release(run.lease)
+	processPaneInputs.release(run.lease)
 	_ = os.RemoveAll(run.directory)
 }
 
 func (t *tools) reapCommandRun(run commandRun) {
-	ctx := t.runtime.ctx
 	go func() {
 		defer t.finishCommandRun(run)
-		_, _, _ = waitForCompletedCommand(ctx, run)
+		completion := time.NewTicker(commandCompletionPollInterval)
+		presence := time.NewTicker(commandPresencePollInterval)
+		defer completion.Stop()
+		defer presence.Stop()
+		for {
+			_, ready, err := readCompletedCommand(run)
+			if err == nil && ready {
+				return
+			}
+			select {
+			case <-completion.C:
+			case <-presence.C:
+				probeCtx, cancel := context.WithTimeout(
+					context.Background(), commandPresenceProbeTimeout,
+				)
+				present, probeErr := commandRunPresent(probeCtx, run.pane, run.identity)
+				cancel()
+				if probeErr == nil && !present {
+					return
+				}
+			}
+		}
 	}()
 }
 
-const commandCompletionPollInterval = 50 * time.Millisecond
+const (
+	commandCompletionPollInterval = 50 * time.Millisecond
+	commandPresencePollInterval   = 500 * time.Millisecond
+	commandPresenceProbeTimeout   = 2 * time.Second
+)
+
+func commandRunPresent(
+	ctx context.Context,
+	pane tmux.Pane,
+	identity paneInputIdentity,
+) (bool, error) {
+	_, err := pane.Refresh(ctx)
+	if err == nil {
+		return true, nil
+	}
+	if commandRunDisappeared(err) {
+		return false, nil
+	}
+	if errors.Is(err, tmux.ErrNoServer) {
+		present, processErr := commandRunProcessPresent(identity.serverPID)
+		if processErr == nil {
+			return present, nil
+		}
+		return true, errors.Join(err, processErr)
+	}
+	return true, err
+}
+
+func commandRunDisappeared(err error) bool {
+	return errors.Is(err, tmux.ErrSnapshotNotFound) ||
+		errors.Is(err, tmux.ErrDaemonReplaced)
+}
+
+func commandRunProcessPresent(pid uint64) (bool, error) {
+	if pid == 0 || pid > uint64(^uint(0)>>1) {
+		return true, errors.New("run_shell_command retained daemon pid is invalid")
+	}
+	process, err := os.FindProcess(int(pid))
+	if err != nil {
+		return true, err
+	}
+	err = process.Signal(syscall.Signal(0))
+	if err == nil || errors.Is(err, os.ErrPermission) {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ESRCH) {
+		return false, nil
+	}
+	return true, err
+}
 
 // awaitCommand blocks until a started command publishes its commit record, and
 // reads back its status and the rows it wrote.
