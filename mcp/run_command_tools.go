@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -48,10 +49,9 @@ type runCommandOutput struct {
 	ExitStatus *int `json:"exitStatus,omitempty"`
 	// TimedOut reports that the wait ended before the command did.
 	TimedOut bool `json:"timedOut"`
-	// Running is what the pane was running when the wait ended, reported only
-	// on a timeout. A shell here means the command is still going; anything
-	// else means the pane was busy and received the text as that program's
-	// input instead of running it.
+	// Running is what the pane reported after dispatch, returned on a timeout.
+	// A non-shell can mean the accepted command is running or that the process
+	// changed after the final check and consumed the payload as input.
 	Running string `json:"running,omitempty"`
 	// Output is pane-rendered output between the command's cursor marks. Wrapped
 	// terminal rows are rejoined and screen painting remains. Before tmux 3.6,
@@ -81,8 +81,8 @@ type runCommandOutput struct {
 
 // runCommand types a command at a shell prompt and waits for its commit record.
 // A shared filesystem carries its exit status and cursor marks bound its output.
-// If the pane is busy, the text reaches that program instead; timeout results
-// report the pane's running command.
+// Both input checkpoints require a shell; timeout results report what the pane
+// was running after dispatch.
 func (t *tools) runCommand(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -107,6 +107,9 @@ func (t *tools) runCommand(
 		output.ResolvedPaneIDs = append([]string{}, started.configuredIDs...)
 	}
 	if err != nil {
+		if started != nil && started.dispatched {
+			t.reapCommandRun(*started)
+		}
 		if ctx.Err() != nil {
 			return nil, output, ctx.Err()
 		}
@@ -118,7 +121,14 @@ func (t *tools) runCommand(
 		}
 		return nil, output, err
 	}
-	defer func() { _ = os.RemoveAll(started.directory) }()
+	completed := false
+	defer func() {
+		if completed {
+			t.finishCommandRun(*started)
+		} else {
+			t.reapCommandRun(*started)
+		}
+	}()
 
 	pane, err := t.tmux(runCtx).Pane(runCtx, started.paneID)
 	if err != nil {
@@ -131,7 +141,7 @@ func (t *tools) runCommand(
 		return nil, output, err
 	}
 	running, _ := pane.Formats().PaneCurrentCommand()
-	return t.awaitCommand(ctx, runCtx, awaiting{
+	result, output, err := t.awaitCommand(ctx, runCtx, awaiting{
 		pane:       pane,
 		statusPath: started.statusAt,
 		openedPath: started.openedAt,
@@ -140,6 +150,8 @@ func (t *tools) runCommand(
 		running:    running,
 		output:     output,
 	})
+	completed = output.ExitStatus != nil
+	return result, output, err
 }
 
 // startCommand types a command into a pane and returns its private completion
@@ -167,6 +179,28 @@ func (t *tools) startCommand(
 			initial.ConfiguredIDs,
 		)
 	}
+	server := t.tmux(ctx)
+	route, err := resolveRunCommandRoute(ctx, server, initial.Source.ID().String())
+	if err != nil {
+		return started, err
+	}
+	runKey := paneRunKey{
+		socket: resolvePath(route.socketPath), paneID: route.paneID,
+	}
+	lease, acquired := processPaneRuns.acquire(runKey)
+	if !acquired {
+		return started, fmt.Errorf(
+			"run_shell_command refused for pane %s: an earlier run_shell_command is still active",
+			initial.Source.ID(),
+		)
+	}
+	started.lease = lease
+	dispatched := false
+	defer func() {
+		if !dispatched {
+			processPaneRuns.release(lease)
+		}
+	}()
 	if shell := incompatibleRunCommandShell(initial.Source); shell != "" {
 		return started, fmt.Errorf(
 			"run_shell_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
@@ -177,17 +211,6 @@ func (t *tools) startCommand(
 	if err := t.confirmCallerInputPreflight(ctx, request, initial, "running a command"); err != nil {
 		return started, err
 	}
-
-	server := t.tmux(ctx)
-
-	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
-	if err != nil {
-		return started, err
-	}
-	if len(socket.Stdout) == 0 || socket.Stdout[0] == "" {
-		return started, errors.New("tmux did not report its socket path")
-	}
-	tmuxExecutable := server.Executable()
 
 	directory, err := os.MkdirTemp("", "libtmux-mcp-run")
 	if err != nil {
@@ -206,9 +229,9 @@ func (t *tools) startCommand(
 	mark := fmt.Sprintf(
 		"%s -S %s display-message -p -t %s "+
 			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
-		shellQuote(tmuxExecutable),
-		shellQuote(socket.Stdout[0]),
-		shellQuote(initial.Source.ID().String()),
+		shellQuote(route.executable),
+		shellQuote(route.socketPath),
+		shellQuote(route.paneID),
 	)
 	script := wrapperScript(mark, openedPath, commandPath, statusPath, closedPath)
 
@@ -256,26 +279,132 @@ func (t *tools) startCommand(
 			second.ConfiguredIDs, second.Source.ID(), shell,
 		)
 	}
-	started.paneID = second.Source.ID()
-	sourceScript := ". " + shellQuote(scriptPath)
-	if err := t.runtime.deps.sendKeys(ctx, second.Source, tmux.SendKeysRequest{
-		Command:         &sourceScript,
-		SuppressHistory: input.SuppressHistory,
-	}); err != nil {
+	if err := t.confirmCallerInputPreflight(ctx, request, second, "running a command"); err != nil {
 		_ = os.RemoveAll(directory)
 		return started, err
 	}
+	secondRoute, err := resolveRunCommandRoute(ctx, server, second.Source.ID().String())
+	if err != nil {
+		_ = os.RemoveAll(directory)
+		return started, err
+	}
+	if secondRoute != route {
+		_ = os.RemoveAll(directory)
+		return started, errors.New(
+			"run_shell_command refused: the tmux executable, socket, or pane route changed before dispatch",
+		)
+	}
+	secondKey := paneRunKey{
+		socket: resolvePath(secondRoute.socketPath), paneID: secondRoute.paneID,
+	}
+	if !processPaneRuns.owns(lease, secondKey) {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refused for pane %s: its active run reservation or route changed before dispatch",
+			second.Source.ID(),
+		)
+	}
+	started.paneID = second.Source.ID()
+	sourceScript := ". " + shellQuote(scriptPath)
+	if input.SuppressHistory {
+		sourceScript = " " + sourceScript
+	}
+	if err := t.runtime.deps.sendKeySequence(ctx, second.Source, tmux.SendKeySequenceRequest{
+		Keys: []string{sourceScript, "Enter"},
+	}); err != nil {
+		if errors.Is(err, tmux.ErrOutcomeUnknown) {
+			dispatched = true
+			started.dispatched = true
+			return started, err
+		}
+		_ = os.RemoveAll(directory)
+		return started, err
+	}
+	dispatched = true
+	started.dispatched = true
 	return started, nil
 }
 
-// Unknown commands retain the public busy-pane timeout behavior. Only shells
-// whose syntax is known to reject the wrapper fail before delivery.
+type runCommandRoute struct {
+	executable string
+	socketPath string
+	paneID     string
+}
+
+func resolveRunCommandRoute(
+	ctx context.Context,
+	server tmux.Server,
+	paneID string,
+) (runCommandRoute, error) {
+	configured := runCommandRoute{
+		executable: server.Executable(), socketPath: server.SocketPath(), paneID: paneID,
+	}
+	if err := validateRunCommandRoute(configured); err != nil {
+		return runCommandRoute{}, err
+	}
+	result, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil {
+		return runCommandRoute{}, err
+	}
+	if result.ExitCode != 0 {
+		return runCommandRoute{}, fmt.Errorf(
+			"run_shell_command could not resolve its tmux socket (exit %d)", result.ExitCode,
+		)
+	}
+	rawSocket := bytes.TrimSuffix(result.RawStdout, []byte{'\n'})
+	if len(rawSocket) == 0 {
+		return runCommandRoute{}, errors.New("tmux did not report its socket path")
+	}
+	route := runCommandRoute{
+		executable: server.Executable(), socketPath: string(rawSocket), paneID: paneID,
+	}
+	if err := validateRunCommandRoute(route); err != nil {
+		return runCommandRoute{}, err
+	}
+	return route, nil
+}
+
+func validateRunCommandRoute(route runCommandRoute) error {
+	for _, component := range []struct {
+		name, value string
+	}{
+		{name: "tmux executable", value: route.executable},
+		{name: "tmux socket", value: route.socketPath},
+		{name: "tmux pane", value: route.paneID},
+	} {
+		if hasASCIIControl(component.value) {
+			return fmt.Errorf(
+				"run_shell_command refuses ASCII control bytes in its %s route", component.name,
+			)
+		}
+	}
+	if !filepath.IsAbs(route.executable) || !filepath.IsAbs(route.socketPath) {
+		return errors.New("run_shell_command requires absolute tmux executable and socket routes")
+	}
+	if !canonicalPaneID(route.paneID) {
+		return errors.New("run_shell_command requires a canonical tmux pane route")
+	}
+	return nil
+}
+
+func hasASCIIControl(value string) bool {
+	for index := 0; index < len(value); index++ {
+		if value[index] < 0x20 || value[index] == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+// Only a known POSIX shell may receive the bookkeeping wrapper. An absent or
+// unknown foreground command is unsafe because it may consume the payload as
+// ordinary input instead of interpreting it as shell syntax.
 func incompatibleRunCommandShell(pane tmux.Pane) string {
 	command, ok := pane.Formats().PaneCurrentCommand()
 	if !ok || command == "" {
-		return ""
+		return "unknown foreground command"
 	}
-	if slices.Contains(nonPOSIXShells, shellName(command)) {
+	if !slices.Contains(posixShells, shellName(command)) {
 		return command
 	}
 	return ""
@@ -323,6 +452,21 @@ type commandRun struct {
 	closedAt      string
 	statusAt      string
 	configuredIDs []string
+	lease         paneRunLease
+	dispatched    bool
+}
+
+func (t *tools) finishCommandRun(run commandRun) {
+	processPaneRuns.release(run.lease)
+	_ = os.RemoveAll(run.directory)
+}
+
+func (t *tools) reapCommandRun(run commandRun) {
+	ctx := t.runtime.ctx
+	go func() {
+		defer t.finishCommandRun(run)
+		_, _, _ = waitForCompletedCommand(ctx, run)
+	}()
 }
 
 const commandCompletionPollInterval = 50 * time.Millisecond
