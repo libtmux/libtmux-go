@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -50,7 +51,7 @@ type paneInputPlacement struct {
 }
 
 type paneInputMemberSignature struct {
-	Placement      paneInputPlacement
+	Placements     []paneInputPlacement
 	Synchronized   string
 	Dead           string
 	InputOff       string
@@ -107,8 +108,27 @@ func (p paneInputPreflight) Identities() []paneInputIdentity {
 func samePaneInputPreflight(initial, final paneInputPreflight) bool {
 	return initial.Identity == final.Identity && initial.Caller == final.Caller &&
 		slices.Equal(initial.ConfiguredIDs, final.ConfiguredIDs) &&
-		initial.Signature.Source == final.Signature.Source &&
-		slices.Equal(initial.Signature.Members, final.Signature.Members)
+		samePaneInputMemberSignature(initial.Signature.Source, final.Signature.Source) &&
+		samePaneInputMemberSignatures(initial.Signature.Members, final.Signature.Members)
+}
+
+func samePaneInputMemberSignature(left, right paneInputMemberSignature) bool {
+	return slices.Equal(left.Placements, right.Placements) &&
+		left.Synchronized == right.Synchronized && left.Dead == right.Dead &&
+		left.InputOff == right.InputOff && left.InMode == right.InMode &&
+		left.CurrentCommand == right.CurrentCommand
+}
+
+func samePaneInputMemberSignatures(left, right []paneInputMemberSignature) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !samePaneInputMemberSignature(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
 }
 
 func parseStrictPaneFlag(name string, raw rawPaneFormat) (bool, error) {
@@ -215,9 +235,7 @@ func (t *tools) preflightPaneInput(
 	}
 	panes := make([]tmux.Pane, 0)
 	for _, pane := range snapshot.Panes() {
-		if pane.SessionID() == resolved.SessionID() &&
-			pane.WindowID() == resolved.WindowID() &&
-			pane.WindowIndex() == resolved.WindowIndex() {
+		if pane.WindowID() == resolved.WindowID() {
 			panes = append(panes, pane)
 		}
 	}
@@ -233,7 +251,9 @@ func (t *tools) preflightPaneInput(
 			InMode:         paneRawFormat(pane, "pane_in_mode"),
 			CurrentCommand: paneRawFormat(pane, "pane_current_command"),
 		})
-		byID[paneID] = pane
+		if _, exists := byID[paneID]; !exists {
+			byID[paneID] = pane
+		}
 	}
 
 	sourceID := resolved.ID().String()
@@ -296,13 +316,14 @@ func (t *tools) preflightPaneInput(
 		}
 		selected = append(selected, pane)
 	}
-	sourceSignature, err := paneInputSignature(byID[sourceID], rows)
+	byID[sourceID] = resolved
+	sourceSignature, err := paneInputSignature(snapshot.PanesByID(resolved.ID()))
 	if err != nil {
 		return empty, paneInputRefusal(tool, sourceID, err)
 	}
 	members := make([]paneInputMemberSignature, 0, len(selected))
 	for _, pane := range selected {
-		signature, signatureErr := paneInputSignature(pane, rows)
+		signature, signatureErr := paneInputSignature(snapshot.PanesByID(pane.ID()))
 		if signatureErr != nil {
 			return empty, paneInputRefusal(tool, pane.ID().String(), signatureErr)
 		}
@@ -336,21 +357,42 @@ func (t *tools) preflightPaneInput(
 }
 
 func paneInputSignature(
-	pane tmux.Pane,
-	rows []paneInputSnapshotRow,
+	panes []tmux.Pane,
 ) (paneInputMemberSignature, error) {
-	placement := paneInputPlacement{
-		SessionID: pane.SessionID().String(), WindowID: pane.WindowID().String(),
-		WindowIndex: pane.WindowIndex(), PaneID: pane.ID().String(),
+	if len(panes) == 0 {
+		return paneInputMemberSignature{}, errors.New("pane is absent from its window placement")
 	}
-	if !canonicalPaneInputID(placement.SessionID, '$') ||
-		!canonicalPaneInputID(placement.WindowID, '@') ||
-		placement.WindowIndex < 0 || !canonicalPaneID(placement.PaneID) {
-		return paneInputMemberSignature{}, errors.New("pane placement is unavailable or malformed")
-	}
-	for _, row := range rows {
-		if row.PaneID != placement.PaneID {
-			continue
+	panes = slices.Clone(panes)
+	slices.SortFunc(panes, func(left, right tmux.Pane) int {
+		return comparePaneInputPlacement(paneInputPlacementFor(left), paneInputPlacementFor(right))
+	})
+
+	var signature paneInputMemberSignature
+	for index, pane := range panes {
+		placement := paneInputPlacementFor(pane)
+		if !canonicalPaneInputID(placement.SessionID, '$') ||
+			!canonicalPaneInputID(placement.WindowID, '@') ||
+			placement.WindowIndex < 0 || !canonicalPaneID(placement.PaneID) {
+			return paneInputMemberSignature{}, errors.New("pane placement is unavailable or malformed")
+		}
+		if index > 0 {
+			previous := paneInputPlacementFor(panes[index-1])
+			if placement == previous {
+				return paneInputMemberSignature{}, errors.New("pane placement is duplicated")
+			}
+			if placement.PaneID != signature.Placements[0].PaneID ||
+				placement.WindowID != signature.Placements[0].WindowID {
+				return paneInputMemberSignature{}, errors.New("pane linked placement is inconsistent")
+			}
+		}
+
+		row := paneInputSnapshotRow{
+			PaneID:         placement.PaneID,
+			Synchronized:   paneRawFormat(pane, "pane_synchronized"),
+			Dead:           paneRawFormat(pane, "pane_dead"),
+			InputOff:       paneRawFormat(pane, "pane_input_off"),
+			InMode:         paneRawFormat(pane, "pane_in_mode"),
+			CurrentCommand: paneRawFormat(pane, "pane_current_command"),
 		}
 		if _, err := parseStrictPaneFlag("pane_synchronized", row.Synchronized); err != nil {
 			return paneInputMemberSignature{}, err
@@ -364,13 +406,42 @@ func paneInputSignature(
 		if err := requireSafePaneMode(row.InMode); err != nil {
 			return paneInputMemberSignature{}, err
 		}
-		return paneInputMemberSignature{
-			Placement: placement, Synchronized: row.Synchronized.Value,
-			Dead: row.Dead.Value, InputOff: row.InputOff.Value, InMode: row.InMode.Value,
+		observed := paneInputMemberSignature{
+			Synchronized: row.Synchronized.Value, Dead: row.Dead.Value,
+			InputOff: row.InputOff.Value, InMode: row.InMode.Value,
 			CurrentCommand: row.CurrentCommand,
-		}, nil
+		}
+		if index == 0 {
+			signature = observed
+		} else if signature.Synchronized != observed.Synchronized ||
+			signature.Dead != observed.Dead || signature.InputOff != observed.InputOff ||
+			signature.InMode != observed.InMode ||
+			signature.CurrentCommand != observed.CurrentCommand {
+			return paneInputMemberSignature{}, errors.New("pane linked state is inconsistent")
+		}
+		signature.Placements = append(signature.Placements, placement)
 	}
-	return paneInputMemberSignature{}, errors.New("pane is absent from its window placement")
+	return signature, nil
+}
+
+func paneInputPlacementFor(pane tmux.Pane) paneInputPlacement {
+	return paneInputPlacement{
+		SessionID: pane.SessionID().String(), WindowID: pane.WindowID().String(),
+		WindowIndex: pane.WindowIndex(), PaneID: pane.ID().String(),
+	}
+}
+
+func comparePaneInputPlacement(left, right paneInputPlacement) int {
+	if order := cmp.Compare(left.SessionID, right.SessionID); order != 0 {
+		return order
+	}
+	if order := cmp.Compare(left.WindowID, right.WindowID); order != 0 {
+		return order
+	}
+	if order := cmp.Compare(left.WindowIndex, right.WindowIndex); order != 0 {
+		return order
+	}
+	return cmp.Compare(left.PaneID, right.PaneID)
 }
 
 func resolvePaneInputSource(
@@ -382,8 +453,15 @@ func resolvePaneInputSource(
 		if !canonicalPaneID(wanted) {
 			return tmux.Pane{}, fmt.Errorf("pane id %q is not canonical", wanted)
 		}
-		pane, err := snapshot.PaneByID(tmux.PaneID(wanted))
-		return pane, notFound(err, "pane", wanted, "list_panes")
+		panes := snapshot.PanesByID(tmux.PaneID(wanted))
+		if len(panes) == 0 {
+			pane, err := snapshot.PaneByID(tmux.PaneID(wanted))
+			return pane, notFound(err, "pane", wanted, "list_panes")
+		}
+		slices.SortFunc(panes, func(left, right tmux.Pane) int {
+			return comparePaneInputPlacement(paneInputPlacementFor(left), paneInputPlacementFor(right))
+		})
+		return panes[0], nil
 	}
 
 	sessions := snapshot.Sessions()

@@ -305,8 +305,8 @@ func (t *tools) startCommand(
 			second.Source.ID(),
 		)
 	}
-	if initial.Signature.Source != second.Signature.Source ||
-		!slices.Equal(initial.Signature.Members, second.Signature.Members) {
+	if !samePaneInputMemberSignature(initial.Signature.Source, second.Signature.Source) ||
+		!samePaneInputMemberSignatures(initial.Signature.Members, second.Signature.Members) {
 		_ = os.RemoveAll(directory)
 		return started, fmt.Errorf(
 			"run_shell_command refused for pane %s: its state or placement changed before dispatch",

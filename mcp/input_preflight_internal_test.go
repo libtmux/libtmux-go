@@ -565,6 +565,51 @@ func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestPaneInputPreflightAuthenticatesLinkedTopology(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, window, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	if err := window.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	want := paneIDs(panes)
+
+	initial, err := instance.tools.preflightPaneInput(
+		callCtx, panes[0].ID().String(), "", paneInputConfigured, "send_keys",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkedSession, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "linked"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkedIndex := 7
+	if err := window.Link(ctx, tmux.LinkWindowRequest{
+		TargetSession: linkedSession.ID(), TargetIndex: &linkedIndex, Detach: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	linked, err := instance.tools.preflightPaneInput(
+		callCtx, panes[0].ID().String(), "", paneInputConfigured, "send_keys",
+	)
+	if err != nil {
+		t.Fatalf("linked pane preflight = %v", err)
+	}
+	if linked.Source.ID() != panes[0].ID() ||
+		!slices.Equal(linked.ConfiguredIDs, want) {
+		t.Fatalf("linked pane preflight = %+v", linked)
+	}
+	if samePaneInputPreflight(initial, linked) {
+		t.Fatal("linked topology change preserved the pane input signature")
+	}
+}
+
+//libtmux:real-tmux
 func TestPaneInputSourceComesFromGuardSnapshot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
