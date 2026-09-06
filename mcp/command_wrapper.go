@@ -5,26 +5,69 @@ import (
 	"strings"
 )
 
-// wrapperScript renders the bookkeeping wrapper the pane runs. Sourcing the
-// caller's script inside a subshell keeps its syntax, and an `exit` in it, from
-// changing this structure. After timeout cleanup removes the directory a
-// trailing stderr redirection would be too late, because shells apply
-// redirections left to right; command stderr stays captured.
-func wrapperScript(mark, openedPath, commandPath, statusPath, closedPath string) string {
+const maximumInheritedTrapBytes = 64 * 1024
+
+// wrapperScript renders the bookkeeping wrapper the pane runs. Bash and zsh
+// trap declarations are carried as opaque code into the command subshell;
+// bookkeeping runs with ERR, DEBUG, errexit, and xtrace disabled. After timeout
+// cleanup removes the directory a trailing stderr redirection would be too
+// late, because shells apply redirections left to right.
+func wrapperScript(
+	mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce string,
+) string {
 	command := shellQuote(commandPath)
+	traps := shellQuote(trapPath)
+	flags := "__libtmux_flags_" + nonce
+	trapStatus := "__libtmux_trap_status_" + nonce
+	trapBytes := "__libtmux_trap_bytes_" + nonce
+	status := "__libtmux_status_" + nonce
+	forget := "\\unset " + flags + " " + trapStatus + " " + trapBytes
+	run := func(options string) string {
+		return "  ( " + forget + "; " + options + "; . " + traps + " )\n"
+	}
 	return "(\n" +
-		"case $- in *e*) __libtmux_errexit=1 ;; *) __libtmux_errexit=0 ;; esac\n" +
-		"set +e\n" +
-		publishRecord(mark, openedPath) +
-		"if [ \"$__libtmux_errexit\" -eq 1 ]; then\n" +
-		"  ( set -e; . " + command + " )\n" +
-		"else\n" +
-		"  ( set +e; . " + command + " )\n" +
+		flags + "=$-\n" +
+		"\\set +x\n" +
+		"\\set +e\n" +
+		trapStatus + "=0\n" +
+		"\\umask 077\n" +
+		"if : >| " + traps + "; then\n" +
+		"  case \"${BASH_VERSION-}:${ZSH_VERSION-}\" in\n" +
+		"    ?*:*) if \\trap -p ERR DEBUG >| " + traps + "; then :; else " +
+		trapStatus + "=125; fi; \\trap - ERR DEBUG ;;\n" +
+		"    :?*) if \\trap >| " + traps + "; then :; else " +
+		trapStatus + "=125; fi; \\trap - ERR DEBUG ;;\n" +
+		"  esac\n" +
+		"else " + trapStatus + "=125\n" +
 		"fi\n" +
-		"__libtmux_status=$?\n" +
-		publishRecord(`command printf %s "$__libtmux_status"`, statusPath) +
+		"if command test \"$" + trapStatus + "\" -eq 0; then\n" +
+		"  if " + trapBytes + "=$(command wc -c < " + traps + ") && " +
+		"command test \"$" + trapBytes + "\" -le " + fmt.Sprint(maximumInheritedTrapBytes) +
+		" 2>/dev/null; then :; else " + trapStatus + "=125; : >| " + traps + "; fi\n" +
+		"fi\n" +
+		"if command test \"$" + trapStatus + "\" -eq 0; then\n" +
+		"  { command printf '\\n'; command cat " + command + "; } >> " + traps +
+		" || " + trapStatus + "=125\n" +
+		"fi\n" +
+		publishRecord(mark, openedPath) +
+		"if command test \"$" + trapStatus + "\" -ne 0; then\n" +
+		"  " + status + "=125\n" +
+		"else\n" +
+		"  case \"$" + flags + "\" in\n" +
+		"    *e*x*|*x*e*)\n" + run("\\set -e; \\set -x") +
+		"    ;;\n" +
+		"    *e*)\n" + run("\\set -e; \\set +x") +
+		"    ;;\n" +
+		"    *x*)\n" + run("\\set +e; \\set -x") +
+		"    ;;\n" +
+		"    *)\n" + run("\\set +e; \\set +x") +
+		"    ;;\n" +
+		"  esac\n" +
+		"  " + status + "=$?\n" +
+		"fi\n" +
+		publishRecord(`command printf %s "$`+status+`"`, statusPath) +
 		publishRecord(mark, closedPath) +
-		"exit 0\n" +
+		"\\exit 0\n" +
 		")\n"
 }
 

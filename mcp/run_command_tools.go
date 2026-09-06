@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -221,6 +222,7 @@ func (t *tools) startCommand(
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")
 	commandPath := filepath.Join(directory, "command")
+	trapPath := filepath.Join(directory, "traps")
 
 	// In-pane marks exclude shell echo; the closing column distinguishes a
 	// newline from output ending mid-row. Files hide markers from the pane, and
@@ -233,7 +235,10 @@ func (t *tools) startCommand(
 		shellQuote(route.socketPath),
 		shellQuote(route.paneID),
 	)
-	script := wrapperScript(mark, openedPath, commandPath, statusPath, closedPath)
+	nonce := fmt.Sprintf("%x", sha256.Sum256([]byte(directory)))[:16]
+	script := wrapperScript(
+		mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce,
+	)
 
 	if err := os.WriteFile(commandPath, []byte(input.Command+"\n"), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
