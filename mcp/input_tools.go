@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -80,12 +81,13 @@ type paneInputPreflight struct {
 
 type paneInputServerIdentity struct {
 	endpoint        string
+	endpointID      uint64
 	serverPID       uint64
 	serverStartTime uint64
 }
 
 type paneInputIdentity struct {
-	endpoint        string
+	endpointID      uint64
 	serverPID       uint64
 	serverStartTime uint64
 	paneID          string
@@ -95,7 +97,7 @@ func (p paneInputPreflight) Identities() []paneInputIdentity {
 	identities := make([]paneInputIdentity, 0, len(p.ConfiguredIDs))
 	for _, paneID := range p.ConfiguredIDs {
 		identities = append(identities, paneInputIdentity{
-			endpoint: p.Identity.endpoint, serverPID: p.Identity.serverPID,
+			endpointID: p.Identity.endpointID, serverPID: p.Identity.serverPID,
 			serverStartTime: p.Identity.serverStartTime, paneID: paneID,
 		})
 	}
@@ -438,6 +440,10 @@ func paneInputIdentityForSnapshot(
 	if !filepath.IsAbs(endpoint) {
 		return paneInputServerIdentity{}, errors.New("resolved pane input endpoint is not absolute")
 	}
+	endpointID, err := processPaneInputEndpoints.identify(endpoint)
+	if err != nil {
+		return paneInputServerIdentity{}, fmt.Errorf("identify pane input endpoint: %w", err)
+	}
 	pidRaw, pidPresent := source.Formats().Raw("pid")
 	pid, err := parseCanonicalPaneInputNumber(pidRaw, false)
 	if err != nil || !pidPresent {
@@ -449,7 +455,8 @@ func paneInputIdentityForSnapshot(
 		return paneInputServerIdentity{}, errors.New("server start_time is unavailable or malformed")
 	}
 	return paneInputServerIdentity{
-		endpoint: endpoint, serverPID: pid, serverStartTime: startTime,
+		endpoint: endpoint, endpointID: endpointID,
+		serverPID: pid, serverStartTime: startTime,
 	}, nil
 }
 
@@ -636,6 +643,13 @@ func (t *tools) sendKeysBatch(
 	}
 	output.PaneID = preflight.Source.ID().String()
 	output.ResolvedPaneIDs = append([]string{}, preflight.ConfiguredIDs...)
+	lease, err := processPaneInputs.acquire(
+		preflight.Identities(), paneInputReservationInput, tool,
+	)
+	if err != nil {
+		return nil, output, err
+	}
+	defer processPaneInputs.release(lease)
 	if err := t.confirmCallerInputPreflight(ctx, request, preflight, "sending keys"); err != nil {
 		return nil, output, err
 	}
@@ -658,6 +672,11 @@ func (t *tools) sendKeysBatch(
 		return nil, output, fmt.Errorf(
 			"%s refused: pane input state, placement, route, caller, or membership changed before dispatch",
 			tool,
+		)
+	}
+	if !processPaneInputs.owns(lease, preflight.Identities()) {
+		return nil, output, fmt.Errorf(
+			"%s refused: its pane input reservation changed before dispatch", tool,
 		)
 	}
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
@@ -707,64 +726,82 @@ func (t *tools) pasteText(
 	input pasteTextInput,
 ) (*mcp.CallToolResult, pasteTextOutput, error) {
 	output := pasteTextOutput{}
-	if input.Text == "" {
-		return nil, output, errors.New("text is required")
-	}
-	preflight, err := t.preflightPaneInput(
+	initial, err := t.preflightPaneInput(
 		ctx, input.PaneID, input.SessionName, paneInputTargetOnly, "paste_text",
 	)
 	if err != nil {
 		return nil, output, err
 	}
-	pane := preflight.Source
+	pane := initial.Source
 	output.PaneID = pane.ID().String()
-	if err := t.confirmCallerInputPreflight(ctx, request, preflight, "pasting text"); err != nil {
+	lease, err := processPaneInputs.acquire(
+		initial.Identities(), paneInputReservationInput, "paste_text",
+	)
+	if err != nil {
 		return nil, output, err
 	}
-	initial := preflight
+	defer processPaneInputs.release(lease)
+	if err := t.confirmCallerInputPreflight(ctx, request, initial, "pasting text"); err != nil {
+		return nil, output, err
+	}
+	if input.Text == "" && !input.Enter {
+		return nil, output, nil
+	}
 
-	server := t.tmux(ctx)
+	server := initial.Source.Server()
 	name := "libtmux-mcp-paste-" + strconv.FormatInt(pasteSequence.Add(1), 10)
 	contents := input.Text
 	if input.Enter {
 		contents += "\n"
 	}
-	if err := t.runtime.deps.setBuffer(ctx, server, tmux.SetBufferRequest{
-		Data: contents,
-		Name: &name,
-	}); err != nil {
-		return nil, output, err
-	}
-	preflight, err = t.preflightPaneInput(
-		ctx, output.PaneID, "", paneInputTargetOnly, "paste_text",
-	)
-	if err != nil {
-		return nil, output, errors.Join(err, server.DeleteBuffer(ctx, &name))
-	}
-	if !samePaneInputPreflight(initial, preflight) {
-		return nil, output, errors.Join(
-			errors.New("paste_text refused: pane input state, placement, route, caller, or membership changed before dispatch"),
-			server.DeleteBuffer(ctx, &name),
-		)
-	}
-	pane = preflight.Source
-	// Deleted with the paste rather than left behind: tmux keeps buffers until
-	// something drops them, and a client pasting repeatedly would fill a
-	// person's buffer list with text they never copied.
 	bracket := true
 	if input.Bracket != nil {
 		bracket = *input.Bracket
 	}
-	if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
+	if err := t.runtime.deps.setBuffer(ctx, server, tmux.SetBufferRequest{
+		Data: contents,
+		Name: &name,
+	}); err != nil {
+		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
+	}
+	final, err := t.preflightPaneInput(
+		ctx, output.PaneID, "", paneInputTargetOnly, "paste_text",
+	)
+	if err != nil {
+		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
+	}
+	if !samePaneInputPreflight(initial, final) {
+		return nil, output, errors.Join(
+			errors.New("paste_text refused: pane input state, placement, route, caller, or membership changed before dispatch"),
+			t.deletePasteBuffer(server, name),
+		)
+	}
+	pane = final.Source
+	if !processPaneInputs.owns(lease, final.Identities()) {
+		return nil, output, errors.Join(
+			errors.New("paste_text refused: its pane input reservation changed before dispatch"),
+			t.deletePasteBuffer(server, name),
+		)
+	}
+	// Deleted with the paste rather than left behind: tmux keeps buffers until
+	// something drops them, and a client pasting repeatedly would fill a
+	// person's buffer list with text they never copied.
+	if err := t.runtime.deps.pasteBuffer(ctx, pane, tmux.PasteBufferRequest{
 		BufferName:  &name,
 		DeleteAfter: true,
 		Bracket:     bracket,
 	}); err != nil {
-		cleanupErr := server.DeleteBuffer(ctx, &name)
+		cleanupErr := t.deletePasteBuffer(server, name)
 		return nil, output, errors.Join(err, cleanupErr)
 	}
 	output.Bytes = len(input.Text)
 	return nil, output, nil
+}
+
+func (t *tools) deletePasteBuffer(server tmux.Server, name string) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(t.runtime.ctx), 2*time.Second)
+	defer cancel()
+	return server.DeleteBuffer(cleanupCtx, &name)
 }
 
 // addInputTools advertises the tools that put something into a pane.

@@ -282,6 +282,104 @@ func TestConfiguredPaneInputMembership(t *testing.T) {
 	}
 }
 
+func TestPaneInputReservationsUseFullDaemonGenerations(t *testing.T) {
+	coordinator := paneInputCoordinator{}
+	first := []paneInputIdentity{
+		{endpointID: 1, serverPID: 101, serverStartTime: 456, paneID: "%1"},
+		{endpointID: 1, serverPID: 101, serverStartTime: 456, paneID: "%2"},
+	}
+	lease, err := coordinator.acquire(first, paneInputReservationRun, "run_shell_command")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !coordinator.owns(lease, first) {
+		t.Fatal("coordinator does not recognize its full-cohort owner")
+	}
+	if _, err := coordinator.acquire(first[1:], paneInputReservationInput, "send_keys"); err == nil {
+		t.Fatal("overlapping input acquired an active run pane")
+	}
+	for _, distinct := range []paneInputIdentity{
+		{endpointID: 2, serverPID: 101, serverStartTime: 456, paneID: "%1"},
+		{endpointID: 1, serverPID: 102, serverStartTime: 456, paneID: "%1"},
+		{endpointID: 1, serverPID: 101, serverStartTime: 457, paneID: "%1"},
+		{endpointID: 1, serverPID: 101, serverStartTime: 456, paneID: "%3"},
+	} {
+		other, err := coordinator.acquire(
+			[]paneInputIdentity{distinct}, paneInputReservationInput, "send_keys",
+		)
+		if err != nil {
+			t.Fatalf("distinct identity %#v conflicted: %v", distinct, err)
+		}
+		coordinator.release(other)
+	}
+	changed := slices.Clone(first)
+	changed[0].serverStartTime++
+	if coordinator.owns(lease, changed) {
+		t.Fatal("lease covered a changed daemon generation")
+	}
+	coordinator.release(lease)
+	if _, err := coordinator.acquire(first[1:], paneInputReservationInput, "send_keys"); err != nil {
+		t.Fatalf("released pane remained reserved: %v", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestPaneInputReservationsCanonicalizeSocketAliases(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	base := mustInternalMCPServer(t, target)
+	baseCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	basePreflight, err := base.tools.preflightPaneInput(
+		baseCtx, panes[0].ID().String(), "", paneInputTargetOnly, "paste_text",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name string
+		link func(string, string) error
+	}{
+		{name: "symlink", link: os.Symlink},
+		{name: "hard link", link: os.Link},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			alias := filepath.Join(t.TempDir(), "tmux.sock")
+			if err := test.link(target.SocketPath(), alias); err != nil {
+				t.Fatal(err)
+			}
+			aliasTarget, err := target.WithSocketPath(alias)
+			if err != nil {
+				t.Fatal(err)
+			}
+			aliased := mustInternalMCPServer(t, aliasTarget)
+			aliasCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: aliasTarget})
+			aliasPreflight, err := aliased.tools.preflightPaneInput(
+				aliasCtx, panes[0].ID().String(), "", paneInputTargetOnly, "paste_text",
+			)
+			if err != nil {
+				t.Fatalf("aliased socket preflight: %v", err)
+			}
+
+			coordinator := paneInputCoordinator{}
+			lease, err := coordinator.acquire(
+				basePreflight.Identities(), paneInputReservationInput, "send_keys",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer coordinator.release(lease)
+			if _, err := coordinator.acquire(
+				aliasPreflight.Identities(), paneInputReservationInput, "paste_text",
+			); err == nil {
+				t.Fatal("physical socket alias acquired an active pane")
+			}
+		})
+	}
+}
+
 //libtmux:real-tmux
 func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -310,15 +408,16 @@ func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 		t.Fatalf("fresh source pane_synchronized = (%q, %t), want (1, true)", raw, ok)
 	}
 	if got.Identity.endpoint != resolvePath(target.SocketPath()) ||
-		got.Identity.serverPID == 0 || got.Identity.serverStartTime == 0 ||
+		got.Identity.endpointID == 0 || got.Identity.serverPID == 0 ||
+		got.Identity.serverStartTime == 0 ||
 		got.Caller.state != paneInputCallerDetached ||
 		!slices.Equal(got.Identities(), []paneInputIdentity{
 			{
-				endpoint: got.Identity.endpoint, serverPID: got.Identity.serverPID,
+				endpointID: got.Identity.endpointID, serverPID: got.Identity.serverPID,
 				serverStartTime: got.Identity.serverStartTime, paneID: want[0],
 			},
 			{
-				endpoint: got.Identity.endpoint, serverPID: got.Identity.serverPID,
+				endpointID: got.Identity.endpointID, serverPID: got.Identity.serverPID,
 				serverStartTime: got.Identity.serverStartTime, paneID: want[1],
 			},
 		}) {
@@ -958,9 +1057,134 @@ func TestRunCommandRefusesShellIdentityTransition(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestSendReservationIsSharedAcrossInstances(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	firstInstance := mustInternalMCPServer(t, target)
+	secondInstance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstInstance.runtime.deps.sendKeySequence = func(
+		dispatchCtx context.Context,
+		_ tmux.Pane,
+		_ tmux.SendKeySequenceRequest,
+	) error {
+		close(entered)
+		select {
+		case <-release:
+			return nil
+		case <-dispatchCtx.Done():
+			return dispatchCtx.Err()
+		}
+	}
+	first := make(chan error, 1)
+	go func() {
+		_, _, err := firstInstance.tools.sendKeysBatch(
+			callCtx, nil,
+			sendKeysBatchInput{PaneID: panes[0].ID().String(), Keys: []string{"C-l"}},
+			"send_keys",
+		)
+		first <- err
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	var secondDispatches atomic.Int32
+	secondInstance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		secondDispatches.Add(1)
+		return nil
+	}
+	_, _, err := secondInstance.tools.sendKeysBatch(
+		callCtx, nil,
+		sendKeysBatchInput{PaneID: panes[0].ID().String(), Keys: []string{"C-l"}},
+		"send_keys",
+	)
+	if err == nil || !strings.Contains(err.Error(), "pane-input dispatch") ||
+		secondDispatches.Load() != 0 {
+		t.Fatalf("overlapping send = (%v, dispatches %d)", err, secondDispatches.Load())
+	}
+	close(release)
+	select {
+	case err := <-first:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+}
+
+//libtmux:real-tmux
+func TestSendReservationCoversFinalPreflight(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	firstInstance := mustInternalMCPServer(t, target)
+	secondInstance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	var firstDispatches, secondDispatches atomic.Int32
+	firstInstance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		firstDispatches.Add(1)
+		return nil
+	}
+	secondInstance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		secondDispatches.Add(1)
+		return nil
+	}
+	var snapshots atomic.Int32
+	var competingErr error
+	firstInstance.runtime.deps.snapshot = func(
+		snapshotCtx context.Context,
+		server tmux.Server,
+	) (tmux.Snapshot, error) {
+		snapshot, err := defaults.snapshot(snapshotCtx, server)
+		if err == nil && snapshots.Add(1) == 2 {
+			_, _, competingErr = secondInstance.tools.sendKeysBatch(
+				callCtx, nil,
+				sendKeysBatchInput{PaneID: panes[0].ID().String(), Keys: []string{"C-l"}},
+				"send_keys",
+			)
+		}
+		return snapshot, err
+	}
+
+	_, _, err := firstInstance.tools.sendKeysBatch(
+		callCtx, nil,
+		sendKeysBatchInput{PaneID: panes[0].ID().String(), Keys: []string{"C-l"}},
+		"send_keys",
+	)
+	if err != nil || competingErr == nil ||
+		!strings.Contains(competingErr.Error(), "pane-input dispatch") ||
+		firstDispatches.Load() != 1 || secondDispatches.Load() != 0 {
+		t.Fatalf("send gap = (first %v/%d, competing %v/%d)",
+			err, firstDispatches.Load(), competingErr, secondDispatches.Load())
+	}
+}
+
+//libtmux:real-tmux
 func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	withoutCallerEnvironment(t)
 	target, window, panes := threePaneInputFixture(ctx, t)
 	if err := window.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
 		t.Fatal(err)
@@ -968,14 +1192,24 @@ func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	defaults := defaultMCPDependencies()
-	staged := ""
+	var buffers, pastes atomic.Int32
+	var staged string
 	instance.runtime.deps.setBuffer = func(
 		bufferCtx context.Context,
 		server tmux.Server,
 		request tmux.SetBufferRequest,
 	) error {
+		buffers.Add(1)
 		staged = request.Data
 		return defaults.setBuffer(bufferCtx, server, request)
+	}
+	instance.runtime.deps.pasteBuffer = func(
+		pasteCtx context.Context,
+		pane tmux.Pane,
+		request tmux.PasteBufferRequest,
+	) error {
+		pastes.Add(1)
+		return defaults.pasteBuffer(pasteCtx, pane, request)
 	}
 	separateSends := 0
 	instance.runtime.deps.sendKeySequence = func(
@@ -987,15 +1221,203 @@ func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 		return errors.New("separate Enter must not be sent")
 	}
 
-	result, output, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
-		PaneID: panes[0].ID().String(), Text: ":", Enter: true,
+	for index, test := range []struct {
+		name       string
+		text       string
+		wantStaged string
+		wantBytes  int
+	}{
+		{name: "text", text: ":", wantStaged: ":\n", wantBytes: 1},
+		{name: "empty", wantStaged: "\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result, output, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+				PaneID: panes[0].ID().String(), Text: test.text, Enter: true,
+			})
+			wantCalls := int32(index + 1)
+			if err != nil || result != nil || staged != test.wantStaged ||
+				separateSends != 0 || output.Bytes != test.wantBytes ||
+				buffers.Load() != wantCalls || pastes.Load() != wantCalls {
+				t.Fatalf(
+					"paste = (result %#v, output %+v, error %v, staged %q, buffers %d, pastes %d, sends %d)",
+					result, output, err, staged, buffers.Load(), pastes.Load(), separateSends,
+				)
+			}
+		})
+	}
+}
+
+//libtmux:real-tmux
+func TestEmptyPasteIsGuardedAndBufferFree(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	var buffers atomic.Int32
+	instance.runtime.deps.setBuffer = func(
+		context.Context,
+		tmux.Server,
+		tmux.SetBufferRequest,
+	) error {
+		buffers.Add(1)
+		return nil
+	}
+
+	_, output, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(),
 	})
-	if err != nil || result != nil || staged != ":\n" || separateSends != 0 ||
-		output.Bytes != 1 {
-		t.Fatalf(
-			"paste = (result %#v, output %+v, error %v, staged %q, sends %d)",
-			result, output, err, staged, separateSends,
-		)
+	if err != nil || output.PaneID != panes[0].ID().String() || output.Bytes != 0 ||
+		buffers.Load() != 0 {
+		t.Fatalf("empty paste = (%+v, %v, buffers %d)", output, err, buffers.Load())
+	}
+
+	preflight, err := instance.tools.preflightPaneInput(
+		callCtx, panes[0].ID().String(), "", paneInputTargetOnly, "run_shell_command",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := processPaneInputs.acquire(
+		preflight.Identities(), paneInputReservationRun, "run_shell_command",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer processPaneInputs.release(lease)
+	_, _, err = instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "earlier run_shell_command") ||
+		buffers.Load() != 0 {
+		t.Fatalf("empty paste during run = (%v, buffers %d)", err, buffers.Load())
+	}
+}
+
+//libtmux:real-tmux
+func TestPasteReservationIsSharedAcrossInstances(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	firstInstance := mustInternalMCPServer(t, target)
+	secondInstance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstInstance.runtime.deps.pasteBuffer = func(
+		pasteCtx context.Context,
+		pane tmux.Pane,
+		request tmux.PasteBufferRequest,
+	) error {
+		close(entered)
+		select {
+		case <-release:
+			return defaults.pasteBuffer(pasteCtx, pane, request)
+		case <-pasteCtx.Done():
+			return pasteCtx.Err()
+		}
+	}
+	first := make(chan error, 1)
+	go func() {
+		_, _, err := firstInstance.tools.pasteText(callCtx, nil, pasteTextInput{
+			PaneID: panes[0].ID().String(), Text: "first",
+		})
+		first <- err
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	var secondPastes atomic.Int32
+	secondInstance.runtime.deps.pasteBuffer = func(
+		context.Context,
+		tmux.Pane,
+		tmux.PasteBufferRequest,
+	) error {
+		secondPastes.Add(1)
+		return nil
+	}
+	_, _, err := secondInstance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: "second",
+	})
+	if err == nil || !strings.Contains(err.Error(), "pane-input dispatch") ||
+		secondPastes.Load() != 0 {
+		t.Fatalf("overlapping paste = (%v, dispatches %d)", err, secondPastes.Load())
+	}
+	close(release)
+	select {
+	case err := <-first:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+}
+
+//libtmux:real-tmux
+func TestPasteReservationCoversFinalPreflight(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	firstInstance := mustInternalMCPServer(t, target)
+	secondInstance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := defaultMCPDependencies()
+	firstInstance.runtime.deps.setBuffer = func(
+		context.Context,
+		tmux.Server,
+		tmux.SetBufferRequest,
+	) error {
+		return nil
+	}
+	secondInstance.runtime.deps.setBuffer = firstInstance.runtime.deps.setBuffer
+	var firstDispatches, secondDispatches atomic.Int32
+	firstInstance.runtime.deps.pasteBuffer = func(
+		context.Context,
+		tmux.Pane,
+		tmux.PasteBufferRequest,
+	) error {
+		firstDispatches.Add(1)
+		return nil
+	}
+	secondInstance.runtime.deps.pasteBuffer = func(
+		context.Context,
+		tmux.Pane,
+		tmux.PasteBufferRequest,
+	) error {
+		secondDispatches.Add(1)
+		return nil
+	}
+	var snapshots atomic.Int32
+	var competingErr error
+	firstInstance.runtime.deps.snapshot = func(
+		snapshotCtx context.Context,
+		server tmux.Server,
+	) (tmux.Snapshot, error) {
+		snapshot, err := defaults.snapshot(snapshotCtx, server)
+		if err == nil && snapshots.Add(1) == 2 {
+			_, _, competingErr = secondInstance.tools.pasteText(
+				callCtx, nil,
+				pasteTextInput{PaneID: panes[0].ID().String(), Text: "second"},
+			)
+		}
+		return snapshot, err
+	}
+
+	_, _, err := firstInstance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: "first",
+	})
+	if err != nil || competingErr == nil ||
+		!strings.Contains(competingErr.Error(), "pane-input dispatch") ||
+		firstDispatches.Load() != 1 || secondDispatches.Load() != 0 {
+		t.Fatalf("paste gap = (first %v/%d, competing %v/%d)",
+			err, firstDispatches.Load(), competingErr, secondDispatches.Load())
 	}
 }
 
@@ -1073,5 +1495,61 @@ func TestPasteRefusesPlacementTransition(t *testing.T) {
 	}
 	if _, err := target.ShowBuffer(ctx, bufferName); err == nil {
 		t.Fatalf("refused paste left buffer %q behind", *bufferName)
+	}
+}
+
+//libtmux:real-tmux
+func TestPasteCleansBufferAfterRequestCancellation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	baseCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	callCtx, cancelCall := context.WithCancel(baseCtx)
+	defaults := defaultMCPDependencies()
+	var bufferName *string
+	instance.runtime.deps.setBuffer = func(
+		bufferCtx context.Context,
+		server tmux.Server,
+		request tmux.SetBufferRequest,
+	) error {
+		bufferName = request.Name
+		if err := defaults.setBuffer(bufferCtx, server, request); err != nil {
+			return err
+		}
+		cancelCall()
+		return nil
+	}
+
+	_, _, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: "must-be-cleaned",
+	})
+	if !errors.Is(err, context.Canceled) || bufferName == nil {
+		t.Fatalf("cancelled paste = (%v, buffer %v)", err, bufferName)
+	}
+	if _, err := target.ShowBuffer(ctx, bufferName); err == nil {
+		t.Fatalf("cancelled paste left buffer %q behind", *bufferName)
+	}
+
+	instance.runtime.deps.setBuffer = func(
+		bufferCtx context.Context,
+		server tmux.Server,
+		request tmux.SetBufferRequest,
+	) error {
+		bufferName = request.Name
+		if err := defaults.setBuffer(bufferCtx, server, request); err != nil {
+			return err
+		}
+		return tmux.ErrOutcomeUnknown
+	}
+	_, _, err = instance.tools.pasteText(baseCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: "unknown-set-buffer-outcome",
+	})
+	if !errors.Is(err, tmux.ErrOutcomeUnknown) || bufferName == nil {
+		t.Fatalf("ambiguous buffer setup = (%v, buffer %v)", err, bufferName)
+	}
+	if _, err := target.ShowBuffer(ctx, bufferName); err == nil {
+		t.Fatalf("ambiguous buffer setup left buffer %q behind", *bufferName)
 	}
 }

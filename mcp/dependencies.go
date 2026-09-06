@@ -16,6 +16,7 @@ type mcpDependencies struct {
 	snapshot             func(context.Context, tmux.Server) (tmux.Snapshot, error)
 	sendKeySequence      func(context.Context, tmux.Pane, tmux.SendKeySequenceRequest) error
 	setBuffer            func(context.Context, tmux.Server, tmux.SetBufferRequest) error
+	pasteBuffer          func(context.Context, tmux.Pane, tmux.PasteBufferRequest) error
 	beforeRunDispatch    func(context.Context) error
 }
 
@@ -76,6 +77,13 @@ func defaultMCPDependencies() mcpDependencies {
 			request tmux.SetBufferRequest,
 		) error {
 			return server.SetBuffer(ctx, request)
+		},
+		pasteBuffer: func(
+			ctx context.Context,
+			pane tmux.Pane,
+			request tmux.PasteBufferRequest,
+		) error {
+			return pane.PasteBuffer(ctx, request)
 		},
 		beforeRunDispatch: func(context.Context) error { return nil },
 	}
