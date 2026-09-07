@@ -720,22 +720,37 @@ func TestConfirmCallerInputPreflight(t *testing.T) {
 	}
 }
 
-// waitForPaneCommand waits until tmux lists the pane running command. A respawn
-// returns before the server has finished replacing the pane, so a preflight run
-// straight afterwards can read the pane as absent rather than as the shell the
-// case is about.
-func waitForPaneCommand(ctx context.Context, pane tmux.Pane, command string) error {
+// panePID reads the process tmux currently reports for a pane.
+func panePID(ctx context.Context, pane tmux.Pane) (int, error) {
+	current, err := pane.Refresh(ctx)
+	if err != nil {
+		return 0, err
+	}
+	pid, present := current.Formats().PanePID()
+	if !present {
+		return 0, errors.New("tmux reported no pane_pid")
+	}
+	return pid, nil
+}
+
+// waitForPaneReplacement waits until tmux reports a pane process other than
+// before. A respawn returns before the server has finished replacing the pane,
+// so a preflight run straight afterwards can read the pane as absent rather
+// than as the shell the case is about. The process is what settles, and unlike
+// the command name it means the same thing on every platform: tmux reports the
+// executable's name on macOS and the invoked name on Linux, which differ when
+// the replacement is reached through a symlink.
+func waitForPaneReplacement(ctx context.Context, pane tmux.Pane, before int) error {
 	return tmuxtest.WaitFor(ctx, 10*time.Millisecond,
 		func(waitCtx context.Context) (bool, error) {
-			current, err := pane.Refresh(waitCtx)
+			pid, err := panePID(waitCtx, pane)
 			if err != nil {
 				if errors.Is(err, tmux.ErrSnapshotNotFound) {
 					return false, nil
 				}
 				return false, err
 			}
-			name, present := current.CurrentCommand()
-			return present && name == command, nil
+			return pid != before, nil
 		})
 }
 
@@ -882,13 +897,17 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	instance.runtime.deps.beforeRunDispatch = func(barrierCtx context.Context) error {
+		before, err := panePID(barrierCtx, panes[0])
+		if err != nil {
+			return err
+		}
 		fish := "exec " + filepath.Join(fishDir, "fish")
 		if _, respawnErr := panes[0].Respawn(barrierCtx, tmux.RespawnRequest{
 			Command: &fish, Kill: true,
 		}); respawnErr != nil {
 			return respawnErr
 		}
-		return waitForPaneCommand(barrierCtx, panes[0], "fish")
+		return waitForPaneReplacement(barrierCtx, panes[0], before)
 	}
 	_, ran, err = instance.tools.runCommand(callCtx, nil, runCommandInput{
 		PaneID: panes[0].ID().String(), Command: "true", TimeoutSeconds: 5,
@@ -898,13 +917,17 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 		t.Fatalf("second shell run refusal = (%+v, %v, sends=%d)", ran, err, sendCalls)
 	}
 
+	beforeCat, err := panePID(ctx, panes[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	cat := "exec /bin/cat"
 	if _, err := panes[0].Respawn(ctx, tmux.RespawnRequest{
 		Command: &cat, Kill: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := waitForPaneCommand(ctx, panes[0], "cat"); err != nil {
+	if err := waitForPaneReplacement(ctx, panes[0], beforeCat); err != nil {
 		t.Fatal(err)
 	}
 	instance.runtime.deps.beforeRunDispatch = func(context.Context) error { return nil }
