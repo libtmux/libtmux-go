@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
@@ -303,6 +305,14 @@ func connectedExampleClient(
 		}
 		panic("new session has no active pane")
 	}
+	// A pane that has not finished starting its shell drops pasted keys on the
+	// floor: nothing is reading them yet. Locally the prompt is up before the
+	// first tool call; on a loaded runner it is not, and the example then
+	// reports that its command never ran.
+	if err := waitForExampleShell(ctx, target, pane.ID().String()); err != nil {
+		killExampleServer(target)
+		panic(err)
+	}
 	session, closeSession, err := connectExampleClient(ctx, target)
 	if err != nil {
 		killExampleServer(target)
@@ -356,4 +366,37 @@ func killExampleServer(server tmux.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Kill(ctx)
+}
+
+// waitForExampleShell blocks until the pane reports a shell as its foreground
+// command, which is when it starts reading keys.
+func waitForExampleShell(ctx context.Context, target tmux.Server, paneID string) error {
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		panes, err := target.Panes(ctx)
+		if err == nil {
+			for _, pane := range panes {
+				if pane.ID().String() != paneID {
+					continue
+				}
+				if command, ok := pane.CurrentCommand(); ok && exampleShell(command) {
+					return nil
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("pane %s never reported a shell", paneID)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+// exampleShell mirrors the package's own shell predicate. example_test.go is
+// an external test package, so it cannot reach the unexported original.
+func exampleShell(running string) bool {
+	name := strings.ToLower(strings.TrimPrefix(filepath.Base(running), "-"))
+	return slices.Contains([]string{
+		"ash", "bash", "csh", "dash", "elvish", "fish", "ksh", "ksh93", "mksh",
+		"nu", "nushell", "pdksh", "powershell", "pwsh", "sh", "tcsh", "zsh",
+	}, name)
 }
