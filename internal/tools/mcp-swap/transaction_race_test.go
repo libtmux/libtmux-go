@@ -9,6 +9,69 @@ import (
 	"time"
 )
 
+// macOS reaches every path under TMPDIR through a symlink: /var is a link to
+// /private/var. A destination that already exists arrives resolved, but one
+// that does not cannot be, so staging held an unresolved path against a
+// resolved parent and refused every write on that platform while passing on
+// Linux. Staging resolves both, and writes the file an alias names rather than
+// replacing the alias.
+func TestStagingResolvesEveryDestinationItPlans(t *testing.T) {
+	t.Run("ancestor", func(t *testing.T) {
+		root := t.TempDir()
+		physical := filepath.Join(root, "physical")
+		if err := os.Mkdir(physical, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		linked := filepath.Join(root, "linked")
+		if err := os.Symlink(physical, linked); err != nil {
+			t.Fatal(err)
+		}
+
+		// Through the link, both for a destination that exists and one that
+		// does not: the swapper writes a config that may be either.
+		fresh := filepath.Join(linked, "fresh.json")
+		staged, err := stageAtomicFile(fresh, []byte("first"), 0o600)
+		if err != nil {
+			t.Fatalf("staging refused a missing destination under a symlinked ancestor: %v", err)
+		}
+		staged.cleanup()
+
+		existing := filepath.Join(physical, "existing.json")
+		if err := os.WriteFile(existing, []byte("original"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		staged, err = stageAtomicFile(
+			filepath.Join(linked, "existing.json"), []byte("updated"), 0o600,
+		)
+		if err != nil {
+			t.Fatalf("staging refused an existing destination under a symlinked ancestor: %v", err)
+		}
+		staged.cleanup()
+	})
+
+	t.Run("aliased destination resolves", func(t *testing.T) {
+		root := t.TempDir()
+		physical := filepath.Join(root, "physical.json")
+		if err := os.WriteFile(physical, []byte("original"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		alias := filepath.Join(root, "alias.json")
+		if err := os.Symlink(physical, alias); err != nil {
+			t.Fatal(err)
+		}
+		staged, err := stageAtomicFile(alias, []byte("updated"), 0o600)
+		if err != nil {
+			t.Fatalf("staging refused an aliased destination: %v", err)
+		}
+		defer staged.cleanup()
+		// The swapper writes the file an alias names rather than replacing the
+		// alias, so the plan has to carry the physical path.
+		if staged.target != physical {
+			t.Fatalf("staged target = %q, want the physical %q", staged.target, physical)
+		}
+	})
+}
+
 func TestStagedFilePreservesLatePathReplacements(t *testing.T) {
 	t.Run("before staging", func(t *testing.T) {
 		target := filepath.Join(t.TempDir(), "config.json")

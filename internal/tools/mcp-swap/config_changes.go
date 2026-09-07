@@ -1169,9 +1169,16 @@ func stageAtomicFile(
 		if resolveErr != nil {
 			return stagedFile{}, resolveErr
 		}
-		if resolved != target {
-			return stagedFile{}, errors.New("destination changed while it was planned")
-		}
+		// resolveWriteTarget could not resolve a destination that does not
+		// exist yet, so target still names it through whatever links lead
+		// there. Adopt the resolved path now, as an existing destination
+		// already arrives resolved: the temporary file is then created beside
+		// the physical parent it will be renamed onto, and the commit-time
+		// check compares two resolved paths. Comparing the two forms instead
+		// refused every write under macOS's TMPDIR, where /var is a link to
+		// /private/var and the two never agree.
+		target = resolved
+		planned.target = resolved
 		planned.targetParent = parent
 	} else {
 		return stagedFile{}, statErr
