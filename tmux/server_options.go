@@ -158,7 +158,6 @@ func (s Server) WithProcessEnvironmentValue(name, value string) (Server, error) 
 	// handle. Pin the already-resolved endpoint as an explicit socket path.
 	config.socketName = ""
 	config.socketPath = state.config.socketSelection.Path
-	config.socketSelection.Path = state.config.socketSelection.Path
 	return Server{
 		state: &serverState{
 			config:   config,
