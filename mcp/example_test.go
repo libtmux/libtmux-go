@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -240,8 +241,34 @@ func Example_watchingAVisibleCommandAcrossTurns() {
 		return
 	}
 
-	fmt.Println(wait.Found, slices.Contains(reading.Lines, "ready"))
+	found := slices.Contains(reading.Lines, "ready")
+	if !wait.Found || !found {
+		// An Example compares stdout against its Output comment, so the
+		// evidence goes to stderr. Three fixes were proposed for this case
+		// from the printed booleans alone, and none of them was aimed at what
+		// actually failed.
+		screen, _ := session.CallTool(ctx, &sdk.CallToolParams{
+			Name: "capture_pane", Arguments: map[string]any{"pane_id": paneID},
+		})
+		fmt.Fprintf(os.Stderr,
+			"watch example: baseline=%q wait=%+v since=%#v screen=%s\n",
+			baseline.Cursor, waited.StructuredContent, reading.Lines,
+			exampleResultText(screen))
+	}
+	fmt.Println(wait.Found, found)
 	// Output: true true
+}
+
+func exampleResultText(result *sdk.CallToolResult) string {
+	if result == nil {
+		return ""
+	}
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			return text.Text
+		}
+	}
+	return ""
 }
 
 // Run a command and use its framed exit status instead of guessing from a
