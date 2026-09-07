@@ -87,9 +87,17 @@ jobs:
           go vet ./...
           go test -race -count=1 -coverpkg=./... -coverprofile=coverage.out ./...
 
+      # An artifact name cannot contain a path separator, and one module is
+      # nested, so the separator becomes a dash.
+      - name: Name the coverage artifact
+        id: coverage
+        env:
+          MODULE: ${{ matrix.module }}
+        run: echo "name=coverage-${MODULE//\//-}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v7
         with:
-          name: coverage-${{ matrix.module }}
+          name: ${{ steps.coverage.outputs.name }}
           path: ${{ matrix.module }}/coverage.out
           if-no-files-found: ignore
 
