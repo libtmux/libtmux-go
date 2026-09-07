@@ -428,6 +428,7 @@ func (t *tools) catalogShowOption(ctx context.Context, request *sdk.CallToolRequ
 		return nil, showOptionOutput{}, err
 	}
 	legacy.Name = input.Name
+	legacy.Effective = input.Effective
 	return t.showOption(ctx, request, legacy)
 }
 

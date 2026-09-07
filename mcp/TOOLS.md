@@ -1821,6 +1821,7 @@ Reads only. Repeating it changes nothing.
 | `scope` **required** | string |
 | `set` **required** | boolean |
 | `value` **required** | string |
+| `inherited` | boolean |
 
 ### `signal_channel`
 

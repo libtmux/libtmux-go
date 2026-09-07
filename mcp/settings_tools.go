@@ -37,6 +37,9 @@ type showOptionInput struct {
 	// SessionName picks the session for session scope, and resolves the
 	// others when they are empty.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"the session to read the option on"`
+	// Effective reads the value the scope inherits when it sets none of its
+	// own, which is where a global option such as mouse lives.
+	Effective bool `json:"effective,omitempty" jsonschema:"include an inherited value"`
 }
 
 // showOptionOutput carries an option's value.
@@ -51,6 +54,10 @@ type showOptionOutput struct {
 	// one set to an empty string are different things, and only this
 	// distinguishes them.
 	Set bool `json:"set"`
+	// Inherited reports a Value that came from the scope's global table rather
+	// than from the object asked about, which only an effective read returns.
+	// Set stays false for it, because the object itself still sets nothing.
+	Inherited bool `json:"inherited,omitempty"`
 }
 
 // showOption reads one tmux option.
@@ -98,9 +105,43 @@ func (t *tools) showOption(
 	if err != nil {
 		return nil, output, err
 	}
+	// tmux keeps a scope's own values and the global table it falls back to
+	// apart, so a session that sets nothing reads empty for an option set with
+	// `set -g`. Without this a caller can write mouse through set_mouse_enabled
+	// and never read it back.
+	if !set && input.Effective {
+		inherited, inheritedSet, inheritedErr := t.inheritedOption(ctx, scope, input.Name)
+		if inheritedErr != nil {
+			return nil, output, inheritedErr
+		}
+		if inheritedSet {
+			output.Value = inherited
+			output.Inherited = true
+			return nil, output, nil
+		}
+	}
 	output.Value = value
 	output.Set = set
 	return nil, output, nil
+}
+
+// inheritedOption reads the global table a scope falls back to. Server options
+// have no table above them, and a pane inherits window options rather than
+// session ones, which is why a session option is only reachable at session
+// scope.
+func (t *tools) inheritedOption(
+	ctx context.Context,
+	scope string,
+	name string,
+) (string, bool, error) {
+	switch scope {
+	case scopeSession:
+		return t.tmux(ctx).GlobalSessionScope().RawOption(ctx, name)
+	case scopeWindow, scopePane:
+		return t.tmux(ctx).GlobalWindowScope().RawOption(ctx, name)
+	default:
+		return "", false, nil
+	}
 }
 
 // scopeUses reports whether a scope reads the target a caller named, so an

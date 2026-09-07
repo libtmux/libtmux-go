@@ -109,6 +109,105 @@ func TestEveryToolAnswersTheSchemaItPublishes(t *testing.T) {
 	}
 }
 
+// A tool answering its own schema does not prove it acted: tmux accepts a
+// server-scoped write of a session option without complaint and changes
+// nothing, so a setter aimed at the wrong scope can report success and leave
+// the option alone. libtmux-go refuses that write before tmux runs, which is
+// what makes it loud here; this reads the value back through the surface so a
+// setter that stops taking effect fails even if the refusal is ever relaxed.
+//
+//libtmux:real-tmux
+func TestSettersChangeWhatTheyReport(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	request := tmux.NewSessionRequest{Name: "effect"}
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &request,
+	})
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+
+	sessions, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "list_sessions"})
+	if err != nil || sessions.IsError {
+		t.Fatalf("list_sessions = (%v, %v)", surfaceResultText(sessions), err)
+	}
+	sessionID := firstListedID(t, sessions, "sessions")
+	windows, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "list_windows"})
+	if err != nil || windows.IsError {
+		t.Fatalf("list_windows = (%v, %v)", surfaceResultText(windows), err)
+	}
+	windowID := firstListedID(t, windows, "windows")
+
+	for _, effect := range []struct {
+		name      string
+		set       string
+		arguments map[string]any
+		option    string
+		scope     string
+		target    string
+		want      string
+	}{
+		{
+			name: "mouse on", set: "set_mouse_enabled",
+			arguments: map[string]any{"enabled": true},
+			option:    "mouse", scope: "session", target: sessionID, want: "on",
+		},
+		{
+			name: "mouse off", set: "set_mouse_enabled",
+			arguments: map[string]any{"enabled": false},
+			option:    "mouse", scope: "session", target: sessionID, want: "off",
+		},
+		{
+			name: "history limit", set: "set_history_limit",
+			arguments: map[string]any{"session_id": sessionID, "lines": 4321},
+			option:    "history-limit", scope: "session", target: sessionID,
+			want: "4321",
+		},
+		{
+			name: "synchronize panes", set: "set_synchronize_panes",
+			arguments: map[string]any{"window_id": windowID, "enabled": true},
+			option:    "synchronize-panes", scope: "window", target: windowID,
+			want: "on",
+		},
+	} {
+		t.Run(effect.name, func(t *testing.T) {
+			result, err := session.CallTool(ctx, &sdk.CallToolParams{
+				Name: effect.set, Arguments: effect.arguments,
+			})
+			if err != nil {
+				t.Fatalf("%s: %v", effect.set, err)
+			}
+			if result.IsError {
+				t.Fatalf("%s: %s", effect.set, surfaceResultText(result))
+			}
+			read, err := session.CallTool(ctx, &sdk.CallToolParams{
+				Name: "show_option",
+				Arguments: map[string]any{
+					// mouse is written as the global session option, which a
+					// session reads by inheritance rather than as its own.
+					"name": effect.option, "scope": effect.scope,
+					"target": effect.target, "effective": true,
+				},
+			})
+			if err != nil || read.IsError {
+				t.Fatalf("show_option %s: (%v, %v)",
+					effect.option, surfaceResultText(read), err)
+			}
+			structured, ok := read.StructuredContent.(map[string]any)
+			if !ok {
+				t.Fatalf("show_option %s answered no object", effect.option)
+			}
+			if value, _ := structured["value"].(string); value != effect.want {
+				t.Errorf("%s reported success but %s reads %q, want %q",
+					effect.set, effect.option, value, effect.want)
+			}
+		})
+	}
+}
+
 // answersItsSchema holds one reply to the schema its tool published.
 func answersItsSchema(tool *sdk.Tool, result *sdk.CallToolResult) error {
 	if tool.OutputSchema == nil {
