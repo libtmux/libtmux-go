@@ -854,8 +854,16 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	if err := panes[0].SetOption(ctx, "synchronize-panes", "off", tmux.SetOptionOptions{}); err != nil {
 		t.Fatal(err)
 	}
+	// The refusal keys off the foreground command's basename, not off any real
+	// shell, so name a binary that exists everywhere `fish` rather than
+	// depending on fish being installed. `cat` also keeps the pane alive and
+	// reading keys, which is the state this case is about.
+	fishDir := t.TempDir()
+	if err := os.Symlink("/bin/cat", filepath.Join(fishDir, "fish")); err != nil {
+		t.Fatal(err)
+	}
 	instance.runtime.deps.beforeRunDispatch = func(barrierCtx context.Context) error {
-		fish := "exec /usr/bin/fish"
+		fish := "exec " + filepath.Join(fishDir, "fish")
 		_, respawnErr := panes[0].Respawn(barrierCtx, tmux.RespawnRequest{
 			Command: &fish, Kill: true,
 		})
