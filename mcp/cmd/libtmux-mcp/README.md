@@ -85,4 +85,4 @@ client-registration poll.
 
 - [`mcp/README.md`](../../README.md) — client configuration
 - [`mcp/TOOLS.md`](../../TOOLS.md) — the tool reference
-- [`mcp-swap`](../mcp-swap) — point the agent CLIs on this machine at a local build
+- [`mcp-swap`](../../../internal/tools/mcp-swap) — point the agent CLIs on this machine at a local build
