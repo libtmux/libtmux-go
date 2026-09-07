@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -544,7 +545,7 @@ func commandRunDisappeared(err error) bool {
 }
 
 func commandRunProcessPresent(pid uint64) (bool, error) {
-	if pid == 0 || pid > uint64(^uint(0)>>1) {
+	if pid == 0 || pid > math.MaxInt {
 		return true, errors.New("run_shell_command retained daemon pid is invalid")
 	}
 	process, err := os.FindProcess(int(pid))
