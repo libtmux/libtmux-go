@@ -88,9 +88,14 @@ func TestEveryToolAnswersTheSchemaItPublishes(t *testing.T) {
 			t.Fatalf("%s: %s", one.tool, surfaceResultText(result))
 		}
 		if one.keep != nil {
+			encoded, err := json.Marshal(result.StructuredContent)
+			if err != nil {
+				t.Fatalf("%s: encode reply: %v", one.tool, err)
+			}
 			var decoded map[string]any
-			encoded, _ := json.Marshal(result.StructuredContent)
-			_ = json.Unmarshal(encoded, &decoded)
+			if err := json.Unmarshal(encoded, &decoded); err != nil {
+				t.Fatalf("%s: decode reply: %v", one.tool, err)
+			}
 			one.keep(held, decoded)
 		}
 		if err := answersItsSchema(tool, result); err != nil {
