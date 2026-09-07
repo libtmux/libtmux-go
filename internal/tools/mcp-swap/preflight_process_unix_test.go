@@ -46,7 +46,7 @@ func TestPreflightOversizeStopsTheProcessGroup(t *testing.T) {
 			entry := preflightHelperEntry(t, "oversized-"+stream+"-tree")
 			heartbeat := filepath.Join(t.TempDir(), "heartbeat")
 			t.Setenv("MCP_SWAP_PREFLIGHT_HEARTBEAT", heartbeat)
-			reason := preflightWithin(entry, time.Second)
+			reason := preflightWithin(entry, oversizeBudget)
 			if !strings.Contains(reason, "exceeds") {
 				t.Fatalf("preflight reason = %q, want stream limit", reason)
 			}

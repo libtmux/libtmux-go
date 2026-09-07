@@ -369,6 +369,11 @@ func finishPreflight(
 	graceful bool,
 ) error {
 	closeErr := stdin.Close()
+	if errors.Is(closeErr, os.ErrClosed) {
+		// The deadline already tore the pipes down. Reporting that as part of
+		// the failure buries the reason the caller needs under plumbing.
+		closeErr = nil
+	}
 	waited := false
 	if graceful {
 		select {
