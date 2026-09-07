@@ -559,7 +559,11 @@ func (t *tools) catalogSignalChannel(ctx context.Context, request *sdk.CallToolR
 
 func (t *tools) catalogSetMouseEnabled(ctx context.Context, _ *sdk.CallToolRequest, input setEnabledCapabilityInput) (*sdk.CallToolResult, settingCapabilityOutput, error) {
 	value := booleanOption(input.Enabled)
-	if err := t.tmux(ctx).SetOption(ctx, "mouse", value, tmux.SetOptionOptions{}); err != nil {
+	// mouse is a session option, so the server scope refuses it. The global
+	// session scope is what `set -g mouse` writes, and it is what a caller
+	// asking to turn mouse handling on for the server means.
+	scope := t.tmux(ctx).GlobalSessionScope()
+	if err := scope.SetOption(ctx, "mouse", value, tmux.SetOptionOptions{}); err != nil {
 		return nil, settingCapabilityOutput{}, err
 	}
 	return nil, settingCapabilityOutput{Name: "mouse", Enabled: new(input.Enabled)}, nil

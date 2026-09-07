@@ -136,15 +136,19 @@ so a configuration that could never have worked never replaces one that did.
 Read first — `status` and `--dry-run` write nothing:
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap status
+$ go run ./internal/tools/mcp-swap status
 ```
 
-```console
-$ go -C mcp run ./cmd/mcp-swap use-local --mode build
-```
+Point them at a build of this checkout:
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap revert
+$ go run ./internal/tools/mcp-swap use --mode build
+```
+
+Put every configuration back:
+
+```console
+$ go run ./internal/tools/mcp-swap revert
 ```
 
 ## What the server already tells you
