@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -225,6 +226,64 @@ authorization = "secret"
 	}
 }
 
+func TestTOMLStrictlyParsesTheWholeDocument(t *testing.T) {
+	t.Parallel()
+	target := client{key: "mcp_servers", format: formatTOML, dialect: dialectStandard}
+	for _, contents := range [][]byte{
+		[]byte("broken = [\n\n[mcp_servers.tmux]\ncommand = \"old\"\n"),
+		[]byte("value = 1\nvalue = 2\n\n[mcp_servers.tmux]\ncommand = \"old\"\n"),
+		[]byte("[mcp_servers.tmux]\ncommand = \"old\"\n\n[mcp_servers.tmux.env]\nCOUNT = 3\n"),
+	} {
+		if _, _, err := entryFromContents(target, contents); err == nil {
+			t.Fatalf("read accepted invalid TOML:\n%s", contents)
+		}
+		if _, err := renderEntryChange(target, contents, devEntry()); err == nil {
+			t.Fatalf("render accepted invalid TOML:\n%s", contents)
+		}
+	}
+}
+
+func TestTOMLSwapPreservesTargetCommentsAndReadsMultilineArguments(t *testing.T) {
+	t.Parallel()
+	contents := []byte(`[mcp_servers.tmux] # local server
+# command rationale
+command = "old"
+# arguments rationale
+args = [
+  "one",
+  "two",
+]
+
+[mcp_servers.tmux.env] # authority
+# keep this authority rationale
+LIBTMUX_TOOLSETS = "inspect"
+`)
+	target := client{key: "mcp_servers", format: formatTOML, dialect: dialectStandard}
+	entry, present, err := entryFromContents(target, contents)
+	if err != nil || !present {
+		t.Fatalf("entry = (%v, %t, %v)", entry, present, err)
+	}
+	spec, err := processSpecFromEntry(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(spec.args, ","); got != "one,two" {
+		t.Fatalf("multiline args = %q, want one,two", got)
+	}
+	updated, err := renderEntryChange(target, contents, devEntry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, comment := range []string{
+		"# local server", "# command rationale", "# arguments rationale",
+		"# authority", "# keep this authority rationale",
+	} {
+		if !strings.Contains(string(updated), comment) {
+			t.Errorf("swap dropped %q:\n%s", comment, updated)
+		}
+	}
+}
+
 const opencodeConfig = `{
   // Why this file looks the way it does.
   "$schema": "https://opencode.ai/config.json",
@@ -291,6 +350,17 @@ func TestAJSONCSwapAddsAfterATrailingComma(t *testing.T) {
 	}
 	if _, err := readJSONC([]byte(readFile(t, path))); err != nil {
 		t.Fatalf("the inserted entry left invalid JSONC: %v\n%s", err, readFile(t, path))
+	}
+}
+
+func TestJSONCTrailingCommaScanLeavesStringsAlone(t *testing.T) {
+	t.Parallel()
+	decoded, err := readJSONC([]byte(`{"object":"value,}","array":"value,]",}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded["object"] != "value,}" || decoded["array"] != "value,]" {
+		t.Fatalf("decoded JSONC strings = %#v", decoded)
 	}
 }
 
@@ -398,6 +468,77 @@ func TestConfigFormatsRejectMalformedUTF8(t *testing.T) {
 				t.Fatal("update accepted malformed UTF-8")
 			}
 		})
+	}
+}
+
+func TestJSONFormatsRejectDuplicateMembers(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		contents []byte
+		client   client
+	}{
+		{
+			"json", []byte(`{"mcpServers": {}, "mcpServers": {}}`),
+			client{key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		},
+		{
+			"jsonc", []byte("{\n  // first\n  \"mcp\": {},\n  \"mcp\": {},\n}\n"),
+			client{key: "mcp", format: formatJSONC, dialect: dialectOpencode},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if _, _, err := entryFromContents(test.client, test.contents); err == nil ||
+				!strings.Contains(err.Error(), "duplicate JSON member") {
+				t.Fatalf("read error = %v, want duplicate-member refusal", err)
+			}
+			if _, err := renderEntryChange(test.client, test.contents, devEntry()); err == nil ||
+				!strings.Contains(err.Error(), "duplicate JSON member") {
+				t.Fatalf("render error = %v, want duplicate-member refusal", err)
+			}
+		})
+	}
+}
+
+func TestJSONFormatsRejectNullRoot(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		format configFormat
+	}{
+		{"json", formatJSON},
+		{"jsonc", formatJSONC},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			target := client{
+				name:    "test",
+				format:  test.format,
+				key:     "mcpServers",
+				dialect: dialectStandard,
+			}
+			if _, _, err := entryFromContents(target, []byte("null\n")); err == nil {
+				t.Fatal("read accepted a null config root")
+			}
+			if _, err := renderEntryChange(target, []byte("null\n"), devEntry()); err == nil {
+				t.Fatal("render accepted a null config root")
+			}
+		})
+	}
+}
+
+func TestProcessSpecsRejectNonStringArgumentsAndEnvironment(t *testing.T) {
+	t.Parallel()
+	for _, entry := range []map[string]any{
+		{"command": "server", "args": []any{"okay", 7}},
+		{"command": "server", "env": map[string]any{"TOKEN": 7}},
+		{"command": "server", "args": "not-an-array"},
+		{"command": "server", "env": []any{"not-an-object"}},
+	} {
+		if _, err := processSpecFromEntry(entry); err == nil {
+			t.Fatalf("process spec accepted %+v", entry)
+		}
 	}
 }
 
@@ -567,6 +708,116 @@ func TestEveryFormatReadsBackWhatItWrote(t *testing.T) {
 				t.Error("the marker did not survive the round trip, so revert cannot see it")
 			}
 		})
+	}
+}
+
+func TestToolsetsExplicitlyMigratesTheRetiredSafetyEnvironment(t *testing.T) {
+	t.Parallel()
+	target := client{
+		name: "json", key: "mcpServers", format: formatJSON,
+		dialect: dialectStandard,
+	}
+	original := []byte(`{
+  "mcpServers": {
+    "tmux": {
+      "command": "old",
+      "env": {"KEEP": "yes", "LIBTMUX_SAFETY": "deny"}
+    }
+  }
+}`)
+
+	withoutToolsets, err := renderEntryChange(target, original, devEntry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, present, err := entryFromContents(target, withoutToolsets)
+	if err != nil || !present {
+		t.Fatalf("read entry = (%v, %t, %v)", entry, present, err)
+	}
+	environment := entryEnvironment(entry)
+	if environment["LIBTMUX_SAFETY"] != "deny" || environment["KEEP"] != "yes" {
+		t.Fatalf("implicit environment = %v, want safety and unrelated values preserved", environment)
+	}
+
+	requested := devEntry()
+	requested["env"].(map[string]any)["LIBTMUX_TOOLSETS"] = "inspect,execute"
+	withToolsets, err := renderEntryChange(target, original, requested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, present, err = entryFromContents(target, withToolsets)
+	if err != nil || !present {
+		t.Fatalf("read migrated entry = (%v, %t, %v)", entry, present, err)
+	}
+	environment = entryEnvironment(entry)
+	if _, found := environment["LIBTMUX_SAFETY"]; found {
+		t.Fatalf("migrated environment retained LIBTMUX_SAFETY: %v", environment)
+	}
+	if environment["LIBTMUX_TOOLSETS"] != "inspect,execute" || environment["KEEP"] != "yes" {
+		t.Fatalf("migrated environment = %v, want explicit toolsets and unrelated values", environment)
+	}
+}
+
+func TestClaudeScopesAddressIndependentEntries(t *testing.T) {
+	t.Parallel()
+	repository := filepath.Join(t.TempDir(), "checkout")
+	target := client{
+		name: "claude", key: "mcpServers", format: formatJSON,
+		dialect: dialectClaude, repository: repository,
+	}
+	original := []byte(`{
+  "mcpServers": {"tmux": {"command": "user-old"}},
+  "projects": {
+    "` + filepath.ToSlash(repository) + `": {
+      "mcpServers": {"tmux": {"command": "project-old"}},
+      "keep": true
+    },
+    "/other": {"mcpServers": {"tmux": {"command": "other"}}}
+  }
+}`)
+
+	project := target
+	project.scope = scopeProject
+	updated, err := renderEntryChange(project, original, devEntry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectEntry, present, err := entryFromContents(project, updated)
+	if err != nil || !present || !isLocal(projectEntry) {
+		t.Fatalf("project entry = (%v, %t, %v)", projectEntry, present, err)
+	}
+	if projectEntry["type"] != "stdio" {
+		t.Fatalf("Claude project type = %v, want stdio", projectEntry["type"])
+	}
+	user := target
+	user.scope = scopeUser
+	userEntry, present, err := entryFromContents(user, updated)
+	if err != nil || !present || describe(userEntry) != "user-old" {
+		t.Fatalf("user entry = (%v, %t, %v), want untouched", userEntry, present, err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(updated, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	projects := decoded["projects"].(map[string]any)
+	if _, found := projects["/other"]; !found {
+		t.Fatal("project-scoped edit removed another project")
+	}
+	selected := projects[filepath.ToSlash(repository)].(map[string]any)
+	if selected["keep"] != true {
+		t.Fatal("project-scoped edit removed a neighboring project setting")
+	}
+}
+
+func TestClaudeProjectScopeRejectsAnUnsafeProjectsShape(t *testing.T) {
+	t.Parallel()
+	target := client{
+		name: "claude", key: "mcpServers", format: formatJSON,
+		dialect: dialectClaude, scope: scopeProject, repository: t.TempDir(),
+	}
+	_, err := renderEntryChange(target, []byte(`{"projects": []}`), devEntry())
+	if err == nil || !strings.Contains(err.Error(), "projects") {
+		t.Fatalf("render error = %v, want the invalid projects shape rejected", err)
 	}
 }
 

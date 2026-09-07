@@ -319,6 +319,27 @@ func TestDryRunRefusesAnInsecureLockDirectory(t *testing.T) {
 	assertPathMissing(t, lockPath)
 }
 
+func TestTransactionLockRejectsASymlinkedPrivateNamespaceWithoutFollowingIt(t *testing.T) {
+	stateRoot := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateRoot)
+	redirected := filepath.Join(t.TempDir(), "redirected")
+	if err := os.Mkdir(redirected, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(redirected, filepath.Join(stateRoot, "libtmux-mcp-dev")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inspectTransactionLockClaim(); err == nil {
+		t.Fatal("dry-run inspection accepted a symlinked private namespace")
+	}
+	if _, err := acquireTransactionLock(); err == nil {
+		t.Fatal("lock acquisition accepted a symlinked private namespace")
+	}
+	if _, err := os.Lstat(filepath.Join(redirected, "swap")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused lock created a directory through the symlink: %v", err)
+	}
+}
+
 func TestTransactionLockRetryIsBounded(t *testing.T) {
 	_ = isolatedLockPath(t)
 	calls := 0
@@ -333,7 +354,45 @@ func TestTransactionLockRetryIsBounded(t *testing.T) {
 	}
 }
 
-func TestTransactionRefusesAReplacedHeldLock(t *testing.T) {
+func TestInProcessTransactionLocksSerialize(t *testing.T) {
+	_ = isolatedLockPath(t)
+	first, err := acquireTransactionLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondResult := make(chan struct {
+		lock *transactionLock
+		err  error
+	}, 1)
+	go func() {
+		lock, err := acquireTransactionLock()
+		secondResult <- struct {
+			lock *transactionLock
+			err  error
+		}{lock, err}
+	}()
+	select {
+	case result := <-secondResult:
+		if result.lock != nil {
+			_ = result.lock.close()
+		}
+		_ = first.close()
+		t.Fatalf("second lock acquired while the first was held: %v", result.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := first.close(); err != nil {
+		t.Fatal(err)
+	}
+	result := <-secondResult
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if err := result.lock.close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProvisioningMayReplaceTheObservedLockBeforeAcquisition(t *testing.T) {
 	target, original := recoveryFixture(t)
 	lockPath := isolatedLockPath(t)
 	if err := os.WriteFile(lockPath, nil, 0o600); err != nil {
@@ -349,17 +408,21 @@ func TestTransactionRefusesAReplacedHeldLock(t *testing.T) {
 		cleanup: func() {},
 	}
 
-	if err := usePreparedLocal([]client{target}, plan, false, false); err == nil {
-		t.Fatal("use-local accepted a replaced transaction lock")
+	if err := usePreparedLocal([]client{target}, plan, false, false); err != nil {
+		t.Fatal(err)
 	}
-	if got := []byte(readFile(t, target.path)); !bytes.Equal(got, original) {
-		t.Fatalf("refused use changed config to %q", got)
+	if got := []byte(readFile(t, target.path)); bytes.Equal(got, original) {
+		t.Fatal("use did not publish its planned configuration")
 	}
 	if got := []byte(readFile(t, lockPath)); !bytes.Equal(got, human) {
-		t.Fatalf("refused use changed replacement lock to %q", got)
+		t.Fatalf("use changed replacement lock to %q", got)
 	}
-	assertPathMissing(t, backupPath(target))
-	assertPathMissing(t, recoveryStatePath(target))
+	if err := revert([]client{target}, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := []byte(readFile(t, target.path)); !bytes.Equal(got, original) {
+		t.Fatalf("revert restored %q", got)
+	}
 }
 
 func TestHeldLockIsRecheckedAtConfigPublication(t *testing.T) {
@@ -406,7 +469,7 @@ func TestHeldLockIsRecheckedAtConfigPublication(t *testing.T) {
 	}
 }
 
-func TestConcurrentSwapsSerializeAndReplan(t *testing.T) {
+func TestConcurrentSwapsProvisionBeforeSerializedReplanning(t *testing.T) {
 	target, original := recoveryFixture(t)
 	lockPath := isolatedLockPath(t)
 	firstEntered := make(chan struct{})
@@ -441,11 +504,9 @@ func TestConcurrentSwapsSerializeAndReplan(t *testing.T) {
 	}()
 	select {
 	case <-secondEntered:
-		close(releaseFirst)
-		<-firstDone
-		<-secondDone
-		t.Fatal("second swap entered its mutation plan while the first held the transaction")
 	case <-time.After(200 * time.Millisecond):
+		close(releaseFirst)
+		t.Fatal("second swap did not provision while the first provisioner was blocked")
 	}
 	close(releaseFirst)
 	if err := <-firstDone; err != nil {
@@ -534,11 +595,11 @@ func isolatedLockPath(t *testing.T) string {
 	t.Helper()
 	stateRoot := filepath.Join(t.TempDir(), "state")
 	t.Setenv("XDG_STATE_HOME", stateRoot)
-	directory := filepath.Join(stateRoot, "libtmux-go")
+	directory := filepath.Join(stateRoot, "libtmux-mcp-dev", "swap")
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(directory, "mcp-swap.lock")
+	return filepath.Join(directory, "state.lock")
 }
 
 func assertNoTransactionResidue(t *testing.T, roots ...string) {

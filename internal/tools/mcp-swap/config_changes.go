@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -14,8 +16,24 @@ import (
 
 const piAdapterHint = "needs the pi-mcp-adapter package; pi has no built-in MCP client"
 
-func report(clients []client) error {
-	return reportTo(os.Stdout, clients)
+func detectTo(output io.Writer, clients []client) error {
+	for _, c := range clients {
+		binary := "missing"
+		if path, err := exec.LookPath(c.binary); err == nil {
+			binary = path
+		}
+		configuration := "missing"
+		if info, err := os.Stat(c.path); err == nil && info.Mode().IsRegular() {
+			configuration = "present"
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			configuration = "unreadable: " + err.Error()
+		}
+		if _, err := fmt.Fprintf(output, "%-12s binary: %s; config: %s%s\n",
+			c.name, binary, configuration, clientCaveat(c)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func reportTo(output io.Writer, clients []client) error {
@@ -70,56 +88,75 @@ func useLocal(clients []client, entry map[string]any, dryRun bool) error {
 // destination before preflight. This validates the command, arguments, and
 // environment that each client will actually use.
 func usePreparedLocal(clients []client, plan entryPlan, dryRun, check bool) error {
-	return planWithTransactionLock(dryRun, func(
-		lockClaim pathClaim,
-		guard func() error,
-		apply bool,
-	) error {
-		changes, err := planEntryChanges(clients, plan.configured)
-		if err != nil {
-			return err
-		}
-		if err := validateDistinctTargets(changes, lockClaim); err != nil {
-			return err
-		}
-		if !apply {
-			if dryRun {
-				printEntryChanges(changes, true)
-			}
-			return nil
-		}
-		for index := range changes {
-			changes[index].recovery.guard = guard
-		}
-		if err := guard(); err != nil {
-			return err
-		}
-		if check {
-			if err := preflightEntryChanges(changes, plan); err != nil {
-				return err
-			}
-		}
-		if err := guard(); err != nil {
-			return err
-		}
+	observedLock, err := inspectTransactionLockClaim()
+	if err != nil {
+		return err
+	}
+	if !dryRun {
 		if err := plan.install(); err != nil {
 			return fmt.Errorf("install build: %w", err)
 		}
-		if err := guard(); err != nil {
-			return err
-		}
-		if err := validateEntryChanges(changes); err != nil {
-			return err
-		}
-		if err := validateDistinctTargets(changes, lockClaim); err != nil {
-			return err
-		}
-		if err := applyEntryChanges(changes); err != nil {
-			return err
-		}
-		printEntryChanges(changes, false)
+	}
+	preflighted, err := planEntryChanges(clients, plan.configured)
+	if err != nil {
+		return err
+	}
+	if err := validateDistinctTargets(preflighted, observedLock); err != nil {
+		return err
+	}
+	if dryRun {
+		printEntryChanges(preflighted, true)
 		return nil
-	})
+	}
+	if check {
+		if err := preflightEntryChanges(preflighted, plan); err != nil {
+			return err
+		}
+	}
+
+	lock, err := acquireTransactionLock()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.close() }()
+	changes, err := planEntryChanges(clients, plan.configured)
+	if err != nil {
+		return err
+	}
+	if !samePlannedProcesses(preflighted, changes) {
+		return errors.New("configuration changed after preflight; retry the swap")
+	}
+	for index := range changes {
+		changes[index].recovery.guard = lock.validate
+	}
+	if err := lock.validate(); err != nil {
+		return err
+	}
+	if err := validateEntryChanges(changes); err != nil {
+		return err
+	}
+	if err := validateDistinctTargets(changes, lockClaim(lock.binding)); err != nil {
+		return err
+	}
+	if err := applyEntryChanges(changes); err != nil {
+		return err
+	}
+	printEntryChanges(changes, false)
+	return nil
+}
+
+func samePlannedProcesses(before, after []entryChange) bool {
+	if len(before) != len(after) {
+		return false
+	}
+	for index := range before {
+		if before[index].target.name != after[index].target.name ||
+			before[index].target.scope != after[index].target.scope ||
+			!before[index].spec.equal(after[index].spec) {
+			return false
+		}
+	}
+	return true
 }
 
 func planEntryChanges(
@@ -430,25 +467,48 @@ func entryFromContents(c client, contents []byte) (map[string]any, bool, error) 
 	}
 	switch c.format {
 	case formatTOML:
-		entry, found := readTOMLEntry(contents, c.key+"."+serverName)
-		return entry, found, nil
+		entry, found, err := readTOMLEntry(contents, c.key+"."+serverName)
+		return validateDecodedEntry(entry, found, err)
 	case formatJSONC:
 		decoded, err := readJSONC(contents)
 		if err != nil {
 			return nil, false, err
 		}
-		entry, found := serverEntry(decoded, c.key)
-		return openCodeEntry(entry), found, nil
+		entry, found, err := clientServerEntry(decoded, c, false)
+		if err != nil {
+			return nil, false, err
+		}
+		return validateDecodedEntry(openCodeEntry(entry), found, nil)
 	case formatJSON:
 		fallthrough
 	default:
+		if err := rejectDuplicateJSONNames(contents); err != nil {
+			return nil, false, err
+		}
 		var decoded map[string]any
 		if err := json.Unmarshal(contents, &decoded); err != nil {
 			return nil, false, err
 		}
-		entry, found := serverEntry(decoded, c.key)
-		return entry, found, nil
+		if decoded == nil {
+			return nil, false, errors.New("JSON config root is not an object")
+		}
+		entry, found, err := clientServerEntry(decoded, c, false)
+		return validateDecodedEntry(entry, found, err)
 	}
+}
+
+func validateDecodedEntry(
+	entry map[string]any,
+	found bool,
+	err error,
+) (map[string]any, bool, error) {
+	if err != nil || !found {
+		return entry, found, err
+	}
+	if _, err := processSpecFromEntry(entry); err != nil {
+		return nil, false, fmt.Errorf("server entry: %w", err)
+	}
+	return entry, true, nil
 }
 
 // openCodeEntry normalizes opencode's entry dialect.
@@ -456,16 +516,24 @@ func openCodeEntry(entry map[string]any) map[string]any {
 	if entry == nil {
 		return nil
 	}
+	flattened := maps.Clone(entry)
 	command, ok := entry["command"].([]any)
 	if !ok || len(command) == 0 {
-		return entry
+		if environment, found := entry["environment"]; found {
+			flattened["env"] = environment
+			delete(flattened, "environment")
+		}
+		return flattened
 	}
-	flattened := map[string]any{"command": fmt.Sprint(command[0])}
+	flattened["command"] = command[0]
 	if len(command) > 1 {
 		flattened["args"] = command[1:]
+	} else {
+		delete(flattened, "args")
 	}
-	if environment, ok := entry["environment"].(map[string]any); ok {
+	if environment, found := entry["environment"]; found {
 		flattened["env"] = environment
+		delete(flattened, "environment")
 	}
 	return flattened
 }
@@ -876,6 +944,9 @@ func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte,
 	if !utf8.Valid(contents) {
 		return nil, errors.New("config is not valid UTF-8")
 	}
+	if _, _, err := entryFromContents(c, contents); err != nil {
+		return nil, err
+	}
 	switch c.format {
 	case formatTOML:
 		table := c.key + "." + serverName
@@ -892,7 +963,7 @@ func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte,
 		if found {
 			header = tomlHeaderAt(contents, start)
 		}
-		rendered := renderTOMLTable(table, header, shaped)
+		rendered := renderTOMLTable(table, header, shaped, tomlDecorations(contents, table))
 		var updated []byte
 		if found {
 			updated = append(append(append([]byte{}, contents[:start]...),
@@ -912,11 +983,17 @@ func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte,
 		if err != nil {
 			return nil, err
 		}
-		if existing, found := serverEntry(decoded, c.key); found {
+		if existing, found, lookupErr := clientServerEntry(decoded, c, false); lookupErr != nil {
+			return nil, lookupErr
+		} else if found {
 			previous = existing
 		}
 		shaped := mergeWithExisting(previous, renderEntry(entry, c.dialect))
-		updated, err := setJSONCMember(contents, []string{c.key, serverName}, shaped, "  ")
+		path, err := clientServerPath(c)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := setJSONCMember(contents, append(path, serverName), shaped, "  ")
 		if err != nil {
 			return nil, err
 		}
@@ -924,17 +1001,25 @@ func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte,
 	case formatJSON:
 		fallthrough
 	default:
+		if err := rejectDuplicateJSONNames(contents); err != nil {
+			return nil, err
+		}
 		var decoded map[string]any
 		if err := json.Unmarshal(contents, &decoded); err != nil {
 			return nil, err
 		}
-		servers, _ := decoded[c.key].(map[string]any)
-		if servers == nil {
-			servers = map[string]any{}
+		if decoded == nil {
+			return nil, errors.New("JSON config root is not an object")
+		}
+		servers, err := clientServerContainer(decoded, c, true)
+		if err != nil {
+			return nil, err
 		}
 		previous, _ := servers[serverName].(map[string]any)
+		if _, found := servers[serverName]; found && previous == nil {
+			return nil, errors.New("server entry is not an object")
+		}
 		servers[serverName] = mergeWithExisting(previous, renderEntry(entry, c.dialect))
-		decoded[c.key] = servers
 		updated, err := json.MarshalIndent(decoded, "", "  ")
 		if err != nil {
 			return nil, err
@@ -1035,23 +1120,6 @@ func resolveWriteTarget(path string) (string, error) {
 		return "", fmt.Errorf("inspect destination: %w", lstatErr)
 	}
 	return target, nil
-}
-
-func atomicWriteMode(path string, defaultMode os.FileMode) (os.FileMode, error) {
-	target, err := resolveWriteTarget(path)
-	if err != nil {
-		return 0, err
-	}
-	mode := defaultMode.Perm()
-	if info, statErr := os.Stat(target); statErr == nil {
-		if !info.Mode().IsRegular() {
-			return 0, errors.New("destination is not a regular file")
-		}
-		mode = info.Mode().Perm()
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return 0, fmt.Errorf("inspect destination: %w", statErr)
-	}
-	return mode, nil
 }
 
 func stageAtomicFile(
@@ -1346,17 +1414,6 @@ func validatePhysicalFile(
 	return nil
 }
 
-// atomicWriteFile replaces path only after its complete contents are durable
-// in a sibling temporary file. Existing symlinks continue to point at their
-// targets rather than being replaced by the rename.
-func atomicWriteFile(path string, contents []byte, defaultMode os.FileMode) error {
-	mode, err := atomicWriteMode(path, defaultMode)
-	if err != nil {
-		return err
-	}
-	return atomicWriteFileExact(path, contents, mode)
-}
-
 func atomicWriteFileExact(path string, contents []byte, mode os.FileMode) error {
 	staged, err := stageAtomicFile(path, contents, mode)
 	if err != nil {
@@ -1367,13 +1424,64 @@ func atomicWriteFileExact(path string, contents []byte, mode os.FileMode) error 
 	return err
 }
 
-func serverEntry(configuration map[string]any, key string) (map[string]any, bool) {
-	servers, ok := configuration[key].(map[string]any)
-	if !ok {
-		return nil, false
+func clientServerPath(c client) ([]string, error) {
+	if c.name != "claude" || c.scope != scopeProject {
+		return []string{c.key}, nil
 	}
-	entry, ok := servers[serverName].(map[string]any)
-	return entry, ok
+	if c.repository == "" || !filepath.IsAbs(c.repository) {
+		return nil, errors.New("claude project scope needs an absolute repository path")
+	}
+	return []string{"projects", filepath.Clean(c.repository), c.key}, nil
+}
+
+func clientServerContainer(
+	configuration map[string]any,
+	c client,
+	create bool,
+) (map[string]any, error) {
+	path, err := clientServerPath(c)
+	if err != nil {
+		return nil, err
+	}
+	current := configuration
+	for _, name := range path {
+		raw, found := current[name]
+		if !found {
+			if !create {
+				return nil, nil
+			}
+			next := map[string]any{}
+			current[name] = next
+			current = next
+			continue
+		}
+		next, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s is not an object", strings.Join(path[:1], "."))
+		}
+		current = next
+	}
+	return current, nil
+}
+
+func clientServerEntry(
+	configuration map[string]any,
+	c client,
+	create bool,
+) (map[string]any, bool, error) {
+	servers, err := clientServerContainer(configuration, c, create)
+	if err != nil || servers == nil {
+		return nil, false, err
+	}
+	raw, found := servers[serverName]
+	if !found {
+		return nil, false, nil
+	}
+	entry, ok := raw.(map[string]any)
+	if !ok {
+		return nil, false, errors.New("server entry is not an object")
+	}
+	return entry, true, nil
 }
 
 func isLocal(entry map[string]any) bool {

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -269,9 +270,16 @@ func endOfValueAfterMember(blanked []byte, offset int) int {
 }
 
 func readJSONC(text []byte) (map[string]any, error) {
-	var decoded map[string]any
-	if err := json.Unmarshal(stripTrailingCommas(blankComments(text)), &decoded); err != nil {
+	strict := stripTrailingCommas(blankComments(text))
+	if err := rejectDuplicateJSONNames(strict); err != nil {
 		return nil, err
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(strict, &decoded); err != nil {
+		return nil, err
+	}
+	if decoded == nil {
+		return nil, errors.New("JSONC config root is not an object")
 	}
 	return decoded, nil
 }
@@ -279,8 +287,24 @@ func readJSONC(text []byte) (map[string]any, error) {
 func stripTrailingCommas(blanked []byte) []byte {
 	out := make([]byte, len(blanked))
 	copy(out, blanked)
+	inString, escaped := false, false
 	for index := range out {
-		if out[index] != ',' {
+		character := out[index]
+		if inString {
+			if escaped {
+				escaped = false
+			} else if character == '\\' {
+				escaped = true
+			} else if character == '"' {
+				inString = false
+			}
+			continue
+		}
+		if character == '"' {
+			inString = true
+			continue
+		}
+		if character != ',' {
 			continue
 		}
 		next := skipSpace(out, index+1)

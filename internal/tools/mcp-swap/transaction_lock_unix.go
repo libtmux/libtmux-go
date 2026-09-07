@@ -19,7 +19,8 @@ func openAndLockTransactionFile(path string, create bool) (*os.File, bool, error
 		return nil, false, err
 	}
 	file := os.NewFile(uintptr(descriptor), path)
-	if err := syscall.Flock(descriptor, syscall.LOCK_EX); err != nil {
+	lock := syscall.Flock_t{Type: syscall.F_WRLCK, Whence: 0, Start: 0, Len: 0}
+	if err := syscall.FcntlFlock(uintptr(descriptor), syscall.F_SETLKW, &lock); err != nil {
 		_ = file.Close()
 		return nil, false, err
 	}
@@ -27,8 +28,9 @@ func openAndLockTransactionFile(path string, create bool) (*os.File, bool, error
 }
 
 func unlockAndCloseTransactionFile(file *os.File) error {
+	lock := syscall.Flock_t{Type: syscall.F_UNLCK, Whence: 0, Start: 0, Len: 0}
 	return errors.Join(
-		syscall.Flock(int(file.Fd()), syscall.LOCK_UN),
+		syscall.FcntlFlock(file.Fd(), syscall.F_SETLK, &lock),
 		file.Close(),
 	)
 }

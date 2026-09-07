@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // tomlTableSpan reports the byte span one table and its sub-tables occupy.
@@ -58,6 +59,10 @@ func tomlHeaderAt(text []byte, start int) string {
 
 // validateTOMLPreservation refuses syntax the line-oriented writer would drop.
 func validateTOMLPreservation(text []byte, table string) error {
+	var document map[string]any
+	if err := toml.Unmarshal(text, &document); err != nil {
+		return fmt.Errorf("invalid TOML: %w", err)
+	}
 	start, end, found := tomlTableSpan(text, table)
 	if !found {
 		return nil
@@ -193,7 +198,7 @@ func tomlPreserved(text []byte, table string) map[string]any {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
 			// Read environment sub-tables separately.
-			if trimmed != "["+table+"]" {
+			if !tomlHeaderMatches([]byte(trimmed), []byte("["+table+"]")) {
 				break
 			}
 			continue
@@ -220,6 +225,42 @@ func tomlPreserved(text []byte, table string) map[string]any {
 // tomlRawValue keeps a value as written, since it is re-emitted verbatim.
 type tomlRawValue string
 
+type tomlDecoration struct {
+	entryComments       []string
+	environmentHeader   string
+	environmentComments []string
+}
+
+func tomlDecorations(text []byte, table string) tomlDecoration {
+	start, end, found := tomlTableSpan(text, table)
+	if !found {
+		return tomlDecoration{}
+	}
+	baseHeader := []byte("[" + table + "]")
+	environmentHeader := []byte("[" + table + ".env]")
+	section := ""
+	decoration := tomlDecoration{}
+	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case tomlHeaderMatches([]byte(trimmed), baseHeader):
+			section = "entry"
+		case tomlHeaderMatches([]byte(trimmed), environmentHeader):
+			section = "environment"
+			decoration.environmentHeader = line
+		case strings.HasPrefix(trimmed, "#"):
+			switch section {
+			case "environment":
+				decoration.environmentComments = append(decoration.environmentComments, line)
+			case "entry":
+				decoration.entryComments = append(decoration.entryComments, line)
+			}
+		}
+	}
+	return decoration
+}
+
 func tomlEnvironment(text []byte, table string) map[string]any {
 	start, end, found := tomlTableSpan(text, table)
 	if !found {
@@ -230,7 +271,9 @@ func tomlEnvironment(text []byte, table string) map[string]any {
 	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
-			inEnvironment = trimmed == "["+table+".env]"
+			inEnvironment = tomlHeaderMatches(
+				[]byte(trimmed), []byte("["+table+".env]"),
+			)
 			continue
 		}
 		if !inEnvironment {
@@ -248,9 +291,16 @@ func tomlEnvironment(text []byte, table string) map[string]any {
 
 // renderTOMLTable renders only supported entry values; unrelated file content
 // is spliced around it.
-func renderTOMLTable(table, header string, entry map[string]any) string {
+func renderTOMLTable(
+	table, header string,
+	entry map[string]any,
+	decoration tomlDecoration,
+) string {
 	var out strings.Builder
 	fmt.Fprintln(&out, header)
+	for _, comment := range decoration.entryComments {
+		fmt.Fprintln(&out, comment)
+	}
 
 	if command, ok := entry["command"].(string); ok {
 		fmt.Fprintf(&out, "command = %s\n", tomlString(command))
@@ -270,7 +320,14 @@ func renderTOMLTable(table, header string, entry map[string]any) string {
 	}
 	environment, _ := entry["env"].(map[string]any)
 	if len(environment) > 0 {
-		fmt.Fprintf(&out, "\n[%s.env]\n", table)
+		environmentHeader := decoration.environmentHeader
+		if environmentHeader == "" {
+			environmentHeader = "[" + table + ".env]"
+		}
+		fmt.Fprintf(&out, "\n%s\n", environmentHeader)
+		for _, comment := range decoration.environmentComments {
+			fmt.Fprintln(&out, comment)
+		}
 		for _, name := range sortedKeys(environment) {
 			if raw, ok := environment[name].(tomlRawValue); ok {
 				fmt.Fprintf(&out, "%s = %s\n", name, string(raw))
@@ -303,66 +360,26 @@ func tomlString(value string) string {
 	return out.String()
 }
 
-// readTOMLEntry parses only command, arguments, and environment for status.
-func readTOMLEntry(text []byte, table string) (map[string]any, bool) {
-	start, end, found := tomlTableSpan(text, table)
-	if !found {
-		return nil, false
+// readTOMLEntry strictly parses the complete document before selecting one table.
+func readTOMLEntry(text []byte, table string) (map[string]any, bool, error) {
+	var document map[string]any
+	if err := toml.Unmarshal(text, &document); err != nil {
+		return nil, false, fmt.Errorf("invalid TOML: %w", err)
 	}
-	entry := map[string]any{}
-	for line := range strings.SplitSeq(string(text[start:end]), "\n") {
-		trimmed := strings.TrimSpace(line)
-		name, value, ok := strings.Cut(trimmed, "=")
+	current := document
+	parts := strings.Split(table, ".")
+	for index, part := range parts {
+		raw, found := current[part]
+		if !found {
+			return nil, false, nil
+		}
+		next, ok := raw.(map[string]any)
 		if !ok {
-			continue
+			return nil, false, fmt.Errorf("%s is not a table", strings.Join(parts[:index+1], "."))
 		}
-		name = strings.TrimSpace(name)
-		value = strings.TrimSpace(value)
-		switch name {
-		case "command":
-			if decoded, ok := tomlStringValue(value); ok {
-				entry["command"] = decoded
-			}
-		case "args":
-			var arguments []any
-			if err := json.Unmarshal([]byte(value), &arguments); err == nil {
-				entry["args"] = arguments
-			}
-		}
+		current = next
 	}
-	// The environment contains the ownership marker reported by status.
-	if rawEnvironment := tomlEnvironment(text, table); rawEnvironment != nil {
-		environment := make(map[string]any, len(rawEnvironment))
-		for name, raw := range rawEnvironment {
-			value := string(raw.(tomlRawValue))
-			if decoded, ok := tomlStringValue(value); ok {
-				environment[name] = decoded
-			} else {
-				environment[name] = value
-			}
-		}
-		entry["env"] = environment
-	}
-	return entry, true
-}
-
-func tomlStringValue(value string) (string, bool) {
-	value = strings.TrimSpace(value)
-	if len(value) < 2 {
-		return "", false
-	}
-	switch value[0] {
-	case '\'':
-		if end := strings.IndexByte(value[1:], '\''); end >= 0 {
-			return value[1 : end+1], true
-		}
-	case '"':
-		var decoded string
-		if err := json.NewDecoder(strings.NewReader(value)).Decode(&decoded); err == nil {
-			return decoded, true
-		}
-	}
-	return "", false
+	return current, true, nil
 }
 
 // sortedKeys stabilizes rendered entries across runs.

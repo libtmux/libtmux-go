@@ -50,7 +50,31 @@ func TestMain(m *testing.M) {
 }
 
 func runPreflightHelper(scenario string) int {
+	startHeartbeat := func() bool {
+		child := exec.Command(os.Args[0])
+		child.Env = replaceHelperEnvironment(os.Environ(), "timeout-descendant")
+		if child.Start() != nil {
+			return false
+		}
+		for range 100 {
+			if _, err := os.Stat(os.Getenv("MCP_SWAP_PREFLIGHT_HEARTBEAT")); err == nil {
+				return true
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		return false
+	}
 	switch scenario {
+	case "lock-available":
+		command := exec.Command("python3", "-c", `
+import fcntl, os, sys
+fd = os.open(sys.argv[1], os.O_RDWR)
+fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+`, os.Getenv("MCP_SWAP_PREFLIGHT_LOCK"))
+		if output, err := command.CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "state lock unavailable during preflight: %v: %s", err, output)
+			return 2
+		}
 	case "hold-stderr":
 		time.Sleep(3 * time.Second)
 		return 0
@@ -67,6 +91,20 @@ func runPreflightHelper(scenario string) int {
 		fmt.Fprintln(os.Stderr, "BEGIN-OF-DISCARDED-STDERR")
 		_, _ = os.Stderr.Write(bytes.Repeat([]byte("x"), 2<<20))
 		fmt.Fprintln(os.Stderr, "END-OF-KEPT-STDERR")
+		return 0
+	case "oversized-stderr", "oversized-stderr-tree":
+		if scenario == "oversized-stderr-tree" && !startHeartbeat() {
+			return 2
+		}
+		_, _ = os.Stderr.Write(bytes.Repeat([]byte("x"), preflightStderrLimit+1))
+		time.Sleep(3 * time.Second)
+		return 0
+	case "oversized-stdout", "oversized-stdout-tree":
+		if scenario == "oversized-stdout-tree" && !startHeartbeat() {
+			return 2
+		}
+		_, _ = os.Stdout.Write(bytes.Repeat([]byte("x"), preflightStdoutLimit+1))
+		time.Sleep(3 * time.Second)
 		return 0
 	case "timeout":
 		child := exec.Command(os.Args[0])
@@ -96,6 +134,10 @@ func runPreflightHelper(scenario string) int {
 			time.Sleep(10 * time.Millisecond)
 		}
 		return 0
+	case "long-lived-tree", "success-parent-exits-tree":
+		if !startHeartbeat() {
+			return 2
+		}
 	}
 
 	if scenario == "environment" &&
@@ -151,11 +193,44 @@ func runPreflightHelper(scenario string) int {
 			"name": "libtmux", "version": "",
 		}
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(map[string]any{
+	response := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      initialize.ID,
 		"result":  result,
-	}); err != nil {
+	}
+	switch scenario {
+	case "wrong-jsonrpc":
+		response["jsonrpc"] = "1.0"
+	case "wrong-id":
+		response["id"] = 9
+	case "missing-protocol-version":
+		delete(result, "protocolVersion")
+	case "empty-protocol-version":
+		result["protocolVersion"] = ""
+	case "blank-protocol-version":
+		result["protocolVersion"] = "   "
+	case "scalar-result":
+		response["result"] = "no"
+	case "error-and-result":
+		response["error"] = map[string]any{"code": -32603, "message": "failure"}
+	}
+	if scenario == "mutate-config" {
+		contents := []byte(`{"mcpServers":{"tmux":{"command":"changed","env":{"MCP_SWAP_CHANGED":"yes"}}}}`)
+		if err := os.WriteFile(os.Getenv("MCP_SWAP_PREFLIGHT_CONFIG"), contents, 0o600); err != nil {
+			return 2
+		}
+	}
+	if scenario == "duplicate-response-member" {
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return 2
+		}
+		_, err = fmt.Fprintf(os.Stdout,
+			`{"jsonrpc":"2.0","id":1,"id":1,"result":%s}`+"\n", encoded)
+		if err != nil {
+			return 2
+		}
+	} else if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
 		return 2
 	}
 	if scenario == "malformed" || scenario == "null" {
@@ -183,6 +258,10 @@ func runPreflightHelper(scenario string) int {
 		"result":  map[string]any{},
 	}); err != nil {
 		return 2
+	}
+	if scenario == "long-lived" || scenario == "long-lived-tree" {
+		time.Sleep(3 * time.Second)
+		return 0
 	}
 
 	marker := os.Getenv("MCP_SWAP_PREFLIGHT_MARKER")
@@ -253,11 +332,46 @@ func TestPreflightRejectsInvalidInitializeResults(t *testing.T) {
 		"missing-server-info",
 		"wrong-name",
 		"empty-version",
+		"wrong-jsonrpc",
+		"wrong-id",
+		"missing-protocol-version",
+		"empty-protocol-version",
+		"blank-protocol-version",
+		"scalar-result",
+		"error-and-result",
+		"duplicate-response-member",
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			entry := preflightHelperEntry(t, scenario)
 			if reason := preflight(entry); reason == "" {
 				t.Fatalf("preflight accepted the %s initialize result", scenario)
+			}
+		})
+	}
+}
+
+func TestPreflightTerminatesALongLivedServerAfterSuccess(t *testing.T) {
+	entry := preflightHelperEntry(t, "long-lived")
+	started := time.Now()
+	if reason := preflightWithin(entry, time.Second); reason != "" {
+		t.Fatalf("preflight failed: %s", reason)
+	}
+	if elapsed := time.Since(started); elapsed >= time.Second {
+		t.Fatalf("preflight waited %s for a healthy long-lived server", elapsed)
+	}
+}
+
+func TestPreflightStopsOversizedStreamsPromptly(t *testing.T) {
+	for _, scenario := range []string{"oversized-stdout", "oversized-stderr"} {
+		t.Run(scenario, func(t *testing.T) {
+			entry := preflightHelperEntry(t, scenario)
+			started := time.Now()
+			reason := preflightWithin(entry, time.Second)
+			if !strings.Contains(reason, "exceeds") {
+				t.Fatalf("preflight reason = %q, want stream limit", reason)
+			}
+			if elapsed := time.Since(started); elapsed >= time.Second {
+				t.Fatalf("preflight waited %s after oversized output", elapsed)
 			}
 		})
 	}
@@ -333,6 +447,7 @@ func TestUseLocalPreflightsTheFinalClientEnvironment(t *testing.T) {
 		command: "use-local",
 		mode:    modeInstalled,
 		only:    []string{"claude"},
+		scope:   scopeUser,
 	})
 	if err == nil {
 		t.Fatal("use-local accepted the process selected by the final client environment")
@@ -368,16 +483,10 @@ func TestPreflightDoesNotWaitForAStderrDescendant(t *testing.T) {
 func TestPreflightKeepsOnlyABoundedStderrTail(t *testing.T) {
 	entry := preflightHelperEntry(t, "stderr-tail")
 	reason := preflight(entry)
-	if reason == "" {
-		t.Fatal("preflight accepted a server that never answered initialize")
+	if !strings.Contains(reason, "stderr exceeds") {
+		t.Fatalf("preflight reason = %q, want the stream limit", reason)
 	}
 	if len(reason) > 70<<10 {
 		t.Fatalf("preflight returned %d bytes of stderr", len(reason))
-	}
-	if !strings.Contains(reason, "END-OF-KEPT-STDERR") {
-		t.Fatalf("preflight dropped the stderr tail: %q", reason)
-	}
-	if strings.Contains(reason, "BEGIN-OF-DISCARDED-STDERR") {
-		t.Fatal("preflight kept the beginning of oversized stderr")
 	}
 }

@@ -19,12 +19,19 @@ type entryDialect int
 
 const (
 	dialectStandard entryDialect = iota
+	// dialectClaude requires the explicit stdio discriminator.
+	dialectClaude
 	// dialectOpencode packs argv into one array and calls the environment
 	// "environment"; it rejects the standard shape.
 	dialectOpencode
 )
 
 func renderEntry(entry map[string]any, dialect entryDialect) map[string]any {
+	if dialect == dialectClaude {
+		rendered := map[string]any{"type": "stdio"}
+		maps.Copy(rendered, entry)
+		return rendered
+	}
 	if dialect != dialectOpencode {
 		return entry
 	}
@@ -60,6 +67,13 @@ func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	for _, name := range []string{"env", "environment"} {
 		if previous, ok := existing[name].(map[string]any); ok {
 			maps.Copy(environment, previous)
+		}
+	}
+	for _, name := range []string{"env", "environment"} {
+		if incoming, ok := fresh[name].(map[string]any); ok {
+			if _, replacesSafety := incoming["LIBTMUX_TOOLSETS"]; replacesSafety {
+				delete(environment, "LIBTMUX_SAFETY")
+			}
 		}
 	}
 	for _, name := range []string{"env", "environment"} {

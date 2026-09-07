@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 const (
@@ -14,19 +15,30 @@ const (
 type transactionLock struct {
 	file    *os.File
 	binding destinationBinding
+	aliases []*os.File
+	gate    bool
 }
+
+var transactionLocks = struct {
+	sync.Mutex
+	active map[physicalIdentity]*transactionLock
+}{active: map[physicalIdentity]*transactionLock{}}
+
+var transactionProcessGate sync.Mutex
 
 func transactionLockPath() (string, error) {
 	root := os.Getenv("XDG_STATE_HOME")
-	if root == "" {
+	if !filepath.IsAbs(root) {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
+		if !filepath.IsAbs(home) {
+			return "", errors.New("home directory must be absolute")
+		}
 		root = filepath.Join(home, ".local", "state")
 	}
-	path, err := filepath.Abs(filepath.Join(root, "libtmux-go", "mcp-swap.lock"))
-	return filepath.Clean(path), err
+	return filepath.Clean(filepath.Join(root, "libtmux-mcp-dev", "swap", "state.lock")), nil
 }
 
 func inspectTransactionLockClaim() (pathClaim, error) {
@@ -60,6 +72,13 @@ func acquireTransactionLock() (*transactionLock, error) {
 func acquireTransactionLockWith(
 	open func(string, bool) (*os.File, bool, error),
 ) (*transactionLock, error) {
+	transactionProcessGate.Lock()
+	releaseGate := true
+	defer func() {
+		if releaseGate {
+			transactionProcessGate.Unlock()
+		}
+	}()
 	path, err := transactionLockPath()
 	if err != nil {
 		return nil, err
@@ -83,11 +102,15 @@ func acquireTransactionLockWith(
 		if created {
 			err = errors.Join(file.Chmod(transactionLockMode), file.Sync())
 		}
-		lock := &transactionLock{file: file}
+		lock := &transactionLock{file: file, gate: true}
 		if err == nil {
 			lock.binding, err = heldLockBinding(file)
 		}
 		if err == nil {
+			transactionLocks.Lock()
+			transactionLocks.active[lock.binding.Target] = lock
+			transactionLocks.Unlock()
+			releaseGate = false
 			return lock, nil
 		}
 		_ = unlockAndCloseTransactionFile(file)
@@ -145,7 +168,41 @@ func (l *transactionLock) validate() error {
 	return err
 }
 
-func (l *transactionLock) close() error { return unlockAndCloseTransactionFile(l.file) }
+func (l *transactionLock) close() error {
+	err := unlockAndCloseTransactionFile(l.file)
+	transactionLocks.Lock()
+	delete(transactionLocks.active, l.binding.Target)
+	aliases := l.aliases
+	l.aliases = nil
+	transactionLocks.Unlock()
+	for _, alias := range aliases {
+		err = errors.Join(err, alias.Close())
+	}
+	if l.gate {
+		l.gate = false
+		transactionProcessGate.Unlock()
+	}
+	return err
+}
+
+func retainTransactionLockAlias(lock *transactionLock, file *os.File) {
+	lock.aliases = append(lock.aliases, file)
+}
+
+func retainIfActiveLockAlias(file *os.File) bool {
+	identity, err := physicalIdentityForFile(file)
+	if err != nil {
+		return false
+	}
+	transactionLocks.Lock()
+	defer transactionLocks.Unlock()
+	lock := transactionLocks.active[identity]
+	if lock == nil {
+		return false
+	}
+	retainTransactionLockAlias(lock, file)
+	return true
+}
 
 func lockClaim(binding destinationBinding) pathClaim {
 	return pathClaim{
@@ -159,7 +216,7 @@ func validateLockInfo(info os.FileInfo) error {
 	switch {
 	case !info.Mode().IsRegular():
 		return errors.New("transaction lock is not a regular file")
-	case info.Mode().Perm() != transactionLockMode:
+	case !exactMode(info, transactionLockMode):
 		return errors.New("transaction lock is not private mode 0600")
 	case err != nil:
 		return err
@@ -173,19 +230,45 @@ func validateLockInfo(info os.FileInfo) error {
 }
 
 func validateLockDirectory(path string, create bool) error {
+	namespace := filepath.Dir(path)
 	if create {
-		if err := os.MkdirAll(path, 0o700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(namespace), 0o700); err != nil {
 			return err
 		}
+		for _, directory := range []string{namespace, path} {
+			if err := createPrivateLockDirectory(directory); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
+	if err := validatePrivateLockDirectory(namespace); err != nil {
+		return err
+	}
+	return validatePrivateLockDirectory(path)
+}
+
+func createPrivateLockDirectory(path string) error {
+	if err := os.Mkdir(path, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	return validatePrivateLockDirectory(path)
+}
+
+func validatePrivateLockDirectory(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
+	if !info.IsDir() || !exactMode(info, 0o700) || !fileOwnedByCurrentUser(info) {
 		return errors.New("transaction lock directory is not private")
 	}
 	return nil
+}
+
+func exactMode(info os.FileInfo, expected os.FileMode) bool {
+	const special = os.ModeSetuid | os.ModeSetgid | os.ModeSticky
+	return info.Mode()&(os.ModePerm|special) == expected
 }
 
 func resolveProspectivePath(path string) (string, error) {

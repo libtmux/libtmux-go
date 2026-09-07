@@ -150,26 +150,67 @@ func TestEntryChangeRejectsAConfigChangedAfterPlanning(t *testing.T) {
 	assertConfigWasNotWritten(t, target, newer)
 }
 
-func TestLaterConfigChangeBeforeApplyStopsAllWrites(t *testing.T) {
+func TestProvisioningChangesAreIncludedInTheInitialPlan(t *testing.T) {
 	first := jsonPreflightClient(t, "first", `{"mcpServers":{}}`)
 	second := jsonPreflightClient(t, "second", `{"mcpServers":{}}`)
 	firstOriginal := readFile(t, first.path)
 	const newer = `{"mcpServers":{"other":{"command":"newer"}}}`
 	plan := entryPlan{
-		configured: map[string]any{"command": "replacement", "args": []any{}},
+		configured: devEntry(),
 		install: func() error {
 			return os.WriteFile(second.path, []byte(newer), 0o600)
 		},
 		cleanup: func() {},
 	}
 
-	err := usePreparedLocal([]client{first, second}, plan, false, false)
-	if err == nil || !strings.Contains(err.Error(), "second") ||
-		!strings.Contains(err.Error(), "changed after") {
-		t.Fatalf("use error = %v, want the changed second config named", err)
+	if err := usePreparedLocal([]client{first, second}, plan, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := revert([]client{first, second}, false); err != nil {
+		t.Fatal(err)
 	}
 	assertConfigWasNotWritten(t, first, firstOriginal)
 	assertConfigWasNotWritten(t, second, newer)
+}
+
+func TestUseReplansTheFinalProcessSpecAfterPreflight(t *testing.T) {
+	t.Setenv("GORACE", "atexit_sleep_ms=0")
+	t.Setenv(preflightHelperEnvironment, "mutate-config")
+	target := jsonPreflightClient(t, "racing", `{"mcpServers":{}}`)
+	t.Setenv("MCP_SWAP_PREFLIGHT_CONFIG", target.path)
+	plan := preflightTestPlan()
+
+	err := usePreparedLocal([]client{target}, plan, false, true)
+	if err == nil || !strings.Contains(err.Error(), "changed after preflight") {
+		t.Fatalf("use error = %v, want final-spec replan refusal", err)
+	}
+	if got := readFile(t, target.path); !strings.Contains(got, "MCP_SWAP_CHANGED") {
+		t.Fatalf("tool overwrote the concurrent config: %s", got)
+	}
+	assertPathMissing(t, backupPath(target))
+	assertPathMissing(t, recoveryStatePath(target))
+}
+
+func TestUseProvisionsBeforePreflight(t *testing.T) {
+	t.Setenv("GORACE", "atexit_sleep_ms=0")
+	marker := filepath.Join(t.TempDir(), "provisioned")
+	t.Setenv(preflightHelperEnvironment, "handshake")
+	target := jsonPreflightClient(t, "provisioned", `{"mcpServers":{}}`)
+	plan := preflightTestPlan()
+	plan.install = func() error { return os.WriteFile(marker, []byte("ready"), 0o600) }
+	plan.configured["env"].(map[string]any)["MCP_SWAP_PREFLIGHT_MARKER"] = marker + ".handshake"
+	plan.configured["env"].(map[string]any)["MCP_SWAP_REQUIRE_FILE"] = marker
+
+	// The helper's environment-mode branch checks inherited and configured
+	// variables; this wrapper fails at launch if provisioning did not run first.
+	plan.configured["command"] = "sh"
+	plan.configured["args"] = []any{
+		"-c", `test -f "$MCP_SWAP_REQUIRE_FILE" && exec "$MCP_SWAP_TEST_BINARY"`,
+	}
+	plan.configured["env"].(map[string]any)["MCP_SWAP_TEST_BINARY"] = os.Args[0]
+	if err := usePreparedLocal([]client{target}, plan, false, true); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func preflightTestPlan() entryPlan {

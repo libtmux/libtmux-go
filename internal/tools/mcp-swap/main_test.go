@@ -31,8 +31,8 @@ func TestParseArgumentsReadsCommandsAndFlagsInAnyOrder(t *testing.T) {
 		},
 		{
 			"flag before command",
-			[]string{"--dry-run", "status"},
-			options{command: "status", dryRun: true, mode: modeDev},
+			[]string{"--dry-run", "use"},
+			options{command: "use-local", dryRun: true, mode: modeDev},
 		},
 		{
 			"mode as two tokens",
@@ -63,6 +63,20 @@ func TestParseArgumentsReadsCommandsAndFlagsInAnyOrder(t *testing.T) {
 			"clients joined by equals",
 			[]string{"revert", "--client=claude"},
 			options{command: "revert", mode: modeDev, only: []string{"claude"}},
+		},
+		{
+			"scope and environment",
+			[]string{
+				"use", "--scope", "user", "--env", "LIBTMUX_TOOLSETS=inspect,execute",
+				"--env=LIBTMUX_SOCKET=qa",
+			},
+			options{
+				command: "use-local", mode: modeDev, scope: scopeUser,
+				environment: map[string]string{
+					"LIBTMUX_TOOLSETS": "inspect,execute",
+					"LIBTMUX_SOCKET":   "qa",
+				},
+			},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -96,6 +110,20 @@ func TestParseArgumentsRefusesWhatItCannotHonour(t *testing.T) {
 		// silently ignoring it would swap to something other than what was
 		// asked for.
 		{"ref without released", []string{"use-local", "--ref", "v1"}, "only means something"},
+		{"unsafe released ref", []string{"use", "--mode", "released", "--ref", "../../escape"}, "safe module version"},
+		{"unsafe released ref character", []string{"use", "--mode", "released", "--ref", "v1_bad"}, "safe module version"},
+		{"non-ASCII released ref", []string{"use", "--mode", "released", "--ref", "v1-β"}, "safe module version"},
+		{"empty released ref", []string{"use", "--mode", "released", "--ref="}, "safe module version"},
+		{"unknown scope", []string{"status", "--scope", "workspace"}, "user or project"},
+		{"retired safety input", []string{"use", "--env", "LIBTMUX_SAFETY=off"}, "LIBTMUX_SAFETY is retired"},
+		{"malformed environment", []string{"use", "--env", "LIBTMUX_TOOLSETS"}, "KEY=VALUE"},
+		{"environment on status", []string{"status", "--env", "A=B"}, "does not apply"},
+		{"dry run on status", []string{"status", "--dry-run"}, "does not apply"},
+		{"preflight flag on revert", []string{"revert", "--no-preflight"}, "does not apply"},
+		{"mode on detect", []string{"detect", "--mode", "build"}, "does not apply"},
+		{"scope on doctor", []string{"doctor", "--scope", "user"}, "does not apply"},
+		{"client on doctor", []string{"doctor", "--client", "claude"}, "does not apply"},
+		{"empty client selection", []string{"use", "--client", ","}, "client selection is empty"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -202,6 +230,26 @@ func TestEveryModeMarksItsEntry(t *testing.T) {
 	}
 }
 
+func TestBuildEntryCarriesRequestedEnvironment(t *testing.T) {
+	t.Parallel()
+	entry, err := buildEntry(options{
+		mode: modeInstalled,
+		environment: map[string]string{
+			"LIBTMUX_TOOLSETS": "inspect,execute",
+			"LIBTMUX_SOCKET":   "qa",
+		},
+	}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment := entryEnvironment(entry)
+	if environment["LIBTMUX_TOOLSETS"] != "inspect,execute" ||
+		environment["LIBTMUX_SOCKET"] != "qa" ||
+		environment["LIBTMUX_MCP_SWAP"] != string(modeInstalled) {
+		t.Fatalf("entry environment = %v", environment)
+	}
+}
+
 // The released server's module path is written into client entries, so its
 // source module must remain authoritative.
 func TestModulePathMatchesTheReleasedServerModule(t *testing.T) {
@@ -251,6 +299,9 @@ func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	if got := clientNames(all); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("known clients = %v, want %v", got, wantNames)
 	}
+	if all[0].dialect != dialectClaude {
+		t.Fatalf("Claude dialect = %v, want explicit stdio dialect", all[0].dialect)
+	}
 	pi := all[len(all)-1]
 	if pi.path != "/home/someone/.pi/agent/mcp.json" ||
 		pi.key != "mcpServers" || pi.format != formatJSONC || pi.dialect != dialectStandard {
@@ -287,6 +338,80 @@ func TestSelectedNarrowsToTheClientsNamed(t *testing.T) {
 	// nothing, which is the failure this refusal exists to prevent.
 	if _, err := selected(all, []string{"clod"}); err == nil {
 		t.Error("an unknown client was accepted")
+	}
+}
+
+func TestRelativeXDGRootsAreIgnored(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "relative-config")
+	t.Setenv("XDG_STATE_HOME", "relative-state")
+
+	clients := knownClients(home)
+	opencode := clients[len(clients)-2]
+	if want := filepath.Join(home, ".config", "opencode", "opencode.jsonc"); opencode.path != want {
+		t.Fatalf("opencode config = %q, want %q", opencode.path, want)
+	}
+	lock, err := transactionLockPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(home, ".local", "state", "libtmux-mcp-dev", "swap", "state.lock"); lock != want {
+		t.Fatalf("transaction lock = %q, want %q", lock, want)
+	}
+	if want := filepath.Join(home, ".local", "state", "libtmux-mcp-dev", "swap", "go", "state.json"); nativeStatePath() != want {
+		t.Fatalf("native state = %q, want %q", nativeStatePath(), want)
+	}
+}
+
+func TestEveryClientSelectionPermutationNormalizesToTransactionOrder(t *testing.T) {
+	t.Parallel()
+	all := knownClients("/home/someone")
+	want := clientNames(all)
+	count := 0
+	var visit func([]string, int)
+	visit = func(names []string, index int) {
+		if index == len(names) {
+			count++
+			chosen, err := selected(all, names)
+			if err != nil {
+				t.Fatalf("selection %v: %v", names, err)
+			}
+			if got := clientNames(chosen); !reflect.DeepEqual(got, want) {
+				t.Fatalf("selection %v normalized to %v, want %v", names, got, want)
+			}
+			return
+		}
+		for candidate := index; candidate < len(names); candidate++ {
+			names[index], names[candidate] = names[candidate], names[index]
+			visit(names, index+1)
+			names[index], names[candidate] = names[candidate], names[index]
+		}
+	}
+	visit(append([]string(nil), want...), 0)
+	if count != 40_320 {
+		t.Fatalf("tested %d permutations, want 40320", count)
+	}
+}
+
+func TestEffectiveScopesUseClaudeProjectAndGlobalUserLayers(t *testing.T) {
+	t.Parallel()
+	repository := filepath.Join(t.TempDir(), "checkout")
+	clients, err := scopedClients(knownClients("/home/someone"), scopeProject, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range clients {
+		want := scopeUser
+		if target.name == "claude" {
+			want = scopeProject
+		}
+		if target.scope != want {
+			t.Errorf("%s scope = %q, want %q", target.name, target.scope, want)
+		}
+		if target.repository != repository {
+			t.Errorf("%s repository = %q, want %q", target.name, target.repository, repository)
+		}
 	}
 }
 
@@ -376,6 +501,41 @@ func TestPiStatusExplainsAdapterAvailability(t *testing.T) {
 	}
 	if strings.Contains(output.String(), hint) {
 		t.Fatalf("pi status still reports a missing adapter: %q", output.String())
+	}
+}
+
+func TestDetectReportsBinaryAndConfigurationPresence(t *testing.T) {
+	directory := t.TempDir()
+	bin := filepath.Join(directory, "bin")
+	if err := os.Mkdir(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	executable := filepath.Join(bin, "present-agent")
+	if err := os.WriteFile(executable, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	config := filepath.Join(directory, "config.json")
+	if err := os.WriteFile(config, []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clients := []client{
+		{name: "present", binary: "present-agent", path: config},
+		{name: "missing", binary: "missing-agent", path: filepath.Join(directory, "missing.json")},
+	}
+
+	var output bytes.Buffer
+	if err := detectTo(&output, clients); err != nil {
+		t.Fatal(err)
+	}
+	text := output.String()
+	if !strings.Contains(text, "present") || !strings.Contains(text, executable) ||
+		!strings.Contains(text, "config: present") {
+		t.Fatalf("detect output = %q", text)
+	}
+	if !strings.Contains(text, "missing") || !strings.Contains(text, "binary: missing") ||
+		!strings.Contains(text, "config: missing") {
+		t.Fatalf("detect output = %q", text)
 	}
 }
 

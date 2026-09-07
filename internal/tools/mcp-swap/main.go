@@ -36,36 +36,44 @@ const modulePath = "github.com/libtmux/libtmux-go/mcp"
 
 type buildMode string
 
+type configScope string
+
 const (
 	modeDev       buildMode = "dev"
 	modeBuild     buildMode = "build"
 	modeInstalled buildMode = "installed"
 	modeReleased  buildMode = "released"
+
+	scopeUser    configScope = "user"
+	scopeProject configScope = "project"
 )
 
 // client describes one supported global configuration.
 type client struct {
-	name    string
-	path    string
-	key     string
-	format  configFormat
-	dialect entryDialect
+	name       string
+	binary     string
+	path       string
+	key        string
+	format     configFormat
+	dialect    entryDialect
+	scope      configScope
+	repository string
 }
 
 func knownClients(home string) []client {
 	config := os.Getenv("XDG_CONFIG_HOME")
-	if config == "" {
+	if !filepath.IsAbs(config) {
 		config = filepath.Join(home, ".config")
 	}
 	return []client{
-		{"claude", filepath.Join(home, ".claude.json"), "mcpServers", formatJSON, dialectStandard},
-		{"codex", filepath.Join(home, ".codex", "config.toml"), "mcp_servers", formatTOML, dialectStandard},
-		{"cursor", filepath.Join(home, ".cursor", "mcp.json"), "mcpServers", formatJSON, dialectStandard},
-		{"gemini", filepath.Join(home, ".gemini", "settings.json"), "mcpServers", formatJSON, dialectStandard},
-		{"grok", filepath.Join(home, ".grok", "config.toml"), "mcp_servers", formatTOML, dialectStandard},
-		{"agy", filepath.Join(home, ".gemini", "config", "mcp_config.json"), "mcpServers", formatJSON, dialectStandard},
-		{"opencode", filepath.Join(config, "opencode", "opencode.jsonc"), "mcp", formatJSONC, dialectOpencode},
-		{"pi", filepath.Join(home, ".pi", "agent", "mcp.json"), "mcpServers", formatJSONC, dialectStandard},
+		{name: "claude", binary: "claude", path: filepath.Join(home, ".claude.json"), key: "mcpServers", format: formatJSON, dialect: dialectClaude},
+		{name: "codex", binary: "codex", path: filepath.Join(home, ".codex", "config.toml"), key: "mcp_servers", format: formatTOML, dialect: dialectStandard},
+		{name: "cursor", binary: "cursor-agent", path: filepath.Join(home, ".cursor", "mcp.json"), key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		{name: "gemini", binary: "gemini", path: filepath.Join(home, ".gemini", "settings.json"), key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		{name: "grok", binary: "grok", path: filepath.Join(home, ".grok", "config.toml"), key: "mcp_servers", format: formatTOML, dialect: dialectStandard},
+		{name: "agy", binary: "agy", path: filepath.Join(home, ".gemini", "config", "mcp_config.json"), key: "mcpServers", format: formatJSON, dialect: dialectStandard},
+		{name: "opencode", binary: "opencode", path: filepath.Join(config, "opencode", "opencode.jsonc"), key: "mcp", format: formatJSONC, dialect: dialectOpencode},
+		{name: "pi", binary: "pi", path: filepath.Join(home, ".pi", "agent", "mcp.json"), key: "mcpServers", format: formatJSONC, dialect: dialectStandard},
 	}
 }
 
@@ -94,9 +102,10 @@ func execute(arguments []string, stdout, stderr io.Writer) int {
 
 func printUsage(output io.Writer) {
 	_, _ = fmt.Fprintln(output,
-		"usage: mcp-swap status|use-local|revert [--dry-run]"+
+		"usage: mcp-swap detect|status|use|use-local|revert|doctor [--dry-run]"+
 			" [--mode dev|build|installed|released] [--ref VERSION]"+
-			" [--client NAME] [--no-preflight]")
+			" [--client NAME] [--scope user|project] [--env KEY=VALUE]"+
+			" [--no-preflight]")
 }
 
 type options struct {
@@ -106,6 +115,8 @@ type options struct {
 	ref         string
 	noPreflight bool
 	only        []string
+	scope       configScope
+	environment map[string]string
 	help        bool
 }
 
@@ -114,6 +125,8 @@ type options struct {
 func parseArguments(arguments []string) (options, error) {
 	chosen := options{mode: modeDev}
 	expecting := ""
+	refProvided := false
+	provided := map[string]bool{}
 	for _, argument := range arguments {
 		if expecting != "" {
 			switch expecting {
@@ -130,6 +143,10 @@ func parseArguments(arguments []string) (options, error) {
 				chosen.ref = argument
 			case "--client":
 				chosen.only = append(chosen.only, argument)
+			case "--scope", "--env":
+				if err := assign(&chosen, expecting, argument); err != nil {
+					return options{}, err
+				}
 			}
 			expecting = ""
 			continue
@@ -142,11 +159,18 @@ func parseArguments(arguments []string) (options, error) {
 		case "help", "-h", "--help":
 			chosen.help = true
 		case "--dry-run", "-dry-run":
+			provided["--dry-run"] = true
 			chosen.dryRun = true
 		case "--no-preflight", "-no-preflight":
+			provided["--no-preflight"] = true
 			chosen.noPreflight = true
-		case "--mode", "-mode", "--ref", "-ref", "--client", "-client":
+		case "--mode", "-mode", "--ref", "-ref", "--client", "-client",
+			"--scope", "-scope", "--env", "-env":
 			expecting = "--" + strings.TrimLeft(argument, "-")
+			provided[expecting] = true
+			if expecting == "--ref" {
+				refProvided = true
+			}
 			if assigned {
 				remembered := expecting
 				expecting = ""
@@ -154,7 +178,10 @@ func parseArguments(arguments []string) (options, error) {
 					return options{}, err
 				}
 			}
-		case "status", "use-local", "revert":
+		case "detect", "status", "use", "use-local", "revert", "doctor":
+			if argument == "use" {
+				argument = "use-local"
+			}
 			if chosen.command != "" {
 				return options{}, fmt.Errorf(
 					"say one command, not %q and %q", chosen.command, argument)
@@ -173,10 +200,51 @@ func parseArguments(arguments []string) (options, error) {
 	if chosen.command == "" {
 		return options{}, errors.New("say status, use-local, or revert")
 	}
+	if err := validateProvidedOptions(chosen.command, provided); err != nil {
+		return options{}, err
+	}
 	if chosen.ref != "" && chosen.mode != modeReleased {
 		return options{}, errors.New("--ref only means something with --mode released")
 	}
+	if refProvided && chosen.ref == "" {
+		return options{}, errors.New("--ref must be a safe module version")
+	}
+	if chosen.ref != "" && !safeModuleVersion(chosen.ref) {
+		return options{}, errors.New("--ref must be a safe module version")
+	}
+	if len(chosen.environment) != 0 && chosen.command != "use-local" {
+		return options{}, errors.New("--env only means something with use")
+	}
+	if len(chosen.only) != 0 {
+		hasClient := false
+		for _, raw := range chosen.only {
+			for part := range strings.SplitSeq(raw, ",") {
+				hasClient = hasClient || strings.TrimSpace(part) != ""
+			}
+		}
+		if !hasClient {
+			return options{}, errors.New("client selection is empty")
+		}
+	}
 	return chosen, nil
+}
+
+func validateProvidedOptions(command string, provided map[string]bool) error {
+	allowed := map[string]map[string]bool{
+		"--client":       {"detect": true, "status": true, "use-local": true, "revert": true},
+		"--dry-run":      {"use-local": true, "revert": true},
+		"--env":          {"use-local": true},
+		"--mode":         {"use-local": true},
+		"--no-preflight": {"use-local": true},
+		"--ref":          {"use-local": true},
+		"--scope":        {"status": true, "use-local": true, "revert": true},
+	}
+	for flag := range provided {
+		if !allowed[flag][command] {
+			return fmt.Errorf("%s does not apply to %s", flag, command)
+		}
+	}
+	return nil
 }
 
 func assign(chosen *options, flagName, value string) error {
@@ -196,8 +264,48 @@ func assign(chosen *options, flagName, value string) error {
 	case "--client":
 		chosen.only = append(chosen.only, value)
 		return nil
+	case "--scope":
+		switch configScope(value) {
+		case scopeUser, scopeProject:
+			chosen.scope = configScope(value)
+			return nil
+		default:
+			return fmt.Errorf("%q is not user or project", value)
+		}
+	case "--env":
+		name, environmentValue, found := strings.Cut(value, "=")
+		if !found || name == "" {
+			return fmt.Errorf("--env expects KEY=VALUE, got %q", value)
+		}
+		if name == "LIBTMUX_SAFETY" {
+			return errors.New("LIBTMUX_SAFETY is retired; use LIBTMUX_TOOLSETS")
+		}
+		if chosen.environment == nil {
+			chosen.environment = map[string]string{}
+		}
+		chosen.environment[name] = environmentValue
+		return nil
 	}
 	return fmt.Errorf("%s takes no value", flagName)
+}
+
+func safeModuleVersion(value string) bool {
+	if value == "latest" {
+		return true
+	}
+	if value == "" || value == "." || value == ".." {
+		return false
+	}
+	for _, character := range value {
+		if character >= 'a' && character <= 'z' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' ||
+			strings.ContainsRune("-+.", character) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func run(chosen options) error {
@@ -205,31 +313,39 @@ func run(chosen options) error {
 	if err != nil {
 		return err
 	}
+	if !filepath.IsAbs(home) {
+		return errors.New("home directory must be absolute")
+	}
 
-	clients, err := selected(knownClients(home), chosen.only)
+	allClients := knownClients(home)
+	clients, err := selected(allClients, chosen.only)
 	if err != nil {
 		return err
 	}
 
+	if chosen.command == "detect" {
+		return detectTo(os.Stdout, clients)
+	}
+	moduleRoot, err := mcpModuleRoot()
+	if err != nil {
+		return err
+	}
+	repository := filepath.Dir(moduleRoot)
+
 	switch chosen.command {
 	case "status":
-		return report(clients)
+		return nativeStatusTo(os.Stdout, clients, chosen.scope, repository)
 	case "revert":
-		return revert(clients, chosen.dryRun)
+		return nativeRevert(allClients, clients, chosen, repository)
+	case "doctor":
+		return nativeDoctorTo(os.Stdout, allClients, repository)
 	case "use-local":
-		// Only checkout-backed modes require a repository root.
-		repository := ""
-		if chosen.mode == modeDev || chosen.mode == modeBuild {
-			if repository, err = mcpModuleRoot(); err != nil {
-				return err
-			}
-		}
-		plan, err := prepareEntry(chosen, repository)
+		plan, err := prepareEntry(chosen, moduleRoot)
 		if err != nil {
 			return err
 		}
 		defer plan.cleanup()
-		return usePreparedLocal(clients, plan, chosen.dryRun, !chosen.noPreflight)
+		return nativeUse(allClients, clients, plan, chosen, repository)
 	default:
 		return fmt.Errorf("%q is not a command", chosen.command)
 	}
@@ -282,6 +398,27 @@ func clientNames(clients []client) []string {
 	return names
 }
 
+func scopedClients(clients []client, requested configScope, repository string) ([]client, error) {
+	absolute, err := filepath.Abs(repository)
+	if err != nil {
+		return nil, err
+	}
+	absolute = filepath.Clean(absolute)
+	chosen := make([]client, len(clients))
+	for index, target := range clients {
+		target.repository = absolute
+		target.scope = scopeUser
+		if target.name == "claude" {
+			target.scope = requested
+			if target.scope == "" {
+				target.scope = scopeProject
+			}
+		}
+		chosen[index] = target
+	}
+	return chosen, nil
+}
+
 type entryPlan struct {
 	configured       map[string]any
 	preflightCommand string
@@ -303,38 +440,49 @@ func prepareEntry(chosen options, repository string) (entryPlan, error) {
 		return plan, nil
 	}
 
-	directory, err := os.MkdirTemp("", buildDirectoryName+"-build-")
-	if err != nil {
-		return entryPlan{}, err
-	}
-	plan.cleanup = func() { _ = os.RemoveAll(directory) }
-	temporary := filepath.Join(directory, commandName)
-	if err := compileAt(repository, temporary); err != nil {
-		plan.cleanup()
-		return entryPlan{}, err
-	}
-	plan.preflightCommand = temporary
-	if !chosen.dryRun {
-		plan.install = func() error {
-			contents, err := os.ReadFile(temporary)
-			if err != nil {
-				return err
-			}
-			persistent := entryCommand(entry)
-			if err := os.MkdirAll(filepath.Dir(persistent), 0o755); err != nil {
-				return err
-			}
-			return atomicWriteFile(persistent, contents, 0o755)
+	var directory string
+	plan.cleanup = func() {
+		if directory != "" {
+			_ = os.RemoveAll(directory)
 		}
+	}
+	plan.install = func() error {
+		var err error
+		directory, err = os.MkdirTemp("", buildDirectoryName+"-build-")
+		if err != nil {
+			return err
+		}
+		temporary := filepath.Join(directory, commandName)
+		if err := compileAt(repository, temporary); err != nil {
+			return err
+		}
+		contents, err := os.ReadFile(temporary)
+		if err != nil {
+			return err
+		}
+		persistent := entryCommand(entry)
+		if err := os.MkdirAll(filepath.Dir(persistent), 0o755); err != nil {
+			return err
+		}
+		if info, err := os.Lstat(persistent); err == nil && !info.Mode().IsRegular() {
+			return errors.New("persistent build destination is not a regular file")
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return atomicWriteFileExact(persistent, contents, 0o755)
 	}
 	return plan, nil
 }
 
 // buildEntry uses go -C for dev mode because not every client honors cwd.
 func buildEntry(chosen options, repository string) (map[string]any, error) {
+	environment := map[string]any{"LIBTMUX_MCP_SWAP": string(chosen.mode)}
+	for name, value := range chosen.environment {
+		environment[name] = value
+	}
 	entry := map[string]any{
 		// Ownership marker for status and safe revert.
-		"env": map[string]any{"LIBTMUX_MCP_SWAP": string(chosen.mode)},
+		"env": environment,
 	}
 	switch chosen.mode {
 	case modeInstalled:
@@ -390,15 +538,6 @@ func compileAt(repository, binary string) error {
 func entryCommand(entry map[string]any) string {
 	command, _ := entry["command"].(string)
 	return command
-}
-
-func entryArguments(entry map[string]any) []string {
-	list, _ := entry["args"].([]any)
-	arguments := make([]string, 0, len(list))
-	for _, argument := range list {
-		arguments = append(arguments, fmt.Sprint(argument))
-	}
-	return arguments
 }
 
 // mcpModuleRoot finds this checkout's released MCP module.

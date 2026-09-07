@@ -124,6 +124,9 @@ func captureDestination(path string) (destinationBinding, error) {
 	if !info.Mode().IsRegular() {
 		return destinationBinding{}, errors.New("destination is not a regular file")
 	}
+	if !exactMode(info, info.Mode().Perm()) {
+		return destinationBinding{}, errors.New("destination has unsupported special permission bits")
+	}
 	target, err := physicalIdentityAt(resolved, true)
 	if err != nil {
 		return destinationBinding{}, fmt.Errorf("identify resolved destination: %w", err)
@@ -149,6 +152,9 @@ func readBoundFileLimit(
 	file, err := os.Open(before.Resolved)
 	if err != nil {
 		return nil, destinationBinding{}, err
+	}
+	if retainIfActiveLockAlias(file) {
+		return nil, destinationBinding{}, errors.New("artifact aliases the active state lock")
 	}
 	reader := io.Reader(file)
 	if limit > 0 {
