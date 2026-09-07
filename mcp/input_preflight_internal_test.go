@@ -720,6 +720,25 @@ func TestConfirmCallerInputPreflight(t *testing.T) {
 	}
 }
 
+// waitForPaneCommand waits until tmux lists the pane running command. A respawn
+// returns before the server has finished replacing the pane, so a preflight run
+// straight afterwards can read the pane as absent rather than as the shell the
+// case is about.
+func waitForPaneCommand(ctx context.Context, pane tmux.Pane, command string) error {
+	return tmuxtest.WaitFor(ctx, 10*time.Millisecond,
+		func(waitCtx context.Context) (bool, error) {
+			current, err := pane.Refresh(waitCtx)
+			if err != nil {
+				if errors.Is(err, tmux.ErrSnapshotNotFound) {
+					return false, nil
+				}
+				return false, err
+			}
+			name, present := current.CurrentCommand()
+			return present && name == command, nil
+		})
+}
+
 //libtmux:real-tmux
 func TestConfiguredMembershipResultPaths(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -864,10 +883,12 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	}
 	instance.runtime.deps.beforeRunDispatch = func(barrierCtx context.Context) error {
 		fish := "exec " + filepath.Join(fishDir, "fish")
-		_, respawnErr := panes[0].Respawn(barrierCtx, tmux.RespawnRequest{
+		if _, respawnErr := panes[0].Respawn(barrierCtx, tmux.RespawnRequest{
 			Command: &fish, Kill: true,
-		})
-		return respawnErr
+		}); respawnErr != nil {
+			return respawnErr
+		}
+		return waitForPaneCommand(barrierCtx, panes[0], "fish")
 	}
 	_, ran, err = instance.tools.runCommand(callCtx, nil, runCommandInput{
 		PaneID: panes[0].ID().String(), Command: "true", TimeoutSeconds: 5,
@@ -881,6 +902,9 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	if _, err := panes[0].Respawn(ctx, tmux.RespawnRequest{
 		Command: &cat, Kill: true,
 	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := waitForPaneCommand(ctx, panes[0], "cat"); err != nil {
 		t.Fatal(err)
 	}
 	instance.runtime.deps.beforeRunDispatch = func(context.Context) error { return nil }
