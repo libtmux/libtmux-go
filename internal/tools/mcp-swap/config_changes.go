@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -441,8 +442,7 @@ func (c restoreChange) restoreCurrent() error {
 
 func rollbackRestoreChanges(applied []restoreChange, cause error) error {
 	failures := []error{cause}
-	for index := len(applied) - 1; index >= 0; index-- {
-		change := applied[index]
+	for _, change := range slices.Backward(applied) {
 		if err := change.restoreCurrent(); err != nil {
 			failures = append(failures, fmt.Errorf(
 				"%s: rollback restore: %w", change.target.name, err,
@@ -770,8 +770,7 @@ func (c entryChange) restoreOriginal() (entryChange, error) {
 func rollbackEntryChanges(applied, prepared []entryChange, cause error) error {
 	var failures []error
 	rolledBack := make(map[string]entryChange, len(applied))
-	for index := len(applied) - 1; index >= 0; index-- {
-		change := applied[index]
+	for _, change := range slices.Backward(applied) {
 		restored, err := change.restoreOriginal()
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: rollback: %w", change.target.name, err))
@@ -808,8 +807,7 @@ func removePreparedBackupsWith(
 	remove func(string) error,
 ) error {
 	recoveries := make([]namedRecovery, 0, len(prepared))
-	for index := len(prepared) - 1; index >= 0; index-- {
-		change := prepared[index]
+	for _, change := range slices.Backward(prepared) {
 		change.recovery.guard = nil
 		recoveries = append(recoveries, namedRecovery{change.target.name, change.recovery})
 	}
@@ -1336,8 +1334,8 @@ func (j *fileJournal) take(
 
 func (j *fileJournal) rollback() error {
 	var failures []error
-	for index := len(j.moves) - 1; index >= 0; index-- {
-		if err := j.moves[index].restore(); err != nil {
+	for _, move := range slices.Backward(j.moves) {
+		if err := move.restore(); err != nil {
 			failures = append(failures, err)
 		}
 	}
