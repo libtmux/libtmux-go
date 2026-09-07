@@ -896,6 +896,11 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	if err := os.Symlink("/bin/cat", filepath.Join(fishDir, "fish")); err != nil {
 		t.Fatal(err)
 	}
+	// tmux does not name the replacement the same way everywhere: Linux
+	// reports the name it was invoked by and macOS the executable behind the
+	// symlink, so the refusal reads "fish" on one and "cat" on the other.
+	// Assert it names whichever tmux reports rather than hard-coding either.
+	var installedShell string
 	instance.runtime.deps.beforeRunDispatch = func(barrierCtx context.Context) error {
 		before, err := panePID(barrierCtx, panes[0])
 		if err != nil {
@@ -907,14 +912,28 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 		}); respawnErr != nil {
 			return respawnErr
 		}
-		return waitForPaneReplacement(barrierCtx, panes[0], before)
+		if err := waitForPaneReplacement(barrierCtx, panes[0], before); err != nil {
+			return err
+		}
+		current, err := panes[0].Refresh(barrierCtx)
+		if err != nil {
+			return err
+		}
+		name, present := current.CurrentCommand()
+		if !present || name == "" {
+			return errors.New("tmux reported no command for the respawned pane")
+		}
+		installedShell = name
+		return nil
 	}
 	_, ran, err = instance.tools.runCommand(callCtx, nil, runCommandInput{
 		PaneID: panes[0].ID().String(), Command: "true", TimeoutSeconds: 5,
 	})
-	if err == nil || !strings.Contains(err.Error(), "fish") || sendCalls != 0 ||
+	if err == nil || !strings.Contains(err.Error(), "incompatible shell "+installedShell) ||
+		sendCalls != 0 ||
 		!slices.Equal(ran.ResolvedPaneIDs, []string{panes[0].ID().String()}) {
-		t.Fatalf("second shell run refusal = (%+v, %v, sends=%d)", ran, err, sendCalls)
+		t.Fatalf("second shell run refusal = (%+v, %v, shell %q, sends=%d)",
+			ran, err, installedShell, sendCalls)
 	}
 
 	beforeCat, err := panePID(ctx, panes[0])
