@@ -32,6 +32,7 @@ type paneInputSnapshotRow struct {
 	InputOff       rawPaneFormat
 	InMode         rawPaneFormat
 	CurrentCommand rawPaneFormat
+	PID            rawPaneFormat
 }
 
 type clientAttentionSnapshotRow struct {
@@ -57,6 +58,7 @@ type paneInputMemberSignature struct {
 	InputOff       string
 	InMode         string
 	CurrentCommand rawPaneFormat
+	PID            rawPaneFormat
 }
 
 type paneInputTransitionSignature struct {
@@ -116,7 +118,7 @@ func samePaneInputMemberSignature(left, right paneInputMemberSignature) bool {
 	return slices.Equal(left.Placements, right.Placements) &&
 		left.Synchronized == right.Synchronized && left.Dead == right.Dead &&
 		left.InputOff == right.InputOff && left.InMode == right.InMode &&
-		left.CurrentCommand == right.CurrentCommand
+		left.CurrentCommand == right.CurrentCommand && left.PID == right.PID
 }
 
 func samePaneInputMemberSignatures(left, right []paneInputMemberSignature) bool {
@@ -250,6 +252,7 @@ func (t *tools) preflightPaneInput(
 			InputOff:       paneRawFormat(pane, "pane_input_off"),
 			InMode:         paneRawFormat(pane, "pane_in_mode"),
 			CurrentCommand: paneRawFormat(pane, "pane_current_command"),
+			PID:            paneRawFormat(pane, "pane_pid"),
 		})
 		if _, exists := byID[paneID]; !exists {
 			byID[paneID] = pane
@@ -393,6 +396,7 @@ func paneInputSignature(
 			InputOff:       paneRawFormat(pane, "pane_input_off"),
 			InMode:         paneRawFormat(pane, "pane_in_mode"),
 			CurrentCommand: paneRawFormat(pane, "pane_current_command"),
+			PID:            paneRawFormat(pane, "pane_pid"),
 		}
 		if _, err := parseStrictPaneFlag("pane_synchronized", row.Synchronized); err != nil {
 			return paneInputMemberSignature{}, err
@@ -406,17 +410,24 @@ func paneInputSignature(
 		if err := requireSafePaneMode(row.InMode); err != nil {
 			return paneInputMemberSignature{}, err
 		}
+		if !row.PID.Present {
+			return paneInputMemberSignature{}, errors.New("pane_pid is unavailable")
+		}
+		if _, err := parseCanonicalPaneInputNumber(row.PID.Value, false); err != nil {
+			return paneInputMemberSignature{}, fmt.Errorf("pane_pid is malformed: %w", err)
+		}
 		observed := paneInputMemberSignature{
 			Synchronized: row.Synchronized.Value, Dead: row.Dead.Value,
 			InputOff: row.InputOff.Value, InMode: row.InMode.Value,
-			CurrentCommand: row.CurrentCommand,
+			CurrentCommand: row.CurrentCommand, PID: row.PID,
 		}
 		if index == 0 {
 			signature = observed
 		} else if signature.Synchronized != observed.Synchronized ||
 			signature.Dead != observed.Dead || signature.InputOff != observed.InputOff ||
 			signature.InMode != observed.InMode ||
-			signature.CurrentCommand != observed.CurrentCommand {
+			signature.CurrentCommand != observed.CurrentCommand ||
+			signature.PID != observed.PID {
 			return paneInputMemberSignature{}, errors.New("pane linked state is inconsistent")
 		}
 		signature.Placements = append(signature.Placements, placement)

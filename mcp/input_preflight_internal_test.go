@@ -1249,6 +1249,48 @@ func TestRunCommandRefusesShellIdentityTransition(t *testing.T) {
 }
 
 //libtmux:real-tmux
+func TestRunCommandRefusesAnIdenticalShellReplacement(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	// The replacement runs the same program the fixture started, so
+	// pane_current_command is unchanged across the two checkpoints and only the
+	// pane's process tells the shells apart.
+	instance.runtime.deps.beforeRunDispatch = func(barrierCtx context.Context) error {
+		command := "ENV= PS1=" + shellQuote(tmuxtest.ShellPrompt) + " /bin/sh -i"
+		pane, err := panes[0].Respawn(barrierCtx, tmux.RespawnRequest{
+			Command: &command, Kill: true,
+		})
+		if err != nil {
+			return err
+		}
+		tmuxtest.WaitForShellReady(barrierCtx, t, pane)
+		return nil
+	}
+	var dispatches atomic.Int32
+	instance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		dispatches.Add(1)
+		return nil
+	}
+
+	_, _, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+		PaneID: panes[0].ID().String(), Command: "true", TimeoutSeconds: 5,
+	})
+	if err == nil || !strings.Contains(err.Error(), "state or placement changed") ||
+		dispatches.Load() != 0 {
+		t.Fatalf("identical shell replacement = (%v, dispatches %d), want refusal",
+			err, dispatches.Load())
+	}
+}
+
+//libtmux:real-tmux
 func TestSendReservationIsSharedAcrossInstances(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
