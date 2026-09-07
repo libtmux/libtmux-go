@@ -843,7 +843,14 @@ func (t *tools) pasteText(
 	if input.Enter {
 		contents += "\n"
 	}
-	bracket := true
+	// Bracketed paste tells the terminal that what follows is pasted, so it is
+	// inserted rather than acted on -- which is exactly what a newline carried
+	// with the text must not be. Bracketing a paste that asks for Enter leaves
+	// the command typed at the prompt in every shell that honours the markers,
+	// which is most of them. The buffer is what stops tmux interpreting a key
+	// name in the text; the markers are not, so dropping them for this case
+	// costs nothing and keeps the delivery to one paste at the target.
+	bracket := !input.Enter
 	if input.Bracket != nil {
 		bracket = *input.Bracket
 	}

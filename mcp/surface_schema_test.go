@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -239,6 +240,12 @@ func answersItsSchema(tool *sdk.Tool, result *sdk.CallToolResult) error {
 		return fmt.Errorf("reply does not answer its own output schema: %w", err)
 	}
 	return nil
+}
+
+// singleQuoted wraps a value for a shell word. The values here are a temporary
+// path and a fixed prompt, neither of which carries a quote.
+func singleQuoted(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 func surfaceResultText(result *sdk.CallToolResult) string {

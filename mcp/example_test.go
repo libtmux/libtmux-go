@@ -203,8 +203,14 @@ func Example_watchingAVisibleCommandAcrossTurns() {
 		Arguments: map[string]any{
 			"pane_id": paneID,
 			"cursor":  baseline.Cursor,
+			// A shell can draw its next prompt before the command's output
+			// reaches the pane, which leaves the two sharing a row: the line
+			// reads "$ ready" rather than "ready". Anchoring the whole line
+			// misses that, while requiring the line to END with the word
+			// still refuses to match the echoed command, which continues
+			// past it.
 			"patterns": []string{
-				"^ready$",
+				`(^|\s)ready$`,
 			},
 			"regex":   true,
 			"timeout": 5,
@@ -241,7 +247,9 @@ func Example_watchingAVisibleCommandAcrossTurns() {
 		return
 	}
 
-	found := slices.Contains(reading.Lines, "ready")
+	found := slices.ContainsFunc(reading.Lines, func(line string) bool {
+		return strings.HasSuffix(line, "ready")
+	})
 	if !wait.Found || !found {
 		// An Example compares stdout against its Output comment, so the
 		// evidence goes to stderr. Three fixes were proposed for this case

@@ -754,6 +754,62 @@ func waitForPaneReplacement(ctx context.Context, pane tmux.Pane, before int) err
 		})
 }
 
+// Bracketed paste tells a terminal to insert what arrives rather than act on
+// it, so a newline carried in a bracketed buffer is typed and never runs:
+// `tmux paste-buffer -p` of "printf 'x'\n" into bash leaves the command at the
+// prompt, which is what the CI runner did and what every shell honouring the
+// markers does. A paste asking for Enter therefore goes unbracketed, and still
+// as one paste at the target rather than a second dispatch synchronize-panes
+// could fan out.
+//
+//libtmux:real-tmux
+func TestPasteTextDropsBracketsWhenItAsksForEnter(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	defaults := instance.runtime.deps
+
+	var bracketed []bool
+	instance.runtime.deps.pasteBuffer = func(
+		pasteCtx context.Context,
+		pane tmux.Pane,
+		request tmux.PasteBufferRequest,
+	) error {
+		bracketed = append(bracketed, request.Bracket)
+		return defaults.pasteBuffer(pasteCtx, pane, request)
+	}
+
+	paneID := panes[0].ID().String()
+	if _, _, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: paneID, Text: "printf 'x'", Enter: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: paneID, Text: "printf 'x'",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(bracketed, []bool{false, true}) {
+		t.Errorf("bracketed = %v, want an Enter paste unbracketed and a bare one bracketed", bracketed)
+	}
+
+	// An explicit choice still wins, so a caller who wants the markers keeps
+	// them and accepts that the command is typed rather than run.
+	yes := true
+	if _, _, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: paneID, Text: "printf 'x'", Enter: true, Bracket: &yes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(bracketed) != 3 || !bracketed[2] {
+		t.Errorf("bracketed = %v, want the explicit choice honoured", bracketed)
+	}
+}
+
 //libtmux:real-tmux
 func TestConfiguredMembershipResultPaths(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
