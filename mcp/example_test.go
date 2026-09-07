@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -180,14 +181,18 @@ func Example_watchingAVisibleCommandAcrossTurns() {
 		return
 	}
 
-	if _, err := session.CallTool(ctx, &sdk.CallToolParams{
+	pasted, err := session.CallTool(ctx, &sdk.CallToolParams{
 		Name: "paste_text",
 		Arguments: map[string]any{
 			"pane_id": paneID,
 			"text":    "sleep 0.1; printf 'ready\\n'",
 			"enter":   true,
 		},
-	}); err != nil {
+	})
+	if err == nil {
+		err = exampleToolError(pasted)
+	}
+	if err != nil {
 		fmt.Println("start the visible command:", err)
 		return
 	}
@@ -354,12 +359,31 @@ func connectExampleClient(
 	}, nil
 }
 
+// decodeStructured refuses an error result rather than decoding an empty one.
+// A tool that declines answers with IsError set and no structured content, not
+// with a transport error, so a caller that checks only the error from CallTool
+// reads the refusal as a reply that simply reported nothing.
 func decodeStructured(result *sdk.CallToolResult, into any) error {
+	if err := exampleToolError(result); err != nil {
+		return err
+	}
 	encoded, err := json.Marshal(result.StructuredContent)
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal(encoded, into)
+}
+
+func exampleToolError(result *sdk.CallToolResult) error {
+	if result == nil || !result.IsError {
+		return nil
+	}
+	for _, content := range result.Content {
+		if text, ok := content.(*sdk.TextContent); ok {
+			return errors.New(text.Text)
+		}
+	}
+	return errors.New("the tool refused and said nothing")
 }
 
 func killExampleServer(server tmux.Server) {
