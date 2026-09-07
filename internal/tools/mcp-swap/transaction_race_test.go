@@ -65,9 +65,15 @@ func TestStagingResolvesEveryDestinationItPlans(t *testing.T) {
 		}
 		defer staged.cleanup()
 		// The swapper writes the file an alias names rather than replacing the
-		// alias, so the plan has to carry the physical path.
-		if staged.target != physical {
-			t.Fatalf("staged target = %q, want the physical %q", staged.target, physical)
+		// alias, so the plan has to carry the physical path. macOS reaches
+		// TempDir through /var, a link to /private/var, so the physical path is
+		// only the one the test wrote after resolving it too.
+		resolved, err := filepath.EvalSymlinks(physical)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if staged.target != resolved {
+			t.Fatalf("staged target = %q, want the physical %q", staged.target, resolved)
 		}
 	})
 }

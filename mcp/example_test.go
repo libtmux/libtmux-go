@@ -371,17 +371,12 @@ func killExampleServer(server tmux.Server) {
 // waitForExampleShell blocks until the pane reports a shell as its foreground
 // command, which is when it starts reading keys.
 func waitForExampleShell(ctx context.Context, target tmux.Server, paneID string) error {
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for {
-		panes, err := target.Panes(ctx)
-		if err == nil {
-			for _, pane := range panes {
-				if pane.ID().String() != paneID {
-					continue
-				}
-				if command, ok := pane.CurrentCommand(); ok && exampleShell(command) {
-					return nil
-				}
+		pane, found, err := examplePane(ctx, target, paneID)
+		if err == nil && found {
+			if command, ok := pane.CurrentCommand(); ok && exampleShell(command) {
+				return waitForExampleShellReadingInput(ctx, pane, deadline)
 			}
 		}
 		if time.Now().After(deadline) {
@@ -389,6 +384,59 @@ func waitForExampleShell(ctx context.Context, target tmux.Server, paneID string)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+}
+
+// waitForExampleShellReadingInput proves the shell executes what it is sent.
+// A forked shell already reports itself as the pane's command, so waiting for
+// that alone still races the moment it starts reading: on a loaded runner the
+// first keys land before readline does and are dropped, and the example then
+// reports that its command never ran. Sending a marker until its output comes
+// back is the signal the pane is ready for the keys that follow.
+func waitForExampleShellReadingInput(
+	ctx context.Context,
+	pane tmux.Pane,
+	deadline time.Time,
+) error {
+	const marker = "libtmux-go-example-ready"
+	command := "printf '" + marker + "\n'"
+	for {
+		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
+			return err
+		}
+		for attempt := 0; attempt < 20; attempt++ {
+			time.Sleep(25 * time.Millisecond)
+			lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
+			if err != nil {
+				return err
+			}
+			if slices.Contains(lines, marker) {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("pane %s never ran a command", pane.ID())
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("pane %s never ran a command", pane.ID())
+		}
+	}
+}
+
+func examplePane(
+	ctx context.Context,
+	target tmux.Server,
+	paneID string,
+) (tmux.Pane, bool, error) {
+	panes, err := target.Panes(ctx)
+	if err != nil {
+		return tmux.Pane{}, false, err
+	}
+	for _, pane := range panes {
+		if pane.ID().String() == paneID {
+			return pane, true, nil
+		}
+	}
+	return tmux.Pane{}, false, nil
 }
 
 // exampleShell mirrors the package's own shell predicate. example_test.go is
