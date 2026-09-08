@@ -9,14 +9,6 @@ on:
     branches: [master]
   pull_request:
 
-# A pull request's runs supersede each other: the matrix builds nine tmux
-# releases and a macOS runner, so leaving a superseded run going delays the one
-# that describes the current head. A push to master cancels nothing, because
-# every commit there needs its own answer.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions:
   contents: read
 
