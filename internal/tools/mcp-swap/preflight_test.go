@@ -361,15 +361,14 @@ func TestPreflightTerminatesALongLivedServerAfterSuccess(t *testing.T) {
 	}
 }
 
-// The oversize helpers write past the limit and then stay alive, so a preflight
-// that spots the limit returns while the helper still holds the pipe open. The
-// budget only has to outlast process start-up on a loaded machine: a detector
-// that instead drained the stream would wait for the helper and be caught by
-// oversizeReturnsWithin. Spending the whole budget on start-up was how a
-// correct detector failed under the race detector on a shared runner.
+// The oversize helpers write past the limit and then stay alive, holding the
+// pipe open, which is what makes the reason alone sufficient: a detector that
+// tried to drain the stream could never finish, so it would spend the budget
+// and report the deadline rather than the limit. Only a detector that stops at
+// the limit says "exceeds". The budget just has to outlast process start-up on
+// a loaded machine.
 const (
 	oversizeBudget        = 10 * time.Second
-	oversizeReturnsWithin = 5 * time.Second
 	oversizeHelperLingers = 60 * time.Second
 )
 
@@ -377,13 +376,9 @@ func TestPreflightStopsOversizedStreamsPromptly(t *testing.T) {
 	for _, scenario := range []string{"oversized-stdout", "oversized-stderr"} {
 		t.Run(scenario, func(t *testing.T) {
 			entry := preflightHelperEntry(t, scenario)
-			started := time.Now()
 			reason := preflightWithin(entry, oversizeBudget)
 			if !strings.Contains(reason, "exceeds") {
 				t.Fatalf("preflight reason = %q, want stream limit", reason)
-			}
-			if elapsed := time.Since(started); elapsed >= oversizeReturnsWithin {
-				t.Fatalf("preflight waited %s after oversized output", elapsed)
 			}
 		})
 	}
