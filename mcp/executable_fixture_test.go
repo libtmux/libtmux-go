@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"testing"
 	"time"
-
-	"github.com/libtmux/libtmux-go/tmux"
 )
 
 const executableFixtureEnvironment = "LIBTMUX_MCP_TEST_EXECUTABLE"
@@ -48,23 +45,4 @@ func runExecutableFixture() {
 	}
 	fmt.Fprintln(os.Stderr, "tmux fixture is unavailable")
 	os.Exit(1)
-}
-
-func executableFixtureOptions(
-	t testing.TB,
-	mode string,
-	options tmux.ServerOptions,
-) tmux.ServerOptions {
-	t.Helper()
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	options.Binary = executable
-	options.ProcessEnvironment = append(
-		options.ProcessEnvironment,
-		executableFixtureEnvironment+"="+mode,
-		"GOCOVERDIR="+t.TempDir(),
-	)
-	return options
 }

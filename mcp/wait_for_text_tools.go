@@ -115,7 +115,7 @@ type waitForTextOutput struct {
 
 // waitForText follows pane output without polling. Existing screen text counts
 // unless SinceEntry is set. Shell echo may match, so authored commands should
-// use run_command.
+// use run_shell_command.
 func (t *tools) waitForText(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -128,6 +128,9 @@ func (t *tools) waitForText(
 	}
 	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
 	if err != nil {
+		return nil, waitForTextOutput{}, err
+	}
+	if err := validatePatternInputs(input.Patterns, input.Stop); err != nil {
 		return nil, waitForTextOutput{}, err
 	}
 	patterns, err := compileNamedMatchers(input.Patterns, input.Regex, input.MatchCase)
@@ -356,6 +359,13 @@ func splitWritten(written string) []string {
 		return nil
 	}
 	return strings.Split(written, "\n")
+}
+
+func addTruncation(caller, earlier truncation) truncation {
+	caller.TruncatedLines += earlier.TruncatedLines
+	caller.TruncatedBytes += earlier.TruncatedBytes
+	caller.Truncated = caller.TruncatedLines > 0 || caller.TruncatedBytes > 0
+	return caller
 }
 
 // namedMatcher is a test on some text together with the pattern that made it,

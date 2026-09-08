@@ -26,19 +26,30 @@ const (
 
 func main() {
 	output := flag.String("output", "TOOLS.md", "the markdown file to write into")
+	check := flag.Bool("check", false, "fail instead of writing when the reference has drifted")
 	flag.Parse()
-	if err := run(*output); err != nil {
+	if err := run(*output, *check); err != nil {
 		fmt.Fprintln(os.Stderr, "toolsref:", err)
 		os.Exit(1)
 	}
 }
 
-func run(output string) error {
+func run(output string, check bool) error {
 	// Generate the complete surface rather than one deployment profile.
-	if err := os.Setenv(tmuxmcp.SafetyEnvironmentVariable, "destructive"); err != nil {
-		return err
+	for _, name := range []string{
+		tmuxmcp.ToolsEnvironmentVariable,
+		tmuxmcp.ExcludeToolsEnvironmentVariable,
+		tmuxmcp.SafetyEnvironmentVariable,
+		tmuxmcp.RecipeToolEnvironmentVariable,
+	} {
+		if err := os.Unsetenv(name); err != nil {
+			return err
+		}
 	}
-	if err := os.Setenv(tmuxmcp.CapabilitiesEnvironmentVariable, "all"); err != nil {
+	if err := os.Setenv(
+		tmuxmcp.ToolsetsEnvironmentVariable,
+		"inspect,manage,execute,teardown",
+	); err != nil {
 		return err
 	}
 	tools, err := listTools()
@@ -60,6 +71,9 @@ func run(output string) error {
 			filepath.Base(output), len(tools))
 		return nil
 	}
+	if check {
+		return fmt.Errorf("generated %s has drifted; run go generate ./... to refresh it", filepath.Base(output))
+	}
 	return os.WriteFile(output, []byte(replaced), 0o644) //nolint:gosec // documentation
 }
 
@@ -72,9 +86,6 @@ func listTools() ([]*sdk.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	slices.SortFunc(tools, func(a, b *sdk.Tool) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
 	return tools, nil
 }
 
@@ -90,9 +101,12 @@ func render(tools []*sdk.Tool) string {
 		"`go generate ./...`; edit the tools, not this.\n", len(tools))
 
 	for _, tool := range tools {
-		fmt.Fprintf(&out, "\n### `%s`\n\n%s\n", tool.Name, sentence(tool.Description))
-		if capability, ok := tool.Meta[tmuxmcp.CapabilityMetaKey].(string); ok {
-			fmt.Fprintf(&out, "\nRequires the `%s` capability.\n", capability)
+		fmt.Fprintf(&out, "\n### `%s`\n\n%s\n", tool.Name, strings.TrimSpace(tool.Description))
+		if capability, ok := tool.Meta[tmuxmcp.CapabilityMetaKey].(map[string]any); ok {
+			if toolset, ok := capability["toolset"].(string); ok {
+				fmt.Fprintf(&out, "\nBelongs to the `%s` toolset.\n", toolset)
+			}
+			writeCapability(&out, capability)
 		}
 		if kind := classify(tool); kind != "" {
 			fmt.Fprintf(&out, "\n%s\n", kind)
@@ -103,22 +117,109 @@ func render(tools []*sdk.Tool) string {
 	return out.String()
 }
 
-// classify renders MCP tool annotations as caller guidance.
+// writeCapability renders the security-relevant manifest row next to the
+// native schemas. It deliberately reads the same SDK metadata clients receive,
+// rather than maintaining a documentation-only classification table.
+func writeCapability(out *bytes.Buffer, capability map[string]any) {
+	fmt.Fprint(out, "\n| Capability | Manifest value |\n| --- | --- |\n")
+	writeCapabilityRow(out, "processReach", codeValue(capability["processReach"]))
+	writeCapabilityRow(out, "tmuxEffects", codeList(stringsOf(capability["tmuxEffects"])))
+	writeCapabilityRow(out, "outputClasses", codeList(stringsOf(capability["outputClasses"])))
+	writeCapabilityRow(out, "mayExposeSecrets", boolValue(capability["mayExposeSecrets"]))
+	writeCapabilityRow(out, "mayReturnUntrustedContent", boolValue(capability["mayReturnUntrustedContent"]))
+	writeCapabilityRow(out, "amplifiesFutureInput", boolValue(capability["amplifiesFutureInput"]))
+	writeCapabilityRow(out, "inputLiteralization", keyedStrings(capability["inputLiteralization"]))
+	writeCapabilityRow(out, "nestedAuthority", codeList(stringsOf(capability["nestedAuthority"])))
+	writeCapabilityRow(out, "annotations", "`readOnlyHint=false`, `destructiveHint=true`, "+
+		"`idempotentHint=false`, `openWorldHint=true`")
+}
+
+func writeCapabilityRow(out *bytes.Buffer, name, value string) {
+	if value == "" {
+		value = "none"
+	}
+	fmt.Fprintf(out, "| `%s` | %s |\n", name, value)
+}
+
+func codeValue(value any) string {
+	text, _ := value.(string)
+	if text == "" {
+		return ""
+	}
+	return "`" + text + "`"
+}
+
+func boolValue(value any) string {
+	boolean, _ := value.(bool)
+	return fmt.Sprintf("`%t`", boolean)
+}
+
+func codeList(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	quoted := make([]string, 0, len(values))
+	for _, value := range values {
+		quoted = append(quoted, "`"+value+"`")
+	}
+	return strings.Join(quoted, ", ")
+}
+
+func keyedStrings(value any) string {
+	typed, ok := value.(map[string]string)
+	if !ok || len(typed) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	rows := make([]string, 0, len(keys))
+	for _, key := range keys {
+		rows = append(rows, "`"+key+"`: `"+typed[key]+"`")
+	}
+	return strings.Join(rows, "; ")
+}
+
+// classify renders the manifest's effect set as caller guidance. Runtime MCP
+// annotations are deliberately conservative when configuration provenance is
+// unknown, so they are not a semantic tool taxonomy.
 func classify(tool *sdk.Tool) string {
-	annotations := tool.Annotations
-	if annotations == nil {
+	capability, ok := tool.Meta[tmuxmcp.CapabilityMetaKey].(map[string]any)
+	if !ok {
+		return ""
+	}
+	effects := stringsOf(capability["tmuxEffects"])
+	if len(effects) == 0 {
 		return ""
 	}
 	switch {
-	case annotations.ReadOnlyHint:
+	case slices.Contains(effects, "delete"):
+		return "**Deletes tmux state.** Repeating it can remove more state."
+	case slices.Equal(effects, []string{"observe"}):
 		return "Reads only. Repeating it changes nothing."
-	case annotations.DestructiveHint != nil && *annotations.DestructiveHint:
-		return "**Ends something.** Nothing brings it back, and it is withheld " +
-			"below the `destructive` safety level."
-	case annotations.IdempotentHint:
-		return "Changes tmux to a state. Repeating it is safe."
 	default:
-		return "Changes tmux by a step. Repeating it compounds."
+		return "Changes tmux state."
+	}
+}
+
+func stringsOf(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				return nil
+			}
+			values = append(values, text)
+		}
+		return values
+	default:
+		return nil
 	}
 }
 
@@ -162,7 +263,7 @@ func propertiesOf(schema any) []property {
 			}
 			return 1
 		}
-		return cmp.Compare(a.name, b.name)
+		return strings.Compare(a.name, b.name)
 	})
 	return out
 }
@@ -232,14 +333,6 @@ func writeTable(out *bytes.Buffer, heading string, properties []property) {
 		}
 		fmt.Fprintf(out, "| %s | %s |\n", name, one.kind)
 	}
-}
-
-func sentence(description string) string {
-	description = strings.TrimSpace(description)
-	if cut := strings.Index(description, ". "); cut >= 0 {
-		return description[:cut+1]
-	}
-	return description
 }
 
 // replaceRegion refuses missing markers instead of appending generated output.

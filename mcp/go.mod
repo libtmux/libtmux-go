@@ -4,7 +4,6 @@ go 1.26.0
 
 require (
 	github.com/libtmux/libtmux-go v0.0.1-alpha.5
-	github.com/libtmux/libtmux-go/workspace v0.0.1-alpha.5
 	// Held below v1.7.0 until modelcontextprotocol/go-sdk#1168 is released.
 	//
 	// Under protocol 2026-07-28 a log message carries only when the client
@@ -29,7 +28,6 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 // This module ships a command, and go install rejects a module whose go.mod

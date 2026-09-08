@@ -368,56 +368,6 @@ func TestTerminalShutdownWaitsForEveryReadCallResponse(t *testing.T) {
 	}
 }
 
-func TestSessionJobsAreIsolatedAndReleasedOnDisconnect(t *testing.T) {
-	instance := mustInternalMCPServer(t, mustInternalTmuxServer(t, tmux.ServerOptions{
-		SocketName: "session-jobs-unused",
-	}))
-
-	connect := func() *ServerSession {
-		_, transport := mcp.NewInMemoryTransports()
-		session, err := instance.Connect(
-			t.Context(), AssumeResponseCommit(transport), nil,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return session
-	}
-	first, second := connect(), connect()
-	t.Cleanup(func() { _ = second.Close() })
-
-	directory := filepath.Join(t.TempDir(), "first-job")
-	if err := os.Mkdir(directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := first.scope.jobs.keep(&job{
-		id: "opaque-handle", directory: directory, finished: true,
-		started: time.Now(), ended: time.Now(),
-	}); err != nil {
-		t.Fatalf("first session keep job: %v", err)
-	}
-
-	firstRequest := &mcp.CallToolRequest{Session: first.sdk}
-	if _, _, err := instance.tools.getJob(t.Context(), firstRequest, getJobInput{
-		JobID: "opaque-handle",
-	}); err != nil {
-		t.Fatalf("own getJob() error = %v", err)
-	}
-	secondRequest := &mcp.CallToolRequest{Session: second.sdk}
-	if _, _, err := instance.tools.getJob(t.Context(), secondRequest, getJobInput{
-		JobID: "opaque-handle",
-	}); err == nil {
-		t.Fatal("another MCP session collected the first session's job")
-	}
-
-	if err := first.Close(); err != nil {
-		t.Fatalf("first Close() error = %v", err)
-	}
-	if _, err := os.Stat(directory); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("job directory survived session disconnect: %v", err)
-	}
-}
-
 func TestSessionConsentIsReleasedOnDisconnect(t *testing.T) {
 	instance := mustInternalMCPServer(t, mustInternalTmuxServer(t, tmux.ServerOptions{
 		SocketName: "session-consent-unused",
@@ -450,71 +400,6 @@ func TestSessionConsentIsReleasedOnDisconnect(t *testing.T) {
 	if instance.tools.allowed(firstRequest, "%9") {
 		t.Fatal("consent survived its MCP session")
 	}
-}
-
-func TestSessionSubscriptionsAreIdempotentAndOwned(t *testing.T) {
-	t.Setenv(CapabilitiesEnvironmentVariable, "all")
-	instance := mustInternalMCPServer(t, mustInternalTmuxServer(t, tmux.ServerOptions{
-		SocketName: "session-subscriptions-unused",
-	}))
-	connect := func() *ServerSession {
-		_, transport := mcp.NewInMemoryTransports()
-		session, err := instance.Connect(
-			t.Context(), AssumeResponseCommit(transport), nil,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return session
-	}
-	first, second := connect(), connect()
-	t.Cleanup(func() { _ = second.Close() })
-	const uri = "tmux://sessions"
-	request := func(session *ServerSession) *mcp.SubscribeRequest {
-		return &mcp.SubscribeRequest{
-			Session: session.sdk,
-			Params:  &mcp.SubscribeParams{URI: uri},
-		}
-	}
-	subscribe := func(request *mcp.SubscribeRequest) error {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-		defer cancel()
-		return instance.tools.subscribe(ctx, request)
-	}
-	if err := subscribe(request(first)); err != nil {
-		t.Fatal(err)
-	}
-	if got := instance.tools.watchers.subscriptionCount(uri); got != 1 {
-		t.Fatalf("watcher subscriptions = %d after first subscribe, want 1", got)
-	}
-	if err := instance.tools.unsubscribe(context.Background(), &mcp.UnsubscribeRequest{
-		Session: second.sdk,
-		Params:  &mcp.UnsubscribeParams{URI: uri},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if got := instance.tools.watchers.subscriptionCount(uri); got != 1 {
-		t.Fatalf("foreign unsubscribe changed count to %d, want 1", got)
-	}
-	if err := subscribe(request(first)); err != nil {
-		t.Fatal(err)
-	}
-	if got := instance.tools.watchers.subscriptionCount(uri); got != 1 {
-		t.Fatalf("repeated subscribe changed count to %d, want 1", got)
-	}
-
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if got := instance.tools.watchers.subscriptionCount(uri); got != 0 {
-		t.Fatalf("disconnect left %d watcher subscriptions", got)
-	}
-}
-
-func (w *watchers) subscriptionCount(uri string) int {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-	return w.subscribed[uri]
 }
 
 func mustInternalTmuxServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
@@ -559,31 +444,9 @@ func TestInstanceCloseReleasesOwnedResources(t *testing.T) {
 		SocketName: "lifecycle-unused",
 	}))
 
-	jobDirectory := filepath.Join(t.TempDir(), "job")
-	if err := os.Mkdir(jobDirectory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	_, transport := mcp.NewInMemoryTransports()
-	session, err := instance.Connect(t.Context(), AssumeResponseCommit(transport), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := session.scope.jobs.keep(&job{id: "job", directory: jobDirectory}); err != nil {
-		t.Fatalf("session keep job before shutdown: %v", err)
-	}
-
 	auditFile, ok := instance.audit.(*os.File)
 	if !ok {
 		t.Fatalf("audit owner = %T, want *os.File", instance.audit)
-	}
-
-	const uri = "tmux://panes/%9/content"
-	instance.tools.watchers.subscribed[uri] = 1
-	instance.tools.watchers.spelled[uri] = map[string]int{uri: 1}
-	instance.tools.watchers.notify(uri)
-	instance.tools.watchers.notify(uri)
-	if !instance.tools.watchers.owes(uri) {
-		t.Fatal("watcher has no deferred notification to release")
 	}
 
 	if err := instance.Close(); err != nil {
@@ -592,17 +455,7 @@ func TestInstanceCloseReleasesOwnedResources(t *testing.T) {
 	if err := instance.Close(); err != nil {
 		t.Fatalf("second Close() error = %v", err)
 	}
-	if _, err := os.Stat(jobDirectory); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("job directory survived Close(): %v", err)
-	}
 	if _, err := auditFile.WriteString("after close"); !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("audit write after Close() error = %v, want closed", err)
-	}
-	if instance.tools.watchers.owes(uri) {
-		t.Fatal("deferred notification survived Close()")
-	}
-	time.Sleep(watchNotifyInterval + 50*time.Millisecond)
-	if !instance.tools.watchers.at(uri).IsZero() {
-		t.Fatal("a deferred notification ran after Close()")
 	}
 }

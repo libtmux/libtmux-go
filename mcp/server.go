@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"runtime/debug"
 	"slices"
 	"sync"
@@ -24,6 +26,11 @@ const fallbackVersion = "v0.0.1-alpha.8"
 // every MCP runtime owns one.
 const minimumTmuxVersion = tmux.MinimumConnectionVersion
 
+const (
+	minimalOwnerEnvironment = "LIBTMUX_MCP_OWNER"
+	minimalOwnerOption      = "@libtmux_mcp_owner"
+)
+
 func (i *Instance) requireTmuxVersion(ctx context.Context) error {
 	minimum, err := tmux.ParseVersion(minimumTmuxVersion)
 	if err != nil {
@@ -42,41 +49,41 @@ func buildVersion() string {
 
 // closedArguments adds enums that jsonschema-go cannot express through these tags.
 var closedArguments = map[string]map[string][]any{
-	"show_option":                  {"scope": scopeValues},
-	"set_option":                   {"scope": scopeValues},
-	"show_hooks":                   {"scope": scopeValues},
-	"split_window":                 {"direction": placementValues},
-	"move_pane":                    {"direction": placementValues},
-	"find_pane_by_position":        {"direction": {"above", "below", "left", "right"}},
-	"list_panes":                   {"detail": {"", detailStandard, detailFull}},
-	"get_recipe":                   {"name": recipeValues},
-	"call_readonly_tools_batch":    {"onError": onErrorValues},
-	"call_mutating_tools_batch":    {"onError": onErrorValues},
-	"call_destructive_tools_batch": {"onError": onErrorValues},
+	"show_option":           {"scope": scopeValues},
+	"show_hooks":            {"scope": scopeValues},
+	"split_window":          {"direction": placementValues},
+	"call_read_tools_batch": {"on_error": {onErrorStop, onErrorContinue}},
+	"send_keys_batch":       {"on_error": {onErrorStop, onErrorContinue}},
+	"find_pane_by_position": {"position": {"top-left", "top-right", "bottom-left", "bottom-right"}},
+	"create_window":         {"direction": {"before", "after"}},
 }
 
 // minimumArguments adds numeric lower bounds that jsonschema-go cannot express
 // through struct tags.
 var minimumArguments = map[string]map[string]float64{
-	"get_job":          {"timeoutSeconds": 0},
-	"wait_for_channel": {"timeoutSeconds": 0},
-	"wait_for_text":    {"idleSeconds": 0, "timeoutSeconds": 0},
+	"wait_for_channel":  {"timeout": 0},
+	"wait_for_text":     {"timeout": 0},
+	"run_shell_command": {"timeout": 0, "max_lines": 0},
 }
 
-var scopeValues = []any{"", scopeServer, scopeSession, scopeWindow, scopePane}
+var maximumArguments = map[string]map[string]float64{
+	"search_panes": {
+		"max_matches_per_pane": searchCeilingMatchesPerPane,
+		"max_lines":            searchCeilingPanes,
+	},
+}
+
+var boundedStringArguments = map[string]map[string]int{
+	"search_panes": {"pattern": patternBytesLimit},
+}
+
+var boundedPatternArrays = map[string][]string{
+	"wait_for_text": {"patterns", "stop"},
+}
+
+var scopeValues = []any{"", "global", scopeServer, scopeSession, scopeWindow, scopePane}
 
 var placementValues = []any{"", "below", "above", "right", "left"}
-
-var onErrorValues = []any{"", onErrorStop, onErrorContinue}
-
-// recipeValues is derived from recipes to avoid a second name list.
-var recipeValues = func() []any {
-	values := make([]any, 0, len(recipes))
-	for _, offered := range recipes {
-		values = append(values, offered.name)
-	}
-	return values
-}()
 
 // listsAreLists removes nullable alternatives inferred for slices.
 func listsAreLists(schema *jsonschema.Schema) {
@@ -106,151 +113,58 @@ func constrain(name string, schema *jsonschema.Schema) {
 			property.Minimum = &minimum
 		}
 	}
-}
-
-// register advertises permitted tools and records the same surface for batches.
-func register[In, Out any](
-	server *mcp.Server,
-	t *tools,
-	capability Capability,
-	tool *mcp.Tool,
-	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
-) {
-	registerHandler(server, t, capability, tool, handler, true)
-}
-
-// registerLocal advertises an MCP-only handler that delegates any tmux work
-// to already registered handlers. Batch tools use it so their outer request
-// does not hold an unbound runtime lease across an inner create_session call.
-func registerLocal[In, Out any](
-	server *mcp.Server,
-	t *tools,
-	capability Capability,
-	tool *mcp.Tool,
-	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
-) {
-	registerHandler(server, t, capability, tool, handler, false)
-}
-
-func registerHandler[In, Out any](
-	server *mcp.Server,
-	t *tools,
-	capability Capability,
-	tool *mcp.Tool,
-	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
-	withRuntime bool,
-) {
-	if !t.level.permits(tool.Annotations) || !t.capabilities.permits(capability) {
-		return
-	}
-	if t.registrationErr != nil {
-		return
-	}
-	if tool.Meta == nil {
-		tool.Meta = mcp.Meta{}
-	}
-	tool.Meta[CapabilityMetaKey] = string(capability)
-	if withRuntime {
-		handler = withRequestRuntime(t, handler)
-	}
-	resolved, err := prepareToolSchemas[In, Out](tool)
-	if err != nil {
-		t.registrationErr = err
-		return
-	}
-	mcp.AddTool(server, tool, handler)
-	if !t.batchable {
-		// Track advertised but unbatchable tools for accurate batch errors.
-		t.unbatchable[tool.Name] = struct{}{}
-		return
-	}
-	t.dispatchers[tool.Name] = dispatcher{
-		annotations: tool.Annotations,
-		call: func(
-			ctx context.Context,
-			request *mcp.CallToolRequest,
-			arguments json.RawMessage,
-		) (any, error) {
-			return batched(ctx, request, handler, arguments, resolved)
-		},
-	}
-}
-
-func prepareToolSchemas[In, Out any](tool *mcp.Tool) (*jsonschema.Resolved, error) {
-	// Infer early so closed argument enums can be applied before registration.
-	if tool.InputSchema == nil {
-		schema, err := jsonschema.For[In](nil)
-		if err != nil {
-			return nil, fmt.Errorf("%s input schema: %w", tool.Name, err)
+	for argument, maximum := range maximumArguments[name] {
+		if property, ok := schema.Properties[argument]; ok {
+			maximum := maximum
+			property.Maximum = &maximum
 		}
-		constrain(tool.Name, schema)
-		tool.InputSchema = schema
 	}
-	// Normalize inferred slices to the non-null reply contract.
-	if tool.OutputSchema == nil {
-		schema, err := jsonschema.For[Out](nil)
-		if err != nil {
-			return nil, fmt.Errorf("%s output schema: %w", tool.Name, err)
+	for argument, maximum := range boundedStringArguments[name] {
+		if property, ok := schema.Properties[argument]; ok {
+			maximum := maximum
+			property.MaxLength = &maximum
 		}
-		listsAreLists(schema)
-		tool.OutputSchema = schema
 	}
-	// Retain the direct-call schema for batch validation.
-	if schema, ok := tool.InputSchema.(*jsonschema.Schema); ok {
-		resolved, err := schema.Resolve(nil)
-		if err != nil {
-			return nil, fmt.Errorf("%s input schema: %w", tool.Name, err)
+	for _, argument := range boundedPatternArrays[name] {
+		if property, ok := schema.Properties[argument]; ok {
+			maximumItems := patternCountLimit
+			maximumLength := patternBytesLimit
+			property.MaxItems = &maximumItems
+			if property.Items == nil {
+				property.Items = &jsonschema.Schema{Type: "string"}
+			}
+			property.Items.MaxLength = &maximumLength
 		}
-		return resolved, nil
 	}
-	return nil, nil
-}
-
-// toolGroups keeps each registration group beside its handlers.
-var toolGroups = []func(*mcp.Server, *tools){
-	addOrientationTools,
-	addCaptureTools,
-	addInspectTools,
-	addInputTools,
-	addWaitTools,
-	addChannelTools,
-	addCreationTools,
-	addLayoutTools,
-	addPositionTools,
-	addLifecycleTools,
-	addServerTools,
-	addBufferTools,
-	addSettingsTools,
-	addRecipeTools,
-	addBatchTools,
 }
 
 // NewServer returns a closeable MCP instance exposing target. It rejects an
 // invalid target before allocating instance-owned resources.
 func NewServer(target tmux.Server) (*Instance, error) {
-	if _, err := target.SocketSelection(); err != nil {
+	profile, err := profileForTarget(target, "unknown")
+	if err != nil {
 		return nil, fmt.Errorf("construct MCP server: %w", err)
 	}
 	if target.ConnectionBound() {
 		return nil, ErrRuntimeTargetBound
 	}
+	surface, err := resolveToolSurface(profile)
+	if err != nil {
+		return nil, fmt.Errorf("construct MCP server: %w", err)
+	}
+	return newServer(target, surface)
+}
 
+func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	instance := newInstance()
 	runtime := newRuntime(instance.ctx, target, instance.terminal)
 	instance.runtime = runtime
-	tools := newToolRegistry()
+	tools := newToolRegistry(surface)
 	tools.instance = instance
 	tools.runtime = runtime
 	serverOptions := &mcp.ServerOptions{
-		Instructions: tools.callerInstructions(),
-	}
-	if tools.capabilities.permits(CapabilityMetadataRead) {
-		serverOptions.CompletionHandler = tools.completeObserved
-	}
-	if tools.capabilities.permits(CapabilityMetadataRead) ||
-		tools.capabilities.permits(CapabilityContentRead) {
-		serverOptions.SubscribeHandler = tools.subscribe
-		serverOptions.UnsubscribeHandler = tools.unsubscribe
+		Instructions: "Operate only on tmux objects through the startup-frozen tool surface. " +
+			"Read tmux://capabilities before delegating executable or destructive work.",
 	}
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "libtmux",
@@ -258,7 +172,6 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	}, serverOptions)
 	instance.server = server
 	instance.tools = tools
-	tools.watchers = newWatchers(runtime)
 	// Audit wraps the backstop so oversized refusals are recorded.
 	server.AddReceivingMiddleware(backstop())
 	writer, auditOwner := auditWriter()
@@ -267,35 +180,67 @@ func NewServer(target tmux.Server) (*Instance, error) {
 	}
 	server.AddReceivingMiddleware(instance.scoped)
 
-	if err := registerToolGroups(server, tools); err != nil {
+	if err := registerToolManifest(server, tools); err != nil {
 		_ = instance.Close()
 		return nil, fmt.Errorf("construct MCP server: %w", err)
 	}
 	addResources(server, tools)
-	addPrompts(server, tools)
 
 	instance.audit = auditOwner
 	return instance, nil
 }
 
-func newToolRegistry() *tools {
-	capabilities, rejected := capabilitiesFromEnvironment()
+func newToolRegistry(configured ...toolSurface) *tools {
+	var surface toolSurface
+	var configurationErr error
+	if len(configured) != 0 {
+		surface = configured[0]
+	} else {
+		surface, configurationErr = resolveToolSurface(socketProfile{
+			Selector:                "name:libtmux-mcp",
+			SelectionProvenance:     "default-dedicated",
+			ServerState:             "unknown",
+			ConfigurationProvenance: "minimal",
+			NamespaceBoundary:       "tmux-objects-only",
+			AttachCommand:           "tmux -N -L 'libtmux-mcp' attach",
+		})
+	}
 	return &tools{
-		level:                safetyFromEnvironment(),
-		capabilities:         capabilities,
-		rejectedCapabilities: rejected,
-		waitCeiling:          waitCeilingFromEnvironment(),
-		dispatchers:          map[string]dispatcher{},
-		unbatchable:          map[string]struct{}{},
-		batchable:            true,
+		surface:         surface,
+		waitCeiling:     waitCeilingFromEnvironment(),
+		dispatchers:     map[string]dispatcher{},
+		registrationErr: configurationErr,
 	}
 }
 
-func registerToolGroups(server *mcp.Server, tools *tools) error {
-	for _, add := range toolGroups {
-		add(server, tools)
+func registerToolManifest(server *mcp.Server, tools *tools) error {
+	for _, definition := range tools.surface.tools {
+		definition.register(server, tools, definition)
 		if tools.registrationErr != nil {
 			return tools.registrationErr
+		}
+	}
+	definitions, err := toolManifest()
+	if err != nil {
+		return err
+	}
+	all := make(map[string]toolDefinition, len(definitions))
+	for _, definition := range definitions {
+		all[definition.name] = definition
+	}
+	for _, aggregate := range tools.surface.tools {
+		if !aggregate.aggregate {
+			continue
+		}
+		for _, name := range aggregate.nestedAuthority {
+			if _, bound := tools.dispatchers[name]; bound {
+				continue
+			}
+			definition := all[name]
+			definition.bindDispatcher(tools, definition)
+			if tools.registrationErr != nil {
+				return tools.registrationErr
+			}
 		}
 	}
 	return nil
@@ -303,7 +248,69 @@ func registerToolGroups(server *mcp.Server, tools *tools) error {
 
 // Run serves target over stdin and stdout until ctx is done.
 func Run(ctx context.Context, target tmux.Server) error {
-	instance, err := NewServer(target)
+	if target.ConnectionBound() {
+		return ErrRuntimeTargetBound
+	}
+	environment := currentStartupEnvironment()
+	profile, err := profileForTarget(target, "unknown")
+	if err != nil {
+		return fmt.Errorf("construct MCP server: %w", err)
+	}
+	if _, err := resolveToolSurfaceFrom(environment, profile); err != nil {
+		return fmt.Errorf("construct MCP server: %w", err)
+	}
+	alive, err := target.IsAlive(ctx)
+	if err != nil {
+		return fmt.Errorf("inspect selected tmux socket: %w", err)
+	}
+	state := "absent"
+	if alive {
+		state = "existing"
+	}
+	profile, err = profileForTarget(target, state)
+	if err != nil {
+		return fmt.Errorf("construct MCP server: %w", err)
+	}
+	surface, err := resolveToolSurfaceFrom(environment, profile)
+	if err != nil {
+		return fmt.Errorf("construct MCP server: %w", err)
+	}
+	return runPinnedSurface(ctx, target, surface)
+}
+
+// RunDefaultMinimal serves a package-created default dedicated target. It
+// starts or joins the daemon with a one-use owner marker and grants default
+// teardown only when the marker proves this process created that daemon.
+func RunDefaultMinimal(ctx context.Context, target tmux.Server) error {
+	if target.ConnectionBound() {
+		return ErrRuntimeTargetBound
+	}
+	environment := currentStartupEnvironment()
+	conservative, err := profileForTarget(target, "unknown")
+	if err != nil {
+		return fmt.Errorf("construct MCP server: %w", err)
+	}
+	// Invalid selection must fail before a tmux subprocess can open the socket.
+	if _, err := resolveToolSurfaceFrom(environment, conservative); err != nil {
+		return fmt.Errorf("construct MCP server: %w", err)
+	}
+	nonce, err := newMinimalOwnerNonce()
+	if err != nil {
+		return fmt.Errorf("construct MCP server: owner marker: %w", err)
+	}
+	profile, err := pinDefaultMinimal(ctx, target, nonce)
+	if err != nil {
+		return fmt.Errorf("pin default minimal tmux server: %w", err)
+	}
+	surface, err := resolveToolSurfaceFrom(environment, profile)
+	if err != nil {
+		return fmt.Errorf("construct MCP server: %w", err)
+	}
+	return runPinnedSurface(ctx, target, surface)
+}
+
+func runPinnedSurface(ctx context.Context, target tmux.Server, surface toolSurface) error {
+	instance, err := newServer(target, surface)
 	if err != nil {
 		return err
 	}
@@ -311,19 +318,94 @@ func Run(ctx context.Context, target tmux.Server) error {
 	return instance.Run(ctx, stdio())
 }
 
+func newMinimalOwnerNonce() (string, error) {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value), nil
+}
+
+func pinDefaultMinimal(
+	ctx context.Context,
+	target tmux.Server,
+	nonce string,
+) (socketProfile, error) {
+	minimal, err := isShippedMinimalConfig(target.ConfigFile())
+	if err != nil {
+		return socketProfile{}, err
+	}
+	if !minimal {
+		return socketProfile{}, fmt.Errorf("default minimal target does not use the package-owned config")
+	}
+	launcher, err := target.WithProcessEnvironmentValue(minimalOwnerEnvironment, nonce)
+	if err != nil {
+		return socketProfile{}, err
+	}
+	if err := launcher.Start(ctx); err != nil {
+		return socketProfile{}, err
+	}
+	marker, present, err := target.GlobalSessionScope().RawOption(ctx, minimalOwnerOption)
+	if err != nil {
+		return socketProfile{}, err
+	}
+	selection, err := target.SocketSelection()
+	if err != nil {
+		return socketProfile{}, err
+	}
+	owned := present && marker == nonce
+	selector := "path:" + selection.Path
+	if filepath.Base(selection.Path) == "libtmux-mcp" {
+		selector = "name:libtmux-mcp"
+	}
+	profile := socketProfile{
+		Selector:                selector,
+		SelectionProvenance:     "default-dedicated",
+		ServerState:             "existing",
+		ConfigurationProvenance: "unknown",
+		NamespaceBoundary:       "tmux-objects-only",
+		ResolvedSocketPath:      selection.Path,
+		AttachCommand: shellQuote(target.Executable()) + " -N -S " +
+			shellQuote(selection.Path) + " attach",
+		defaultTeardown: owned,
+	}
+	if selection.Path == "" {
+		return socketProfile{}, fmt.Errorf("default minimal target has no socket path")
+	}
+	if owned {
+		profile.ServerState = "created"
+		profile.ConfigurationProvenance = "minimal"
+	}
+	return profile, nil
+}
+
+func profileForTarget(target tmux.Server, state string) (socketProfile, error) {
+	selection, err := target.SocketSelection()
+	if err != nil {
+		return socketProfile{}, err
+	}
+	profile := socketProfile{
+		Selector:                "path:" + selection.Path,
+		SelectionProvenance:     "operator-current",
+		ServerState:             state,
+		ConfigurationProvenance: "unknown",
+		NamespaceBoundary:       "tmux-objects-only",
+		ResolvedSocketPath:      selection.Path,
+		AttachCommand: shellQuote(target.Executable()) + " -N -S " +
+			shellQuote(selection.Path) + " attach",
+	}
+	if state == "absent" {
+		profile.ConfigurationProvenance = "user-configured"
+	}
+	return profile, nil
+}
+
 type tools struct {
-	instance     *Instance
-	runtime      *tmuxRuntime
-	level        SafetyLevel
-	capabilities capabilitySet
-	// Rejected values are part of the configuration snapshot reported to clients.
-	rejectedCapabilities []string
-	waitCeiling          time.Duration
-	watchers             *watchers
-	dispatchers          map[string]dispatcher
-	unbatchable          map[string]struct{}
-	// Batch tools set batchable false to prevent nested dispatch.
-	batchable       bool
+	instance        *Instance
+	runtime         *tmuxRuntime
+	surface         toolSurface
+	waitCeiling     time.Duration
+	dispatchers     map[string]dispatcher
 	registrationErr error
 	// A process cannot change its containing pane. Failed discovery is not
 	// cached because cancellation or transport loss may be transient.

@@ -858,8 +858,7 @@ they are not a substitute for the requirement.
 The MCP server addresses the socket it was started with and nothing in a call
 can retarget it: `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET`, or
 `LIBTMUX_SOCKET_PATH`, resolved at launch, with `-doctor` naming which was
-taken. The Python server of the same name takes `socket_name` on 48 of its
-tools instead, so a call chooses.
+taken. The shared cross-port contract uses the same one-socket process boundary.
 
 This is a decision rather than an omission, and the reasoning is not
 ergonomics. An MCP server runs with the operator's authority and is driven by a
@@ -874,10 +873,9 @@ Two alternatives were weighed. Taking a socket per call and validating it
 against an operator-declared allowlist keeps the reach and adds a list to get
 wrong, and the failure is silent: an allowlist with one entry too many is
 indistinguishable from a correct one until it matters. Running one server per
-tmux socket is what this design already supports, costs a process, and is what
-`list_servers` exists to make discoverable — it reports the other servers on
-the machine precisely so a person can point a second instance at one, while
-nothing a model says can reach them from this one.
+tmux socket is what this design already supports and costs a process. Discovery
+is deliberately outside MCP: an operator points a second instance at another
+socket, while nothing a model says can reach it from the first one.
 
 The cost is real and is not hidden: a client that wants two tmux servers runs
 two of these. That is the trade, taken deliberately.
@@ -892,9 +890,9 @@ two of these. That is the trade, taken deliberately.
 | Test isolation | Per-test explicit `-S` socket with two-layer cleanup | Named `-L` sockets; a shared suite server |
 | Batching | Recorded `Op` values, a forward-reference `Ref`, and planners as values | A name-keyed planner registry; attributing a merged stdout to grouped operations by position; a `Result` interface or a type parameter per operation kind |
 | MCP listing criteria | Typed criteria matched in Go against the snapshot the tool already takes | A caller-supplied tmux `-f` expression; typed criteria compiled into one |
-| MCP detached commands | An in-process handle table, bounded, whose entries keep their answer once read | A handle encoding the paths it needs; one-shot collection |
+| MCP long-running commands | Pane-visible state observed with bounded capture or wait tools; no MCP job handle | An in-process handle table; a handle encoding paths; one-shot collection |
 | MCP per-pane state | A field on the listing's own row type | A field on the shared pane summary; a separate digest tool |
-| MCP command output | Reading the pane's grid between two cursor marks | Teeing the command's bytes to a file; copying the pane's byte stream with `pipe-pane` |
+| MCP command output | `run_shell_command` reads the pane's grid between two cursor marks | Teeing the command's bytes to a file; copying the pane's byte stream with `pipe-pane` |
 
 The execution bakeoff showed that some apparently missing tmux targets still
 return success for `display-message`; failure tests use commands with stable
@@ -917,12 +915,13 @@ Compiling typed criteria into `-f` was rejected for the same reason one level
 removed: the pushdown it buys is a local pipe carrying a few kilobytes, and it
 puts a format assembler on the boundary for good.
 
-The detached-command bakeoff settled two things. A handle that carried the paths
-it needs would be a caller-supplied path this server later reads, so the state
-stays in process. One-shot collection was rejected after the annotation gate
-caught it: a handle that stops answering once read is not idempotent, and asking
-twice is how a caller checks on something, so the first read that finds a status
-keeps it and every later read is answered from that.
+The detached-command bakeoff settled two things. A handle carrying paths would
+make the server read caller-supplied paths later, and one-shot collection would
+stop answering when repeated. The earlier server therefore kept bounded handle
+state in process. The shared capability contract later removed background job
+handles entirely: the process already lives in a tmux pane, so its pane id and
+capture cursor remain observable across MCP restarts without a second lifecycle
+authority.
 
 The per-pane state bakeoff was settled by measuring the tool list. Hanging the
 state off the shared pane summary added its schema to the four other tools that
@@ -946,9 +945,9 @@ and redoing it outside tmux is a terminal emulator.
 Teeing lost a second time, decisively: a command whose stdout is a pipe is not
 a command running in a terminal. `[ -t 1 ]` reports a pipe, so colour is off,
 paging is off, and any program that branches on `isatty` takes the other
-branch -- which is the opposite of what a tool called `run_command` on a tmux
-pane is for. `pipe-pane` keeps the tty, and is the approach to reach for if the
-requirement ever becomes bytes rather than what the pane shows.
+branch -- which is the opposite of what `run_shell_command` on a tmux pane is
+for. `pipe-pane` keeps the tty in the core experiment, but it is not a public
+MCP route; the portable surface answers with what the terminal shows.
 
 The compensations are therefore the price of the answer, not evidence against
 the approach. What the bakeoff did find was a case none of them covered: a

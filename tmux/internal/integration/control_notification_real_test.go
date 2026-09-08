@@ -4,6 +4,7 @@ package integration
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -166,19 +167,25 @@ func TestNotificationStreamPauseAfterArmsTheServerHold(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = stream.Close() })
 
-	sendRealPaneCommand(ctx, t, panes[0], "printf 'pause-after-armed\\n'")
+	const marker = "pause-after-armed"
+	sendRealPaneCommand(ctx, t, panes[0], "printf '"+marker+"\\n'")
+	// tmux arms the hold on a client that has already attached, so whatever the
+	// pane emitted before refresh-client landed is framed unextended and says
+	// nothing about the arming. Only this command's own output does.
 	for {
 		notification, err := stream.Next(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// tmux frames pane output as extended output only for a client that
-		// armed the hold, so this is the arming reaching the server.
-		if notification.Kind() == tmux.ControlNotificationExtendedOutput {
-			break
+		_, output, ok := notification.Output()
+		if !ok || !bytes.Contains(output, []byte(marker)) {
+			continue
 		}
 		if notification.Kind() == tmux.ControlNotificationOutput {
 			t.Fatal("pane output arrived unextended, so the hold never reached tmux")
+		}
+		if notification.Kind() == tmux.ControlNotificationExtendedOutput {
+			break
 		}
 	}
 	if err := stream.ContinuePane(ctx, panes[0].ID()); err != nil {

@@ -1,14 +1,18 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -29,9 +33,6 @@ type runCommandInput struct {
 	// for send_keys. It covers the wrapper too, which is this package's own
 	// bookkeeping and has no business in a person's history either.
 	SuppressHistory bool `json:"suppressHistory,omitempty" jsonschema:"keep the command out of the shell's history by prefixing a space"`
-	// Detach returns as soon as the command is typed, with a handle to collect
-	// it by, instead of waiting for it to finish.
-	Detach bool `json:"detach,omitempty" jsonschema:"return a jobId at once instead of waiting; collect it later with get_job"`
 	// MaxLines caps the returned output, keeping the last lines.
 	MaxLines int `json:"maxLines,omitempty" jsonschema:"how many lines of output to return at most, keeping the last ones"`
 	// MaxBytes caps the returned output's size, keeping the last lines.
@@ -42,6 +43,8 @@ type runCommandInput struct {
 type runCommandOutput struct {
 	// PaneID is the pane the command ran in.
 	PaneID string `json:"paneId"`
+	// ResolvedPaneIDs is the sorted configured preflight singleton.
+	ResolvedPaneIDs []string `json:"resolvedPaneIds"`
 	// ExitStatus is the command's exit status, absent when the command did not
 	// finish. It is a pointer because zero is what a command reports when it
 	// succeeded, so a timeout reported as zero would read as success to
@@ -49,10 +52,9 @@ type runCommandOutput struct {
 	ExitStatus *int `json:"exitStatus,omitempty"`
 	// TimedOut reports that the wait ended before the command did.
 	TimedOut bool `json:"timedOut"`
-	// Running is what the pane was running when the wait ended, reported only
-	// on a timeout. A shell here means the command is still going; anything
-	// else means the pane was busy and received the text as that program's
-	// input instead of running it.
+	// Running is what the pane reported after dispatch, returned on a timeout.
+	// A non-shell can mean the accepted command is running or that the process
+	// changed after the final check and consumed the payload as input.
 	Running string `json:"running,omitempty"`
 	// Output is pane-rendered output between the command's cursor marks. Wrapped
 	// terminal rows are rejoined and screen painting remains. Before tmux 3.6,
@@ -70,62 +72,59 @@ type runCommandOutput struct {
 	// the same word for the same thing.
 	LinesMissed bool `json:"linesMissed,omitempty"`
 	// EffectiveTimeoutSeconds is the budget this call actually used, which is
-	// what timeoutSeconds asked for unless the server's ceiling was lower. It
-	// is absent from a detached run, which waited for nothing.
+	// what timeoutSeconds asked for unless the server's ceiling was lower.
 	EffectiveTimeoutSeconds int `json:"effectiveTimeoutSeconds,omitempty"`
 	// TimeoutClamped reports that the ceiling shortened the wait, so a caller
 	// that asked for longer learns the policy from a reply rather than from a
 	// failed call.
 	TimeoutClamped bool `json:"timeoutClamped,omitempty"`
-	// JobID is the handle a detached run is collected by, and is absent from
-	// one that waited.
-	JobID string `json:"jobId,omitempty"`
-	// Detached reports that the command was left running, so nothing here
-	// describes how it ended yet.
-	Detached bool `json:"detached,omitempty"`
 	// truncation reports what the bounds dropped from Output.
 	truncation
 }
 
 // runCommand types a command at a shell prompt and waits for its commit record.
 // A shared filesystem carries its exit status and cursor marks bound its output.
-// If the pane is busy, the text reaches that program instead; timeout results
-// report the pane's running command.
+// Both input checkpoints require a shell; timeout results report what the pane
+// was running after dispatch.
 func (t *tools) runCommand(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input runCommandInput,
 ) (*mcp.CallToolResult, runCommandOutput, error) {
+	output := runCommandOutput{ResolvedPaneIDs: []string{}}
+	if strings.TrimSpace(input.Command) == "" {
+		return nil, output, errors.New("command is required")
+	}
 	limits, err := resolveBounds(input.MaxLines, input.MaxBytes)
 	if err != nil {
-		return nil, runCommandOutput{}, err
+		return nil, output, err
 	}
-	var owned *jobs
-	if input.Detach {
-		owned, err = t.sessionJobs(request)
-		if err != nil {
-			return nil, runCommandOutput{}, err
-		}
-	}
-	output := runCommandOutput{}
-	runCtx := ctx
-	if !input.Detach {
-		timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
-		output.EffectiveTimeoutSeconds = int(timeout.Seconds())
-		output.TimeoutClamped = clamped
-		var runCancel context.CancelFunc
-		runCtx, runCancel = context.WithTimeout(ctx, timeout)
-		defer runCancel()
-		reporter := newProgressReporter(
-			runCtx, request, timeout, "waiting for the command to finish")
-		defer reporter.stop()
-	}
-	started, err := t.startCommand(runCtx, request, input, owned)
+	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
+	output.EffectiveTimeoutSeconds = int(timeout.Seconds())
+	output.TimeoutClamped = clamped
+	initial, err := t.preflightPaneInput(
+		ctx, input.PaneID, input.SessionName, paneInputConfigured, "run_shell_command",
+	)
 	if err != nil {
+		return nil, output, err
+	}
+	output.PaneID = initial.Source.ID().String()
+	output.ResolvedPaneIDs = append([]string{}, initial.ConfiguredIDs...)
+	runCtx, runCancel := context.WithTimeout(ctx, timeout)
+	defer runCancel()
+	started, err := t.startCommand(runCtx, request, input, initial)
+	if started != nil {
+		output.PaneID = started.paneID.String()
+		output.ResolvedPaneIDs = append([]string{}, started.configuredIDs...)
+	}
+	if err != nil {
+		if started != nil && started.dispatched {
+			t.reapCommandRun(*started)
+		}
 		if ctx.Err() != nil {
 			return nil, output, ctx.Err()
 		}
-		if !input.Detach && isOwnWaitDeadline(ctx, runCtx, err) {
+		if isOwnWaitDeadline(ctx, runCtx, err) {
 			output.TimedOut = true
 			output.OutputUnavailable = "the effective timeout ended during command setup, " +
 				"before pane output was collected"
@@ -133,29 +132,21 @@ func (t *tools) runCommand(
 		}
 		return nil, output, err
 	}
-	output.PaneID = started.paneID.String()
-
-	// A detached run is finished here. The handle is what collects it, and the
-	// directory it records itself in outlives this call because of that.
-	if input.Detach {
-		output.JobID = started.id
-		output.Detached = true
-		return nil, output, nil
-	}
-	defer func() { _ = os.RemoveAll(started.directory) }()
-
-	pane, err := t.tmux(runCtx).Pane(runCtx, started.paneID)
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, output, ctx.Err()
+	reporter := newProgressReporter(
+		runCtx, request, timeout, "waiting for the command to finish")
+	defer reporter.stop()
+	completed := false
+	defer func() {
+		if completed {
+			t.finishCommandRun(*started)
+		} else {
+			t.reapCommandRun(*started)
 		}
-		if isOwnWaitDeadline(ctx, runCtx, err) {
-			return finishRunCommandDeadline(*started, output, "")
-		}
-		return nil, output, err
-	}
+	}()
+
+	pane := started.pane
 	running, _ := pane.Formats().PaneCurrentCommand()
-	return t.awaitCommand(ctx, runCtx, awaiting{
+	result, output, err := t.awaitCommand(ctx, runCtx, awaiting{
 		pane:       pane,
 		statusPath: started.statusAt,
 		openedPath: started.openedAt,
@@ -164,61 +155,77 @@ func (t *tools) runCommand(
 		running:    running,
 		output:     output,
 	})
+	completed = output.ExitStatus != nil
+	return result, output, err
 }
 
-// startCommand types a command into a pane and returns the handle that
-// identifies it, without waiting for anything.
-//
-// It is separate from waiting because the two are independent: the wrapper
-// records the same status whether or not this process is the one that reads it,
-// so detaching changes who waits and nothing else.
+// startCommand types a command into a pane and returns its private completion
+// record. The public operation always waits for that record.
 func (t *tools) startCommand(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input runCommandInput,
-	owned *jobs,
-) (*job, error) {
-	if strings.TrimSpace(input.Command) == "" {
-		return nil, errors.New("command is required")
+	initial paneInputPreflight,
+) (*commandRun, error) {
+	started := &commandRun{
+		pane: initial.Source, paneID: initial.Source.ID(),
+		configuredIDs: append([]string{}, initial.ConfiguredIDs...),
+	}
+	if len(initial.ConfiguredIDs) != 1 {
+		return started, fmt.Errorf(
+			"run_shell_command refuses configured pane membership %v: one completion, output, and exit status require a configured singleton",
+			initial.ConfiguredIDs,
+		)
+	}
+	lease, err := processPaneInputs.acquire(
+		initial.Identities(), paneInputReservationRun, "run_shell_command",
+	)
+	if err != nil {
+		return started, err
+	}
+	started.lease = lease
+	started.identity = lease.identities[0]
+	dispatched := false
+	defer func() {
+		if !dispatched {
+			processPaneInputs.release(lease)
+		}
+	}()
+	if shell := incompatibleRunCommandShell(initial.Source); shell != "" {
+		return started, fmt.Errorf(
+			"run_shell_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
+				"use send_keys or respawn_pane with a compatible shell",
+			initial.Source.ID(), shell,
+		)
+	}
+	if err := t.confirmCallerInputPreflight(ctx, request, initial, "running a command"); err != nil {
+		return started, err
 	}
 	server := t.tmux(ctx)
-	// Resolved for delivery, which refuses a pane that cannot read the keys
-	// before the pane is asked to do anything. Either refusal saves this tool
-	// the whole timeoutSeconds the caller set: a mode reads the command as key
-	// bindings, one of which takes a pending key and never answers the sending
-	// client, and a pane with no process never runs the wrapper at all.
-	pane, err := t.resolvePaneToDeliver(
-		ctx, request, input.PaneID, input.SessionName, "running a command", "run_command")
+	route, err := resolveRunCommandRoute(ctx, server, initial.Source.ID().String())
 	if err != nil {
-		return nil, err
+		return started, err
 	}
-	if shell := incompatibleRunCommandShell(pane); shell != "" {
-		return nil, fmt.Errorf(
-			"run_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
-				"use send_keys or respawn_pane with a compatible shell",
-			pane.ID(), shell,
+	sameEndpoint, err := samePaneInputEndpoint(route.socketPath, initial.Identity.endpoint)
+	if err != nil {
+		return started, fmt.Errorf("run_shell_command resolve pinned tmux endpoint: %w", err)
+	}
+	if !sameEndpoint {
+		return started, errors.New(
+			"run_shell_command refused: the selected and reported tmux endpoints differ",
 		)
 	}
 
-	socket, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
-	if err != nil {
-		return nil, err
-	}
-	if len(socket.Stdout) == 0 || socket.Stdout[0] == "" {
-		return nil, errors.New("tmux did not report its socket path")
-	}
-	tmuxExecutable := server.Executable()
-
 	directory, err := os.MkdirTemp("", "libtmux-mcp-run")
 	if err != nil {
-		return nil, err
+		return started, err
 	}
 
-	jobID := "libtmux-mcp-" + rand.Text()
 	statusPath := filepath.Join(directory, "status")
 	openedPath := filepath.Join(directory, "opened")
 	closedPath := filepath.Join(directory, "closed")
 	commandPath := filepath.Join(directory, "command")
+	trapPath := filepath.Join(directory, "traps")
 
 	// In-pane marks exclude shell echo; the closing column distinguishes a
 	// newline from output ending mid-row. Files hide markers from the pane, and
@@ -227,62 +234,193 @@ func (t *tools) startCommand(
 	mark := fmt.Sprintf(
 		"%s -S %s display-message -p -t %s "+
 			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
-		shellQuote(tmuxExecutable),
-		shellQuote(socket.Stdout[0]),
-		shellQuote(pane.ID().String()),
+		shellQuote(route.executable),
+		shellQuote(route.socketPath),
+		shellQuote(route.paneID),
 	)
-	script := wrapperScript(mark, openedPath, commandPath, statusPath, closedPath)
+	nonce := fmt.Sprintf("%x", sha256.Sum256([]byte(directory)))[:16]
+	script := wrapperScript(
+		mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce,
+	)
 
 	if err := os.WriteFile(commandPath, []byte(input.Command+"\n"), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
-		return nil, err
+		return started, err
 	}
 	// Source the wrapper so tabs and control bytes bypass the shell's line
 	// editor; only this package-controlled path is typed into the pane.
 	scriptPath := filepath.Join(directory, "script")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		_ = os.RemoveAll(directory)
-		return nil, err
+		return started, err
 	}
-	started := &job{
-		id:        jobID,
-		paneID:    pane.ID(),
-		command:   input.Command,
-		directory: directory,
-		openedAt:  openedPath,
-		closedAt:  closedPath,
-		statusAt:  statusPath,
-		started:   time.Now(),
-	}
-	if owned != nil {
-		if err := owned.keep(started); err != nil {
-			_ = os.RemoveAll(directory)
-			return nil, err
-		}
-	}
+	started.directory = directory
+	started.openedAt = openedPath
+	started.closedAt = closedPath
+	started.statusAt = statusPath
 	sourceScript := ". " + shellQuote(scriptPath)
-	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-		Command:         &sourceScript,
-		SuppressHistory: input.SuppressHistory,
-	}); err != nil {
-		if owned != nil {
-			owned.discard(started.id)
-		} else {
-			_ = os.RemoveAll(directory)
-		}
-		return nil, err
+	if input.SuppressHistory {
+		sourceScript = " " + sourceScript
 	}
+	dispatch := tmux.SendKeySequenceRequest{Keys: []string{sourceScript, "Enter"}}
+	if err := t.runtime.deps.beforeRunDispatch(ctx); err != nil {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command pre-dispatch setup failed for configured pane membership %v: %w",
+			started.configuredIDs, err,
+		)
+	}
+	second, err := t.preflightPaneInput(
+		ctx, initial.Source.ID().String(), "", paneInputConfigured, "run_shell_command",
+	)
+	if err != nil {
+		_ = os.RemoveAll(directory)
+		return started, err
+	}
+	started.configuredIDs = append([]string{}, second.ConfiguredIDs...)
+	if len(second.ConfiguredIDs) != 1 {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refuses configured pane membership %v at dispatch: one completion, output, and exit status require a configured singleton",
+			second.ConfiguredIDs,
+		)
+	}
+	if shell := incompatibleRunCommandShell(second.Source); shell != "" {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refuses configured pane membership %v at dispatch: pane %s is running incompatible shell %s; use send_keys or respawn_pane with a compatible shell",
+			second.ConfiguredIDs, second.Source.ID(), shell,
+		)
+	}
+	if initial.Caller != second.Caller {
+		_ = os.RemoveAll(directory)
+		return started, errors.New(
+			"run_shell_command refused: pane input caller changed before dispatch",
+		)
+	}
+	if initial.Identity != second.Identity ||
+		!slices.Equal(initial.ConfiguredIDs, second.ConfiguredIDs) {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refused for pane %s: its route or configured membership changed before dispatch",
+			second.Source.ID(),
+		)
+	}
+	if !samePaneInputMemberSignature(initial.Signature.Source, second.Signature.Source) ||
+		!samePaneInputMemberSignatures(initial.Signature.Members, second.Signature.Members) {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refused for pane %s: its state or placement changed before dispatch",
+			second.Source.ID(),
+		)
+	}
+	if !processPaneInputs.owns(lease, second.Identities()) {
+		_ = os.RemoveAll(directory)
+		return started, fmt.Errorf(
+			"run_shell_command refused for pane %s: its active run reservation changed before dispatch",
+			second.Source.ID(),
+		)
+	}
+	if route.paneID != second.Source.ID().String() {
+		_ = os.RemoveAll(directory)
+		return started, errors.New("run_shell_command refused: the tmux pane route changed before dispatch")
+	}
+	started.pane = second.Source
+	started.paneID = second.Source.ID()
+	if err := t.runtime.deps.sendKeySequence(ctx, second.Source, dispatch); err != nil {
+		if errors.Is(err, tmux.ErrOutcomeUnknown) {
+			dispatched = true
+			started.dispatched = true
+			return started, err
+		}
+		_ = os.RemoveAll(directory)
+		return started, err
+	}
+	dispatched = true
+	started.dispatched = true
 	return started, nil
 }
 
-// Unknown commands retain the public busy-pane timeout behavior. Only shells
-// whose syntax is known to reject the wrapper fail before delivery.
+type runCommandRoute struct {
+	executable string
+	socketPath string
+	paneID     string
+}
+
+func resolveRunCommandRoute(
+	ctx context.Context,
+	server tmux.Server,
+	paneID string,
+) (runCommandRoute, error) {
+	configured := runCommandRoute{
+		executable: server.Executable(), socketPath: server.SocketPath(), paneID: paneID,
+	}
+	if err := validateRunCommandRoute(configured); err != nil {
+		return runCommandRoute{}, err
+	}
+	result, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
+	if err != nil {
+		return runCommandRoute{}, err
+	}
+	if result.ExitCode != 0 {
+		return runCommandRoute{}, fmt.Errorf(
+			"run_shell_command could not resolve its tmux socket (exit %d)", result.ExitCode,
+		)
+	}
+	rawSocket := bytes.TrimSuffix(result.RawStdout, []byte{'\n'})
+	if len(rawSocket) == 0 {
+		return runCommandRoute{}, errors.New("tmux did not report its socket path")
+	}
+	route := runCommandRoute{
+		executable: server.Executable(), socketPath: string(rawSocket), paneID: paneID,
+	}
+	if err := validateRunCommandRoute(route); err != nil {
+		return runCommandRoute{}, err
+	}
+	return route, nil
+}
+
+func validateRunCommandRoute(route runCommandRoute) error {
+	for _, component := range []struct {
+		name, value string
+	}{
+		{name: "tmux executable", value: route.executable},
+		{name: "tmux socket", value: route.socketPath},
+		{name: "tmux pane", value: route.paneID},
+	} {
+		if hasASCIIControl(component.value) {
+			return fmt.Errorf(
+				"run_shell_command refuses ASCII control bytes in its %s route", component.name,
+			)
+		}
+	}
+	if !filepath.IsAbs(route.executable) || !filepath.IsAbs(route.socketPath) {
+		return errors.New("run_shell_command requires absolute tmux executable and socket routes")
+	}
+	if !canonicalPaneID(route.paneID) {
+		return errors.New("run_shell_command requires a canonical tmux pane route")
+	}
+	return nil
+}
+
+func hasASCIIControl(value string) bool {
+	for index := 0; index < len(value); index++ {
+		if value[index] < 0x20 || value[index] == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+// Only a known POSIX shell may receive the bookkeeping wrapper. An absent or
+// unknown foreground command is unsafe because it may consume the payload as
+// ordinary input instead of interpreting it as shell syntax.
 func incompatibleRunCommandShell(pane tmux.Pane) string {
 	command, ok := pane.Formats().PaneCurrentCommand()
 	if !ok || command == "" {
-		return ""
+		return "unknown foreground command"
 	}
-	if slices.Contains(nonPOSIXShells, shellName(command)) {
+	if !slices.Contains(posixShells, shellName(command)) {
 		return command
 	}
 	return ""
@@ -323,6 +461,107 @@ type awaiting struct {
 	output                             runCommandOutput
 }
 
+type commandRun struct {
+	pane          tmux.Pane
+	paneID        tmux.PaneID
+	identity      paneInputIdentity
+	directory     string
+	openedAt      string
+	closedAt      string
+	statusAt      string
+	configuredIDs []string
+	lease         paneInputLease
+	dispatched    bool
+}
+
+func (t *tools) finishCommandRun(run commandRun) {
+	processPaneInputs.release(run.lease)
+	_ = os.RemoveAll(run.directory)
+}
+
+func (t *tools) reapCommandRun(run commandRun) {
+	go func() {
+		defer t.finishCommandRun(run)
+		completion := time.NewTicker(commandCompletionPollInterval)
+		presence := time.NewTicker(commandPresencePollInterval)
+		defer completion.Stop()
+		defer presence.Stop()
+		for {
+			_, ready, err := readCompletedCommand(run)
+			if err == nil && ready {
+				return
+			}
+			select {
+			case <-completion.C:
+			case <-presence.C:
+				probeCtx, cancel := context.WithTimeout(
+					context.Background(), commandPresenceProbeTimeout,
+				)
+				present, probeErr := commandRunPresent(probeCtx, run.pane, run.identity)
+				cancel()
+				if probeErr == nil && !present {
+					return
+				}
+			}
+		}
+	}()
+}
+
+const (
+	commandCompletionPollInterval = 50 * time.Millisecond
+	commandPresencePollInterval   = 500 * time.Millisecond
+	commandPresenceProbeTimeout   = 2 * time.Second
+)
+
+func commandRunPresent(
+	ctx context.Context,
+	pane tmux.Pane,
+	identity paneInputIdentity,
+) (bool, error) {
+	refreshed, err := pane.Refresh(ctx)
+	if err == nil {
+		dead, present := refreshed.Formats().PaneDead()
+		if !present {
+			return true, errors.New("run_shell_command retained pane_dead state is unavailable")
+		}
+		return !dead, nil
+	}
+	if commandRunDisappeared(err) {
+		return false, nil
+	}
+	if errors.Is(err, tmux.ErrNoServer) {
+		present, processErr := commandRunProcessPresent(identity.serverPID)
+		if processErr == nil {
+			return present, nil
+		}
+		return true, errors.Join(err, processErr)
+	}
+	return true, err
+}
+
+func commandRunDisappeared(err error) bool {
+	return errors.Is(err, tmux.ErrSnapshotNotFound) ||
+		errors.Is(err, tmux.ErrDaemonReplaced)
+}
+
+func commandRunProcessPresent(pid uint64) (bool, error) {
+	if pid == 0 || pid > math.MaxInt {
+		return true, errors.New("run_shell_command retained daemon pid is invalid")
+	}
+	process, err := os.FindProcess(int(pid))
+	if err != nil {
+		return true, err
+	}
+	err = process.Signal(syscall.Signal(0))
+	if err == nil || errors.Is(err, os.ErrPermission) {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ESRCH) {
+		return false, nil
+	}
+	return true, err
+}
+
 // awaitCommand blocks until a started command publishes its commit record, and
 // reads back its status and the rows it wrote.
 func (t *tools) awaitCommand(
@@ -332,12 +571,12 @@ func (t *tools) awaitCommand(
 ) (*mcp.CallToolResult, runCommandOutput, error) {
 	output := waiting.output
 
-	completion := job{
+	completion := commandRun{
 		openedAt: waiting.openedPath,
 		statusAt: waiting.statusPath,
 		closedAt: waiting.closedPath,
 	}
-	status, ready, err := waitForCompletedJob(waitCtx, completion)
+	status, ready, err := waitForCompletedCommand(waitCtx, completion)
 	if err == nil && ready {
 		return t.finishAwaitedCommand(ctx, waitCtx, waiting, output, status)
 	}
@@ -371,11 +610,11 @@ func (t *tools) finishAwaitedCommand(
 }
 
 func finishRunCommandDeadline(
-	completion job,
+	completion commandRun,
 	output runCommandOutput,
 	running string,
 ) (*mcp.CallToolResult, runCommandOutput, error) {
-	status, ready, err := readCompletedJob(completion)
+	status, ready, err := readCompletedCommand(completion)
 	if err != nil {
 		return nil, output, err
 	}
@@ -390,4 +629,48 @@ func finishRunCommandDeadline(
 		output.OutputUnavailable = reason
 	}
 	return nil, output, nil
+}
+
+func waitForCompletedCommand(
+	waitCtx context.Context,
+	entry commandRun,
+) (status int, ready bool, err error) {
+	ticker := time.NewTicker(commandCompletionPollInterval)
+	defer ticker.Stop()
+	for {
+		status, ready, err = readCompletedCommand(entry)
+		if err != nil || ready {
+			return status, ready, err
+		}
+		select {
+		case <-ticker.C:
+		case <-waitCtx.Done():
+			status, ready, err = readCompletedCommand(entry)
+			if err != nil || ready {
+				return status, ready, err
+			}
+			return 0, false, waitCtx.Err()
+		}
+	}
+}
+
+// readCompletedCommand treats the closing cursor mark as the commit record.
+func readCompletedCommand(entry commandRun) (int, bool, error) {
+	recorded, err := os.ReadFile(entry.statusAt)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("read command status: %w", err)
+	}
+	if _, err := readMark(entry.closedAt); errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	} else if err != nil {
+		return 0, false, err
+	}
+	status, err := strconv.Atoi(strings.TrimSpace(string(recorded)))
+	if err != nil {
+		return 0, false, fmt.Errorf("unreadable exit status %q", recorded)
+	}
+	return status, true, nil
 }

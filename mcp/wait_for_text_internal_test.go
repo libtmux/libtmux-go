@@ -49,12 +49,12 @@ func TestWaitForTextRejectsNegativeDurations(t *testing.T) {
 }
 
 func TestWaitForTextSchemaRejectsNegativeDurations(t *testing.T) {
-	schema, err := jsonschema.For[waitForTextInput](nil)
+	schema, err := jsonschema.For[waitForTextCapabilityInput](nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	constrain("wait_for_text", schema)
-	for _, name := range []string{"idleSeconds", "timeoutSeconds"} {
+	for _, name := range []string{"timeout"} {
 		property := schema.Properties[name]
 		if property == nil {
 			t.Fatalf("wait_for_text schema has no %s property", name)

@@ -8,10 +8,12 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -75,11 +77,9 @@ func TestControlCommandPrefixPinsTheEffectiveSocketPath(t *testing.T) {
 	root := t.TempDir()
 	record := filepath.Join(root, "arguments")
 	proxy := filepath.Join(t.TempDir(), "tmux")
-	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+	writeExecutableProxy(t, proxy, []byte(`#!/bin/sh
 printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"
-`), 0o700); err != nil {
-		t.Fatalf("write tmux proxy: %v", err)
-	}
+`))
 	server := mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:     proxy,
 		SocketName: "named",
@@ -173,9 +173,7 @@ func TestControlModeUsesServerProcessEnvironment(t *testing.T) {
 	proxy := []byte("#!/bin/sh\n" +
 		"if [ \"$LIBTMUX_CONTROL_REQUIRED\" != configured ]; then exit 91; fi\n" +
 		"exec \"$LIBTMUX_CONTROL_REAL_TMUX\" \"$@\"\n")
-	if err := os.WriteFile(proxyPath, proxy, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutableProxy(t, proxyPath, proxy)
 	environment := append(
 		scrubTmuxEnvironment(os.Environ()),
 		"LIBTMUX_CONTROL_REQUIRED=configured",
@@ -218,9 +216,7 @@ func TestControlModeCloseBoundsInheritedOutputPipes(t *testing.T) {
 		"  fi\n" +
 		"done\n" +
 		"exec \"$LIBTMUX_CONTROL_REAL_TMUX\" \"$@\"\n")
-	if err := os.WriteFile(proxyPath, proxy, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutableProxy(t, proxyPath, proxy)
 	t.Cleanup(func() {
 		pidBytes, readErr := os.ReadFile(pidPath)
 		if readErr != nil {
@@ -460,9 +456,7 @@ func TestStartControlModeCleansFailedRegistrationProcessAndSpool(t *testing.T) {
 		"  fi\n" +
 		"done\n" +
 		"exec \"$LIBTMUX_CONTROL_REAL_TMUX\" \"$@\"\n")
-	if err := os.WriteFile(proxyPath, proxy, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutableProxy(t, proxyPath, proxy)
 	environment := append(
 		scrubTmuxEnvironment(os.Environ()),
 		"LIBTMUX_CONTROL_PID_FILE="+pidPath,
@@ -535,4 +529,30 @@ func onlyInternalControlSession(t *testing.T, server tmux.Server) tmux.Session {
 		t.Fatalf("len(Sessions()) = %d, want 1", len(sessions))
 	}
 	return sessions[0]
+}
+
+// writeExecutableProxy writes a script and waits until it can actually be
+// executed. Go's os.OpenFile sets O_CLOEXEC, but a concurrent fork elsewhere in
+// the package still holds a copy of the write descriptor until its own execve
+// runs, and exec of the file fails with ETXTBSY for that window. Tests here run
+// in parallel and each forks a proxy, so the window is reached: the tmux matrix
+// saw "fork/exec ...: text file busy" from a script this package had already
+// closed. Retrying the exec is what closes it, because the condition clears on
+// its own.
+func writeExecutableProxy(t *testing.T, path string, contents []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, contents, 0o700); err != nil {
+		t.Fatalf("write tmux proxy: %v", err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		err := exec.Command(path, "-V").Run()
+		if !errors.Is(err, syscall.ETXTBSY) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tmux proxy %s stayed busy", path)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,15 +14,133 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// callerIdentity identifies the pane hosting this process. Pane IDs are
-// server-local, so a positive match requires both the ID and socket.
+type paneInputCallerState uint8
+
+const (
+	paneInputCallerDetached paneInputCallerState = iota
+	paneInputCallerUnresolved
+	paneInputCallerForeign
+	paneInputCallerSelected
+)
+
+type paneInputCaller struct {
+	state           paneInputCallerState
+	socket          string
+	serverPID       uint64
+	serverStartTime uint64
+	sessionID       string
+	paneID          string
+}
+
+type paneInputCallerPane struct {
+	sessionID string
+	paneID    string
+}
+
+func parsePaneInputCaller(
+	tmuxVariable string,
+	tmuxPresent bool,
+	pane string,
+	panePresent bool,
+) (paneInputCaller, error) {
+	if !tmuxPresent && !panePresent {
+		return paneInputCaller{state: paneInputCallerDetached}, nil
+	}
+	if !tmuxPresent || !panePresent || tmuxVariable == "" || !canonicalPaneID(pane) {
+		return paneInputCaller{}, errors.New("pane input caller context is incomplete or malformed")
+	}
+	sessionSeparator := strings.LastIndexByte(tmuxVariable, ',')
+	pidSeparator := -1
+	if sessionSeparator > 0 {
+		pidSeparator = strings.LastIndexByte(tmuxVariable[:sessionSeparator], ',')
+	}
+	if pidSeparator <= 0 || pidSeparator+1 == sessionSeparator ||
+		sessionSeparator+1 == len(tmuxVariable) {
+		return paneInputCaller{}, errors.New("pane input caller context is incomplete or malformed")
+	}
+	socket := tmuxVariable[:pidSeparator]
+	pidText := tmuxVariable[pidSeparator+1 : sessionSeparator]
+	sessionText := tmuxVariable[sessionSeparator+1:]
+	pid, err := parseCanonicalPaneInputNumber(pidText, false)
+	if err != nil {
+		return paneInputCaller{}, errors.New("pane input caller context is incomplete or malformed")
+	}
+	if _, err := parseCanonicalPaneInputNumber(sessionText, true); err != nil {
+		return paneInputCaller{}, errors.New("pane input caller context is incomplete or malformed")
+	}
+	if !filepath.IsAbs(socket) || hasASCIIControl(socket) {
+		return paneInputCaller{}, errors.New("pane input caller context is incomplete or malformed")
+	}
+	return paneInputCaller{
+		state: paneInputCallerUnresolved, socket: socket, serverPID: pid,
+		sessionID: "$" + sessionText, paneID: pane,
+	}, nil
+}
+
+func classifyPaneInputCaller(
+	caller paneInputCaller,
+	server paneInputServerIdentity,
+	panes []paneInputCallerPane,
+) (paneInputCaller, error) {
+	if caller.state == paneInputCallerDetached {
+		return caller, nil
+	}
+	if caller.state != paneInputCallerUnresolved {
+		return paneInputCaller{}, errors.New("pane input caller context is inconsistent")
+	}
+	sameEndpoint, err := samePaneInputEndpoint(caller.socket, server.endpoint)
+	if err != nil {
+		return paneInputCaller{}, fmt.Errorf("resolve pane input caller endpoint: %w", err)
+	}
+	if !sameEndpoint {
+		caller.state = paneInputCallerForeign
+		return caller, nil
+	}
+	if caller.serverPID != server.serverPID {
+		return paneInputCaller{}, errors.New("pane input caller daemon is stale or malformed")
+	}
+	for _, pane := range panes {
+		if pane.sessionID == caller.sessionID && pane.paneID == caller.paneID {
+			caller.state = paneInputCallerSelected
+			caller.socket = server.endpoint
+			caller.serverStartTime = server.serverStartTime
+			return caller, nil
+		}
+	}
+	return paneInputCaller{}, errors.New("pane input caller session or pane is stale or malformed")
+}
+
+func samePaneInputEndpoint(left, right string) (bool, error) {
+	if !filepath.IsAbs(left) || !filepath.IsAbs(right) {
+		return false, errors.New("pane input endpoint is not absolute")
+	}
+	leftInfo, leftErr := os.Stat(left)
+	rightInfo, rightErr := os.Stat(right)
+	if leftErr == nil && rightErr == nil {
+		return os.SameFile(leftInfo, rightInfo), nil
+	}
+	leftResolved, leftErr := filepath.EvalSymlinks(left)
+	rightResolved, rightErr := filepath.EvalSymlinks(right)
+	if leftErr != nil || rightErr != nil {
+		return false, errors.Join(leftErr, rightErr)
+	}
+	return leftResolved == rightResolved, nil
+}
+
+func parseCanonicalPaneInputNumber(value string, allowZero bool) (uint64, error) {
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || value != strconv.FormatUint(parsed, 10) || (!allowZero && parsed == 0) {
+		return 0, errors.New("noncanonical decimal")
+	}
+	return parsed, nil
+}
+
 type callerIdentity struct {
 	paneID string
 	socket string
 	inside bool
 }
 
-// callerFromEnvironment reads what tmux told this process about itself.
 func callerFromEnvironment() callerIdentity {
 	pane := os.Getenv("TMUX_PANE")
 	tmuxVariable := os.Getenv("TMUX")
@@ -31,9 +151,6 @@ func callerFromEnvironment() callerIdentity {
 	return callerIdentity{paneID: pane, socket: resolvePath(socket), inside: true}
 }
 
-// callerIdentityFor uses tmux's environment when present, then falls back to
-// matching pane processes against this process's ancestors. Successful empty
-// discovery is cached; failed discovery remains retryable.
 func (t *tools) callerIdentityFor(ctx context.Context) (callerIdentity, error) {
 	t.callerMutex.Lock()
 	defer t.callerMutex.Unlock()
@@ -53,14 +170,11 @@ func (t *tools) callerIdentityFor(ctx context.Context) (callerIdentity, error) {
 	return caller, nil
 }
 
-// callerFromProcessTree finds the pane whose process this one descends from.
 func (t *tools) callerFromProcessTree(ctx context.Context) (callerIdentity, error) {
 	ancestors := ancestorPIDs()
 	if len(ancestors) == 0 {
 		return callerIdentity{}, nil
 	}
-	// One listing avoids a command per ancestor and asks only for the two
-	// fields needed to match them.
 	process, err := t.runtime.process(ctx)
 	if err != nil {
 		return callerIdentity{}, err
@@ -82,20 +196,14 @@ func (t *tools) callerFromProcessTree(ctx context.Context) (callerIdentity, erro
 			continue
 		}
 		return callerIdentity{
-			paneID: paneID,
-			socket: resolvePath(t.socketPath(ctx)),
-			inside: true,
+			paneID: paneID, socket: resolvePath(t.socketPath(ctx)), inside: true,
 		}, nil
 	}
 	return callerIdentity{}, nil
 }
 
-// ancestorDepth bounds the walk up the process tree. A pane's shell is a
-// handful of processes above whatever a client started, and a cycle in the
-// answers would otherwise be a loop that never ends.
 const ancestorDepth = 32
 
-// ancestorPIDs reports this process and the processes above it, nearest first.
 func ancestorPIDs() []int {
 	pids := make([]int, 0, ancestorDepth)
 	for pid := os.Getpid(); pid > 1 && len(pids) < ancestorDepth; {
@@ -109,7 +217,6 @@ func ancestorPIDs() []int {
 	return pids
 }
 
-// parentPID uses ps rather than the platform-specific /proc filesystem.
 func parentPID(pid int) (int, bool) {
 	output, err := exec.Command("ps", "-o", "ppid=", "-p", strconv.Itoa(pid)).Output()
 	if err != nil {
@@ -122,8 +229,6 @@ func parentPID(pid int) (int, bool) {
 	return parent, true
 }
 
-// resolvePath follows symlinks when possible and otherwise returns the cleaned
-// spelling.
 func resolvePath(path string) string {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -132,129 +237,10 @@ func resolvePath(path string) string {
 	return resolved
 }
 
-// isCaller returns nil outside tmux. Positive matches require both pane ID and
-// resolved server socket.
 func (c callerIdentity) isCaller(pane tmux.Pane, socket string) *bool {
 	if !c.inside {
 		return nil
 	}
 	answer := pane.ID().String() == c.paneID && socket != "" && resolvePath(socket) == c.socket
 	return &answer
-}
-
-// callerInstructions distinguishes tmux objects from similarly named UI
-// objects and directs clients to non-polling workflows.
-func (t *tools) callerInstructions() string {
-	var text strings.Builder
-	text.WriteString(`Drive one tmux server: sessions, windows, and panes.
-
-USE THIS FOR tmux objects. A bare "pane", "split", "this terminal", "send keys",
-or "scrollback" means tmux here. The identifiers are unambiguous: %` + `N is a
-pane, @N a window, $N a session.
-
-DO NOT USE THIS FOR editor splits (VS Code, Neovim), browser windows or tabs,
-desktop windows, or notebook cells. Ask which is meant if a bare "window" or
-"session" could be either.
-
-WAIT, DO NOT POLL. Reading a pane until it looks right costs a round trip per
-look and finds the shell's echo of the command rather than its result:
-  - a command this client runs, its exit status, and its output: run_command
-  - output this client did not author, such as a service announcing itself:
-    wait_for_text, with stop set to the failure markers you already know so a
-    failed run returns at once instead of at the deadline
-  - a program whose finishing you cannot predict the words of: wait_for_text
-    with idleSeconds, which returns when the pane goes quiet
-  - anything that signals a tmux channel, including another client:
-    wait_for_channel
-capture_pane is for what a pane shows right now, not for waiting.
-
-DO NOT WAIT AT ALL FOR WORK YOU CAN COME BACK TO. run_command with detach
-returns a jobId as soon as the command is typed, and get_job collects the exit
-status and output when you want them. Use it for a build or a test run and
-spend the turn on something else. Every wait is bounded either way, and the
-reply says which bound it ran under.
-
-WATCHING ACROSS TURNS IS capture_since. It returns what a pane wrote since the
-cursor the last call gave you, so a pane you check every turn costs its new
-lines rather than its whole screen every time. Call it once with no cursor to
-start. Clients that can subscribe to resources can instead subscribe to
-tmux://panes/{pane}/content and be told when the pane changes.
-
-REPLIES ARE BOUNDED. Anything that returns pane text keeps the last lines and
-says what it dropped, so a pane holding a day of output cannot fill your
-context. Ask for more with maxLines; ask for scrollback with includeHistory.
-
-NARROW A LISTING RATHER THAN READING THE SERVER. list_panes takes sessionName,
-windowId, command, pathUnder, dead, and active; list_windows and list_sessions
-take their own. Every reply says the total it selected from. On a machine
-carrying somebody else's tmux, asking for the pane running a command rather
-than for every pane is one answer instead of forty.
-
-PREFER ONE RESPONSE. snapshot_pane returns a pane's contents and state together,
-avoiding a second protocol call. State and content are collected sequentially,
-not atomically. search_panes finds which pane shows something, and the lines
-that showed it, without capturing each pane in turn. A batch runs several calls
-in one request.
-
-LISTING TELLS YOU WHAT EXISTS, NOT WHAT IS IN IT. list_windows and list_panes
-report names, indexes, and positions; search_panes and capture_pane are what
-read the text a pane is showing. For state without contents, list_panes with
-detail full adds every matching pane's exit status, path, title, history size,
-and whether it is in a mode that swallows keys. Use capture_since or a resource
-subscription to detect new output; history size alone is not a change signal.
-get_pane_info reports the same state for one pane you can name.
-
-BEFORE YOU MOVE WHAT SOMEBODY IS LOOKING AT, get_server_info reports every
-attached client and the session each is watching, marking the ones that are
-programs rather than people. Selecting a window in a session nobody is
-attached to moves nothing.
-
-PUTTING TEXT IN A PANE, in order of how much tmux reads:
-  - send_keys types a line and presses Enter, reading tmux key names, so "C-c"
-    interrupts and "Escape" is a key
-  - send_keys_batch sends key names in order with no Enter, for driving a pager
-    or an editor
-  - paste_text delivers text exactly, reading nothing. Use it for anything you
-    did not write by hand: a word like "Escape" inside it would otherwise be
-    sent as that key
-
-CHANGING THINGS. split_window and create_window make room; select_layout,
-resize_pane, swap_pane and select_window arrange it; move_pane puts a pane in
-another window, or breaks it out into one of its own, keeping whatever it is
-running; build_workspace lays out a whole session from a tmuxp-style document,
-which is more than is wanted for one more window. rename_window and
-set_pane_title label what you built for whoever reads it. kill_pane,
-kill_window, kill_session and kill_server end things, and nothing undoes them.
-
-WHEN A PANE MAKES NO SENSE, the reason is often a setting rather than its
-contents: show_option for why scrollback stopped or a dead pane is still there,
-show_hooks with a name for behaviour nothing here caused, show_environment for
-what a new pane would inherit, get_server_info with includeMessages for tmux's
-own log of what it refused, display_message for anything else tmux knows when
-changing tools are enabled. A tmux format may run a shell command through #(). If a
-program reports success or failure by colouring a word rather than saying so,
-capture_pane with styles keeps the colour a capture strips.
-`)
-	text.WriteString("\n" + t.level.describe() + "\n")
-	text.WriteString(t.capabilities.describe() + "\n")
-
-	caller := callerFromEnvironment()
-	if !caller.inside {
-		// Written before any tmux call is possible, so this only knows what the
-		// environment said. A client that starts its servers with a curated
-		// environment keeps neither variable, and the server then finds its own
-		// pane by asking tmux instead — which it cannot do yet, here.
-		text.WriteString("\nThis server's environment does not say which tmux pane it runs " +
-			"in. It may still be running in one: get_server_info works it out from tmux " +
-			"itself and reports the pane, and a pane listed with isCaller true is that " +
-			"pane. Ask before acting on a pane, because that one is this conversation.\n")
-		return text.String()
-	}
-	text.WriteString("\nThis server runs in pane " + caller.paneID + " on the tmux server at " +
-		caller.socket + ". A pane reported with isCaller true is that pane: killing it, " +
-		"clearing it, or typing into it acts on the terminal this server is running in. " +
-		"A pane id is unique only within one tmux server, so isCaller is false when an id " +
-		"matches on a different socket. get_server_info says whether the tmux server these " +
-		"tools address is the one holding that pane.\n")
-	return text.String()
 }

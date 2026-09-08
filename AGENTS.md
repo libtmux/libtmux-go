@@ -10,7 +10,7 @@ was asked for.
 
 ## What is here
 
-Five Go modules, each with its own `go.mod`:
+Six Go modules, each with its own `go.mod`:
 
 | Path | Module | What it is |
 | --- | --- | --- |
@@ -19,6 +19,7 @@ Five Go modules, each with its own `go.mod`:
 | `mcp/` | consumer | Serves one tmux server to Model Context Protocol clients |
 | `examples/` | consumer | Compiles the examples quoted in generated documentation |
 | `benchmarks/` | tool | Prints what each way of reaching tmux costs |
+| `internal/tools/` | developer tool | Rewires MCP clients without shipping in a release module |
 
 Inside the tmux module, `tmuxq` holds model-free generics, `tmuxtest` gives
 tests a real tmux server that cleans itself up, and `internal/` holds the

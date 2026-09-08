@@ -14,12 +14,16 @@ Reading one server's source and the other's schemas is how a comparison goes
 wrong: it said both took the same arguments, and running them showed one names
 every argument in snake_case and the other in camelCase.
 """
-import json, os, subprocess, sys, threading, queue, time
+import json, os, subprocess, sys, tempfile, threading, queue, time
 cmd = json.loads(sys.argv[1]); label = sys.argv[2]
+socket_scope = tempfile.TemporaryDirectory(prefix="libtmux-mcp-compare-")
 env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"],
-       "TMUX_TMPDIR": "/tmp/pycompare", "LIBTMUX_SAFETY": "destructive"}
+       "TMUX_TMPDIR": socket_scope.name,
+       "LIBTMUX_TOOLSETS": "inspect,manage,execute,teardown"}
 for extra in sys.argv[3:]:
     k, _, v = extra.partition("="); env[k] = v
+os.makedirs(os.path.join(env["TMUX_TMPDIR"], f"tmux-{os.getuid()}"), mode=0o700,
+            exist_ok=True)
 p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                      stderr=subprocess.PIPE, text=True, env=env, bufsize=1,
                      cwd=os.environ.get("DRIVE_CWD") or None)
@@ -63,9 +67,9 @@ report = {
   "instructionsChars": len(init.get("result", {}).get("instructions") or ""),
 }
 # Enum enforcement on the wire.
-for name, arguments, tag in [("list_panes", {"detail": "verbose"}, "badEnum"),
-                             ("list_panes", {"bogusField": 1}, "unknownField"),
-                             ("run_command", {"command": True, "paneId": "%0"}, "wrongType")]:
+for name, arguments, tag in [("split_window", {"pane_id": "%0", "direction": "diagonal"}, "badEnum"),
+                             ("list_panes", {"bogus_field": 1}, "unknownField"),
+                             ("run_shell_command", {"command": True, "pane_id": "%0"}, "wrongType")]:
     r = rpc("tools/call", {"name": name, "arguments": arguments}, t=30)
     result = r.get("result", {}) or {}
     said = "".join(c.get("text","") for c in result.get("content", []) if c.get("type")=="text")
@@ -77,3 +81,4 @@ try: p.wait(timeout=10)
 except subprocess.TimeoutExpired: p.kill()
 err = p.stderr.read()
 if err.strip(): print("STDERR:", err[:600], file=sys.stderr)
+socket_scope.cleanup()

@@ -413,6 +413,38 @@ func generatedDefinitionSupportsScope(
 	return false
 }
 
+// generatedDefinitionScopeNames names the scopes a definition does carry, so a
+// refusal can say where the option lives rather than only that it is not here.
+func generatedDefinitionScopeNames(definition generatedOptionDefinition) string {
+	var scopes generatedOptionScope
+	for _, variant := range definition.variants {
+		scopes |= variant.scopes
+	}
+	names := make([]string, 0, 4)
+	for _, candidate := range []struct {
+		scope generatedOptionScope
+		name  string
+	}{
+		{generatedOptionScopeServer, "server"},
+		{generatedOptionScopeSession, "session"},
+		{generatedOptionScopeWindow, "window"},
+		{generatedOptionScopePane, "pane"},
+	} {
+		if scopes&candidate.scope != 0 {
+			names = append(names, candidate.name)
+		}
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0] + " options"
+	default:
+		return strings.Join(names[:len(names)-1], ", ") +
+			" and " + names[len(names)-1] + " options"
+	}
+}
+
 func generatedDefinitionSupportsVersionScope(
 	definition generatedOptionDefinition,
 	version Version,

@@ -122,6 +122,53 @@ func (s Server) WithSocketPath(path string) (Server, error) {
 	}}, nil
 }
 
+// WithProcessEnvironmentValue returns a server whose tmux subprocesses receive
+// name=value while preserving the receiver's frozen executable, configuration,
+// and exact socket endpoint. It does not expose an inherited environment
+// snapshot through [Server.ProcessEnvironment]. The result shares daemon-scoped
+// coordination with the receiver. A connection-bound receiver is rejected.
+func (s Server) WithProcessEnvironmentValue(name, value string) (Server, error) {
+	state, err := s.stateForUse()
+	if err != nil {
+		return Server{}, err
+	}
+	if err := validateEnvironmentName(name); err != nil {
+		return Server{}, invalidServerOptions(err)
+	}
+	if err := validateEnvironmentValue(value); err != nil {
+		return Server{}, invalidServerOptions(err)
+	}
+	if s.connection != nil {
+		return Server{}, s.connection.terminalError(commandProcess)
+	}
+	config := state.config
+	config.processEnvironment = setProcessEnvironmentValue(
+		config.processEnvironment,
+		name,
+		value,
+	)
+	if config.configuredProcessEnvironment != nil {
+		config.configuredProcessEnvironment = setProcessEnvironmentValue(
+			config.configuredProcessEnvironment,
+			name,
+			value,
+		)
+	}
+	// Environment values such as TMUX_TMPDIR must not retarget the derived
+	// handle. Pin the already-resolved endpoint as an explicit socket path.
+	config.socketName = ""
+	config.socketPath = state.config.socketSelection.Path
+	return Server{
+		state: &serverState{
+			config:   config,
+			executor: state.executor,
+			shared:   state.shared,
+		},
+		daemon:          s.daemon,
+		requiresProcess: s.requiresProcess,
+	}, nil
+}
+
 func newServer(options ServerOptions, dependencies serverDependencies) (Server, error) {
 	if err := validateColorMode(options.Colors); err != nil {
 		return Server{}, invalidServerOptions(err)

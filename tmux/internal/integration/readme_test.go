@@ -27,6 +27,7 @@ func TestEveryPackageDirectoryHasAREADME(t *testing.T) {
 	for _, directory := range []string{
 		".", "tmux", "tmux/tmuxtest", "tmuxq",
 		"examples", "workspace", "mcp", "benchmarks",
+		"internal/tools", "internal/tools/mcp-swap",
 	} {
 		if _, err := os.Stat(filepath.Join(root, directory, "README.md")); err != nil {
 			t.Errorf("%s has no README.md", directory)

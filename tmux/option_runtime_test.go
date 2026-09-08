@@ -2195,6 +2195,42 @@ func TestOptionErrorsDistinguishAMissingTarget(t *testing.T) {
 	}
 }
 
+// TestAWrongScopeOptionSaysWhereItLives separates the two refusals that read
+// identically before: an option tmux does not have, and one reached through a
+// handle whose scope does not carry it. The second is what a caller hits after
+// picking Server for a session option, and the message it got sent them looking
+// for a tmux option that exists.
+func TestAWrongScopeOptionSaysWhereItLives(t *testing.T) {
+	t.Parallel()
+
+	server, err := newServer(ServerOptions{}, testServerDependencies(t, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// mouse is a session option, so a server handle cannot reach it.
+	scopeErr := server.SetOption(context.Background(), "mouse", "on", SetOptionOptions{})
+	if scopeErr == nil {
+		t.Fatal("a server handle accepted a session option")
+	}
+	message := scopeErr.Error()
+	if !strings.Contains(message, "session options") {
+		t.Errorf("refusal does not say where mouse lives: %q", message)
+	}
+	if !strings.Contains(message, "mouse") {
+		t.Errorf("refusal does not name the option: %q", message)
+	}
+	if !errors.Is(scopeErr, ErrOption) {
+		t.Errorf("got %v, which must still match ErrOption", scopeErr)
+	}
+
+	// An option tmux has at no scope keeps the plain refusal, with nothing
+	// invented about where it lives.
+	unknown := newLocalInvalidOptionError("set-option", "not-an-option").Error()
+	if strings.Contains(unknown, "tmux keeps") {
+		t.Errorf("unknown option claims a scope: %q", unknown)
+	}
+}
+
 // TestARefusedOptionDoesNotReportAnExitStatus covers the message a caller sees
 // when this package rejects an option before building a command. Reporting a
 // status of -1 sends a reader looking for a tmux exit code that never existed.

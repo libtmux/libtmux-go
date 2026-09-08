@@ -13,6 +13,11 @@ type mcpDependencies struct {
 	newWindow            func(context.Context, tmux.Session, tmux.NewWindowRequest) (tmux.Window, error)
 	refreshWindow        func(context.Context, tmux.Server, tmux.WindowID) (tmux.Window, error)
 	probeSibling         func(context.Context, tmux.Server) (bool, int)
+	snapshot             func(context.Context, tmux.Server) (tmux.Snapshot, error)
+	sendKeySequence      func(context.Context, tmux.Pane, tmux.SendKeySequenceRequest) error
+	setBuffer            func(context.Context, tmux.Server, tmux.SetBufferRequest) error
+	pasteBuffer          func(context.Context, tmux.Pane, tmux.PasteBufferRequest) error
+	beforeRunDispatch    func(context.Context) error
 }
 
 func defaultMCPDependencies() mcpDependencies {
@@ -56,6 +61,31 @@ func defaultMCPDependencies() mcpDependencies {
 			return server.Window(ctx, id)
 		},
 		probeSibling: probeSiblingServer,
+		snapshot: func(ctx context.Context, server tmux.Server) (tmux.Snapshot, error) {
+			return server.Snapshot(ctx)
+		},
+		sendKeySequence: func(
+			ctx context.Context,
+			pane tmux.Pane,
+			request tmux.SendKeySequenceRequest,
+		) error {
+			return pane.SendKeySequence(ctx, request)
+		},
+		setBuffer: func(
+			ctx context.Context,
+			server tmux.Server,
+			request tmux.SetBufferRequest,
+		) error {
+			return server.SetBuffer(ctx, request)
+		},
+		pasteBuffer: func(
+			ctx context.Context,
+			pane tmux.Pane,
+			request tmux.PasteBufferRequest,
+		) error {
+			return pane.PasteBuffer(ctx, request)
+		},
+		beforeRunDispatch: func(context.Context) error { return nil },
 	}
 }
 

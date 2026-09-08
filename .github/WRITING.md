@@ -126,7 +126,7 @@ grouped by affected component rather than change type:
 ```markdown
 ### mcp
 
-- `run_command` no longer returns its own sourcing line as output.
+- `run_shell_command` no longer returns its own sourcing line as output.
 - Add `onError` to the three batch tools. It chooses whether a batch stops at
   the first failure; stopping remains the default.
 ```

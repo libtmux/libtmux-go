@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -14,56 +15,75 @@ import (
 // real tmux. Compare revisions on one machine: tmux dominates wall time, while
 // allocation counts are stable. Stdio framing is excluded.
 
-// benchServer connects one client to one server against a real tmux.
-func benchServer(b *testing.B) (*sdk.ClientSession, context.Context) {
+// benchServer connects one client to one server against a real tmux and builds
+// the same one-window, two-pane fixture through the public MCP surface.
+func benchServer(b *testing.B) (*sdk.ClientSession, context.Context, string) {
 	b.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	b.Cleanup(cancel)
 
 	target := tmuxtest.NewServerWithOptions(ctx, b, tmuxtest.ServerOptions{})
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
-	serverSession, err := mustMCPServer(b, target).Connect(
-		ctx, assumeResponseCommit(serverTransport), nil,
+	instance, err := tmuxmcp.NewServer(target)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = instance.Close() })
+	serverSession, err := instance.Connect(
+		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
 	)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.Cleanup(func() { _ = serverSession.Close() })
 
-	client := sdk.NewClient(&sdk.Implementation{Name: "bench"}, nil)
+	client := sdk.NewClient(&sdk.Implementation{Name: "bench", Version: "1"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.Cleanup(func() { _ = session.Close() })
 
-	if _, err := session.CallTool(ctx, &sdk.CallToolParams{
-		Name: "build_workspace",
-		Arguments: map[string]any{
-			"document": "session_name: bench\nwindows:\n  - panes:\n      - {}\n      - {}\n",
-		},
-	}); err != nil {
+	callBenchmarkTool(ctx, b, session, "create_session", map[string]any{
+		"session_name": "bench",
+	})
+	var listed struct {
+		Panes []struct {
+			ID string `json:"id"`
+		} `json:"panes"`
+	}
+	if err := unmarshalStructured(
+		callBenchmarkTool(ctx, b, session, "list_panes", nil), &listed,
+	); err != nil {
 		b.Fatal(err)
 	}
-	return session, ctx
+	if len(listed.Panes) == 0 {
+		b.Fatal("create_session returned no pane")
+	}
+	paneID := listed.Panes[0].ID
+	callBenchmarkTool(ctx, b, session, "split_window", map[string]any{
+		"pane_id": paneID,
+	})
+	return session, ctx, paneID
 }
 
-// BenchmarkToolCall reports what one call of each shape costs: a listing, a
-// listing that reads every pane's state, one pane's contents, and a format
-// expansion, which is the cheapest thing tmux can be asked.
+// BenchmarkToolCall reports what one call of each shape costs: listings, one
+// pane's metadata and contents, server metadata, and validated tmux variables.
 func BenchmarkToolCall(b *testing.B) {
-	session, ctx := benchServer(b)
+	session, ctx, paneID := benchServer(b)
 	for _, call := range []struct {
 		name      string
 		tool      string
 		arguments map[string]any
 	}{
-		{"list_sessions", "list_sessions", map[string]any{}},
-		{"list_panes", "list_panes", map[string]any{}},
-		{"list_panes_full", "list_panes", map[string]any{"detail": "full"}},
-		{"get_server_info", "get_server_info", map[string]any{}},
-		{"capture_pane", "capture_pane", map[string]any{}},
-		{"display_message", "display_message", map[string]any{"format": "#{pane_id}"}},
+		{"list_sessions", "list_sessions", nil},
+		{"list_panes", "list_panes", nil},
+		{"get_pane_info", "get_pane_info", map[string]any{"pane_id": paneID}},
+		{"get_server_info", "get_server_info", nil},
+		{"capture_pane", "capture_pane", map[string]any{"pane_id": paneID}},
+		{"get_tmux_variables", "get_tmux_variables", map[string]any{
+			"names": []string{"pane_id"},
+		}},
 	} {
 		b.Run(call.name, func(b *testing.B) {
 			b.ReportAllocs()
@@ -85,8 +105,8 @@ func BenchmarkToolCall(b *testing.B) {
 // BenchmarkBatchAgainstSerial compares elapsed time and allocations for one
 // batch call with the same three calls made separately.
 func BenchmarkBatchAgainstSerial(b *testing.B) {
-	session, ctx := benchServer(b)
-	calls := []map[string]any{
+	session, ctx, _ := benchServer(b)
+	operations := []map[string]any{
 		{"tool": "list_sessions", "arguments": map[string]any{}},
 		{"tool": "list_windows", "arguments": map[string]any{}},
 		{"tool": "list_panes", "arguments": map[string]any{}},
@@ -95,11 +115,17 @@ func BenchmarkBatchAgainstSerial(b *testing.B) {
 	b.Run("batched", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			if _, err := session.CallTool(ctx, &sdk.CallToolParams{
-				Name:      "call_readonly_tools_batch",
-				Arguments: map[string]any{"calls": calls},
-			}); err != nil {
+			result, err := session.CallTool(ctx, &sdk.CallToolParams{
+				Name: "call_read_tools_batch",
+				Arguments: map[string]any{
+					"operations": operations,
+				},
+			})
+			if err != nil {
 				b.Fatal(err)
+			}
+			if result.IsError {
+				b.Fatalf("call_read_tools_batch: %#v", result.Content)
 			}
 		}
 	})
@@ -107,12 +133,16 @@ func BenchmarkBatchAgainstSerial(b *testing.B) {
 	b.Run("serial", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			for _, call := range calls {
-				if _, err := session.CallTool(ctx, &sdk.CallToolParams{
-					Name:      call["tool"].(string),
-					Arguments: call["arguments"],
-				}); err != nil {
+			for _, operation := range operations {
+				result, err := session.CallTool(ctx, &sdk.CallToolParams{
+					Name:      operation["tool"].(string),
+					Arguments: operation["arguments"],
+				})
+				if err != nil {
 					b.Fatal(err)
+				}
+				if result.IsError {
+					b.Fatalf("%s: %#v", operation["tool"], result.Content)
 				}
 			}
 		}
@@ -123,46 +153,28 @@ func BenchmarkBatchAgainstSerial(b *testing.B) {
 // capture_since adds fingerprinting and a cursor, so it wins only when avoiding
 // repeated large captures.
 func BenchmarkCaptureSinceAgainstCapturePane(b *testing.B) {
-	session, ctx := benchServer(b)
-	var pane string
-	var listed struct {
-		Panes []struct {
-			ID string `json:"id"`
-		} `json:"panes"`
-	}
-	result, err := session.CallTool(ctx, &sdk.CallToolParams{
-		Name: "list_panes", Arguments: map[string]any{},
-	})
-	if err != nil {
-		b.Fatal(err)
-	}
-	if err := unmarshalStructured(result, &listed); err != nil || len(listed.Panes) == 0 {
-		b.Skip("no pane to read")
-	}
-	pane = listed.Panes[0].ID
+	session, ctx, paneID := benchServer(b)
 
 	// A pane with something in it. The cursor is fixed overhead of roughly half
 	// a kilobyte, so on a blank pane capture_since returns more than a whole
 	// capture does; the comparison is only honest once the screen it saves
 	// re-sending is bigger than the cursor that saves it.
-	if _, err := session.CallTool(ctx, &sdk.CallToolParams{
-		Name: "run_command",
-		Arguments: map[string]any{
-			"paneId": pane, "command": "seq 1 400", "timeoutSeconds": 30,
-		},
-	}); err != nil {
-		b.Fatal(err)
-	}
+	callBenchmarkTool(ctx, b, session, "run_shell_command", map[string]any{
+		"pane_id": paneID, "command": "seq 1 400", "timeout": 30,
+	})
 
 	b.Run("capture_pane", func(b *testing.B) {
 		b.ReportAllocs()
 		replies := 0
 		for b.Loop() {
 			result, err := session.CallTool(ctx, &sdk.CallToolParams{
-				Name: "capture_pane", Arguments: map[string]any{"paneId": pane},
+				Name: "capture_pane", Arguments: map[string]any{"pane_id": paneID},
 			})
 			if err != nil {
 				b.Fatal(err)
+			}
+			if result.IsError {
+				b.Fatalf("capture_pane: %#v", result.Content)
 			}
 			replies += replyBytes(result)
 		}
@@ -174,7 +186,7 @@ func BenchmarkCaptureSinceAgainstCapturePane(b *testing.B) {
 		replies := 0
 		b.ReportAllocs()
 		for b.Loop() {
-			arguments := map[string]any{"paneId": pane}
+			arguments := map[string]any{"pane_id": paneID}
 			if cursor != "" {
 				arguments["cursor"] = cursor
 			}
@@ -184,16 +196,40 @@ func BenchmarkCaptureSinceAgainstCapturePane(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
+			if result.IsError {
+				b.Fatalf("capture_since: %#v", result.Content)
+			}
 			var since struct {
 				Cursor string `json:"cursor"`
 			}
-			if err := unmarshalStructured(result, &since); err == nil {
-				cursor = since.Cursor
+			if err := unmarshalStructured(result, &since); err != nil {
+				b.Fatal(err)
 			}
+			cursor = since.Cursor
 			replies += replyBytes(result)
 		}
 		b.ReportMetric(float64(replies)/float64(b.N), "bytes/reply")
 	})
+}
+
+func callBenchmarkTool(
+	ctx context.Context,
+	b *testing.B,
+	session *sdk.ClientSession,
+	name string,
+	arguments map[string]any,
+) *sdk.CallToolResult {
+	b.Helper()
+	result, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: name, Arguments: arguments,
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	if result.IsError {
+		b.Fatalf("%s: %#v", name, result.Content)
+	}
+	return result
 }
 
 // replyBytes is how much of a caller's context one reply would spend.

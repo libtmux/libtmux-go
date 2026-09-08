@@ -62,6 +62,10 @@ type OptionError struct {
 	// is exported, a caller may build one with any contents, and Error must
 	// never render output it did not itself decide was disclosable.
 	unreachable string
+	// scopes names where a known option does live, when it was refused for
+	// being addressed through the wrong handle. It is private for the same
+	// reason as unreachable, and it is generated rather than caller-supplied.
+	scopes string
 }
 
 // Error implements error.
@@ -83,7 +87,13 @@ func (e *OptionError) Error() string {
 	// A negative code means no tmux command ran, so reporting an exit status
 	// invites a reader to look for one tmux never produced.
 	if e.Result.ExitCode < 0 {
-		return fmt.Sprintf("%v: %s was refused before tmux ran it", kind, operation)
+		refused := fmt.Sprintf("%v: %s was refused before tmux ran it", kind, operation)
+		// Naming the scope separates the option tmux does not have from the one
+		// reached through the wrong handle, which read identically before.
+		if e.scopes != "" {
+			return fmt.Sprintf("%s; tmux keeps %s in %s", refused, e.Name, e.scopes)
+		}
+		return refused
 	}
 	return fmt.Sprintf("%v: %s exited %d", kind, operation, e.Result.ExitCode)
 }
@@ -153,4 +163,12 @@ func newLocalInvalidOptionError(subcommand, name string) *OptionError {
 		Result:     CommandResult{ExitCode: -1},
 		kind:       ErrInvalidOption,
 	}
+}
+
+// newLocalOptionScopeError reports a known option addressed through a handle
+// whose scope it does not live in, naming the scopes that do carry it.
+func newLocalOptionScopeError(subcommand, name, scopes string) *OptionError {
+	failure := newLocalInvalidOptionError(subcommand, name)
+	failure.scopes = scopes
+	return failure
 }

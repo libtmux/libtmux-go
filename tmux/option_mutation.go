@@ -510,7 +510,9 @@ func preflightGeneratedMutation(
 		return nil
 	}
 	if !generatedDefinitionSupportsScope(*definition, scope) {
-		return newLocalInvalidOptionError(subcommand, name)
+		return newLocalOptionScopeError(
+			subcommand, name, generatedDefinitionScopeNames(*definition),
+		)
 	}
 	if !generatedDefinitionScopeVariesByVersion(*definition, scope) {
 		return nil

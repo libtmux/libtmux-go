@@ -4,6 +4,7 @@ use (
 	.
 	./benchmarks
 	./examples
+	./internal/tools
 	./mcp
 	./workspace
 )

@@ -1,12 +1,17 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -14,6 +19,664 @@ import (
 
 // Input tools distinguish a command plus Enter, a sequence of tmux key names,
 // and literal text that tmux must not interpret as keys.
+
+type rawPaneFormat struct {
+	Value   string
+	Present bool
+}
+
+type paneInputSnapshotRow struct {
+	PaneID         string
+	Synchronized   rawPaneFormat
+	Dead           rawPaneFormat
+	InputOff       rawPaneFormat
+	InMode         rawPaneFormat
+	CurrentCommand rawPaneFormat
+	PID            rawPaneFormat
+}
+
+type clientAttentionSnapshotRow struct {
+	Control     rawPaneFormat
+	SessionID   rawPaneFormat
+	WindowID    rawPaneFormat
+	WindowIndex rawPaneFormat
+	PaneID      rawPaneFormat
+	Zoomed      rawPaneFormat
+}
+
+type paneInputPlacement struct {
+	SessionID   string
+	WindowID    string
+	WindowIndex int
+	PaneID      string
+}
+
+type paneInputMemberSignature struct {
+	Placements     []paneInputPlacement
+	Synchronized   string
+	Dead           string
+	InputOff       string
+	InMode         string
+	CurrentCommand rawPaneFormat
+	PID            rawPaneFormat
+}
+
+type paneInputTransitionSignature struct {
+	Source  paneInputMemberSignature
+	Members []paneInputMemberSignature
+}
+
+type paneInputMembershipKind uint8
+
+const (
+	paneInputConfigured paneInputMembershipKind = iota
+	paneInputTargetOnly
+)
+
+type paneInputPreflight struct {
+	Source        tmux.Pane
+	Panes         []tmux.Pane
+	ConfiguredIDs []string
+	Identity      paneInputServerIdentity
+	Caller        paneInputCaller
+	Signature     paneInputTransitionSignature
+}
+
+type paneInputServerIdentity struct {
+	endpoint        string
+	endpointID      uint64
+	serverPID       uint64
+	serverStartTime uint64
+}
+
+type paneInputIdentity struct {
+	endpointID      uint64
+	serverPID       uint64
+	serverStartTime uint64
+	paneID          string
+}
+
+func (p paneInputPreflight) Identities() []paneInputIdentity {
+	identities := make([]paneInputIdentity, 0, len(p.ConfiguredIDs))
+	for _, paneID := range p.ConfiguredIDs {
+		identities = append(identities, paneInputIdentity{
+			endpointID: p.Identity.endpointID, serverPID: p.Identity.serverPID,
+			serverStartTime: p.Identity.serverStartTime, paneID: paneID,
+		})
+	}
+	return identities
+}
+
+func samePaneInputPreflight(initial, final paneInputPreflight) bool {
+	return initial.Identity == final.Identity && initial.Caller == final.Caller &&
+		slices.Equal(initial.ConfiguredIDs, final.ConfiguredIDs) &&
+		samePaneInputMemberSignature(initial.Signature.Source, final.Signature.Source) &&
+		samePaneInputMemberSignatures(initial.Signature.Members, final.Signature.Members)
+}
+
+func samePaneInputMemberSignature(left, right paneInputMemberSignature) bool {
+	return slices.Equal(left.Placements, right.Placements) &&
+		left.Synchronized == right.Synchronized && left.Dead == right.Dead &&
+		left.InputOff == right.InputOff && left.InMode == right.InMode &&
+		left.CurrentCommand == right.CurrentCommand && left.PID == right.PID
+}
+
+func samePaneInputMemberSignatures(left, right []paneInputMemberSignature) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !samePaneInputMemberSignature(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func parseStrictPaneFlag(name string, raw rawPaneFormat) (bool, error) {
+	if raw.Present {
+		switch raw.Value {
+		case "0":
+			return false, nil
+		case "1":
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("%s is unavailable or malformed", name)
+}
+
+func requireSafePaneMode(raw rawPaneFormat) error {
+	if raw.Present && raw.Value == "0" {
+		return nil
+	}
+	if raw.Present {
+		mode, err := strconv.Atoi(raw.Value)
+		if err == nil && mode > 0 {
+			return errors.New("pane is in a mode")
+		}
+	}
+	return errors.New("pane_in_mode is unavailable or malformed")
+}
+
+func configuredPaneInputMembership(sourceID string, rows []paneInputSnapshotRow) ([]string, error) {
+	empty := []string{}
+	var source *paneInputSnapshotRow
+	for index := range rows {
+		if rows[index].PaneID == sourceID {
+			source = &rows[index]
+			break
+		}
+	}
+	if source == nil {
+		return empty, fmt.Errorf("pane %s is absent from the fresh pane snapshot", sourceID)
+	}
+
+	synchronized, err := parseStrictPaneFlag("pane_synchronized", source.Synchronized)
+	if err != nil {
+		return empty, fmt.Errorf("pane %s: %w", sourceID, err)
+	}
+	configured := []paneInputSnapshotRow{*source}
+	if synchronized {
+		configured = configured[:0]
+		for _, row := range rows {
+			on, parseErr := parseStrictPaneFlag("pane_synchronized", row.Synchronized)
+			if parseErr != nil {
+				return empty, fmt.Errorf("pane %s: %w", row.PaneID, parseErr)
+			}
+			if on {
+				configured = append(configured, row)
+			}
+		}
+	}
+
+	ids := make([]string, 0, len(configured))
+	seen := make(map[string]struct{}, len(configured))
+	for _, row := range configured {
+		dead, parseErr := parseStrictPaneFlag("pane_dead", row.Dead)
+		if parseErr != nil {
+			return empty, fmt.Errorf("pane %s: %w", row.PaneID, parseErr)
+		}
+		if dead {
+			return empty, fmt.Errorf("pane %s has no process", row.PaneID)
+		}
+		inputOff, parseErr := parseStrictPaneFlag("pane_input_off", row.InputOff)
+		if parseErr != nil {
+			return empty, fmt.Errorf("pane %s: %w", row.PaneID, parseErr)
+		}
+		if inputOff {
+			return empty, fmt.Errorf("pane %s has input disabled", row.PaneID)
+		}
+		if modeErr := requireSafePaneMode(row.InMode); modeErr != nil {
+			return empty, fmt.Errorf("pane %s: %w", row.PaneID, modeErr)
+		}
+		if _, exists := seen[row.PaneID]; exists {
+			continue
+		}
+		seen[row.PaneID] = struct{}{}
+		ids = append(ids, row.PaneID)
+	}
+	slices.Sort(ids)
+	return ids, nil
+}
+
+func (t *tools) preflightPaneInput(
+	ctx context.Context,
+	id string,
+	sessionName string,
+	kind paneInputMembershipKind,
+	tool string,
+) (paneInputPreflight, error) {
+	empty := paneInputPreflight{ConfiguredIDs: []string{}}
+	snapshot, err := t.runtime.deps.snapshot(ctx, t.tmux(ctx))
+	if err != nil {
+		return empty, fmt.Errorf("%s preflight pane and client snapshot: %w", tool, err)
+	}
+	resolved, err := resolvePaneInputSource(snapshot, id, sessionName)
+	if err != nil {
+		return empty, err
+	}
+	panes := make([]tmux.Pane, 0)
+	for _, pane := range snapshot.Panes() {
+		if pane.WindowID() == resolved.WindowID() {
+			panes = append(panes, pane)
+		}
+	}
+	rows := make([]paneInputSnapshotRow, 0, len(panes))
+	byID := make(map[string]tmux.Pane, len(panes))
+	for _, pane := range panes {
+		paneID := pane.ID().String()
+		rows = append(rows, paneInputSnapshotRow{
+			PaneID:         paneID,
+			Synchronized:   paneRawFormat(pane, "pane_synchronized"),
+			Dead:           paneRawFormat(pane, "pane_dead"),
+			InputOff:       paneRawFormat(pane, "pane_input_off"),
+			InMode:         paneRawFormat(pane, "pane_in_mode"),
+			CurrentCommand: paneRawFormat(pane, "pane_current_command"),
+			PID:            paneRawFormat(pane, "pane_pid"),
+		})
+		if _, exists := byID[paneID]; !exists {
+			byID[paneID] = pane
+		}
+	}
+
+	sourceID := resolved.ID().String()
+	ids := []string{}
+	if kind == paneInputTargetOnly {
+		var source *paneInputSnapshotRow
+		for index := range rows {
+			if rows[index].PaneID == sourceID {
+				source = &rows[index]
+				break
+			}
+		}
+		if source == nil {
+			return empty, fmt.Errorf("%s refused: pane %s is absent from the fresh pane snapshot", tool, sourceID)
+		}
+		dead, parseErr := parseStrictPaneFlag("pane_dead", source.Dead)
+		if parseErr != nil {
+			return empty, paneInputRefusal(tool, sourceID, parseErr)
+		}
+		if dead {
+			return empty, paneInputRefusal(tool, sourceID, errors.New("pane has no process"))
+		}
+		inputOff, parseErr := parseStrictPaneFlag("pane_input_off", source.InputOff)
+		if parseErr != nil {
+			return empty, paneInputRefusal(tool, sourceID, parseErr)
+		}
+		if inputOff {
+			return empty, paneInputRefusal(tool, sourceID, errors.New("pane has input disabled"))
+		}
+		if modeErr := requireSafePaneMode(source.InMode); modeErr != nil {
+			return empty, paneInputRefusal(tool, sourceID, modeErr)
+		}
+		if _, parseErr := parseStrictPaneFlag("pane_synchronized", source.Synchronized); parseErr != nil {
+			return empty, paneInputRefusal(tool, sourceID, parseErr)
+		}
+		ids = append(ids, sourceID)
+	} else {
+		ids, err = configuredPaneInputMembership(sourceID, rows)
+		if err != nil {
+			return empty, fmt.Errorf("%s refused: %w; capture_pane reads text without changing pane mode", tool, err)
+		}
+	}
+	attended, err := attendedPaneInputMembership(
+		snapshot.Clients(), snapshot.Panes(), resolved.WindowID().String(),
+	)
+	if err != nil {
+		return empty, fmt.Errorf("%s refused: %w", tool, err)
+	}
+	for _, paneID := range ids {
+		if attended[paneID] {
+			return empty, paneInputRefusal(tool, paneID, errors.New("pane is attended by a tmux client"))
+		}
+	}
+
+	selected := make([]tmux.Pane, 0, len(ids))
+	for _, paneID := range ids {
+		pane, exists := byID[paneID]
+		if !exists {
+			return empty, fmt.Errorf("%s refused: pane %s disappeared from the preflight snapshot", tool, paneID)
+		}
+		selected = append(selected, pane)
+	}
+	byID[sourceID] = resolved
+	sourceSignature, err := paneInputSignature(snapshot.PanesByID(resolved.ID()))
+	if err != nil {
+		return empty, paneInputRefusal(tool, sourceID, err)
+	}
+	members := make([]paneInputMemberSignature, 0, len(selected))
+	for _, pane := range selected {
+		signature, signatureErr := paneInputSignature(snapshot.PanesByID(pane.ID()))
+		if signatureErr != nil {
+			return empty, paneInputRefusal(tool, pane.ID().String(), signatureErr)
+		}
+		members = append(members, signature)
+	}
+	identity, err := paneInputIdentityForSnapshot(snapshot, byID[sourceID])
+	if err != nil {
+		return empty, fmt.Errorf("%s refused: %w", tool, err)
+	}
+	tmuxVariable, tmuxPresent := os.LookupEnv("TMUX")
+	tmuxPane, panePresent := os.LookupEnv("TMUX_PANE")
+	caller, err := parsePaneInputCaller(tmuxVariable, tmuxPresent, tmuxPane, panePresent)
+	if err != nil {
+		return empty, fmt.Errorf("%s refused: %w", tool, err)
+	}
+	callerPanes := make([]paneInputCallerPane, 0, len(snapshot.Panes()))
+	for _, pane := range snapshot.Panes() {
+		callerPanes = append(callerPanes, paneInputCallerPane{
+			sessionID: pane.SessionID().String(), paneID: pane.ID().String(),
+		})
+	}
+	caller, err = classifyPaneInputCaller(caller, identity, callerPanes)
+	if err != nil {
+		return empty, fmt.Errorf("%s refused: %w", tool, err)
+	}
+	return paneInputPreflight{
+		Source: byID[sourceID], Panes: selected, ConfiguredIDs: ids,
+		Identity: identity, Caller: caller,
+		Signature: paneInputTransitionSignature{Source: sourceSignature, Members: members},
+	}, nil
+}
+
+func paneInputSignature(
+	panes []tmux.Pane,
+) (paneInputMemberSignature, error) {
+	if len(panes) == 0 {
+		return paneInputMemberSignature{}, errors.New("pane is absent from its window placement")
+	}
+	panes = slices.Clone(panes)
+	slices.SortFunc(panes, func(left, right tmux.Pane) int {
+		return comparePaneInputPlacement(paneInputPlacementFor(left), paneInputPlacementFor(right))
+	})
+
+	var signature paneInputMemberSignature
+	for index, pane := range panes {
+		placement := paneInputPlacementFor(pane)
+		if !canonicalPaneInputID(placement.SessionID, '$') ||
+			!canonicalPaneInputID(placement.WindowID, '@') ||
+			placement.WindowIndex < 0 || !canonicalPaneID(placement.PaneID) {
+			return paneInputMemberSignature{}, errors.New("pane placement is unavailable or malformed")
+		}
+		if index > 0 {
+			previous := paneInputPlacementFor(panes[index-1])
+			if placement == previous {
+				return paneInputMemberSignature{}, errors.New("pane placement is duplicated")
+			}
+			if placement.PaneID != signature.Placements[0].PaneID ||
+				placement.WindowID != signature.Placements[0].WindowID {
+				return paneInputMemberSignature{}, errors.New("pane linked placement is inconsistent")
+			}
+		}
+
+		row := paneInputSnapshotRow{
+			PaneID:         placement.PaneID,
+			Synchronized:   paneRawFormat(pane, "pane_synchronized"),
+			Dead:           paneRawFormat(pane, "pane_dead"),
+			InputOff:       paneRawFormat(pane, "pane_input_off"),
+			InMode:         paneRawFormat(pane, "pane_in_mode"),
+			CurrentCommand: paneRawFormat(pane, "pane_current_command"),
+			PID:            paneRawFormat(pane, "pane_pid"),
+		}
+		if _, err := parseStrictPaneFlag("pane_synchronized", row.Synchronized); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		if _, err := parseStrictPaneFlag("pane_dead", row.Dead); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		if _, err := parseStrictPaneFlag("pane_input_off", row.InputOff); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		if err := requireSafePaneMode(row.InMode); err != nil {
+			return paneInputMemberSignature{}, err
+		}
+		if !row.PID.Present {
+			return paneInputMemberSignature{}, errors.New("pane_pid is unavailable")
+		}
+		if _, err := parseCanonicalPaneInputNumber(row.PID.Value, false); err != nil {
+			return paneInputMemberSignature{}, fmt.Errorf("pane_pid is malformed: %w", err)
+		}
+		observed := paneInputMemberSignature{
+			Synchronized: row.Synchronized.Value, Dead: row.Dead.Value,
+			InputOff: row.InputOff.Value, InMode: row.InMode.Value,
+			CurrentCommand: row.CurrentCommand, PID: row.PID,
+		}
+		if index == 0 {
+			signature = observed
+		} else if signature.Synchronized != observed.Synchronized ||
+			signature.Dead != observed.Dead || signature.InputOff != observed.InputOff ||
+			signature.InMode != observed.InMode ||
+			signature.CurrentCommand != observed.CurrentCommand ||
+			signature.PID != observed.PID {
+			return paneInputMemberSignature{}, errors.New("pane linked state is inconsistent")
+		}
+		signature.Placements = append(signature.Placements, placement)
+	}
+	return signature, nil
+}
+
+func paneInputPlacementFor(pane tmux.Pane) paneInputPlacement {
+	return paneInputPlacement{
+		SessionID: pane.SessionID().String(), WindowID: pane.WindowID().String(),
+		WindowIndex: pane.WindowIndex(), PaneID: pane.ID().String(),
+	}
+}
+
+func comparePaneInputPlacement(left, right paneInputPlacement) int {
+	if order := cmp.Compare(left.SessionID, right.SessionID); order != 0 {
+		return order
+	}
+	if order := cmp.Compare(left.WindowID, right.WindowID); order != 0 {
+		return order
+	}
+	if order := cmp.Compare(left.WindowIndex, right.WindowIndex); order != 0 {
+		return order
+	}
+	return cmp.Compare(left.PaneID, right.PaneID)
+}
+
+func resolvePaneInputSource(
+	snapshot tmux.Snapshot,
+	id string,
+	sessionName string,
+) (tmux.Pane, error) {
+	if wanted := strings.TrimSpace(id); wanted != "" {
+		if !canonicalPaneID(wanted) {
+			return tmux.Pane{}, fmt.Errorf("pane id %q is not canonical", wanted)
+		}
+		panes := snapshot.PanesByID(tmux.PaneID(wanted))
+		if len(panes) == 0 {
+			pane, err := snapshot.PaneByID(tmux.PaneID(wanted))
+			return pane, notFound(err, "pane", wanted, "list_panes")
+		}
+		slices.SortFunc(panes, func(left, right tmux.Pane) int {
+			return comparePaneInputPlacement(paneInputPlacementFor(left), paneInputPlacementFor(right))
+		})
+		return panes[0], nil
+	}
+
+	sessions := snapshot.Sessions()
+	var session tmux.Session
+	if wanted := strings.TrimSpace(sessionName); wanted != "" {
+		found := false
+		for _, candidate := range sessions {
+			name, present := candidate.Name()
+			if !present {
+				return tmux.Pane{}, errors.New("session_name is unavailable")
+			}
+			if name == wanted {
+				session, found = candidate, true
+				break
+			}
+		}
+		if !found {
+			return tmux.Pane{}, missing{fmt.Errorf(
+				"no session named %q on this tmux server; list_sessions reports the sessions that exist",
+				wanted,
+			)}
+		}
+	} else {
+		switch len(sessions) {
+		case 0:
+			return tmux.Pane{}, errors.New("the tmux server has no sessions")
+		case 1:
+			session = sessions[0]
+		default:
+			return tmux.Pane{}, fmt.Errorf(
+				"the tmux server has %d sessions, so sessionName is required", len(sessions),
+			)
+		}
+	}
+	pane, present := session.ActivePane()
+	if !present {
+		return tmux.Pane{}, fmt.Errorf("session %s has no unambiguous active pane", session.ID())
+	}
+	return pane, nil
+}
+
+func paneInputIdentityForSnapshot(
+	snapshot tmux.Snapshot,
+	source tmux.Pane,
+) (paneInputServerIdentity, error) {
+	selection, err := snapshot.Server().SocketSelection()
+	if err != nil {
+		return paneInputServerIdentity{}, fmt.Errorf("resolve pane input endpoint: %w", err)
+	}
+	endpoint, err := filepath.EvalSymlinks(selection.Path)
+	if err != nil {
+		return paneInputServerIdentity{}, fmt.Errorf("resolve pane input endpoint: %w", err)
+	}
+	if !filepath.IsAbs(endpoint) {
+		return paneInputServerIdentity{}, errors.New("resolved pane input endpoint is not absolute")
+	}
+	endpointID, err := processPaneInputEndpoints.identify(endpoint)
+	if err != nil {
+		return paneInputServerIdentity{}, fmt.Errorf("identify pane input endpoint: %w", err)
+	}
+	pidRaw, pidPresent := source.Formats().Raw("pid")
+	pid, err := parseCanonicalPaneInputNumber(pidRaw, false)
+	if err != nil || !pidPresent {
+		return paneInputServerIdentity{}, errors.New("server pid is unavailable or malformed")
+	}
+	startRaw, startPresent := source.Formats().Raw("start_time")
+	startTime, err := parseCanonicalPaneInputNumber(startRaw, false)
+	if err != nil || !startPresent {
+		return paneInputServerIdentity{}, errors.New("server start_time is unavailable or malformed")
+	}
+	return paneInputServerIdentity{
+		endpoint: endpoint, endpointID: endpointID,
+		serverPID: pid, serverStartTime: startTime,
+	}, nil
+}
+
+func attendedPaneInputMembership(
+	clients []tmux.Client,
+	panes []tmux.Pane,
+	targetWindowID string,
+) (map[string]bool, error) {
+	rows := make([]clientAttentionSnapshotRow, 0, len(clients))
+	for _, client := range clients {
+		rows = append(rows, clientAttentionSnapshotRow{
+			Control:     clientRawFormat(client, "client_control_mode"),
+			SessionID:   clientRawFormat(client, "session_id"),
+			WindowID:    clientRawFormat(client, "window_id"),
+			WindowIndex: clientRawFormat(client, "window_index"),
+			PaneID:      clientRawFormat(client, "pane_id"),
+			Zoomed:      clientRawFormat(client, "window_zoomed_flag"),
+		})
+	}
+	placements := make([]paneInputPlacement, 0, len(panes))
+	for _, pane := range panes {
+		placements = append(placements, paneInputPlacement{
+			SessionID: pane.SessionID().String(), WindowID: pane.WindowID().String(),
+			WindowIndex: pane.WindowIndex(), PaneID: pane.ID().String(),
+		})
+	}
+	return attendedPaneIDs(rows, placements, targetWindowID)
+}
+
+func attendedPaneIDs(
+	clients []clientAttentionSnapshotRow,
+	panes []paneInputPlacement,
+	targetWindowID string,
+) (map[string]bool, error) {
+	if !canonicalPaneInputID(targetWindowID, '@') {
+		return nil, errors.New("target window_id is unavailable or malformed")
+	}
+	for _, pane := range panes {
+		if !canonicalPaneInputID(pane.SessionID, '$') ||
+			!canonicalPaneInputID(pane.WindowID, '@') ||
+			pane.WindowIndex < 0 || !canonicalPaneID(pane.PaneID) {
+			return nil, errors.New("pane placement is unavailable or malformed")
+		}
+	}
+	attended := make(map[string]bool)
+	for _, client := range clients {
+		control, err := parseStrictPaneFlag("client_control_mode", client.Control)
+		if err != nil {
+			return nil, err
+		}
+		if control {
+			continue
+		}
+		placement, err := clientPaneInputPlacement(client)
+		if err != nil {
+			return nil, err
+		}
+		zoomed, err := parseStrictPaneFlag("window_zoomed_flag", client.Zoomed)
+		if err != nil {
+			return nil, err
+		}
+		matches := 0
+		for _, pane := range panes {
+			if pane == placement {
+				matches++
+			}
+		}
+		if matches != 1 {
+			return nil, errors.New("client pane placement is unavailable or inconsistent")
+		}
+		if placement.WindowID != targetWindowID {
+			continue
+		}
+		if zoomed {
+			attended[placement.PaneID] = true
+			continue
+		}
+		for _, pane := range panes {
+			if pane.WindowID == targetWindowID {
+				attended[pane.PaneID] = true
+			}
+		}
+	}
+	return attended, nil
+}
+
+func clientPaneInputPlacement(row clientAttentionSnapshotRow) (paneInputPlacement, error) {
+	if !row.SessionID.Present || !canonicalPaneInputID(row.SessionID.Value, '$') ||
+		!row.WindowID.Present || !canonicalPaneInputID(row.WindowID.Value, '@') ||
+		!row.PaneID.Present || !canonicalPaneID(row.PaneID.Value) {
+		return paneInputPlacement{}, errors.New("client pane placement is unavailable or malformed")
+	}
+	index, err := strconv.Atoi(row.WindowIndex.Value)
+	if !row.WindowIndex.Present || err != nil || index < 0 ||
+		row.WindowIndex.Value != strconv.Itoa(index) {
+		return paneInputPlacement{}, errors.New("client window_index is unavailable or malformed")
+	}
+	return paneInputPlacement{
+		SessionID: row.SessionID.Value, WindowID: row.WindowID.Value,
+		WindowIndex: index, PaneID: row.PaneID.Value,
+	}, nil
+}
+
+func clientRawFormat(client tmux.Client, name string) rawPaneFormat {
+	value, present := client.Formats().Raw(name)
+	return rawPaneFormat{Value: value, Present: present}
+}
+
+func canonicalPaneID(value string) bool {
+	return canonicalPaneInputID(value, '%')
+}
+
+func canonicalPaneInputID(value string, prefix byte) bool {
+	if len(value) < 2 || value[0] != prefix {
+		return false
+	}
+	id, err := strconv.ParseUint(value[1:], 10, 32)
+	return err == nil && value == string(prefix)+strconv.FormatUint(id, 10)
+}
+
+func paneRawFormat(pane tmux.Pane, name string) rawPaneFormat {
+	value, present := pane.Formats().Raw(name)
+	return rawPaneFormat{Value: value, Present: present}
+}
+
+func paneInputRefusal(tool, paneID string, cause error) error {
+	return fmt.Errorf(
+		"%s refused for pane %s: %w; capture_pane reads text without changing pane mode",
+		tool, paneID, cause,
+	)
+}
 
 // sendKeysBatchInput sends several keys to a pane in order.
 type sendKeysBatchInput struct {
@@ -30,12 +693,14 @@ type sendKeysBatchInput struct {
 	Literal bool `json:"literal,omitempty" jsonschema:"send the keys as characters rather than as tmux key names"`
 }
 
-// sendKeysBatchOutput reports what was sent.
+// sendKeysBatchOutput reports the source target and accepted key count.
 type sendKeysBatchOutput struct {
-	// PaneID is the pane that received the keys.
+	// PaneID is the resolved source target.
 	PaneID string `json:"paneId"`
 	// Sent is how many keys tmux accepted when the call succeeds.
 	Sent int `json:"sent"`
+	// ResolvedPaneIDs is sorted configured preflight membership.
+	ResolvedPaneIDs []string `json:"resolvedPaneIds"`
 }
 
 // sendKeysBatch sends a sequence of keys without pressing Enter.
@@ -48,27 +713,68 @@ func (t *tools) sendKeysBatch(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
 	input sendKeysBatchInput,
+	tool string,
 ) (*mcp.CallToolResult, sendKeysBatchOutput, error) {
+	output := sendKeysBatchOutput{ResolvedPaneIDs: []string{}}
 	if len(input.Keys) == 0 {
-		return nil, sendKeysBatchOutput{}, errors.New("keys is required")
-	}
-	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "sending keys", "send_keys_batch")
-	if err != nil {
-		return nil, sendKeysBatchOutput{}, err
+		return nil, output, errors.New("keys is required")
 	}
 	for index, key := range input.Keys {
 		if key == "" {
-			return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: index},
-				fmt.Errorf("key %d is empty", index)
+			return nil, output, fmt.Errorf("key %d is empty", index)
 		}
 	}
-	if err := pane.SendKeySequence(ctx, tmux.SendKeySequenceRequest{
+	preflight, err := t.preflightPaneInput(
+		ctx, input.PaneID, input.SessionName, paneInputConfigured, tool,
+	)
+	if err != nil {
+		return nil, output, err
+	}
+	output.PaneID = preflight.Source.ID().String()
+	output.ResolvedPaneIDs = append([]string{}, preflight.ConfiguredIDs...)
+	lease, err := processPaneInputs.acquire(
+		preflight.Identities(), paneInputReservationInput, tool,
+	)
+	if err != nil {
+		return nil, output, err
+	}
+	defer processPaneInputs.release(lease)
+	if err := t.confirmCallerInputPreflight(ctx, request, preflight, "sending keys"); err != nil {
+		return nil, output, err
+	}
+	initial := preflight
+	confirmedIDs := append([]string{}, preflight.ConfiguredIDs...)
+	preflight, err = t.preflightPaneInput(
+		ctx, output.PaneID, "", paneInputConfigured, tool,
+	)
+	if err != nil {
+		return nil, output, err
+	}
+	output.ResolvedPaneIDs = append([]string{}, preflight.ConfiguredIDs...)
+	if !slices.Equal(preflight.ConfiguredIDs, confirmedIDs) {
+		return nil, output, fmt.Errorf(
+			"%s refused: configured pane input membership changed from %v to %v before dispatch",
+			tool, confirmedIDs, preflight.ConfiguredIDs,
+		)
+	}
+	if !samePaneInputPreflight(initial, preflight) {
+		return nil, output, fmt.Errorf(
+			"%s refused: pane input state, placement, route, caller, or membership changed before dispatch",
+			tool,
+		)
+	}
+	if !processPaneInputs.owns(lease, preflight.Identities()) {
+		return nil, output, fmt.Errorf(
+			"%s refused: its pane input reservation changed before dispatch", tool,
+		)
+	}
+	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
 	}); err != nil {
-		return nil, sendKeysBatchOutput{PaneID: pane.ID().String()},
-			fmt.Errorf("sending keys: %w", err)
+		return nil, output, fmt.Errorf("sending keys: %w", err)
 	}
-	return nil, sendKeysBatchOutput{PaneID: pane.ID().String(), Sent: len(input.Keys)}, nil
+	output.Sent = len(input.Keys)
+	return nil, output, nil
 }
 
 // pasteSequence names each staged buffer apart from the last, so two pastes at
@@ -93,11 +799,11 @@ type pasteTextInput struct {
 	Enter bool `json:"enter,omitempty" jsonschema:"press Enter after the text"`
 }
 
-// pasteTextOutput reports what was pasted.
+// pasteTextOutput reports the source target and accepted paste byte count.
 type pasteTextOutput struct {
-	// PaneID is the pane that received the text.
+	// PaneID is the resolved source target.
 	PaneID string `json:"paneId"`
-	// Bytes is how many bytes were delivered.
+	// Bytes is how many text bytes tmux accepted for paste.
 	Bytes int `json:"bytes"`
 }
 
@@ -108,234 +814,90 @@ func (t *tools) pasteText(
 	request *mcp.CallToolRequest,
 	input pasteTextInput,
 ) (*mcp.CallToolResult, pasteTextOutput, error) {
-	if input.Text == "" {
-		return nil, pasteTextOutput{}, errors.New("text is required")
-	}
-	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "pasting text", "paste_text")
+	output := pasteTextOutput{}
+	initial, err := t.preflightPaneInput(
+		ctx, input.PaneID, input.SessionName, paneInputTargetOnly, "paste_text",
+	)
 	if err != nil {
-		return nil, pasteTextOutput{}, err
+		return nil, output, err
 	}
-	output := pasteTextOutput{PaneID: pane.ID().String()}
+	pane := initial.Source
+	output.PaneID = pane.ID().String()
+	lease, err := processPaneInputs.acquire(
+		initial.Identities(), paneInputReservationInput, "paste_text",
+	)
+	if err != nil {
+		return nil, output, err
+	}
+	defer processPaneInputs.release(lease)
+	if err := t.confirmCallerInputPreflight(ctx, request, initial, "pasting text"); err != nil {
+		return nil, output, err
+	}
+	if input.Text == "" && !input.Enter {
+		return nil, output, nil
+	}
 
-	server := t.tmux(ctx)
+	server := initial.Source.Server()
 	name := "libtmux-mcp-paste-" + strconv.FormatInt(pasteSequence.Add(1), 10)
-	if err := server.SetBuffer(ctx, tmux.SetBufferRequest{
-		Data: input.Text,
+	contents := input.Text
+	if input.Enter {
+		contents += "\n"
+	}
+	// Bracketed paste tells the terminal that what follows is pasted, so it is
+	// inserted rather than acted on -- which is exactly what a newline carried
+	// with the text must not be. Bracketing a paste that asks for Enter leaves
+	// the command typed at the prompt in every shell that honours the markers,
+	// which is most of them. The buffer is what stops tmux interpreting a key
+	// name in the text; the markers are not, so dropping them for this case
+	// costs nothing and keeps the delivery to one paste at the target.
+	bracket := !input.Enter
+	if input.Bracket != nil {
+		bracket = *input.Bracket
+	}
+	if err := t.runtime.deps.setBuffer(ctx, server, tmux.SetBufferRequest{
+		Data: contents,
 		Name: &name,
 	}); err != nil {
-		return nil, output, err
+		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
+	}
+	final, err := t.preflightPaneInput(
+		ctx, output.PaneID, "", paneInputTargetOnly, "paste_text",
+	)
+	if err != nil {
+		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
+	}
+	if !samePaneInputPreflight(initial, final) {
+		return nil, output, errors.Join(
+			errors.New("paste_text refused: pane input state, placement, route, caller, or membership changed before dispatch"),
+			t.deletePasteBuffer(server, name),
+		)
+	}
+	pane = final.Source
+	if !processPaneInputs.owns(lease, final.Identities()) {
+		return nil, output, errors.Join(
+			errors.New("paste_text refused: its pane input reservation changed before dispatch"),
+			t.deletePasteBuffer(server, name),
+		)
 	}
 	// Deleted with the paste rather than left behind: tmux keeps buffers until
 	// something drops them, and a client pasting repeatedly would fill a
 	// person's buffer list with text they never copied.
-	bracket := true
-	if input.Bracket != nil {
-		bracket = *input.Bracket
-	}
-	if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
+	if err := t.runtime.deps.pasteBuffer(ctx, pane, tmux.PasteBufferRequest{
 		BufferName:  &name,
 		DeleteAfter: true,
 		Bracket:     bracket,
 	}); err != nil {
-		cleanupErr := server.DeleteBuffer(ctx, &name)
+		cleanupErr := t.deletePasteBuffer(server, name)
 		return nil, output, errors.Join(err, cleanupErr)
-	}
-	if input.Enter {
-		enter := "Enter"
-		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-			Command:   &enter,
-			SkipEnter: true,
-		}); err != nil {
-			t.runtime.observe(err)
-			// The text arrived; only the Enter did not. Reporting the paste as
-			// a failure would invite a client to send it again.
-			return toolFailure(fmt.Errorf("text pasted but Enter was not sent: %w", err)),
-				pasteTextOutput{PaneID: pane.ID().String(), Bytes: len(input.Text)}, nil
-		}
 	}
 	output.Bytes = len(input.Text)
 	return nil, output, nil
 }
 
-// exitCopyModeInput omits fields that only entering copy mode can use.
-type exitCopyModeInput struct {
-	// PaneID is the tmux pane id. Empty uses the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
-	// SessionName picks the session when PaneID is empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to use when paneId is empty"`
-}
-
-// enterCopyModeInput puts a pane into copy mode.
-type enterCopyModeInput struct {
-	// PaneID is the tmux pane id. Empty uses the active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"the tmux pane id; empty uses the active pane"`
-	// SessionName picks the session when PaneID is empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to use when paneId is empty"`
-	// ScrollUp enters copy mode one page above the bottom, which is where a
-	// client that wants to look at what scrolled past wants to start.
-	ScrollUp bool `json:"scrollUp,omitempty" jsonschema:"enter one page above the bottom"`
-}
-
-// copyModeOutput reports the pane's mode.
-type copyModeOutput struct {
-	// PaneID is the pane whose mode changed.
-	PaneID string `json:"paneId"`
-	// InCopyMode reports the mode the pane is in now.
-	InCopyMode bool `json:"inCopyMode"`
-}
-
-// enterCopyMode redirects subsequent keys to tmux rather than the pane's
-// program. get_pane_info reports inMode; exit_copy_mode restores input.
-func (t *tools) enterCopyMode(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input enterCopyModeInput,
-) (*mcp.CallToolResult, copyModeOutput, error) {
-	// Guarded like a write, because it is one from the person's side: copy
-	// mode takes their keystrokes away from their shell. exit_copy_mode is
-	// deliberately not guarded, being the way out of exactly that.
-	pane, err := t.resolvePaneToWrite(
-		ctx, request, input.PaneID, input.SessionName, "entering copy mode")
-	if err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	if err := pane.CopyMode(ctx, tmux.CopyModeRequest{ScrollUp: input.ScrollUp}); err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	return nil, copyModeOutput{PaneID: pane.ID().String(), InCopyMode: true}, nil
-}
-
-// refuseAPaneThatCannotRead rejects dead or modal panes before input can be
-// lost or interpreted as tmux bindings.
-func refuseAPaneThatCannotRead(pane tmux.Pane, tool string) error {
-	formats := pane.Formats()
-	// Before the mode, because a pane can be dead and in a mode at once -- a
-	// corpse is scrollable -- and having no process is the more fundamental of
-	// the two: leaving the mode would not give the keys anywhere to go.
-	if dead, _ := formats.PaneDead(); dead {
-		return fmt.Errorf(
-			"pane %s has no process: its program exited, so it reads no keys and "+
-				"%s reaches nothing. respawn_pane restarts it, and capture_pane "+
-				"with includeHistory still reads what it printed",
-			pane.ID(), tool)
-	}
-	mode, ok := formats.PaneInMode()
-	if !ok || mode == 0 {
-		return nil
-	}
-	return fmt.Errorf(
-		"pane %s is in a mode, so %s would be read as that mode's key bindings "+
-			"rather than reaching the program. To read scrollback, capture_pane "+
-			"with includeHistory and startLine reads it without leaving the mode "+
-			"or sending anything; to reach the program, exit_copy_mode first",
-		pane.ID(), tool)
-}
-
-// exitCopyMode returns a pane to passing keys to the program in it.
-func (t *tools) exitCopyMode(
-	ctx context.Context,
-	_ *mcp.CallToolRequest,
-	input exitCopyModeInput,
-) (*mcp.CallToolResult, copyModeOutput, error) {
-	pane, err := t.resolvePane(ctx, input.PaneID, input.SessionName)
-	if err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	if err := pane.CopyMode(ctx, tmux.CopyModeRequest{Cancel: true}); err != nil {
-		return nil, copyModeOutput{}, err
-	}
-	return nil, copyModeOutput{PaneID: pane.ID().String()}, nil
-}
-
-// sendKeys types a command into a pane and presses Enter.
-func (t *tools) sendKeys(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input sendKeysInput,
-) (*mcp.CallToolResult, sendKeysOutput, error) {
-	if strings.TrimSpace(input.Command) == "" {
-		return nil, sendKeysOutput{}, errors.New("command is required")
-	}
-	pane, err := t.resolvePaneToDeliver(ctx, request, input.PaneID, input.SessionName, "sending keys", "send_keys")
-	if err != nil {
-		return nil, sendKeysOutput{}, err
-	}
-	command := input.Command
-	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
-		Command:         &command,
-		SuppressHistory: input.SuppressHistory,
-	}); err != nil {
-		return nil, sendKeysOutput{}, err
-	}
-	return nil, sendKeysOutput{PaneID: pane.ID().String(), Sent: command}, nil
-}
-
-// sendKeysInput selects the pane and the command to run in it.
-type sendKeysInput struct {
-	// PaneID is a stable tmux pane identifier such as %1. Empty types into the
-	// active pane.
-	PaneID string `json:"paneId,omitempty" jsonschema:"a tmux pane id such as %1; empty types into the active pane"`
-	// SessionName picks the session when PaneID is empty.
-	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to type into when paneId is empty"`
-	// SuppressHistory prefixes the command with a space, which a shell
-	// configured to ignore such lines keeps out of its history. An agent
-	// typing into a person's pane otherwise fills their history with commands
-	// they did not run.
-	SuppressHistory bool `json:"suppressHistory,omitempty" jsonschema:"keep the command out of the shell's history by prefixing a space"`
-	// Command is typed into the pane, then Enter is sent. tmux reads its own
-	// key names here, so "C-c" interrupts what the pane is running and
-	// "Escape" is a key rather than those letters. That is also the way back
-	// from a pane left holding a command by a run_command that timed out,
-	// which would otherwise time out every later command sent to it.
-	Command string `json:"command" jsonschema:"what to type, read as tmux key names: \"C-c\" interrupts the pane and \"Escape\" is a key rather than those letters; use paste_text for text to take literally"`
-}
-
-// sendKeysOutput reports what was sent.
-type sendKeysOutput struct {
-	// PaneID is the pane that received it, which a caller that left it empty
-	// did not know.
-	PaneID string `json:"paneId"`
-	// Sent is the command that was typed into the pane.
-	Sent string `json:"sent"`
+func (t *tools) deletePasteBuffer(server tmux.Server, name string) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(t.runtime.ctx), 2*time.Second)
+	defer cancel()
+	return server.DeleteBuffer(cleanupCtx, &name)
 }
 
 // addInputTools advertises the tools that put something into a pane.
-func addInputTools(server *mcp.Server, t *tools) {
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "send_keys",
-		Annotations: mutating("Send Keys to a Pane"),
-		Description: "Type into one pane and press Enter. tmux key names are " +
-			"read, so \"C-c\" interrupts what the pane is running, which is how " +
-			"to recover a pane left busy by a run_command that timed out. Use " +
-			"paste_text for content you did not write by hand, and run_command " +
-			"when you want the exit status.",
-	}, t.sendKeys)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "send_keys_batch",
-		Annotations: mutating("Send a Sequence of Keys"),
-		Description: "Send several tmux key names to a pane in order, with no " +
-			"Enter appended. This is how to drive a program that reads keys " +
-			"rather than lines: quit a pager, answer a prompt, leave an editor.",
-	}, t.sendKeysBatch)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "paste_text",
-		Annotations: mutating("Paste Text into a Pane"),
-		Description: "Deliver text into a pane exactly, with no tmux key names " +
-			"read. Use this for anything you did not write by hand: a word like " +
-			"\"Escape\" in the middle of it would otherwise be sent as that key.",
-	}, t.pasteText)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "enter_copy_mode",
-		Annotations: mutating("Enter Copy Mode"),
-		Description: "Put a pane into tmux's copy mode, where keys scroll and " +
-			"select rather than reaching the program in the pane. Leave it with " +
-			"exit_copy_mode: keys sent to a pane still in copy mode do not reach " +
-			"the shell.",
-	}, t.enterCopyMode)
-	register(server, t, CapabilityPaneControl, &mcp.Tool{
-		Name:        "exit_copy_mode",
-		Annotations: settling("Leave Copy Mode"),
-		Description: "Return a pane from copy mode to passing keys to the " +
-			"program running in it.",
-	}, t.exitCopyMode)
-}

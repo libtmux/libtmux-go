@@ -136,32 +136,35 @@ so a configuration that could never have worked never replaces one that did.
 Read first — `status` and `--dry-run` write nothing:
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap status
+$ go run ./internal/tools/mcp-swap status
 ```
 
-```console
-$ go -C mcp run ./cmd/mcp-swap use-local --mode build
-```
+Point them at a build of this checkout:
 
 ```console
-$ go -C mcp run ./cmd/mcp-swap revert
+$ go run ./internal/tools/mcp-swap use --mode build
+```
+
+Put every configuration back:
+
+```console
+$ go run ./internal/tools/mcp-swap revert
 ```
 
 ## What the server already tells you
 
-Before probing, ask it. `-doctor` reports the tmux it found, the socket, what
-that server holds, the safety tier in force, and whether it is running inside a
-pane:
+Before probing, ask it. `-doctor` reports the selected tmux, its socket and
+contents, and whether the process is running inside that server:
 
 ```console
 $ libtmux-mcp -doctor -socket-name mcp-target
 ```
 
-`-tools` prints the advertised surface with each tool's classification, which
-is how to confirm a tier withheld what it should:
+`-tools` prints the startup-frozen surface with each tool's toolset and process
+reach, which is how to confirm an exact selection:
 
 ```console
-$ LIBTMUX_SAFETY=readonly libtmux-mcp -tools
+$ LIBTMUX_TOOLSETS=inspect libtmux-mcp -tools
 ```
 
 ## Gotchas that have cost real time

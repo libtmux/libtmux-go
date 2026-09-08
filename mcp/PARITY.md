@@ -5,184 +5,265 @@ There are two MCP servers for tmux under the libtmux name: this one, and
 same tmux and answer to the same clients, so a person choosing between them, or
 running both, wants to know where they differ.
 
-This is not the root [PARITY.md](../PARITY.md). That one is a contract: every
-supported Python *library* capability has a Go equivalent, proved from a symbol
-manifest. This is a comparison of two *servers*, and neither is a port of the
-other. Nothing here is a promise.
+This is not the root [PARITY.md](../PARITY.md). That file compares Go library
+symbols with the Python library. This file compares two MCP servers. Neither is
+a port of the other, and this comparison is not an API promise.
 
-Every claim below was measured, not read: both servers were started and driven
-over stdio JSON-RPC by the same script, and this one was additionally driven
-from inside a pane of the tmux server it drives. Where a number appears it came
-back off the wire.
+Every count below was measured over stdio JSON-RPC from this branch and Python
+0.1.0a21 with their full advertised surfaces. Both servers were driven by the
+same raw client; invalid calls were sent rather than inferred from schemas.
 
 ## The surface, counted
 
-| | here | Python |
-| --- | --- | --- |
-| Tools | 58 | 56 |
-| Arguments across them | 202 | 293 |
-| Arguments with a closed set published as `enum` | 10 | 5 |
-| Tools carrying an output schema | 58 | 56 |
-| Tools carrying annotations | 58 | 56 |
+| Wire surface | Go | Python |
+| --- | ---: | ---: |
+| Tools | 45 | 54 |
+| Argument fields across tool schemas | 103 | 289 |
+| Arguments published with `enum` | 7 | 3 |
+| Tools carrying an output schema | 45 | 54 |
+| Tools carrying annotations | 45 | 54 |
+| Described argument fields | 103 | 287 |
 | Collections published as null-or-array | 0 | 0 |
-| Prompts | 4 | 4 |
-| Resources, and templates | 1 and 6 | 0 and 6 |
-| Capabilities declared | completions, logging, prompts, resources (with subscribe), tools | experimental, extensions, logging, prompts, resources, tools |
+| Prompts | 0 | 4 |
+| Listed resources, and templates | 1 and 0 | 0 and 6 |
+| Server-instruction characters | 144 | 1,847 |
+
+The Go handshake declares logging, resources, and tools. The Python handshake
+also declares prompts, experimental data, and UI extensions. Both declare
+`listChanged` for tools. Go declares it for its one static resource; Python's
+resource capability reports neither subscriptions nor changing lists.
+
+The Go count is generated from one native manifest and grouped into the shared
+`inspect`, `manage`, `execute`, and `teardown` toolsets. Its unfiltered
+inventory is exactly 18, 14, 9, and 4 tools. A fresh authenticated product-owned
+server defaults to all 45; an existing or explicitly selected server defaults
+to the 41 non-teardown tools.
 
 ## The tools
 
-Fifty-five tool names are the same on both and are grouped the same way. The
-arguments are not: this server names them in camelCase and the Python one in
-snake_case, on every argument it has — 215 snake_case and no camelCase, counted
-off its own schemas. `paneId` is `pane_id`, `timeoutSeconds` is `timeout`.
-Swapping one server for the other therefore changes every call, not just the
-command that starts it.
+Thirty-nine tool names are common to both measured servers. Six are Go-only:
 
-The argument counts differ for a reason worth knowing before choosing. Python
-takes `socket_name` on 48 of its tools, `session_id` on 33, and `window_id` on
-26, because a call chooses its own target; strip those four targeting arguments
-and its 293 become 142, against this server's 202. The trade runs both ways:
-Python spends arguments on reaching any tmux server, and this one spends them
-on narrowing a listing — `list_panes` here takes `command`, `pathUnder`,
-`dead`, `active`, and `detail` where Python takes one `filters`.
+- `clear_pane_scrollback`
+- `get_tmux_variables`
+- `run_shell_command`
+- `set_history_limit`
+- `set_mouse_enabled`
+- `set_synchronize_panes`
 
-Three tools are here and not there:
+Fifteen are Python-only:
 
-- `build_workspace` builds a whole session from a tmuxp-style document, so
-  laying out five panes is one call rather than five.
-- `get_job` collects a `run_command` that was started with `detach`, which is
-  how a build runs without spending the turn waiting for it.
-- `move_pane` moves a pane between windows, or breaks it out into its own.
+- `clear_pane`, `delete_buffer`, `display_message`, `enter_copy_mode`, and
+  `exit_copy_mode`
+- `kill_server`, `list_servers`, `load_buffer`, `paste_buffer`, and `pipe_pane`
+- `run_command`, `set_environment`, `set_option`, `show_buffer`, and
+  `show_hook`
 
-One is here behind `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`: `get_recipe` offers the
-same text as the MCP prompts, for a client that reads tools and not prompts.
-The Python server has the same idea under `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1`,
-which turns each prompt into a tool of its own.
+Both current schemas use snake_case input names. Moving between the servers no
+longer changes every field's casing, but it still requires inspecting the
+chosen tool's schema: a similarly named workflow may use different selectors,
+bounds, or result fields.
 
-One is there and not here: `show_hook`, for a single hook. Here that is
-`show_hooks` with a `name`.
+The different inventories express different boundaries. Python offers broader
+buffer, option, environment, server-discovery, copy-mode, and pipe operations.
+Go exposes named settings and validated variable lookup, keeps one socket per
+process, omits human modal-interface control, and uses one bounded pane-command
+route. Go's `run_shell_command` is therefore not a spelling alias for Python's
+`run_command`.
+
+Go deliberately omits entering and cancelling copy mode from its MCP manifest.
+Capture, snapshot, search, and cursor tools observe terminal content without
+taking ownership of an attached person's view or selection. The core tmux
+module still exposes `Pane.CopyMode` for applications that own the complete
+interaction; library parity does not require MCP parity.
+
+One immutable Go `toolDefinition` registry owns each tool's name, controlled
+description, toolset, process reach, effects, output classes, trust flags,
+future-input amplification, annotations, schemas, input sinks, format controls,
+nested authority, and handler. Registration, dispatch, startup filtering,
+per-tool metadata, capability reporting, and generated [TOOLS.md](TOOLS.md) all
+read that registry. A missing, extra, or duplicate registration fails server
+construction.
+
+The Go capability row appears at
+`_meta["com.git-pull.libtmux-mcp/capability"]` on each listed tool and in
+`tmux://capabilities`; those rows are byte-equivalent after JSON normalization.
+It distinguishes `configured-process`, `pane-input`, and `pane-command` reach,
+secret output from untrusted output, and literal input from constrained tmux
+variables. Conservative annotations stay identical because an existing tmux
+server may have user-configured hooks and commands.
+
+Earlier Go alphas exposed more experimental routes. Their useful workflows now
+map to the fixed 45-tool surface:
+
+| Earlier Go route | Current route | What remains available |
+| --- | --- | --- |
+| `get_pane` | `get_pane_info` | Typed metadata for one pane |
+| `server_info` and `whoami` | `get_server_info` plus pane rows | Socket and caller identity |
+| `observe` | `snapshot_pane`, then `capture_since` | Incremental output with an opaque cursor |
+| `run_command` and `get_job` | `run_shell_command` plus pane capture | Bounded status and long-running pane visibility |
+| `display_message` | `get_tmux_variables` | Validated lookup without free-form formats |
+| `new_session` and `new_window` | `create_session` and `create_window` | Commandless configured-process creation |
+| generic option writers | named setters or `run_shell_command` | Typed common settings and explicit execution |
+| public buffer tools | `paste_text` | Literal target-only delivery through a private buffer |
+| dynamic pane resources | inspect tools | Startup-selected topology and content reads |
+| prompt recipes | documented call sequences | Workflows without another callable surface |
+
+See the [retired tool mapping](TOOLS.md#retired-tool-mapping) for every old
+name. It is migration context, not an alternate inventory.
 
 ## Knowing its own pane
 
-Both servers work out which pane they are running in from `TMUX` and
-`TMUX_PANE`, and both compare the socket rather than the pane id alone, since
-another tmux on another socket has a `%1` too.
+Both servers use `TMUX` and `TMUX_PANE` to decide whether a pane belongs to the
+terminal carrying the MCP process. Both compare socket identity rather than a
+pane id alone, because two independent tmux servers can each have `%1`.
 
-This one also falls back to the process tree. A client that starts its servers
-with a curated environment passes neither variable, and a server started that
-way is inside a pane and cannot see it from the environment; it finds the pane
-whose process is one of its own ancestors.
+Go also falls back to the process tree. A client may start an MCP server with a
+curated environment that omits tmux variables even though the process remains a
+descendant of a pane. Go finds the pane whose foreground process ancestry
+contains its own process. `get_server_info` reports `insideThisServer` and
+`callerPaneId`, and pane summaries carry `isCaller`.
 
-Both report what they found. This one puts `insideThisServer` and
-`callerPaneId` on `get_server_info` and `isCaller` on every pane summary.
+The protection differs. Python refuses teardown that would end its caller pane,
+window, session, or server. Go protects both teardown and input. Writing to or
+ending the caller asks through MCP elicitation and fails closed when the client
+cannot ask or the person declines. Confirmation cannot make an unselected tool
+reachable.
 
-They guard different things.
-
-The Python server refuses the five tools that end something: `kill_pane`,
-`respawn_pane`, `kill_window`, `kill_session`, and `kill_server`. The refusal
-is flat — "Use a manual tmux command if intended" — and there is no way to
-proceed through the protocol.
-
-This one refuses the same five, and also everything that types into that pane:
-`send_keys`, `paste_text`, `clear_pane`, and `run_command`. Typing is the case
-that is hard to notice and impossible to undo — keystrokes land in the terminal
-the conversation is happening in, interrupting the client or answering a prompt
-nobody saw. Rather than refusing outright, it asks the person, through MCP
-elicitation. It refuses when the person declines or the client cannot ask.
-That refusal names the way out: another pane, `split_window`, or `list_panes`
-to find one where `isCaller` is false.
-
-A yes about writing there can be kept for the rest of the session, because a
-guard that asks before every keystroke is one people learn to click through.
-It covers writing to that pane and nothing else — ending the pane, its window,
-its session, or the server asks again, and those forms do not offer to keep the
-answer.
+Go input checks one more human boundary. Before send, paste, or command
+dispatch, it freshly lists tmux clients and excludes control-mode clients. A
+non-control client makes its active pane attended while viewing a zoomed
+window, or every visible pane in that window attended otherwise. Malformed or
+incomplete client rows fail closed. Every configured synchronized cohort member
+is checked; `paste_text` remains target-only, but its target must still be
+unattended. This is protection against racing a human terminal, not an
+operating-system sandbox.
 
 ## Watching a pane
 
-Both offer `capture_since`, which returns what a pane wrote since the cursor
-the last call handed back, so a pane checked every turn costs its new lines
-rather than its whole screen. Both offer `wait_for_text` and
-`wait_for_channel`, so a client waits rather than polling.
+Both servers offer `capture_since`, which returns only output after an opaque
+cursor, plus `wait_for_text` and `wait_for_channel`. A client can wait for
+output instead of polling. Go's cursor binds pane and process generation and
+reports `linesMissed` when tmux discarded required history.
 
-This one also lets a client subscribe. It declares the `subscribe` capability,
-holds a tmux control-mode connection per session for as long as anything is
-subscribed, and sends `notifications/resources/updated` when a watched pane
-writes — measured at 20ms from the write, over a real process. A client that
-can subscribe never asks; it is told. The Python server's handshake declares no
-subscribe capability, so its resources are read when a client asks and not
-before.
+Neither measured handshake offers resource subscriptions. Python publishes six
+dynamic resource templates for hierarchy and content, which a client reads on
+demand. Go publishes no dynamic template: topology and terminal content are
+tools so one startup selection governs every operation. Its one listed resource,
+`tmux://capabilities`, is static disclosure of that selected surface.
+
+Go bounds pattern size before regular-expression compilation. `search_panes`
+also caps aggregate panes, lines, bytes, and elapsed work. `wait_for_text` has a
+startup-frozen duration ceiling. `run_shell_command` returns a framed exit
+status and bounded output for one authored command; long-lived work instead
+stays visible in the pane and is observed with a cursor or marker.
 
 ## What the schemas say
 
-Both publish closed value sets as JSON Schema `enum`, so a client validates
-before the call and a model picks from a list rather than reading a sentence:
-ten arguments here, five there. The Python server writes them as
-`typing.Literal` and pydantic emits the enum; this one keeps a table of tool and
-argument and writes it into the schema at registration.
+Both servers publish closed value sets as JSON Schema `enum`, output schemas on
+every tool, and arrays rather than null-or-array unions. Both rejected a bad
+enum, an unknown field, and an argument of the wrong type when those calls were
+sent over the wire.
 
-Both refuse a value outside a set, an argument of the wrong type, and a field
-they do not have — driven at all three, both answered with an error rather than
-running. What each says differs: Python answers a bad `detail` with pydantic's
-"Unexpected keyword argument", because it has no `detail` at all, where this one
-names the values it takes.
+Go sends every direct and nested operation through the same native validator
+and handler binding. A schema field and its declared input sink must match.
+Format-expanding tmux inputs are either literalized exactly once or constrained
+to a validated variable name.
 
-Both publish every collection as an array rather than as null-or-array, so a
-client can count what came back without checking for null first.
+`call_read_tools_batch` has exact nested authority over 16 inspect operations
+before named exclusions. Startup filtering prunes its schema enum and dispatch
+authority together. With nothing left, it remains advertised with an
+unsatisfiable operations schema rather than becoming a stringly typed escape.
+Calls execute serially and retain typed result envelopes under one
+1,000,000-byte response ceiling.
 
-Both run their batch tools through the same per-tool schemas as a direct call.
+Both servers' read batches accept `on_error` as `stop` or `continue` and stop by
+default. Stopping suits a dependent sequence; continuing lets independent reads
+report all their failures. Go additionally prunes nested batch authority from
+the selected startup surface before a call can name an inner tool.
 
-Both batches choose what a failure does to the calls after it — `on_error`
-there, `onError` here — and both default to stopping. Stopping suits a sequence,
-where a step nobody took makes the ones after it wrong; continuing suits
-independent calls, where one failure otherwise turns the whole batch into
-something a caller cannot tell the state of.
+Go's pane-input arrays describe a fresh configured synchronization cohort, not
+proven delivery. Source-off means source-only; source-on includes the window's
+effective-on panes. Dead, input-disabled, modal, missing, attended, or malformed
+members refuse the complete operation. `run_shell_command` requires a singleton
+cohort in exactly two full checkpoints; `paste_text` sends its text and optional
+newline only through one target's private buffer.
 
 ## Being found
 
-Both carry four MCP prompts. Two are the same job under different names:
-diagnosing a pane, and laying out a workspace. Two are only there —
-`run_and_wait` and `interrupt_gracefully` — and two are only here,
-`watch_pane` and `recover_pane`.
+Python publishes four prompts: `build_dev_workspace`,
+`diagnose_failing_pane`, `interrupt_gracefully`, and `run_and_wait`. Its six
+resource templates also make the tmux hierarchy discoverable through resource
+pickers, and its longer server instructions carry operating context.
 
-This one also answers `completion/complete` and says so in its handshake, so a
-client's picker offers the panes and sessions that exist when a prompt argument
-or a resource template blank is being filled. The Python handshake declares no
-completions capability, and declares `experimental` and `extensions`, which
-this one does not. And it ships `TOOLS.md`, generated from the schemas, so
-the reference cannot drift from the tools.
+Go publishes no prompt or completion route. It keeps recipes in
+[TOOLS.md](TOOLS.md), whose generated reference comes from the same schemas and
+capability rows as `tools/list`. This trades protocol-level discovery helpers
+for a smaller startup surface and documentation that can be checked for drift.
+
+The static capability resource gives a Go client the effective toolsets, socket
+boundary, provenance, selection inputs, and complete per-tool rows. It does not
+bypass tool selection to expose pane contents.
 
 ## Addressing the hierarchy
 
-Both expose tmux as resources under `tmux://`.
+Python can select a socket and hierarchy object on individual calls, and its
+resource templates carry socket and session or window selectors. One MCP
+process can therefore inspect several tmux servers over successive requests.
 
-The Python templates all take `{?socket_name}`, so one server reads from
-several tmux servers, one read at a time. This one fixes its target at launch,
-by `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET`, or `LIBTMUX_SOCKET_PATH`,
-and `-doctor` says which was taken. Nothing in a call can retarget it. That is
-a deliberate trade: a client cannot reach a tmux the operator did not point it
-at, and `list_servers` tells a person which others exist so they can start a
-second instance.
+Go pins one socket for the lifetime of the process. `LIBTMUX_SOCKET` selects a
+name and `LIBTMUX_SOCKET_PATH` an absolute path; they are mutually exclusive.
+`LIBTMUX_TMUX_CONFIG` selects a nonempty absolute configuration path. There is
+no per-call retargeting or public server-discovery tool.
 
-The two differ on how a window is named. There it is a session and an index,
-`tmux://sessions/{session}/windows/{window_index}`. Here it is the window's own
-id, `tmux://windows/{window}` — written without its sigil, because a percent
-sign begins an escape in a URI and an index changes when a window moves.
+With no selector, Go uses the product-dedicated `libtmux-mcp` socket and bundled
+minimal configuration. Startup gives a new daemon a random owner nonce, reads
+back a global marker, and removes the nonce from tmux's environment. Only a
+matching marker proves process ownership and permits teardown by default. A
+racing, inherited, explicitly named, path-selected, or user-configured daemon
+cannot inherit that claim.
+
+The trade is operational. Python provides broader per-call reach. Go makes the
+operator's startup choice the authority boundary, then addresses sessions,
+windows, and panes by their exact tmux ids inside that server.
 
 ## Limiting what a client can do
 
-Both read `LIBTMUX_SAFETY`, with the same three levels — `readonly`,
-`mutating`, `destructive` — meaning the same things, so an operator running
-both can keep the same operation ceiling. The Go server adds
-`LIBTMUX_MCP_CAPABILITIES` as an independent allowlist and defaults it to
-metadata-only; the Python server has no equivalent capability partition.
+Both servers use the shared unordered `inspect`, `manage`, `execute`, and
+`teardown` toolsets selected by `LIBTMUX_TOOLSETS`. Both accept named additions
+and exclusions, and both treat a present retired `LIBTMUX_SAFETY` variable as a
+fatal startup error rather than silently translating it.
+
+Go freezes selection at construction. An empty `LIBTMUX_TOOLSETS` value is the
+valid zero subset; a nonempty value with a leading, trailing, or interior empty
+token is malformed. Unknown names, relative socket or configuration paths, and
+the retired
+`LIBTMUX_MCP_CAPABILITIES` or `LIBTMUX_MCP_PROMPTS_AS_TOOLS` variables fail
+before tmux opens. Named exclusions win over additions.
+
+Selection limits advertised protocol authority, not what the tmux user can do.
+A pane-command tool runs with that user's permissions, and user configuration
+can attach hooks to otherwise narrow tmux operations. The capability metadata
+states these boundaries; it does not claim sandboxing or exact downstream
+effects.
 
 ## Testing the server
 
-The two ship different kinds of artefact for it. The Python server has sphinx
-documentation and a `justfile`. This one has an agent skill,
-`.agents/skills/testing-the-mcp-server/`, which carries the socket layout, the
-fidelity layers, an exhaustive real-tmux schema gate, and a per-client matrix
-of isolation levers and what each client's failure actually means. Its raw
-driver covers JSON-RPC framing, protocol negotiation, curated client
-environments, and real handshakes that the in-memory tests do not.
+The measurements in this document use one raw JSON-RPC driver against both
+servers. It counts actual `tools/list`, prompt, resource, initialization,
+schema, annotation, and instruction data, then sends invalid enum, unknown
+field, and wrong-type calls. That keeps the comparison about observable MCP
+behavior rather than source-language conventions.
+
+Python ships Sphinx documentation and project test commands. Go also ships an
+agent testing skill under `.agents/skills/testing-the-mcp-server/`; it defines
+isolated sockets, raw-wire checks, real-client preflights, and which failure
+belongs to the server versus a client adapter.
+
+Go's focused manifest tests enumerate the 45 tools, all 16 toolset subsets,
+named include/exclude precedence, zero-authority batch behavior, schema-to-sink
+equality, wire metadata/resource parity, response caps, and authenticated
+startup ownership. Live tests prove a losing launch cannot claim teardown and
+the ownership nonce does not remain in tmux's environment. They use isolated
+sockets and multiple supported tmux versions. The generated reference has a
+check mode so CI fails when checked-in schemas or capability rows drift from
+the advertised server.

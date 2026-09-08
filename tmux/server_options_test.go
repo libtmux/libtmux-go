@@ -147,6 +147,37 @@ func TestNewServerDistinguishesInheritedAndEmptyEnvironment(t *testing.T) {
 	}
 }
 
+func TestWithProcessEnvironmentValuePreservesFrozenPrivateSnapshot(t *testing.T) {
+	t.Parallel()
+
+	server, err := newServer(
+		ServerOptions{},
+		testServerDependencies(t, []string{"PATH=/frozen", "KEEP=original"}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := server.WithProcessEnvironmentValue("LIBTMUX_MCP_OWNER", "owner-nonce")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if server.ProcessEnvironment() != nil || derived.ProcessEnvironment() != nil {
+		t.Fatal("a private inherited environment became publicly reconstructible")
+	}
+	if _, present := processEnvironmentValue(server.state.config.processEnvironment, "LIBTMUX_MCP_OWNER"); present {
+		t.Fatal("deriving a launch environment mutated the receiver")
+	}
+	if value, present := processEnvironmentValue(derived.state.config.processEnvironment, "LIBTMUX_MCP_OWNER"); !present || value != "owner-nonce" {
+		t.Fatalf("derived owner environment = (%q, %t)", value, present)
+	}
+	if derived.state.executor != server.state.executor || derived.state.shared != server.state.shared {
+		t.Fatal("environment derivation changed the daemon binding")
+	}
+	if derived.SocketPath() != server.SocketPath() {
+		t.Fatalf("derived socket = %q, want pinned %q", derived.SocketPath(), server.SocketPath())
+	}
+}
+
 func TestNewServerPreservesOpaqueEnvironmentEntries(t *testing.T) {
 	t.Parallel()
 

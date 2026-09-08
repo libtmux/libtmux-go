@@ -801,6 +801,36 @@ func ExampleServer_WithSocketPath() {
 	// Server(socket_path=/tmp/sibling.sock)
 }
 
+func ExampleServer_WithProcessEnvironmentValue() {
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Println("test executable:", err)
+		return
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		Binary:     executable,
+		SocketPath: "/tmp/libtmux-go-owner.sock",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	launcher, err := server.WithProcessEnvironmentValue("LIBTMUX_MCP_OWNER", "nonce")
+	if err != nil {
+		fmt.Println("launch environment:", err)
+		return
+	}
+
+	// The derived server keeps the endpoint it was already pointed at, so an
+	// environment value such as TMUX_TMPDIR cannot retarget it, and the
+	// inherited environment stays private.
+	fmt.Println(launcher)
+	fmt.Println(launcher.ProcessEnvironment() == nil)
+	// Output:
+	// Server(socket_path=/tmp/libtmux-go-owner.sock)
+	// true
+}
+
 func ExampleServer_SocketSelection() {
 	executable, err := os.Executable()
 	if err != nil {

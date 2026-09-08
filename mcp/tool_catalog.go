@@ -8,16 +8,28 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// AdvertisedTools returns caller-owned descriptions of the tools permitted by
-// the current safety and capability environment. It performs an in-memory MCP
-// handshake without constructing a tmux target or allocating runtime-owned
-// jobs, watchers, or audit resources.
+// AdvertisedTools returns caller-owned descriptions of the startup-selected
+// tools. It performs an in-memory MCP handshake without opening tmux or
+// allocating runtime-owned audit resources.
 func AdvertisedTools(ctx context.Context) (tools []*sdk.Tool, err error) {
+	profile := socketProfile{
+		Selector:                "name:libtmux-mcp",
+		SelectionProvenance:     "default-dedicated",
+		ServerState:             "absent",
+		ConfigurationProvenance: "minimal",
+		NamespaceBoundary:       "tmux-objects-only",
+		AttachCommand:           "tmux -N -L 'libtmux-mcp' attach",
+		defaultTeardown:         true,
+	}
+	surface, err := resolveToolSurface(profile)
+	if err != nil {
+		return nil, err
+	}
 	server := sdk.NewServer(&sdk.Implementation{
 		Name:    "libtmux",
 		Version: Version,
 	}, nil)
-	if err := registerToolGroups(server, newToolRegistry()); err != nil {
+	if err := registerToolManifest(server, newToolRegistry(surface)); err != nil {
 		return nil, err
 	}
 

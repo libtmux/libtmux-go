@@ -37,10 +37,13 @@ $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 That puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client launches it as
 a subprocess and speaks to it over stdin and stdout.
 
-The default server exposes topology metadata only. Set
-`LIBTMUX_MCP_CAPABILITIES=operate` in the server's environment to enable the
-ordinary workspace, pane, content, layout, and settings tools. Destruction
-also requires `LIBTMUX_SAFETY=destructive` and the `tmux-destroy` capability.
+Without a selector, the server pins the named socket `libtmux-mcp` and uses the
+package's shipped minimal configuration when it starts a new daemon there.
+Explicitly selected new servers report user-configured provenance; existing
+servers remain unknown. Startup writes a random owner marker through that
+minimal configuration, then reads it back; only the process whose marker
+survived the launch race gets the default `teardown` toolset. The nonce is
+removed from tmux's environment.
 
 ### Claude Code
 
@@ -70,7 +73,7 @@ Add to `claude_desktop_config.json`:
     "tmux": {
       "command": "libtmux-mcp",
       "args": ["-socket-name", "my-application"],
-      "env": {"LIBTMUX_MCP_CAPABILITIES": "operate"}
+      "env": {"LIBTMUX_TOOLSETS": "inspect,manage,execute"}
     }
   }
 }
@@ -96,7 +99,7 @@ what a config entry that will not start actually needs:
 | Flag | Answers |
 | --- | --- |
 | `-version` | which build this is |
-| `-tools` | what a client would be offered, and how safety and capabilities changed it |
+| `-tools` | the startup-frozen tools, toolsets, and process reach a client sees |
 | `-doctor` | which socket it reaches, what is on it, and whether it is running inside that tmux itself |
 
 `-version` and `-tools` do not resolve or contact tmux.
@@ -110,8 +113,6 @@ libtmux-mcp doctor
   tmux:    3.7b
   socket:  /tmp/tmux-1000/my-application (from -socket-name)
   holds:   1 sessions, 1 windows, 1 panes, 0 clients attached
-  safety:  mutating
-  access:  metadata-read
   caller:  pane %1 of this very server — acting on it acts on
            the terminal this process is running in
 ```
@@ -144,7 +145,7 @@ It earns its keep the moment the agent has to **wait**, **watch**, **inspect**,
 or **avoid disturbing the terminal a person is using**. A dev server printing
 its port, a test run finishing, a deploy log settling: those are where a
 shell-out turns into a polling loop that reads the shell's echo of its own
-command and reports success before anything happened. `run_command` waits for
+command and reports success before anything happened. `run_shell_command` waits for
 the command and returns its exit status and output without reading the screen at
 all; `wait_for_text` watches what a pane writes; `capture_since` returns what a
 pane wrote since the last look rather than its whole screen again. That is the
@@ -156,17 +157,19 @@ loop, and a smaller bill for keeping it there.
 Three things here exist because an agent's context and its turn are the scarce
 resources, not tmux:
 
-- **A listing narrows.** `list_panes` takes `sessionName`, `windowId`,
-  `command`, `pathUnder`, `dead`, and `active`, and reports the `total` it
-  selected from. On a real 18-pane server, asking which pane runs `vim` is 535
-  bytes where the whole listing is 7.3 kB.
-- **A command need not be waited for.** `run_command` with `detach` returns a
-  `jobId` at once; `get_job` collects the exit status and output later. A build
-  costs what typing it costs.
-- **Checking is not capturing.** `list_panes` with `detail: full` adds every
-  matching pane's exit status, path, title, and history size from the snapshot
-  it already took — one tmux command for eight panes, and no pane's contents
-  read at all.
+- **Reads are bounded.** Captures keep the newest requested lines and say what
+  they omitted. Pattern input is capped before compilation; search inspects at
+  most 200 panes, 20,000 lines, 1,000,000 bytes, and five seconds of matching
+  work.
+- **One batch keeps typed calls typed.** `call_read_tools_batch` accepts up to
+  sixteen inspect operations, validates each operation's own schema, and keeps
+  each full nested MCP result envelope that fits. Every row reports its index,
+  success or error, and truncation; the complete JSON-RPC response is at most
+  1,000,000 bytes. A serialized request ID may use at most 524,288 bytes;
+  a larger ID fails before any tool runs.
+- **Checking is not capturing.** Listing tools report metadata without reading
+  pane content. `snapshot_pane` is the explicit combined metadata-and-content
+  operation.
 
 ## Knowing its own pane
 
@@ -200,64 +203,76 @@ A write reached through a batch asks in the same way a direct one does. The
 question goes to the client that sent the batch, and declining fails that call
 and stops the batch there.
 
+Synchronized input protects every configured member, not only the requested
+source. The server validates the complete membership before asking, so a dead
+or modal peer refuses the operation without prompting or changing tmux.
+
 ## Limiting what a client can do
 
-Two independent checks bound what the server advertises. A tool must pass both.
+`LIBTMUX_TOOLSETS` selects an unordered subset of `inspect`, `manage`, `execute`,
+and `teardown`. The inherited default is the first three; an explicitly empty
+value selects no toolset. There is no `none` sentinel.
 
-`LIBTMUX_MCP_CAPABILITIES` selects the kinds of access granted. Empty or unset
-is `metadata-read` only. It accepts a comma-separated list:
+`LIBTMUX_TOOLS` then includes exact names, and `LIBTMUX_EXCLUDE_TOOLS` removes
+exact names after every inclusion. Exclusion also prunes
+`call_read_tools_batch`'s native operation schema and nested authority. Unknown
+names and leading, trailing, or interior empty list items stop startup before
+tmux opens. A present `LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, or
+`LIBTMUX_MCP_PROMPTS_AS_TOOLS` also stops startup with migration guidance.
 
-| Capability | Grants |
+### Moving from an earlier alpha
+
+The capability switch changes names and the default socket together. Use this
+mapping when updating an existing client entry:
+
+| Earlier setting | Current setting |
 | --- | --- |
-| `metadata-read` | identities, topology, process state, and geometry, but no pane contents or configuration values |
-| `content-read` | pane output, buffers, option values, hooks, environment values, jobs, and tmux messages |
-| `pane-control` | pane input and tmux features that may run shell commands, including arbitrary format expansion |
-| `workspace-create` | session, window, pane, and workspace creation, including programs they start |
-| `tmux-layout` | selection, movement, resizing, layouts, and names |
-| `tmux-settings` | buffers, environment variables, and options |
-| `tmux-destroy` | ending panes, windows, sessions, or the server |
+| `LIBTMUX_SAFETY=readonly` | `LIBTMUX_TOOLSETS=inspect` |
+| `LIBTMUX_SAFETY=mutating` | `LIBTMUX_TOOLSETS=inspect,manage,execute` |
+| `LIBTMUX_SAFETY=destructive` | all four toolsets on a process-created minimal daemon |
+| `LIBTMUX_MCP_CAPABILITIES=` | Start with `LIBTMUX_TOOLSETS=inspect`, then exclude content and configuration readers to retain the earlier metadata-only default |
+| `LIBTMUX_MCP_CAPABILITIES=inspect` | `LIBTMUX_TOOLSETS=inspect` |
+| `LIBTMUX_MCP_CAPABILITIES=operate` | `LIBTMUX_TOOLSETS=inspect,manage,execute` |
+| `LIBTMUX_MCP_CAPABILITIES=all` | all four toolsets |
+| `LIBTMUX_MCP_CAPABILITIES=metadata-read` or `LIBTMUX_MCP_CAPABILITIES=content-read` | `inspect`; use exact exclusions when the earlier metadata/content split matters |
+| `LIBTMUX_MCP_CAPABILITIES=pane-control` | `execute`; arbitrary tmux-format expansion has no replacement |
+| `LIBTMUX_MCP_CAPABILITIES=workspace-create` | `execute`; current creation tools accept no program, so start bounded work with `run_shell_command` |
+| `LIBTMUX_MCP_CAPABILITIES=tmux-layout` | `manage`; use exact inclusions for the earlier narrower group |
+| `LIBTMUX_MCP_CAPABILITIES=tmux-settings` | Use exact constrained setters from `manage` and `execute`; generic buffer, environment, and option mutation is removed |
+| `LIBTMUX_MCP_CAPABILITIES=tmux-destroy` | `teardown`; server-wide teardown has no replacement |
+| `LIBTMUX_MCP_TOOLS=a,b` | `LIBTMUX_TOOLS=a,b`, with exclusions available separately |
+| `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1` | removed; use the [typed workflow mapping](TOOLS.md#retired-prompt-workflow-mapping) |
+| implicit ordinary tmux socket | explicit `LIBTMUX_SOCKET=default` or another chosen name |
 
-Three profiles save spelling: `inspect` is both read capabilities, `operate`
-is every capability except `tmux-destroy`, and `all` is every capability. An
-unknown value is reported and grants nothing; if no value is recognized, the
-server falls back to `metadata-read`.
+An unchanged launch now opens the dedicated `libtmux-mcp` world, so it may look
+empty until the agent creates a session. The startup line prints the exact
+attach command. Retired tool names and their workflow replacements are listed
+in the [generated tool reference](TOOLS.md#retired-mcp-surface).
 
-`LIBTMUX_SAFETY` is the independent operation ceiling:
-
-| Value | Offers |
-| --- | --- |
-| `readonly` | only the tools that read tmux |
-| `mutating` | those plus the ones that change it, and is the default |
-| `destructive` | those plus the ones that end something: `kill_pane`, `kill_window`, `kill_session`, `kill_server` |
-
-An unset or empty variable takes the default. A value naming no level takes
-`readonly`, because setting the variable at all is asking for a bound and a
-typo in it must not widen one; `-tools` reports the level in force rather than
-the string that was rejected.
-
-A tool above the level or outside the capability allowlist is never advertised,
-so no prompt reaches it, and a batch cannot reach around either bound. Pane
-content resources and subscriptions require `content-read`; metadata resources
-require `metadata-read`. The active bounds are stated in the server
-instructions, so a shorter tool list is explainable. Safety is derived from
-each tool's annotations, while its capability is declared beside its
-registration.
+Tool filtering shapes the interface; it is not an operating-system sandbox.
+All calls run with the tmux user's authority. Every listed tool carries its full
+capability row under `_meta["com.git-pull.libtmux-mcp/capability"]`: process
+reach, tmux effects, output classes, secret and untrusted-output flags,
+input literalization, native schemas, nested authority, and conservative MCP
+annotations. The manifest's complete input-sink table stays internal and is
+validated against every native schema.
 
 ## Everything else an operator can set
 
 | Variable | Does |
 | --- | --- |
-| `LIBTMUX_SAFETY` | bounds which tools are advertised, as above |
-| `LIBTMUX_MCP_CAPABILITIES` | allowlists independent access classes; defaults to `metadata-read` |
-| `LIBTMUX_SOCKET_PATH` | selects an explicit socket path when both socket flags are empty; it precedes `LIBTMUX_SOCKET` |
-| `LIBTMUX_SOCKET` | names the tmux socket when no path or `-socket-name` selects one |
+| `LIBTMUX_TOOLSETS` | selects any unordered subset of the four toolsets |
+| `LIBTMUX_TOOLS` | includes exact tool names after toolset expansion |
+| `LIBTMUX_EXCLUDE_TOOLS` | removes exact names after every inclusion |
+| `LIBTMUX_SOCKET_PATH` | selects an absolute socket path; mutually exclusive with `LIBTMUX_SOCKET` |
+| `LIBTMUX_SOCKET` | names the tmux socket when no socket flag selects one |
+| `LIBTMUX_TMUX_CONFIG` | selects a nonempty absolute tmux configuration path |
 | `LIBTMUX_TMUX_BIN` | selects the tmux executable when `-binary` is empty |
 | `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
-| `LIBTMUX_MCP_PROMPTS_AS_TOOLS` | `1` also offers the recipes as a `get_recipe` tool, for clients that do not read MCP prompts |
 | `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |
 
-The names match the Python server, so an operator running both writes one
-thing. Flags override their corresponding variables; both are resolved once
+The names match the Python server, so an operator running both writes one thing.
+Flags override their corresponding socket variables; every selection is frozen
 when the server starts, and a client cannot change the target afterwards.
 
 A wait longer than the ceiling is shortened rather than refused, and the reply
@@ -265,6 +280,12 @@ says so in `effectiveTimeoutSeconds` and `timeoutClamped`. The ceiling bounds
 the caller rather than the transport: these tools await throughout, so a long
 wait blocks nothing else. What an unbounded one costs is the agent's turn, and
 MCP gives it no way to change its mind mid-call.
+
+`tmux://capabilities` is the only resource. Its static payload reports the
+schema version, frozen state, startup-pinned connection and configuration
+provenance, effective tool names, selection, common trust boundaries, and the
+same capability rows carried by tool discovery. There are no dynamic resources,
+templates, prompts, completion routes, or background job handles.
 
 ## Publishing it to the MCP registry
 
@@ -318,15 +339,28 @@ $ publisher publish
 
 ## The tools
 
-Fifty-odd tools, each with the arguments a client sends and what comes back,
-plus recipes, gotchas, and what the server logs:
+Forty-five tools, each with the arguments a client sends and what comes back,
+plus gotchas and what the server logs:
 
 **[Tool reference →](TOOLS.md)**
 
 That page is reference material, read by search rather than read through, which
 is why it is not here.
 
-There is a second MCP server for tmux under the same name, written in Python.
+Copy mode stays outside the MCP surface. Captures, snapshots, searches, and
+cursors read pane output without taking over an attached person's modal view;
+`get_pane_info` reports when a mode already owns input. The Go tmux module
+retains its copy-mode API for applications that own that interaction.
+
+Input tools read effective pane synchronization from a fresh snapshot. Direct
+sends and batch rows report sorted configured membership, while
+`run_shell_command` requires a configured singleton before setup and again
+before dispatch. `paste_text` is target-only; optional Enter has its own
+configured membership. These IDs describe observed configuration, not proven
+delivery, because tmux state can change after the check.
+
+A second [libtmux-mcp server](https://github.com/tmux-python/libtmux-mcp) for
+tmux is written in Python.
 The two serve the same tmux and answer to the same clients, and where they
 differ is set out separately:
 
@@ -345,9 +379,9 @@ $ libtmux-mcp -doctor -socket-name my-application
 command from your client's config by hand: a bad `-binary`, or a path that is
 not on the client's `PATH`, fails at startup and says so.
 
-**Tools are missing rather than failing.** `LIBTMUX_SAFETY` or
-`LIBTMUX_MCP_CAPABILITIES` withheld them. `-tools` prints the surface and both
-bounds; both are also stated in the server instructions the client received.
+**Tools are missing rather than failing.** `LIBTMUX_TOOLSETS`, `LIBTMUX_TOOLS`,
+or `LIBTMUX_EXCLUDE_TOOLS` shaped the startup surface. `-tools` prints the same
+listed surface a client receives.
 
 **It reaches the wrong tmux.** `-doctor` names the socket it addresses and
 lists the others on the machine. A client's environment is not your shell's:
@@ -391,8 +425,8 @@ window 120x40, layout 87f2,120x40,0,0{71x40,0,0,1,48x40,72,0,2}
 ```
 
 The client and server are joined in memory, so it is one program rather than
-two. The tool names and arguments are the same ones a client sees over stdin
-and stdout.
+two. The tool names, native schemas, and results are the same ones a client sees
+over stdin and stdout.
 
 ## Embedding it
 
@@ -440,29 +474,30 @@ it:
 $ go run ./cmd/libtmux-mcp -socket-name my-application
 ```
 
-Testing it in a real client is better than driving it by hand, and
-`mcp-swap` does the rewiring:
+Testing it in a real client is better than driving it by hand. From the
+repository root, the developer-only [`mcp-swap`](../internal/tools/mcp-swap/)
+command does the rewiring:
 
 ```console
-$ go run ./cmd/mcp-swap status
+$ go run ./internal/tools/mcp-swap status
 ```
 
 ```console
-$ go run ./cmd/mcp-swap use-local --dry-run
+$ go run ./internal/tools/mcp-swap use-local --dry-run
 ```
 
 ```console
-$ go run ./cmd/mcp-swap use-local
+$ go run ./internal/tools/mcp-swap use-local
 ```
 
 ```console
-$ go run ./cmd/mcp-swap revert
+$ go run ./internal/tools/mcp-swap revert
 ```
 
 To try a build in one agent while the others keep whatever they run, name it:
 
 ```console
-$ go run ./cmd/mcp-swap use-local \
+$ go run ./internal/tools/mcp-swap use-local \
     --client claude \
     --mode build
 ```
@@ -474,12 +509,16 @@ them back. It writes only the `tmux` entry, only in global config, and without
 | Client | Config | Format |
 | --- | --- | --- |
 | claude | `~/.claude.json` | JSON |
+| codex | `~/.codex/config.toml` | TOML |
 | cursor | `~/.cursor/mcp.json` | JSON |
 | gemini | `~/.gemini/settings.json` | JSON |
-| antigravity | `~/.gemini/config/mcp_config.json` | JSON |
-| codex | `~/.codex/config.toml` | TOML |
 | grok | `~/.grok/config.toml` | TOML |
+| agy (`antigravity` alias) | `~/.gemini/config/mcp_config.json` | JSON |
 | opencode | `$XDG_CONFIG_HOME/opencode/opencode.jsonc` | JSONC |
+| pi | `~/.pi/agent/mcp.json` | JSONC |
+
+Pi itself has no MCP client. Its configuration is read by the third-party
+`pi-mcp-adapter` extension, and `status` reports when that adapter is absent.
 
 All of them, not the JSON ones only. The entry has one name across every
 client, so swapping some of them leaves two different servers answering to
@@ -490,8 +529,12 @@ They hold other servers, other settings, and comments explaining why something
 is set the way it is; a decode-and-write reformats all of that. So the entry's
 bytes are located and replaced, and every other byte is left alone. Keys this
 tool does not write survive — grok's `enabled`, for instance — and so does the
-entry's environment, because `LIBTMUX_SAFETY` and
-`LIBTMUX_MCP_CAPABILITIES` are configuration rather than a choice of build.
+entry's environment, because toolsets, named filters, and socket selection are
+configuration rather than a choice of build.
+
+The complete selected set is parsed and rendered before any file changes. Each
+new backup destination is checked at the same time, so one malformed config or
+unusable backup leaves every selected client unchanged.
 
 Each config is copied beside itself before the first change. The first copy is
 kept rather than the latest, so `revert` lands on what was there before any
