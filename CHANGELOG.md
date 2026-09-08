@@ -15,6 +15,122 @@ Modules are tagged per directory, so each carries its own version: the core as
   minutes rather than running to GitHub's six-hour ceiling. (#12)
 - A newer push to a pull request cancels the run it supersedes. Pushes to master
   keep their own group and still run concurrently. (#12)
+### tmux
+
+- Add `Server.WithProcessEnvironmentValue`, which derives a launch-only process
+  environment while preserving the frozen executable and exact socket target.
+  An entry such as `TMUX_TMPDIR` cannot retarget the derived handle. (#10)
+- `Server.SetOption` and its siblings now name the scopes an option does carry
+  when refusing it through a handle that does not. A session option such as
+  `mouse` reported only `invalid option`, which reads as an option tmux does
+  not have rather than the wrong receiver. (#10)
+
+### mcp
+
+- Replace ordered safety tiers with one native 45-tool capability manifest. The
+  manifest governs registration, startup-frozen toolset and exact-name
+  selection, schemas, annotations, per-tool metadata, aggregate authority, and
+  the static `tmux://capabilities` resource. (#10)
+- Rename four tools. `run_command` is now `run_shell_command` and no longer
+  offers detached mode; `clear_pane` is now `clear_pane_scrollback` and is
+  classified as teardown; `call_readonly_tools_batch` is now
+  `call_read_tools_batch` with exact inspect-only nested authority; `set_option`
+  is replaced by the constrained `set_mouse_enabled`, `set_history_limit`, and
+  `set_synchronize_panes`. (#10)
+- Add `get_tmux_variables`, which reads validated variable names and replaces
+  `display_message`. There is no free-form tmux-format interpreter. (#10)
+- Remove `enter_copy_mode` and `exit_copy_mode`. Use capture, history,
+  snapshot, search, and cursor tools to observe pane output without taking over
+  an attached person's mode; `Pane.CopyMode` remains in the core tmux module
+  for applications that own the interaction. (#10)
+- Remove `build_workspace`, `move_pane`, `set_environment`, and `kill_server`,
+  which have no direct replacement. Compose the retained creation and layout
+  tools for the first two, and kill selected sessions explicitly rather than the
+  server. (#10)
+- Remove host-adjacent and off-manifest families: dynamic resources, prompts,
+  subscriptions, server discovery, generic mutation batches, buffers, pipe
+  tools, and background job handles. Migrate recipes to the typed-tool
+  workflows. (#10)
+- `LIBTMUX_MCP_CAPABILITIES` and `LIBTMUX_MCP_PROMPTS_AS_TOOLS` now fail startup
+  instead of being ignored. Migrate capability classes to documented toolset or
+  exact-name selection. (#10)
+- Pin the default server to the dedicated `libtmux-mcp` socket with minimal
+  configuration, authenticate launch ownership with a retained random marker,
+  and remove that nonce from tmux's environment. Default teardown is granted
+  only to the process that created the daemon, so a server the client did not
+  create is offered the 41 non-teardown tools. (#10)
+- Add separate named-socket, absolute socket-path, and absolute tmux-config
+  selectors. A malformed selector fails before tmux opens. (#10)
+- Bound pattern count and size. Pane search stops after 200 panes, 20,000
+  lines, 1,000,000 bytes of matching input, or five seconds, and reports the
+  ceiling it reached. (#10)
+- Bound read batches. Each nested operation is validated, full nested MCP
+  envelopes are preserved when they fit, truncated results retain explicit
+  rows, and the complete JSON-RPC response is capped at 1,000,000 bytes. (#10)
+- Request IDs over 512 KiB now fail before dispatch rather than consuming the
+  response budget. (#10)
+- `tmux://capabilities` now reports a schema version, frozen state, effective
+  names, connection provenance, and the common trust boundary. (#10)
+- `send_keys`, `send_keys_batch`, `paste_text`, and `run_shell_command` now fail
+  closed when required pane or client state is missing or malformed, a
+  configured member is dead, input-disabled, modal, or attended, or input could
+  reach the caller or an active run. (#10)
+- `run_shell_command` accepts a known POSIX foreground shell and uses exactly
+  two complete checkpoints. Its bookkeeping is isolated, so authored Bash and
+  zsh commands retain inherited `ERR` and `DEBUG` traps and the parent keeps its
+  trap and option state. (#10)
+- `run_shell_command` now refuses a pane whose process changed between its two
+  checkpoints, including a replacement running the same program, and refuses a
+  pane whose `pane_pid` tmux does not report. A shell swapped for another copy
+  of itself previously matched on its command name and read as unchanged. (#10)
+- Fix `set_mouse_enabled`, which set a session option at server scope and so
+  failed every call with `invalid option: set-option mouse`. It now writes the
+  global session option, which is what `set -g mouse` writes. (#10)
+- Fix `paste_text` with `enter`, which never ran the command in a shell that
+  honours bracketed paste. The text and its newline were pasted bracketed,
+  which tells the terminal to insert what arrives rather than act on it. A
+  paste asking for `enter` is no longer bracketed; an explicit `bracket` still
+  wins. (#10)
+- Fix `show_option`'s `effective`, which was published, documented as including
+  an inherited value, and never read. An effective read now falls back to the
+  scope's global table and reports `inherited` when the value came from there;
+  `set` continues to report whether the object asked about sets one of its
+  own. (#10)
+
+### internal/tools
+
+`mcp-swap` points MCP clients at this checkout. It is a developer command and
+ships in no release.
+
+- `mcp-swap` precomputes every selected configuration and backup destination
+  before the first write, rejects physical-target aliases, and rolls back
+  writes in reverse order. Recovery binds configuration, backup, and state
+  identities, bytes, and modes. (#10)
+- `--dry-run` starts no build or server and writes no configuration, backup,
+  cache, or state. (#10)
+- `mcp-swap` supports all eight clients, including Pi and canonical `agy`
+  (`antigravity` alias), reports a missing Pi adapter, and treats help as a
+  successful query. (#10)
+- `use` and `revert` now plan, stage, and commit a native client's own
+  configuration as one transaction, recording what each swap replaced in a
+  ledger with a file identity that detects edits made behind the tool's back. A
+  partially applied swap reverts from that ledger rather than from memory. (#10)
+- Add `detect`, which reports the executable and configuration file the tool
+  recognises for each client, and `doctor`, which reads the swap state, the
+  authentication each client would use, and any recovery artifact left behind,
+  without writing anything. (#10)
+- Add `use`, which takes the same selectors as `use-local` and states the server
+  source it registers rather than implying a local checkout. (#10)
+- Drop the MCP Go SDK dependency. The preflight handshake is written against
+  the wire protocol, so the command no longer carries the released module's
+  dependency set. (#10)
+- Preflight no longer reports the pipe it closed alongside the reason a probe
+  stopped; a timeout now names only the timeout. (#10)
+- Fix staging a destination that does not exist yet under a symlinked ancestor,
+  which every path under macOS's `TMPDIR` has. The planned path was held
+  against a resolved parent, so the swap was refused with `destination changed
+  while it was planned` before it wrote anything. A destination is now resolved
+  whether or not it exists, as an existing one already was. (#10)
 
 ## v0.0.1-alpha.5, workspace/v0.0.1-alpha.5, mcp/v0.0.1-alpha.8
 
