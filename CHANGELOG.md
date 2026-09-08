@@ -9,6 +9,13 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### Development
+
+- Every CI job carries a timeout, so a job that stops making progress fails in
+  minutes rather than running to GitHub's six-hour ceiling. (#12)
+- A newer push to a pull request cancels the run it supersedes. Pushes to master
+  keep their own group and still run concurrently. (#12)
+
 ## v0.0.1-alpha.5, workspace/v0.0.1-alpha.5, mcp/v0.0.1-alpha.8
 
 ### tmux
