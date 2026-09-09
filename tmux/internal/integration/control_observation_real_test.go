@@ -212,7 +212,14 @@ func waitForPaneMarker(
 
 //libtmux:real-tmux
 func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t)
+	// The reader yields raw terminal bytes, so a readline shell's bracketed-paste
+	// sequences would reach it glued to the command's output. FixedShell pins a
+	// POSIX shell that writes none.
+	initialSession := tmux.NewSessionRequest{Name: "work"}
+	server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{
+		InitialSession: &initialSession,
+		FixedShell:     true,
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	panes, err := server.Panes(ctx)
@@ -228,6 +235,10 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Keys sent before a shell is ready are dropped without an error, and the
+	// prompt each shell draws belongs before the observation's baseline.
+	tmuxtest.WaitForShellReady(ctx, t, first)
+	tmuxtest.WaitForShellReady(ctx, t, second)
 
 	observation, err := first.OpenObservation(ctx)
 	if err != nil {
