@@ -34,24 +34,28 @@ exact ones you want in your own go.mod; the commands here fetch the newest.
 
 ## Quick start
 
-Make a window, split it, send a command into the new pane:
+Make a window, split it, type a command into the new pane, and read the reply
+back through an `io.Reader`:
 
 <!-- docs:quickstart -->
 
 ```go
-windowName := "work"
-window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
+window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 if err != nil {
 	return fmt.Errorf("create window: %w", err)
 }
 pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-	Direction: tmux.PaneDirectionRight,
+	Direction: tmux.PaneDirectionRight, Command: "sh",
 })
 if err != nil {
 	return fmt.Errorf("split window: %w", err)
 }
-command := "printf 'libtmux ready\\n'"
-if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command, Literal: true}); err != nil {
+output, err := pane.OpenObservation(ctx)
+if err != nil {
+	return fmt.Errorf("watch pane: %w", err)
+}
+defer func() { err = errors.Join(err, output.Close()) }()
+if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
 	return fmt.Errorf("send command: %w", err)
 }
 ```

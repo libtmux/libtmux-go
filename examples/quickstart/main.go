@@ -2,11 +2,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"log"
-	"slices"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -39,47 +39,38 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
 	// docs:quickstart
-	windowName := "work"
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 	if err != nil {
 		return fmt.Errorf("create window: %w", err)
 	}
 	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-		Direction: tmux.PaneDirectionRight,
+		Direction: tmux.PaneDirectionRight, Command: "sh",
 	})
 	if err != nil {
 		return fmt.Errorf("split window: %w", err)
 	}
-	command := "printf 'libtmux ready\\n'"
-	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command, Literal: true}); err != nil {
+	output, err := pane.OpenObservation(ctx)
+	if err != nil {
+		return fmt.Errorf("watch pane: %w", err)
+	}
+	defer func() { err = errors.Join(err, output.Close()) }()
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
 		return fmt.Errorf("send command: %w", err)
 	}
 	// docs:end
 
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{
-			Start: tmux.CaptureBoundary,
-			End:   tmux.CaptureBoundary,
-		})
-		if err != nil {
-			return fmt.Errorf("capture pane: %w", err)
-		}
-		if slices.Contains(lines, "libtmux ready") {
+	scanner := bufio.NewScanner(output.Reader(ctx))
+	for scanner.Scan() {
+		if scanner.Text() == "libtmux ready" {
 			fmt.Println("libtmux ready")
 			return nil
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
 	}
+	return fmt.Errorf("read pane: %w", scanner.Err())
 }

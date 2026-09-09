@@ -129,7 +129,10 @@
 // commands suitable for a connection by staging through a tmux buffer and
 // caller-supplied file. A connection-backed server avoids those processes.
 //
-// [ControlClient.NextNotification] waits for pane output as a stream.
+// [Session.Run] runs a command to its exit status in a window of its own.
+// [Pane.Writer] types into a pane and [PaneObservation.Reader] reads what it
+// prints, as an [io.Writer] and an [io.Reader]. [NotificationStream.Subscribe]
+// asks tmux to report a format whenever its value changes, and
 // [Server.WaitFor] waits for an explicit tmux channel signal. Polling
 // [Pane.Capture] reads the visible screen and may match a shell's command echo
 // before the command produces output.
