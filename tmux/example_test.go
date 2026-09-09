@@ -491,7 +491,7 @@ func ExamplePaneFilter_Predicate() {
 }
 
 func ExamplePtr() {
-	value := tmux.Ptr(0)
+	value := new(0)
 	fmt.Println(*value)
 
 	// Output:

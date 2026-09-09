@@ -195,7 +195,7 @@ plan := tmux.NewPlan()
 plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 plan.SetPaneTitle(editor, "editor")
-plan.SendKeys(editor, tmux.SendKeysRequest{Command: tmux.Ptr("echo built")})
+plan.SendKeys(editor, tmux.SendKeysRequest{Command: new("echo built")})
 plan.DisplayMessage(editor, "#{pane_title}")
 ```
 

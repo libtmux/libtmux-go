@@ -36,13 +36,12 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return err
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	windowName := "discovery"
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("discovery")})
 	if err != nil {
 		return err
 	}
