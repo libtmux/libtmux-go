@@ -945,3 +945,57 @@ func hasExactRealWindow(
 	}
 	return false
 }
+
+//libtmux:real-tmux
+func TestSessionRunReportsStatusAndScreen(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	session := sessions[0]
+
+	started := time.Now()
+	result, err := session.Run(ctx, "printf 'one\\ntwo\\n'; exit 7", tmux.RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != 7 {
+		t.Errorf("Run() status = %d, want 7", result.Status)
+	}
+	if want := []string{"one", "two"}; !slices.Equal(result.Lines, want) {
+		t.Errorf("Run() lines = %q, want %q", result.Lines, want)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Errorf("Run() took %s, want a push-driven wait", elapsed)
+	}
+	windows, err := session.Refresh(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := windows.WindowCount(); count != 1 {
+		t.Errorf("window count after Run() = %d, want the run's window removed", count)
+	}
+
+	// A command that exits before anything could poll for it.
+	fast, err := session.Run(ctx, "true", tmux.RunOptions{})
+	if err != nil {
+		t.Fatalf("Run(true) error = %v", err)
+	}
+	if fast.Status != 0 || len(fast.Lines) != 0 {
+		t.Errorf("Run(true) = %+v, want status 0 and no lines", fast)
+	}
+
+	kept, err := session.Run(ctx, "echo kept", tmux.RunOptions{Keep: true, WindowName: "kept"})
+	if err != nil {
+		t.Fatalf("Run(keep) error = %v", err)
+	}
+	if kept.Pane == "" {
+		t.Fatal("Run(keep) reported no pane")
+	}
+	if _, err := server.Pane(ctx, kept.Pane); err != nil {
+		t.Errorf("kept pane %s is gone: %v", kept.Pane, err)
+	}
+}

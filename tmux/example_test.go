@@ -2019,3 +2019,32 @@ func ExampleNotificationStream_Unsubscribe() {
 	fmt.Println("unsubscribed:", stream.Unsubscribe(ctx, request.Name))
 	// Output: unsubscribed: <nil>
 }
+
+func ExampleSession_Run() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-session-run",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "run"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// The command has a terminal, and its exit status is a result rather
+	// than an error. The window it ran in is gone by the time Run returns.
+	result, err := session.Run(ctx, "printf 'built\\n'; exit 3", tmux.RunOptions{})
+	if err != nil {
+		fmt.Println("run:", err)
+		return
+	}
+	fmt.Println(result.Lines, result.Status)
+	// Output: [built] 3
+}

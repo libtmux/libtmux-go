@@ -65,6 +65,30 @@ works.
 
 Runnable: [`examples/quickstart`](examples/quickstart) — `go -C examples run ./quickstart`.
 
+## Running a command to completion
+
+`Session.Run` is `os/exec` for a program that needs a terminal: the command
+runs in a window of its own with a tty, and what comes back is its exit status
+and the screen tmux rendered. A nonzero status is a result, not an error, and
+the wait is tmux's own rather than a poll:
+
+<!-- docs:run-to-completion -->
+
+```go
+result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
+if err != nil {
+	return fmt.Errorf("run command: %w", err)
+}
+for _, line := range result.Lines {
+	fmt.Println("screen:", line)
+}
+fmt.Println("exited", result.Status)
+```
+
+<!-- docs:end -->
+
+Runnable: [`examples/run-to-completion`](examples/run-to-completion).
+
 ## What querying looks like
 
 Two ways to ask, and they answer the same question at different costs.
