@@ -70,7 +70,7 @@ func (n ControlNotification) Output() (PaneID, []byte, bool) {
 }
 
 // SubscriptionChange is one evaluated format value reported by a subscription
-// armed on a notification stream. The scope fields tmux did not
+// armed with [NotificationStream.Subscribe]. The scope fields tmux did not
 // evaluate against are zero: a session-scoped subscription reports no window
 // or pane, and a window-scoped one reports no pane.
 type SubscriptionChange struct {

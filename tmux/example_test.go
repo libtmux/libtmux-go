@@ -1936,3 +1936,86 @@ func ExamplePaneObservation_Notifications() {
 	}
 	// Output: heard the pane
 }
+
+func ExampleNotificationStream_Subscribe() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-subscribe",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "watch"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	// tmux evaluates the format itself and reports each change; nothing here
+	// asks twice.
+	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+		Name: "windows", Format: "#{session_windows}",
+	}); err != nil {
+		fmt.Println("subscribe:", err)
+		return
+	}
+	if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+		fmt.Println("new window:", err)
+		return
+	}
+	for notification, err := range stream.Notifications(ctx) {
+		if err != nil {
+			fmt.Println("notification:", err)
+			return
+		}
+		if change, ok := notification.Subscription(); ok && change.Value == "2" {
+			fmt.Println(change.Name, "=", change.Value)
+			break
+		}
+	}
+	// Output: windows = 2
+}
+
+func ExampleNotificationStream_Unsubscribe() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-unsubscribe",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "watch"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	request := tmux.SubscriptionRequest{Name: "name", Format: "#{session_name}"}
+	if err := stream.Subscribe(ctx, request); err != nil {
+		fmt.Println("subscribe:", err)
+		return
+	}
+	// The name is all tmux needs to stop reporting it.
+	fmt.Println("unsubscribed:", stream.Unsubscribe(ctx, request.Name))
+	// Output: unsubscribed: <nil>
+}

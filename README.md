@@ -213,6 +213,37 @@ for {
 	fmt.Printf("notification: %s\n", notification.Kind())
 	if notification.Kind() == tmux.ControlNotificationSessionRenamed {
 		fmt.Println("heard the rename")
+		break
+	}
+}
+```
+
+<!-- docs:end -->
+
+A subscription asks tmux to evaluate a format and report it when its value
+changes, so a program hears about a state it cares about — a window count, a
+pane's current command — without asking again:
+
+<!-- docs:subscribing -->
+
+```go
+// A subscription is a format tmux evaluates for you: it reports the value
+// when it first looks, about a second later, and then each time it changes.
+if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+	Name: "windows", Format: "#{session_windows}",
+}); err != nil {
+	return fmt.Errorf("subscribe: %w", err)
+}
+if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+	return fmt.Errorf("open window: %w", err)
+}
+for {
+	notification, err := stream.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("read notification: %w", err)
+	}
+	if change, ok := notification.Subscription(); ok && change.Value == "2" {
+		fmt.Println("session has", change.Value, "windows")
 		return nil
 	}
 }
@@ -220,7 +251,8 @@ for {
 
 <!-- docs:end -->
 
-Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe).
+Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe)
+and, for a pane as an `io.Writer` and `io.Reader`, [`examples/pane-io`](examples/pane-io).
 
 ## Packages
 
