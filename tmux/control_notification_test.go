@@ -277,3 +277,41 @@ func BenchmarkParseControlNotificationColonTail(b *testing.B) {
 		}
 	}
 }
+
+func TestSubscriptionReadsScopeAndValue(t *testing.T) {
+	tests := []struct {
+		line string
+		want SubscriptionChange
+	}{
+		{
+			line: "%subscription-changed dead $1 @2 3 %4 : 1/7",
+			want: SubscriptionChange{Name: "dead", Session: "$1", Window: "@2", WindowIndex: 3, Pane: "%4", Value: "1/7"},
+		},
+		{
+			line: "%subscription-changed windows $1 - - - : 2",
+			want: SubscriptionChange{Name: "windows", Session: "$1", Value: "2"},
+		},
+		{
+			// A reserved argument tmux may add later must not shift the value.
+			line: "%subscription-changed name $1 @2 0 - future : a : b",
+			want: SubscriptionChange{Name: "name", Session: "$1", Window: "@2", Value: "a : b"},
+		},
+	}
+	for _, test := range tests {
+		notification, err := ParseControlNotification([]byte(test.line))
+		if err != nil {
+			t.Fatalf("ParseControlNotification(%q) error = %v", test.line, err)
+		}
+		got, ok := notification.Subscription()
+		if !ok || got != test.want {
+			t.Errorf("Subscription() = (%+v, %v), want (%+v, true)", got, ok, test.want)
+		}
+	}
+	other, err := ParseControlNotification([]byte("%window-add @3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change, ok := other.Subscription(); ok {
+		t.Errorf("Subscription() on %%window-add = (%+v, true), want false", change)
+	}
+}
