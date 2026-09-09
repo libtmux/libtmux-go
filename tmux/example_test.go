@@ -1887,3 +1887,52 @@ func ExamplePaneObservation_Reader() {
 	fmt.Println(matched, err)
 	// Output: true <nil>
 }
+
+func ExamplePaneObservation_Notifications() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-observation-range",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "range", Command: "sh"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'seen\\n'"); err != nil {
+		fmt.Println("write:", err)
+		return
+	}
+	// Every notification on the connection, as a range loop; output for this
+	// pane is picked out by identity.
+	for notification, err := range observation.Notifications(ctx) {
+		if err != nil {
+			fmt.Println("notification:", err)
+			return
+		}
+		if id, data, isOutput := notification.Output(); isOutput && id == pane.ID() &&
+			bytes.Contains(data, []byte("seen\r\n")) {
+			fmt.Println("heard the pane")
+			break
+		}
+	}
+	// Output: heard the pane
+}

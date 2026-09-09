@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"iter"
 	"strconv"
 	"strings"
 	"time"
@@ -132,6 +133,16 @@ func (s *NotificationStream) Next(
 		return ControlNotification{}, ErrControlClosed
 	}
 	return s.client.NextNotification(ctx)
+}
+
+// Notifications returns [NotificationStream.Next] as a range loop; exactly one
+// iterator or direct read may run at a time. Malformed notifications yield
+// their error and iteration continues; every other error ends the loop after
+// being yielded.
+func (s *NotificationStream) Notifications(
+	ctx context.Context,
+) iter.Seq2[ControlNotification, error] {
+	return notificationSeq(ctx, s.Next)
 }
 
 // CloseContext starts idempotent stream shutdown and waits within ctx. The

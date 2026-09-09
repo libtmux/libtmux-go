@@ -266,3 +266,31 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 		t.Errorf("Reader() heard %q, want %q", heard, want)
 	}
 }
+
+//libtmux:real-tmux
+func TestNotificationIteratorsRange(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+	if _, err := sessions[0].Rename(ctx, "ranged"); err != nil {
+		t.Fatal(err)
+	}
+	for notification, err := range stream.Notifications(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if notification.Kind() == tmux.ControlNotificationSessionRenamed {
+			return
+		}
+	}
+	t.Fatal("Notifications() ended before the rename")
+}

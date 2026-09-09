@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -385,4 +386,14 @@ func (r *paneOutputReader) Read(p []byte) (int, error) {
 	n := copy(p, r.pending)
 	r.pending = r.pending[n:]
 	return n, nil
+}
+
+// Notifications returns [PaneObservation.NextNotification] as a range loop;
+// exactly one iterator or direct read may run at a time. Malformed
+// notifications yield their error and iteration continues; every other error
+// ends the loop after being yielded.
+func (o *PaneObservation) Notifications(
+	ctx context.Context,
+) iter.Seq2[ControlNotification, error] {
+	return notificationSeq(ctx, o.NextNotification)
 }
