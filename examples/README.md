@@ -20,6 +20,7 @@ $ go -C examples run ./quickstart
 | [`fast-path/`](fast-path/) | Owned connection | Plain and connected reads, plus their exact-capture boundary |
 | [`planned-build/`](planned-build/) | Recording commands, then sending them | Naming a pane before it exists, and reading a plan before it runs |
 | [`control-mode-subscribe/`](control-mode-subscribe/) | An owned notification stream | Watching what tmux says on its own |
+| [`pane-io/`](pane-io/) | A pane as `io.Writer` and `io.Reader` | Typing a line and scanning the reply with the standard interfaces |
 
 Each directory has a page of its own explaining what to look at, and each has a
 test that runs the example against a real tmux and reads what it printed. The

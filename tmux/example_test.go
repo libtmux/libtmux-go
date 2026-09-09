@@ -1,12 +1,14 @@
 package tmux_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"time"
 	"unicode/utf8"
@@ -1795,4 +1797,93 @@ func ExampleSession_OpenNotifications() {
 	// Output:
 	// renamed: renamed
 	// closed: true
+}
+
+func ExamplePane_Writer() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-pane-writer",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	// A plain POSIX shell keeps the pane's startup out of the example.
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "type", Command: "sh"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	// Each newline is the Enter key, so this types two commands.
+	if _, err := fmt.Fprint(pane.Writer(ctx), "printf 'one\\n'\nprintf 'two\\n'\n"); err != nil {
+		fmt.Println("write:", err)
+		return
+	}
+	scanner := bufio.NewScanner(observation.Reader(ctx))
+	for scanner.Scan() {
+		if line := scanner.Text(); line == "one" || line == "two" {
+			fmt.Println(line)
+			if line == "two" {
+				break
+			}
+		}
+	}
+	// Output:
+	// one
+	// two
+}
+
+func ExamplePaneObservation_Reader() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-observation-reader",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "read", Command: "sh"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'ready\\n'"); err != nil {
+		fmt.Println("write:", err)
+		return
+	}
+	// The reader is a byte stream, so any consumer of an io.Reader works on
+	// it. The typed command echoes first; the exact line is the reply.
+	matched, err := regexp.MatchReader(`(?m)^ready\r?$`, bufio.NewReader(observation.Reader(ctx)))
+	fmt.Println(matched, err)
+	// Output: true <nil>
 }

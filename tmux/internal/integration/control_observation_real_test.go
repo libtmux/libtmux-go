@@ -3,8 +3,11 @@
 package integration
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -204,5 +207,62 @@ func waitForPaneMarker(
 		return strings.Contains(strings.Join(lines, "\n"), marker), err
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+//libtmux:real-tmux
+func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
+	}
+	first := panes[0]
+	window, err := first.ResolveWindow(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := window.SplitPane(ctx, tmux.SplitPaneRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	observation, err := first.OpenObservation(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = observation.Close() })
+
+	// The other pane speaks first and must not be heard.
+	if _, err := fmt.Fprintln(second.Writer(ctx), "printf 'other-pane\\n'"); err != nil {
+		t.Fatal(err)
+	}
+	waitForPaneCapture(ctx, t, second, "other-pane")
+	// Two lines in one write: each newline is Enter.
+	if _, err := fmt.Fprint(first.Writer(ctx), "printf 'alpha\\n'\nprintf 'omega\\n'\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := bufio.NewScanner(observation.Reader(ctx))
+	var heard []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "other-pane" {
+			t.Fatal("Reader() delivered another pane's output")
+		}
+		if line == "alpha" || line == "omega" {
+			heard = append(heard, line)
+		}
+		if len(heard) == 2 {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"alpha", "omega"}; !slices.Equal(heard, want) {
+		t.Errorf("Reader() heard %q, want %q", heard, want)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -349,4 +350,39 @@ func failedPaneObservationCommand(
 		detail = "tmux rejected the command"
 	}
 	return fmt.Errorf("%s: %s", action, detail)
+}
+
+// Reader returns the pane's output after the baseline as a byte stream: what
+// the program in the pane writes to its terminal, in order, and nothing from
+// any other pane on the connection. Reads block until the pane writes, ctx
+// ends, or the observation closes. A lost observation ends the stream with
+// [ErrPaneObservationLost] rather than [io.EOF]. The bytes are the terminal's:
+// escape sequences and carriage returns arrive as written, and the echo of
+// what is typed into the pane arrives before the reply, as it does on screen.
+// Exactly one reader or direct notification read may run at a time.
+func (o *PaneObservation) Reader(ctx context.Context) io.Reader {
+	return &paneOutputReader{ctx: ctx, observation: o}
+}
+
+type paneOutputReader struct {
+	ctx         context.Context
+	observation *PaneObservation
+	pending     []byte
+}
+
+func (r *paneOutputReader) Read(p []byte) (int, error) {
+	for len(r.pending) == 0 {
+		notification, err := r.observation.NextNotification(r.ctx)
+		if err != nil {
+			return 0, err
+		}
+		pane, output, ok := notification.Output()
+		if !ok || pane != r.observation.paneID {
+			continue
+		}
+		r.pending = output
+	}
+	n := copy(p, r.pending)
+	r.pending = r.pending[n:]
+	return n, nil
 }
