@@ -361,6 +361,9 @@ func failedPaneObservationCommand(
 // escape sequences and carriage returns arrive as written, and the echo of
 // what is typed into the pane arrives before the reply, as it does on screen.
 // Exactly one reader or direct notification read may run at a time.
+//
+// A malformed notification on the connection is skipped, as
+// [PaneObservation.Notifications] skips it; every other error ends the stream.
 func (o *PaneObservation) Reader(ctx context.Context) io.Reader {
 	return &paneOutputReader{ctx: ctx, observation: o}
 }
@@ -372,9 +375,15 @@ type paneOutputReader struct {
 }
 
 func (r *paneOutputReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
 	for len(r.pending) == 0 {
 		notification, err := r.observation.NextNotification(r.ctx)
 		if err != nil {
+			if _, unreadable := errors.AsType[*ControlNotificationError](err); unreadable {
+				continue
+			}
 			return 0, err
 		}
 		pane, output, ok := notification.Output()
