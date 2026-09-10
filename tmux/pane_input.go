@@ -244,9 +244,9 @@ func sendKeysArguments(
 // no trailing newline is typed and left on the line.
 //
 // A write returns once tmux has taken the keys, before the pane's program has
-// read them; the program interprets what arrives. Each line is one tmux
-// command, so a writer that buffers whole lines costs less than one that
-// writes bytes one at a time.
+// read them; the program interprets what arrives. A line with a trailing
+// newline costs two tmux commands, the text and a separate Enter; buffering
+// whole lines still costs far less than writing bytes one at a time.
 func (p Pane) Writer(ctx context.Context) io.Writer {
 	return paneWriter{ctx: ctx, pane: p}
 }
@@ -260,16 +260,15 @@ func (w paneWriter) Write(data []byte) (int, error) {
 	rest := string(data)
 	for rest != "" {
 		line, more, found := strings.Cut(rest, "\n")
-		if line != "" || found {
-			request := SendKeysRequest{Command: &line, Literal: true, SkipEnter: !found}
-			if line == "" {
-				// An empty line is only the Enter key; send-keys needs no operand.
-				if err := w.pane.Enter(w.ctx); err != nil {
-					return len(data) - len(rest), err
-				}
-			} else if err := w.pane.SendKeys(w.ctx, request); err != nil {
+		if line == "" {
+			// An empty line is only the Enter key; send-keys needs no operand.
+			if err := w.pane.Enter(w.ctx); err != nil {
 				return len(data) - len(rest), err
 			}
+		} else if err := w.pane.SendKeys(w.ctx, SendKeysRequest{
+			Command: &line, Literal: true, SkipEnter: !found,
+		}); err != nil {
+			return len(data) - len(rest), err
 		}
 		rest = more
 	}
