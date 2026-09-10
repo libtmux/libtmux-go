@@ -120,6 +120,8 @@ func (s Session) Run(ctx context.Context, command string, options RunOptions) (r
 		return RunResult{}, err
 	}
 	result.Pane = finished.ID()
+	// A signal-killed pane reports pane_dead_signal and no pane_dead_status, so
+	// a missing status is the documented Signal case rather than an error.
 	result.Status, _ = finished.DeadStatus()
 	result.Signal, _ = finished.DeadSignal()
 	lines, err := finished.Capture(ctx, CapturePaneRequest{Start: CaptureBoundary, End: CaptureBoundary})

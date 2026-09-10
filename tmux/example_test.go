@@ -491,11 +491,17 @@ func ExamplePaneFilter_Predicate() {
 }
 
 func ExamplePtr() {
-	value := new(0)
+	value := tmux.Ptr(0)
 	fmt.Println(*value)
+
+	// A zero-size type still gets a distinct address, which is what Ptr adds
+	// over new.
+	first, second := tmux.Ptr(struct{}{}), tmux.Ptr(struct{}{})
+	fmt.Println(first != second)
 
 	// Output:
 	// 0
+	// true
 }
 
 func ExamplePaneCommandIs() {
