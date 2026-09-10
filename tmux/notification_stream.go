@@ -136,8 +136,14 @@ func (r SubscriptionRequest) validate() error {
 			"may not contain a colon or a space, which tmux reads as the scope",
 		)
 	}
+	if err := validateServerCommandArgument("refresh-client", "Name", r.Name, true); err != nil {
+		return err
+	}
 	if r.Format == "" {
 		return invalidServerCommandRequest("refresh-client", "Format", "", "is required")
+	}
+	if err := validateServerCommandArgument("refresh-client", "Format", r.Format, true); err != nil {
+		return err
 	}
 	scopes := 0
 	for _, set := range []bool{r.Session != "", r.Window != "", r.Pane != ""} {
@@ -193,6 +199,9 @@ func (s *NotificationStream) Unsubscribe(ctx context.Context, name string) error
 		return invalidServerCommandRequest(
 			"refresh-client", "Name", name, "is not a subscription name",
 		)
+	}
+	if err := validateServerCommandArgument("refresh-client", "Name", name, true); err != nil {
+		return err
 	}
 	_, err := s.client.Cmd(ctx, "refresh-client", "-B", name)
 	return err
