@@ -287,3 +287,20 @@ func TestAppendRejectsDifferentSocketWithSamePaneID(t *testing.T) {
 		t.Fatalf("unrelated server mutated: %v windows=%d", err, len(snapshot.Windows()))
 	}
 }
+
+func TestBooleanOptionsAndBeforeScriptResult(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	path := write(t, t.TempDir(), "options.yaml", "session_name: options\nbefore_script: /bin/sh -c 'printf retained'\noptions: {renumber-windows: true}\nwindows:\n- options: {automatic-rename: false, remain-on-exit: true}\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", "-S", server.SocketPath(), "-d", "--json", path)
+	if code != 0 || !strings.Contains(out, `"stdout":"retained"`) {
+		t.Fatalf("boolean options/script capture: %d %q %q", code, out, diagnostic)
+	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil || len(snapshot.Windows()) != 1 {
+		t.Fatalf("window topology: %v", err)
+	}
+	result, err := server.Cmd(t.Context(), "show-options", "-w", "-v", "-t", snapshot.Windows()[0].ID().String(), "remain-on-exit")
+	if err != nil || strings.TrimSpace(string(result.RawStdout)) != "on" {
+		t.Fatalf("boolean option was not applied: %+v %v", result, err)
+	}
+}

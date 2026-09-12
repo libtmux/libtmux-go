@@ -282,6 +282,9 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		failures = append(failures, map[string]any{"code": "interrupted", "message": "operation interrupted", "stage": "load"})
 	}
 	summary := map[string]any{"schema_version": 1, "command": "load", "status": status, "results": results, "errors": failures}
+	if len(r.scripts) > 0 {
+		summary["scripts"] = r.scripts
+	}
 	if r.ndjson {
 		event := "completed"
 		if len(failures) > 0 {
@@ -349,6 +352,7 @@ func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name strin
 		return tmux.Session{}, err
 	}
 	result, err := r.process(bridgeArgv(args), "", nil, true, log)
+	r.scripts = append(r.scripts, map[string]any{"input_index": index, "kind": "python-workspace", "result": result})
 	if eventErr := r.event("script-completed", map[string]any{"input_index": index, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
 		return tmux.Session{}, eventErr
 	}
@@ -356,7 +360,7 @@ func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name strin
 		return tmux.Session{}, err
 	}
 	if result.Status != 0 {
-		return tmux.Session{}, fmt.Errorf("python workspace bridge exited %d: %s", result.Status, result.Stderr)
+		return tmux.Session{}, fmt.Errorf("python workspace bridge exited %d: %s", result.Status, result.Stdout+result.Stderr)
 	}
 	if o.append {
 		return currentSession(r.ctx, server)
@@ -406,6 +410,7 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 			return session, err
 		}
 		result, err := r.process(argv, plan.ScriptDirectory, nil, true, log)
+		r.scripts = append(r.scripts, map[string]any{"input_index": inputIndex, "kind": "before-script", "result": result})
 		if eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
 			return session, eventErr
 		}
