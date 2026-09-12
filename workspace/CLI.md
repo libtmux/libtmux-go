@@ -71,7 +71,13 @@ file and atomic publication.
 Load creates a session, reuses an existing session with the same name, or
 appends to the current session with `--append`. With multiple inputs, `-s`
 overrides only the final workspace's session name. Append requires `TMUX` and
-`TMUX_PANE`. A foreground load requires terminal stdin and attaches through the controlling
+`TMUX_PANE` identifying the same live daemon as the selected socket. Socket
+paths can contain commas. The CLI authenticates the inherited daemon PID and
+retains one session for every input, even if a script moves the inherited pane.
+Linked panes use tmux's canonical session. Native commands retain the core's
+daemon replacement checks, including global options and raw queries.
+
+A foreground load requires terminal stdin and attaches through the controlling
 terminal or switches the current tmux client. Inside tmux, human mode offers
 switch, detached-load and append choices; `--yes` selects switching. Existing
 sessions ask before attachment unless `--yes` is set. Machine load requires `-d` or `--append` and
@@ -131,8 +137,13 @@ the CLI checks distribution metadata before invoking it. Python selectors,
 startup settings and vi-mode settings retain their Python meaning. The paired
 startup and vi-mode options use the last occurrence. Missing optional runtimes
 produce an explicit error. Plugin and custom-builder loads use the same
-append selection as native loads: `--append` targets the current session even
-when `-d` is also supplied. The bridge forwards one mode to Python.
+append selection as native loads: `--append` targets the retained session even
+when `-d` is also supplied. Append authenticates before checking the Python
+runtime. Its private adapter checks the borrowed daemon and session before
+importing extensions and again after constructing the builder. A missing or
+replaced target fails without creating a replacement session, and failures
+retain the original session ID. These checks do not make later Python builder
+execution atomic against external daemon replacement or arbitrary plugin code.
 Append with both a Python plugin/custom builder and a document `before_script`
 is unavailable and fails during preflight. The checked Python builder deletes
 borrowed sessions on script failure; the CLI blocks that combination. Native
