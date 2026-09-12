@@ -2134,3 +2134,42 @@ func ExamplePane_CaptureTo() {
 	fmt.Println(strings.TrimSpace(screen.String()))
 	// Output: captured
 }
+
+func ExampleRunning_StreamTo() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-stream-to",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "stream"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// Start returns while the command runs; StreamTo copies what it prints
+	// and returns the same result Wait would. The command waits before its
+	// first line because the stream begins where StreamTo opens it, and after
+	// it because tmux can drop the last write before a process exits.
+	running, err := session.Start(ctx,
+		"sleep 1; printf 'streaming\\n'; sleep 1", tmux.RunOptions{},
+	)
+	if err != nil {
+		fmt.Println("start:", err)
+		return
+	}
+	var printed bytes.Buffer
+	result, err := running.StreamTo(ctx, &printed)
+	if err != nil {
+		fmt.Println("stream:", err)
+		return
+	}
+	fmt.Println(strings.TrimSpace(printed.String()), result.Status)
+	// Output: streaming 0
+}

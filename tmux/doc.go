@@ -130,7 +130,11 @@
 // commands suitable for a connection by staging through a tmux buffer and
 // caller-supplied file. A connection-backed server avoids those processes.
 //
-// [Session.Run] runs a command to its exit status in a window of its own.
+// [Session.Run] runs a command to its exit status in a window of its own, and
+// [Session.Start] returns a [Running] handle before it finishes:
+// [Running.Wait] waits for it, [Running.Kill] stops it, [Running.StreamTo]
+// copies what it prints while it runs, and [Running.Pane] exposes the pane so
+// it can also be typed into.
 // [Pane.Writer] types into a pane and [PaneObservation.Reader] reads what it
 // prints, as an [io.Writer] and an [io.Reader]. [Server.LoadBufferFrom],
 // [Server.SaveBufferTo] and [Pane.CaptureTo] move a payload or a scrollback
