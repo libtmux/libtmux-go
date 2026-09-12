@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -51,6 +52,30 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Println("screen:", line)
 	}
 	fmt.Println("exited", result.Status)
+	// docs:end
+
+	// docs:run-streaming
+	// Start returns while the command is still running, so its output can be
+	// followed and it can be stopped from another goroutine. The stream begins
+	// where StreamTo opens it, so this command waits before its first line;
+	// result.Lines holds the screen either way.
+	running, err := session.Start(ctx, "sleep 1; seq 1 3; sleep 30", tmux.RunOptions{})
+	if err != nil {
+		return fmt.Errorf("start command: %w", err)
+	}
+	stopped := make(chan error, 1)
+	go func() {
+		time.Sleep(2 * time.Second)
+		stopped <- running.Kill(ctx)
+	}()
+	streamed, err := running.StreamTo(ctx, os.Stdout)
+	if err != nil {
+		return fmt.Errorf("stream command: %w", err)
+	}
+	if err := <-stopped; err != nil {
+		return fmt.Errorf("stop command: %w", err)
+	}
+	fmt.Println("stopped by signal", streamed.Signal)
 	// docs:end
 	return nil
 }

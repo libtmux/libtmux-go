@@ -22,6 +22,7 @@ $ go -C examples run ./quickstart
 | [`control-mode-subscribe/`](control-mode-subscribe/) | An owned notification stream | Watching what tmux says on its own |
 | [`run-to-completion/`](run-to-completion/) | A command run in a pane to its exit status | `os/exec` for a program that needs a terminal |
 | [`pane-io/`](pane-io/) | A pane as `io.Writer` and `io.Reader` | Typing a line and scanning the reply with the standard interfaces |
+| [`byte-streams/`](byte-streams/) | Buffers and captures as streams | Moving a payload in and a scrollback out with no quoting and no temporary file |
 
 Each directory has a page of its own explaining what to look at, and each has a
 test that runs the example against a real tmux and reads what it printed. The

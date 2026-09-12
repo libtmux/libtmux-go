@@ -117,11 +117,10 @@ snapshot, err := server.Snapshot(ctx)
 if err != nil {
 	return err
 }
-predicate, err := tmux.PaneActiveIs(true).Predicate()
+active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
 if err != nil {
 	return err
 }
-active := tmuxq.Where(snapshot.Panes(), predicate)
 ```
 
 <!-- docs:end -->
@@ -281,6 +280,52 @@ for {
 
 Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe)
 and, for a pane as an `io.Writer` and `io.Reader`, [`examples/pane-io`](examples/pane-io).
+
+## Moving bytes
+
+Keys and command arguments are the wrong way to move a payload: a shell reads
+what it is sent, and tmux caps a whole command at 16 KiB and cannot carry a NUL
+through one at all. A buffer loaded from an `io.Reader` has neither limit, and a
+capture written to an `io.Writer` never holds a scrollback in memory:
+
+<!-- docs:byte-streams -->
+
+```go
+name := "payload"
+if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
+	Name: &name,
+}); err != nil {
+	return fmt.Errorf("load payload: %w", err)
+}
+if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
+	BufferName: &name, DeleteAfter: true,
+}); err != nil {
+	return fmt.Errorf("paste payload: %w", err)
+}
+
+file, err := os.Create(archive)
+if err != nil {
+	return fmt.Errorf("create archive: %w", err)
+}
+defer func() { err = errors.Join(err, file.Close()) }()
+compressor := gzip.NewWriter(file)
+if err := pane.CaptureTo(ctx, compressor, tmux.CapturePaneRequest{
+	Start: tmux.CaptureBoundary, End: tmux.CaptureBoundary,
+}); err != nil {
+	return fmt.Errorf("capture scrollback: %w", err)
+}
+if err := compressor.Close(); err != nil {
+	return fmt.Errorf("finish archive: %w", err)
+}
+```
+
+<!-- docs:end -->
+
+`Server.LoadBufferFrom`, `Server.SaveBufferTo` and `Pane.CaptureTo` use tmux's
+own stdin and stdout, which tmux offers no control client, so they need a
+process; `Server.LoadBuffer`, `Server.SaveBuffer` and `Pane.CaptureToFile` take
+a path and work over a connection. Runnable:
+[`examples/byte-streams`](examples/byte-streams).
 
 ## Packages
 

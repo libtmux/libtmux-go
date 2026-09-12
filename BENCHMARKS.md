@@ -173,6 +173,49 @@ against 175, and `capture_pane` wins on both counts. It earns its place on a
 wide pane holding full lines, read repeatedly -- which is what it is for, and
 is worth knowing is not every pane.
 
+## What moving bytes costs
+
+A payload going into tmux and a scrollback coming out, measured on the machine
+named above against tmux 3.7c, 20 iterations per size:
+
+```console
+$ go test ./tmux/ \
+    -run '^$' \
+    -bench 'BenchmarkLoadBufferFrom|BenchmarkSaveBufferTo|BenchmarkCaptureScrollback' \
+    -benchtime 20x \
+    -benchmem
+```
+
+| Payload | `LoadBufferFrom` | `SaveBufferTo` |
+| --- | ---: | ---: |
+| 8 KiB | 29,218 B/op, 68 allocs | 30,378 B/op, 67 allocs |
+| 1 MiB | 29,063 B/op, 67 allocs | 29,688 B/op, 67 allocs |
+| 8 MiB | 29,057 B/op, 67 allocs | 30,249 B/op, 67 allocs |
+
+**The point of the table is the column that does not move.** A thousandfold
+payload costs the same allocations, because the bytes cross a pipe in 32 KiB
+steps and never land in Go's heap. Throughput does move with size, from
+1.3MB/s at 8 KiB to 162MB/s at 8 MiB, because a fixed subprocess spawn of
+roughly 6ms is most of a small transfer and little of a large one.
+
+**Above 16 KiB there is nothing to compare against.** `Server.SetBuffer`
+carries its payload in the command itself, and tmux refuses a command over
+`MAX_IMSGSIZE`, 16384 bytes, with `command too long`. Measured on 3.2a and
+3.7c, the largest payload it accepts is about 16.3 KB, and any payload holding
+a NUL is refused at any size.
+
+Reading a 1500-line scrollback shows the same trade in the other direction:
+
+| Call | Cost |
+| --- | ---: |
+| `Pane.CaptureTo` | 6.8ms, 31,620 B/op, 85 allocs |
+| `Pane.CaptureBytes` | 5.8ms, 276,335 B/op, 116 allocs |
+
+`CaptureBytes` returns the screen, so it allocates it; `CaptureTo` writes it,
+so it does not. The write costs about a millisecond more per call on this
+scrollback, which is the price of the pipe, and it stops growing where the
+returned slice keeps going.
+
 ## What waiting and watching cost
 
 The claims this server makes about not spending a caller's turn, measured
