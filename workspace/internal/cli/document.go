@@ -213,7 +213,11 @@ type commandPlan struct {
 }
 
 func normalize(doc document, base string) (loadPlan, error) {
-	plan := loadPlan{Name: expand(textValue(doc["session_name"])), Readiness: "auto", Bridge: doc["plugins"] != nil || doc["workspace_builder"] != nil || doc["workspace_builder_paths"] != nil}
+	plugins := doc["plugins"]
+	if items, ok := plugins.([]any); ok && len(items) == 0 {
+		plugins = nil
+	}
+	plan := loadPlan{Name: expand(textValue(doc["session_name"])), Readiness: "auto", Bridge: plugins != nil || doc["workspace_builder"] != nil}
 	if raw, exists := doc["workspace_builder_options"]; exists && raw != nil {
 		catalog := mapping(raw)
 		if catalog == nil {
