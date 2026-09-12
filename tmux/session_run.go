@@ -267,6 +267,13 @@ var (
 	outcomeSettleLimit = 5 * time.Second
 )
 
+// signalHandoverDelay is how long the liveness check waits for tmux's own
+// signal once it has found the command's outcome readable. tmux records the
+// outcome as it reaps the command and signals afterwards, from the point where
+// it has finished with the pane's terminal, so the screen the command printed
+// arrives between the two.
+var signalHandoverDelay = 500 * time.Millisecond
+
 // waitForExit returns when tmux signals the pane's death, or when the pane is
 // found already dead. The signal is edge-triggered and arrives once, so a wait
 // that trusted it alone would hang for as long as ctx allowed if it never
@@ -302,7 +309,7 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			// fixedNotice is set for tmux before 3.3, which is also the
 			// release that added pane_dead_signal.
 			if outcomeRecorded(pane, !r.fixedNotice) {
-				return nil
+				return awaitDeathSignal(ctx, signaled)
 			}
 			if settling >= outcomeSettleLimit {
 				return fmt.Errorf("%w: pane %s is dead and its command unreaped",
@@ -343,6 +350,25 @@ func outcomeRecorded(pane Pane, signalReported bool) bool {
 	}
 	_, ok := pane.DeadSignal()
 	return ok
+}
+
+// awaitDeathSignal hands a wait that found the pane finished back to tmux's
+// own signal, which says more: tmux sends it once it has finished with the
+// pane's terminal, and the last of what the command printed reaches the screen
+// on the way there. The liveness check is there to notice a signal that never
+// comes, not to answer ahead of one that is on its way, so it gives up only
+// after a delay no healthy pane needs.
+func awaitDeathSignal(ctx context.Context, signaled <-chan error) error {
+	timer := time.NewTimer(signalHandoverDelay)
+	defer timer.Stop()
+	select {
+	case err := <-signaled:
+		return err
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-timer.C:
+		return nil
+	}
 }
 
 // askForAReap gives the server one more child to notice, which is what makes
