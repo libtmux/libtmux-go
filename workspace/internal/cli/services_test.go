@@ -67,7 +67,8 @@ func TestChildDrainFailureCancelsProcess(t *testing.T) {
 	defer cancel()
 	r := &invocation{ctx: ctx, out: rejectingWriter{}, err: io.Discard, ndjson: true}
 	start := time.Now()
-	result, err := r.process([]string{"/bin/sh", "-c", "printf output; sleep 5"}, "", nil, true)
+	// Establish the descendant before its parent's output triggers cancellation.
+	result, err := r.process([]string{"/bin/sh", "-c", "sleep 5 & printf output; wait"}, "", nil, true)
 	if err == nil || result.Status == 0 || time.Since(start) > 700*time.Millisecond {
 		t.Fatalf("child did not stop with a failure status: %+v %v (%s)", result, err, time.Since(start))
 	}
