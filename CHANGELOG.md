@@ -17,6 +17,11 @@ Modules are tagged per directory, so each carries its own version: the core as
   directory contains spaces, preserving quoted arguments and the script's
   working directory.
 
+### examples
+
+- `byte-streams` waits for pasted text to appear before compressing the pane
+  screen, so the archive contains the payload even when echo is delayed.
+
 ## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
 
 ### tmux
