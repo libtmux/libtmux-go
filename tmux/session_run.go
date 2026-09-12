@@ -29,6 +29,13 @@ type RunOptions struct {
 	Keep bool
 }
 
+// ErrOutcomeUnrecorded reports that a command's pane is dead while tmux has
+// not recorded how the command ended, which it does by reaping the command's
+// process. tmux is known to leave a pane in that state indefinitely, so this
+// is reported rather than waited out, and rather than passed off as a zero
+// exit status that would call a failed command successful.
+var ErrOutcomeUnrecorded = errors.New("tmux: command outcome was never recorded")
+
 // RunResult reports how a command finished and what its terminal showed.
 type RunResult struct {
 	// Status is the command's exit status. It is zero when Signal is set.
@@ -58,8 +65,9 @@ func (result RunResult) clone() RunResult {
 // rendered rather than the bytes the program wrote.
 //
 // A nonzero status is a result, not an error; the error reports what tmux
-// could not do. The wait is tmux's own, not a poll: it needs no tmux binary on
-// the command's PATH and returns as the process exits. A command that never
+// could not do. The wait is tmux's own signal, backed by a liveness check that
+// widens from a quarter second in case that signal is lost: it needs no tmux
+// binary on the command's PATH and returns as the process exits. A command that never
 // exits holds Run until ctx ends. On error, Run removes its window regardless
 // of [RunOptions.Keep], since Run gives the caller no other chance to retry or
 // clean up; a bare [Session.Start] followed by [Running.Wait] leaves that
@@ -189,9 +197,12 @@ func (r *Running) Pane() Pane {
 	return r.pane
 }
 
-// Wait blocks until the command exits, using tmux's own wait-for rather than
-// polling, and reports its exit status and what its terminal showed. It
-// removes the window Start created unless [RunOptions.Keep] was set.
+// Wait blocks until the command exits, on tmux's own wait-for signal backed by
+// a widening liveness check, and reports its exit status and what its terminal
+// showed. It removes the window Start created unless [RunOptions.Keep] was
+// set. A command whose process tmux never reaps has no outcome to report, and
+// Wait ends with [ErrOutcomeUnrecorded] rather than the zero status that would
+// make a failed command look successful.
 //
 // Wait may be called more than once and concurrently; every call observes the
 // same completion. Only the first call to reach tmux drives the underlying
@@ -210,6 +221,16 @@ func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 	r.mu.Unlock()
 
 	if err := r.waitForExit(ctx); err != nil {
+		// Another Wait may have observed the command's end while this one was
+		// waiting, and its cleanup leaves this one looking at a pane that is
+		// already gone. That completion is the answer both calls share.
+		r.mu.Lock()
+		if r.done {
+			result, observed := r.result.clone(), r.err
+			r.mu.Unlock()
+			return result, observed
+		}
+		r.mu.Unlock()
 		return RunResult{}, fmt.Errorf("wait for command: %w", err)
 	}
 
@@ -226,10 +247,24 @@ func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 // livenessDelay bounds how long waitForExit trusts tmux's signal before it
 // asks whether the pane is already dead, and how far that interval backs off.
 // The first check is soon enough to rescue a short command whose signal was
-// missed; the ceiling keeps a long command from being polled.
-const (
+// missed; the ceiling keeps a long command from being polled. They are
+// variables so a test can shrink them and take the liveness path deliberately
+// rather than by luck.
+var (
 	initialLivenessDelay = 250 * time.Millisecond
 	maximumLivenessDelay = 30 * time.Second
+)
+
+// outcomeSettleDelay is how often a pane found dead is re-read while tmux has
+// yet to record how its command ended; outcomeReapDelay is how long that is
+// allowed to take before the server is asked to reap, and outcomeSettleLimit
+// how long the whole wait is worth before reporting ErrOutcomeUnrecorded. Both
+// are far past the moment tmux normally needs and are none of a healthy
+// command's time.
+var (
+	outcomeSettleDelay = 20 * time.Millisecond
+	outcomeReapDelay   = 200 * time.Millisecond
+	outcomeSettleLimit = 5 * time.Second
 )
 
 // waitForExit returns when tmux signals the pane's death, or when the pane is
@@ -246,6 +281,8 @@ func (r *Running) waitForExit(ctx context.Context) error {
 	}()
 
 	delay := initialLivenessDelay
+	var settling time.Duration
+	var asked bool
 	for {
 		timer := time.NewTimer(delay)
 		select {
@@ -262,10 +299,67 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			return err
 		}
 		if dead, ok := pane.Dead(); ok && dead {
-			return nil
+			// fixedNotice is set for tmux before 3.3, which is also the
+			// release that added pane_dead_signal.
+			if outcomeRecorded(pane, !r.fixedNotice) {
+				return nil
+			}
+			if settling >= outcomeSettleLimit {
+				return fmt.Errorf("%w: pane %s is dead and its command unreaped",
+					ErrOutcomeUnrecorded, pane.ID())
+			}
+			if settling >= outcomeReapDelay && !asked {
+				asked = true
+				r.askForAReap(ctx)
+			}
+			// tmux closes a pane's terminal before it reaps the command,
+			// and reports pane_dead from that closed descriptor alone, so
+			// reading the outcome now would call a command that exited 7 a
+			// command that exited 0. Wait for tmux to catch up.
+			settling += outcomeSettleDelay
+			delay = outcomeSettleDelay
+			continue
 		}
 		delay = min(delay*2, maximumLivenessDelay)
 	}
+}
+
+// outcomeRecorded reports whether tmux has recorded how the command in pane
+// ended. A pane reads as dead as soon as tmux closes its terminal, which it
+// does before reaping the command: server_destroy_pane closes the descriptor
+// and only then returns early when the status is not ready, and through tmux
+// 3.5a pane_dead is that closed descriptor and nothing more. Either field
+// being readable is proof the command has been reaped.
+//
+// signalReported says whether this tmux reports pane_dead_signal, which
+// arrived in 3.3. Without it a signaled command is dead with no readable
+// outcome at all, so there a closed terminal is the most that can be known.
+func outcomeRecorded(pane Pane, signalReported bool) bool {
+	if _, ok := pane.DeadStatus(); ok {
+		return true
+	}
+	if !signalReported {
+		return true
+	}
+	_, ok := pane.DeadSignal()
+	return ok
+}
+
+// askForAReap gives the server one more child to notice, which is what makes
+// it collect the one it has already lost.
+//
+// tmux reads a command's exit status only in the waitpid drain that a SIGCHLD
+// sends it through, and a server can miss that signal: a tmux linked against
+// libutempter forks a helper to update utmp as a pane's terminal closes and
+// raises SIGCHLD at itself afterwards to cover what the helper disturbs, which
+// is the shape of the loss seen here -- the command left a zombie child of the
+// server, pane_dead_status never appeared, and neither did the pane-died hook.
+// The drain is unconditional and takes every child that is ready, so any later
+// child death runs it again and collects the stalled one with it. This asks
+// for that by the shortest command tmux will run for us, and ignores its own
+// outcome: the wait's next read of the pane is the only answer that counts.
+func (r *Running) askForAReap(ctx context.Context) {
+	_, _ = r.session.server.Cmd(ctx, "run-shell", "-b", "true")
 }
 
 // finish reads the command's outcome after tmux has signaled its pane-died

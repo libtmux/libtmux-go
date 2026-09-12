@@ -47,3 +47,70 @@ func TestTrimScreenKeepsOnlyWhatTheCommandShowed(t *testing.T) {
 		})
 	}
 }
+
+// TestOutcomeRecordedWaitsForTmuxToReapTheCommand covers the state a pane
+// passes through on its way to dead: tmux closes the pane's terminal, which is
+// all pane_dead reports through tmux 3.5a, and only reaps the command
+// afterwards. A wait that accepted the first of those would report every
+// command as having exited zero.
+func TestOutcomeRecordedWaitsForTmuxToReapTheCommand(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		formats        map[string]string
+		signalReported bool
+		want           bool
+	}{
+		{
+			name:           "terminal closed before tmux reaped the command",
+			formats:        map[string]string{"pane_dead": "1"},
+			signalReported: true,
+			want:           false,
+		},
+		{
+			name: "outcome fields present but still empty",
+			formats: map[string]string{
+				"pane_dead": "1", "pane_dead_status": "", "pane_dead_signal": "",
+			},
+			signalReported: true,
+			want:           false,
+		},
+		{
+			name:           "nonzero exit status recorded",
+			signalReported: true,
+			formats:        map[string]string{"pane_dead": "1", "pane_dead_status": "7"},
+			want:           true,
+		},
+		{
+			name:           "zero exit status recorded",
+			signalReported: true,
+			formats:        map[string]string{"pane_dead": "1", "pane_dead_status": "0"},
+			want:           true,
+		},
+		{
+			name:           "signal recorded, as tmux 3.3 and later report it",
+			signalReported: true,
+			formats:        map[string]string{"pane_dead": "1", "pane_dead_signal": "KILL"},
+			want:           true,
+		},
+		{
+			// Before tmux 3.3 a signaled command has no outcome field at
+			// all, so waiting for one would never end.
+			name:           "signaled before tmux reported signals",
+			formats:        map[string]string{"pane_dead": "1"},
+			signalReported: false,
+			want:           true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			pane := Pane{formats: formatValues{values: test.formats}}
+			if got := outcomeRecorded(pane, test.signalReported); got != test.want {
+				t.Errorf("outcomeRecorded(%v, %v) = %v, want %v",
+					test.formats, test.signalReported, got, test.want)
+			}
+		})
+	}
+}
