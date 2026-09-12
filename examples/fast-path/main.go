@@ -22,30 +22,55 @@ func main() {
 	}
 }
 
-// start owns cleanup because log.Fatal skips deferred calls in main.
+// start owns cleanup because log.Fatal skips deferred calls in main. It kills
+// the server only when this call is the one that started it: a server
+// already alive on that socket — lent by the documentation arena, or left
+// over from another process — is never this process's to stop.
 func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	return run(ctx, tmux.ServerOptions{SocketName: "libtmux-go-example-fast-path"})
-}
-
-// run accepts options so tests can isolate the server.
-func run(ctx context.Context, options tmux.ServerOptions) error {
-	server, err := tmux.NewServer(options)
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-fast-path"})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
-	defer func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer killCancel()
-		_ = server.Kill(killCtx)
-	}()
+	startedHere, err := ownsServer(ctx, server)
+	if err != nil {
+		return fmt.Errorf("check tmux server: %w", err)
+	}
+	if startedHere {
+		defer func() {
+			killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer killCancel()
+			_ = server.Kill(killCtx)
+		}()
+	}
+	return run(ctx, server)
+}
 
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
+// ownsServer reports whether server has no daemon yet, so the first command
+// against it will start one this process then owns.
+func ownsServer(ctx context.Context, server tmux.Server) (bool, error) {
+	alive, err := server.IsAlive(ctx)
+	if err != nil {
+		return false, err
+	}
+	return !alive, nil
+}
+
+// run accepts injected server state so tests can isolate the example and so
+// the documentation arena can lend its own server; run only ever stops the
+// session it creates, never the server itself.
+func run(ctx context.Context, server tmux.Server) (err error) {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-fast-path"})
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		defer cleanupCancel()
+		err = errors.Join(err, session.Kill(cleanupCtx))
+	}()
 
 	if err := readWindows(ctx, session, searchesPerPath); err != nil {
 		return err

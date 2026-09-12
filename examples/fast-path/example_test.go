@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +11,8 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+const fastPathArtifact = "go-fast-path"
 
 func TestMain(m *testing.M) {
 	os.Exit(tmuxtest.Main(m))
@@ -22,8 +23,15 @@ func TestFastPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	options := tmux.ServerOptions{SocketPath: filepath.Join(t.TempDir(), "tmux.sock")}
-	printed := exampletest.Output(t, func() error { return run(ctx, options) })
+	resolved, err := exampletest.ResolveArenaServer(
+		fastPathArtifact,
+		os.LookupEnv,
+		func() tmux.Server { return tmuxtest.NewServer(ctx, t) },
+	)
+	if err != nil {
+		t.Fatalf("resolve arena server: %v", err)
+	}
+	printed := exampletest.Output(t, func() error { return run(ctx, resolved.Server) })
 
 	for _, want := range []string{
 		"process path: 10 searches",
@@ -33,6 +41,11 @@ func TestFastPath(t *testing.T) {
 	} {
 		if !strings.Contains(printed, want) {
 			t.Errorf("printed %q, want it to contain %q", printed, want)
+		}
+	}
+	if resolved.Active() {
+		if err := resolved.EmitEvidence(ctx); err != nil {
+			t.Fatalf("emit arena evidence: %v", err)
 		}
 	}
 }
