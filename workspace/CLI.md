@@ -107,12 +107,18 @@ Human load progress writes to a terminal on stderr. The `default`, `minimal`,
 disables the presenter. `TMUXP_PROGRESS_FORMAT` and `TMUXP_PROGRESS_LINES`
 provide defaults. Machine output always disables terminal rendering.
 
-## Python compatibility
+## Search and Python compatibility
 
-Python regular expressions use a checked Python 3.10 or newer process, preserving
-lookaround, backreferences and Unicode matching. Native Go services discover
-documents and extract their searchable fields. `-F` requests literal matching
-through the same expression adapter.
+Search uses native Go regular expressions by default, including `-F` literal
+matching. It does not require Python. Whole-word matching groups alternatives;
+its word boundaries follow Go's ASCII word rules. Structured pane commands are
+searched as JSON text.
+
+Use `--regex-engine python` explicitly for lookaround, backreferences, Python
+object representations or Unicode word boundaries. That mode checks Python
+3.10 or newer and uses the same native discovery and field extraction. Both
+engines group whole-word alternatives. Unsupported Go syntax reports the
+explicit Python option without starting a compatibility process automatically.
 
 `shell` and workspace plugin/custom-builder execution require an installed
 tmuxp 1.74.0 distribution. Set `TMUX_WORKSPACE_PYTHON` to its Python executable;

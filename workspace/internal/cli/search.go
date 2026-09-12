@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
 
 var fieldAliases = map[string]string{"name": "name", "n": "name", "session": "session_name", "session_name": "session_name", "s": "session_name", "path": "path", "p": "path", "window": "window", "w": "window", "pane": "pane"}
 
-// Python owns expression matching so lookaround, backreferences and Unicode word
-// boundaries have Python semantics. Discovery and field extraction remain native.
+// The explicit Python engine supports lookaround, backreferences and Python
+// word boundaries. Ordinary search never starts this process.
 const searchPython = `import json, re, sys
 q = json.load(sys.stdin)
 try:
@@ -21,7 +23,7 @@ try:
         fields, pattern = term['fields'], term['pattern']
         flags = re.IGNORECASE if q['ignore_case'] or (q['smart_case'] and not any(c.isupper() for c in pattern)) else 0
         if q['fixed']: pattern = re.escape(pattern)
-        if q['word']: pattern = r'\b' + pattern + r'\b'
+        if q['word']: pattern = r'\b(?:' + pattern + r')\b'
         patterns.append((fields, re.compile(pattern, flags)))
 except re.error as error:
     print(json.dumps({'error': str(error)}))
@@ -49,6 +51,95 @@ for record in q['records']:
 print(json.dumps(output, ensure_ascii=False))
 `
 
+type searchTerm struct {
+	Fields  []string `json:"fields"`
+	Pattern string   `json:"pattern"`
+}
+
+type searchRecord struct {
+	Fields map[string][]any `json:"fields"`
+	Result map[string]any   `json:"result"`
+}
+
+type searchPattern struct {
+	fields     []string
+	expression *regexp.Regexp
+}
+
+func compileSearch(terms []searchTerm, o *options) ([]searchPattern, error) {
+	patterns := make([]searchPattern, 0, len(terms))
+	for _, term := range terms {
+		pattern := term.Pattern
+		ignoreCase := o.ignoreCase || (o.smartCase && strings.IndexFunc(pattern, unicode.IsUpper) < 0)
+		if o.fixed {
+			pattern = regexp.QuoteMeta(pattern)
+		}
+		if o.word {
+			pattern = `\b(?:` + pattern + `)\b`
+		}
+		if ignoreCase {
+			pattern = "(?i)" + pattern
+		}
+		expression, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, usage("invalid Go expression: %v; use --regex-engine python for Python-only syntax", err)
+		}
+		patterns = append(patterns, searchPattern{term.Fields, expression})
+	}
+	return patterns, nil
+}
+
+func (r *invocation) nativeMatches(patterns []searchPattern, records []searchRecord, o *options) ([]map[string]any, error) {
+	output := []map[string]any{}
+	for _, record := range records {
+		if err := r.ctx.Err(); err != nil {
+			return nil, err
+		}
+		matches := map[string][]string{}
+		matchedFields := []string{}
+		selected := !o.any
+		for _, pattern := range patterns {
+			matched := false
+			for _, field := range pattern.fields {
+				for _, value := range record.Fields[field] {
+					text, ok := value.(string)
+					if !ok {
+						encoded, err := json.Marshal(value)
+						if err != nil {
+							return nil, err
+						}
+						text = string(encoded)
+					}
+					if found := pattern.expression.FindStringIndex(text); found != nil {
+						matched = true
+						if _, exists := matches[field]; !exists {
+							matchedFields = append(matchedFields, field)
+						}
+						part := text[found[0]:found[1]]
+						if !contains(matches[field], part) {
+							matches[field] = append(matches[field], part)
+						}
+					}
+				}
+			}
+			if o.any {
+				selected = selected || matched
+			} else {
+				selected = selected && matched
+			}
+		}
+		if o.invert {
+			selected = !selected
+		}
+		if selected {
+			record.Result["matches"] = matches
+			record.Result["matched_fields"] = matchedFields
+			output = append(output, record.Result)
+		}
+	}
+	return output, nil
+}
+
 func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error {
 	fields := []string{"name", "session_name", "path", "window", "pane"}
 	if len(o.fields) > 0 {
@@ -63,7 +154,7 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 			}
 		}
 	}
-	terms := []map[string]any{}
+	terms := []searchTerm{}
 	for _, arg := range args {
 		selected := fields
 		pattern := arg
@@ -74,7 +165,7 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 			}
 		}
 		if pattern != "" {
-			terms = append(terms, map[string]any{"fields": selected, "pattern": pattern})
+			terms = append(terms, searchTerm{selected, pattern})
 		}
 	}
 	if len(terms) == 0 {
@@ -83,14 +174,26 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 		}
 		return usage("search requires a nonempty query pattern")
 	}
-	if err := r.checkPython(false); err != nil {
-		return err
+	var patterns []searchPattern
+	switch o.regexEngine {
+	case "go", "":
+		var err error
+		patterns, err = compileSearch(terms, o)
+		if err != nil {
+			return err
+		}
+	case "python":
+		if err := r.checkPython(false); err != nil {
+			return err
+		}
+	default:
+		return usage("unknown regex engine %q; choose go or python", o.regexEngine)
 	}
 	records, _, err := discover(true)
 	if err != nil {
 		return err
 	}
-	inputRecords := []map[string]any{}
+	inputRecords := []searchRecord{}
 	for _, record := range records {
 		values := map[string][]any{"name": {textValue(record["name"])}, "path": {textValue(record["path"])}, "session_name": {textValue(record["session_name"])}, "window": {}, "pane": {}}
 		for _, rawWindow := range array(mapping(record["config"])["windows"]) {
@@ -118,26 +221,43 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 		for _, key := range []string{"name", "path", "session_name", "source"} {
 			result[key] = record[key]
 		}
-		inputRecords = append(inputRecords, map[string]any{"fields": values, "result": result})
+		inputRecords = append(inputRecords, searchRecord{values, result})
 	}
-	payload, err := json.Marshal(map[string]any{"terms": terms, "records": inputRecords, "ignore_case": o.ignoreCase, "smart_case": o.smartCase, "fixed": o.fixed, "word": o.word, "any": o.any, "invert": o.invert})
+	var matches []map[string]any
+	if o.regexEngine == "python" {
+		matches, err = r.pythonMatches(terms, inputRecords, o)
+	} else {
+		matches, err = r.nativeMatches(patterns, inputRecords, o)
+	}
 	if err != nil {
 		return err
+	}
+	return r.writeMatches(matches)
+}
+
+func (r *invocation) pythonMatches(terms []searchTerm, inputRecords []searchRecord, o *options) ([]map[string]any, error) {
+	payload, err := json.Marshal(map[string]any{"terms": terms, "records": inputRecords, "ignore_case": o.ignoreCase, "smart_case": o.smartCase, "fixed": o.fixed, "word": o.word, "any": o.any, "invert": o.invert})
+	if err != nil {
+		return nil, err
 	}
 	result, err := r.process([]string{pythonExecutable(), "-c", searchPython}, "", bytes.NewReader(payload), false, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if result.Status != 0 {
-		return usage("invalid search expression: %s", strings.TrimSpace(result.Stdout+result.Stderr))
+		return nil, usage("invalid search expression: %s", strings.TrimSpace(result.Stdout+result.Stderr))
 	}
 	if result.Truncated {
-		return fmt.Errorf("search compatibility output exceeds %d bytes", captureLimit)
+		return nil, fmt.Errorf("search compatibility output exceeds %d bytes", captureLimit)
 	}
 	var matches []map[string]any
 	if err := json.Unmarshal([]byte(result.Stdout), &matches); err != nil {
-		return err
+		return nil, err
 	}
+	return matches, nil
+}
+
+func (r *invocation) writeMatches(matches []map[string]any) error {
 	if r.ndjson {
 		for _, match := range matches {
 			if err := r.encode(match); err != nil {
