@@ -172,12 +172,23 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if err := r.event("started", map[string]any{"input_count": len(inputs)}); err != nil {
 		return err
 	}
+	r.startProgress(o)
+	if r.progress != nil {
+		defer func() {
+			if err := r.progress.close(); err != nil {
+				r.writeErr = err
+			}
+		}()
+	}
 	results := []map[string]any{}
 	failures := []map[string]any{}
 	var last tmux.Session
 	for index, input := range inputs {
 		if r.ctx.Err() != nil {
 			break
+		}
+		if r.progress != nil {
+			r.progress.begin(input.plan, privatePath(input.path))
 		}
 		if err := r.event("workspace-started", map[string]any{"input_index": index, "input": privatePath(input.path)}); err != nil {
 			return err
@@ -230,6 +241,11 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			}
 		}
 		results = append(results, entry)
+	}
+	if r.progress != nil {
+		if err := r.progress.close(); err != nil {
+			return err
+		}
 	}
 	status := "ok"
 	if len(failures) > 0 {
@@ -306,7 +322,13 @@ func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name strin
 	if err := r.event("warning", map[string]any{"input_index": index, "code": "python_compatibility", "message": "plugins/custom builder execute in version-checked tmuxp " + referenceVersion}); err != nil {
 		return tmux.Session{}, err
 	}
+	if err := r.event("script-started", map[string]any{"input_index": index}); err != nil {
+		return tmux.Session{}, err
+	}
 	result, err := r.process(bridgeArgv(args), "", nil, true, log)
+	if eventErr := r.event("script-completed", map[string]any{"input_index": index, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
+		return tmux.Session{}, eventErr
+	}
 	if err != nil {
 		return tmux.Session{}, err
 	}
@@ -357,7 +379,13 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		if err != nil {
 			return session, err
 		}
+		if err := r.event("script-started", map[string]any{"input_index": inputIndex}); err != nil {
+			return session, err
+		}
 		result, err := r.process(argv, plan.ScriptDirectory, nil, true, log)
+		if eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
+			return session, eventErr
+		}
 		if err == nil && result.Status != 0 {
 			err = fmt.Errorf("before_script exited %d: %s", result.Status, result.Stderr)
 		}
@@ -428,7 +456,7 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 				return session, err
 			}
 		}
-		if err := r.event("window-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "window_index": window.Index(), "window_name": wp.Name}); err != nil {
+		if err := r.event("window-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "window_index": window.Index(), "window_name": wp.Name, "pane_total": len(wp.Panes)}); err != nil {
 			return session, err
 		}
 		for _, key := range sortedKeys(wp.Options) {
@@ -480,6 +508,9 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 			if pp.Focus {
 				focusedPane = pane
 			}
+			if err := r.event("pane-completed", map[string]any{"input_index": inputIndex, "pane_id": pane.ID().String()}); err != nil {
+				return session, err
+			}
 			if pi > 0 {
 				if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: "tiled"}); err != nil {
 					return session, err
@@ -503,6 +534,9 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		}
 		if wp.Focus || focus.ID() == "" {
 			focus = window
+		}
+		if err := r.event("window-completed", map[string]any{"input_index": inputIndex, "window_id": window.ID().String()}); err != nil {
+			return session, err
 		}
 	}
 	if focus.ID() != "" {

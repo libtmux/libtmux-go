@@ -89,6 +89,9 @@ func (w *captureWriter) emitBytes(data []byte, final bool) error {
 				return err
 			}
 		} else if !w.r.machine() {
+			if w.r.progress != nil {
+				return w.r.progress.script(w.stream, text)
+			}
 			writer := w.r.err
 			if w.stream == "stdout" {
 				writer = w.r.out

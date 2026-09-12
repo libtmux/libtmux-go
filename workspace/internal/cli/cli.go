@@ -41,6 +41,7 @@ type invocation struct {
 	sequence                 int
 	writeErr                 error
 	dispatched               bool
+	progress                 *progressPresenter
 }
 
 // Run executes one fresh command tree and returns its process exit status.
@@ -116,6 +117,15 @@ func (r *invocation) encode(value any) error {
 
 func (r *invocation) event(event string, data map[string]any) error {
 	if !r.ndjson {
+		if !r.machine() {
+			if r.progress != nil {
+				return r.progress.event(event, data)
+			}
+			if event == "warning" {
+				_, err := fmt.Fprintln(r.err, r.style("warning", "warning:")+" "+safeTerminal(textValue(data["message"])))
+				return err
+			}
+		}
 		return nil
 	}
 	r.mu.Lock()
@@ -140,12 +150,14 @@ func (r *invocation) result(value map[string]any) error {
 	return r.encode(value)
 }
 
-func (r *invocation) style(role, value string) string {
+func (r *invocation) style(role, value string) string { return r.styleFor(r.out, role, value) }
+
+func (r *invocation) styleFor(writer io.Writer, role, value string) string {
 	if r.machine() || os.Getenv("NO_COLOR") != "" || r.color == "never" {
 		return value
 	}
 	force := r.color == "always" || os.Getenv("FORCE_COLOR") != "" || (os.Getenv("CLICOLOR_FORCE") != "" && os.Getenv("CLICOLOR_FORCE") != "0")
-	if !force && (os.Getenv("CLICOLOR") == "0" || !terminal(r.out)) {
+	if !force && (os.Getenv("CLICOLOR") == "0" || !terminal(writer)) {
 		return value
 	}
 	codes := map[string]string{"heading": "1;96", "subject": "1;35", "info": "36", "success": "32", "warning": "33", "error": "31", "secondary": "2"}
