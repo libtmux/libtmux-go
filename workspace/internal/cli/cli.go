@@ -295,7 +295,7 @@ func (r *invocation) tree() *cobra.Command {
 	f.BoolVarP(&l.detached, "detached", "d", false, "load without attaching")
 	f.BoolVarP(&l.append, "append", "a", false, "append windows to the current session")
 	f.BoolVarP(&l.colors256, "256-colors", "2", false, "request 256 terminal colors")
-	f.BoolVarP(&l.colors88, "88-colors", "8", false, "request 88 terminal colors")
+	f.BoolVarP(&l.colors88, "88-colors", "8", false, "legacy 88-color request; unsupported by tmux 3.2a+ (default false)")
 	f.StringVar(&l.logFile, "log-file", "", "write diagnostics and script output to a log file (default empty: disabled)")
 	f.StringVar(&l.progressFormat, "progress-format", "", "progress preset or token format; TMUXP_PROGRESS_FORMAT (default default)")
 	f.IntVar(&l.progressLines, "progress-lines", 3, "script panel lines; 0 direct output, -1 terminal height; TMUXP_PROGRESS_LINES (default 3)")
