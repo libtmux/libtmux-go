@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -60,18 +63,114 @@ type rejectingWriter struct{}
 func (rejectingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
 
 func TestChildDrainFailureCancelsProcess(t *testing.T) {
-	for _, logFailure := range []bool{false, true} {
-		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-		r := &invocation{ctx: ctx, out: rejectingWriter{}, err: io.Discard, ndjson: true}
-		var log io.Writer
-		if logFailure {
-			log = rejectingWriter{}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	r := &invocation{ctx: ctx, out: rejectingWriter{}, err: io.Discard, ndjson: true}
+	start := time.Now()
+	result, err := r.process([]string{"/bin/sh", "-c", "printf output; sleep 5"}, "", nil, true)
+	if err == nil || result.Status == 0 || time.Since(start) > 700*time.Millisecond {
+		t.Fatalf("child did not stop with a failure status: %+v %v (%s)", result, err, time.Since(start))
+	}
+}
+
+type failingLogFile struct {
+	closeFailure bool
+	writes       int
+}
+
+func (f *failingLogFile) Write(data []byte) (int, error) {
+	f.writes++
+	if !f.closeFailure {
+		return 0, io.ErrClosedPipe
+	}
+	return len(data), nil
+}
+
+func (f *failingLogFile) Close() error { return io.ErrClosedPipe }
+
+func TestLogFailurePreservesChildCompletion(t *testing.T) {
+	for _, closeFailure := range []bool{false, true} {
+		for _, status := range []int{0, 7} {
+			for _, rejectDiagnostic := range []bool{false, true} {
+				marker := filepath.Join(t.TempDir(), "completed")
+				t.Setenv("LOG_CHILD_MARKER", marker)
+				file := &failingLogFile{closeFailure: closeFailure}
+				var diagnostic bytes.Buffer
+				r := &invocation{ctx: t.Context(), out: io.Discard, err: &diagnostic, json: true, log: newDiagnosticLog(file, slog.LevelDebug)}
+				if rejectDiagnostic {
+					r.err = rejectingWriter{}
+				}
+				result, err := r.process([]string{"/bin/sh", "-c", `printf first; sleep 0.01; printf second >&2; printf done > "$LOG_CHILD_MARKER"; exit ` + strconv.Itoa(status)}, "", nil, true)
+				r.closeLog()
+				r.closeLog()
+				_, markerErr := os.Stat(marker)
+				if err != nil || result.Status != status || markerErr != nil || (!closeFailure && file.writes != 1) {
+					t.Errorf("close=%t status=%d stderr=%t: %+v err=%v marker=%v writes=%d", closeFailure, status, rejectDiagnostic, result, err, markerErr, file.writes)
+				}
+				if !rejectDiagnostic && strings.Count(diagnostic.String(), "log_file_failed") != 1 {
+					t.Errorf("secondary warning: %q", diagnostic.String())
+				}
+			}
 		}
-		start := time.Now()
-		_, err := r.process([]string{"/bin/sh", "-c", "printf output; sleep 5"}, "", nil, true, log)
+	}
+}
+
+func TestLogDestinationsPrecedeBackend(t *testing.T) {
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "fifo")
+	if err := exec.Command("mkfifo", fifo).Run(); err != nil {
+		t.Fatal(err)
+	}
+	regular := filepath.Join(dir, "regular")
+	if err := os.WriteFile(regular, []byte("retained"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(regular, link); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(dir, "backend-called")
+	for _, name := range []string{"python", "tmux"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n: > \"$LOG_BACKEND_MARKER\"\nexit 0\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("TMUX_WORKSPACE_PYTHON", filepath.Join(dir, "python"))
+	t.Setenv("LOG_BACKEND_MARKER", marker)
+	path := filepath.Join(dir, "workspace.yaml")
+	if err := os.WriteFile(path, []byte("session_name: unused\nplugins: [never.Imported]\nwindows:\n- panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, destination := range []string{dir, fifo, link, "/dev/null"} {
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		var out, diagnostic bytes.Buffer
+		done := make(chan int, 1)
+		go func() {
+			done <- Run(ctx, []string{"load", "-S", filepath.Join(dir, "socket"), "-d", "--json", "--log-file", destination, path}, strings.NewReader(""), &out, &diagnostic)
+		}()
+		var code int
+		select {
+		case code = <-done:
+		case <-time.After(200 * time.Millisecond):
+			t.Error("log destination remained blocked after cancellation")
+			reader, err := os.OpenFile(fifo, os.O_RDWR, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case code = <-done:
+			case <-time.After(time.Second):
+				t.Fatal("owned FIFO opener did not join after reader release")
+			}
+			_ = reader.Close()
+		}
 		cancel()
-		if err == nil || time.Since(start) > 700*time.Millisecond {
-			t.Fatalf("log failure=%v: child did not stop promptly: %v (%s)", logFailure, err, time.Since(start))
+		if code != 1 || out.Len() != 0 || !strings.Contains(diagnostic.String(), "regular file") {
+			t.Errorf("invalid log destination: %d %q %q", code, out.String(), diagnostic.String())
+		}
+		if _, err := os.Stat(marker); !os.IsNotExist(err) {
+			t.Errorf("backend ran before log preflight: %v", err)
 		}
 	}
 }
@@ -180,7 +279,7 @@ func TestSearchExplicitPythonKeepsObjectMatchingAndGroupsWholeWords(t *testing.T
 func TestMachineControlBytesAndBoundedChildOutput(t *testing.T) {
 	var out strings.Builder
 	r := &invocation{ctx: context.Background(), out: &out, err: io.Discard, ndjson: true, command: "shell"}
-	result, err := r.process([]string{"/bin/sh", "-c", "printf 'line\\n\\033[31m\\t'; printf 'diagnostic\\n' >&2"}, "", nil, true, nil)
+	result, err := r.process([]string{"/bin/sh", "-c", "printf 'line\\n\\033[31m\\t'; printf 'diagnostic\\n' >&2"}, "", nil, true)
 	if err != nil || result.Status != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -192,7 +291,7 @@ func TestMachineControlBytesAndBoundedChildOutput(t *testing.T) {
 			t.Fatalf("invalid NDJSON %q", line)
 		}
 	}
-	result, err = r.process([]string{"/bin/sh", "-c", "head -c 1100000 /dev/zero; head -c 1100000 /dev/zero >&2"}, "", nil, false, nil)
+	result, err = r.process([]string{"/bin/sh", "-c", "head -c 1100000 /dev/zero; head -c 1100000 /dev/zero >&2"}, "", nil, false)
 	if err != nil || !result.Truncated || len(result.Stdout) != captureLimit || len(result.Stderr) != captureLimit {
 		t.Fatalf("bounded concurrent drain %+v %v", struct {
 			Out, Err  int
