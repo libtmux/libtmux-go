@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
-	"github.com/mattn/go-shellwords"
 	"github.com/spf13/cobra"
 )
 
@@ -423,15 +422,11 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 			return session, err
 		}
 	}
-	if plan.BeforeScript != "" {
-		argv, err := shellwords.Parse(plan.BeforeScript)
-		if err != nil {
-			return session, err
-		}
+	if len(plan.BeforeScript) != 0 {
 		if err := r.event("script-started", map[string]any{"input_index": inputIndex}); err != nil {
 			return session, err
 		}
-		result, err := r.process(argv, plan.ScriptDirectory, nil, true, log)
+		result, err := r.process(plan.BeforeScript, plan.ScriptDirectory, nil, true, log)
 		r.scripts = append(r.scripts, map[string]any{"input_index": inputIndex, "kind": "before-script", "result": result})
 		if eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
 			return session, eventErr

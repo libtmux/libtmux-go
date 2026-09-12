@@ -71,6 +71,26 @@ func TestInvalidSizePrecedesWorkspaceAndBackend(t *testing.T) {
 	}
 }
 
+func TestMalformedBeforeScriptPrecedesBackend(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	dir := t.TempDir()
+	for _, script := range []string{"printf 'unterminated", "   "} {
+		doc := document{"session_name": "invalid", "before_script": script, "windows": []any{document{"panes": []any{nil}}}}
+		data, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "invalid.json")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		code, out, diagnostic := invoke(t, "load", path, "-d", "--json")
+		if code != 1 || out != "" || !json.Valid([]byte(diagnostic)) || !strings.Contains(diagnostic, "before_script") {
+			t.Errorf("script %q reached backend: %d %q %q", script, code, out, diagnostic)
+		}
+	}
+}
+
 func TestHelpWithoutTmux(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, path := range []string{"", "load", "ls", "search", "edit", "freeze", "convert", "import", "import teamocil", "import tmuxinator", "shell", "debug-info"} {

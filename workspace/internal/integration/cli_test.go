@@ -165,6 +165,40 @@ func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 	}
 }
 
+func TestMalformedBeforeScriptLeavesSessionsUntouched(t *testing.T) {
+	for _, appendMode := range []bool{false, true} {
+		t.Run(strconv.FormatBool(appendMode), func(t *testing.T) {
+			server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}})
+			before, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			valid := write(t, dir, "valid.yaml", "session_name: first\nwindows:\n- panes: [blank]\n")
+			invalid := write(t, dir, "invalid.json", `{"session_name":"invalid","before_script":"printf 'unterminated","windows":[{"panes":[null]}]}`)
+			args := []string{"load", valid, invalid, "-S", server.SocketPath(), "--ndjson"}
+			if appendMode {
+				t.Setenv("TMUX", server.SocketPath()+",1,0")
+				t.Setenv("TMUX_PANE", before.Panes()[0].ID().String())
+				args = append(args, "--append")
+			} else {
+				args = append(args, "-d")
+			}
+			code, out, diagnostic := run(t, args...)
+			if code != 1 || out != "" || !strings.Contains(diagnostic, "before_script") {
+				t.Errorf("expected preflight failure: %d %s %s", code, out, diagnostic)
+			}
+			after, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(after.Sessions()) != 1 || len(after.Windows()) != 1 || len(after.Panes()) != 1 || after.Sessions()[0].ID() != before.Sessions()[0].ID() || after.Windows()[0].ID() != before.Windows()[0].ID() || after.Panes()[0].ID() != before.Panes()[0].ID() {
+				t.Errorf("preflight changed retained topology: sessions=%d windows=%d panes=%d", len(after.Sessions()), len(after.Windows()), len(after.Panes()))
+			}
+		})
+	}
+}
+
 func TestReadinessWaitsForPrompt(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{Config: []byte("set -g default-shell /bin/sh\nset -g default-command \"sleep 0.25; printf ready; exec /bin/sh\"\n")})
 	dir := t.TempDir()
