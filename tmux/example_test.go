@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -2053,4 +2054,83 @@ func ExampleSession_Run() {
 	}
 	fmt.Println(result.Lines, result.Status)
 	// Output: [built] 3
+}
+
+func ExampleServer_LoadBufferFrom() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-load-buffer-from",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "payload"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// A payload tmux reads as a stream: no quoting applies to it, and neither
+	// argv nor tmux's command-length limit bounds it.
+	name := "example"
+	if err := server.LoadBufferFrom(
+		ctx,
+		strings.NewReader("$HOME 'quoted'\x00"),
+		tmux.LoadBufferFromOptions{Name: &name},
+	); err != nil {
+		fmt.Println("load buffer:", err)
+		return
+	}
+	var buffer bytes.Buffer
+	if err := server.SaveBufferTo(
+		ctx, &buffer, tmux.SaveBufferToOptions{Name: &name},
+	); err != nil {
+		fmt.Println("save buffer:", err)
+		return
+	}
+	fmt.Printf("%q\n", buffer.String())
+	// Output: "$HOME 'quoted'\x00"
+}
+
+func ExamplePane_CaptureTo() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-capture-to",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "capture"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	// Run leaves its window in place, so its screen is there to be captured.
+	result, err := session.Run(ctx, "printf 'captured\\n'", tmux.RunOptions{Keep: true})
+	if err != nil {
+		fmt.Println("run:", err)
+		return
+	}
+	pane, err := server.Pane(ctx, result.Pane)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
+		return
+	}
+
+	// The screen is written to any writer rather than returned, so a long
+	// scrollback never lands in this program's memory.
+	var screen bytes.Buffer
+	if err := pane.CaptureTo(ctx, &screen, tmux.CapturePaneRequest{}); err != nil {
+		fmt.Println("capture:", err)
+		return
+	}
+	fmt.Println(strings.TrimSpace(screen.String()))
+	// Output: captured
 }

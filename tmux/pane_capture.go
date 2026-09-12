@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"sync/atomic"
@@ -181,7 +182,7 @@ func (p Pane) CaptureToFile(
 	path string,
 	request CapturePaneRequest,
 ) ([]string, error) {
-	expanded, err := expandBufferPath("save-buffer", path)
+	expanded, err := expandBufferPath("save-buffer", "Pane.CaptureTo", path)
 	if err != nil {
 		return nil, err
 	}
@@ -218,6 +219,27 @@ func (p Pane) capturePane(
 	toBuffer bool,
 	request CapturePaneRequest,
 ) (CommandResult, error) {
+	arguments, err := p.captureArguments(ctx, buffer, toBuffer, request)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
+	if !toBuffer {
+		// Control mode does not escape command stdout. Pane content matching a
+		// closing guard could truncate the reply and desynchronize later commands,
+		// so printed captures always use a subprocess.
+		p.server = p.server.requireProcess()
+	}
+	return p.literalCmd(ctx, arguments...)
+}
+
+// captureArguments validates request and builds its capture-pane argument
+// vector; it does not select a transport or run the command.
+func (p Pane) captureArguments(
+	ctx context.Context,
+	buffer string,
+	toBuffer bool,
+	request CapturePaneRequest,
+) ([]string, error) {
 	if err := validateServerCommandArguments(
 		"capture-pane",
 		serverCommandArgument{field: "Buffer", value: buffer},
@@ -225,24 +247,24 @@ func (p Pane) capturePane(
 		serverCommandArgument{field: "End", value: string(request.End)},
 		serverCommandArgument{field: "Pane", value: p.paneID.String()},
 	); err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 	if toBuffer && buffer == "" {
-		return CommandResult{ExitCode: -1}, &CaptureRequestError{
+		return nil, &CaptureRequestError{
 			Field:  "Buffer",
 			Reason: "must not be empty",
 		}
 	}
 	if err := validateCapturePosition("Start", request.Start); err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 	if err := validateCapturePosition("End", request.End); err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 	if err := validateTypedTarget(
 		"capture-pane", "Pane", "pane", p.paneID.String(),
 	); err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 
 	var current Version
@@ -250,7 +272,7 @@ func (p Pane) capturePane(
 		var err error
 		current, err = p.server.Version(ctx)
 		if err != nil {
-			return CommandResult{ExitCode: -1}, err
+			return nil, err
 		}
 	}
 
@@ -289,7 +311,7 @@ func (p Pane) capturePane(
 		captureVersion34,
 	)
 	if err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 	if request.AlternateScreen {
 		arguments = append(arguments, "-a")
@@ -306,7 +328,7 @@ func (p Pane) capturePane(
 		captureVersion36,
 	)
 	if err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 	if request.Pending {
 		arguments = append(arguments, "-P")
@@ -320,7 +342,7 @@ func (p Pane) capturePane(
 		captureVersion37,
 	)
 	if err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 	arguments, err = p.appendCaptureFeature(
 		arguments,
@@ -331,7 +353,7 @@ func (p Pane) capturePane(
 		captureVersion37,
 	)
 	if err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
 	arguments, err = p.appendCaptureFeature(
 		arguments,
@@ -342,15 +364,40 @@ func (p Pane) capturePane(
 		captureVersion37,
 	)
 	if err != nil {
-		return CommandResult{ExitCode: -1}, err
+		return nil, err
 	}
-	if !toBuffer {
-		// Control mode does not escape command stdout. Pane content matching a
-		// closing guard could truncate the reply and desynchronize later commands,
-		// so printed captures always use a subprocess.
-		p.server = p.server.requireProcess()
+	return arguments, nil
+}
+
+// CaptureTo streams printed content from the receiver's exact linked pane into
+// destination without holding a screen in memory, which is what makes a long
+// scrollback affordable to write straight to a file or a compressor. Like
+// [Pane.Capture] it reads the screen at one point in time rather than
+// following it; the zero request reads the visible screen and version-gated
+// fields follow [UnsupportedPolicy].
+//
+// A completed nonzero exit becomes a redacted command error, because CaptureTo
+// returns no bytes for the caller to inspect. Cancellation does not prove
+// destination received the complete screen, and a copy failure takes
+// precedence over a completed command's exit status because it means
+// destination never saw everything tmux sent. Printed captures always use a
+// subprocess, so a [Connection]-bound Pane returns
+// [ErrConnectionRequiresProcess]; [Pane.CaptureToFile] stages through a tmux
+// buffer and runs over a connection.
+func (p Pane) CaptureTo(
+	ctx context.Context,
+	destination io.Writer,
+	request CapturePaneRequest,
+) error {
+	if destination == nil {
+		return &CaptureRequestError{Field: "destination", Reason: "must not be nil"}
 	}
-	return p.literalCmd(ctx, arguments...)
+	arguments, err := p.captureArguments(ctx, "", false, request)
+	if err != nil {
+		return err
+	}
+	result, err := p.streamOut(ctx, destination, arguments)
+	return requireRedactedServerCommandNoStderr("capture-pane", result, err)
 }
 
 func validateCapturePosition(field string, position CapturePosition) error {

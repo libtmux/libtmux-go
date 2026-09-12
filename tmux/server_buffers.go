@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"context"
+	"io"
 	"slices"
 	"strings"
 )
@@ -53,6 +54,22 @@ type LoadBufferRequest struct {
 	// Path is the required input file path.
 	Path string
 	// Name selects the destination buffer, or nil for tmux's allocation behavior.
+	Name *string
+}
+
+// LoadBufferFromOptions configures streaming data into a tmux paste buffer.
+// Its zero value lets tmux allocate a buffer; nil Name selects that
+// allocation and a pointer to an empty name is explicit.
+type LoadBufferFromOptions struct {
+	// Name selects the destination buffer, or nil for tmux's allocation behavior.
+	Name *string
+}
+
+// SaveBufferToOptions configures streaming a tmux paste buffer's contents
+// out. Its zero value selects tmux's most-recent buffer; a pointer to an
+// empty name is explicit.
+type SaveBufferToOptions struct {
+	// Name selects a named buffer, or nil for tmux's most-recent buffer.
 	Name *string
 }
 
@@ -150,13 +167,15 @@ func (s Server) DeleteBuffer(ctx context.Context, name *string) error {
 }
 
 // SaveBuffer writes a named or most-recent buffer to a file. Path follows
-// [Server.SourceFile]'s current-user expansion and lexical normalization. It changes
-// that file; exact "-" is rejected because the runner exposes no process stdio.
+// [Server.SourceFile]'s current-user expansion and lexical normalization. It
+// changes that file. Exact "-" is rejected because it names tmux's stdout
+// rather than a path; [Server.SaveBufferTo] streams to an [io.Writer], and
+// this method is the one that runs over a [Connection].
 func (s Server) SaveBuffer(ctx context.Context, request SaveBufferRequest) error {
 	if err := validateBufferName("save-buffer", request.Name); err != nil {
 		return err
 	}
-	path, err := expandBufferPath("save-buffer", request.Path)
+	path, err := expandBufferPath("save-buffer", "Server.SaveBufferTo", request.Path)
 	if err != nil {
 		return err
 	}
@@ -173,13 +192,15 @@ func (s Server) SaveBuffer(ctx context.Context, request SaveBufferRequest) error
 }
 
 // LoadBuffer reads a file into a named or newly allocated buffer. Path follows
-// [Server.SourceFile]'s current-user expansion and lexical normalization. It mutates
-// tmux's destination buffer and rejects exact "-" because no process stdio is exposed.
+// [Server.SourceFile]'s current-user expansion and lexical normalization. It
+// mutates tmux's destination buffer. Exact "-" is rejected because it names
+// tmux's stdin rather than a path; [Server.LoadBufferFrom] streams from an
+// [io.Reader], and this method is the one that runs over a [Connection].
 func (s Server) LoadBuffer(ctx context.Context, request LoadBufferRequest) error {
 	if err := validateBufferName("load-buffer", request.Name); err != nil {
 		return err
 	}
-	path, err := expandBufferPath("load-buffer", request.Path)
+	path, err := expandBufferPath("load-buffer", "Server.LoadBufferFrom", request.Path)
 	if err != nil {
 		return err
 	}
@@ -190,6 +211,69 @@ func (s Server) LoadBuffer(ctx context.Context, request LoadBufferRequest) error
 	arguments = append(arguments, "--", path)
 	result, err := s.literalCmd(ctx, arguments...)
 	return requireServerCommandNoStderr("load-buffer", result, err)
+}
+
+// LoadBufferFrom streams source into a named or newly allocated tmux paste
+// buffer, reading it to completion without holding its contents in memory. It
+// carries any bytes, including NUL, and is bounded by neither argv nor tmux's
+// command-message limit, which is what [Server.SetBuffer] is bounded by.
+//
+// A copy failure after tmux exits zero means the buffer holds only the prefix
+// that reached tmux, and cancellation does not prove tmux stored nothing. A
+// source that blocks regardless of cancellation does not hold the call, and is
+// still being read when it returns. A [Connection]-bound Server returns
+// [ErrConnectionRequiresProcess]: tmux offers no stdin to a control client, so
+// use [Server.LoadBuffer] and a path over a connection.
+func (s Server) LoadBufferFrom(
+	ctx context.Context,
+	source io.Reader,
+	options LoadBufferFromOptions,
+) error {
+	if source == nil {
+		return invalidServerCommandRequest("load-buffer", "source", "", "must not be nil")
+	}
+	if err := validateBufferName("load-buffer", options.Name); err != nil {
+		return err
+	}
+	arguments := []string{"load-buffer"}
+	if options.Name != nil {
+		arguments = append(arguments, "-b", *options.Name)
+	}
+	arguments = append(arguments, "--", "-")
+	result, err := s.streamIn(ctx, source, arguments)
+	return requireRedactedServerCommandNoStderr("load-buffer", result, err)
+}
+
+// SaveBufferTo streams a named or most-recent tmux paste buffer into
+// destination without holding its contents in memory. It writes any bytes,
+// including NUL, and preserves them exactly where [Server.ShowBuffer]
+// reconstructs lines.
+//
+// Cancellation does not prove destination received a complete buffer, and a
+// copy failure takes precedence over a completed command's exit status because
+// it means destination never saw everything tmux sent. A destination that
+// blocks regardless of cancellation does not hold the call. A
+// [Connection]-bound Server returns [ErrConnectionRequiresProcess]: tmux
+// offers no stdout to a control client, so use [Server.SaveBuffer] and a path
+// over a connection.
+func (s Server) SaveBufferTo(
+	ctx context.Context,
+	destination io.Writer,
+	options SaveBufferToOptions,
+) error {
+	if destination == nil {
+		return invalidServerCommandRequest("save-buffer", "destination", "", "must not be nil")
+	}
+	if err := validateBufferName("save-buffer", options.Name); err != nil {
+		return err
+	}
+	arguments := []string{"save-buffer"}
+	if options.Name != nil {
+		arguments = append(arguments, "-b", *options.Name)
+	}
+	arguments = append(arguments, "--", "-")
+	result, err := s.streamOut(ctx, destination, arguments)
+	return requireRedactedServerCommandNoStderr("save-buffer", result, err)
 }
 
 // ListBuffers returns an owned snapshot of live tmux buffer rows. A command or
@@ -231,7 +315,7 @@ func validateBufferName(subcommand string, name *string) error {
 	return validateServerCommandArgument(subcommand, "Name", *name, true)
 }
 
-func expandBufferPath(subcommand string, path string) (string, error) {
+func expandBufferPath(subcommand string, streaming string, path string) (string, error) {
 	if path == "" {
 		return "", invalidServerCommandRequest(
 			subcommand,
@@ -245,7 +329,7 @@ func expandBufferPath(subcommand string, path string) (string, error) {
 			subcommand,
 			"Path",
 			path,
-			"requires process stdio, which this runner does not expose",
+			"is tmux's stdio operand rather than a path; use "+streaming,
 		)
 	}
 	expanded, err := expandCommandPath(subcommand, path)
