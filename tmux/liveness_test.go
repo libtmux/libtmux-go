@@ -23,7 +23,58 @@ func TestMain(m *testing.M) {
 			os.Exit(m.Run())
 		}
 	}
-	os.Exit(tmuxtest.Main(m))
+	os.Exit(arenaTestMain(func() int { return tmuxtest.Main(m) }))
+}
+
+// TestStopExampleServerRefusesToStopALentServer is the negative half of the
+// documentation arena's contract: an example must never stop a server it did
+// not start. The lent case asserts the refusal and that the server survives
+// it; the owned case beside it is the control, proving the same call still
+// stops a server this process did start.
+func TestStopExampleServerRefusesToStopALentServer(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		lent bool
+	}{
+		{name: "owned server stops", lent: false},
+		{name: "lent server is refused", lent: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			server := tmuxtest.NewServer(ctx, t)
+
+			var refusals []string
+			err := stopExampleServer(ctx, server, test.lent, func(reason string) {
+				refusals = append(refusals, reason)
+			})
+			alive, aliveErr := server.IsAlive(ctx)
+			if aliveErr != nil {
+				t.Fatalf("IsAlive() error = %v", aliveErr)
+			}
+
+			if !test.lent {
+				if err != nil {
+					t.Fatalf("stopExampleServer() error = %v, want nil", err)
+				}
+				if len(refusals) != 0 {
+					t.Fatalf("refusals = %v, want none", refusals)
+				}
+				if alive {
+					t.Fatal("IsAlive() = true, want the owned server stopped")
+				}
+				return
+			}
+			if !errors.Is(err, errArenaServerLent) {
+				t.Fatalf("stopExampleServer() error = %v, want errArenaServerLent", err)
+			}
+			if len(refusals) != 1 {
+				t.Fatalf("refusals = %v, want exactly one reported reason", refusals)
+			}
+			if !alive {
+				t.Fatal("IsAlive() = false, want the lent server left running")
+			}
+		})
+	}
 }
 
 // libtmux:parity libtmux.server.Server.is_alive

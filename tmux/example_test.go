@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -28,16 +31,344 @@ const exampleWaitBudget = 60 * time.Second
 // example's ctx is expired exactly when its run failed on the deadline, which
 // is when cleanup matters most, and the socket it names is fixed: a server left
 // running fails every later run with a session that already exists.
+//
+// Under the documentation arena the server is lent, not owned: stopping it is
+// refused and reported instead, and only the sessions this run added are
+// removed, so the next example's session name does not collide with one this
+// run leaves behind.
 func killExampleServer(server tmux.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = server.Kill(ctx)
+
+	_, lent := arenaLentServer()
+	if err := stopExampleServer(ctx, server, lent, arenaRecordRefusal); err != nil {
+		if !lent {
+			return
+		}
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		if cleanupErr := killArenaSessionsSinceBaseline(cleanupCtx, server); cleanupErr != nil {
+			arenaRecordRefusal(fmt.Sprintf("clean up example sessions: %v", cleanupErr))
+		}
+	}
+}
+
+// stopExampleServer stops server, unless lent reports that the documentation
+// arena lent it, in which case stopping is refused: an example must never
+// stop a server it did not start. onRefusal receives the reason so a refusal
+// is reported rather than silently skipped.
+func stopExampleServer(
+	ctx context.Context,
+	server tmux.Server,
+	lent bool,
+	onRefusal func(string),
+) error {
+	if lent {
+		onRefusal("kill-server refused: the documentation arena lent this server")
+		return errArenaServerLent
+	}
+	return server.Kill(ctx)
+}
+
+// errArenaServerLent is stopExampleServer's refusal when the documentation
+// arena lent the server a snippet would otherwise stop.
+var errArenaServerLent = errors.New("arena lent this server; refusing to stop it")
+
+// exampleServer resolves the tmux server a documented snippet runs against:
+// the documentation arena's lent server when it is active, or a server this
+// example starts and owns otherwise. Behavior is tmux.NewServer's own when
+// the arena is inactive.
+func exampleServer(options tmux.ServerOptions) (tmux.Server, error) {
+	if server, active := arenaLentServer(); active {
+		if reason, needsOwn := examplesNeedingAFreshServer[callerExampleName()]; needsOwn {
+			arenaRecordRefusal(callerExampleName() + ": " + reason)
+			return tmux.NewServer(options)
+		}
+		arenaRecordSource(callerDocumentedSource())
+		return server, nil
+	}
+	return tmux.NewServer(options)
+}
+
+// examplesNeedingAFreshServer names the documented Examples that cannot run
+// against a lent server, with the reason each one cannot.
+//
+// Their printed output is the documentation, and it counts what the whole
+// server holds -- "no sessions", "panes: 1". A lent server already holds the
+// supervisor's own session, so the count a reader is shown would be wrong, or
+// the example would have to stop saying the thing it exists to say. Each keeps
+// a server of its own, and the refusal is reported rather than silent.
+var examplesNeedingAFreshServer = map[string]string{
+	"ExampleErrNoServer":        "prints how many sessions the server has, starting from none",
+	"ExampleServer_SearchPanes": "prints a pane count for the whole server",
+	"ExampleServer_Sessions":    "lists every session on the server",
+	"ExampleServer_Snapshot":    "prints session and pane counts for the whole server",
+	"ExampleWindow_Panes":       "prints a pane count that assumes the window it just made is the only one",
+}
+
+// callerExampleName names the Example function that asked for a server, which
+// is how an entry in examplesNeedingAFreshServer is matched.
+func callerExampleName() string {
+	// Same depth as callerDocumentedSource: this frame, exampleServer, then
+	// the Example that asked for a server.
+	pc, _, _, ok := runtime.Caller(2)
+	if !ok {
+		return "unknown"
+	}
+	name := runtime.FuncForPC(pc).Name()
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		name = name[i+1:]
+	}
+	return name
+}
+
+// callerDocumentedSource names the file exampleServer's caller lives in,
+// relative to the module, which is the unit the documentation site quotes and
+// the supervisor keys coverage by.
+func callerDocumentedSource() string {
+	_, file, _, ok := runtime.Caller(2)
+	if !ok {
+		return "unknown"
+	}
+	if i := strings.LastIndex(file, "/tmux/"); i >= 0 {
+		return strings.TrimPrefix(file[i+1:], "")
+	}
+	return filepath.Base(file)
+}
+
+// exampleArenaArtifact identifies this package's documented Example functions
+// to the documentation arena. examples/internal/exampletest defines the same
+// activation contract for the example programs, but internal packages are
+// only importable from within their own module tree, so this is a local copy
+// scoped to the tmux module.
+const (
+	exampleArenaDescriptorVariable = "LIBTMUX_ARENA_DESCRIPTOR"
+	exampleArenaArtifactVariable   = "LIBTMUX_ARENA_ARTIFACT"
+	exampleArenaSocketVariable     = "LIBTMUX_SOCKET_PATH"
+	exampleArenaBinaryVariable     = "LIBTMUX_TMUX_BIN"
+	exampleArenaArtifact           = "go-tmux-examples"
+)
+
+// exampleArenaState holds the arena's lent server and what this run has done
+// with it. Example functions run one after another rather than concurrently,
+// so this is read and written without a lock.
+type exampleArenaState struct {
+	active   bool
+	server   tmux.Server
+	baseline map[tmux.SessionID]bool
+	sources  []string
+	refusals []string
+}
+
+var exampleArena exampleArenaState
+
+func arenaLentServer() (tmux.Server, bool) {
+	return exampleArena.server, exampleArena.active
+}
+
+// arenaRecordSource records the documented file an Example belongs to, once.
+//
+// The supervisor asks for one evidence record per *declared* source and its
+// coverage keys are file paths, so a record per Example function would name
+// something the registry cannot match and would force the registry to list
+// every Example by hand. The file is the documented unit; which Examples ran
+// is in the test output.
+func arenaRecordSource(name string) {
+	if slices.Contains(exampleArena.sources, name) {
+		return
+	}
+	exampleArena.sources = append(exampleArena.sources, name)
+}
+
+func arenaRecordRefusal(reason string) {
+	exampleArena.refusals = append(exampleArena.refusals, reason)
+}
+
+// resolveExampleArena reads the arena's activation contract from the
+// environment. An empty descriptor means the arena is inactive. Once active,
+// an incomplete contract or an artifact mismatch is an error, and the caller
+// must not fall back to any other server.
+func resolveExampleArena(lookup func(string) (string, bool)) (tmux.Server, bool, error) {
+	descriptor, _ := lookup(exampleArenaDescriptorVariable)
+	if descriptor == "" {
+		return tmux.Server{}, false, nil
+	}
+	artifact, _ := lookup(exampleArenaArtifactVariable)
+	socketPath, _ := lookup(exampleArenaSocketVariable)
+	binary, _ := lookup(exampleArenaBinaryVariable)
+	if artifact == "" || socketPath == "" || binary == "" {
+		return tmux.Server{}, false, errors.New("arena contract is incomplete")
+	}
+	if artifact != exampleArenaArtifact {
+		return tmux.Server{}, false, fmt.Errorf("arena artifact %q does not match %q", artifact, exampleArenaArtifact)
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary, SocketPath: socketPath})
+	if err != nil {
+		return tmux.Server{}, false, fmt.Errorf("configure arena tmux server: %w", err)
+	}
+	return server, true, nil
+}
+
+// arenaSessionBaseline snapshots the sessions already on server before any
+// example runs, so cleanup after each example can tell what it added.
+func arenaSessionBaseline(ctx context.Context, server tmux.Server) (map[tmux.SessionID]bool, error) {
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	baseline := make(map[tmux.SessionID]bool, len(sessions))
+	for _, session := range sessions {
+		baseline[session.ID()] = true
+	}
+	return baseline, nil
+}
+
+// killArenaSessionsSinceBaseline removes every session on server that was not
+// present at exampleArena's baseline, returning the lent server to the state
+// this run found it in without ever stopping it.
+func killArenaSessionsSinceBaseline(ctx context.Context, server tmux.Server) error {
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for _, session := range sessions {
+		if exampleArena.baseline[session.ID()] {
+			continue
+		}
+		if err := server.KillSession(ctx, session.ID().String()); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+// arenaTestMain runs the package's TestMain body, activating the
+// documentation arena around it when the environment names it. An incomplete
+// or mismatched contract fails before run so nothing touches any server;
+// otherwise behavior is run's own.
+func arenaTestMain(run func() int) int {
+	server, active, err := resolveExampleArena(os.LookupEnv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "arena:", err)
+		return 2
+	}
+	if active {
+		baseline, err := arenaSessionBaseline(context.Background(), server)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "arena: snapshot sessions:", err)
+			return 2
+		}
+		exampleArena.active = true
+		exampleArena.server = server
+		exampleArena.baseline = baseline
+	}
+
+	code := run()
+
+	for _, reason := range exampleArena.refusals {
+		fmt.Fprintln(os.Stderr, "arena: refused:", reason)
+	}
+	if !active {
+		return code
+	}
+	if len(exampleArena.sources) == 0 {
+		fmt.Fprintln(os.Stderr, "arena: active but no documented source ran against the lent server")
+		if code == 0 {
+			code = 1
+		}
+		return code
+	}
+	if err := emitArenaEvidence(context.Background(), server, exampleArena.sources); err != nil {
+		fmt.Fprintln(os.Stderr, "arena: emit evidence:", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	return code
+}
+
+// emitArenaEvidence prints one LIBTMUX_ARENA_EVIDENCE={json} line per source
+// audited against server: schema 1, carrying the artifact, the tmux global
+// option @libtmux_arena_challenge, the server's pid, its socket path, and the
+// documented source, having verified the reported socket path equals the one
+// the arena lent.
+func emitArenaEvidence(ctx context.Context, server tmux.Server, sources []string) error {
+	serverPID, err := arenaServerPID(ctx, server)
+	if err != nil {
+		return fmt.Errorf("read arena server pid: %w", err)
+	}
+	actualSocketPath, err := arenaServerSocketPath(ctx, server)
+	if err != nil {
+		return fmt.Errorf("read arena server socket path: %w", err)
+	}
+	if want := server.SocketPath(); actualSocketPath != want {
+		return fmt.Errorf("arena socket path %q does not match requested %q", actualSocketPath, want)
+	}
+	challenge, present, err := server.GlobalSessionScope().RawOption(ctx, "@libtmux_arena_challenge")
+	if err != nil {
+		return fmt.Errorf("read arena challenge: %w", err)
+	}
+	if !present || challenge == "" {
+		return errors.New("arena challenge is empty")
+	}
+	for _, source := range sources {
+		evidence, err := json.Marshal(struct {
+			Artifact   string `json:"artifact"`
+			Challenge  string `json:"challenge"`
+			Schema     int    `json:"schema"`
+			ServerPID  int    `json:"server_pid"`
+			SocketPath string `json:"socket_path"`
+			Source     string `json:"source"`
+		}{
+			Artifact:   exampleArenaArtifact,
+			Challenge:  challenge,
+			Schema:     1,
+			ServerPID:  serverPID,
+			SocketPath: actualSocketPath,
+			Source:     source,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Printf("LIBTMUX_ARENA_EVIDENCE=%s\n", evidence); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func arenaServerPID(ctx context.Context, server tmux.Server) (int, error) {
+	value, err := arenaDisplayMessage(ctx, server, "#{pid}")
+	if err != nil {
+		return 0, err
+	}
+	serverPID, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("parse arena server pid %q: %w", value, err)
+	}
+	return serverPID, nil
+}
+
+func arenaServerSocketPath(ctx context.Context, server tmux.Server) (string, error) {
+	return arenaDisplayMessage(ctx, server, "#{socket_path}")
+}
+
+func arenaDisplayMessage(ctx context.Context, server tmux.Server, format string) (string, error) {
+	result, err := server.Cmd(ctx, "display-message", "-p", format)
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 || len(result.Stdout) != 1 {
+		return "", fmt.Errorf("exit %d, stdout %q", result.ExitCode, result.Stdout)
+	}
+	return result.Stdout[0], nil
 }
 
 func Example() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-workflow",
 	})
 	if err != nil {
@@ -114,7 +445,7 @@ func ExampleNewPlan() {
 func ExamplePane_SendKeys() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-send-keys",
 	})
 	if err != nil {
@@ -174,7 +505,7 @@ func ExamplePane_SendKeys() {
 func ExamplePane_CaptureBytes() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture-bytes",
 	})
 	if err != nil {
@@ -211,7 +542,7 @@ func ExamplePane_CaptureBytes() {
 func ExampleServer_Sessions() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-sessions",
 	})
 	if err != nil {
@@ -249,7 +580,7 @@ func ExampleServer_Sessions() {
 func ExampleServer_Cmd() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-cmd",
 	})
 	if err != nil {
@@ -285,7 +616,7 @@ func ExampleServer_Cmd() {
 func ExampleServer_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-open-control",
 	})
 	if err != nil {
@@ -346,7 +677,7 @@ func ExampleServer_OpenControl() {
 func ExampleServer_ShowBufferBytes() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-show-buffer",
 	})
 	if err != nil {
@@ -381,7 +712,7 @@ func ExampleServer_ShowBufferBytes() {
 func ExampleServer_Snapshot() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-snapshot",
 	})
 	if err != nil {
@@ -417,7 +748,7 @@ func ExampleServer_Snapshot() {
 func ExampleSession_ResolveActiveWindow() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-resolve-window",
 	})
 	if err != nil {
@@ -449,7 +780,7 @@ func ExampleSession_ResolveActiveWindow() {
 func ExamplePaneFilter_Predicate() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-pane-filter",
 	})
 	if err != nil {
@@ -533,7 +864,7 @@ func ExampleSparseArray() {
 func ExampleErrNoServer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-no-server",
 	})
 	if err != nil {
@@ -577,7 +908,7 @@ func ExampleErrNoServer() {
 func ExampleSession_Options() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-session-options",
 	})
 	if err != nil {
@@ -622,7 +953,7 @@ func ExampleSession_Options() {
 func ExampleSession_SetMouse() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-set-mouse",
 	})
 	if err != nil {
@@ -657,7 +988,7 @@ func ExampleSession_SetMouse() {
 func ExampleSession_SetUpdateEnvironment() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-update-environment",
 	})
 	if err != nil {
@@ -694,7 +1025,7 @@ func ExampleSession_SetUpdateEnvironment() {
 func ExampleGlobalSessionScope_SetHook() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-global-hook",
 	})
 	if err != nil {
@@ -735,7 +1066,7 @@ func ExampleGlobalSessionScope_SetHook() {
 func ExampleServer_SearchPanes() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-server-search-panes",
 	})
 	if err != nil {
@@ -867,7 +1198,7 @@ func ExampleServer_SocketSelection() {
 func ExampleServer_NewSession() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-new-session",
 	})
 	if err != nil {
@@ -890,7 +1221,7 @@ func ExampleServer_NewSession() {
 func ExampleSession_NewWindow() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-new-window",
 	})
 	if err != nil {
@@ -921,7 +1252,7 @@ func ExampleSession_NewWindow() {
 func ExampleWindow_SplitPane() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-split-pane",
 	})
 	if err != nil {
@@ -962,7 +1293,7 @@ func ExampleWindow_SplitPane() {
 func ExamplePane_Capture() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture",
 	})
 	if err != nil {
@@ -1031,7 +1362,7 @@ func ExampleServerOptions_Binary() {
 func ExampleServer_Session() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-session-lookup",
 	})
 	if err != nil {
@@ -1060,7 +1391,7 @@ func ExampleServer_Session() {
 func ExampleServer_Window() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-window-lookup",
 	})
 	if err != nil {
@@ -1095,7 +1426,7 @@ func ExampleServer_Window() {
 func ExampleServer_Pane() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-pane-lookup",
 	})
 	if err != nil {
@@ -1127,7 +1458,7 @@ func ExampleServer_Pane() {
 func ExampleServer_Client() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-client-lookup",
 	})
 	if err != nil {
@@ -1151,7 +1482,7 @@ func ExampleServer_Client() {
 func ExampleWindow_SearchPanes() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-search-panes",
 	})
 	if err != nil {
@@ -1188,7 +1519,7 @@ func ExampleWindow_SearchPanes() {
 func ExampleWindow_Panes() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-window-panes",
 	})
 	if err != nil {
@@ -1252,7 +1583,7 @@ func ExampleWindow_Panes() {
 func ExampleServer_SetOption() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-set-option",
 	})
 	if err != nil {
@@ -1280,7 +1611,7 @@ func ExampleServer_SetOption() {
 func ExampleServer_RawOption() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-raw-option",
 	})
 	if err != nil {
@@ -1303,7 +1634,7 @@ func ExampleServer_RawOption() {
 func ExampleSession_SetBellAction() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-bell-action",
 	})
 	if err != nil {
@@ -1337,7 +1668,7 @@ func ExampleSession_SetBellAction() {
 func ExampleControlClient_Call() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-control-call",
 	})
 	if err != nil {
@@ -1381,7 +1712,7 @@ func ExampleControlClient_Call() {
 func ExampleServer_WaitFor() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-wait-for",
 	})
 	if err != nil {
@@ -1460,7 +1791,7 @@ func ExampleServer_WaitFor_paneCompletion() {
 func ExamplePoll() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-poll",
 	})
 	if err != nil {
@@ -1511,7 +1842,7 @@ func ExamplePoll() {
 func ExampleControlClient_NextNotification() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-output-events",
 	})
 	if err != nil {
@@ -1567,7 +1898,7 @@ func ExampleControlClient_NextNotification() {
 func ExamplePane_CaptureToFile() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-capture-to-file",
 	})
 	if err != nil {
@@ -1631,7 +1962,7 @@ func ExamplePane_CaptureToFile() {
 func ExampleSession_OpenControl() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-control-pool",
 	})
 	if err != nil {
@@ -1665,7 +1996,7 @@ func ExampleSession_OpenControl() {
 func ExamplePane_OpenObservation() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-pane-observation",
 	})
 	if err != nil {
@@ -1726,7 +2057,7 @@ func ExamplePane_OpenObservation() {
 func ExampleServer_OpenNotifications() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-server-notifications",
 	})
 	if err != nil {
@@ -1754,7 +2085,7 @@ func ExampleServer_OpenNotifications() {
 func ExampleSession_OpenNotifications() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{
+	server, err := exampleServer(tmux.ServerOptions{
 		SocketName: "libtmux-go-example-session-notifications",
 	})
 	if err != nil {
