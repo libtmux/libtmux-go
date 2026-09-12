@@ -1836,16 +1836,20 @@ func ExamplePane_Writer() {
 	}
 	defer func() { _ = observation.Close() }()
 
-	// Each newline is the Enter key, so this types two commands.
-	if _, err := fmt.Fprint(pane.Writer(ctx), "printf 'one\\n'\nprintf 'two\\n'\n"); err != nil {
-		fmt.Println("write:", err)
-		return
-	}
+	// Typing and reading take turns. A terminal echoes what is typed as it
+	// arrives, so a second command typed while the first is still printing
+	// shares a line with that output: the echo has no newline of its own yet.
+	writer := pane.Writer(ctx)
 	scanner := bufio.NewScanner(observation.Reader(ctx))
-	for scanner.Scan() {
-		if line := scanner.Text(); line == "one" || line == "two" {
-			fmt.Println(line)
-			if line == "two" {
+	// Each newline is the Enter key, so each of these types one command.
+	for _, command := range []string{"printf 'one\\n'", "printf 'two\\n'"} {
+		if _, err := fmt.Fprintln(writer, command); err != nil {
+			fmt.Println("write:", err)
+			return
+		}
+		for scanner.Scan() {
+			if line := scanner.Text(); line == "one" || line == "two" {
+				fmt.Println(line)
 				break
 			}
 		}
@@ -1929,14 +1933,19 @@ func ExamplePaneObservation_Notifications() {
 		return
 	}
 	// Every notification on the connection, as a range loop; output for this
-	// pane is picked out by identity.
+	// pane is picked out by identity. tmux chooses where one notification's
+	// bytes end, which need not be where a line does, so what is looked for
+	// is collected across them rather than expected within one.
+	var heard []byte
 	for notification, err := range observation.Notifications(ctx) {
 		if err != nil {
 			fmt.Println("notification:", err)
 			return
 		}
-		if id, data, isOutput := notification.Output(); isOutput && id == pane.ID() &&
-			bytes.Contains(data, []byte("seen\r\n")) {
+		if id, data, isOutput := notification.Output(); isOutput && id == pane.ID() {
+			heard = append(heard, data...)
+		}
+		if bytes.Contains(heard, []byte("seen\r\n")) {
 			fmt.Println("heard the pane")
 			break
 		}
