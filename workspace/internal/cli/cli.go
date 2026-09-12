@@ -42,6 +42,7 @@ type invocation struct {
 	writeErr                 error
 	dispatched               bool
 	progress                 *progressPresenter
+	scripts                  []map[string]any
 }
 
 // Run executes one fresh command tree and returns its process exit status.

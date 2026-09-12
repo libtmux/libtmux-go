@@ -167,6 +167,22 @@ func environment(value any) (map[string]string, error) {
 	return out, nil
 }
 
+func optionValues(value any) (map[string]string, error) {
+	out, err := environment(value)
+	if err != nil {
+		return nil, err
+	}
+	for key, raw := range mapping(value) {
+		if flag, ok := raw.(bool); ok {
+			out[key] = "off"
+			if flag {
+				out[key] = "on"
+			}
+		}
+	}
+	return out, nil
+}
+
 type loadPlan struct {
 	Name, Directory, BeforeScript       string
 	Readiness                           string
@@ -232,11 +248,11 @@ func normalize(doc document, base string) (loadPlan, error) {
 	if err != nil {
 		return plan, err
 	}
-	plan.Options, err = environment(doc["options"])
+	plan.Options, err = optionValues(doc["options"])
 	if err != nil {
 		return plan, err
 	}
-	plan.GlobalOptions, err = environment(doc["global_options"])
+	plan.GlobalOptions, err = optionValues(doc["global_options"])
 	if err != nil {
 		return plan, err
 	}
@@ -277,11 +293,11 @@ func normalize(doc document, base string) (loadPlan, error) {
 			seen[n] = true
 			wp.Index = &n
 		}
-		wp.Options, err = environment(w["options"])
+		wp.Options, err = optionValues(w["options"])
 		if err != nil {
 			return plan, err
 		}
-		wp.OptionsAfter, err = environment(w["options_after"])
+		wp.OptionsAfter, err = optionValues(w["options_after"])
 		if err != nil {
 			return plan, err
 		}
