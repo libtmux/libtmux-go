@@ -110,7 +110,7 @@ func TestMalformedBeforeScriptPrecedesBackend(t *testing.T) {
 func TestBridgeAppendScriptPrecedesRuntime(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("TMUX_WORKSPACE_PYTHON", filepath.Join(t.TempDir(), "missing-python"))
-	for field, value := range map[string]string{"plugins": `["example.Plugin"]`, "workspace_builder": `"example.Builder"`, "workspace_builder_paths": `["."]`} {
+	for field, value := range map[string]string{"plugins": `["example.Plugin"]`, "workspace_builder": `"example.Builder"`} {
 		path := filepath.Join(t.TempDir(), "unsafe.json")
 		content := `{"session_name":"unsafe","before_script":"/bin/false","windows":[{"panes":[null]}],"` + field + `":` + value + `}`
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -178,6 +178,34 @@ func TestNormalizeShorthandAndCommandState(t *testing.T) {
 	commands := panes[2].Commands
 	if commands[2].Enter || commands[2].SleepAfter == 0 || !commands[4].Enter || commands[4].SleepAfter != 0 {
 		t.Fatalf("command state did not carry/reset: %+v", commands)
+	}
+}
+
+func TestNormalizeExtensionSelection(t *testing.T) {
+	for _, test := range []struct {
+		name, field string
+		bridge      bool
+	}{
+		{"ordinary", "", false},
+		{"empty-plugins", "plugins: []", false},
+		{"builder-paths", "workspace_builder_paths: ['.']", false},
+		{"plugin", "plugins: [example.Plugin]", true},
+		{"builder", "workspace_builder: example.Builder\nworkspace_builder_paths: ['.']", true},
+		{"malformed-plugins", "plugins: invalid", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			doc, err := decodeDocument([]byte("session_name: example\nbefore_script: /bin/echo native\nwindows: [{panes: [blank]}]\n" + test.field + "\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan, err := normalize(doc, t.TempDir())
+			if err != nil || plan.Bridge != test.bridge {
+				t.Fatalf("bridge=%t want=%t: %v", plan.Bridge, test.bridge, err)
+			}
+			if !test.bridge && (len(plan.BeforeScript) != 2 || plan.BeforeScript[0] != "/bin/echo" || plan.BeforeScript[1] != "native") {
+				t.Fatalf("native before_script was not normalized: %v", plan.BeforeScript)
+			}
+		})
 	}
 }
 

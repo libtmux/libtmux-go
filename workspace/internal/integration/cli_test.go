@@ -530,6 +530,64 @@ func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
 	}
 }
 
+func TestNeutralExtensionMetadataStaysNative(t *testing.T) {
+	for _, field := range []string{"plugins: []", "workspace_builder_paths: ['.']"} {
+		for _, appendMode := range []bool{false, true} {
+			t.Run(field+"/append="+strconv.FormatBool(appendMode), func(t *testing.T) {
+				server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}})
+				before, err := server.Snapshot(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				dir := t.TempDir()
+				pythonMarker := filepath.Join(dir, "python-marker")
+				t.Setenv("GO_EXTENSION_PYTHON_MARKER", pythonMarker)
+				python := write(t, dir, "python", "#!/bin/sh\nprintf python > \"$GO_EXTENSION_PYTHON_MARKER\"\nexit 97\n")
+				if err := os.Chmod(python, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TMUX_WORKSPACE_PYTHON", python)
+				marker := filepath.Join(dir, "script-marker")
+				script := write(t, dir, "before.sh", "printf native > \"$1\"\n")
+				path := write(t, dir, "workspace.yaml", "session_name: native\nbefore_script: "+strconv.Quote("/bin/sh "+script+" "+marker)+"\nwindows: [{window_name: added, panes: [blank]}]\n"+field+"\n")
+				args := []string{"load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "--json"}
+				wantSessions := 2
+				if appendMode {
+					t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+					t.Setenv("TMUX_PANE", before.Panes()[0].ID().String())
+					args = append(args, "--append")
+					wantSessions = 1
+				} else {
+					args = append(args, "-d")
+				}
+				code, out, diagnostic := run(t, args...)
+				if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
+					t.Errorf("native load: %d %s %s", code, out, diagnostic)
+				}
+				if got, err := os.ReadFile(marker); err != nil || string(got) != "native" {
+					t.Errorf("native script: %q %v", got, err)
+				}
+				if _, err := os.Stat(pythonMarker); !os.IsNotExist(err) {
+					t.Errorf("neutral metadata invoked Python: %v", err)
+				}
+				after, err := server.Snapshot(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(after.Sessions()) != wantSessions || len(after.Windows()) != 2 || len(after.Panes()) != 2 {
+					t.Errorf("native topology: sessions=%d windows=%d panes=%d", len(after.Sessions()), len(after.Windows()), len(after.Panes()))
+				}
+				if _, err := after.SessionByID(before.Sessions()[0].ID()); err != nil {
+					t.Errorf("borrowed session lost: %v", err)
+				}
+				if _, err := after.PaneByID(before.Panes()[0].ID()); err != nil {
+					t.Errorf("borrowed pane lost: %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestInitialWindowUsesConfiguredBaseIndex(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
