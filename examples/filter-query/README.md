@@ -42,11 +42,10 @@ snapshot, err := server.Snapshot(ctx)
 if err != nil {
 	return err
 }
-predicate, err := tmux.PaneActiveIs(true).Predicate()
+active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
 if err != nil {
 	return err
 }
-active := tmuxq.Where(snapshot.Panes(), predicate)
 ```
 
 <!-- docs:end -->
