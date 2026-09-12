@@ -247,10 +247,8 @@ func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 // livenessDelay bounds how long waitForExit trusts tmux's signal before it
 // asks whether the pane is already dead, and how far that interval backs off.
 // The first check is soon enough to rescue a short command whose signal was
-// missed; the ceiling keeps a long command from being polled. They are
-// variables so a test can shrink them and take the liveness path deliberately
-// rather than by luck.
-var (
+// missed; the ceiling keeps a long command from being polled.
+const (
 	initialLivenessDelay = 250 * time.Millisecond
 	maximumLivenessDelay = 30 * time.Second
 )
@@ -261,7 +259,7 @@ var (
 // how long the whole wait is worth before reporting ErrOutcomeUnrecorded. Both
 // are far past the moment tmux normally needs and are none of a healthy
 // command's time.
-var (
+const (
 	outcomeSettleDelay = 20 * time.Millisecond
 	outcomeReapDelay   = 200 * time.Millisecond
 	outcomeSettleLimit = 5 * time.Second
@@ -272,7 +270,7 @@ var (
 // outcome as it reaps the command and signals afterwards, from the point where
 // it has finished with the pane's terminal, so the screen the command printed
 // arrives between the two.
-var signalHandoverDelay = 500 * time.Millisecond
+const signalHandoverDelay = 500 * time.Millisecond
 
 // waitForExit returns when tmux signals the pane's death, or when the pane is
 // found already dead. The signal is edge-triggered and arrives once, so a wait
@@ -306,9 +304,7 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			return err
 		}
 		if dead, ok := pane.Dead(); ok && dead {
-			// fixedNotice is set for tmux before 3.3, which is also the
-			// release that added pane_dead_signal.
-			if outcomeRecorded(pane, !r.fixedNotice) {
+			if outcomeRecorded(pane) {
 				return awaitDeathSignal(ctx, signaled)
 			}
 			if settling >= outcomeSettleLimit {
@@ -336,16 +332,11 @@ func (r *Running) waitForExit(ctx context.Context) error {
 // does before reaping the command: server_destroy_pane closes the descriptor
 // and only then returns early when the status is not ready, and through tmux
 // 3.5a pane_dead is that closed descriptor and nothing more. Either field
-// being readable is proof the command has been reaped.
-//
-// signalReported says whether this tmux reports pane_dead_signal, which
-// arrived in 3.3. Without it a signaled command is dead with no readable
-// outcome at all, so there a closed terminal is the most that can be known.
-func outcomeRecorded(pane Pane, signalReported bool) bool {
+// being readable is proof the command has been reaped. Before tmux 3.3, which
+// added pane_dead_signal, a signaled command has neither field, and the wait
+// there ends on tmux's own signal rather than on anything this can see.
+func outcomeRecorded(pane Pane) bool {
 	if _, ok := pane.DeadStatus(); ok {
-		return true
-	}
-	if !signalReported {
 		return true
 	}
 	_, ok := pane.DeadSignal()
