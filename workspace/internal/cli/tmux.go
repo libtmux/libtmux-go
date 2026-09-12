@@ -185,6 +185,9 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			return fmt.Errorf("%s: %w", privatePath(path), err)
 		}
 		if plan.Bridge {
+			if _, scripted := doc["before_script"]; o.append && scripted {
+				return &failure{"unsupported_combination", "--append with Python plugins/custom builders and before_script is unavailable: tmuxp can delete the borrowed session on script failure", 2}
+			}
 			if err := r.checkPython(true); err != nil {
 				return err
 			}

@@ -129,6 +129,10 @@ startup and vi-mode options use the last occurrence. Missing optional runtimes
 produce an explicit error. Plugin and custom-builder loads use the same
 append selection as native loads: `--append` targets the current session even
 when `-d` is also supplied. The bridge forwards one mode to Python.
+Append with both a Python plugin/custom builder and a document `before_script`
+is unavailable and fails during preflight. The checked Python builder deletes
+borrowed sessions on script failure; the CLI blocks that combination. Native
+scripted append and plugin append without a document script remain supported.
 
 Run Python against a selected session:
 
