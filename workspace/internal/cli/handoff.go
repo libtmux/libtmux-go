@@ -110,3 +110,14 @@ func (h *loadHandoff) attach(ctx context.Context, session tmux.Session) error {
 	}
 	return result.Err()
 }
+
+func (r *invocation) finishHandoff(h *loadHandoff, session tmux.Session) error {
+	if h.terminal != nil {
+		restore, err := prepareTerminalRestore(h.input)
+		if err != nil {
+			return err
+		}
+		defer func() { r.terminalRestoreErr = restore() }()
+	}
+	return h.attach(r.ctx, session)
+}

@@ -42,6 +42,7 @@ type invocation struct {
 	mu                       sync.Mutex
 	sequence                 int
 	writeErr                 error
+	terminalRestoreErr       error
 	log                      *diagnosticLog
 	dispatched               bool
 	progress                 *progressPresenter
@@ -91,16 +92,9 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 	if ctx.Err() != nil {
 		err = &failure{"interrupted", "operation interrupted", 130}
 	}
-	if err == nil {
-		err = r.writeErr
-	}
-	if err == nil {
+	f := r.commandFailure(err)
+	if f == nil {
 		return 0
-	}
-	f := &failure{"operation_failed", err.Error(), 1}
-	var specific *failure
-	if errors.As(err, &specific) {
-		f = specific
 	}
 	r.logEvent("command-failed", map[string]any{"code": f.Code, "message": f.Message})
 	if r.machine() {
@@ -125,6 +119,28 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 		}
 	}
 	return f.Exit
+}
+
+func (r *invocation) commandFailure(err error) *failure {
+	if err == nil {
+		err = r.writeErr
+	}
+	if err == nil {
+		err = r.terminalRestoreErr
+		r.terminalRestoreErr = nil
+	}
+	if err == nil {
+		return nil
+	}
+	f := &failure{"operation_failed", err.Error(), 1}
+	var specific *failure
+	if errors.As(err, &specific) {
+		f = specific
+	}
+	if r.terminalRestoreErr != nil {
+		f = &failure{f.Code, f.Message + "; terminal restoration also failed: " + r.terminalRestoreErr.Error(), f.Exit}
+	}
+	return f
 }
 
 func (r *invocation) machine() bool { return r.json || r.ndjson }
