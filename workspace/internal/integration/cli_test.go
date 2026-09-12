@@ -360,6 +360,31 @@ func TestPythonShellAndPluginBridge(t *testing.T) {
 			}
 		})
 	}
+	t.Run("before-script-preserves-borrowed-session", func(t *testing.T) {
+		scriptMarker := filepath.Join(dir, "script-ran")
+		script := "/bin/sh -c 'printf attempted > \"$1\"; exit 7' sh " + strconv.Quote(scriptMarker)
+		path := write(t, dir, "unsafe.json", `{"session_name":"unsafe","before_script":`+strconv.Quote(script)+`,"plugins":["native_plugin.Plugin"],"windows":[{"panes":[null]}]}`)
+		code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "--append", "--json")
+		if code != 2 || out != "" || !strings.Contains(diagnostic, "unsupported_combination") {
+			t.Errorf("expected preflight refusal: %d %s %s", code, out, diagnostic)
+		}
+		if _, err := os.Stat(scriptMarker); !os.IsNotExist(err) {
+			t.Errorf("unsafe script executed: %v", err)
+		}
+		after, err := server.Snapshot(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := after.SessionByID(borrowed.ID()); err != nil {
+			t.Errorf("borrowed session deleted: %v", err)
+		}
+		if _, err := after.PaneByID(target.ID()); err != nil {
+			t.Errorf("borrowed pane deleted: %v", err)
+		}
+		if len(after.Sessions()) != 2 || len(after.Windows()) != 4 {
+			t.Errorf("borrowed topology changed: sessions=%d windows=%d", len(after.Sessions()), len(after.Windows()))
+		}
+	})
 }
 
 func TestAppendRejectsDifferentSocketWithSamePaneID(t *testing.T) {

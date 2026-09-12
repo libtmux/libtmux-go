@@ -91,6 +91,22 @@ func TestMalformedBeforeScriptPrecedesBackend(t *testing.T) {
 	}
 }
 
+func TestBridgeAppendScriptPrecedesRuntime(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("TMUX_WORKSPACE_PYTHON", filepath.Join(t.TempDir(), "missing-python"))
+	for field, value := range map[string]string{"plugins": `["example.Plugin"]`, "workspace_builder": `"example.Builder"`, "workspace_builder_paths": `["."]`} {
+		path := filepath.Join(t.TempDir(), "unsafe.json")
+		content := `{"session_name":"unsafe","before_script":"/bin/false","windows":[{"panes":[null]}],"` + field + `":` + value + `}`
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		code, out, diagnostic := invoke(t, "load", path, "--append", "--json")
+		if code != 2 || out != "" || !strings.Contains(diagnostic, "unsupported_combination") || !strings.Contains(diagnostic, "before_script") {
+			t.Errorf("%s reached runtime: %d %q %q", field, code, out, diagnostic)
+		}
+	}
+}
+
 func TestHelpWithoutTmux(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, path := range []string{"", "load", "ls", "search", "edit", "freeze", "convert", "import", "import teamocil", "import tmuxinator", "shell", "debug-info"} {
