@@ -388,6 +388,14 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 			return session, err
 		}
 	}
+	waitForPrompt := plan.Readiness == "always"
+	if plan.Readiness == "auto" {
+		shell, err := query(r.ctx, server, "show-options", "-v", "-t", session.ID().String(), "default-shell")
+		if err != nil {
+			return session, err
+		}
+		waitForPrompt = filepath.Base(shell) == "zsh"
+	}
 	var focus tmux.Window
 	for index, wp := range plan.Windows {
 		first := wp.Panes[0]
@@ -434,6 +442,17 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 			}
 			if err := r.event("pane-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "pane_id": pane.ID().String(), "pane_index": pane.Index()}); err != nil {
 				return session, err
+			}
+			if waitForPrompt && pp.Shell == "" {
+				ready, err := paneReady(r.ctx, pane)
+				if err != nil {
+					return session, err
+				}
+				if !ready {
+					if err := r.event("warning", map[string]any{"input_index": inputIndex, "pane_id": pane.ID().String(), "code": "pane_readiness_timeout", "message": "pane prompt did not move the cursor within two seconds"}); err != nil {
+						return session, err
+					}
+				}
 			}
 			for _, command := range pp.Commands {
 				if err := delay(r.ctx, command.SleepBefore); err != nil {
@@ -504,6 +523,25 @@ func delay(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+func paneReady(ctx context.Context, pane tmux.Pane) (bool, error) {
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		fresh, err := pane.Refresh(ctx)
+		if err != nil {
+			return false, err
+		}
+		x, _ := fresh.CursorX()
+		y, _ := fresh.CursorY()
+		if x != 0 || y != 0 {
+			return true, nil
+		}
+		if err := delay(ctx, 50*time.Millisecond); err != nil {
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 func setGlobalOption(ctx context.Context, server tmux.Server, name, value string) error {

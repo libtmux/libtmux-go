@@ -362,11 +362,8 @@ func (r *invocation) importDocument(_ *cobra.Command, o *options, args []string,
 	}
 	global := expand("~/." + kind)
 	if kind == "tmuxinator" {
-		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-			candidate := filepath.Join(expand(xdg), "tmuxinator")
-			if info, e := os.Stat(candidate); e == nil && info.IsDir() {
-				global = candidate
-			}
+		if configured, exists := os.LookupEnv("TMUXINATOR_CONFIG"); exists {
+			global = expand(configured)
 		}
 	}
 	path, err := resolveFile(args[0], global)

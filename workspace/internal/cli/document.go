@@ -159,6 +159,7 @@ func environment(value any) (map[string]string, error) {
 
 type loadPlan struct {
 	Name, Directory, BeforeScript       string
+	Readiness                           string
 	Environment, Options, GlobalOptions map[string]string
 	Windows                             []windowPlan
 	Bridge                              bool
@@ -183,7 +184,24 @@ type commandPlan struct {
 }
 
 func normalize(doc document, base string) (loadPlan, error) {
-	plan := loadPlan{Name: expand(textValue(doc["session_name"])), Bridge: doc["plugins"] != nil || doc["workspace_builder"] != nil || doc["workspace_builder_path"] != nil}
+	plan := loadPlan{Name: expand(textValue(doc["session_name"])), Readiness: "auto", Bridge: doc["plugins"] != nil || doc["workspace_builder"] != nil || doc["workspace_builder_paths"] != nil}
+	if raw, exists := doc["workspace_builder_options"]; exists && raw != nil {
+		catalog := mapping(raw)
+		if catalog == nil {
+			return plan, errors.New("workspace_builder_options must be a mapping")
+		}
+		if value := catalog["pane_readiness"]; value != nil {
+			switch strings.ToLower(strings.TrimSpace(textValue(value))) {
+			case "auto":
+			case "always", "true", "on", "yes", "1":
+				plan.Readiness = "always"
+			case "never", "false", "off", "no", "0":
+				plan.Readiness = "never"
+			default:
+				return plan, errors.New("pane_readiness must be auto, always or never")
+			}
+		}
+	}
 	if plan.Name == "" || strings.ContainsAny(plan.Name, ".:\x00\r\n") {
 		return plan, errors.New("session_name must be nonempty and contain no colon, period, NUL or newline")
 	}
