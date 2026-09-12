@@ -46,6 +46,7 @@ type invocation struct {
 	dispatched               bool
 	progress                 *progressPresenter
 	scripts                  []map[string]any
+	loadResult               map[string]any
 }
 
 // Run executes one fresh command tree and returns its process exit status.
@@ -103,11 +104,25 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 	}
 	r.logEvent("command-failed", map[string]any{"code": f.Code, "message": f.Message})
 	if r.machine() {
-		if encodeErr := json.NewEncoder(diagnostic).Encode(f); encodeErr != nil {
+		value := struct {
+			*failure
+			Result map[string]any `json:"result,omitempty"`
+		}{f, r.loadResult}
+		if encodeErr := json.NewEncoder(diagnostic).Encode(value); encodeErr != nil {
 			return f.Exit
 		}
 	} else {
-		_, _ = fmt.Fprintln(diagnostic, r.style("error", "error:")+" "+f.Message)
+		if _, err := fmt.Fprintln(diagnostic, r.style("error", "error:")+" "+f.Message); err != nil {
+			return f.Exit
+		}
+		results, _ := r.loadResult["results"].([]map[string]any)
+		for _, result := range results {
+			if id := textValue(result["session_id"]); id != "" {
+				if _, err := fmt.Fprintf(diagnostic, "workspace %s %s: %s\n", safeTerminal(textValue(result["session_name"])), safeTerminal(id), safeTerminal(textValue(result["stage"]))); err != nil {
+					return f.Exit
+				}
+			}
+		}
 	}
 	return f.Exit
 }

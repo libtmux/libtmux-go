@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -283,6 +284,97 @@ func TestLoadColorPreflightAnd256Colors(t *testing.T) {
 		if !strings.Contains(" "+invocation+" ", " -2 ") {
 			t.Errorf("256-color client missing -2: %s", invocation)
 		}
+	}
+}
+
+type publicationWriter struct {
+	bytes.Buffer
+	action   string
+	event    string
+	selected bool
+	cancel   context.CancelFunc
+}
+
+func (w *publicationWriter) Write(data []byte) (int, error) {
+	var record map[string]any
+	if json.Unmarshal(data, &record) == nil && (record["results"] != nil || (w.event != "" && record["event"] == w.event)) {
+		w.selected = true
+	}
+	if w.selected && w.action == "write" {
+		return 0, io.ErrClosedPipe
+	}
+	if w.selected && w.action == "cancel" {
+		w.cancel()
+	}
+	return w.Buffer.Write(data)
+}
+
+func (w *publicationWriter) Flush() error {
+	if w.selected && w.action == "flush" {
+		return io.ErrClosedPipe
+	}
+	return nil
+}
+
+func TestLoadPublicationRetainsResults(t *testing.T) {
+	type testCase struct{ mode, action, event string }
+	cases := []testCase{}
+	for _, mode := range []string{"--json", "--ndjson"} {
+		for _, action := range []string{"write", "flush", "cancel"} {
+			cases = append(cases, testCase{mode, action, ""})
+		}
+	}
+	cases = append(cases, testCase{"--ndjson", "write", "workspace-completed"})
+	for _, test := range cases {
+		t.Run(test.mode+"-"+test.action+"-"+test.event, func(t *testing.T) {
+			server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+			dir := t.TempDir()
+			path := write(t, dir, "workspace.yaml", "session_name: completed\nwindows:\n- panes: [blank]\n")
+			args := []string{"load", "-S", server.SocketPath(), "-d", test.mode, path}
+			if test.event != "" {
+				args = append(args, write(t, dir, "later.yaml", "session_name: later\nwindows:\n- panes: [blank]\n"))
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			out := &publicationWriter{action: test.action, event: test.event, cancel: cancel}
+			var diagnostic bytes.Buffer
+			code := cli.Run(ctx, args, strings.NewReader(""), out, &diagnostic)
+			wantCode, wantStatus := 1, "ok"
+			if test.action == "cancel" {
+				wantCode = 130
+			}
+			if test.event != "" {
+				wantStatus = "partial"
+			}
+			var result struct {
+				Code   string `json:"code"`
+				Result struct {
+					Status  string `json:"status"`
+					Results []struct {
+						SessionID string `json:"session_id"`
+						Stage     string `json:"stage"`
+					} `json:"results"`
+				} `json:"result"`
+			}
+			if err := json.Unmarshal(diagnostic.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if code != wantCode || result.Result.Status != wantStatus || len(result.Result.Results) != 1 {
+				t.Errorf("completed result lost: code=%d diagnostic=%s", code, diagnostic.String())
+			} else if got := result.Result.Results[0]; got.SessionID != "$0" || got.Stage != "completed" {
+				t.Errorf("incorrect retained result: %+v", got)
+			}
+			if test.action == "cancel" && result.Code != "interrupted" {
+				t.Errorf("cancellation replaced: %+v", result)
+			}
+			snapshot, err := server.Snapshot(t.Context())
+			if err != nil || len(snapshot.Sessions()) != 1 || len(snapshot.Windows()) != 1 || len(snapshot.Panes()) != 1 {
+				t.Fatalf("completed topology changed or later input ran: %v sessions=%d windows=%d panes=%d", err, len(snapshot.Sessions()), len(snapshot.Windows()), len(snapshot.Panes()))
+			}
+			if snapshot.Sessions()[0].ID() != "$0" {
+				t.Errorf("retained different session: %s", snapshot.Sessions()[0].ID())
+			}
+		})
 	}
 }
 
