@@ -46,6 +46,16 @@ func readDocument(path string) (document, error) {
 	if err != nil {
 		return nil, err
 	}
+	if strings.EqualFold(filepath.Ext(path), ".json") {
+		var value document
+		if err := json.Unmarshal(data, &value); err != nil {
+			return nil, fmt.Errorf("decode JSON workspace: %w", err)
+		}
+		if value == nil {
+			return nil, errors.New("workspace must be a mapping")
+		}
+		return value, nil
+	}
 	return decodeDocument(data)
 }
 

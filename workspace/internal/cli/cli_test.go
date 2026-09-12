@@ -20,6 +20,9 @@ func invoke(t *testing.T, args ...string) (int, string, string) {
 func TestInvalidInvocationPrecedesBackend(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, args := range [][]string{
+		{"--json"},
+		{"--json=1", "import", "teamocil"},
+		{"--ndjson=TRUE", "load"},
 		{"--json", "import", "teamocil"},
 		{"import", "tmuxinator", "--ndjson"},
 		{"load", "x", "-2", "-8", "--json"},
@@ -39,6 +42,23 @@ func TestInvalidInvocationPrecedesBackend(t *testing.T) {
 				t.Fatal("backend was reached before usage validation")
 			}
 		})
+	}
+}
+
+func TestJSONExtensionUsesJSONSyntax(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invalid.json")
+	if err := os.WriteFile(path, []byte("session_name: yaml\nwindows: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readDocument(path); err == nil {
+		t.Fatal("YAML content accepted in a JSON document")
+	}
+}
+
+func TestMachineCompletionEnvelope(t *testing.T) {
+	code, out, diagnostic := invoke(t, "--json", "--generate-completion", "bash")
+	if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
+		t.Fatalf("machine completion: %d %q %q", code, out, diagnostic)
 	}
 }
 
