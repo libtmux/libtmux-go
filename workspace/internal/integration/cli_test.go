@@ -299,6 +299,67 @@ func TestPythonShellAndPluginBridge(t *testing.T) {
 	if err != nil || string(got) != "bridged" {
 		t.Fatalf("plugin did not execute: %q %v", got, err)
 	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var target tmux.Pane
+	for _, pane := range snapshot.Panes() {
+		session, _ := pane.Session()
+		if name, _ := session.Name(); name == "shell-target" {
+			target = pane
+			break
+		}
+	}
+	if target.ID() == "" {
+		t.Fatal("missing borrowed pane")
+	}
+	borrowed, _ := target.Session()
+	pid, err := server.Cmd(t.Context(), "display-message", "-p", "#{pid}")
+	if err != nil || pid.ExitCode != 0 {
+		t.Fatalf("server identity: %+v %v", pid, err)
+	}
+	t.Setenv("TMUX", server.SocketPath()+","+strings.TrimSpace(string(pid.RawStdout))+",0")
+	t.Setenv("TMUX_PANE", target.ID().String())
+	for _, detached := range []bool{false, true} {
+		t.Run("append-detached-"+strconv.FormatBool(detached), func(t *testing.T) {
+			path := write(t, dir, "append.yaml", "session_name: append-"+strconv.FormatBool(detached)+"\nplugins: [native_plugin.Plugin]\nwindows:\n- panes: [blank]\n")
+			args := []string{"load", path, "-S", server.SocketPath(), "--append", "--json"}
+			if detached {
+				args = append(args, "-d")
+			}
+			code, out, diagnostic := run(t, args...)
+			if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
+				t.Fatalf("plugin append %d %s %s", code, out, diagnostic)
+			}
+			got, err := os.ReadFile(marker)
+			if err != nil || string(got) != "shell-target" {
+				t.Errorf("plugin targeted %q instead of borrowed session: %v", got, err)
+			}
+			after, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantWindows := 3
+			if detached {
+				wantWindows++
+			}
+			if len(after.Sessions()) != 2 || len(after.Windows()) != wantWindows {
+				t.Errorf("plugin append changed session ownership: sessions=%d windows=%d", len(after.Sessions()), len(after.Windows()))
+			}
+			retained, err := after.SessionByID(borrowed.ID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			windows, _ := retained.Windows()
+			if len(windows) != wantWindows-1 {
+				t.Errorf("borrowed session windows=%d", len(windows))
+			}
+			if _, err := after.PaneByID(target.ID()); err != nil {
+				t.Errorf("borrowed pane lost: %v", err)
+			}
+		})
+	}
 }
 
 func TestAppendRejectsDifferentSocketWithSamePaneID(t *testing.T) {
