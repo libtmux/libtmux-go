@@ -247,15 +247,15 @@ func normalize(doc document, base string) (loadPlan, error) {
 		plan.ScriptDirectory = plan.Directory
 	}
 	if script := expand(textValue(doc["before_script"])); script != "" && !plan.Bridge {
-		if strings.HasPrefix(script, ".") {
-			script = filepath.Join(base, script)
-		}
 		plan.BeforeScript, err = shellwords.Parse(script)
 		if err != nil {
 			return plan, fmt.Errorf("before_script: %w", err)
 		}
 		if len(plan.BeforeScript) == 0 {
 			return plan, errors.New("before_script must contain a command")
+		}
+		if strings.HasPrefix(plan.BeforeScript[0], ".") {
+			plan.BeforeScript[0] = filepath.Join(base, plan.BeforeScript[0])
 		}
 	}
 	plan.Environment, err = environment(doc["environment"])

@@ -489,7 +489,10 @@ func TestReadinessWaitsForPrompt(t *testing.T) {
 func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	cwd := t.TempDir()
-	configDir := t.TempDir()
+	configDir := filepath.Join(t.TempDir(), "workspace files")
+	if err := os.Mkdir(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	explicitDir := t.TempDir()
 	t.Chdir(cwd)
 	script := write(t, configDir, "before.sh", "#!/bin/sh\npwd > \"$1\"\n")
@@ -498,7 +501,7 @@ func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
 	}
 	for _, test := range []struct{ name, directory, want string }{{"inherited", "", cwd}, {"explicit", explicitDir, explicitDir}} {
 		marker := filepath.Join(configDir, test.name+".cwd")
-		config := "session_name: " + test.name + "\nbefore_script: './before.sh " + marker + "'\nwindows:\n- panes: [blank]\n"
+		config := "session_name: " + test.name + "\nbefore_script: './before.sh " + strconv.Quote(marker) + "'\nwindows:\n- panes: [blank]\n"
 		if test.directory != "" {
 			config += "start_directory: " + test.directory + "\n"
 		}
