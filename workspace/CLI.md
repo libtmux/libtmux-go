@@ -77,9 +77,15 @@ retains one session for every input, even if a script moves the inherited pane.
 Linked panes use tmux's canonical session. Native commands retain the core's
 daemon replacement checks, including global options and raw queries.
 
-A foreground load requires terminal stdin and attaches through the controlling
-terminal or switches the current tmux client. Inside tmux, human mode offers
-switch, detached-load and append choices; `--yes` selects switching. Existing
+A foreground load requires terminal stdin and acquires the controlling terminal
+before building, or authenticates the current pane and selects one terminal
+client viewing it. Inside tmux, human mode offers switch, detached-load and
+append choices; `--yes` selects switching. Multiple matching clients and
+independent `active-pane` clients on the invoking window require `-d` or
+`--append`. The selected client's identity and attachment are checked again
+before switching; a changed client is refused. Diagnostics retain completed
+workspace results when handoff fails.
+Progress stops and output is flushed before terminal handoff. Existing
 sessions ask before attachment unless `--yes` is set. Machine load requires `-d` or `--append` and
 does not read implicit prompts.
 
