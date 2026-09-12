@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPairedFlagsLastOccurrence(t *testing.T) {
@@ -30,6 +31,47 @@ func TestPairedFlagsLastOccurrence(t *testing.T) {
 		}
 		if startup != want || vi != want {
 			t.Fatalf("%v: startup=%s vi=%s", args, startup, vi)
+		}
+	}
+}
+
+func TestPythonVersionCheckSurvivesOptimization(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("Python compatibility runtime unavailable")
+	}
+	dir := t.TempDir()
+	metadata := filepath.Join(dir, "tmuxp-0.0.dist-info")
+	if err := os.Mkdir(metadata, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(metadata, "METADATA"), []byte("Name: tmuxp\nVersion: 0.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PYTHONPATH", dir)
+	t.Setenv("PYTHONOPTIMIZE", "1")
+	r := &invocation{ctx: t.Context(), out: io.Discard, err: io.Discard}
+	if err := r.checkPython(true); err == nil {
+		t.Fatal("optimized Python bypassed the tmuxp distribution version check")
+	}
+}
+
+type rejectingWriter struct{}
+
+func (rejectingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestChildDrainFailureCancelsProcess(t *testing.T) {
+	for _, logFailure := range []bool{false, true} {
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		r := &invocation{ctx: ctx, out: rejectingWriter{}, err: io.Discard, ndjson: true}
+		var log io.Writer
+		if logFailure {
+			log = rejectingWriter{}
+		}
+		start := time.Now()
+		_, err := r.process([]string{"/bin/sh", "-c", "printf output; sleep 5"}, "", nil, true, log)
+		cancel()
+		if err == nil || time.Since(start) > 700*time.Millisecond {
+			t.Fatalf("log failure=%v: child did not stop promptly: %v (%s)", logFailure, err, time.Since(start))
 		}
 	}
 }
