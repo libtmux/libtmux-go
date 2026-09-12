@@ -176,3 +176,64 @@ func TestReadinessWaitsForPrompt(t *testing.T) {
 		t.Fatal("load did not wait for the delayed prompt")
 	}
 }
+
+func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	cwd := t.TempDir()
+	configDir := t.TempDir()
+	explicitDir := t.TempDir()
+	t.Chdir(cwd)
+	script := write(t, configDir, "before.sh", "#!/bin/sh\npwd > \"$1\"\n")
+	if err := os.Chmod(script, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct{ name, directory, want string }{{"inherited", "", cwd}, {"explicit", explicitDir, explicitDir}} {
+		marker := filepath.Join(configDir, test.name+".cwd")
+		config := "session_name: " + test.name + "\nbefore_script: './before.sh " + marker + "'\nwindows:\n- panes: [blank]\n"
+		if test.directory != "" {
+			config += "start_directory: " + test.directory + "\n"
+		}
+		path := write(t, configDir, test.name+".yaml", config)
+		code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+		if code != 0 {
+			t.Fatalf("script cwd %d %s %s", code, out, diagnostic)
+		}
+		got, err := os.ReadFile(marker)
+		if err != nil || strings.TrimSpace(string(got)) != test.want {
+			t.Fatalf("script cwd got %q want %q: %v", got, test.want, err)
+		}
+	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane := snapshot.Panes()[0]
+	t.Setenv("TMUX", server.SocketPath()+",1,0")
+	t.Setenv("TMUX_PANE", pane.ID().String())
+	path := write(t, configDir, "fail-append.yaml", "session_name: unused\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
+	code, _, _ := run(t, "load", path, "-S", server.SocketPath(), "--append", "--json")
+	if code != 1 {
+		t.Fatalf("expected script failure, got %d", code)
+	}
+	fresh, err := server.Snapshot(t.Context())
+	if err != nil || len(fresh.Sessions()) != len(snapshot.Sessions()) {
+		t.Fatalf("borrowed session lost: %v", err)
+	}
+}
+
+func TestInitialWindowUsesConfiguredBaseIndex(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	path := write(t, dir, "base.yaml", "session_name: base\noptions: {base-index: 4}\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	if code != 0 {
+		t.Fatalf("base-index %d %s %s", code, out, diagnostic)
+	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Windows()[0].Index() != 4 {
+		t.Fatalf("initial index %d", snapshot.Windows()[0].Index())
+	}
+}

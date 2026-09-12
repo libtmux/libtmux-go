@@ -357,7 +357,7 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		if err != nil {
 			return session, err
 		}
-		result, err := r.process(argv, plan.Directory, nil, true, log)
+		result, err := r.process(argv, plan.ScriptDirectory, nil, true, log)
 		if err == nil && result.Status != 0 {
 			err = fmt.Errorf("before_script exited %d: %s", result.Status, result.Stderr)
 		}
@@ -390,18 +390,29 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 	}
 	waitForPrompt := plan.Readiness == "always"
 	if plan.Readiness == "auto" {
-		shell, err := query(r.ctx, server, "show-options", "-v", "-t", session.ID().String(), "default-shell")
+		shell, err := query(r.ctx, server, "show-options", "-A", "-v", "-t", session.ID().String(), "default-shell")
 		if err != nil {
 			return session, err
 		}
 		waitForPrompt = filepath.Base(shell) == "zsh"
 	}
 	var focus tmux.Window
+	baseIndex := bootstrap.Index()
+	if created {
+		value, err := query(r.ctx, server, "show-options", "-A", "-v", "-t", session.ID().String(), "base-index")
+		if err != nil {
+			return session, err
+		}
+		baseIndex, err = strconv.Atoi(value)
+		if err != nil {
+			return session, fmt.Errorf("decode base-index: %w", err)
+		}
+	}
 	for index, wp := range plan.Windows {
 		first := wp.Panes[0]
 		requestedIndex := wp.Index
 		if created && index == 0 && requestedIndex == nil {
-			n := bootstrap.Index()
+			n := baseIndex
 			requestedIndex = &n
 		}
 		var name *string

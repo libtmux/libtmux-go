@@ -160,6 +160,7 @@ func environment(value any) (map[string]string, error) {
 type loadPlan struct {
 	Name, Directory, BeforeScript       string
 	Readiness                           string
+	ScriptDirectory                     string
 	Environment, Options, GlobalOptions map[string]string
 	Windows                             []windowPlan
 	Bridge                              bool
@@ -209,6 +210,9 @@ func normalize(doc document, base string) (loadPlan, error) {
 	plan.Directory, err = directory(doc["start_directory"], base)
 	if err != nil {
 		return plan, err
+	}
+	if doc["start_directory"] != nil {
+		plan.ScriptDirectory = plan.Directory
 	}
 	plan.BeforeScript = expand(textValue(doc["before_script"]))
 	if strings.HasPrefix(plan.BeforeScript, ".") {
@@ -280,6 +284,9 @@ func normalize(doc document, base string) (loadPlan, error) {
 			return plan, err
 		}
 		panes, ok := w["panes"].([]any)
+		if _, exists := w["panes"]; !exists {
+			panes, ok = []any{nil}, true
+		}
 		if !ok || len(panes) == 0 {
 			return plan, fmt.Errorf("window %d panes must be a nonempty sequence", wi)
 		}
