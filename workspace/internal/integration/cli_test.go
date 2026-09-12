@@ -304,3 +304,30 @@ func TestBooleanOptionsAndBeforeScriptResult(t *testing.T) {
 		t.Fatalf("boolean option was not applied: %+v %v", result, err)
 	}
 }
+
+func TestHumanInsideTmuxChoice(t *testing.T) {
+	for _, choice := range []string{"n", "a"} {
+		t.Run(choice, func(t *testing.T) {
+			server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+			if _, err := server.NewSession(t.Context(), tmux.NewSessionRequest{Name: "original"}); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("TMUX", server.SocketPath()+",1,0")
+			t.Setenv("TMUX_PANE", "%0")
+			path := write(t, t.TempDir(), "choice.yaml", "session_name: choice\nwindows:\n- panes: [blank]\n")
+			var out, diagnostic bytes.Buffer
+			code := cli.Run(t.Context(), []string{"load", "-S", server.SocketPath(), path}, strings.NewReader(choice+"\n"), &out, &diagnostic)
+			if code != 0 || !strings.Contains(diagnostic.String(), "append") {
+				t.Fatalf("interactive choice: %d %q %q", code, out.String(), diagnostic.String())
+			}
+			snapshot, err := server.Snapshot(t.Context())
+			want := 2
+			if choice == "a" {
+				want = 1
+			}
+			if err != nil || len(snapshot.Sessions()) != want || len(snapshot.Windows()) != 2 {
+				t.Fatalf("choice effects: %v sessions=%d windows=%d", err, len(snapshot.Sessions()), len(snapshot.Windows()))
+			}
+		})
+	}
+}

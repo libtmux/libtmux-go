@@ -146,6 +146,24 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if err := loadValidation(cmd, o, r.machine()); err != nil {
 		return err
 	}
+	if !r.machine() && !o.detached && !o.append && !o.yes && os.Getenv("TMUX") != "" {
+		choice, err := r.prompt("Already inside tmux: switch (y), load detached (n), or append (a)", "y")
+		if err != nil {
+			return err
+		}
+		switch strings.ToLower(choice) {
+		case "y", "yes":
+		case "n", "no":
+			o.detached = true
+		case "a", "append":
+			o.append = true
+		default:
+			return usage("load choice must be y, n or a")
+		}
+	}
+	if !o.detached && !o.append && os.Getenv("TMUX") == "" && !terminal(r.in) {
+		return &failure{"terminal_required", "attach requires terminal stdin; use -d", 2}
+	}
 	type input struct {
 		path string
 		plan loadPlan
@@ -209,6 +227,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	results := []map[string]any{}
 	failures := []map[string]any{}
 	var last tmux.Session
+	lastReused := false
 	for index, input := range inputs {
 		if r.ctx.Err() != nil {
 			break
@@ -252,6 +271,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			}
 		} else {
 			last = session
+			lastReused = reused
 			entry["stage"] = "completed"
 			if err := r.event("workspace-completed", entry); err != nil {
 				return err
@@ -305,6 +325,18 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		return &failure{"load_failed", "one or more workspaces failed; completed effects are retained", 1}
 	}
 	if !o.detached && !o.append && last.ID() != "" {
+		if lastReused && !o.yes && !r.machine() {
+			answer, err := r.prompt("Session is already running. Attach (y/n)", "y")
+			if err != nil {
+				return err
+			}
+			if strings.ToLower(answer) == "n" || strings.ToLower(answer) == "no" {
+				return nil
+			}
+			if strings.ToLower(answer) != "y" && strings.ToLower(answer) != "yes" {
+				return usage("attach choice must be y or n")
+			}
+		}
 		return r.attach(server, last)
 	}
 	return nil
@@ -319,7 +351,7 @@ func (r *invocation) attach(server tmux.Server, session tmux.Session) error {
 		return &failure{"terminal_required", "attach requires a controlling terminal; use -d", 2}
 	}
 	defer func() { _ = terminalFile.Close() }()
-	return session.Attach(r.ctx, tmux.AttachSessionOptions{Stdin: terminalFile, Stdout: terminalFile, Stderr: terminalFile})
+	return session.Attach(r.ctx, tmux.AttachSessionOptions{Stdin: r.terminalInput, Stdout: terminalFile, Stderr: terminalFile})
 }
 
 func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name string, index int, log io.Writer) (tmux.Session, error) {
