@@ -88,7 +88,8 @@ for zsh prompts; explicit pane or window launch commands skip readiness waits.
 Relative directories resolve through the session, window and pane hierarchy
 from the configuration directory. This avoids the reference normalizer's
 missing-parent and mixed-relative-path cases. Before-script argv uses shell
-quoting without an implicit shell. Its cwd is the explicit session directory,
+quoting without an implicit shell. Native load validates it for every input
+before creating or modifying sessions. Its cwd is the explicit session directory,
 or the invocation cwd when `start_directory` is absent. A failed script removes
 an owned newly created session and preserves a borrowed append session.
 

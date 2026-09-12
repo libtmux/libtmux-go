@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-shellwords"
 	"gopkg.in/yaml.v3"
 )
 
@@ -184,7 +185,8 @@ func optionValues(value any) (map[string]string, error) {
 }
 
 type loadPlan struct {
-	Name, Directory, BeforeScript       string
+	Name, Directory                     string
+	BeforeScript                        []string
 	Readiness                           string
 	ScriptDirectory                     string
 	Environment, Options, GlobalOptions map[string]string
@@ -240,9 +242,17 @@ func normalize(doc document, base string) (loadPlan, error) {
 	if doc["start_directory"] != nil {
 		plan.ScriptDirectory = plan.Directory
 	}
-	plan.BeforeScript = expand(textValue(doc["before_script"]))
-	if strings.HasPrefix(plan.BeforeScript, ".") {
-		plan.BeforeScript = filepath.Join(base, plan.BeforeScript)
+	if script := expand(textValue(doc["before_script"])); script != "" && !plan.Bridge {
+		if strings.HasPrefix(script, ".") {
+			script = filepath.Join(base, script)
+		}
+		plan.BeforeScript, err = shellwords.Parse(script)
+		if err != nil {
+			return plan, fmt.Errorf("before_script: %w", err)
+		}
+		if len(plan.BeforeScript) == 0 {
+			return plan, errors.New("before_script must contain a command")
+		}
 	}
 	plan.Environment, err = environment(doc["environment"])
 	if err != nil {
