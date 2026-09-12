@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -41,6 +42,7 @@ type invocation struct {
 	mu                       sync.Mutex
 	sequence                 int
 	writeErr                 error
+	log                      *diagnosticLog
 	dispatched               bool
 	progress                 *progressPresenter
 	scripts                  []map[string]any
@@ -49,6 +51,7 @@ type invocation struct {
 // Run executes one fresh command tree and returns its process exit status.
 func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Writer) int {
 	r := &invocation{ctx: ctx, in: in, out: out, err: diagnostic, color: "auto", logLevel: "warning"}
+	defer r.closeLog()
 	r.terminalInput, _ = in.(*os.File)
 	for _, arg := range args {
 		if arg == "--" {
@@ -98,6 +101,7 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 	if errors.As(err, &specific) {
 		f = specific
 	}
+	r.logEvent("command-failed", map[string]any{"code": f.Code, "message": f.Message})
 	if r.machine() {
 		if encodeErr := json.NewEncoder(diagnostic).Encode(f); encodeErr != nil {
 			return f.Exit
@@ -123,6 +127,10 @@ func (r *invocation) encode(value any) error {
 }
 
 func (r *invocation) event(event string, data map[string]any) error {
+	r.logEvent(event, data)
+	if event == "warning" && data["code"] != "workspace_failed" && r.diagnosticLevel() > slog.LevelWarn {
+		return nil
+	}
 	if !r.ndjson {
 		if !r.machine() {
 			if r.progress != nil {
@@ -296,7 +304,7 @@ func (r *invocation) tree() *cobra.Command {
 	f.BoolVarP(&l.append, "append", "a", false, "append windows to the current session")
 	f.BoolVarP(&l.colors256, "256-colors", "2", false, "request 256 terminal colors")
 	f.BoolVarP(&l.colors88, "88-colors", "8", false, "legacy 88-color request; unsupported by tmux 3.2a+ (default false)")
-	f.StringVar(&l.logFile, "log-file", "", "write diagnostics and script output to a log file (default empty: disabled)")
+	f.StringVar(&l.logFile, "log-file", "", "append JSON diagnostics: info lifecycle, debug script output (default empty: disabled)")
 	f.StringVar(&l.progressFormat, "progress-format", "", "progress preset or token format; TMUXP_PROGRESS_FORMAT (default default)")
 	f.IntVar(&l.progressLines, "progress-lines", 3, "script panel lines; 0 direct output, -1 terminal height; TMUXP_PROGRESS_LINES (default 3)")
 	f.BoolVar(&l.noProgress, "no-progress", false, "disable animation; TMUXP_PROGRESS=0")

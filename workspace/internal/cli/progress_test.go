@@ -80,12 +80,22 @@ func TestProgressZeroLinesHandsOffScriptStdout(t *testing.T) {
 }
 
 func TestHumanWarningsRemainVisibleWithoutProgress(t *testing.T) {
-	var out, diagnostic bytes.Buffer
-	r := &invocation{ctx: t.Context(), out: &out, err: &diagnostic, color: "never"}
-	if err := r.event("warning", map[string]any{"message": "prompt timeout"}); err != nil {
-		t.Fatal(err)
-	}
-	if out.Len() != 0 || !strings.Contains(diagnostic.String(), "prompt timeout") {
-		t.Fatalf("warning was lost: stdout=%q stderr=%q", out.String(), diagnostic.String())
+	for _, level := range []string{"warning", "critical"} {
+		for _, ndjson := range []bool{false, true} {
+			var out, diagnostic bytes.Buffer
+			r := &invocation{ctx: t.Context(), out: &out, err: &diagnostic, color: "never", logLevel: level, ndjson: ndjson}
+			for _, warning := range []map[string]any{{"message": "prompt timeout"}, {"code": "workspace_failed", "message": "workspace error"}} {
+				if err := r.event("warning", warning); err != nil {
+					t.Fatal(err)
+				}
+			}
+			text := diagnostic.String()
+			if ndjson {
+				text = out.String()
+			}
+			if strings.Contains(text, "prompt timeout") != (level == "warning") || !strings.Contains(text, "workspace error") {
+				t.Fatalf("level=%s ndjson=%t: stdout=%q stderr=%q", level, ndjson, out.String(), diagnostic.String())
+			}
+		}
 	}
 }

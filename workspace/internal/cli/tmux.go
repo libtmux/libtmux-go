@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -228,6 +227,13 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		inputs = append(inputs, input{path, plan})
 	}
+	if o.logFile != "" {
+		file, err := openLogFile(expand(o.logFile))
+		if err != nil {
+			return err
+		}
+		r.log = newDiagnosticLog(file, r.diagnosticLevel())
+	}
 	server, err := serverFor(o)
 	if err != nil {
 		return err
@@ -244,15 +250,6 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		if err := r.checkPython(true); err != nil {
 			return err
 		}
-	}
-	var log io.Writer
-	if o.logFile != "" {
-		file, e := os.OpenFile(expand(o.logFile), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-		if e != nil {
-			return e
-		}
-		defer func() { _ = file.Close() }()
-		log = file
 	}
 	if err := r.event("started", map[string]any{"input_count": len(inputs)}); err != nil {
 		return err
@@ -294,9 +291,9 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		if buildErr == nil && !reused {
 			if input.plan.Bridge {
-				session, buildErr = r.bridgeLoad(server, session, o, input.path, input.plan.Name, index, log)
+				session, buildErr = r.bridgeLoad(server, session, o, input.path, input.plan.Name, index)
 			} else {
-				session, buildErr = r.build(server, session, input.plan, index, log)
+				session, buildErr = r.build(server, session, input.plan, index)
 			}
 		}
 		entry := map[string]any{"input_index": index, "input": privatePath(input.path), "session_name": input.plan.Name, "session_id": session.ID().String(), "reused": reused}
@@ -304,9 +301,6 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			entry["stage"] = "failed"
 			failure := map[string]any{"code": "workspace_failed", "message": buildErr.Error(), "input_index": index, "stage": "load", "session_id": session.ID().String()}
 			failures = append(failures, failure)
-			if log != nil {
-				_, _ = fmt.Fprintln(log, buildErr)
-			}
 			if err := r.event("warning", failure); err != nil {
 				return err
 			}
@@ -349,17 +343,20 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if len(r.scripts) > 0 {
 		summary["scripts"] = r.scripts
 	}
+	event := "completed"
+	if len(failures) > 0 {
+		event = "failed"
+	}
 	if r.ndjson {
-		event := "completed"
-		if len(failures) > 0 {
-			event = "failed"
-		}
 		if err := r.event(event, summary); err != nil {
 			return err
 		}
-	} else if r.json {
-		if err := r.encode(summary); err != nil {
-			return err
+	} else {
+		r.logEvent(event, summary)
+		if r.json {
+			if err := r.encode(summary); err != nil {
+				return err
+			}
 		}
 	}
 	if len(failures) > 0 {
@@ -395,7 +392,7 @@ func (r *invocation) attach(server tmux.Server, session tmux.Session) error {
 	return session.Attach(r.ctx, tmux.AttachSessionOptions{Stdin: r.terminalInput, Stdout: terminalFile, Stderr: terminalFile})
 }
 
-func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *options, path, name string, index int, log io.Writer) (tmux.Session, error) {
+func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *options, path, name string, index int) (tmux.Session, error) {
 	args := []string{"--color", "never", "load", "--no-progress"}
 	if o.append {
 		args = append(args, "--append")
@@ -432,7 +429,7 @@ func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *op
 	if err := r.event("script-started", map[string]any{"input_index": index}); err != nil {
 		return borrowed, err
 	}
-	result, err := r.process(argv, "", nil, true, log)
+	result, err := r.process(argv, "", nil, true)
 	r.scripts = append(r.scripts, map[string]any{"input_index": index, "kind": "python-workspace", "result": result})
 	if eventErr := r.event("script-completed", map[string]any{"input_index": index, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
 		return borrowed, eventErr
@@ -449,7 +446,7 @@ func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *op
 	return findSession(r.ctx, server, name)
 }
 
-func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int, log io.Writer) (tmux.Session, error) {
+func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, error) {
 	created := session.ID() == ""
 	if !created {
 		if _, err := session.Refresh(r.ctx); err != nil {
@@ -478,7 +475,7 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		if err := r.event("script-started", map[string]any{"input_index": inputIndex}); err != nil {
 			return session, err
 		}
-		result, err := r.process(plan.BeforeScript, plan.ScriptDirectory, nil, true, log)
+		result, err := r.process(plan.BeforeScript, plan.ScriptDirectory, nil, true)
 		r.scripts = append(r.scripts, map[string]any{"input_index": inputIndex, "kind": "before-script", "result": result})
 		if eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
 			return session, eventErr

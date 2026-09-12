@@ -118,6 +118,20 @@ Human load progress writes to a terminal on stderr. The `default`, `minimal`,
 disables the presenter. `TMUXP_PROGRESS_FORMAT` and `TMUXP_PROGRESS_LINES`
 provide defaults. Machine output always disables terminal rendering.
 
+`--log-level` filters optional warnings and file records. Command failures and
+machine operation records remain visible at every level. `load --log-file`
+appends UTF-8 JSON lines, with lifecycle records at `info`, script output at
+`debug`, and failures at `error`. Each record includes its level, message,
+command and event data; child records distinguish stdout from stderr.
+
+File logging is available on Unix. The destination must be a regular file;
+directories, pipes, devices and final-path symlinks are rejected before tmux or
+Python runs. New files use owner-only permissions, subject to umask. Existing
+content and permissions remain intact. A later write or close error disables
+the sink and attempts one optional warning after work finishes. Workspace
+results, cancellation and child exit statuses remain unchanged by logging
+failures, including failure to write that secondary warning.
+
 ## Search and Python compatibility
 
 Search uses native Go regular expressions by default, including `-F` literal

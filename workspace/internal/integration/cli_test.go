@@ -148,8 +148,8 @@ func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "unrelated"}})
 	dir := t.TempDir()
 	path := write(t, dir, "fail.yaml", "session_name: failure\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
-	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--ndjson")
-	if code != 1 || !json.Valid([]byte(diagnostic)) {
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--ndjson", "--log-level", "critical")
+	if code != 1 || !json.Valid([]byte(diagnostic)) || !strings.Contains(diagnostic, "load_failed") || !strings.Contains(out, `"code":"workspace_failed"`) {
 		t.Fatalf("failure %d %s %s", code, out, diagnostic)
 	}
 	terminal := 0
@@ -282,6 +282,66 @@ func TestLoadColorPreflightAnd256Colors(t *testing.T) {
 	for _, invocation := range strings.Split(strings.TrimSpace(string(invocations)), "\n") {
 		if !strings.Contains(" "+invocation+" ", " -2 ") {
 			t.Errorf("256-color client missing -2: %s", invocation)
+		}
+	}
+}
+
+func TestLoadLogLevelsAndRegularFiles(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	for _, level := range []string{"info", "debug", "critical"} {
+		path := write(t, dir, level+".yaml", "session_name: logged-"+level+"\nbefore_script: /bin/sh -c 'printf child-out; printf child-err >&2'\nwindows:\n- panes: [blank]\n")
+		logPath := filepath.Join(dir, level+".log")
+		if level == "info" {
+			write(t, dir, level+".log", "retained\n")
+			if err := os.Chmod(logPath, 0o640); err != nil {
+				t.Fatal(err)
+			}
+		}
+		code, out, diagnostic := run(t, "load", "-S", server.SocketPath(), "-d", "--json", "--log-level", level, "--log-file", logPath, path)
+		if code != 0 || diagnostic != "" || !json.Valid([]byte(out)) || !strings.Contains(out, "child-out") || !strings.Contains(out, "child-err") {
+			t.Fatalf("level=%s: %d %q %q", level, code, out, diagnostic)
+		}
+		data, err := os.ReadFile(logPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantMode := os.FileMode(0o600)
+		if level == "info" {
+			wantMode = 0o640
+			if !strings.HasPrefix(string(data), "retained\n") {
+				t.Fatal("existing log content was replaced")
+			}
+			data = data[len("retained\n"):]
+		}
+		info, err := os.Stat(logPath)
+		if err != nil || info.Mode().Perm() != wantMode {
+			t.Fatalf("log permissions: %v %v", info, err)
+		}
+		if strings.Contains(string(data), "child-out") != (level == "debug") || strings.Contains(string(data), "child-err") != (level == "debug") {
+			t.Errorf("level=%s leaked or lost child text: %s", level, data)
+		}
+		completed, streams := false, map[string]bool{}
+		for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+			if line == "" {
+				continue
+			}
+			var record struct {
+				Message string `json:"msg"`
+				Data    struct {
+					Stream string `json:"stream"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				t.Fatalf("invalid log record: %q %v", line, err)
+			}
+			completed = completed || record.Message == "completed"
+			if record.Message == "script-output" {
+				streams[record.Data.Stream] = true
+			}
+		}
+		if completed != (level != "critical") || (streams["stdout"] && streams["stderr"]) != (level == "debug") || (level == "critical" && len(data) != 0) {
+			t.Errorf("level=%s completed=%t streams=%v log=%s", level, completed, streams, data)
 		}
 	}
 }

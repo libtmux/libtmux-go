@@ -240,7 +240,7 @@ func (r *invocation) pythonMatches(terms []searchTerm, inputRecords []searchReco
 	if err != nil {
 		return nil, err
 	}
-	result, err := r.process([]string{pythonExecutable(), "-c", searchPython}, "", bytes.NewReader(payload), false, nil)
+	result, err := r.process([]string{pythonExecutable(), "-c", searchPython}, "", bytes.NewReader(payload), false)
 	if err != nil {
 		return nil, err
 	}

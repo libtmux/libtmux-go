@@ -37,7 +37,6 @@ type captureWriter struct {
 	r         *invocation
 	emit      bool
 	cancel    context.CancelFunc
-	log       io.Writer
 	pending   []byte
 	writeErr  error
 }
@@ -52,13 +51,6 @@ func (w *captureWriter) Write(data []byte) (int, error) {
 	}
 	if remaining > 0 {
 		_, _ = w.buffer.Write(data[:min(remaining, n)])
-	}
-	if w.log != nil {
-		if _, err := w.log.Write(data); err != nil {
-			w.writeErr = err
-			w.cancel()
-			return 0, err
-		}
 	}
 	if w.emit {
 		if err := w.emitBytes(data, false); err != nil {
@@ -84,11 +76,15 @@ func (w *captureWriter) emitBytes(data []byte, final bool) error {
 	w.pending = append(w.pending[:0], data...)
 	text := decoded.String()
 	if text != "" {
+		data := map[string]any{"stream": w.stream, "text": text, "encoding": "utf-8-replacement"}
 		if w.r.ndjson {
-			if err := w.r.event("script-output", map[string]any{"stream": w.stream, "text": text, "encoding": "utf-8-replacement"}); err != nil {
+			if err := w.r.event("script-output", data); err != nil {
 				return err
 			}
-		} else if !w.r.machine() {
+		} else {
+			w.r.logEvent("script-output", data)
+		}
+		if !w.r.machine() {
 			if w.r.progress != nil {
 				return w.r.progress.script(w.stream, text)
 			}
@@ -104,7 +100,7 @@ func (w *captureWriter) emitBytes(data []byte, final bool) error {
 	return nil
 }
 
-func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bool, log io.Writer) (processResult, error) {
+func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bool) (processResult, error) {
 	result := processResult{Encoding: "utf-8-replacement"}
 	if len(argv) == 0 {
 		return result, errors.New("empty child command")
@@ -116,8 +112,8 @@ func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bo
 	cmd.Dir = cwd
 	cmd.Stdin = input
 	cmd.WaitDelay = 2 * time.Second
-	out := &captureWriter{r: r, stream: "stdout", emit: emit, cancel: cancel, log: log}
-	diagnostic := &captureWriter{r: r, stream: "stderr", emit: emit, cancel: cancel, log: log}
+	out := &captureWriter{r: r, stream: "stdout", emit: emit, cancel: cancel}
+	diagnostic := &captureWriter{r: r, stream: "stderr", emit: emit, cancel: cancel}
 	cmd.Stdout, cmd.Stderr = out, diagnostic
 	err := cmd.Run()
 	if emit {
@@ -126,9 +122,6 @@ func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bo
 	result.Stdout = strings.ToValidUTF8(out.buffer.String(), "\uFFFD")
 	result.Stderr = strings.ToValidUTF8(diagnostic.buffer.String(), "\uFFFD")
 	result.Truncated = out.truncated || diagnostic.truncated
-	if writeErr := errors.Join(out.writeErr, diagnostic.writeErr); writeErr != nil {
-		return result, writeErr
-	}
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
@@ -139,6 +132,9 @@ func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bo
 		} else {
 			return result, err
 		}
+	}
+	if writeErr := errors.Join(out.writeErr, diagnostic.writeErr); writeErr != nil {
+		return result, writeErr
 	}
 	return result, nil
 }
@@ -155,7 +151,7 @@ func (r *invocation) checkPython(tmuxpRequired bool) error {
 	if tmuxpRequired {
 		script += "from importlib.metadata import version\nif version('tmuxp') != '" + referenceVersion + "': raise RuntimeError('tmuxp " + referenceVersion + " required')\n"
 	}
-	result, err := r.process([]string{pythonExecutable(), "-c", script}, "", nil, false, nil)
+	result, err := r.process([]string{pythonExecutable(), "-c", script}, "", nil, false)
 	if err != nil {
 		return &failure{"compatibility_runtime", fmt.Sprintf("Python compatibility runtime unavailable: %v; set TMUX_WORKSPACE_PYTHON", err), 1}
 	}
@@ -263,7 +259,7 @@ func (r *invocation) shell(cmd *cobra.Command, o *options, args []string) error 
 	if err := r.event("started", nil); err != nil {
 		return err
 	}
-	result, err := r.process(bridgeArgv(argv), "", nil, true, nil)
+	result, err := r.process(bridgeArgv(argv), "", nil, true)
 	if err != nil {
 		_ = r.event("failed", map[string]any{"message": err.Error()})
 		return err
@@ -341,7 +337,7 @@ func (r *invocation) edit(_ *cobra.Command, _ *options, args []string) error {
 	argv = append(argv, path)
 	var result processResult
 	if r.machine() {
-		result, err = r.process(argv, "", nil, false, nil)
+		result, err = r.process(argv, "", nil, false)
 	} else {
 		cmd := exec.CommandContext(r.ctx, argv[0], argv[1:]...)
 		cmd.Stdin = r.in
