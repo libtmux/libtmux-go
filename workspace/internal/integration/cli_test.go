@@ -266,3 +266,24 @@ func TestPythonShellAndPluginBridge(t *testing.T) {
 		t.Fatalf("plugin did not execute: %q %v", got, err)
 	}
 }
+
+func TestAppendRejectsDifferentSocketWithSamePaneID(t *testing.T) {
+	first := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	second := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	for _, server := range []tmux.Server{first, second} {
+		if _, err := server.NewSession(t.Context(), tmux.NewSessionRequest{Name: "existing"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("TMUX", first.SocketPath()+",1,0")
+	t.Setenv("TMUX_PANE", "%0")
+	path := write(t, t.TempDir(), "append.yaml", "session_name: append\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", "--append", "-S", second.SocketPath(), "--json", path)
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "current tmux server") {
+		t.Fatalf("cross-server append was accepted: %d %q %q", code, out, diagnostic)
+	}
+	snapshot, err := second.Snapshot(t.Context())
+	if err != nil || len(snapshot.Windows()) != 1 {
+		t.Fatalf("unrelated server mutated: %v windows=%d", err, len(snapshot.Windows()))
+	}
+}

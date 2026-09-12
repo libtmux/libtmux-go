@@ -50,7 +50,7 @@ func findSession(ctx context.Context, server tmux.Server, target string) (tmux.S
 		return tmux.Session{}, err
 	}
 	if target == "" {
-		if paneID := os.Getenv("TMUX_PANE"); paneID != "" {
+		if paneID := os.Getenv("TMUX_PANE"); paneID != "" && currentEndpoint(server) == nil {
 			for _, pane := range snapshot.Panes() {
 				if pane.ID().String() == paneID {
 					session, ok := pane.Session()
@@ -78,6 +78,9 @@ func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, erro
 	if os.Getenv("TMUX_PANE") == "" || os.Getenv("TMUX") == "" {
 		return tmux.Session{}, usage("--append requires TMUX and TMUX_PANE identifying the current session")
 	}
+	if err := currentEndpoint(server); err != nil {
+		return tmux.Session{}, err
+	}
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		return tmux.Session{}, err
@@ -91,6 +94,18 @@ func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, erro
 		}
 	}
 	return tmux.Session{}, errors.New("current pane does not belong to the selected tmux server")
+}
+
+func currentEndpoint(server tmux.Server) error {
+	path, _, _ := strings.Cut(os.Getenv("TMUX"), ",")
+	if path != "" {
+		current, currentErr := os.Stat(path)
+		selected, selectedErr := os.Stat(server.SocketPath())
+		if currentErr == nil && selectedErr == nil && os.SameFile(current, selected) {
+			return nil
+		}
+	}
+	return usage("selected socket does not identify the current tmux server")
 }
 
 func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
@@ -159,6 +174,14 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	server, err := serverFor(o)
 	if err != nil {
 		return err
+	}
+	if o.append {
+		if os.Getenv("TMUX_PANE") == "" {
+			return usage("--append requires TMUX_PANE identifying the current session")
+		}
+		if err := currentEndpoint(server); err != nil {
+			return err
+		}
 	}
 	var log io.Writer
 	if o.logFile != "" {
