@@ -104,3 +104,48 @@ func TestMachineControlBytesAndBoundedChildOutput(t *testing.T) {
 		}{len(result.Stdout), len(result.Stderr), result.Truncated}, err)
 	}
 }
+
+func TestStreamPreservesSplitUTF8(t *testing.T) {
+	var out strings.Builder
+	r := &invocation{ctx: t.Context(), out: &out, err: io.Discard, ndjson: true, command: "shell"}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	w := &captureWriter{r: r, stream: "stdout", emit: true, cancel: cancel}
+	for _, part := range [][]byte{{0xe7}, {0x95}, {0x8c, '\n'}} {
+		if _, err := w.Write(part); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var reconstructed strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		var event struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatal(err)
+		}
+		reconstructed.WriteString(event.Text)
+	}
+	if reconstructed.String() != "界\n" || ctx.Err() != nil {
+		t.Fatalf("split UTF-8 became %q", reconstructed.String())
+	}
+}
+
+func TestTmuxinatorDirectoryOverride(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMUXINATOR_CONFIG", dir)
+	if err := os.WriteFile(filepath.Join(dir, "example.yaml"), []byte("name: imported\nwindows:\n- editor: vim\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "import", "tmuxinator", "example", "--json")
+	if code != 0 || !strings.Contains(out, `"session_name":"imported"`) || diagnostic != "" {
+		t.Fatalf("override %d %q %q", code, out, diagnostic)
+	}
+}
+
+func TestReadinessValidation(t *testing.T) {
+	doc := document{"session_name": "ready", "windows": []any{document{"panes": []any{"blank"}}}, "workspace_builder_options": document{"pane_readiness": "sometimes"}}
+	if _, err := normalize(doc, t.TempDir()); err == nil {
+		t.Fatal("invalid readiness policy was silently accepted")
+	}
+}

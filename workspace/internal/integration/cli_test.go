@@ -162,3 +162,17 @@ func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 		t.Fatalf("lost unrelated session %s", name)
 	}
 }
+
+func TestReadinessWaitsForPrompt(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{Config: []byte("set -g default-shell /bin/sh\nset -g default-command \"sleep 0.25; printf ready; exec /bin/sh\"\n")})
+	dir := t.TempDir()
+	path := write(t, dir, "ready.yaml", "session_name: ready\nworkspace_builder_options: {pane_readiness: always}\nwindows:\n- panes: [blank]\n")
+	start := time.Now()
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("readiness %d %s %s", code, out, diagnostic)
+	}
+	if time.Since(start) < 200*time.Millisecond {
+		t.Fatal("load did not wait for the delayed prompt")
+	}
+}

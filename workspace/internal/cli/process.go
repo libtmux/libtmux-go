@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/mattn/go-shellwords"
@@ -37,6 +38,7 @@ type captureWriter struct {
 	emit      bool
 	cancel    context.CancelFunc
 	log       io.Writer
+	pending   []byte
 }
 
 func (w *captureWriter) Write(data []byte) (int, error) {
@@ -56,11 +58,31 @@ func (w *captureWriter) Write(data []byte) (int, error) {
 		}
 	}
 	if w.emit {
-		text := strings.ToValidUTF8(string(data), "\uFFFD")
+		if err := w.emitBytes(data, false); err != nil {
+			w.cancel()
+			return 0, err
+		}
+	}
+	return n, nil
+}
+
+func (w *captureWriter) emitBytes(data []byte, final bool) error {
+	data = append(w.pending, data...)
+	var decoded strings.Builder
+	for len(data) > 0 {
+		if !final && !utf8.FullRune(data) {
+			break
+		}
+		value, size := utf8.DecodeRune(data)
+		decoded.WriteRune(value)
+		data = data[size:]
+	}
+	w.pending = append(w.pending[:0], data...)
+	text := decoded.String()
+	if text != "" {
 		if w.r.ndjson {
 			if err := w.r.event("script-output", map[string]any{"stream": w.stream, "text": text, "encoding": "utf-8-replacement"}); err != nil {
-				w.cancel()
-				return 0, err
+				return err
 			}
 		} else if !w.r.machine() {
 			writer := w.r.err
@@ -68,12 +90,11 @@ func (w *captureWriter) Write(data []byte) (int, error) {
 				writer = w.r.out
 			}
 			if _, err := io.WriteString(writer, text); err != nil {
-				w.cancel()
-				return 0, err
+				return err
 			}
 		}
 	}
-	return n, nil
+	return nil
 }
 
 func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bool, log io.Writer) (processResult, error) {
@@ -91,6 +112,9 @@ func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bo
 	diagnostic := &captureWriter{r: r, stream: "stderr", emit: emit, cancel: cancel, log: log}
 	cmd.Stdout, cmd.Stderr = out, diagnostic
 	err := cmd.Run()
+	if emit {
+		err = errors.Join(err, out.emitBytes(nil, true), diagnostic.emitBytes(nil, true))
+	}
 	result.Stdout = strings.ToValidUTF8(out.buffer.String(), "\uFFFD")
 	result.Stderr = strings.ToValidUTF8(diagnostic.buffer.String(), "\uFFFD")
 	result.Truncated = out.truncated || diagnostic.truncated
