@@ -109,6 +109,9 @@ func currentEndpoint(server tmux.Server) error {
 }
 
 func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
+	if _, _, err := sessionDimensions(); err != nil {
+		return err
+	}
 	if o.colors256 && o.colors88 {
 		return usage("-2 and -8 are mutually exclusive")
 	}
@@ -372,23 +375,10 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 	created := session.ID() == ""
 	var bootstrap tmux.Window
 	if created {
-		width, height := 80, 24
-		for _, dimension := range []struct {
-			names  []string
-			target *int
-		}{{[]string{"TMUXP_DEFAULT_COLUMNS", "COLUMNS"}, &width}, {[]string{"TMUXP_DEFAULT_ROWS", "ROWS"}, &height}} {
-			for _, name := range dimension.names {
-				if raw := os.Getenv(name); raw != "" {
-					n, err := strconv.Atoi(raw)
-					if err != nil || n < 1 || n > 65535 {
-						return session, usage("%s must be 1..65535", name)
-					}
-					*dimension.target = n
-					break
-				}
-			}
+		width, height, err := sessionDimensions()
+		if err != nil {
+			return session, err
 		}
-		var err error
 		session, err = server.NewSession(r.ctx, tmux.NewSessionRequest{Name: plan.Name, StartDirectory: plan.Directory, Environment: plan.Environment, Width: width, Height: height})
 		if err != nil {
 			return session, err

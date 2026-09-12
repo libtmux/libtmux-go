@@ -62,6 +62,15 @@ func TestMachineCompletionEnvelope(t *testing.T) {
 	}
 }
 
+func TestInvalidSizePrecedesWorkspaceAndBackend(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("TMUXP_DEFAULT_COLUMNS", "invalid")
+	code, out, diagnostic := invoke(t, "load", "-d", "--json", "absent.yaml")
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "TMUXP_DEFAULT_COLUMNS") {
+		t.Fatalf("size validation: %d %q %q", code, out, diagnostic)
+	}
+}
+
 func TestHelpWithoutTmux(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, path := range []string{"", "load", "ls", "search", "edit", "freeze", "convert", "import", "import teamocil", "import tmuxinator", "shell", "debug-info"} {

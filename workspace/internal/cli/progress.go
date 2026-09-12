@@ -277,3 +277,44 @@ func (p *progressPresenter) draw() {
 	_, p.err = io.WriteString(p.out, strings.Join(lines, "\n"))
 	p.drawn = len(lines)
 }
+
+func sessionDimensions() (int, int, error) {
+	width, height := 80, 24
+	for _, dimension := range []struct {
+		names  []string
+		target *int
+	}{
+		{[]string{"TMUXP_DEFAULT_COLUMNS", "COLUMNS"}, &width},
+		{[]string{"TMUXP_DEFAULT_ROWS", "ROWS"}, &height},
+	} {
+		for _, name := range dimension.names {
+			if raw := os.Getenv(name); raw != "" {
+				n, err := strconv.Atoi(raw)
+				if err != nil || n < 1 || n > 65535 {
+					return 0, 0, usage("%s must be 1..65535", name)
+				}
+				*dimension.target = n
+				break
+			}
+		}
+	}
+	if value, ok := os.LookupEnv("TMUXP_DETECT_TERMINAL_SIZE"); ok && value != "1" {
+		return 0, 0, nil
+	}
+	if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 && h > 0 {
+		width, height = w, h
+	}
+	for _, dimension := range []struct {
+		name   string
+		target *int
+	}{{"COLUMNS", &width}, {"LINES", &height}} {
+		if raw := os.Getenv(dimension.name); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 1 || n > 65535 {
+				return 0, 0, usage("%s must be 1..65535", dimension.name)
+			}
+			*dimension.target = n
+		}
+	}
+	return width, height, nil
+}
