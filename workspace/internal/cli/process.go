@@ -39,6 +39,7 @@ type captureWriter struct {
 	cancel    context.CancelFunc
 	log       io.Writer
 	pending   []byte
+	writeErr  error
 }
 
 func (w *captureWriter) Write(data []byte) (int, error) {
@@ -54,11 +55,14 @@ func (w *captureWriter) Write(data []byte) (int, error) {
 	}
 	if w.log != nil {
 		if _, err := w.log.Write(data); err != nil {
+			w.writeErr = err
+			w.cancel()
 			return 0, err
 		}
 	}
 	if w.emit {
 		if err := w.emitBytes(data, false); err != nil {
+			w.writeErr = err
 			w.cancel()
 			return 0, err
 		}
@@ -105,6 +109,7 @@ func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bo
 	ctx, cancel := context.WithCancel(r.ctx)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	superviseProcess(cmd)
 	cmd.Dir = cwd
 	cmd.Stdin = input
 	cmd.WaitDelay = 2 * time.Second
@@ -118,6 +123,9 @@ func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bo
 	result.Stdout = strings.ToValidUTF8(out.buffer.String(), "\uFFFD")
 	result.Stderr = strings.ToValidUTF8(diagnostic.buffer.String(), "\uFFFD")
 	result.Truncated = out.truncated || diagnostic.truncated
+	if writeErr := errors.Join(out.writeErr, diagnostic.writeErr); writeErr != nil {
+		return result, writeErr
+	}
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
@@ -140,9 +148,9 @@ func pythonExecutable() string {
 }
 
 func (r *invocation) checkPython(tmuxpRequired bool) error {
-	script := "import sys; assert sys.version_info >= (3, 10) and sys.version_info.major == 3, 'Python 3.10 or newer required'"
+	script := "import sys\nif sys.version_info < (3, 10) or sys.version_info.major != 3: raise RuntimeError('Python 3.10 or newer required')\n"
 	if tmuxpRequired {
-		script += "; from importlib.metadata import version; assert version('tmuxp') == '" + referenceVersion + "', 'tmuxp " + referenceVersion + " required'"
+		script += "from importlib.metadata import version\nif version('tmuxp') != '" + referenceVersion + "': raise RuntimeError('tmuxp " + referenceVersion + " required')\n"
 	}
 	result, err := r.process([]string{pythonExecutable(), "-c", script}, "", nil, false, nil)
 	if err != nil {
