@@ -98,7 +98,7 @@ func TestReadLeavesAndOutputPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("EDITOR", editor+" 'quoted argument'")
-	for _, args := range [][]string{{"ls", "--json", "--full"}, {"search", "--json", "(?<=h)éllo"}, {"search", "--json", "missing"}, {"edit", workspace, "--json"}, {"convert", workspace, "--json"}, {"import", "teamocil", teamocil, "--json"}, {"import", "tmuxinator", tmuxinator, "--json"}, {"debug-info", "--json"}} {
+	for _, args := range [][]string{{"ls", "--json", "--full"}, {"search", "--regex-engine", "python", "--json", "(?<=h)éllo"}, {"search", "--json", "missing"}, {"edit", workspace, "--json"}, {"convert", workspace, "--json"}, {"import", "teamocil", teamocil, "--json"}, {"import", "tmuxinator", tmuxinator, "--json"}, {"debug-info", "--json"}} {
 		code, out, diagnostic := invoke(t, args...)
 		if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
 			t.Fatalf("%v: %d %q %q", args, code, out, diagnostic)
@@ -123,7 +123,39 @@ func TestReadLeavesAndOutputPrecedence(t *testing.T) {
 	}
 }
 
-func TestSearchPreservesPythonWordAndObjectSemantics(t *testing.T) {
+func TestSearchNativeDoesNotRequirePythonAndGroupsWholeWords(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMUXP_CONFIGDIR", dir)
+	t.Setenv("TMUX_WORKSPACE_PYTHON", filepath.Join(dir, "missing-python"))
+	t.Chdir(dir)
+	if err := os.WriteFile(filepath.Join(dir, "words.yaml"), []byte("session_name: words\nwindows:\n- panes:\n  - foobar\n  - shell_command:\n    - {cmd: deploy, enter: false}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		args  []string
+		count int
+	}{
+		{[]string{"pane:deploy"}, 1},
+		{[]string{"-w", "pane:foo|bar"}, 0},
+		{[]string{"-F", `pane:"cmd":"deploy"`}, 1},
+		{[]string{"pane:^"}, 1},
+		{[]string{"--any", "pane:deploy", "pane:missing"}, 1},
+		{[]string{"pane:deploy", "pane:missing"}, 0},
+		{[]string{"-v", "pane:missing"}, 1},
+	} {
+		code, out, diagnostic := invoke(t, append([]string{"search", "--json"}, test.args...)...)
+		var matches []map[string]any
+		if code != 0 || diagnostic != "" || json.Unmarshal([]byte(out), &matches) != nil || len(matches) != test.count {
+			t.Fatalf("native search %v: %d %q %q", test.args, code, out, diagnostic)
+		}
+	}
+	code, out, diagnostic := invoke(t, "search", "--json", "(?<=foo)bar")
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "--regex-engine python") {
+		t.Fatalf("unsupported native expression: %d %q %q", code, out, diagnostic)
+	}
+}
+
+func TestSearchExplicitPythonKeepsObjectMatchingAndGroupsWholeWords(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("Python compatibility runtime unavailable")
 	}
@@ -133,11 +165,15 @@ func TestSearchPreservesPythonWordAndObjectSemantics(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "words.yaml"), []byte("session_name: words\nwindows:\n- panes:\n  - foobar\n  - shell_command:\n    - {cmd: deploy, enter: false}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"search", "--json", "-w", "pane:foo|bar"}, {"search", "--json", "-F", "pane:'cmd': 'deploy'"}} {
+	for _, args := range [][]string{{"search", "--regex-engine", "python", "--json", "pane:(?<=foo)bar"}, {"search", "--regex-engine", "python", "--json", "-F", "pane:'cmd': 'deploy'"}} {
 		code, out, diagnostic := invoke(t, args...)
 		if code != 0 || !strings.Contains(out, `"name":"words"`) {
 			t.Fatalf("Python search semantics %v: %d %q %q", args, code, out, diagnostic)
 		}
+	}
+	code, out, diagnostic := invoke(t, "search", "--regex-engine", "python", "--json", "-w", "pane:foo|bar")
+	if code != 0 || strings.TrimSpace(out) != "[]" || diagnostic != "" {
+		t.Fatalf("grouped Python whole words: %d %q %q", code, out, diagnostic)
 	}
 }
 

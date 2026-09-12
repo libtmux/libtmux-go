@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--iterations", type=int, default=15)
     parser.add_argument("--reference", type=pathlib.Path)
+    parser.add_argument("--search-only", action="store_true",
+                        help="Verify search and read-command timings without a live tmux suite")
     args = parser.parse_args()
     if args.iterations < 1:
         parser.error("iterations must be positive")
@@ -98,7 +100,7 @@ def main():
                         "samples":samples}
             for boundary,arguments in (("startup-version",["--version"]),
                                        ("discovery-json",["ls","--json"]),
-                                       ("search-python-regex",["search","--json","name:sample"])):
+                                       ("search-native-regex",["search","--json","name:sample"])):
                 samples={"go":[],"tmuxp":[]}
                 for i in range(args.iterations):
                     for name,program in (("go",binary),("tmuxp",reference_binary)) if i%2==0 else (("tmuxp",reference_binary),("go",binary)):
@@ -107,6 +109,9 @@ def main():
                         samples[name].append((time.perf_counter_ns()-started)/1_000_000)
                         if boundary!="startup-version": json.loads(result.stdout)
                 report["matched_benchmarks"][boundary]={name:summarize(values) for name,values in samples.items()}
+            if args.search_only:
+                report["matched_boundaries"] = "Alternating installed CLI processes with identical read-command argv and workspace data; no live tmux server."
+                return
             samples={"go":[],"tmuxp":[]}
             for i in range(args.iterations):
                 for name,program in (("go",binary),("tmuxp",reference_binary)) if i%2==0 else (("tmuxp",reference_binary),("go",binary)):
@@ -180,7 +185,7 @@ print(json.dumps(rows))
         def leaves():
             (root / "tmuxinator.yml").write_text("name: imported\nwindows:\n- editor: vim\n")
             (root / "teamocil.yml").write_text("session:\n  name: imported\n  windows:\n  - name: editor\n    panes:\n    - cmd: vim\n")
-            for command in (["ls", "--full", "--json"], ["search", "--json", "(?<=sam)ple"],
+            for command in (["ls", "--full", "--json"], ["search", "--regex-engine", "python", "--json", "(?<=sam)ple"],
                             ["convert", str(workspace), "--json"], ["debug-info", "--json"],
                             ["import", "teamocil", str(root / "teamocil.yml"), "--json"],
                             ["import", "tmuxinator", str(root / "tmuxinator.yml"), "--json"],
@@ -312,6 +317,26 @@ print(json.dumps(rows))
                 assert not result.stdout
                 assert json.loads(result.stderr)["code"] == "usage"
 
+        if args.search_only:
+            check("command graph and all-leaf machine flags", validate_graph)
+            native = invoke(["search", "--json", "name:sample"],
+                            extra_env={"TMUX_WORKSPACE_PYTHON":str(root / "missing-python")})
+            assert len(json.loads(native.stdout)) == 1
+            report["checks"].append({"name":"native search without Python", "status":"PASS"})
+            explicit = invoke(["search", "--regex-engine", "python", "--json", "(?<=sam)ple"])
+            assert len(json.loads(explicit.stdout)) == 1
+            report["checks"].append({"name":"explicit Python expression", "status":"PASS"})
+            measured("search-native-regex", ["search", "--json", "name:sample"])
+            measured("search-explicit-python", ["search", "--regex-engine", "python", "--json", "name:sample"])
+            check("matched pinned read-command boundaries", matched_reference)
+            report["status"] = "PASS"
+            report["scope"] = "native-search-return-pass"
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(report, indent=2)+"\n")
+            print(json.dumps({"status":report["status"], "checks":len(report["checks"]),
+                              "benchmarks":{k:v["median"] for k,v in report["benchmarks"].items()}}))
+            return
+
         try:
             report["tmux_version"] = subprocess.check_output(["tmux", "-V"], text=True).strip()
             check("command graph and all-leaf machine flags", validate_graph)
@@ -327,7 +352,7 @@ print(json.dumps(rows))
                 assert b"tmuxinator" in invoke(["--generate-docs", format]).stdout
             measured("startup-version", ["--version"])
             measured("discovery-json", ["ls", "--json"])
-            measured("search-python-regex", ["search", "--json", "name:sample"])
+            measured("search-native-regex", ["search", "--json", "name:sample"])
             measured("capture-json", ["freeze", "-S", str(socket), "--json", "sample"])
             def finish_load(i, result):
                 value = json.loads(result.stdout)

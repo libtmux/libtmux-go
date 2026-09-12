@@ -184,6 +184,7 @@ type options struct {
 	noProgress                                      bool
 	tree, full                                      bool
 	fields                                          []string
+	regexEngine                                     string
 	ignoreCase, smartCase, fixed, word, invert, any bool
 	format, saveTo                                  string
 	quiet, force                                    bool
@@ -302,13 +303,14 @@ func (r *invocation) tree() *cobra.Command {
 	ls, list := add("ls", "", "list local and global workspace files", 0, 0, r.list)
 	ls.Flags().BoolVar(&list.tree, "tree", false, "show directory and configuration trees")
 	ls.Flags().BoolVar(&list.full, "full", false, "include complete configuration documents")
-	search, s := add("search", " [query-term...]", "search workspace fields with Python expressions", 0, -1, r.search)
+	search, s := add("search", " [query-term...]", "search workspace fields with native regular expressions", 0, -1, r.search)
 	f = search.Flags()
+	f.StringVar(&s.regexEngine, "regex-engine", "go", "expression engine: go or explicit python compatibility")
 	f.StringArrayVarP(&s.fields, "field", "f", nil, "repeat field: name/n, session/s, path/p, window/w, pane (default all)")
 	f.BoolVarP(&s.ignoreCase, "ignore-case", "i", false, "ignore case")
 	f.BoolVarP(&s.smartCase, "smart-case", "S", false, "ignore case unless the pattern contains uppercase")
 	f.BoolVarP(&s.fixed, "fixed-strings", "F", false, "treat patterns as literal strings")
-	f.BoolVarP(&s.word, "word-regexp", "w", false, "match whole words")
+	f.BoolVarP(&s.word, "word-regexp", "w", false, "match whole words, grouping alternatives")
 	f.BoolVarP(&s.invert, "invert-match", "v", false, "select workspaces that do not match")
 	f.BoolVar(&s.any, "any", false, "match any query term (default all)")
 	add("edit", " workspace-file", "open a workspace with EDITOR", 1, 1, r.edit)
