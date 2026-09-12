@@ -99,3 +99,10 @@ func TestNormalizeShorthandAndCommandState(t *testing.T) {
 		t.Fatalf("command state did not carry/reset: %+v", commands)
 	}
 }
+
+func TestMissingPanesCreatesBlankPane(t *testing.T) {
+	plan, err := normalize(document{"session_name": "minimal", "windows": []any{document{"window_name": "shell"}}}, t.TempDir())
+	if err != nil || len(plan.Windows) != 1 || len(plan.Windows[0].Panes) != 1 {
+		t.Fatalf("missing panes: %+v %v", plan, err)
+	}
+}
