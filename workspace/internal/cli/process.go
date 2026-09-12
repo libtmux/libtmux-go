@@ -169,6 +169,60 @@ func bridgeArgv(args []string) []string {
 	return append([]string{pythonExecutable(), "-u", "-c", "from tmuxp.cli import cli; import sys; cli(sys.argv[1:])"}, args...)
 }
 
+func appendBridgeArgv(session tmux.Session, o *options, path, name string) ([]string, error) {
+	pid, hasPID := session.Formats().PID()
+	started, hasStart := session.Formats().StartTime()
+	if !hasPID || !hasStart {
+		return nil, errors.New("append context is missing the borrowed daemon identity")
+	}
+	request := map[string]any{
+		"path": path, "name": name, "socket": session.Server().SocketPath(),
+		"session": session.ID().String(), "identity": fmt.Sprintf("%d:%d", pid, started.Unix()),
+	}
+	if o.tmuxConfig != "" {
+		request["config_file"] = o.tmuxConfig
+	}
+	if o.colors256 {
+		request["colors"] = 256
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	const script = `import json, sys
+from pathlib import Path
+from libtmux import Server
+from tmuxp._internal import config_reader
+from tmuxp.cli.load import load_plugins
+from tmuxp.cli._colors import Colors, ColorMode
+from tmuxp.workspace import loader
+from tmuxp.workspace.builder import prepended_sys_path, resolve_builder_class, resolve_builder_paths
+
+request = json.loads(sys.argv[1])
+server = Server(socket_path=request['socket'], config_file=request.get('config_file'), colors=request.get('colors'))
+def append_target():
+    borrowed = server.sessions.get(session_id=request['session'], default=None)
+    if borrowed is None:
+        raise RuntimeError('append_context: borrowed session no longer exists')
+    identity = server.cmd('display-message', '-p', '-t', borrowed.session_id, '#{pid}:#{start_time}')
+    if identity.returncode != 0 or identity.stdout != [request['identity']]:
+        raise RuntimeError('append_context: borrowed daemon identity changed')
+    return borrowed
+
+append_target()
+path = Path(request['path'])
+config = loader.trickle(loader.expand(config_reader.ConfigReader._from_file(path), cwd=str(path.parent)))
+config['session_name'] = request['name']
+with prepended_sys_path(resolve_builder_paths(config, path)):
+    builder = resolve_builder_class(config)(session_config=config, server=server, plugins=load_plugins(config, colors=Colors(ColorMode.NEVER)))
+    borrowed = append_target()
+    builder.build(borrowed, append=True)
+    for plugin in builder.plugins:
+        plugin.before_script(builder.session)
+`
+	return []string{pythonExecutable(), "-u", "-c", script, string(payload)}, nil
+}
+
 func (r *invocation) shell(cmd *cobra.Command, o *options, args []string) error {
 	count := 0
 	for _, backend := range []string{"best", "pdb", "code", "ptipython", "ptpython", "ipython", "bpython"} {

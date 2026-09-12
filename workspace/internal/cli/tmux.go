@@ -17,11 +17,19 @@ import (
 )
 
 func serverFor(o *options) (tmux.Server, error) {
+	socketPath := o.socketPath
+	if socketPath == "" && o.socketName == "" && os.Getenv("TMUX") != "" {
+		var err error
+		socketPath, _, err = inheritedEndpoint()
+		if err != nil {
+			return tmux.Server{}, err
+		}
+	}
 	colors := tmux.ColorDefault
 	if o.colors256 {
 		colors = tmux.Color256
 	}
-	return tmux.NewServer(tmux.ServerOptions{SocketName: o.socketName, SocketPath: o.socketPath, ConfigFile: o.tmuxConfig, Colors: colors})
+	return tmux.NewServer(tmux.ServerOptions{SocketName: o.socketName, SocketPath: socketPath, ConfigFile: o.tmuxConfig, Colors: colors})
 }
 
 func query(ctx context.Context, server tmux.Server, args ...string) (string, error) {
@@ -81,25 +89,52 @@ func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, erro
 	if err != nil {
 		return tmux.Session{}, err
 	}
-	for _, pane := range snapshot.Panes() {
-		if pane.ID().String() == os.Getenv("TMUX_PANE") {
-			session, ok := pane.Session()
-			if ok {
-				return session, nil
+	paneID := tmux.PaneID(os.Getenv("TMUX_PANE"))
+	pane, err := snapshot.PaneByID(paneID)
+	if errors.Is(err, tmux.ErrSnapshotAmbiguous) {
+		// Linked panes use tmux's canonical session, protected by this snapshot.
+		pane, err = snapshot.Server().Pane(ctx, paneID)
+	}
+	if err != nil {
+		return tmux.Session{}, usage("current pane does not belong to the selected tmux server")
+	}
+	session, err := snapshot.SessionByID(pane.SessionID())
+	if err != nil {
+		return tmux.Session{}, err
+	}
+	_, inheritedPID, err := inheritedEndpoint()
+	pid, ok := session.Formats().PID()
+	if err != nil || !ok || pid != inheritedPID {
+		return tmux.Session{}, usage("selected socket does not identify the current tmux server")
+	}
+	return session, nil
+}
+
+func inheritedEndpoint() (string, int, error) {
+	value := os.Getenv("TMUX")
+	last := strings.LastIndexByte(value, ',')
+	if last > 0 {
+		previous := strings.LastIndexByte(value[:last], ',')
+		if previous > 0 {
+			pid, pidErr := strconv.Atoi(value[previous+1 : last])
+			_, sessionErr := strconv.ParseUint(value[last+1:], 10, 64)
+			if pidErr == nil && pid > 0 && sessionErr == nil {
+				return value[:previous], pid, nil
 			}
 		}
 	}
-	return tmux.Session{}, errors.New("current pane does not belong to the selected tmux server")
+	return "", 0, usage("TMUX must identify the current tmux server with socket,positive-pid,session")
 }
 
 func currentEndpoint(server tmux.Server) error {
-	path, _, _ := strings.Cut(os.Getenv("TMUX"), ",")
-	if path != "" {
-		current, currentErr := os.Stat(path)
-		selected, selectedErr := os.Stat(server.SocketPath())
-		if currentErr == nil && selectedErr == nil && os.SameFile(current, selected) {
-			return nil
-		}
+	path, _, err := inheritedEndpoint()
+	if err != nil {
+		return err
+	}
+	current, currentErr := os.Stat(path)
+	selected, selectedErr := os.Stat(server.SocketPath())
+	if currentErr == nil && selectedErr == nil && os.SameFile(current, selected) {
+		return nil
 	}
 	return usage("selected socket does not identify the current tmux server")
 }
@@ -168,6 +203,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		plan loadPlan
 	}
 	inputs := []input{}
+	needsPython := false
 	for index, arg := range args {
 		path, err := resolveFile(arg, "")
 		if err != nil {
@@ -188,9 +224,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			if _, scripted := doc["before_script"]; o.append && scripted {
 				return &failure{"unsupported_combination", "--append with Python plugins/custom builders and before_script is unavailable: tmuxp can delete the borrowed session on script failure", 2}
 			}
-			if err := r.checkPython(true); err != nil {
-				return err
-			}
+			needsPython = true
 		}
 		inputs = append(inputs, input{path, plan})
 	}
@@ -198,11 +232,16 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if err != nil {
 		return err
 	}
+	var borrowed tmux.Session
 	if o.append {
-		if os.Getenv("TMUX_PANE") == "" {
-			return usage("--append requires TMUX_PANE identifying the current session")
+		borrowed, err = currentSession(r.ctx, server)
+		if err != nil {
+			return err
 		}
-		if err := currentEndpoint(server); err != nil {
+		server = borrowed.Server()
+	}
+	if needsPython {
+		if err := r.checkPython(true); err != nil {
 			return err
 		}
 	}
@@ -244,7 +283,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		var buildErr error
 		reused := false
 		if o.append {
-			session, buildErr = currentSession(r.ctx, server)
+			session = borrowed
 		} else {
 			var exists bool
 			exists, buildErr = server.HasSession(r.ctx, tmux.HasSessionRequest{Target: input.plan.Name})
@@ -255,7 +294,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		if buildErr == nil && !reused {
 			if input.plan.Bridge {
-				session, buildErr = r.bridgeLoad(server, o, input.path, input.plan.Name, index, log)
+				session, buildErr = r.bridgeLoad(server, session, o, input.path, input.plan.Name, index, log)
 			} else {
 				session, buildErr = r.build(server, session, input.plan, index, log)
 			}
@@ -356,7 +395,7 @@ func (r *invocation) attach(server tmux.Server, session tmux.Session) error {
 	return session.Attach(r.ctx, tmux.AttachSessionOptions{Stdin: r.terminalInput, Stdout: terminalFile, Stderr: terminalFile})
 }
 
-func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name string, index int, log io.Writer) (tmux.Session, error) {
+func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *options, path, name string, index int, log io.Writer) (tmux.Session, error) {
 	args := []string{"--color", "never", "load", "--no-progress"}
 	if o.append {
 		args = append(args, "--append")
@@ -379,31 +418,44 @@ func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name strin
 		args = append(args, "-2")
 	}
 	args = append(args, path)
+	argv := bridgeArgv(args)
+	if o.append {
+		var err error
+		argv, err = appendBridgeArgv(borrowed, o, path, name)
+		if err != nil {
+			return borrowed, err
+		}
+	}
 	if err := r.event("warning", map[string]any{"input_index": index, "code": "python_compatibility", "message": "plugins/custom builder execute in version-checked tmuxp " + referenceVersion}); err != nil {
-		return tmux.Session{}, err
+		return borrowed, err
 	}
 	if err := r.event("script-started", map[string]any{"input_index": index}); err != nil {
-		return tmux.Session{}, err
+		return borrowed, err
 	}
-	result, err := r.process(bridgeArgv(args), "", nil, true, log)
+	result, err := r.process(argv, "", nil, true, log)
 	r.scripts = append(r.scripts, map[string]any{"input_index": index, "kind": "python-workspace", "result": result})
 	if eventErr := r.event("script-completed", map[string]any{"input_index": index, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
-		return tmux.Session{}, eventErr
+		return borrowed, eventErr
 	}
 	if err != nil {
-		return tmux.Session{}, err
+		return borrowed, err
 	}
 	if result.Status != 0 {
-		return tmux.Session{}, fmt.Errorf("python workspace bridge exited %d: %s", result.Status, result.Stdout+result.Stderr)
+		return borrowed, fmt.Errorf("python workspace bridge exited %d: %s", result.Status, result.Stdout+result.Stderr)
 	}
 	if o.append {
-		return currentSession(r.ctx, server)
+		return borrowed, nil
 	}
 	return findSession(r.ctx, server, name)
 }
 
 func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int, log io.Writer) (tmux.Session, error) {
 	created := session.ID() == ""
+	if !created {
+		if _, err := session.Refresh(r.ctx); err != nil {
+			return session, err
+		}
+	}
 	var bootstrap tmux.Window
 	if created {
 		width, height, err := sessionDimensions()

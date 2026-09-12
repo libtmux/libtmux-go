@@ -36,6 +36,19 @@ func write(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+func daemonPID(t *testing.T, server tmux.Server) string {
+	t.Helper()
+	result, err := server.Cmd(t.Context(), "display-message", "-p", "#{pid}")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("daemon PID: %+v %v", result, err)
+	}
+	value := strings.TrimSpace(string(result.RawStdout))
+	if pid, err := strconv.Atoi(value); err != nil || pid <= 0 {
+		t.Fatalf("invalid daemon PID %q: %v", value, err)
+	}
+	return value
+}
+
 func TestLoadFreezeReloadAppendAndEnvironment(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
@@ -116,7 +129,7 @@ windows:
 	}
 	pane := snapshot.Panes()[0]
 	t.Setenv("TMUX_PANE", pane.ID().String())
-	t.Setenv("TMUX", server.SocketPath()+",1,0")
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
 	appendPath := write(t, dir, "append.yaml", "session_name: ignored\nwindows:\n- window_name: appended\n  panes: [blank]\n")
 	code, out, diagnostic = run(t, "load", appendPath, "-S", server.SocketPath(), "--append", "--json")
 	if code != 0 {
@@ -286,7 +299,7 @@ func TestMalformedBeforeScriptLeavesSessionsUntouched(t *testing.T) {
 			invalid := write(t, dir, "invalid.json", `{"session_name":"invalid","before_script":"printf 'unterminated","windows":[{"panes":[null]}]}`)
 			args := []string{"load", valid, invalid, "-S", server.SocketPath(), "--ndjson"}
 			if appendMode {
-				t.Setenv("TMUX", server.SocketPath()+",1,0")
+				t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
 				t.Setenv("TMUX_PANE", before.Panes()[0].ID().String())
 				args = append(args, "--append")
 			} else {
@@ -352,7 +365,7 @@ func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	pane := snapshot.Panes()[0]
-	t.Setenv("TMUX", server.SocketPath()+",1,0")
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
 	t.Setenv("TMUX_PANE", pane.ID().String())
 	path := write(t, configDir, "fail-append.yaml", "session_name: unused\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
 	code, _, _ := run(t, "load", path, "-S", server.SocketPath(), "--append", "--json")
@@ -495,6 +508,106 @@ func TestPythonShellAndPluginBridge(t *testing.T) {
 	})
 }
 
+func TestAppendBridgeAuthenticatesBeforeImportsAndBuild(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("optional Python runtime is unavailable")
+	}
+	version, err := exec.Command(python, "-c", "from importlib.metadata import version; print(version('tmuxp'))").Output()
+	if err != nil || strings.TrimSpace(string(version)) != "1.74.0" {
+		t.Skip("optional tmuxp 1.74.0 runtime is unavailable")
+	}
+	for _, boundary := range []string{"retarget", "missing", "constructor", "runtime"} {
+		t.Run(boundary, func(t *testing.T) {
+			options := tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}}
+			first := tmuxtest.NewServerWithOptions(t.Context(), t, options)
+			second := tmuxtest.NewServerWithOptions(t.Context(), t, options)
+			if _, err := first.NewSession(t.Context(), tmux.NewSessionRequest{Name: "keepalive"}); err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			alias := filepath.Join(dir, "socket")
+			if err := os.Symlink(first.SocketPath(), alias); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("TMUX", alias+","+daemonPID(t, first)+",0")
+			t.Setenv("TMUX_PANE", "%0")
+			t.Setenv("APPEND_REAL_PYTHON", python)
+			t.Setenv("APPEND_BOUNDARY", boundary)
+			t.Setenv("APPEND_ALIAS", alias)
+			t.Setenv("APPEND_ORIGINAL", first.SocketPath())
+			t.Setenv("APPEND_REPLACEMENT", second.SocketPath())
+			t.Setenv("APPEND_MARKERS", dir)
+			t.Setenv("PYTHONDONTWRITEBYTECODE", "1")
+			wrapper := write(t, dir, "python", `#!/bin/sh
+set -eu
+if [ "$1" = -c ] && [ "$APPEND_BOUNDARY" = runtime ]; then
+    rm "$APPEND_ALIAS"
+    ln -s "$APPEND_REPLACEMENT" "$APPEND_ALIAS"
+    : > "$APPEND_MARKERS/runtime-check"
+fi
+if [ "$1" = -u ]; then
+    case "$APPEND_BOUNDARY" in
+        retarget) rm "$APPEND_ALIAS"; ln -s "$APPEND_REPLACEMENT" "$APPEND_ALIAS" ;;
+        missing) tmux -S "$APPEND_ORIGINAL" kill-session -t '$0' ;;
+    esac
+    : > "$APPEND_MARKERS/handed-off"
+fi
+exec "$APPEND_REAL_PYTHON" "$@"
+`)
+			if err := os.Chmod(wrapper, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("TMUX_WORKSPACE_PYTHON", wrapper)
+			write(t, dir, "extension.py", `import os
+from pathlib import Path
+from tmuxp.workspace.builder.classic import ClassicWorkspaceBuilder
+markers = Path(os.environ['APPEND_MARKERS'])
+(markers / 'imported').touch()
+class Builder(ClassicWorkspaceBuilder):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        (markers / 'constructed').touch()
+        if os.environ['APPEND_BOUNDARY'] == 'constructor':
+            alias = Path(os.environ['APPEND_ALIAS'])
+            alias.unlink()
+            alias.symlink_to(os.environ['APPEND_REPLACEMENT'])
+    def build(self, *args, **kwargs):
+        (markers / 'built').touch()
+        return super().build(*args, **kwargs)
+`)
+			path := write(t, dir, "workspace.json", `{"session_name":"unwanted","workspace_builder":"extension:Builder","workspace_builder_paths":[`+strconv.Quote(dir)+`],"windows":[{"panes":[null]}]}`)
+			args := []string{"load", "--append", "--json", "-S", alias}
+			if boundary == "runtime" {
+				script := write(t, dir, "native.sh", ": > \"$APPEND_MARKERS/native-script\"\n")
+				native := write(t, dir, "native.json", `{"session_name":"native","before_script":`+strconv.Quote("/bin/sh "+strconv.Quote(script))+`,"windows":[{"panes":[null]}]}`)
+				args = append(args, native)
+			}
+			code, out, diagnostic := run(t, append(args, path)...)
+			if code != 1 || !strings.Contains(out, "append_context") || !strings.Contains(out, `"session_id":"$0"`) {
+				t.Errorf("borrowed target failure was not retained: %d %q %q", code, out, diagnostic)
+			}
+			for _, marker := range []string{"handed-off", "imported", "constructed", "built", "runtime-check", "native-script"} {
+				_, err := os.Stat(filepath.Join(dir, marker))
+				want := marker == "handed-off" || boundary == "constructor" && (marker == "imported" || marker == "constructed") || boundary == "runtime" && marker == "runtime-check"
+				if want && err != nil || !want && !os.IsNotExist(err) {
+					t.Errorf("%s marker: %v, want present=%t", marker, err, want)
+				}
+			}
+			for index, server := range []tmux.Server{first, second} {
+				want := 1
+				if index == 0 && boundary != "missing" {
+					want = 2
+				}
+				snapshot, err := server.Snapshot(t.Context())
+				if err != nil || len(snapshot.Sessions()) != want || len(snapshot.Windows()) != want {
+					t.Errorf("bridge changed topology beyond fixture action: %v sessions=%d windows=%d want=%d", err, len(snapshot.Sessions()), len(snapshot.Windows()), want)
+				}
+			}
+		})
+	}
+}
+
 func TestAppendRejectsDifferentSocketWithSamePaneID(t *testing.T) {
 	first := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	second := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
@@ -503,7 +616,7 @@ func TestAppendRejectsDifferentSocketWithSamePaneID(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("TMUX", first.SocketPath()+",1,0")
+	t.Setenv("TMUX", first.SocketPath()+","+daemonPID(t, first)+",0")
 	t.Setenv("TMUX_PANE", "%0")
 	path := write(t, t.TempDir(), "append.yaml", "session_name: append\nwindows:\n- panes: [blank]\n")
 	code, out, diagnostic := run(t, "load", "--append", "-S", second.SocketPath(), "--json", path)
@@ -513,6 +626,255 @@ func TestAppendRejectsDifferentSocketWithSamePaneID(t *testing.T) {
 	snapshot, err := second.Snapshot(t.Context())
 	if err != nil || len(snapshot.Windows()) != 1 {
 		t.Fatalf("unrelated server mutated: %v windows=%d", err, len(snapshot.Windows()))
+	}
+}
+
+func TestAppendAuthenticatesDaemonBeforePython(t *testing.T) {
+	for _, retarget := range []bool{false, true} {
+		t.Run(strconv.FormatBool(retarget), func(t *testing.T) {
+			options := tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}}
+			first := tmuxtest.NewServerWithOptions(t.Context(), t, options)
+			second := tmuxtest.NewServerWithOptions(t.Context(), t, options)
+			pid := daemonPID(t, first)
+			if pid == daemonPID(t, second) {
+				t.Fatal("fixtures share a daemon")
+			}
+			dir := t.TempDir()
+			alias := filepath.Join(dir, "inherited")
+			selected := second.SocketPath()
+			if err := os.Symlink(first.SocketPath(), alias); err != nil {
+				t.Fatal(err)
+			}
+			if retarget {
+				if err := os.Remove(alias); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(second.SocketPath(), alias); err != nil {
+					t.Fatal(err)
+				}
+				selected = alias
+			}
+			t.Setenv("TMUX", alias+","+pid+",0")
+			t.Setenv("TMUX_PANE", "%0")
+			marker := filepath.Join(dir, "python-called")
+			python := write(t, dir, "python", "#!/bin/sh\n: > \"$APPEND_PYTHON_MARKER\"\nexit 0\n")
+			if err := os.Chmod(python, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("APPEND_PYTHON_MARKER", marker)
+			t.Setenv("TMUX_WORKSPACE_PYTHON", python)
+			for _, bridge := range []bool{false, true} {
+				config := "session_name: unwanted\nwindows:\n- panes: [blank]\n"
+				if bridge {
+					config += "plugins: [never.Imported]\n"
+				}
+				path := write(t, dir, "workspace.yaml", config)
+				for _, mode := range []string{"--json", "--ndjson"} {
+					_ = os.Remove(marker)
+					code, out, diagnostic := run(t, "load", "-S", selected, "--append", mode, path)
+					if code != 2 || out != "" || !strings.Contains(diagnostic, "current tmux server") {
+						t.Errorf("bridge=%t %s: invalid append returned %d %q %q", bridge, mode, code, out, diagnostic)
+					}
+					if _, err := os.Stat(marker); !os.IsNotExist(err) {
+						t.Errorf("bridge=%t %s: Python ran before authentication: %v", bridge, mode, err)
+					}
+				}
+			}
+			for _, server := range []tmux.Server{first, second} {
+				snapshot, err := server.Snapshot(t.Context())
+				if err != nil || len(snapshot.Sessions()) != 1 || len(snapshot.Windows()) != 1 || len(snapshot.Panes()) != 1 {
+					t.Errorf("borrowed topology changed: %v windows=%d", err, len(snapshot.Windows()))
+				}
+			}
+		})
+	}
+}
+
+func TestAppendSupportsMatchingSocketAliasesAndCommas(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}})
+	dir := t.TempDir()
+	pid := daemonPID(t, server)
+	path := write(t, dir, "workspace.yaml", "session_name: ignored\nwindows:\n- panes: [blank]\n")
+	for _, name := range []string{"socket", "full,with,commas"} {
+		alias := filepath.Join(dir, name)
+		if err := os.Symlink(server.SocketPath(), alias); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("TMUX", alias+","+pid+",0")
+		t.Setenv("TMUX_PANE", "%0")
+		for _, explicit := range []bool{true, false} {
+			args := []string{"load", "--append", "--json", path}
+			if explicit {
+				args = append(args, "-S", alias)
+			}
+			code, out, diagnostic := run(t, args...)
+			if code != 0 || !strings.Contains(out, `"session_id":"$0"`) {
+				t.Errorf("%s explicit=%t: %d %q %q", name, explicit, code, out, diagnostic)
+			}
+		}
+	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil || len(snapshot.Sessions()) != 1 || len(snapshot.Windows()) != 5 {
+		t.Fatalf("matching append topology: %v windows=%d", err, len(snapshot.Windows()))
+	}
+	if _, err := snapshot.PaneByID("%0"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadWithEmptyInheritedContext(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}})
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
+	t.Setenv("TMUX_TMPDIR", t.TempDir())
+	selected, err := tmux.NewServer(tmux.ServerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(selected.SocketPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(server.SocketPath(), selected.SocketPath()); err != nil {
+		t.Fatal(err)
+	}
+	path := write(t, t.TempDir(), "workspace.yaml", "session_name: added\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", "-d", "--json", path)
+	if code != 0 || !strings.Contains(out, `"session_id":"$1"`) {
+		t.Fatalf("empty inherited context: %d %q %q", code, out, diagnostic)
+	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil || len(snapshot.Sessions()) != 2 || len(snapshot.Windows()) != 2 {
+		t.Fatalf("default endpoint topology: %v sessions=%d windows=%d", err, len(snapshot.Sessions()), len(snapshot.Windows()))
+	}
+}
+
+func TestAppendGuardsGlobalWritesAfterScriptRetargetsEndpoint(t *testing.T) {
+	options := tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}}
+	first := tmuxtest.NewServerWithOptions(t.Context(), t, options)
+	second := tmuxtest.NewServerWithOptions(t.Context(), t, options)
+	dir := t.TempDir()
+	alias := filepath.Join(dir, "inherited")
+	if err := os.Symlink(first.SocketPath(), alias); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX", alias+","+daemonPID(t, first)+",0")
+	t.Setenv("TMUX_PANE", "%0")
+	t.Setenv("APPEND_ALIAS", alias)
+	t.Setenv("APPEND_REPLACEMENT", second.SocketPath())
+	marker := filepath.Join(dir, "script-ran")
+	t.Setenv("APPEND_SCRIPT_MARKER", marker)
+	script := write(t, dir, "retarget.sh", "rm \"$APPEND_ALIAS\"\nln -s \"$APPEND_REPLACEMENT\" \"$APPEND_ALIAS\"\nprintf done > \"$APPEND_SCRIPT_MARKER\"\n")
+	path := write(t, dir, "workspace.json", `{"session_name":"ignored","before_script":`+strconv.Quote("/bin/sh "+strconv.Quote(script))+`,"global_options":{"@APPEND_AUTH_MARKER":"written"},"windows":[{"panes":[null]}]}`)
+	code, out, diagnostic := run(t, "load", "--append", "--json", path)
+	if code != 1 || !strings.Contains(out, "server was replaced") {
+		t.Errorf("expected guarded failure: %d %q %q", code, out, diagnostic)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("authorized script did not run: %v", err)
+	}
+	for _, server := range []tmux.Server{first, second} {
+		result, err := server.Cmd(t.Context(), "show-options", "-gqv", "@APPEND_AUTH_MARKER")
+		if err != nil || result.ExitCode != 0 || len(result.RawStdout) != 0 {
+			t.Errorf("post-script global mutation: %+v %v", result, err)
+		}
+		snapshot, err := server.Snapshot(t.Context())
+		if err != nil || len(snapshot.Sessions()) != 1 || len(snapshot.Windows()) != 1 {
+			t.Errorf("post-script topology changed: %v windows=%d", err, len(snapshot.Windows()))
+		}
+	}
+}
+
+func TestAppendRetainsSessionAcrossInputsAfterPaneMoves(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}})
+	for _, command := range [][]string{
+		{"split-window", "-h", "-t", "%0"},
+		{"new-session", "-d", "-s", "other"},
+	} {
+		result, err := server.Cmd(t.Context(), command...)
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("create topology: %+v %v", result, err)
+		}
+	}
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", "%0")
+	t.Setenv("APPEND_SOCKET", server.SocketPath())
+	dir := t.TempDir()
+	script := write(t, dir, "move.sh", "exec tmux -S \"$APPEND_SOCKET\" join-pane -s %0 -t %2\n")
+	first := write(t, dir, "first.json", `{"session_name":"first","before_script":`+strconv.Quote("/bin/sh "+strconv.Quote(script))+`,"windows":[{"panes":[null]}]}`)
+	second := write(t, dir, "second.yaml", "session_name: second\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", "--append", "--json", first, second)
+	if code != 0 {
+		t.Fatalf("multi-input append: %d %q %q", code, out, diagnostic)
+	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, session := range snapshot.Sessions() {
+		windows, _ := session.Windows()
+		want := 1
+		if name, _ := session.Name(); name == "retained" {
+			want = 3
+		}
+		if len(windows) != want {
+			t.Errorf("retained append target changed: %s windows=%d want=%d; %s", session, len(windows), want, out)
+		}
+	}
+	pane, err := snapshot.PaneByID("%0")
+	if err != nil || pane.SessionID() != "$1" {
+		t.Fatalf("authorized pane move was not retained: %+v %v", pane, err)
+	}
+}
+
+func TestAppendLinkedPaneUsesTmuxCanonicalSession(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "initial"}})
+	for _, command := range [][]string{
+		{"new-session", "-d", "-s", "secondary"},
+		{"link-window", "-s", "@0", "-t", "secondary:7"},
+		{"select-window", "-t", "secondary:7"},
+	} {
+		result, err := server.Cmd(t.Context(), command...)
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("link pane fixture: %+v %v", result, err)
+		}
+	}
+	result, err := server.Cmd(t.Context(), "display-message", "-p", "-t", "%0", "#{session_id}")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("canonical session oracle: %+v %v", result, err)
+	}
+	want := tmux.SessionID(strings.TrimSpace(string(result.RawStdout)))
+	before, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before.PanesByID("%0")) != 2 {
+		t.Fatal("fixture does not contain linked pane views")
+	}
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", "%0")
+	path := write(t, t.TempDir(), "workspace.yaml", "session_name: ignored\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", "--append", "--json", path)
+	if code != 0 {
+		t.Fatalf("linked append: %d %q %q", code, out, diagnostic)
+	}
+	after, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, prior := range before.Sessions() {
+		current, err := after.SessionByID(prior.ID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		oldWindows, _ := prior.Windows()
+		newWindows, _ := current.Windows()
+		expected := len(oldWindows)
+		if prior.ID() == want {
+			expected++
+		}
+		if len(newWindows) != expected {
+			t.Errorf("canonical target %s: %s has %d windows, want %d", want, current, len(newWindows), expected)
+		}
 	}
 }
 
@@ -540,7 +902,7 @@ func TestHumanInsideTmuxChoice(t *testing.T) {
 			if _, err := server.NewSession(t.Context(), tmux.NewSessionRequest{Name: "original"}); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("TMUX", server.SocketPath()+",1,0")
+			t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
 			t.Setenv("TMUX_PANE", "%0")
 			path := write(t, t.TempDir(), "choice.yaml", "session_name: choice\nwindows:\n- panes: [blank]\n")
 			var out, diagnostic bytes.Buffer
