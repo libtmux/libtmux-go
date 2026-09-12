@@ -80,10 +80,46 @@ var errArenaServerLent = errors.New("arena lent this server; refusing to stop it
 // the arena is inactive.
 func exampleServer(options tmux.ServerOptions) (tmux.Server, error) {
 	if server, active := arenaLentServer(); active {
+		if reason, needsOwn := examplesNeedingAFreshServer[callerExampleName()]; needsOwn {
+			arenaRecordRefusal(callerExampleName() + ": " + reason)
+			return tmux.NewServer(options)
+		}
 		arenaRecordSource(callerDocumentedSource())
 		return server, nil
 	}
 	return tmux.NewServer(options)
+}
+
+// examplesNeedingAFreshServer names the documented Examples that cannot run
+// against a lent server, with the reason each one cannot.
+//
+// Their printed output is the documentation, and it counts what the whole
+// server holds -- "no sessions", "panes: 1". A lent server already holds the
+// supervisor's own session, so the count a reader is shown would be wrong, or
+// the example would have to stop saying the thing it exists to say. Each keeps
+// a server of its own, and the refusal is reported rather than silent.
+var examplesNeedingAFreshServer = map[string]string{
+	"ExampleErrNoServer":        "prints how many sessions the server has, starting from none",
+	"ExampleServer_SearchPanes": "prints a pane count for the whole server",
+	"ExampleServer_Sessions":    "lists every session on the server",
+	"ExampleServer_Snapshot":    "prints session and pane counts for the whole server",
+	"ExampleWindow_Panes":       "prints a pane count that assumes the window it just made is the only one",
+}
+
+// callerExampleName names the Example function that asked for a server, which
+// is how an entry in examplesNeedingAFreshServer is matched.
+func callerExampleName() string {
+	// Same depth as callerDocumentedSource: this frame, exampleServer, then
+	// the Example that asked for a server.
+	pc, _, _, ok := runtime.Caller(2)
+	if !ok {
+		return "unknown"
+	}
+	name := runtime.FuncForPC(pc).Name()
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		name = name[i+1:]
+	}
+	return name
 }
 
 // callerDocumentedSource names the file exampleServer's caller lives in,
@@ -138,10 +174,8 @@ func arenaLentServer() (tmux.Server, bool) {
 // every Example by hand. The file is the documented unit; which Examples ran
 // is in the test output.
 func arenaRecordSource(name string) {
-	for _, seen := range exampleArena.sources {
-		if seen == name {
-			return
-		}
+	if slices.Contains(exampleArena.sources, name) {
+		return
 	}
 	exampleArena.sources = append(exampleArena.sources, name)
 }
