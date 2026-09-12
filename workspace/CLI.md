@@ -126,7 +126,9 @@ tmuxp 1.74.0 distribution. Set `TMUX_WORKSPACE_PYTHON` to its Python executable;
 the CLI checks distribution metadata before invoking it. Python selectors,
 startup settings and vi-mode settings retain their Python meaning. The paired
 startup and vi-mode options use the last occurrence. Missing optional runtimes
-produce an explicit error.
+produce an explicit error. Plugin and custom-builder loads use the same
+append selection as native loads: `--append` targets the current session even
+when `-d` is also supplied. The bridge forwards one mode to Python.
 
 Run Python against a selected session:
 

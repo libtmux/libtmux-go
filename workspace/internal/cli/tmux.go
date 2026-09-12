@@ -354,9 +354,11 @@ func (r *invocation) attach(server tmux.Server, session tmux.Session) error {
 }
 
 func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name string, index int, log io.Writer) (tmux.Session, error) {
-	args := []string{"--color", "never", "load", "-d", "--no-progress"}
+	args := []string{"--color", "never", "load", "--no-progress"}
 	if o.append {
 		args = append(args, "--append")
+	} else {
+		args = append(args, "-d")
 	}
 	if o.yes {
 		args = append(args, "--yes")
