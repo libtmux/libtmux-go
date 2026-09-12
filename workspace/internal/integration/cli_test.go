@@ -1073,3 +1073,85 @@ func TestHumanInsideTmuxChoice(t *testing.T) {
 		})
 	}
 }
+
+func TestScriptPublicationPreservesCleanup(t *testing.T) {
+	for _, test := range []struct {
+		appendMode bool
+		status     int
+	}{{false, 7}, {true, 7}, {false, 0}} {
+		t.Run(strconv.FormatBool(test.appendMode)+"-status-"+strconv.Itoa(test.status), func(t *testing.T) {
+			appendMode := test.appendMode
+			server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "original"}})
+			before, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			marker := filepath.Join(dir, "finished")
+			t.Setenv("SCRIPT_COMPLETION_MARKER", marker)
+			prior := write(t, dir, "prior.yaml", "session_name: prior\nwindows:\n- panes: [blank]\n")
+			failed := write(t, dir, "failed.yaml", "session_name: failed\nbefore_script: /bin/sh -c 'printf finished > \"$SCRIPT_COMPLETION_MARKER\"; exit "+strconv.Itoa(test.status)+"'\nwindows:\n- panes: [blank]\n")
+			args := []string{"load", "-S", server.SocketPath(), "-d", "--ndjson", prior, failed}
+			if appendMode {
+				t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+				t.Setenv("TMUX_PANE", before.Panes()[0].ID().String())
+				args = append(args, "--append")
+			}
+			out := &publicationWriter{action: "write", event: "script-completed"}
+			var diagnostic bytes.Buffer
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			code := cli.Run(ctx, args, strings.NewReader(""), out, &diagnostic)
+			var result struct {
+				Result struct {
+					Results []struct {
+						SessionID string `json:"session_id"`
+						Stage     string `json:"stage"`
+					} `json:"results"`
+					Scripts []struct {
+						Result struct {
+							Status int `json:"child_status"`
+						} `json:"result"`
+					} `json:"scripts"`
+				} `json:"result"`
+			}
+			if err := json.Unmarshal(diagnostic.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			content, markerErr := os.ReadFile(marker)
+			if code != 1 || markerErr != nil || string(content) != "finished" || len(result.Result.Scripts) != 1 || result.Result.Scripts[0].Result.Status != test.status {
+				t.Fatalf("known child outcome lost: code=%d marker=%q err=%v diagnostic=%s", code, content, markerErr, diagnostic.String())
+			}
+			priorID, failedID, sessions := "$1", "$2", 2
+			if appendMode {
+				priorID, failedID, sessions = "$0", "$0", 1
+			}
+			if len(result.Result.Results) != 2 || result.Result.Results[0].SessionID != priorID || result.Result.Results[0].Stage != "completed" || result.Result.Results[1].SessionID != failedID || result.Result.Results[1].Stage != "failed" {
+				t.Errorf("prior/failed input outcomes lost: %s", diagnostic.String())
+			}
+			after, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			windows := 2
+			if !appendMode && test.status == 0 {
+				sessions, windows = 3, 3
+			}
+			if len(after.Sessions()) != sessions || len(after.Windows()) != windows || len(after.Panes()) != windows {
+				t.Errorf("cleanup damaged prior effects or retained failed owned session: sessions=%d windows=%d panes=%d", len(after.Sessions()), len(after.Windows()), len(after.Panes()))
+			}
+			originalRetained := false
+			for _, window := range after.Windows() {
+				originalRetained = originalRetained || window.ID() == before.Windows()[0].ID()
+			}
+			if !originalRetained {
+				t.Error("original window was removed")
+			}
+			for _, session := range after.Sessions() {
+				if name, _ := session.Name(); test.status != 0 && name == "failed" {
+					t.Error("failed owned session survived publication failure")
+				}
+			}
+		})
+	}
+}

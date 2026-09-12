@@ -484,9 +484,7 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		}
 		result, err := r.process(plan.BeforeScript, plan.ScriptDirectory, nil, true)
 		r.scripts = append(r.scripts, map[string]any{"input_index": inputIndex, "kind": "before-script", "result": result})
-		if eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
-			return session, eventErr
-		}
+		eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated})
 		if err == nil && result.Status != 0 {
 			err = fmt.Errorf("before_script exited %d: %s", result.Status, result.Stderr)
 		}
@@ -496,10 +494,13 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 				killErr := session.Kill(cleanup)
 				cancel()
 				if killErr != nil {
-					return session, errors.Join(err, killErr)
+					err = errors.Join(err, killErr)
 				}
 			}
-			return session, err
+			return session, errors.Join(err, eventErr)
+		}
+		if eventErr != nil {
+			return session, eventErr
 		}
 	}
 	for _, key := range sortedKeys(plan.Environment) {
