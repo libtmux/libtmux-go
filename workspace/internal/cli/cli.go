@@ -34,6 +34,7 @@ func usage(format string, args ...any) error {
 type invocation struct {
 	ctx                      context.Context
 	in                       io.Reader
+	terminalInput            *os.File
 	out, err                 io.Writer
 	json, ndjson             bool
 	color, logLevel, command string
@@ -48,6 +49,7 @@ type invocation struct {
 // Run executes one fresh command tree and returns its process exit status.
 func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Writer) int {
 	r := &invocation{ctx: ctx, in: in, out: out, err: diagnostic, color: "auto", logLevel: "warning"}
+	r.terminalInput, _ = in.(*os.File)
 	for _, arg := range args {
 		if arg == "--" {
 			break
@@ -171,7 +173,7 @@ func (r *invocation) styleFor(writer io.Writer, role, value string) string {
 
 func terminal(w any) bool {
 	f, ok := w.(*os.File)
-	return ok && (isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd()))
+	return ok && f != nil && (isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd()))
 }
 
 type options struct {
