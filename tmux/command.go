@@ -32,8 +32,6 @@ type ColorMode int
 const (
 	// ColorDefault preserves tmux's detected color capability.
 	ColorDefault ColorMode = 0
-	// Color88 requests tmux's 88-color capability mode.
-	Color88 ColorMode = 88
 	// Color256 requests tmux's 256-color capability mode.
 	Color256 ColorMode = 256
 )
