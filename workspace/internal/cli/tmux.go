@@ -1,0 +1,628 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/mattn/go-shellwords"
+	"github.com/spf13/cobra"
+)
+
+func serverFor(o *options) (tmux.Server, error) {
+	colors := tmux.ColorDefault
+	if o.colors256 {
+		colors = tmux.Color256
+	}
+	if o.colors88 {
+		colors = tmux.Color88
+	}
+	return tmux.NewServer(tmux.ServerOptions{SocketName: o.socketName, SocketPath: o.socketPath, ConfigFile: o.tmuxConfig, Colors: colors})
+}
+
+func query(ctx context.Context, server tmux.Server, args ...string) (string, error) {
+	for _, arg := range args {
+		if arg == ";" || strings.ContainsRune(arg, 0) {
+			return "", errors.New("invalid tmux query operand")
+		}
+	}
+	result, err := server.Cmd(ctx, args...)
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", fmt.Errorf("%s: %s", args[0], strings.Join(result.Stderr, "\n"))
+	}
+	return strings.TrimSuffix(string(result.RawStdout), "\n"), nil
+}
+
+func findSession(ctx context.Context, server tmux.Server, target string) (tmux.Session, error) {
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		return tmux.Session{}, err
+	}
+	if target == "" {
+		if paneID := os.Getenv("TMUX_PANE"); paneID != "" {
+			for _, pane := range snapshot.Panes() {
+				if pane.ID().String() == paneID {
+					session, ok := pane.Session()
+					if ok {
+						return session, nil
+					}
+				}
+			}
+		}
+		if len(snapshot.Sessions()) == 1 {
+			return snapshot.Sessions()[0], nil
+		}
+		return tmux.Session{}, usage("session is ambiguous; supply a session name")
+	}
+	for _, session := range snapshot.Sessions() {
+		name, _ := session.Name()
+		if name == target || session.ID().String() == target {
+			return session, nil
+		}
+	}
+	return tmux.Session{}, fmt.Errorf("session %q not found", target)
+}
+
+func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, error) {
+	if os.Getenv("TMUX_PANE") == "" || os.Getenv("TMUX") == "" {
+		return tmux.Session{}, usage("--append requires TMUX and TMUX_PANE identifying the current session")
+	}
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		return tmux.Session{}, err
+	}
+	for _, pane := range snapshot.Panes() {
+		if pane.ID().String() == os.Getenv("TMUX_PANE") {
+			session, ok := pane.Session()
+			if ok {
+				return session, nil
+			}
+		}
+	}
+	return tmux.Session{}, errors.New("current pane does not belong to the selected tmux server")
+}
+
+func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
+	if o.colors256 && o.colors88 {
+		return usage("-2 and -8 are mutually exclusive")
+	}
+	if machine && !o.detached && !o.append {
+		return usage("machine load requires -d or explicit --append")
+	}
+	if !cmd.Flags().Changed("progress-lines") {
+		if raw := os.Getenv("TMUXP_PROGRESS_LINES"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil {
+				return usage("TMUXP_PROGRESS_LINES must be an integer")
+			}
+			o.progressLines = n
+		}
+	}
+	if o.progressLines < -1 {
+		return usage("progress-lines must be -1 or nonnegative")
+	}
+	if o.progressFormat == "" {
+		o.progressFormat = os.Getenv("TMUXP_PROGRESS_FORMAT")
+	}
+	if o.progressFormat == "" {
+		o.progressFormat = "default"
+	}
+	if os.Getenv("TMUXP_PROGRESS") == "0" {
+		o.noProgress = true
+	}
+	return nil
+}
+
+func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
+	if err := loadValidation(cmd, o, r.machine()); err != nil {
+		return err
+	}
+	type input struct {
+		path string
+		plan loadPlan
+	}
+	inputs := []input{}
+	for _, arg := range args {
+		path, err := resolveFile(arg, "")
+		if err != nil {
+			return err
+		}
+		doc, err := readDocument(path)
+		if err != nil {
+			return err
+		}
+		if o.session != "" {
+			doc["session_name"] = o.session
+		}
+		plan, err := normalize(doc, filepath.Dir(path))
+		if err != nil {
+			return fmt.Errorf("%s: %w", privatePath(path), err)
+		}
+		if plan.Bridge {
+			if err := r.checkPython(true); err != nil {
+				return err
+			}
+		}
+		inputs = append(inputs, input{path, plan})
+	}
+	server, err := serverFor(o)
+	if err != nil {
+		return err
+	}
+	var log io.Writer
+	if o.logFile != "" {
+		file, e := os.OpenFile(expand(o.logFile), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if e != nil {
+			return e
+		}
+		defer func() { _ = file.Close() }()
+		log = file
+	}
+	if err := r.event("started", map[string]any{"input_count": len(inputs)}); err != nil {
+		return err
+	}
+	results := []map[string]any{}
+	failures := []map[string]any{}
+	var last tmux.Session
+	for index, input := range inputs {
+		if r.ctx.Err() != nil {
+			break
+		}
+		if err := r.event("workspace-started", map[string]any{"input_index": index, "input": privatePath(input.path)}); err != nil {
+			return err
+		}
+		var session tmux.Session
+		var buildErr error
+		reused := false
+		if o.append {
+			session, buildErr = currentSession(r.ctx, server)
+		} else {
+			var exists bool
+			exists, buildErr = server.HasSession(r.ctx, tmux.HasSessionRequest{Target: input.plan.Name})
+			if buildErr == nil && exists {
+				session, buildErr = findSession(r.ctx, server, input.plan.Name)
+				reused = true
+			}
+		}
+		if buildErr == nil && !reused {
+			if input.plan.Bridge {
+				session, buildErr = r.bridgeLoad(server, o, input.path, input.plan.Name, index, log)
+			} else {
+				session, buildErr = r.build(server, session, input.plan, index, log)
+			}
+		}
+		entry := map[string]any{"input_index": index, "input": privatePath(input.path), "session_name": input.plan.Name, "session_id": session.ID().String(), "reused": reused}
+		if buildErr != nil {
+			entry["stage"] = "failed"
+			failure := map[string]any{"code": "workspace_failed", "message": buildErr.Error(), "input_index": index, "stage": "load", "session_id": session.ID().String()}
+			failures = append(failures, failure)
+			if log != nil {
+				_, _ = fmt.Fprintln(log, buildErr)
+			}
+			if err := r.event("warning", failure); err != nil {
+				return err
+			}
+		} else {
+			last = session
+			entry["stage"] = "completed"
+			if err := r.event("workspace-completed", entry); err != nil {
+				return err
+			}
+			if !r.machine() {
+				verb := "Loaded"
+				if reused {
+					verb = "Reused"
+				}
+				if _, err := fmt.Fprintf(r.out, "%s %s %s\n", r.style("success", verb), r.style("subject", input.plan.Name), r.style("secondary", session.ID().String())); err != nil {
+					return err
+				}
+			}
+		}
+		results = append(results, entry)
+	}
+	status := "ok"
+	if len(failures) > 0 {
+		status = "partial"
+		if len(failures) == len(results) {
+			status = "error"
+		}
+	}
+	if r.ctx.Err() != nil {
+		status = "partial"
+		failures = append(failures, map[string]any{"code": "interrupted", "message": "operation interrupted", "stage": "load"})
+	}
+	summary := map[string]any{"schema_version": 1, "command": "load", "status": status, "results": results, "errors": failures}
+	if r.ndjson {
+		event := "completed"
+		if len(failures) > 0 {
+			event = "failed"
+		}
+		if err := r.event(event, summary); err != nil {
+			return err
+		}
+	} else if r.json {
+		if err := r.encode(summary); err != nil {
+			return err
+		}
+	}
+	if len(failures) > 0 {
+		return &failure{"load_failed", "one or more workspaces failed; completed effects are retained", 1}
+	}
+	if !o.detached && !o.append && last.ID() != "" {
+		return r.attach(server, last)
+	}
+	return nil
+}
+
+func (r *invocation) attach(server tmux.Server, session tmux.Session) error {
+	if os.Getenv("TMUX") != "" {
+		return server.SwitchClient(r.ctx, session.ID().String())
+	}
+	terminalFile, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return &failure{"terminal_required", "attach requires a controlling terminal; use -d", 2}
+	}
+	defer func() { _ = terminalFile.Close() }()
+	return session.Attach(r.ctx, tmux.AttachSessionOptions{Stdin: terminalFile, Stdout: terminalFile, Stderr: terminalFile})
+}
+
+func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name string, index int, log io.Writer) (tmux.Session, error) {
+	args := []string{"--color", "never", "load", "-d", "--no-progress"}
+	if o.append {
+		args = append(args, "--append")
+	}
+	if o.yes {
+		args = append(args, "--yes")
+	}
+	if o.socketPath != "" {
+		args = append(args, "-S", o.socketPath)
+	} else if o.socketName != "" {
+		args = append(args, "-L", o.socketName)
+	}
+	if o.tmuxConfig != "" {
+		args = append(args, "-f", o.tmuxConfig)
+	}
+	if o.session != "" {
+		args = append(args, "-s", o.session)
+	}
+	if o.colors256 {
+		args = append(args, "-2")
+	}
+	if o.colors88 {
+		args = append(args, "-8")
+	}
+	args = append(args, path)
+	if err := r.event("warning", map[string]any{"input_index": index, "code": "python_compatibility", "message": "plugins/custom builder execute in version-checked tmuxp " + referenceVersion}); err != nil {
+		return tmux.Session{}, err
+	}
+	result, err := r.process(bridgeArgv(args), "", nil, true, log)
+	if err != nil {
+		return tmux.Session{}, err
+	}
+	if result.Status != 0 {
+		return tmux.Session{}, fmt.Errorf("python workspace bridge exited %d: %s", result.Status, result.Stderr)
+	}
+	if o.append {
+		return currentSession(r.ctx, server)
+	}
+	return findSession(r.ctx, server, name)
+}
+
+func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int, log io.Writer) (tmux.Session, error) {
+	created := session.ID() == ""
+	var bootstrap tmux.Window
+	if created {
+		width, height := 80, 24
+		for _, dimension := range []struct {
+			names  []string
+			target *int
+		}{{[]string{"TMUXP_DEFAULT_COLUMNS", "COLUMNS"}, &width}, {[]string{"TMUXP_DEFAULT_ROWS", "ROWS"}, &height}} {
+			for _, name := range dimension.names {
+				if raw := os.Getenv(name); raw != "" {
+					n, err := strconv.Atoi(raw)
+					if err != nil || n < 1 || n > 65535 {
+						return session, usage("%s must be 1..65535", name)
+					}
+					*dimension.target = n
+					break
+				}
+			}
+		}
+		var err error
+		session, err = server.NewSession(r.ctx, tmux.NewSessionRequest{Name: plan.Name, StartDirectory: plan.Directory, Environment: plan.Environment, Width: width, Height: height})
+		if err != nil {
+			return session, err
+		}
+		bootstrap, err = session.ResolveActiveWindow(r.ctx)
+		if err != nil {
+			return session, err
+		}
+		if err := r.event("session-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "session_name": plan.Name}); err != nil {
+			return session, err
+		}
+	}
+	if plan.BeforeScript != "" {
+		argv, err := shellwords.Parse(plan.BeforeScript)
+		if err != nil {
+			return session, err
+		}
+		result, err := r.process(argv, plan.Directory, nil, true, log)
+		if err == nil && result.Status != 0 {
+			err = fmt.Errorf("before_script exited %d: %s", result.Status, result.Stderr)
+		}
+		if err != nil {
+			if created {
+				cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				killErr := session.Kill(cleanup)
+				cancel()
+				if killErr != nil {
+					return session, errors.Join(err, killErr)
+				}
+			}
+			return session, err
+		}
+	}
+	for _, key := range sortedKeys(plan.Environment) {
+		if err := session.SetEnvironment(r.ctx, key, plan.Environment[key], tmux.SetEnvironmentOptions{}); err != nil {
+			return session, err
+		}
+	}
+	for _, key := range sortedKeys(plan.GlobalOptions) {
+		if err := setGlobalOption(r.ctx, server, key, plan.GlobalOptions[key]); err != nil {
+			return session, err
+		}
+	}
+	for _, key := range sortedKeys(plan.Options) {
+		if err := setSessionOption(r.ctx, session, key, plan.Options[key]); err != nil {
+			return session, err
+		}
+	}
+	var focus tmux.Window
+	for index, wp := range plan.Windows {
+		first := wp.Panes[0]
+		requestedIndex := wp.Index
+		if created && index == 0 && requestedIndex == nil {
+			n := bootstrap.Index()
+			requestedIndex = &n
+		}
+		var name *string
+		if wp.Name != "" {
+			name = &wp.Name
+		}
+		window, err := session.NewWindow(r.ctx, tmux.NewWindowRequest{Name: name, Index: requestedIndex, StartDirectory: first.Directory, Command: first.Shell, Environment: first.Environment, KillExisting: created && index == 0 && requestedIndex != nil && *requestedIndex == bootstrap.Index()})
+		if err != nil {
+			return session, err
+		}
+		if created && index == 0 && window.Index() != bootstrap.Index() {
+			if err := bootstrap.Kill(r.ctx); err != nil {
+				return session, err
+			}
+		}
+		if err := r.event("window-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "window_index": window.Index(), "window_name": wp.Name}); err != nil {
+			return session, err
+		}
+		for _, key := range sortedKeys(wp.Options) {
+			if err := window.SetOption(r.ctx, key, wp.Options[key], tmux.SetOptionOptions{}); err != nil {
+				return session, err
+			}
+		}
+		pane, ok, err := window.ResolveActivePane(r.ctx)
+		if err != nil {
+			return session, err
+		}
+		if !ok {
+			return session, errors.New("new window has no active pane")
+		}
+		var focusedPane tmux.Pane
+		for pi, pp := range wp.Panes {
+			if pi > 0 {
+				pane, err = pane.Split(r.ctx, tmux.SplitPaneRequest{Direction: tmux.PaneDirectionBelow, StartDirectory: pp.Directory, Command: pp.Shell, Environment: pp.Environment})
+				if err != nil {
+					return session, err
+				}
+			}
+			if err := r.event("pane-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "pane_id": pane.ID().String(), "pane_index": pane.Index()}); err != nil {
+				return session, err
+			}
+			for _, command := range pp.Commands {
+				if err := delay(r.ctx, command.SleepBefore); err != nil {
+					return session, err
+				}
+				text := command.Text
+				if err := pane.SendKeys(r.ctx, tmux.SendKeysRequest{Command: &text, SuppressHistory: pp.SuppressHistory, SkipEnter: !command.Enter, Literal: true}); err != nil {
+					return session, err
+				}
+				if err := delay(r.ctx, command.SleepAfter); err != nil {
+					return session, err
+				}
+			}
+			if pp.Focus {
+				focusedPane = pane
+			}
+			if pi > 0 {
+				if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: "tiled"}); err != nil {
+					return session, err
+				}
+			}
+		}
+		if wp.Layout != "" {
+			if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: wp.Layout}); err != nil {
+				return session, err
+			}
+		}
+		for _, key := range sortedKeys(wp.OptionsAfter) {
+			if err := window.SetOption(r.ctx, key, wp.OptionsAfter[key], tmux.SetOptionOptions{}); err != nil {
+				return session, err
+			}
+		}
+		if focusedPane.ID() != "" {
+			if _, err := focusedPane.Select(r.ctx, tmux.PaneSelectRequest{}); err != nil {
+				return session, err
+			}
+		}
+		if wp.Focus || focus.ID() == "" {
+			focus = window
+		}
+	}
+	if focus.ID() != "" {
+		if _, err := focus.Select(r.ctx); err != nil {
+			return session, err
+		}
+	}
+	return session, nil
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func delay(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func setGlobalOption(ctx context.Context, server tmux.Server, name, value string) error {
+	first := server.GlobalSessionScope().SetOption(ctx, name, value, tmux.SetOptionOptions{})
+	if first == nil {
+		return nil
+	}
+	if err := server.GlobalWindowScope().SetOption(ctx, name, value, tmux.SetOptionOptions{}); err == nil {
+		return nil
+	}
+	if err := server.SetOption(ctx, name, value, tmux.SetOptionOptions{}); err == nil {
+		return nil
+	}
+	return first
+}
+
+func setSessionOption(ctx context.Context, session tmux.Session, name, value string) error {
+	first := session.SetOption(ctx, name, value, tmux.SetOptionOptions{})
+	if first == nil {
+		return nil
+	}
+	window, err := session.ResolveActiveWindow(ctx)
+	if err == nil {
+		if err := window.SetOption(ctx, name, value, tmux.SetOptionOptions{}); err == nil {
+			return nil
+		}
+	}
+	return first
+}
+
+func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
+	if err := validateFormat(o.format); err != nil {
+		return err
+	}
+	server, err := serverFor(o)
+	if err != nil {
+		return err
+	}
+	target := ""
+	if len(args) > 0 {
+		target = args[0]
+	}
+	session, err := findSession(r.ctx, server, target)
+	if err != nil {
+		return err
+	}
+	doc, err := capture(r.ctx, session)
+	if err != nil {
+		return err
+	}
+	warnings := []string{"capture cannot recover original commands, process arguments, shell history, plugins or before_script"}
+	if r.ndjson && o.saveTo == "" {
+		return r.result(map[string]any{"status": "ok", "workspace": doc, "warnings": warnings})
+	}
+	if !r.machine() {
+		if err := r.confirm("Freeze session", o.yes); err != nil {
+			return err
+		}
+		if o.format == "" {
+			o.format, err = r.prompt("Workspace format (yaml/json)", "yaml")
+			if err != nil {
+				return err
+			}
+			if err := validateFormat(o.format); err != nil {
+				return err
+			}
+		}
+	}
+	return r.documentResult(o, doc, "", "yaml", warnings)
+}
+
+func capture(ctx context.Context, session tmux.Session) (document, error) {
+	name, _ := session.Name()
+	doc := document{"session_name": name}
+	windows, ok := session.Windows()
+	if !ok {
+		return nil, errors.New("capture session lacks snapshot relations")
+	}
+	result := []any{}
+	for _, window := range windows {
+		name, _ := window.Name()
+		layout, _ := window.Layout()
+		active, _ := window.Active()
+		wp := document{"window_name": name, "window_index": window.Index(), "layout": layout, "focus": active}
+		options := document{}
+		names, err := query(ctx, session.Server(), "show-options", "-w", "-t", window.ID().String())
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range strings.Split(names, "\n") {
+			name, _, _ := strings.Cut(row, " ")
+			if name == "" {
+				continue
+			}
+			value, err := query(ctx, session.Server(), "show-options", "-w", "-t", window.ID().String(), "-v", name)
+			if err != nil {
+				return nil, err
+			}
+			options[name] = value
+		}
+		wp["options"] = options
+		panes, _ := window.Panes()
+		pp := []any{}
+		for _, pane := range panes {
+			cwd, _ := pane.CurrentPath()
+			command, _ := pane.CurrentCommand()
+			active, _ := pane.Active()
+			if strings.HasPrefix(command, "-") || strings.HasSuffix(command, "python") || strings.HasSuffix(command, "ruby") || strings.HasSuffix(command, "node") {
+				command = ""
+			}
+			p := document{"start_directory": cwd, "focus": active}
+			if command != "" {
+				p["shell_command"] = command
+			}
+			pp = append(pp, p)
+		}
+		wp["panes"] = pp
+		result = append(result, wp)
+	}
+	doc["windows"] = result
+	return doc, nil
+}
