@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -35,6 +36,82 @@ func TestPairedFlagsLastOccurrence(t *testing.T) {
 		if startup != want || vi != want {
 			t.Fatalf("%v: startup=%s vi=%s", args, startup, vi)
 		}
+	}
+}
+
+func TestListHumanTreeGroupsDirectoriesAndEscapesNames(t *testing.T) {
+	home := t.TempDir()
+	project := filepath.Join(home, "project")
+	globalName := "global\x1b]2;directory\a"
+	global := filepath.Join(home, globalName)
+	for _, directory := range []string{project, global} {
+		if err := os.Mkdir(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unsafeName := "gamma\x1b]2;title\a\nname"
+	for _, path := range []string{filepath.Join(project, ".tmuxp.json"), filepath.Join(global, "alpha.json"), filepath.Join(global, "beta.json"), filepath.Join(global, unsafeName+".json")} {
+		if err := os.WriteFile(path, []byte(`{"session_name":"listed","windows":[{"panes":["blank"]}]}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("TMUXP_CONFIGDIR", global)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "unused"))
+	t.Setenv("NO_COLOR", "1")
+	t.Chdir(project)
+	for _, args := range [][]string{{"ls"}, {"ls", "--full"}, {"ls", "--tree"}, {"ls", "--tree", "--full"}} {
+		code, out, diagnostic := invoke(t, args...)
+		if code != 0 || diagnostic != "" {
+			t.Fatalf("%v: %d %q %q", args, code, out, diagnostic)
+		}
+		if strings.ContainsAny(out, "\x1b\a") || strings.Contains(out, "title\nname") {
+			t.Errorf("%v emitted terminal controls: %q", args, out)
+		}
+		if !strings.Contains(out, `gamma\x1b]2;title\x07\x0aname`) {
+			t.Errorf("%v did not escape the workspace name: %q", args, out)
+		}
+		if strings.Contains(strings.Join(args, " "), "--tree") {
+			expected := "~/project\n  └─ .tmuxp  ~/project/.tmuxp.json  local\n"
+			if !strings.HasPrefix(out, expected) || strings.Count(out, "~/global\\x1b]2;directory\\x07\n") != 1 {
+				t.Errorf("tree directory groups missing: %q", out)
+			}
+			first, second, last := strings.Index(out, "  ├─ alpha"), strings.Index(out, "  ├─ beta"), strings.Index(out, "  └─ gamma")
+			if first < 0 || second < first || last < second {
+				t.Errorf("tree changed sibling ordering or branch markers: %q", out)
+			}
+		}
+		if strings.Contains(strings.Join(args, " "), "--full") && strings.Count(out, "session_name: listed") != 4 {
+			t.Errorf("full configuration missing: %q", out)
+		}
+		if len(args) == 3 && (!strings.Contains(out, "\n     session_name: listed\n") || !strings.Contains(out, "\n  │  session_name: listed\n")) {
+			t.Errorf("tree configuration is not nested under its workspace: %q", out)
+		}
+	}
+	for _, mode := range []string{"--json", "--ndjson"} {
+		for _, full := range []bool{false, true} {
+			args := []string{"ls", mode}
+			if full {
+				args = append(args, "--full")
+			}
+			code, before, diagnostic := invoke(t, args...)
+			treeCode, after, treeDiagnostic := invoke(t, append(args, "--tree")...)
+			if code != 0 || treeCode != 0 || diagnostic != "" || treeDiagnostic != "" || before != after || strings.ContainsAny(after, "\x1b\a") {
+				t.Fatalf("tree changed %v: %d %q %q / %d %q %q", args, code, before, diagnostic, treeCode, after, treeDiagnostic)
+			}
+			if !strings.Contains(after, `gamma\u001b]2;title\u0007\nname`) {
+				t.Errorf("machine output changed the underlying name: %q", after)
+			}
+		}
+	}
+	t.Setenv("NO_COLOR", "")
+	code, out, diagnostic := invoke(t, "ls", "--tree", "--color", "always")
+	if code != 0 || diagnostic != "" || !strings.HasPrefix(out, "\x1b[") || strings.Contains(out, "\x1b]") || strings.ContainsRune(out, '\a') {
+		t.Errorf("styled listing leaked terminal controls or lost color: %d %q %q", code, out, diagnostic)
+	}
+	r := &invocation{ctx: t.Context(), out: rejectingWriter{}, err: io.Discard}
+	if err := r.list(nil, &options{tree: true}, nil); !errors.Is(err, io.ErrClosedPipe) {
+		t.Errorf("directory heading lost output failure: %v", err)
 	}
 }
 

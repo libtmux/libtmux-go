@@ -340,7 +340,7 @@ func (r *invocation) tree() *cobra.Command {
 	f.IntVar(&l.progressLines, "progress-lines", 3, "script panel lines; 0 direct output, -1 terminal height; TMUXP_PROGRESS_LINES (default 3)")
 	f.BoolVar(&l.noProgress, "no-progress", false, "disable animation; TMUXP_PROGRESS=0")
 	ls, list := add("ls", "", "list local and global workspace files", 0, 0, r.list)
-	ls.Flags().BoolVar(&list.tree, "tree", false, "show directory and configuration trees")
+	ls.Flags().BoolVar(&list.tree, "tree", false, "show workspaces grouped by directory")
 	ls.Flags().BoolVar(&list.full, "full", false, "include complete configuration documents")
 	search, s := add("search", " [query-term...]", "search workspace fields with native regular expressions", 0, -1, r.search)
 	f = search.Flags()
