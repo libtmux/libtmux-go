@@ -9,6 +9,75 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `Server.LoadBufferFrom` and `Server.SaveBufferTo`, which stream a paste
+  buffer out of an `io.Reader` and into an `io.Writer`, and `Pane.CaptureTo`,
+  which writes a capture to an `io.Writer`. They carry any bytes at any size,
+  where `Server.SetBuffer` is bounded by tmux's 16 KiB command limit and
+  refuses NUL, and allocation does not grow with the payload. tmux gives a
+  control client no stdin or stdout, so a `Connection`-bound value returns
+  `ErrConnectionRequiresProcess`; `Server.LoadBuffer`, `Server.SaveBuffer` and
+  `Pane.CaptureToFile` take a path and still run over a connection. (#14)
+- `Server.LoadBuffer` and `Server.SaveBuffer` reject a `Path` of `-` by naming
+  the streaming method to use instead of reporting that the runner exposes no
+  process stdio. (#14)
+- Add `Session.Run`, which runs a command in a window of its own, waits for it
+  to exit, and returns its status and the screen it showed as `RunResult`. A
+  nonzero status is a result rather than an error, and the window is removed
+  unless `RunOptions.Keep` is set. `RunResult.Signal` is empty before tmux 3.3,
+  which reports no signal for a dead pane. (#14)
+- Add `Session.Start`, which returns a `Running` handle while a command is
+  still going, with `Running.Wait`, `Running.StreamTo`, `Running.Kill` and
+  `Running.Pane`. `StreamTo` copies what the command prints into an
+  `io.Writer` and returns the same `RunResult` as `Wait`, so following a
+  command needs no goroutine of the caller's. `Kill` sends SIGKILL to the
+  process group, with tmux resolving the process id when it runs, and reports
+  success when the pane has already gone. (#14)
+- `Running.Wait` may be called more than once and concurrently, and a `Wait`
+  whose context ended can be retried. It waits on tmux's signal and, on a
+  widening interval, on whether the pane is dead and its command reaped, so a
+  signal that never arrives cannot hold it until the caller's deadline. (#14)
+- Add `ErrOutcomeUnrecorded`, which `Running.Wait` reports when a pane is dead
+  and tmux has not recorded how its command ended. A pane reads as dead as
+  soon as tmux closes its terminal, which is before the exit status can be
+  read, so a command that failed is never reported as having exited zero.
+  (#14)
+- Add `Pane.Writer`, an `io.Writer` that types into a pane. Each newline is
+  the Enter key. (#14)
+- Add `PaneObservation.Reader`, an `io.Reader` over one pane's output after
+  the observation's baseline. A lost observation ends it with
+  `ErrPaneObservationLost` rather than `io.EOF`. (#14)
+- Add `Notifications` range-loop iterators to `NotificationStream` and
+  `PaneObservation`, matching `ControlClient.Notifications`. (#14)
+- Add `NotificationStream.Subscribe` and `NotificationStream.Unsubscribe`,
+  which arm tmux format subscriptions on an owned stream from a
+  `SubscriptionRequest`, and `ControlNotification.Subscription`, which reads
+  the `SubscriptionChange` they report. A pane-scoped subscription stops once
+  that pane's process exits; scope at the window to observe pane death. (#14)
+
+### tmuxq
+
+- Add `Matching` and `MatchingSeq`, which apply a generated model filter to a
+  slice or sequence and report the one error a filter can have. They replace
+  the `Predicate` call followed by `Where` that a caller wrote before, and the
+  `Filter` interface names what they accept without naming a model. (#14)
+
+### mcp
+
+- `paste_text` now stages text larger than tmux's 16 KiB command limit as
+  appended chunks, so a large paste succeeds instead of failing with
+  `command too long`. Staging stays on the control connection this server
+  holds, without a tmux process or a file. (#14)
+
+### examples
+
+- Add `run-to-completion`, `pane-io` and `byte-streams`. (#14)
+- `quickstart` now types through `Pane.Writer` and reads through
+  `PaneObservation.Reader` instead of polling `Pane.Capture`, and its split
+  pane runs `sh` so the example does not depend on the login shell's startup.
+  (#14)
+
 ## v0.0.1-alpha.6, workspace/v0.0.1-alpha.6, mcp/v0.0.1-alpha.9
 
 ### Development
