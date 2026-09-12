@@ -69,7 +69,8 @@ file and atomic publication.
 ## Execution behavior
 
 Load creates a session, reuses an existing session with the same name, or
-appends to the current session with `--append`. Append requires `TMUX` and
+appends to the current session with `--append`. With multiple inputs, `-s`
+overrides only the final workspace's session name. Append requires `TMUX` and
 `TMUX_PANE`. A foreground load requires terminal stdin and attaches through the controlling
 terminal or switches the current tmux client. Inside tmux, human mode offers
 switch, detached-load and append choices; `--yes` selects switching. Existing

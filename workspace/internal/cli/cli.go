@@ -290,7 +290,7 @@ func (r *invocation) tree() *cobra.Command {
 	sockets(load, l)
 	f := load.Flags()
 	f.StringVarP(&l.tmuxConfig, "tmux-config", "f", "", "tmux configuration file (default empty: tmux default)")
-	f.StringVarP(&l.session, "session-name", "s", "", "override session name (default empty: document name)")
+	f.StringVarP(&l.session, "session-name", "s", "", "override the final workspace's session name (default empty: document name)")
 	f.BoolVarP(&l.yes, "yes", "y", false, "answer yes to yes/no prompts")
 	f.BoolVarP(&l.detached, "detached", "d", false, "load without attaching")
 	f.BoolVarP(&l.append, "append", "a", false, "append windows to the current session")
