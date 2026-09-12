@@ -149,3 +149,31 @@ func TestReadinessValidation(t *testing.T) {
 		t.Fatal("invalid readiness policy was silently accepted")
 	}
 }
+
+func TestCommandMetadataAndDocumentation(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	code, out, diagnostic := invoke(t, "--command-tree", "--json")
+	var tree struct {
+		Children []struct {
+			Name string `json:"name"`
+		} `json:"children"`
+		Flags []struct {
+			Name    string `json:"name"`
+			Default string `json:"default"`
+		} `json:"flags"`
+	}
+	if code != 0 || json.Unmarshal([]byte(out), &tree) != nil || len(tree.Children) != 9 || diagnostic != "" {
+		t.Fatalf("metadata %d %s %s", code, out, diagnostic)
+	}
+	for _, flag := range tree.Flags {
+		if flag.Name == "json" && flag.Default != "false" {
+			t.Fatalf("invocation changed declared default: %q", flag.Default)
+		}
+	}
+	for _, format := range []string{"markdown", "man", "yaml"} {
+		code, out, diagnostic = invoke(t, "--generate-docs", format)
+		if code != 0 || !strings.Contains(out, "tmuxinator") || !strings.Contains(out, "progress-lines") || diagnostic != "" {
+			t.Fatalf("docs %s: %d %s %s", format, code, out, diagnostic)
+		}
+	}
+}

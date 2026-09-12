@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -235,5 +237,32 @@ func TestInitialWindowUsesConfiguredBaseIndex(t *testing.T) {
 	}
 	if snapshot.Windows()[0].Index() != 4 {
 		t.Fatalf("initial index %d", snapshot.Windows()[0].Index())
+	}
+}
+
+func TestPythonShellAndPluginBridge(t *testing.T) {
+	check := exec.Command("python3", "-c", "from importlib.metadata import version; print(version('tmuxp'))")
+	version, err := check.Output()
+	if err != nil || strings.TrimSpace(string(version)) != "1.74.0" {
+		t.Skip("optional tmuxp 1.74.0 runtime is unavailable")
+	}
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "shell-target"}})
+	code, out, diagnostic := run(t, "shell", "shell-target", "-S", server.SocketPath(), "-c", "print(session.session_name)", "--json")
+	if code != 0 || !json.Valid([]byte(out)) || !strings.Contains(out, "shell-target") || diagnostic != "" {
+		t.Fatalf("shell bridge %d %s %s", code, out, diagnostic)
+	}
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "plugin-ran")
+	write(t, dir, "native_plugin.py", "from tmuxp.plugin import TmuxpPlugin\nfrom pathlib import Path\nclass Plugin(TmuxpPlugin):\n    def before_script(self, session):\n        Path("+strconv.Quote(marker)+").write_text(session.session_name)\n")
+	t.Setenv("PYTHONPATH", dir)
+	t.Setenv("PYTHONDONTWRITEBYTECODE", "1")
+	path := write(t, dir, "plugin.yaml", "session_name: bridged\nplugins: [native_plugin.Plugin]\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic = run(t, "load", path, "-S", server.SocketPath(), "-d", "--json")
+	if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
+		t.Fatalf("plugin bridge %d %s %s", code, out, diagnostic)
+	}
+	got, err := os.ReadFile(marker)
+	if err != nil || string(got) != "bridged" {
+		t.Fatalf("plugin did not execute: %q %v", got, err)
 	}
 }
