@@ -168,7 +168,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		plan loadPlan
 	}
 	inputs := []input{}
-	for _, arg := range args {
+	for index, arg := range args {
 		path, err := resolveFile(arg, "")
 		if err != nil {
 			return err
@@ -177,7 +177,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		if err != nil {
 			return err
 		}
-		if o.session != "" {
+		if o.session != "" && index == len(args)-1 {
 			doc["session_name"] = o.session
 		}
 		plan, err := normalize(doc, filepath.Dir(path))
@@ -374,9 +374,7 @@ func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name strin
 	if o.tmuxConfig != "" {
 		args = append(args, "-f", o.tmuxConfig)
 	}
-	if o.session != "" {
-		args = append(args, "-s", o.session)
-	}
+	args = append(args, "-s", name)
 	if o.colors256 {
 		args = append(args, "-2")
 	}

@@ -165,6 +165,61 @@ func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 	}
 }
 
+func TestLoadNamesOnlyFinalInput(t *testing.T) {
+	for _, plugins := range []bool{false, true} {
+		t.Run("plugins-"+strconv.FormatBool(plugins), func(t *testing.T) {
+			if plugins {
+				version, err := exec.Command("python3", "-c", "from importlib.metadata import version; print(version('tmuxp'))").Output()
+				if err != nil || strings.TrimSpace(string(version)) != "1.74.0" {
+					t.Skip("optional tmuxp 1.74.0 runtime is unavailable")
+				}
+			}
+			server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+			dir := t.TempDir()
+			extensions := ""
+			if plugins {
+				write(t, dir, "name_plugin.py", "from tmuxp.plugin import TmuxpPlugin\nclass Plugin(TmuxpPlugin):\n    pass\n")
+				t.Setenv("PYTHONPATH", dir)
+				t.Setenv("PYTHONDONTWRITEBYTECODE", "1")
+				extensions = "plugins: [name_plugin.Plugin]\n"
+			}
+			first := write(t, dir, "first.yaml", "session_name: first\n"+extensions+"windows:\n- window_name: earlier\n  panes: [blank]\n")
+			last := write(t, dir, "last.yaml", "session_name: last\n"+extensions+"windows:\n- window_name: final\n  panes: [blank]\n")
+			code, out, diagnostic := run(t, "load", first, last, "-s", "renamed", "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+			if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
+				t.Fatalf("multi-input naming: %d %s %s", code, out, diagnostic)
+			}
+			var result struct {
+				Results []struct {
+					Name   string `json:"session_name"`
+					Reused bool   `json:"reused"`
+				} `json:"results"`
+			}
+			if err := json.Unmarshal([]byte(out), &result); err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Results) != 2 || result.Results[0].Name != "first" || result.Results[1].Name != "renamed" || result.Results[0].Reused || result.Results[1].Reused {
+				t.Errorf("unexpected input results: %+v", result.Results)
+			}
+			snapshot, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(snapshot.Sessions()) != 2 || len(snapshot.Windows()) != 2 {
+				t.Errorf("unexpected topology: sessions=%d windows=%d", len(snapshot.Sessions()), len(snapshot.Windows()))
+			}
+			for _, window := range snapshot.Windows() {
+				session, _ := window.Session()
+				name, _ := session.Name()
+				windowName, _ := window.Name()
+				if (name != "first" || windowName != "earlier") && (name != "renamed" || windowName != "final") {
+					t.Errorf("window %q loaded into session %q", windowName, name)
+				}
+			}
+		})
+	}
+}
+
 func TestMalformedBeforeScriptLeavesSessionsUntouched(t *testing.T) {
 	for _, appendMode := range []bool{false, true} {
 		t.Run(strconv.FormatBool(appendMode), func(t *testing.T) {
