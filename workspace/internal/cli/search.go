@@ -21,7 +21,7 @@ try:
         fields, pattern = term['fields'], term['pattern']
         flags = re.IGNORECASE if q['ignore_case'] or (q['smart_case'] and not any(c.isupper() for c in pattern)) else 0
         if q['fixed']: pattern = re.escape(pattern)
-        if q['word']: pattern = r'\b(?:' + pattern + r')\b'
+        if q['word']: pattern = r'\b' + pattern + r'\b'
         patterns.append((fields, re.compile(pattern, flags)))
 except re.error as error:
     print(json.dumps({'error': str(error)}))
@@ -33,6 +33,7 @@ for record in q['records']:
         matched = False
         for field in fields:
             for value in record['fields'].get(field, []):
+                if not isinstance(value, str): value = str(value)
                 found = pattern.search(value)
                 if found:
                     matched = True
@@ -91,7 +92,7 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 	}
 	inputRecords := []map[string]any{}
 	for _, record := range records {
-		values := map[string][]string{"name": {textValue(record["name"])}, "path": {textValue(record["path"])}, "session_name": {textValue(record["session_name"])}, "window": {}, "pane": {}}
+		values := map[string][]any{"name": {textValue(record["name"])}, "path": {textValue(record["path"])}, "session_name": {textValue(record["session_name"])}, "window": {}, "pane": {}}
 		for _, rawWindow := range array(mapping(record["config"])["windows"]) {
 			w := mapping(rawWindow)
 			if name := textValue(w["window_name"]); name != "" {
@@ -105,8 +106,8 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 						values["pane"] = append(values["pane"], text)
 					} else {
 						for _, rawCommand := range array(pane["shell_command"]) {
-							if rawCommand != nil {
-								values["pane"] = append(values["pane"], textValue(rawCommand))
+							if nonemptySearchCommand(rawCommand) {
+								values["pane"] = append(values["pane"], rawCommand)
 							}
 						}
 					}
@@ -154,4 +155,25 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 		}
 	}
 	return nil
+}
+
+func nonemptySearchCommand(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return false
+	case bool:
+		return v
+	case string:
+		return v != ""
+	case int:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	default:
+		return true
+	}
 }

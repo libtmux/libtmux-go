@@ -123,6 +123,24 @@ func TestReadLeavesAndOutputPrecedence(t *testing.T) {
 	}
 }
 
+func TestSearchPreservesPythonWordAndObjectSemantics(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("Python compatibility runtime unavailable")
+	}
+	dir := t.TempDir()
+	t.Setenv("TMUXP_CONFIGDIR", dir)
+	t.Chdir(dir)
+	if err := os.WriteFile(filepath.Join(dir, "words.yaml"), []byte("session_name: words\nwindows:\n- panes:\n  - foobar\n  - shell_command:\n    - {cmd: deploy, enter: false}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"search", "--json", "-w", "pane:foo|bar"}, {"search", "--json", "-F", "pane:'cmd': 'deploy'"}} {
+		code, out, diagnostic := invoke(t, args...)
+		if code != 0 || !strings.Contains(out, `"name":"words"`) {
+			t.Fatalf("Python search semantics %v: %d %q %q", args, code, out, diagnostic)
+		}
+	}
+}
+
 func TestMachineControlBytesAndBoundedChildOutput(t *testing.T) {
 	var out strings.Builder
 	r := &invocation{ctx: context.Background(), out: &out, err: io.Discard, ndjson: true, command: "shell"}
