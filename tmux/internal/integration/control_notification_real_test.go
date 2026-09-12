@@ -192,3 +192,81 @@ func TestNotificationStreamPauseAfterArmsTheServerHold(t *testing.T) {
 		t.Fatalf("ContinuePane() error = %v", err)
 	}
 }
+
+//libtmux:real-tmux
+func TestNotificationStreamSubscribeReportsAFormatWhenItChanges(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+
+	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+		Name:    "windows",
+		Format:  "#{session_windows}",
+		Session: sessions[0].ID(),
+	}); err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	// tmux reports the value it first evaluates, then each change; the
+	// window opened here must show up as a change to two.
+	if _, err := sessions[0].NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	for {
+		notification, err := stream.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		change, ok := notification.Subscription()
+		if !ok {
+			continue
+		}
+		if change.Name != "windows" {
+			t.Fatalf("Subscription() name = %q, want windows", change.Name)
+		}
+		if change.Session != sessions[0].ID() {
+			t.Fatalf("Subscription() session = %q, want %q", change.Session, sessions[0].ID())
+		}
+		if change.Window != "" || change.Pane != "" {
+			t.Fatalf("session-scoped Subscription() carried window %q pane %q", change.Window, change.Pane)
+		}
+		if change.Value == "2" {
+			return
+		}
+	}
+}
+
+//libtmux:real-tmux
+func TestNotificationStreamUnsubscribeStopsAName(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+	request := tmux.SubscriptionRequest{Name: "name", Format: "#{session_name}"}
+	if err := stream.Subscribe(ctx, request); err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if err := stream.Unsubscribe(ctx, request.Name); err != nil {
+		t.Fatalf("Unsubscribe() error = %v", err)
+	}
+	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{Name: "a:b", Format: "x"}); err == nil {
+		t.Fatal("Subscribe() accepted a name containing the scope delimiter")
+	}
+}

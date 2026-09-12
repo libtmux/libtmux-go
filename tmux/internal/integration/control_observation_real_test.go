@@ -3,8 +3,11 @@
 package integration
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -205,4 +208,100 @@ func waitForPaneMarker(
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+//libtmux:real-tmux
+func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
+	// The reader yields raw terminal bytes, so a readline shell's bracketed-paste
+	// sequences would reach it glued to the command's output. FixedShell pins a
+	// POSIX shell that writes none.
+	initialSession := tmux.NewSessionRequest{Name: "work"}
+	server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{
+		InitialSession: &initialSession,
+		FixedShell:     true,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
+	}
+	first := panes[0]
+	window, err := first.ResolveWindow(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := window.SplitPane(ctx, tmux.SplitPaneRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Keys sent before a shell is ready are dropped without an error, and the
+	// prompt each shell draws belongs before the observation's baseline.
+	tmuxtest.WaitForShellReady(ctx, t, first)
+	tmuxtest.WaitForShellReady(ctx, t, second)
+
+	observation, err := first.OpenObservation(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = observation.Close() })
+
+	// The other pane speaks first and must not be heard.
+	if _, err := fmt.Fprintln(second.Writer(ctx), "printf 'other-pane\\n'"); err != nil {
+		t.Fatal(err)
+	}
+	waitForPaneCapture(ctx, t, second, "other-pane")
+	// Two lines in one write: each newline is Enter.
+	if _, err := fmt.Fprint(first.Writer(ctx), "printf 'alpha\\n'\nprintf 'omega\\n'\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := bufio.NewScanner(observation.Reader(ctx))
+	var heard []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "other-pane" {
+			t.Fatal("Reader() delivered another pane's output")
+		}
+		if line == "alpha" || line == "omega" {
+			heard = append(heard, line)
+		}
+		if len(heard) == 2 {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"alpha", "omega"}; !slices.Equal(heard, want) {
+		t.Errorf("Reader() heard %q, want %q", heard, want)
+	}
+}
+
+//libtmux:real-tmux
+func TestNotificationIteratorsRange(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+	if _, err := sessions[0].Rename(ctx, "ranged"); err != nil {
+		t.Fatal(err)
+	}
+	for notification, err := range stream.Notifications(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if notification.Kind() == tmux.ControlNotificationSessionRenamed {
+			return
+		}
+	}
+	t.Fatal("Notifications() ended before the rename")
 }

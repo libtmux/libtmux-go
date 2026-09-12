@@ -34,24 +34,28 @@ exact ones you want in your own go.mod; the commands here fetch the newest.
 
 ## Quick start
 
-Make a window, split it, send a command into the new pane:
+Make a window, split it, type a command into the new pane, and read the reply
+back through an `io.Reader`:
 
 <!-- docs:quickstart -->
 
 ```go
-windowName := "work"
-window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
+window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 if err != nil {
 	return fmt.Errorf("create window: %w", err)
 }
 pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-	Direction: tmux.PaneDirectionRight,
+	Direction: tmux.PaneDirectionRight, Command: "sh",
 })
 if err != nil {
 	return fmt.Errorf("split window: %w", err)
 }
-command := "printf 'libtmux ready\\n'"
-if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command, Literal: true}); err != nil {
+output, err := pane.OpenObservation(ctx)
+if err != nil {
+	return fmt.Errorf("watch pane: %w", err)
+}
+defer func() { err = errors.Join(err, output.Close()) }()
+if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
 	return fmt.Errorf("send command: %w", err)
 }
 ```
@@ -64,6 +68,30 @@ swept across every supported release — so none of it can drift from code that
 works.
 
 Runnable: [`examples/quickstart`](examples/quickstart) — `go -C examples run ./quickstart`.
+
+## Running a command to completion
+
+`Session.Run` is `os/exec` for a program that needs a terminal: the command
+runs in a window of its own with a tty, and what comes back is its exit status
+and the screen tmux rendered. A nonzero status is a result, not an error, and
+the wait is tmux's own rather than a poll:
+
+<!-- docs:run-to-completion -->
+
+```go
+result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
+if err != nil {
+	return fmt.Errorf("run command: %w", err)
+}
+for _, line := range result.Lines {
+	fmt.Println("screen:", line)
+}
+fmt.Println("exited", result.Status)
+```
+
+<!-- docs:end -->
+
+Runnable: [`examples/run-to-completion`](examples/run-to-completion).
 
 ## What querying looks like
 
@@ -89,11 +117,10 @@ snapshot, err := server.Snapshot(ctx)
 if err != nil {
 	return err
 }
-predicate, err := tmux.PaneActiveIs(true).Predicate()
+active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
 if err != nil {
 	return err
 }
-active := tmuxq.Where(snapshot.Panes(), predicate)
 ```
 
 <!-- docs:end -->
@@ -171,7 +198,7 @@ plan := tmux.NewPlan()
 plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 plan.SetPaneTitle(editor, "editor")
-plan.SendKeys(editor, tmux.SendKeysRequest{Command: tmux.Ptr("echo built")})
+plan.SendKeys(editor, tmux.SendKeysRequest{Command: new("echo built")})
 plan.DisplayMessage(editor, "#{pane_title}")
 ```
 
@@ -213,6 +240,37 @@ for {
 	fmt.Printf("notification: %s\n", notification.Kind())
 	if notification.Kind() == tmux.ControlNotificationSessionRenamed {
 		fmt.Println("heard the rename")
+		break
+	}
+}
+```
+
+<!-- docs:end -->
+
+A subscription asks tmux to evaluate a format and report it when its value
+changes, so a program hears about a state it cares about — a window count, a
+pane's current command — without asking again:
+
+<!-- docs:subscribing -->
+
+```go
+// A subscription is a format tmux evaluates for you: it reports the value
+// when it first looks, about a second later, and then each time it changes.
+if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+	Name: "windows", Format: "#{session_windows}",
+}); err != nil {
+	return fmt.Errorf("subscribe: %w", err)
+}
+if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+	return fmt.Errorf("open window: %w", err)
+}
+for {
+	notification, err := stream.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("read notification: %w", err)
+	}
+	if change, ok := notification.Subscription(); ok && change.Value == "2" {
+		fmt.Println("session has", change.Value, "windows")
 		return nil
 	}
 }
@@ -220,7 +278,54 @@ for {
 
 <!-- docs:end -->
 
-Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe).
+Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe)
+and, for a pane as an `io.Writer` and `io.Reader`, [`examples/pane-io`](examples/pane-io).
+
+## Moving bytes
+
+Keys and command arguments are the wrong way to move a payload: a shell reads
+what it is sent, and tmux caps a whole command at 16 KiB and cannot carry a NUL
+through one at all. A buffer loaded from an `io.Reader` has neither limit, and a
+capture written to an `io.Writer` never holds a scrollback in memory:
+
+<!-- docs:byte-streams -->
+
+```go
+name := "payload"
+if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
+	Name: &name,
+}); err != nil {
+	return fmt.Errorf("load payload: %w", err)
+}
+if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
+	BufferName: &name, DeleteAfter: true,
+}); err != nil {
+	return fmt.Errorf("paste payload: %w", err)
+}
+
+file, err := os.Create(archive)
+if err != nil {
+	return fmt.Errorf("create archive: %w", err)
+}
+defer func() { err = errors.Join(err, file.Close()) }()
+compressor := gzip.NewWriter(file)
+if err := pane.CaptureTo(ctx, compressor, tmux.CapturePaneRequest{
+	Start: tmux.CaptureBoundary, End: tmux.CaptureBoundary,
+}); err != nil {
+	return fmt.Errorf("capture scrollback: %w", err)
+}
+if err := compressor.Close(); err != nil {
+	return fmt.Errorf("finish archive: %w", err)
+}
+```
+
+<!-- docs:end -->
+
+`Server.LoadBufferFrom`, `Server.SaveBufferTo` and `Pane.CaptureTo` use tmux's
+own stdin and stdout, which tmux offers no control client, so they need a
+process; `Server.LoadBuffer`, `Server.SaveBuffer` and `Pane.CaptureToFile` take
+a path and work over a connection. Runnable:
+[`examples/byte-streams`](examples/byte-streams).
 
 ## Packages
 

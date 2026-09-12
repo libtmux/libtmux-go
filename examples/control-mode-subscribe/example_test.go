@@ -28,6 +28,9 @@ func TestControlModeSubscribe(t *testing.T) {
 	if want := "heard the rename"; !strings.Contains(printed, want) {
 		t.Errorf("printed %q, want it to contain %q", printed, want)
 	}
+	if want := "session has 2 windows"; !strings.Contains(printed, want) {
+		t.Errorf("printed %q, want the subscription to report %q", printed, want)
+	}
 	if want := "notification:"; !strings.Contains(printed, want) {
 		t.Errorf("printed %q, want it to name the notifications it read", printed)
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -854,10 +856,7 @@ func (t *tools) pasteText(
 	if input.Bracket != nil {
 		bracket = *input.Bracket
 	}
-	if err := t.runtime.deps.setBuffer(ctx, server, tmux.SetBufferRequest{
-		Data: contents,
-		Name: &name,
-	}); err != nil {
+	if err := t.stageBuffer(ctx, server, name, contents); err != nil {
 		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
 	}
 	final, err := t.preflightPaneInput(
@@ -892,6 +891,55 @@ func (t *tools) pasteText(
 	}
 	output.Bytes = len(input.Text)
 	return nil, output, nil
+}
+
+// maximumBufferCommandBytes bounds one set-buffer command's payload. tmux
+// refuses a whole client command over MAX_IMSGSIZE, 16384 bytes, with
+// "command too long", so a paste larger than that arrives as an appended
+// series rather than failing.
+const maximumBufferCommandBytes = 8 << 10
+
+// stageBuffer stores contents in the named buffer, appending in chunks when it
+// is too large for one tmux command. Appending keeps the payload out of any
+// file and needs no tmux process, so it works over the control connection this
+// server holds.
+func (t *tools) stageBuffer(
+	ctx context.Context,
+	server tmux.Server,
+	name string,
+	contents string,
+) error {
+	for chunk, more := range bufferChunks(contents, maximumBufferCommandBytes) {
+		if err := t.runtime.deps.setBuffer(ctx, server, tmux.SetBufferRequest{
+			Data: chunk, Name: &name, Append: more,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// bufferChunks splits contents into pieces no larger than limit, breaking only
+// between runes, and reports for each piece whether it follows an earlier one.
+func bufferChunks(contents string, limit int) iter.Seq2[string, bool] {
+	return func(yield func(string, bool) bool) {
+		appending := false
+		for len(contents) > limit {
+			cut := limit
+			for cut > 0 && !utf8.RuneStart(contents[cut]) {
+				cut--
+			}
+			if cut == 0 {
+				cut = limit
+			}
+			if !yield(contents[:cut], appending) {
+				return
+			}
+			contents = contents[cut:]
+			appending = true
+		}
+		yield(contents, appending)
+	}
 }
 
 func (t *tools) deletePasteBuffer(server tmux.Server, name string) error {

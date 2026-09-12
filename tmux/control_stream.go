@@ -58,9 +58,18 @@ func (c *ControlClient) nextNotificationAfter(
 func (c *ControlClient) Notifications(
 	ctx context.Context,
 ) iter.Seq2[ControlNotification, error] {
+	return notificationSeq(ctx, c.NextNotification)
+}
+
+// notificationSeq turns one blocking read into a range loop with the
+// [ControlClient.Notifications] contract.
+func notificationSeq(
+	ctx context.Context,
+	next func(context.Context) (ControlNotification, error),
+) iter.Seq2[ControlNotification, error] {
 	return func(yield func(ControlNotification, error) bool) {
 		for {
-			notification, err := c.NextNotification(ctx)
+			notification, err := next(ctx)
 			if errors.Is(err, io.EOF) {
 				return
 			}

@@ -2,8 +2,10 @@ package tmux
 
 import (
 	"context"
+	"io"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 var paneInputVersion34 = Version{raw: "3.4", major: 3, minor: 4}
@@ -234,6 +236,43 @@ func sendKeysArguments(
 		command = " " + command
 	}
 	return append(arguments, "--", command), warnings, nil
+}
+
+// Writer returns the pane's keyboard as an [io.Writer]. Bytes written to it
+// are typed into the pane literally, and each newline is the Enter key, so
+// [fmt.Fprintln] submits a line as a person at the keyboard would. Text with
+// no trailing newline is typed and left on the line.
+//
+// A write returns once tmux has taken the keys, before the pane's program has
+// read them; the program interprets what arrives. A line with a trailing
+// newline costs two tmux commands, the text and a separate Enter; buffering
+// whole lines still costs far less than writing bytes one at a time.
+func (p Pane) Writer(ctx context.Context) io.Writer {
+	return paneWriter{ctx: ctx, pane: p}
+}
+
+type paneWriter struct {
+	ctx  context.Context
+	pane Pane
+}
+
+func (w paneWriter) Write(data []byte) (int, error) {
+	rest := string(data)
+	for rest != "" {
+		line, more, found := strings.Cut(rest, "\n")
+		if line == "" {
+			// An empty line is only the Enter key; send-keys needs no operand.
+			if err := w.pane.Enter(w.ctx); err != nil {
+				return len(data) - len(rest), err
+			}
+		} else if err := w.pane.SendKeys(w.ctx, SendKeysRequest{
+			Command: &line, Literal: true, SkipEnter: !found,
+		}); err != nil {
+			return len(data) - len(rest), err
+		}
+		rest = more
+	}
+	return len(data), nil
 }
 
 // Enter sends the Enter key to the receiver's exact linked pane. Completed

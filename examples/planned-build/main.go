@@ -38,12 +38,12 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: tmux.Ptr("planned")})
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("planned")})
 	if err != nil {
 		return fmt.Errorf("create window: %w", err)
 	}
@@ -54,7 +54,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 	editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
 	plan.SetPaneTitle(editor, "editor")
-	plan.SendKeys(editor, tmux.SendKeysRequest{Command: tmux.Ptr("echo built")})
+	plan.SendKeys(editor, tmux.SendKeysRequest{Command: new("echo built")})
 	plan.DisplayMessage(editor, "#{pane_title}")
 	// docs:end
 

@@ -1,13 +1,16 @@
 package tmux_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -492,8 +495,14 @@ func ExamplePtr() {
 	value := tmux.Ptr(0)
 	fmt.Println(*value)
 
+	// A zero-size type still gets a distinct address, which is what Ptr adds
+	// over new.
+	first, second := tmux.Ptr(struct{}{}), tmux.Ptr(struct{}{})
+	fmt.Println(first != second)
+
 	// Output:
 	// 0
+	// true
 }
 
 func ExamplePaneCommandIs() {
@@ -1795,4 +1804,396 @@ func ExampleSession_OpenNotifications() {
 	// Output:
 	// renamed: renamed
 	// closed: true
+}
+
+func ExamplePane_Writer() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-pane-writer",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	// A plain POSIX shell keeps the pane's startup out of the example.
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "type", Command: "sh"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	// Typing and reading take turns. A terminal echoes what is typed as it
+	// arrives, so a second command typed while the first is still printing
+	// shares a line with that output: the echo has no newline of its own yet.
+	writer := pane.Writer(ctx)
+	scanner := bufio.NewScanner(observation.Reader(ctx))
+	// Each newline is the Enter key, so each of these types one command.
+	for _, command := range []string{"printf 'one\\n'", "printf 'two\\n'"} {
+		if _, err := fmt.Fprintln(writer, command); err != nil {
+			fmt.Println("write:", err)
+			return
+		}
+		for scanner.Scan() {
+			if line := scanner.Text(); line == "one" || line == "two" {
+				fmt.Println(line)
+				break
+			}
+		}
+	}
+	// Output:
+	// one
+	// two
+}
+
+func ExamplePaneObservation_Reader() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-observation-reader",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "read", Command: "sh"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'ready\\n'"); err != nil {
+		fmt.Println("write:", err)
+		return
+	}
+	// The reader is a byte stream, so any consumer of an io.Reader works on
+	// it. The typed command echoes first; the exact line is the reply.
+	matched, err := regexp.MatchReader(`(?m)^ready\r?$`, bufio.NewReader(observation.Reader(ctx)))
+	fmt.Println(matched, err)
+	// Output: true <nil>
+}
+
+func ExamplePaneObservation_Notifications() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-observation-range",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "range", Command: "sh"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'seen\\n'"); err != nil {
+		fmt.Println("write:", err)
+		return
+	}
+	// Every notification on the connection, as a range loop; output for this
+	// pane is picked out by identity. tmux chooses where one notification's
+	// bytes end, which need not be where a line does, so what is looked for
+	// is collected across them rather than expected within one.
+	var heard []byte
+	for notification, err := range observation.Notifications(ctx) {
+		if err != nil {
+			fmt.Println("notification:", err)
+			return
+		}
+		if id, data, isOutput := notification.Output(); isOutput && id == pane.ID() {
+			heard = append(heard, data...)
+		}
+		if bytes.Contains(heard, []byte("seen\r\n")) {
+			fmt.Println("heard the pane")
+			break
+		}
+	}
+	// Output: heard the pane
+}
+
+func ExampleNotificationStream_Subscribe() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-subscribe",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "watch"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	// tmux evaluates the format itself and reports each change; nothing here
+	// asks twice.
+	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+		Name: "windows", Format: "#{session_windows}",
+	}); err != nil {
+		fmt.Println("subscribe:", err)
+		return
+	}
+	if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+		fmt.Println("new window:", err)
+		return
+	}
+	for notification, err := range stream.Notifications(ctx) {
+		if err != nil {
+			fmt.Println("notification:", err)
+			return
+		}
+		if change, ok := notification.Subscription(); ok && change.Value == "2" {
+			fmt.Println(change.Name, "=", change.Value)
+			break
+		}
+	}
+	// Output: windows = 2
+}
+
+func ExampleNotificationStream_Unsubscribe() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-unsubscribe",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "watch"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	request := tmux.SubscriptionRequest{Name: "name", Format: "#{session_name}"}
+	if err := stream.Subscribe(ctx, request); err != nil {
+		fmt.Println("subscribe:", err)
+		return
+	}
+	// The name is all tmux needs to stop reporting it.
+	fmt.Println("unsubscribed:", stream.Unsubscribe(ctx, request.Name))
+	// Output: unsubscribed: <nil>
+}
+
+func ExampleSession_Run() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-session-run",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "run"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// The command has a terminal, and its exit status is a result rather
+	// than an error. The window it ran in is gone by the time Run returns.
+	result, err := session.Run(ctx, "printf 'built\\n'; exit 3", tmux.RunOptions{})
+	if err != nil {
+		fmt.Println("run:", err)
+		return
+	}
+	fmt.Println(result.Lines, result.Status)
+	// Output: [built] 3
+}
+
+func ExampleServer_LoadBufferFrom() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-load-buffer-from",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "payload"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// A payload tmux reads as a stream: no quoting applies to it, and neither
+	// argv nor tmux's command-length limit bounds it.
+	name := "example"
+	if err := server.LoadBufferFrom(
+		ctx,
+		strings.NewReader("$HOME 'quoted'\x00"),
+		tmux.LoadBufferFromOptions{Name: &name},
+	); err != nil {
+		fmt.Println("load buffer:", err)
+		return
+	}
+	var buffer bytes.Buffer
+	if err := server.SaveBufferTo(
+		ctx, &buffer, tmux.SaveBufferToOptions{Name: &name},
+	); err != nil {
+		fmt.Println("save buffer:", err)
+		return
+	}
+	fmt.Printf("%q\n", buffer.String())
+	// Output: "$HOME 'quoted'\x00"
+}
+
+func ExamplePane_CaptureTo() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-capture-to",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "capture"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
+		return
+	}
+	command := "printf 'captured\\n'"
+	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
+		fmt.Println("send keys:", err)
+		return
+	}
+
+	// The screen is written to a writer rather than returned, so a long
+	// scrollback never lands in this program's memory. It is a point in time,
+	// so this reads until the line the shell was asked to print is there.
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var screen bytes.Buffer
+		if err := pane.CaptureTo(ctx, &screen, tmux.CapturePaneRequest{}); err != nil {
+			fmt.Println("capture:", err)
+			return
+		}
+		// A whole line, because the shell echoed the command as it was typed
+		// and that echo contains the same word.
+		if slices.Contains(strings.Split(screen.String(), "\n"), "captured") {
+			fmt.Println("captured")
+			return
+		}
+		select {
+		case <-ctx.Done():
+			fmt.Println("timed out waiting for output")
+			return
+		case <-ticker.C:
+		}
+	}
+	// Output: captured
+}
+
+func ExampleRunning_StreamTo() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-stream-to",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "stream"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+
+	// Start returns while the command runs; StreamTo copies what it prints
+	// and returns the same result Wait would. The command waits before its
+	// first line because the stream begins where StreamTo opens it, and after
+	// it because tmux can drop the last write before a process exits.
+	running, err := session.Start(ctx,
+		"sleep 1; printf 'streaming\\n'; sleep 1", tmux.RunOptions{},
+	)
+	if err != nil {
+		fmt.Println("start:", err)
+		return
+	}
+	var printed bytes.Buffer
+	result, err := running.StreamTo(ctx, &printed)
+	if err != nil {
+		fmt.Println("stream:", err)
+		return
+	}
+	fmt.Println(strings.TrimSpace(printed.String()), result.Status)
+	// Output: streaming 0
 }

@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"iter"
 	"strconv"
 	"strings"
 	"time"
@@ -103,6 +104,109 @@ func (s *NotificationStream) ContinuePane(ctx context.Context, pane PaneID) erro
 	return err
 }
 
+// SubscriptionRequest names a format for tmux to evaluate and report on this
+// stream whenever its value changes. Its zero value is invalid because Name and
+// Format are required. At most one of Session, Window, and Pane scopes the
+// evaluation; none evaluates against the stream's attached session.
+//
+// tmux stops evaluating a pane-scoped subscription once that pane's process has
+// exited, so a subscription that must observe pane death is scoped to the
+// window and reads the pane from the change it reports.
+type SubscriptionRequest struct {
+	// Name identifies the subscription in each change and to Unsubscribe. It
+	// may not contain a colon or a space.
+	Name string
+	// Format is the tmux format to evaluate, such as #{pane_current_command}.
+	Format string
+	// Session scopes evaluation to one session.
+	Session SessionID
+	// Window scopes evaluation to one window.
+	Window WindowID
+	// Pane scopes evaluation to one pane.
+	Pane PaneID
+}
+
+func (r SubscriptionRequest) validate() error {
+	if r.Name == "" {
+		return invalidServerCommandRequest("refresh-client", "Name", "", "is required")
+	}
+	if strings.ContainsAny(r.Name, ": ") {
+		return invalidServerCommandRequest(
+			"refresh-client", "Name", r.Name,
+			"may not contain a colon or a space, which tmux reads as the scope",
+		)
+	}
+	if err := validateServerCommandArgument("refresh-client", "Name", r.Name, true); err != nil {
+		return err
+	}
+	if r.Format == "" {
+		return invalidServerCommandRequest("refresh-client", "Format", "", "is required")
+	}
+	if err := validateServerCommandArgument("refresh-client", "Format", r.Format, true); err != nil {
+		return err
+	}
+	scopes := 0
+	for _, set := range []bool{r.Session != "", r.Window != "", r.Pane != ""} {
+		if set {
+			scopes++
+		}
+	}
+	if scopes > 1 {
+		return invalidServerCommandRequest(
+			"refresh-client", "Scope", "", "selects more than one of Session, Window, and Pane",
+		)
+	}
+	return nil
+}
+
+func (r SubscriptionRequest) scope() string {
+	switch {
+	case r.Session != "":
+		return r.Session.String()
+	case r.Window != "":
+		return r.Window.String()
+	case r.Pane != "":
+		return r.Pane.String()
+	}
+	return ""
+}
+
+// Subscribe asks tmux to evaluate request's format and report it on this
+// stream as a subscription-changed notification, read with
+// [ControlNotification.Subscription]. tmux reports the value at its next
+// evaluation, about a second later, and then each time it changes. Arming a
+// name already armed replaces its format.
+func (s *NotificationStream) Subscribe(ctx context.Context, request SubscriptionRequest) error {
+	if s == nil || s.client == nil {
+		return ErrControlClosed
+	}
+	if err := request.validate(); err != nil {
+		return err
+	}
+	_, err := s.client.Cmd(ctx, "refresh-client", "-B",
+		request.Name+":"+request.scope()+":"+request.Format)
+	return err
+}
+
+// Unsubscribe stops the subscription armed under name. Stopping a name that
+// was never armed does nothing and reports nothing, because tmux answers
+// neither.
+func (s *NotificationStream) Unsubscribe(ctx context.Context, name string) error {
+	if s == nil || s.client == nil {
+		return ErrControlClosed
+	}
+	if name == "" || strings.ContainsAny(name, ": ") {
+		return invalidServerCommandRequest(
+			"refresh-client", "Name", name, "is not a subscription name",
+		)
+	}
+	if err := validateServerCommandArgument("refresh-client", "Name", name, true); err != nil {
+		return err
+	}
+	_, err := s.client.Cmd(ctx, "refresh-client", "-B", name)
+	return err
+}
+
 // resumablePaneID reports whether tmux's resume parser accepts id, which needs
 // a per cent sign and then digits.
 func resumablePaneID(id PaneID) bool {
@@ -132,6 +236,16 @@ func (s *NotificationStream) Next(
 		return ControlNotification{}, ErrControlClosed
 	}
 	return s.client.NextNotification(ctx)
+}
+
+// Notifications returns [NotificationStream.Next] as a range loop; exactly one
+// iterator or direct read may run at a time. Malformed notifications yield
+// their error and iteration continues; every other error ends the loop after
+// being yielded.
+func (s *NotificationStream) Notifications(
+	ctx context.Context,
+) iter.Seq2[ControlNotification, error] {
+	return notificationSeq(ctx, s.Next)
 }
 
 // CloseContext starts idempotent stream shutdown and waits within ctx. The

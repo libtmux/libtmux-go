@@ -18,8 +18,9 @@
 //   - Find live objects with [Server.Session], [Server.Window], [Server.Pane],
 //     and [Server.Client].
 //   - Read the hierarchy with [Server.Snapshot].
-//   - Capture pane text with [Pane.Capture] or exact bytes with
-//     [Pane.CaptureBytes].
+//   - Capture pane text with [Pane.Capture], exact bytes with
+//     [Pane.CaptureBytes], or a whole scrollback into an [io.Writer] with
+//     [Pane.CaptureTo].
 //   - Run arbitrary tmux commands with [Server.Cmd].
 //   - Bind a materialized session to owned control lanes with
 //     [Session.OpenControl], or receive notifications with
@@ -129,10 +130,23 @@
 // commands suitable for a connection by staging through a tmux buffer and
 // caller-supplied file. A connection-backed server avoids those processes.
 //
-// [ControlClient.NextNotification] waits for pane output as a stream.
-// [Server.WaitFor] waits for an explicit tmux channel signal. Polling
-// [Pane.Capture] reads the visible screen and may match a shell's command echo
-// before the command produces output.
+// [Session.Run] runs a command to its exit status in a window of its own, and
+// [Session.Start] returns a [Running] handle before it finishes:
+// [Running.Wait] waits for it, [Running.Kill] stops it, [Running.StreamTo]
+// copies what it prints while it runs, and [Running.Pane] exposes the pane so
+// it can also be typed into.
+// [Pane.Writer] types into a pane and [PaneObservation.Reader] reads what it
+// prints, as an [io.Writer] and an [io.Reader]. [Server.LoadBufferFrom],
+// [Server.SaveBufferTo] and [Pane.CaptureTo] move a payload or a scrollback
+// through tmux's own stdin and stdout, which no quoting rule and no command
+// length limit apply to; tmux offers a control client neither stream, so those
+// three need a process and their path-taking siblings are what a connection
+// uses. [ControlClient.NextNotification]
+// waits for pane output as a stream, and [NotificationStream.Subscribe] asks
+// tmux to report a format whenever its value changes. [Server.WaitFor] waits
+// for an explicit tmux channel signal. Polling [Pane.Capture] reads the
+// visible screen and may match a shell's command echo before the command
+// produces output.
 //
 // # Plans
 //

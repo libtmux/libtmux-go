@@ -37,7 +37,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
@@ -62,6 +62,29 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Printf("notification: %s\n", notification.Kind())
 		if notification.Kind() == tmux.ControlNotificationSessionRenamed {
 			fmt.Println("heard the rename")
+			break
+		}
+	}
+	// docs:end
+
+	// docs:subscribing
+	// A subscription is a format tmux evaluates for you: it reports the value
+	// when it first looks, about a second later, and then each time it changes.
+	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+		Name: "windows", Format: "#{session_windows}",
+	}); err != nil {
+		return fmt.Errorf("subscribe: %w", err)
+	}
+	if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+		return fmt.Errorf("open window: %w", err)
+	}
+	for {
+		notification, err := stream.Next(ctx)
+		if err != nil {
+			return fmt.Errorf("read notification: %w", err)
+		}
+		if change, ok := notification.Subscription(); ok && change.Value == "2" {
+			fmt.Println("session has", change.Value, "windows")
 			return nil
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -66,6 +67,54 @@ func (n ControlNotification) Output() (PaneID, []byte, bool) {
 		return "", nil, false
 	}
 	return n.outputPane, bytes.Clone(n.output), true
+}
+
+// SubscriptionChange is one evaluated format value reported by a subscription
+// armed with [NotificationStream.Subscribe]. The scope fields tmux did not
+// evaluate against are zero: a session-scoped subscription reports no window
+// or pane, and a window-scoped one reports no pane.
+type SubscriptionChange struct {
+	// Name is the subscription name given when it was armed.
+	Name string
+	// Session is the session the value was evaluated for.
+	Session SessionID
+	// Window is the window the value was evaluated for, when scoped to one.
+	Window WindowID
+	// WindowIndex is Window's index in Session. It means nothing when Window
+	// is zero.
+	WindowIndex int
+	// Pane is the pane the value was evaluated for, when scoped to one.
+	Pane PaneID
+	// Value is the format expanded by tmux.
+	Value string
+}
+
+// Subscription returns the change carried by a subscription-changed
+// notification. Other notification kinds return a zero value and false.
+func (n ControlNotification) Subscription() (SubscriptionChange, bool) {
+	if n.kind != ControlNotificationSubscriptionChanged || len(n.arguments) < 6 {
+		return SubscriptionChange{}, false
+	}
+	// Grammar: name, session, window, window index, pane, reserved..., value.
+	// Reserved arguments may grow, so the value is the last argument rather
+	// than the sixth.
+	change := SubscriptionChange{
+		Name:  n.arguments[0],
+		Value: n.arguments[len(n.arguments)-1],
+	}
+	if id := n.arguments[1]; id != "-" {
+		change.Session = SessionID(id)
+	}
+	if id := n.arguments[2]; id != "-" {
+		change.Window = WindowID(id)
+	}
+	if index, err := strconv.Atoi(n.arguments[3]); err == nil {
+		change.WindowIndex = index
+	}
+	if id := n.arguments[4]; id != "-" {
+		change.Pane = PaneID(id)
+	}
+	return change, true
 }
 
 // ParseControlNotification parses one newline-free tmux control-mode
