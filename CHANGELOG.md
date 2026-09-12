@@ -9,6 +9,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
+
 ### tmux
 
 - Add `Server.LoadBufferFrom` and `Server.SaveBufferTo`, which stream a paste
