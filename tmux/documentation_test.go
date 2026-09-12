@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
 )
 
 var documentationLinkPattern = regexp.MustCompile(
@@ -683,10 +685,18 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 				t.Fatalf("run %s: %v\n%s", workflow, err, output)
 			}
 
-			probe := exec.Command("tmux", "list-sessions")
-			probe.Env = isolatedExampleEnvironment(home, tmuxRoot)
-			if output, err := probe.CombinedOutput(); err == nil {
-				t.Fatalf("%s left an isolated tmux server running:\n%s", workflow, output)
+			// Killing the final session can finish before the daemon exits.
+			cleanupCtx, cleanupCancel := context.WithTimeout(ctx, time.Second)
+			defer cleanupCancel()
+			var output []byte
+			if err := tmux.Poll(cleanupCtx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
+				probe := exec.CommandContext(ctx, "tmux", "list-sessions")
+				probe.Env = isolatedExampleEnvironment(home, tmuxRoot)
+				var probeErr error
+				output, probeErr = probe.CombinedOutput()
+				return probeErr != nil, ctx.Err()
+			}); err != nil {
+				t.Fatalf("%s left an isolated tmux server running: %v\n%s", workflow, err, output)
 			}
 		})
 	}
