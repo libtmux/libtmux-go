@@ -32,7 +32,12 @@ func start() error {
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
-	return run(ctx, server, filepath.Join(os.TempDir(), "libtmux-byte-streams.gz"))
+	// One path per process, so two runs at once do not write each other's
+	// archive.
+	archive := filepath.Join(
+		os.TempDir(), fmt.Sprintf("libtmux-byte-streams-%d.gz", os.Getpid()),
+	)
+	return run(ctx, server, archive)
 }
 
 // run accepts injected server state so tests can isolate the example.
@@ -98,5 +103,6 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 	}
 	fmt.Printf("pasted %d bytes, compressed the screen into %d\n",
 		payload.Size(), written.Size())
+	fmt.Println("archive:", archive)
 	return nil
 }
