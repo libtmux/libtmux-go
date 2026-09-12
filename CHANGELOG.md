@@ -9,6 +9,14 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### workspace
+
+- `tmux-workspace load` restores terminal input modes and descriptor flags
+  after an attached client is cancelled, before reporting retained sessions.
+- `before_script` supports dot-relative executable paths when the workspace
+  directory contains spaces, preserving quoted arguments and the script's
+  working directory.
+
 ## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
 
 ### tmux
