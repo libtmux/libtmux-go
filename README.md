@@ -34,6 +34,37 @@ exact ones you want in your own go.mod; the commands here fetch the newest.
 
 ## Quick start
 
+Configure a server. `ServerOptions{}` drives the tmux the user running the
+program already has; set `SocketName` or `SocketPath` to give the program a
+server of its own, which is what you want when it should not touch a session
+someone is working in:
+
+<!-- docs:connect -->
+
+```go
+server, err := tmux.NewServer(tmux.ServerOptions{})
+if err != nil {
+	return fmt.Errorf("configure tmux server: %w", err)
+}
+```
+
+<!-- docs:end -->
+
+Create a session to work in:
+
+<!-- docs:session -->
+
+```go
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+	Name: "libtmux-go-quickstart", WindowName: "start",
+})
+if err != nil {
+	return fmt.Errorf("create session: %w", err)
+}
+```
+
+<!-- docs:end -->
+
 Make a window, split it, send a command into the new pane:
 
 <!-- docs:quickstart -->
