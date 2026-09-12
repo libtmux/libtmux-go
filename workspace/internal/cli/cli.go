@@ -51,17 +51,21 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 		if arg == "--" {
 			break
 		}
-		if arg == "--json" || arg == "--json=true" {
-			r.json = true
-		}
-		if arg == "--ndjson" || arg == "--ndjson=true" {
-			r.ndjson = true
-		}
-		if arg == "--json=false" {
-			r.json = false
-		}
-		if arg == "--ndjson=false" {
-			r.ndjson = false
+		name, value, assigned := strings.Cut(arg, "=")
+		if name == "--json" || name == "--ndjson" {
+			enabled := true
+			if assigned {
+				var err error
+				enabled, err = strconv.ParseBool(value)
+				if err != nil {
+					continue
+				}
+			}
+			if name == "--json" {
+				r.json = enabled
+			} else {
+				r.ndjson = enabled
+			}
 		}
 	}
 	requestedJSON, requestedNDJSON := r.json, r.ndjson
@@ -237,20 +241,33 @@ func (r *invocation) tree() *cobra.Command {
 			_, err := io.WriteString(r.out, rendered.String())
 			return err
 		}
+		var rendered strings.Builder
+		var err error
 		switch completion {
 		case "":
+			if r.machine() {
+				return usage("supply a command or an explicit root action")
+			}
 			return cmd.Help()
 		case "bash":
-			return root.GenBashCompletionV2(r.out, true)
+			err = root.GenBashCompletionV2(&rendered, true)
 		case "zsh":
-			return root.GenZshCompletion(r.out)
+			err = root.GenZshCompletion(&rendered)
 		case "fish":
-			return root.GenFishCompletion(r.out, true)
+			err = root.GenFishCompletion(&rendered, true)
 		case "powershell":
-			return root.GenPowerShellCompletionWithDesc(r.out)
+			err = root.GenPowerShellCompletionWithDesc(&rendered)
 		default:
 			return usage("invalid completion shell %q", completion)
 		}
+		if err != nil {
+			return err
+		}
+		if r.machine() {
+			return r.encode(map[string]any{"shell": completion, "content": rendered.String()})
+		}
+		_, err = io.WriteString(r.out, rendered.String())
+		return err
 	}
 	add := func(name, synopsis, description string, minimumArgs, maximumArgs int, action func(*cobra.Command, *options, []string) error) (*cobra.Command, *options) {
 		o := &options{progressLines: 3, pythonrc: true}
