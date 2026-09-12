@@ -220,6 +220,59 @@ func TestLoadNamesOnlyFinalInput(t *testing.T) {
 	}
 }
 
+func TestLoadColorPreflightAnd256Colors(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "retained"}})
+	before, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls")
+	wrapper := write(t, dir, "tmux", "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$TMUX_WORKSPACE_TEST_CALLS\"\nexec \"$TMUX_WORKSPACE_TEST_TMUX\" \"$@\"\n")
+	if err := os.Chmod(wrapper, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_WORKSPACE_TEST_CALLS", calls)
+	t.Setenv("TMUX_WORKSPACE_TEST_TMUX", binary)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	first := write(t, dir, "first.yaml", "session_name: first\nwindows:\n- panes: [blank]\n")
+	last := write(t, dir, "last.yaml", "session_name: last\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", first, last, "-S", server.SocketPath(), "-d", "-8", "--ndjson")
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "unsupported_color_mode") {
+		t.Errorf("expected color preflight refusal: %d %s %s", code, out, diagnostic)
+	}
+	if _, err := os.Stat(calls); !os.IsNotExist(err) {
+		t.Errorf("legacy color request invoked tmux: %v", err)
+	}
+	after, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Sessions()) != 1 || len(after.Windows()) != 1 || len(after.Panes()) != 1 || after.Sessions()[0].ID() != before.Sessions()[0].ID() || after.Windows()[0].ID() != before.Windows()[0].ID() || after.Panes()[0].ID() != before.Panes()[0].ID() {
+		t.Error("legacy color request changed retained topology")
+	}
+	if err := os.WriteFile(calls, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic = run(t, "load", first, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "-2", "--json")
+	if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
+		t.Fatalf("256-color load: %d %s %s", code, out, diagnostic)
+	}
+	invocations, err := os.ReadFile(calls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invocation := range strings.Split(strings.TrimSpace(string(invocations)), "\n") {
+		if !strings.Contains(" "+invocation+" ", " -2 ") {
+			t.Errorf("256-color client missing -2: %s", invocation)
+		}
+	}
+}
+
 func TestMalformedBeforeScriptLeavesSessionsUntouched(t *testing.T) {
 	for _, appendMode := range []bool{false, true} {
 		t.Run(strconv.FormatBool(appendMode), func(t *testing.T) {

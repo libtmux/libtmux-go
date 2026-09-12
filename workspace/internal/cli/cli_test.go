@@ -71,6 +71,22 @@ func TestInvalidSizePrecedesWorkspaceAndBackend(t *testing.T) {
 	}
 }
 
+func TestLegacyColorsPrecedeWorkspaceAndBackend(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	for _, flag := range []string{"-8", "--88-colors"} {
+		for _, mode := range []string{"", "--json", "--ndjson"} {
+			args := []string{"load", "absent.yaml", "also-absent.yaml", "-d", flag}
+			if mode != "" {
+				args = append(args, mode)
+			}
+			code, out, diagnostic := invoke(t, args...)
+			if code != 2 || out != "" || !strings.Contains(diagnostic, "88-color") || !strings.Contains(diagnostic, "3.2a+") || (mode != "" && !json.Valid([]byte(diagnostic))) {
+				t.Errorf("legacy colors %v: %d %q %q", args, code, out, diagnostic)
+			}
+		}
+	}
+}
+
 func TestMalformedBeforeScriptPrecedesBackend(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	dir := t.TempDir()

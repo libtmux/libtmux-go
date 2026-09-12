@@ -21,9 +21,6 @@ func serverFor(o *options) (tmux.Server, error) {
 	if o.colors256 {
 		colors = tmux.Color256
 	}
-	if o.colors88 {
-		colors = tmux.Color88
-	}
 	return tmux.NewServer(tmux.ServerOptions{SocketName: o.socketName, SocketPath: o.socketPath, ConfigFile: o.tmuxConfig, Colors: colors})
 }
 
@@ -113,6 +110,9 @@ func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
 	}
 	if o.colors256 && o.colors88 {
 		return usage("-2 and -8 are mutually exclusive")
+	}
+	if o.colors88 {
+		return &failure{"unsupported_color_mode", "tmux 3.2a+ rejects the legacy 88-color flag (-8); remove it or use -2 for 256 colors", 2}
 	}
 	if machine && !o.detached && !o.append {
 		return usage("machine load requires -d or explicit --append")
@@ -377,9 +377,6 @@ func (r *invocation) bridgeLoad(server tmux.Server, o *options, path, name strin
 	args = append(args, "-s", name)
 	if o.colors256 {
 		args = append(args, "-2")
-	}
-	if o.colors88 {
-		args = append(args, "-8")
 	}
 	args = append(args, path)
 	if err := r.event("warning", map[string]any{"input_index": index, "code": "python_compatibility", "message": "plugins/custom builder execute in version-checked tmuxp " + referenceVersion}); err != nil {

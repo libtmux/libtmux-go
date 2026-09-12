@@ -77,6 +77,9 @@ switch, detached-load and append choices; `--yes` selects switching. Existing
 sessions ask before attachment unless `--yes` is set. Machine load requires `-d` or `--append` and
 does not read implicit prompts.
 
+Load rejects `-8` and `--88-colors` before reading workspace files or invoking
+tmux. Supported tmux releases have no 88-color mode; use `-2` for 256 colors.
+
 The native normalizer supports command and pane shorthand, inherited commands,
 command delays and enter-state overrides, history suppression, directories,
 launch-time environment, shell overrides, layouts, explicit window indexes,
