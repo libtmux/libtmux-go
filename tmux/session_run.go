@@ -33,7 +33,8 @@ type RunOptions struct {
 type RunResult struct {
 	// Status is the command's exit status. It is zero when Signal is set.
 	Status int
-	// Signal names the signal that ended the command, when one did.
+	// Signal names the signal that ended the command, when one did. It is
+	// empty before tmux 3.3, which reports no signal for a dead pane.
 	Signal string
 	// Lines is what the terminal showed when the command finished, without
 	// the blank lines tmux pads a screen with.
@@ -208,7 +209,7 @@ func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 	}
 	r.mu.Unlock()
 
-	if err := r.session.server.WaitFor(ctx, WaitForRequest{Channel: r.channel}); err != nil {
+	if err := r.waitForExit(ctx); err != nil {
 		return RunResult{}, fmt.Errorf("wait for command: %w", err)
 	}
 
@@ -220,6 +221,51 @@ func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 	r.result, r.err = r.finish(ctx)
 	r.done = true
 	return r.result.clone(), r.err
+}
+
+// livenessDelay bounds how long waitForExit trusts tmux's signal before it
+// asks whether the pane is already dead, and how far that interval backs off.
+// The first check is soon enough to rescue a short command whose signal was
+// missed; the ceiling keeps a long command from being polled.
+const (
+	initialLivenessDelay = 250 * time.Millisecond
+	maximumLivenessDelay = 30 * time.Second
+)
+
+// waitForExit returns when tmux signals the pane's death, or when the pane is
+// found already dead. The signal is edge-triggered and arrives once, so a wait
+// that trusted it alone would hang for as long as ctx allowed if it never
+// came; the liveness check is the second exit, and it backs off so a command
+// that runs for an hour is asked about a handful of times.
+func (r *Running) waitForExit(ctx context.Context) error {
+	signaled := make(chan error, 1)
+	waitCtx, endWait := context.WithCancel(ctx)
+	defer endWait()
+	go func() {
+		signaled <- r.session.server.WaitFor(waitCtx, WaitForRequest{Channel: r.channel})
+	}()
+
+	delay := initialLivenessDelay
+	for {
+		timer := time.NewTimer(delay)
+		select {
+		case err := <-signaled:
+			timer.Stop()
+			return err
+		case <-ctx.Done():
+			timer.Stop()
+			return context.Cause(ctx)
+		case <-timer.C:
+		}
+		pane, err := r.pane.Refresh(ctx)
+		if err != nil {
+			return err
+		}
+		if dead, ok := pane.Dead(); ok && dead {
+			return nil
+		}
+		delay = min(delay*2, maximumLivenessDelay)
+	}
 }
 
 // finish reads the command's outcome after tmux has signaled its pane-died
@@ -321,7 +367,10 @@ func (r *Running) StreamTo(
 func (r *Running) Kill(ctx context.Context) error {
 	if _, err := r.session.server.RunShell(ctx, RunShellRequest{
 		TargetPane: r.pane.ID(),
-		Command:    "kill -s KILL -- -#{pane_pid}",
+		// Nothing to kill is not a failure, and from tmux 3.5 a run-shell
+		// command that exits nonzero is reported to the caller, so a pane that
+		// has gone must leave this exiting zero rather than complaining.
+		Command: "[ -n \"#{pane_pid}\" ] && kill -s KILL -- -#{pane_pid} 2>/dev/null; true",
 	}); err != nil {
 		return fmt.Errorf("kill command: %w", err)
 	}
@@ -331,8 +380,9 @@ func (r *Running) Kill(ctx context.Context) error {
 var remainOnExitFormatVersion33 = Version{raw: "3.3", major: 3, minor: 3}
 
 // deadPaneNotice is the fixed text tmux 3.2a writes when a remain-on-exit
-// pane's process ends. Later releases render remain-on-exit-format instead.
-const deadPaneNotice = "Pane is dead (status "
+// pane's process ends, which continues "status N" for an exit and "signal N"
+// for a signal. Later releases render remain-on-exit-format instead.
+const deadPaneNotice = "Pane is dead ("
 
 // trimScreen drops the blank lines tmux pads a screen to its height with and,
 // when tmux wrote its fixed dead-pane notice, that notice, so lines hold only

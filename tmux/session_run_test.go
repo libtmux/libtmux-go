@@ -26,6 +26,12 @@ func TestTrimScreenKeepsOnlyWhatTheCommandShowed(t *testing.T) {
 			want:        []string{"built"},
 		},
 		{
+			name:        "a signal notice on the bottom row",
+			lines:       []string{"watching", "", "Pane is dead (signal 9, Sat Sep 12 12:24:50 2026)"},
+			fixedNotice: true,
+			want:        []string{"watching"},
+		},
+		{
 			name:  "a command's own line is not a notice where tmux writes none",
 			lines: []string{"echo 'Pane is dead (status 1, faked)'", ""},
 			want:  []string{"echo 'Pane is dead (status 1, faked)'"},

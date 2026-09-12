@@ -260,6 +260,22 @@ func TestCommandStreamUntilWaitCompletes(t *testing.T) {
 	})
 }
 
+// reportsDeadSignal is false before tmux 3.3, which populates no
+// pane_dead_signal: a signal-killed command is then indistinguishable from one
+// that exited zero through the formats alone.
+func reportsDeadSignal(ctx context.Context, t *testing.T, server tmux.Server) bool {
+	t.Helper()
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	minimum, err := tmux.ParseVersion("3.3")
+	if err != nil {
+		t.Fatalf("ParseVersion() error = %v", err)
+	}
+	return version.AtLeast(minimum)
+}
+
 //libtmux:real-tmux
 func TestCommandKillStopsIt(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
@@ -283,7 +299,7 @@ func TestCommandKillStopsIt(t *testing.T) {
 	if elapsed := time.Since(started); elapsed > 5*time.Second {
 		t.Errorf("Wait() after Kill() took %s, want a prompt return", elapsed)
 	}
-	if result.Signal == "" {
+	if reportsDeadSignal(ctx, t, server) && result.Signal == "" {
 		t.Errorf("Wait() after Kill() reported no signal, result = %+v", result)
 	}
 }
@@ -600,8 +616,8 @@ func TestCommandStreamToKillsWhileStreaming(t *testing.T) {
 	if killErr := <-killed; killErr != nil {
 		t.Fatalf("Kill() error = %v", killErr)
 	}
-	if result.Signal == "" && result.Status == 0 {
-		t.Fatalf("StreamTo() = %+v, want a killed command's signal or status", result)
+	if reportsDeadSignal(ctx, t, server) && result.Signal == "" {
+		t.Fatalf("StreamTo() = %+v, want the signal that killed the command", result)
 	}
 }
 
@@ -622,5 +638,35 @@ func TestCommandStreamToRejectsANilDestination(t *testing.T) {
 		err, tmux.ErrInvalidServerCommandRequest,
 	) {
 		t.Fatalf("StreamTo(nil) error = %v, want ErrInvalidServerCommandRequest", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestCommandWaitEndsWhenTheSignalIsLost(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	session := oneSession(ctx, t, server)
+
+	running, err := session.Start(ctx, "sleep 0.2", tmux.RunOptions{Keep: true})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	// Take the pane's hook away before the command exits, so tmux signals
+	// nothing and only the liveness check can end the wait.
+	if err := running.Pane().SetHook(ctx, "pane-died", ""); err != nil {
+		t.Fatalf("SetHook() error = %v", err)
+	}
+
+	started := time.Now()
+	result, err := running.Wait(ctx)
+	if err != nil {
+		t.Fatalf("Wait() error = %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Errorf("Wait() took %s with no signal, want the liveness check to end it", elapsed)
+	}
+	if result.Pane == "" {
+		t.Errorf("Wait() = %+v, want the command's pane", result)
 	}
 }

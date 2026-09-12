@@ -2112,26 +2112,41 @@ func ExamplePane_CaptureTo() {
 		fmt.Println("create session:", err)
 		return
 	}
-	// Run leaves its window in place, so its screen is there to be captured.
-	result, err := session.Run(ctx, "printf 'captured\\n'", tmux.RunOptions{Keep: true})
-	if err != nil {
-		fmt.Println("run:", err)
+	pane, ok, err := session.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		fmt.Println("resolve pane:", ok, err)
 		return
 	}
-	pane, err := server.Pane(ctx, result.Pane)
-	if err != nil {
-		fmt.Println("resolve pane:", err)
+	command := "printf 'captured\\n'"
+	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
+		fmt.Println("send keys:", err)
 		return
 	}
 
-	// The screen is written to any writer rather than returned, so a long
-	// scrollback never lands in this program's memory.
-	var screen bytes.Buffer
-	if err := pane.CaptureTo(ctx, &screen, tmux.CapturePaneRequest{}); err != nil {
-		fmt.Println("capture:", err)
-		return
+	// The screen is written to a writer rather than returned, so a long
+	// scrollback never lands in this program's memory. It is a point in time,
+	// so this reads until the line the shell was asked to print is there.
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var screen bytes.Buffer
+		if err := pane.CaptureTo(ctx, &screen, tmux.CapturePaneRequest{}); err != nil {
+			fmt.Println("capture:", err)
+			return
+		}
+		// A whole line, because the shell echoed the command as it was typed
+		// and that echo contains the same word.
+		if slices.Contains(strings.Split(screen.String(), "\n"), "captured") {
+			fmt.Println("captured")
+			return
+		}
+		select {
+		case <-ctx.Done():
+			fmt.Println("timed out waiting for output")
+			return
+		case <-ticker.C:
+		}
 	}
-	fmt.Println(strings.TrimSpace(screen.String()))
 	// Output: captured
 }
 
