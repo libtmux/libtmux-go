@@ -183,12 +183,23 @@ func (r *invocation) list(_ *cobra.Command, o *options, _ []string) error {
 	if r.json {
 		return r.encode(map[string]any{"workspaces": records, "global_workspace_dirs": dirs})
 	}
-	for _, record := range records {
-		prefix := ""
+	for index, record := range records {
+		prefix, continuation := "", ""
 		if o.tree {
-			prefix = "  └─ "
+			directory := filepath.Dir(textValue(record["path"]))
+			if index == 0 || filepath.Dir(textValue(records[index-1]["path"])) != directory {
+				if _, err := fmt.Fprintln(r.out, r.style("heading", safeTerminal(directory))); err != nil {
+					return err
+				}
+			}
+			prefix = "  ├─ "
+			continuation = "  │  "
+			if index+1 == len(records) || filepath.Dir(textValue(records[index+1]["path"])) != directory {
+				prefix = "  └─ "
+				continuation = "     "
+			}
 		}
-		if _, err := fmt.Fprintf(r.out, "%s%s  %s  %s\n", prefix, r.style("subject", textValue(record["name"])), r.style("info", textValue(record["path"])), r.style("secondary", textValue(record["source"]))); err != nil {
+		if _, err := fmt.Fprintf(r.out, "%s%s  %s  %s\n", prefix, r.style("subject", safeTerminal(textValue(record["name"]))), r.style("info", safeTerminal(textValue(record["path"]))), r.style("secondary", safeTerminal(textValue(record["source"])))); err != nil {
 			return err
 		}
 		if o.full {
@@ -196,7 +207,12 @@ func (r *invocation) list(_ *cobra.Command, o *options, _ []string) error {
 			if e != nil {
 				return e
 			}
-			if _, e = r.out.Write(data); e != nil {
+			if o.tree {
+				_, e = fmt.Fprintln(r.out, continuation+strings.ReplaceAll(strings.TrimSuffix(string(data), "\n"), "\n", "\n"+continuation))
+			} else {
+				_, e = r.out.Write(data)
+			}
+			if e != nil {
 				return e
 			}
 		}

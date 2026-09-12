@@ -11,6 +11,9 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- `tmux-workspace ls --tree` groups workspaces by directory with sibling
+  markers. Human listings escape terminal controls in names and paths;
+  machine output preserves the original records.
 - `tmux-workspace load` restores terminal input modes and descriptor flags
   after an attached client is cancelled, before reporting retained sessions.
 - `before_script` supports dot-relative executable paths when the workspace

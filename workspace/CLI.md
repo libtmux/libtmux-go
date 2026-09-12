@@ -42,6 +42,11 @@ $ tmux-workspace ls \
     --json
 ```
 
+Human `ls --tree` groups adjacent workspaces by directory in discovery order.
+`--full` includes each configuration as YAML, indented under its workspace in
+tree mode. Human names and paths escape terminal control characters; JSON and
+NDJSON preserve the original values.
+
 Capture a session as a JSON document without writing a file:
 
 ```console
