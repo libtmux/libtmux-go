@@ -264,6 +264,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	}
 	results := []map[string]any{}
 	failures := []map[string]any{}
+	summary := map[string]any{"schema_version": 1, "command": "load", "status": "partial", "results": results, "errors": failures}
 	var last tmux.Session
 	lastReused := false
 	for index, input := range inputs {
@@ -301,13 +302,22 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			entry["stage"] = "failed"
 			failure := map[string]any{"code": "workspace_failed", "message": buildErr.Error(), "input_index": index, "stage": "load", "session_id": session.ID().String()}
 			failures = append(failures, failure)
-			if err := r.event("warning", failure); err != nil {
-				return err
-			}
 		} else {
 			last = session
 			lastReused = reused
 			entry["stage"] = "completed"
+		}
+		results = append(results, entry)
+		summary["results"], summary["errors"] = results, failures
+		if len(r.scripts) > 0 {
+			summary["scripts"] = r.scripts
+		}
+		r.loadResult = summary
+		if buildErr != nil {
+			if err := r.event("warning", failures[len(failures)-1]); err != nil {
+				return err
+			}
+		} else {
 			if err := r.event("workspace-completed", entry); err != nil {
 				return err
 			}
@@ -321,12 +331,6 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 				}
 			}
 		}
-		results = append(results, entry)
-	}
-	if r.progress != nil {
-		if err := r.progress.close(); err != nil {
-			return err
-		}
 	}
 	status := "ok"
 	if len(failures) > 0 {
@@ -339,9 +343,12 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		status = "partial"
 		failures = append(failures, map[string]any{"code": "interrupted", "message": "operation interrupted", "stage": "load"})
 	}
-	summary := map[string]any{"schema_version": 1, "command": "load", "status": status, "results": results, "errors": failures}
-	if len(r.scripts) > 0 {
-		summary["scripts"] = r.scripts
+	summary["status"], summary["errors"] = status, failures
+	r.loadResult = summary
+	if r.progress != nil {
+		if err := r.progress.close(); err != nil {
+			return err
+		}
 	}
 	event := "completed"
 	if len(failures) > 0 {
