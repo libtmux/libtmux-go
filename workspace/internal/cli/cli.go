@@ -14,6 +14,7 @@ import (
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 	"github.com/spf13/pflag"
 )
 
@@ -55,10 +56,20 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 		if arg == "--ndjson" || arg == "--ndjson=true" {
 			r.ndjson = true
 		}
+		if arg == "--json=false" {
+			r.json = false
+		}
+		if arg == "--ndjson=false" {
+			r.ndjson = false
+		}
 	}
+	requestedJSON, requestedNDJSON := r.json, r.ndjson
 	cmd := r.tree()
 	cmd.SetArgs(args)
 	err := cmd.ExecuteContext(ctx)
+	if err != nil {
+		r.json, r.ndjson = requestedJSON, requestedNDJSON
+	}
 	if err != nil && !r.dispatched {
 		var specific *failure
 		if !errors.As(err, &specific) {
@@ -163,19 +174,21 @@ type options struct {
 
 func (r *invocation) tree() *cobra.Command {
 	var version, metadata bool
-	var completion string
+	var completion, documentation string
 	root := &cobra.Command{Use: "tmux-workspace", Short: "manage tmuxp workspaces with native Go services", SilenceErrors: true, SilenceUsage: true, CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true}}
 	root.SetIn(r.in)
 	root.SetOut(r.out)
 	root.SetErr(r.err)
+	root.SetHelpCommand(&cobra.Command{Use: "help", Hidden: true})
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usage("%s", err) })
-	root.PersistentFlags().BoolVar(&r.json, "json", r.json, "emit JSON; machine mode never prompts")
-	root.PersistentFlags().BoolVar(&r.ndjson, "ndjson", r.ndjson, "emit flushed NDJSON; takes precedence over --json")
+	root.PersistentFlags().BoolVar(&r.json, "json", false, "emit JSON; machine mode never prompts (default false)")
+	root.PersistentFlags().BoolVar(&r.ndjson, "ndjson", false, "emit flushed NDJSON; takes precedence over --json (default false)")
 	root.PersistentFlags().StringVar(&r.color, "color", "auto", "color policy: auto, always, never (default auto)")
 	root.PersistentFlags().StringVar(&r.logLevel, "log-level", "warning", "diagnostic level: debug, info, warning, error, critical (default warning)")
 	root.Flags().BoolVarP(&version, "version", "V", false, "show native and compatibility versions")
 	root.Flags().BoolVar(&metadata, "command-tree", false, "export the command metadata tree as JSON")
 	root.Flags().StringVar(&completion, "generate-completion", "", "write bash, zsh, fish or powershell completion (default empty: disabled)")
+	root.Flags().StringVar(&documentation, "generate-docs", "", "write markdown, man or yaml command reference (default empty: disabled)")
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		r.dispatched = true
 		r.command = strings.TrimPrefix(cmd.CommandPath(), "tmux-workspace ")
@@ -200,6 +213,17 @@ func (r *invocation) tree() *cobra.Command {
 		}
 		if metadata {
 			return r.encode(commandMetadata(root))
+		}
+		if documentation != "" {
+			var rendered strings.Builder
+			if err := generateDocs(root, documentation, &rendered); err != nil {
+				return err
+			}
+			if r.machine() {
+				return r.encode(map[string]any{"format": documentation, "content": rendered.String()})
+			}
+			_, err := io.WriteString(r.out, rendered.String())
+			return err
 		}
 		switch completion {
 		case "":
@@ -291,7 +315,79 @@ func (r *invocation) tree() *cobra.Command {
 	pair(shell, "use-pythonrc", "no-startup", &sh.pythonrc, "load Python startup file (last occurrence wins; default enabled)")
 	pair(shell, "use-vi-mode", "no-vi-mode", &sh.vi, "enable vi editing (last occurrence wins; default disabled)")
 	add("debug-info", "", "show redacted runtime and tmux diagnostics", 0, 0, r.debugInfo)
+	annotateTree(root)
 	return root
+}
+
+func generateDocs(cmd *cobra.Command, format string, out io.Writer) error {
+	cmd.DisableAutoGenTag = true
+	var err error
+	switch format {
+	case "markdown":
+		err = doc.GenMarkdownCustom(cmd, out, func(link string) string { return "#" + strings.ReplaceAll(strings.TrimSuffix(link, ".md"), "_", "-") })
+	case "man":
+		err = doc.GenMan(cmd, &doc.GenManHeader{Title: "TMUX-WORKSPACE", Section: "1"}, out)
+	case "yaml":
+		err = doc.GenYaml(cmd, out)
+	default:
+		return usage("invalid documentation format %q", format)
+	}
+	if err != nil {
+		return err
+	}
+	for _, child := range cmd.Commands() {
+		if child.Hidden {
+			continue
+		}
+		if format == "yaml" {
+			if _, err := fmt.Fprintln(out, "---"); err != nil {
+				return err
+			}
+		}
+		if err := generateDocs(child, format, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func annotateTree(root *cobra.Command) {
+	var visit func(*cobra.Command)
+	visit = func(cmd *cobra.Command) {
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			flag.Annotations = map[string][]string{}
+			if flag.Value.Type() == "bool" && !strings.Contains(flag.Usage, "default") {
+				flag.Usage += " (default " + flag.DefValue + ")"
+			}
+			switch flag.Name {
+			case "workspace-format":
+				flag.Annotations["choices"] = []string{"yaml", "json"}
+			case "progress-format":
+				flag.Annotations["environment"] = []string{"TMUXP_PROGRESS_FORMAT"}
+			case "progress-lines":
+				flag.Annotations["environment"] = []string{"TMUXP_PROGRESS_LINES"}
+			case "no-progress":
+				flag.Annotations["environment"] = []string{"TMUXP_PROGRESS"}
+			case "256-colors", "88-colors":
+				flag.Annotations["exclusive_group"] = []string{"terminal-colors"}
+			case "best", "pdb", "code", "ptipython", "ptpython", "ipython", "bpython":
+				flag.Annotations["exclusive_group"] = []string{"python-shell"}
+				flag.Annotations["store_constant"] = []string{flag.Name}
+			case "use-pythonrc", "no-startup":
+				flag.Annotations["repeat_behavior"] = []string{"last occurrence across Python startup toggles wins"}
+			case "use-vi-mode", "no-vi-mode":
+				flag.Annotations["repeat_behavior"] = []string{"last occurrence across vi mode toggles wins"}
+			case "field":
+				flag.Annotations["repeat_behavior"] = []string{"append"}
+			}
+		})
+		for _, child := range cmd.Commands() {
+			visit(child)
+		}
+	}
+	visit(root)
+	root.PersistentFlags().Lookup("color").Annotations = map[string][]string{"choices": {"auto", "always", "never"}, "environment": {"NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "CLICOLOR"}}
+	root.PersistentFlags().Lookup("log-level").Annotations = map[string][]string{"choices": {"debug", "info", "warning", "error", "critical"}}
 }
 
 func maximum(value int) string {
@@ -370,7 +466,7 @@ func commandMetadata(cmd *cobra.Command) map[string]any {
 	flags := []map[string]any{}
 	cmd.InitDefaultHelpFlag()
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		flags = append(flags, map[string]any{"name": f.Name, "shorthand": f.Shorthand, "type": f.Value.Type(), "default": f.DefValue, "description": f.Usage, "no_option_value": f.NoOptDefVal})
+		flags = append(flags, map[string]any{"name": f.Name, "shorthand": f.Shorthand, "type": f.Value.Type(), "default": f.DefValue, "description": f.Usage, "no_option_value": f.NoOptDefVal, "annotations": f.Annotations})
 	})
 	inherited := []map[string]any{}
 	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
@@ -378,6 +474,9 @@ func commandMetadata(cmd *cobra.Command) map[string]any {
 	})
 	children := []map[string]any{}
 	for _, child := range cmd.Commands() {
+		if child.Hidden {
+			continue
+		}
 		children = append(children, commandMetadata(child))
 	}
 	return map[string]any{"name": cmd.Name(), "path": cmd.CommandPath(), "usage": cmd.Use, "description": cmd.Short, "aliases": cmd.Aliases, "positionals": cmd.Annotations, "flags": flags, "inherited_flags": inherited, "children": children}

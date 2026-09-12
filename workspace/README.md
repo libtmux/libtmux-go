@@ -7,6 +7,10 @@ settled. Pin an exact version.
 
 Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
+The [`tmux-workspace` CLI](CLI.md) provides native workspace management,
+structured output, and optional Python compatibility. The library API below
+retains its own supported-field contract.
+
 This is a consumer of the tmux module, not part of it. The tmux module takes no
 runtime dependency; parsing YAML needs one, so this lives in its own module and
 `go get` on the tmux module never pulls it in.
