@@ -68,10 +68,14 @@ func quickstartServer(
 		return tmux.Server{}, false, err
 	}
 	if active {
-		return tmux.NewServer(tmux.ServerOptions{
+		server, err := tmux.NewServer(tmux.ServerOptions{
 			Binary:     endpoint.binary,
 			SocketPath: endpoint.socketPath,
-		}), true, nil
+		})
+		if err != nil {
+			return tmux.Server{}, false, fmt.Errorf("configure arena tmux server: %w", err)
+		}
+		return server, true, nil
 	}
 	return tmuxtest.NewServer(ctx, t), false, nil
 }
