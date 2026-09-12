@@ -70,8 +70,10 @@ file and atomic publication.
 
 Load creates a session, reuses an existing session with the same name, or
 appends to the current session with `--append`. Append requires `TMUX` and
-`TMUX_PANE`. A foreground load attaches through the controlling terminal or
-switches the current tmux client. Machine load requires `-d` or `--append` and
+`TMUX_PANE`. A foreground load requires terminal stdin and attaches through the controlling
+terminal or switches the current tmux client. Inside tmux, human mode offers
+switch, detached-load and append choices; `--yes` selects switching. Existing
+sessions ask before attachment unless `--yes` is set. Machine load requires `-d` or `--append` and
 does not read implicit prompts.
 
 The native normalizer supports command and pane shorthand, inherited commands,
@@ -158,3 +160,21 @@ $ tmux-workspace --generate-completion zsh
 ```
 
 The completion generators also support `bash`, `fish`, and `powershell`.
+
+## Local verification
+
+The retained verifier requires tmux and an installed tmuxp 1.74.0 Python
+runtime. It uses private sockets, a controlling PTY, and isolated workspace
+files. Set `TMUXP_REFERENCE_CHECKOUT` to the pinned reference checkout to add
+the example corpus and matched installed-tmuxp timings.
+
+```console
+$ python3 workspace/scripts/verify_cli.py \
+    --binary "$(go env GOPATH)/bin/tmux-workspace" \
+    --output workspace-results.json \
+    --reference "$TMUXP_REFERENCE_CHECKOUT"
+```
+
+The report includes raw timing samples, binary/script hashes, command inventory,
+stream checks and fixture outcomes. A missing example plugin is reported as a
+dependency gap; topology checks do not assert that external applications start.
