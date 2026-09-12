@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,11 +207,21 @@ func (r *invocation) list(_ *cobra.Command, o *options, _ []string) error {
 	return err
 }
 
+func flushOutput(writer io.Writer) error {
+	if flusher, ok := writer.(interface{ Flush() error }); ok {
+		return flusher.Flush()
+	}
+	return nil
+}
+
 func (r *invocation) prompt(label, fallback string) (string, error) {
 	if r.machine() {
 		return "", usage("%s must be supplied in machine mode", label)
 	}
 	if _, err := fmt.Fprintf(r.err, "%s [%s]: ", label, fallback); err != nil {
+		return "", err
+	}
+	if err := flushOutput(r.err); err != nil {
 		return "", err
 	}
 	reader, ok := r.in.(*bufio.Reader)

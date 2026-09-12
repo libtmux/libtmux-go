@@ -81,12 +81,20 @@ func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, erro
 	if os.Getenv("TMUX_PANE") == "" || os.Getenv("TMUX") == "" {
 		return tmux.Session{}, usage("--append requires TMUX and TMUX_PANE identifying the current session")
 	}
-	if err := currentEndpoint(server); err != nil {
+	snapshot, pane, err := currentView(ctx, server)
+	if err != nil {
 		return tmux.Session{}, err
+	}
+	return snapshot.SessionByID(pane.SessionID())
+}
+
+func currentView(ctx context.Context, server tmux.Server) (tmux.Snapshot, tmux.Pane, error) {
+	if err := currentEndpoint(server); err != nil {
+		return tmux.Snapshot{}, tmux.Pane{}, err
 	}
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
-		return tmux.Session{}, err
+		return tmux.Snapshot{}, tmux.Pane{}, err
 	}
 	paneID := tmux.PaneID(os.Getenv("TMUX_PANE"))
 	pane, err := snapshot.PaneByID(paneID)
@@ -95,18 +103,14 @@ func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, erro
 		pane, err = snapshot.Server().Pane(ctx, paneID)
 	}
 	if err != nil {
-		return tmux.Session{}, usage("current pane does not belong to the selected tmux server")
-	}
-	session, err := snapshot.SessionByID(pane.SessionID())
-	if err != nil {
-		return tmux.Session{}, err
+		return tmux.Snapshot{}, tmux.Pane{}, usage("current pane does not belong to the selected tmux server")
 	}
 	_, inheritedPID, err := inheritedEndpoint()
-	pid, ok := session.Formats().PID()
+	pid, ok := pane.Formats().PID()
 	if err != nil || !ok || pid != inheritedPID {
-		return tmux.Session{}, usage("selected socket does not identify the current tmux server")
+		return tmux.Snapshot{}, tmux.Pane{}, usage("selected socket does not identify the current tmux server")
 	}
-	return session, nil
+	return snapshot, pane, nil
 }
 
 func inheritedEndpoint() (string, int, error) {
@@ -239,12 +243,22 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		return err
 	}
 	var borrowed tmux.Session
+	var handoff *loadHandoff
 	if o.append {
 		borrowed, err = currentSession(r.ctx, server)
 		if err != nil {
 			return err
 		}
 		server = borrowed.Server()
+	} else if !o.detached {
+		handoff, err = r.prepareHandoff(server)
+		if err != nil {
+			return err
+		}
+		defer handoff.close()
+		if handoff.client.Name() != "" {
+			server = handoff.client.Server()
+		}
 	}
 	if needsPython {
 		if err := r.checkPython(true); err != nil {
@@ -369,7 +383,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if len(failures) > 0 {
 		return &failure{"load_failed", "one or more workspaces failed; completed effects are retained", 1}
 	}
-	if !o.detached && !o.append && last.ID() != "" {
+	if handoff != nil && last.ID() != "" {
 		if lastReused && !o.yes && !r.machine() {
 			answer, err := r.prompt("Session is already running. Attach (y/n)", "y")
 			if err != nil {
@@ -382,21 +396,12 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 				return usage("attach choice must be y or n")
 			}
 		}
-		return r.attach(server, last)
+		if err := errors.Join(flushOutput(r.out), flushOutput(r.err)); err != nil {
+			return err
+		}
+		return handoff.attach(r.ctx, last)
 	}
 	return nil
-}
-
-func (r *invocation) attach(server tmux.Server, session tmux.Session) error {
-	if os.Getenv("TMUX") != "" {
-		return server.SwitchClient(r.ctx, session.ID().String())
-	}
-	terminalFile, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		return &failure{"terminal_required", "attach requires a controlling terminal; use -d", 2}
-	}
-	defer func() { _ = terminalFile.Close() }()
-	return session.Attach(r.ctx, tmux.AttachSessionOptions{Stdin: r.terminalInput, Stdout: terminalFile, Stderr: terminalFile})
 }
 
 func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *options, path, name string, index int) (tmux.Session, error) {
