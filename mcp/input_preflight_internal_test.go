@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -840,13 +841,13 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 		t.Fatalf("classified send failure = (%+v, %v), want sent=0 ids=%v", sent, err, want)
 	}
 
-	setBufferCalls := 0
+	loadCalls := 0
 	instance.runtime.deps.setBuffer = func(
 		context.Context,
 		tmux.Server,
 		tmux.SetBufferRequest,
 	) error {
-		setBufferCalls++
+		loadCalls++
 		return nil
 	}
 	if err := panes[0].CopyMode(ctx, tmux.CopyModeRequest{}); err != nil {
@@ -855,8 +856,8 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	_, pasted, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
 		PaneID: panes[0].ID().String(), Text: "blocked", Enter: true,
 	})
-	if err == nil || setBufferCalls != 0 || pasted.Bytes != 0 {
-		t.Fatalf("modal paste preflight = (%+v, %v, setBuffer=%d)", pasted, err, setBufferCalls)
+	if err == nil || loadCalls != 0 || pasted.Bytes != 0 {
+		t.Fatalf("modal paste preflight = (%+v, %v, loadBufferFrom=%d)", pasted, err, loadCalls)
 	}
 	if err := panes[0].CopyMode(ctx, tmux.CopyModeRequest{Cancel: true}); err != nil {
 		t.Fatal(err)
@@ -867,8 +868,8 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	_, pasted, err = instance.tools.pasteText(callCtx, nil, pasteTextInput{
 		PaneID: panes[0].ID().String(), Text: "disabled",
 	})
-	if err == nil || setBufferCalls != 0 || pasted.Bytes != 0 {
-		t.Fatalf("input-off paste preflight = (%+v, %v, setBuffer=%d)", pasted, err, setBufferCalls)
+	if err == nil || loadCalls != 0 || pasted.Bytes != 0 {
+		t.Fatalf("input-off paste preflight = (%+v, %v, loadBufferFrom=%d)", pasted, err, loadCalls)
 	}
 	if _, err := panes[0].Select(ctx, tmux.PaneSelectRequest{Input: tmux.PaneInputEnable}); err != nil {
 		t.Fatal(err)
@@ -1666,7 +1667,11 @@ func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 		request tmux.SetBufferRequest,
 	) error {
 		buffers.Add(1)
-		staged = request.Data
+		if request.Append {
+			staged += request.Data
+		} else {
+			staged = request.Data
+		}
 		return defaults.setBuffer(bufferCtx, server, request)
 	}
 	instance.runtime.deps.pasteBuffer = func(
@@ -2017,5 +2022,52 @@ func TestPasteCleansBufferAfterRequestCancellation(t *testing.T) {
 	}
 	if _, err := target.ShowBuffer(ctx, bufferName); err == nil {
 		t.Fatalf("ambiguous buffer setup left buffer %q behind", *bufferName)
+	}
+}
+
+//libtmux:real-tmux
+func TestPasteTextStagesPayloadsBeyondTmuxCommandLimit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+
+	// Past tmux's MAX_IMSGSIZE command limit, which is what an argv-carried
+	// paste is bounded by however large the text a caller sends.
+	text := strings.Repeat("paste-beyond-argv\n", 4096)
+	var staged *string
+	instance.runtime.deps.pasteBuffer = func(
+		_ context.Context,
+		_ tmux.Pane,
+		request tmux.PasteBufferRequest,
+	) error {
+		staged = request.BufferName
+		return nil
+	}
+
+	_, output, err := instance.tools.pasteText(callCtx, nil, pasteTextInput{
+		PaneID: panes[0].ID().String(), Text: text,
+	})
+	if err != nil {
+		t.Fatalf("pasteText() error = %v, want a staged paste of %d bytes", err, len(text))
+	}
+	if output.Bytes != len(text) {
+		t.Fatalf("pasteText() reported %d bytes, want %d", output.Bytes, len(text))
+	}
+	if staged == nil {
+		t.Fatal("pasteText() dispatched no buffer to the pane")
+	}
+	t.Cleanup(func() { _ = target.DeleteBuffer(context.WithoutCancel(ctx), staged) })
+
+	var got bytes.Buffer
+	if err := target.SaveBufferTo(
+		ctx, &got, tmux.SaveBufferToOptions{Name: staged},
+	); err != nil {
+		t.Fatalf("SaveBufferTo() error = %v", err)
+	}
+	if got.String() != text {
+		t.Fatalf("staged buffer holds %d bytes, want the %d pasted", got.Len(), len(text))
 	}
 }

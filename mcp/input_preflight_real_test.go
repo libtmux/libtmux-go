@@ -187,13 +187,13 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 		callerTarget, _, callerPanes := threePaneInputFixture(ctx, t)
 		instance := mustInternalMCPServer(t, callerTarget)
 		setPaneInputCallerEnvironment(t, callerTarget, callerPanes[0])
-		setBufferCalls := 0
+		loadCalls := 0
 		instance.runtime.deps.setBuffer = func(
 			context.Context,
 			tmux.Server,
 			tmux.SetBufferRequest,
 		) error {
-			setBufferCalls++
+			loadCalls++
 			return nil
 		}
 		prompts := 0
@@ -206,17 +206,17 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 		declined := callInputTool(ctx, t, declining, "paste_text", map[string]any{
 			"pane_id": callerPanes[0].ID().String(), "text": "declined",
 		})
-		if !declined.IsError || prompts != 1 || setBufferCalls != 0 {
+		if !declined.IsError || prompts != 1 || loadCalls != 0 {
 			t.Fatalf("declined caller paste = (%t, prompts=%d, buffers=%d)",
-				declined.IsError, prompts, setBufferCalls)
+				declined.IsError, prompts, loadCalls)
 		}
 
 		unaskable := connectInputTestClient(ctx, t, instance, nil)
 		refused := callInputTool(ctx, t, unaskable, "paste_text", map[string]any{
 			"pane_id": callerPanes[0].ID().String(), "text": "unaskable",
 		})
-		if !refused.IsError || setBufferCalls != 0 {
-			t.Fatalf("unaskable caller paste = (%t, buffers=%d)", refused.IsError, setBufferCalls)
+		if !refused.IsError || loadCalls != 0 {
+			t.Fatalf("unaskable caller paste = (%t, buffers=%d)", refused.IsError, loadCalls)
 		}
 	})
 
@@ -235,10 +235,10 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 		instance.runtime.deps.setBuffer = func(
 			bufferCtx context.Context,
 			server tmux.Server,
-			buffer tmux.SetBufferRequest,
+			request tmux.SetBufferRequest,
 		) error {
 			buffers++
-			return setBuffer(bufferCtx, server, buffer)
+			return setBuffer(bufferCtx, server, request)
 		}
 		client := connectInputTestClient(ctx, t, instance, &sdk.ClientOptions{
 			ElicitationHandler: func(context.Context, *sdk.ElicitRequest) (*sdk.ElicitResult, error) {
@@ -269,10 +269,10 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 		instance.runtime.deps.setBuffer = func(
 			bufferCtx context.Context,
 			server tmux.Server,
-			buffer tmux.SetBufferRequest,
+			request tmux.SetBufferRequest,
 		) error {
 			buffers++
-			return setBuffer(bufferCtx, server, buffer)
+			return setBuffer(bufferCtx, server, request)
 		}
 		client := connectInputTestClient(ctx, t, instance, &sdk.ClientOptions{
 			ElicitationHandler: func(context.Context, *sdk.ElicitRequest) (*sdk.ElicitResult, error) {
