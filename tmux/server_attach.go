@@ -78,6 +78,9 @@ func (s Server) Start(ctx context.Context) error {
 // The call retains caller-supplied files while attached and never owns or
 // closes them. A completed nonzero exit returns [CommandError]; cancellation
 // can end waiting but does not prove that attachment or detachment did not occur.
+// On Unix, cancellation requests a tmux disconnect before bounded forced
+// cleanup. If the daemon cannot respond, callers may need to restore their
+// terminal state after the call returns.
 func (s Server) AttachSession(ctx context.Context, request AttachSessionRequest) error {
 	values, err := captureAttachSessionRequest(request.Target, request.AttachSessionOptions)
 	if err != nil {
@@ -90,7 +93,8 @@ func (s Server) AttachSession(ctx context.Context, request AttachSessionRequest)
 // and blocks until detach or context cancellation. It validates the receiver's
 // stable SessionID, retains but never closes caller-supplied streams, and
 // returns [CommandError] for a completed nonzero exit. Cancellation does not
-// prove attachment or detachment did not occur.
+// prove attachment or detachment did not occur. See [Server.AttachSession]
+// for terminal recovery after forced cancellation.
 func (s Session) Attach(ctx context.Context, options AttachSessionOptions) error {
 	target := s.sessionID.String()
 	if err := validateTypedTarget(
@@ -130,7 +134,7 @@ func (s Server) attachSession(ctx context.Context, values attachSessionValues) e
 	}
 	result, err := s.streamingLiteralCmd(
 		ctx,
-		tmuxcmd.Stdio{Stdin: values.stdin, Stdout: values.stdout, Stderr: values.stderr},
+		tmuxcmd.Stdio{Stdin: values.stdin, Stdout: values.stdout, Stderr: values.stderr, AttachSession: true},
 		arguments...,
 	)
 	if err != nil {

@@ -399,7 +399,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		if err := errors.Join(flushOutput(r.out), flushOutput(r.err)); err != nil {
 			return err
 		}
-		return handoff.attach(r.ctx, last)
+		return r.finishHandoff(handoff, last)
 	}
 	return nil
 }

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -21,23 +22,65 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	"github.com/libtmux/libtmux-go/workspace/internal/cli"
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
 type handoffProcessConfig struct {
 	Args                []string
 	Result, Cancel, Raw string
+	Observe, Later      string
 }
 
 type handoffProcessResult struct {
-	Code       int
-	Restored   bool
-	Diagnostic string
+	Code                    int
+	Restored                bool
+	Diagnostic              string
+	BeforeFlags, AfterFlags [3]int
+	Writes                  []handoffDiagnosticWrite
+	CancelToReturnNS        int64
+}
+
+type handoffDiagnosticWrite struct {
+	Text              string
+	Written           int
+	Error, FlagsError string
+	Flags             [3]int
+}
+
+type handoffDiagnosticWriter struct{ writes []handoffDiagnosticWrite }
+
+func handoffFlags() ([3]int, error) {
+	var flags [3]int
+	for fd := range flags {
+		var err error
+		flags[fd], err = unix.FcntlInt(uintptr(fd), unix.F_GETFL, 0)
+		if err != nil {
+			return flags, err
+		}
+	}
+	return flags, nil
+}
+
+func (w *handoffDiagnosticWriter) Write(data []byte) (int, error) {
+	flags, flagErr := handoffFlags()
+	n, err := os.Stderr.Write(data)
+	entry := handoffDiagnosticWrite{Text: string(data), Written: n, Flags: flags}
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	if flagErr != nil {
+		entry.FlagsError = flagErr.Error()
+	}
+	w.writes = append(w.writes, entry)
+	return n, err
 }
 
 func TestHumanLoadTerminal(t *testing.T) {
-	for _, mode := range []string{"no-controlling-terminal", "detach", "cancel"} {
+	for _, mode := range []string{"no-controlling-terminal", "detach", "cancel", "paused-daemon"} {
 		t.Run(mode, func(t *testing.T) {
+			cancelMode := mode == "cancel" || mode == "paused-daemon"
+			var paused *os.Process
 			ctx, server, _ := handoffServer(t)
 			dir := t.TempDir()
 			marker := filepath.Join(dir, "script-ran")
@@ -46,6 +89,10 @@ func TestHumanLoadTerminal(t *testing.T) {
 			config := handoffProcessConfig{
 				Args:   []string{"load", path, "-y", "--no-progress", "-S", server.SocketPath()},
 				Result: filepath.Join(dir, "result"), Cancel: filepath.Join(dir, "cancel"), Raw: filepath.Join(dir, "raw"),
+			}
+			if mode == "paused-daemon" {
+				config.Observe = filepath.Join(dir, "observe-later")
+				config.Later = filepath.Join(dir, "later")
 			}
 			encoded, err := json.Marshal(config)
 			if err != nil {
@@ -72,13 +119,51 @@ func TestHumanLoadTerminal(t *testing.T) {
 					t.Fatalf("terminal helper exited without result: %v %q", process.Wait(ctx), process.Output())
 				default:
 				}
-				clients, err := server.Clients(ctx)
-				if err != nil || len(clients) != 1 || handled {
+				if handled {
 					return false
 				}
-				if mode == "cancel" {
+				clients, err := server.Clients(ctx)
+				if err != nil || len(clients) != 1 {
+					return false
+				}
+				if cancelMode {
 					if _, err := os.Stat(config.Raw); err != nil {
 						return false
+					}
+					if mode == "paused-daemon" {
+						pidText := daemonPID(t, server)
+						pid, err := strconv.Atoi(pidText)
+						if err != nil {
+							t.Fatal(err)
+						}
+						daemon, err := os.FindProcess(pid)
+						if err != nil {
+							t.Fatal(err)
+						}
+						t.Cleanup(func() {
+							if paused != nil {
+								if err := paused.Signal(syscall.SIGCONT); err != nil {
+									t.Errorf("resume owned daemon: %v", err)
+								}
+							}
+							_ = daemon.Release()
+						})
+						if daemonPID(t, server) != pidText {
+							t.Fatal("owned daemon changed before stop")
+						}
+						paused = daemon
+						if err := daemon.Signal(syscall.SIGSTOP); err != nil {
+							t.Fatal(err)
+						}
+						handoffWait(ctx, t, func() bool {
+							state, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+							if err != nil {
+								return false
+							}
+							fields := strings.Fields(string(state)[strings.LastIndex(string(state), ")")+1:])
+							return len(fields) > 0 && fields[0] == "T"
+						})
+						t.Logf("paused authenticated owned daemon PID %d", pid)
 					}
 					if err := os.WriteFile(config.Cancel, nil, 0o600); err != nil {
 						t.Fatal(err)
@@ -92,12 +177,48 @@ func TestHumanLoadTerminal(t *testing.T) {
 				handled = true
 				return false
 			})
+			if paused != nil {
+				if err := paused.Signal(syscall.SIGCONT); err != nil {
+					t.Fatal(err)
+				}
+				paused = nil
+				handoffWait(ctx, t, func() bool { clients, err := server.Clients(ctx); return err == nil && len(clients) == 0 })
+				if err := os.WriteFile(config.Observe, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if err := process.Wait(ctx); err != nil {
 				t.Fatalf("terminal helper: %v %q", err, process.Output())
 			}
 			var result handoffProcessResult
 			if err := json.Unmarshal(data, &result); err != nil {
 				t.Fatalf("terminal result: %s %v", data, err)
+			}
+			t.Logf("handoff observations: %s", data)
+			if cancelMode && (result.CancelToReturnNS <= 0 || result.CancelToReturnNS > int64(time.Second)) {
+				t.Errorf("unbounded cancellation interval: %s", time.Duration(result.CancelToReturnNS))
+			}
+			if mode == "paused-daemon" {
+				later, err := os.ReadFile(config.Later)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var state struct {
+					Restored bool
+					Flags    [3]int
+				}
+				if err := json.Unmarshal(later, &state); err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("state after daemon cleanup: %s", later)
+				if !state.Restored || state.Flags != result.BeforeFlags {
+					t.Errorf("late terminal state: %+v", state)
+				}
+			}
+			for _, write := range result.Writes {
+				if write.Error != "" || write.FlagsError != "" || write.Written != len(write.Text) {
+					t.Errorf("terminal delivery failed: %+v", write)
+				}
 			}
 			snapshot, err := server.Snapshot(ctx)
 			if err != nil {
@@ -111,10 +232,10 @@ func TestHumanLoadTerminal(t *testing.T) {
 				return
 			}
 			wantCode := 0
-			if mode == "cancel" {
+			if cancelMode {
 				wantCode = 130
 			}
-			if result.Code != wantCode || !handled || !result.Restored || len(snapshot.Clients()) != 0 || len(snapshot.Sessions()) != 2 || markerErr != nil || (mode == "cancel" && !strings.Contains(result.Diagnostic, "handoff-loaded")) {
+			if result.Code != wantCode || !handled || !result.Restored || result.BeforeFlags != result.AfterFlags || len(snapshot.Clients()) != 0 || len(snapshot.Sessions()) != 2 || markerErr != nil || (cancelMode && (!strings.Contains(result.Diagnostic, "handoff-loaded") || !strings.Contains(string(process.Output()), "workspace handoff-loaded"))) {
 				t.Fatalf("terminal handoff: %+v attached=%v clients=%d sessions=%d marker=%v", result, handled, len(snapshot.Clients()), len(snapshot.Sessions()), markerErr)
 			}
 		})
@@ -145,21 +266,32 @@ func TestHumanLoadProcess(t *testing.T) {
 	if err := json.Unmarshal([]byte(os.Getenv("GO_HANDOFF_CONFIG")), &config); err != nil {
 		t.Fatal(err)
 	}
-	before, err := term.GetState(int(os.Stdin.Fd()))
+	beforeFlags, err := handoffFlags()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = term.Restore(int(os.Stdin.Fd()), before) }()
+	defer func() {
+		for fd, flags := range beforeFlags {
+			_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFL, flags)
+		}
+	}()
+	before, err := term.GetState(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = term.Restore(0, before) }()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	joined := make(chan struct{})
+	var cancelAt time.Time
 	go func() {
 		defer close(joined)
 		for {
-			current, err := term.GetState(int(os.Stdin.Fd()))
+			current, err := term.GetState(0)
 			if err == nil && !reflect.DeepEqual(current, before) {
 				_ = os.WriteFile(config.Raw, nil, 0o600)
 			}
 			if _, err := os.Stat(config.Cancel); err == nil {
+				cancelAt = time.Now()
 				cancel()
 				return
 			}
@@ -171,19 +303,49 @@ func TestHumanLoadProcess(t *testing.T) {
 		}
 	}()
 	var diagnostic bytes.Buffer
-	code := cli.Run(ctx, config.Args, os.Stdin, os.Stdout, io.MultiWriter(os.Stderr, &diagnostic))
+	var terminalWrites handoffDiagnosticWriter
+	code := cli.Run(ctx, config.Args, os.Stdin, os.Stdout, io.MultiWriter(&terminalWrites, &diagnostic))
+	returnedAt := time.Now()
 	cancel()
 	<-joined
-	after, err := term.GetState(int(os.Stdin.Fd()))
+	after, err := term.GetState(0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := json.Marshal(handoffProcessResult{code, reflect.DeepEqual(before, after), diagnostic.String()})
+	afterFlags, flagErr := handoffFlags()
+	if flagErr != nil {
+		t.Fatal(flagErr)
+	}
+	var elapsed int64
+	if !cancelAt.IsZero() {
+		elapsed = returnedAt.Sub(cancelAt).Nanoseconds()
+	}
+	data, err := json.Marshal(handoffProcessResult{Code: code, Restored: reflect.DeepEqual(before, after), Diagnostic: diagnostic.String(), BeforeFlags: beforeFlags, AfterFlags: afterFlags, Writes: terminalWrites.writes, CancelToReturnNS: elapsed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(config.Result, data, 0o600); err != nil {
 		t.Fatal(err)
+	}
+	if config.Observe != "" {
+		observeCtx, stopObserve := context.WithTimeout(t.Context(), 3*time.Second)
+		defer stopObserve()
+		handoffWait(observeCtx, t, func() bool { _, err := os.Stat(config.Observe); return err == nil })
+		state, err := term.GetState(0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		flags, err := handoffFlags()
+		if err != nil {
+			t.Fatal(err)
+		}
+		later, err := json.Marshal(map[string]any{"restored": reflect.DeepEqual(before, state), "flags": flags})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(config.Later, later, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
