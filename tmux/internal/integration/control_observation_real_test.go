@@ -251,15 +251,18 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForPaneCapture(ctx, t, second, "other-pane")
-	// Two lines in one write: each newline is Enter.
-	if _, err := fmt.Fprint(first.Writer(ctx), "printf 'alpha\\n'\nprintf 'omega\\n'\n"); err != nil {
+	// Two lines in one write: each newline is Enter. Leading output newlines
+	// keep markers separate from prompts when the shell reads ahead.
+	if _, err := fmt.Fprint(first.Writer(ctx), "printf '\\nalpha\\n'\nprintf '\\nomega\\n'\n"); err != nil {
 		t.Fatal(err)
 	}
 
 	scanner := bufio.NewScanner(observation.Reader(ctx))
 	var heard []string
+	var observed []string
 	for scanner.Scan() {
 		line := scanner.Text()
+		observed = append(observed, line)
 		if line == "other-pane" {
 			t.Fatal("Reader() delivered another pane's output")
 		}
@@ -271,6 +274,11 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
+		t.Logf("Reader() raw lines = %q; matched = %q", observed, heard)
+		proofCtx, proofCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer proofCancel()
+		capture, captureErr := first.Capture(proofCtx, tmux.CapturePaneRequest{})
+		t.Logf("first pane capture = %q; error = %v", capture, captureErr)
 		t.Fatal(err)
 	}
 	if want := []string{"alpha", "omega"}; !slices.Equal(heard, want) {
