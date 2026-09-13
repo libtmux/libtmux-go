@@ -24,7 +24,9 @@ func TestImportPreservesCommandGroupsAndSavedContext(t *testing.T) {
 		sync         string
 	}{
 		{"tmuxinator", `{"name":"imported","pre_window":["false","project"],"windows":[{"first":["blank","pane"]},{"second":{"root":"nested","pre":["false","window"],"synchronize":"after","panes":[["one","two"],"three"]}}]}`, [][]string{{"false; project", "blank", "pane"}, {"false; project", "false && window", "one", "two"}}, 0, "after"},
-		{"teamocil", `{"session":{"name":"imported","windows":[{"name":"first","panes":[{"commands":["false","first"]}]},{"name":"second","root":"nested","focus":true,"options":{"automatic-rename":false},"panes":[{"commands":["one","two"]},{"cmd":"three","focus":true}]}]}}`, [][]string{{"false; first"}, {"one; two"}}, 1, ""},
+		// Teamocil evaluates no templates, so this markup is ordinary
+		// text and must survive the import verbatim.
+		{"teamocil", `{"session":{"name":"imported","windows":[{"name":"first","panes":[{"commands":["false","echo <%= literal %>"]}]},{"name":"second","root":"nested","focus":true,"options":{"automatic-rename":false},"panes":[{"commands":["one","two"]},{"cmd":"three","focus":true}]}]}}`, [][]string{{"false; echo <%= literal %>"}, {"one; two"}}, 1, ""},
 	}
 	for _, test := range tests {
 		t.Run(test.kind, func(t *testing.T) {
@@ -74,7 +76,7 @@ func TestImportRefusesInvalidSourceBeforePublishing(t *testing.T) {
 	tests := []struct{ kind, source, field string }{
 		{"tmuxinator", `{"name":"x","root":"<%= cwd %>","windows":[{"one":null}]}`, "ERB"},
 		{"tmuxinator", `{"name":"x","windows":[{"one":["echo <%= value %>"]}]}`, "ERB"},
-		{"teamocil", `{"name":"x","windows":[{"name":"one","options":{"@literal":"<% value %>"}}]}`, "ERB"},
+		{"tmuxinator", `{"name":"x","windows":[{"<%= dynamic_window %>":null}]}`, "ERB"},
 		{"tmuxinator", `{"name":null,"project_name":"x","windows":[{"one":null}]}`, "aliases"},
 		{"tmuxinator", `{"name":"x","pre":"run","windows":[{"one":null}]}`, "pre"},
 		{"tmuxinator", `{"name":"x","post":"run","windows":[{"one":null}]}`, "post"},
