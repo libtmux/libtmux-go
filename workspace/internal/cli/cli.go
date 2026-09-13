@@ -313,7 +313,7 @@ func (r *invocation) tree() *cobra.Command {
 		return err
 	}
 	add := func(name, synopsis, description string, minimumArgs, maximumArgs int, action func(*cobra.Command, *options, []string) error) (*cobra.Command, *options) {
-		o := &options{progressLines: 3, pythonrc: true}
+		o := &options{progressLines: 3}
 		cmd := &cobra.Command{Use: name + synopsis, Short: description, Args: func(_ *cobra.Command, args []string) error {
 			if len(args) < minimumArgs || (maximumArgs >= 0 && len(args) > maximumArgs) {
 				return usage("%s expects %d..%s operands", name, minimumArgs, maximum(maximumArgs))
@@ -385,7 +385,7 @@ func (r *invocation) tree() *cobra.Command {
 		shell.Flags().Var(&constantValue{target: &sh.backend, value: backend}, backend, "select "+backend+" Python shell (mutually exclusive; default best)")
 		shell.Flags().Lookup(backend).NoOptDefVal = "true"
 	}
-	pair(shell, "use-pythonrc", "no-startup", &sh.pythonrc, "load Python startup file (last occurrence wins; default enabled)")
+	pair(shell, "use-pythonrc", "no-startup", &sh.pythonrc, "load Python startup file (last occurrence wins; default disabled)")
 	pair(shell, "use-vi-mode", "no-vi-mode", &sh.vi, "enable vi editing (last occurrence wins; default disabled)")
 	add("debug-info", "", "show redacted runtime and tmux diagnostics", 0, 0, r.debugInfo)
 	annotateTree(root)
