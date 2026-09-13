@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -219,10 +221,24 @@ func normalize(doc document, base string) (loadPlan, error) {
 		plugins = nil
 	}
 	plan := loadPlan{Name: expand(textValue(doc["session_name"])), Readiness: "auto", Bridge: plugins != nil || doc["workspace_builder"] != nil}
+	if !plan.Bridge {
+		if err := checkFields(doc, "workspace",
+			"session_name", "description", "start_directory", "environment", "options",
+			"global_options", "shell_command_before", "suppress_history", "windows",
+			"before_script", "plugins", "workspace_builder", "workspace_builder_paths", "workspace_builder_options",
+		); err != nil {
+			return plan, err
+		}
+	}
 	if raw, exists := doc["workspace_builder_options"]; exists && raw != nil {
 		catalog := mapping(raw)
 		if catalog == nil {
 			return plan, errors.New("workspace_builder_options must be a mapping")
+		}
+		if !plan.Bridge {
+			if err := checkFields(catalog, "workspace_builder_options", "pane_readiness"); err != nil {
+				return plan, err
+			}
 		}
 		if value := catalog["pane_readiness"]; value != nil {
 			switch strings.ToLower(strings.TrimSpace(textValue(value))) {
@@ -284,6 +300,14 @@ func normalize(doc document, base string) (loadPlan, error) {
 		w := mapping(raw)
 		if w == nil {
 			return plan, fmt.Errorf("window %d must be a mapping", wi)
+		}
+		if !plan.Bridge {
+			if err := checkFields(w, fmt.Sprintf("window %d", wi),
+				"window_name", "description", "window_index", "layout", "start_directory", "window_shell",
+				"focus", "suppress_history", "options", "options_after", "environment", "shell_command_before", "panes",
+			); err != nil {
+				return plan, err
+			}
 		}
 		wp := windowPlan{Name: expand(textValue(w["window_name"])), Layout: expand(textValue(w["layout"]))}
 		if err := (tmux.SelectLayoutRequest{Layout: wp.Layout}).Validate(); err != nil {
@@ -350,6 +374,14 @@ func normalize(doc document, base string) (loadPlan, error) {
 					return plan, fmt.Errorf("window %d pane %d has invalid shorthand", wi, pi)
 				}
 			}
+			if !plan.Bridge {
+				if err := checkFields(p, fmt.Sprintf("window %d pane %d", wi, pi),
+					"shell_command", "shell_command_before", "description", "start_directory", "shell",
+					"focus", "suppress_history", "environment", "enter", "sleep_before", "sleep_after",
+				); err != nil {
+					return plan, err
+				}
+			}
 			pp := panePlan{Shell: expand(textValue(w["window_shell"])), Environment: windowEnv}
 			if shell, exists := p["shell"]; exists {
 				pp.Shell = expand(textValue(shell))
@@ -377,9 +409,9 @@ func normalize(doc document, base string) (loadPlan, error) {
 				return plan, err
 			}
 			for _, commands := range []any{doc["shell_command_before"], w["shell_command_before"], p["shell_command_before"], p["shell_command"]} {
-				parsed, e := commandsWithState(commands, &state)
+				parsed, e := commandsWithState(commands, &state, !plan.Bridge)
 				if e != nil {
-					return plan, e
+					return plan, fmt.Errorf("window %d pane %d: %w", wi, pi, e)
 				}
 				pp.Commands = append(pp.Commands, parsed...)
 			}
@@ -388,6 +420,15 @@ func normalize(doc document, base string) (loadPlan, error) {
 		plan.Windows = append(plan.Windows, wp)
 	}
 	return plan, nil
+}
+
+func checkFields(doc document, scope string, allowed ...string) error {
+	for _, key := range slices.Sorted(maps.Keys(doc)) {
+		if !slices.Contains(allowed, key) {
+			return fmt.Errorf("%s: unknown field %q", scope, key)
+		}
+	}
+	return nil
 }
 
 func commandSettings(state *commandPlan, m document) error {
@@ -413,7 +454,7 @@ func commandSettings(state *commandPlan, m document) error {
 	return nil
 }
 
-func commandsWithState(value any, state *commandPlan) ([]commandPlan, error) {
+func commandsWithState(value any, state *commandPlan, strict bool) ([]commandPlan, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -422,7 +463,7 @@ func commandsWithState(value any, state *commandPlan) ([]commandPlan, error) {
 		values = []any{value}
 	}
 	result := []commandPlan{}
-	for _, raw := range values {
+	for index, raw := range values {
 		if raw == nil {
 			continue
 		}
@@ -431,6 +472,11 @@ func commandsWithState(value any, state *commandPlan) ([]commandPlan, error) {
 			m := mapping(raw)
 			if m == nil {
 				return nil, errors.New("commands must be strings or cmd mappings")
+			}
+			if strict {
+				if err := checkFields(m, fmt.Sprintf("command %d", index), "cmd", "enter", "sleep_before", "sleep_after"); err != nil {
+					return nil, err
+				}
 			}
 			var exists bool
 			text, exists = m["cmd"].(string)

@@ -77,6 +77,58 @@ func TestLayoutPreflightLaterInputBeforeScripts(t *testing.T) {
 	}
 }
 
+func TestUnknownExecutionFieldsPrecedeScriptsAndMutations(t *testing.T) {
+	for _, fields := range []string{
+		`"before_scrip":"ignored"`,
+		`"windows":[{"shell_command_befor":"ignored","panes":[null]}]`,
+		`"windows":[{"panes":[{"shell_commmand":"ignored"}]}]`, //nolint:misspell // Deliberately misspelled execution key.
+		`"windows":[{"panes":[{"shell_command":[{"cmd":"ignored","entter":false}]}]}]`,
+		`"workspace_builder_options":{"pane_readines":"never"}`,
+	} {
+		t.Run(fields, func(t *testing.T) {
+			server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keeper"}})
+			before, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			pid := daemonPID(t, server)
+			dir := t.TempDir()
+			marker := filepath.Join(dir, "script-ran")
+			first, err := json.Marshal(map[string]any{
+				"session_name": "validation-first", "before_script": "touch " + strconv.Quote(marker),
+				"windows": []map[string]any{{"panes": []any{nil}}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			one := write(t, dir, "first.json", string(first))
+			invalid := map[string]any{"session_name": "validation-last", "windows": []any{map[string]any{"panes": []any{nil}}}}
+			if err := json.Unmarshal([]byte("{"+fields+"}"), &invalid); err != nil {
+				t.Fatal(err)
+			}
+			last, err := json.Marshal(invalid)
+			if err != nil {
+				t.Fatal(err)
+			}
+			two := write(t, dir, "last.json", string(last))
+			code, out, diagnostic := run(t, "load", "-d", "--json", "-S", server.SocketPath(), "-f", server.ConfigFile(), one, two)
+			if code != 1 || out != "" || !strings.Contains(diagnostic, "unknown field") {
+				t.Errorf("load = %d %q %q, want unknown-key preflight error", code, out, diagnostic)
+			}
+			if _, err := os.Stat(marker); !os.IsNotExist(err) {
+				t.Errorf("before_script ran before later key refusal: %v", err)
+			}
+			after, err := server.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(after.Sessions()) != 1 || len(after.Windows()) != 1 || len(after.Panes()) != 1 || after.Sessions()[0].ID() != before.Sessions()[0].ID() || after.Windows()[0].ID() != before.Windows()[0].ID() || after.Panes()[0].ID() != before.Panes()[0].ID() || daemonPID(t, server) != pid {
+				t.Errorf("preflight changed retained topology: sessions=%d windows=%d panes=%d", len(after.Sessions()), len(after.Windows()), len(after.Panes()))
+			}
+		})
+	}
+}
+
 func TestLoadFreezeReloadAppendAndEnvironment(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
