@@ -120,14 +120,14 @@ func TestPaneCaptureToAddressesItsOwnPane(t *testing.T) {
 	// Two panes, and the one under test is deliberately not the active one: a
 	// capture that lost its target would read the active pane instead and
 	// still look like it worked.
-	other := tmuxtest.RunInPane(ctx, t, "printf 'other-pane\n'")
+	other := tmuxtest.RunInPane(ctx, t, "printf 'other-pane\\n'")
 	tmuxtest.WaitForLine(ctx, t, other, "other-pane")
 	window, ok := other.Window()
 	if !ok {
 		t.Fatal("RunInPane's pane carries no window")
 	}
 	subject, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-		Direction: tmux.PaneDirectionRight, Command: "printf 'subject-pane\n'; sleep 30",
+		Direction: tmux.PaneDirectionRight, Command: "printf 'subject-pane\\n'; sleep 30",
 	})
 	if err != nil {
 		t.Fatalf("SplitPane() error = %v", err)
