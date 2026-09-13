@@ -478,6 +478,7 @@ func (r *Running) StreamTo(
 func (r *Running) Kill(ctx context.Context) error {
 	if _, err := r.session.server.RunShell(ctx, RunShellRequest{
 		TargetPane: r.pane.ID(),
+		Background: true,
 		// Nothing to kill is not a failure, and from tmux 3.5 a run-shell
 		// command that exits nonzero is reported to the caller, so a pane that
 		// has gone must leave this exiting zero rather than complaining.
