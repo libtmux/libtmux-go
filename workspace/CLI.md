@@ -126,6 +126,15 @@ command delays and enter-state overrides, history suppression, directories,
 launch-time environment, shell overrides, layouts, explicit window indexes,
 focus, options, before-script execution and pane readiness. A pane environment
 mapping replaces the window mapping; the session environment still applies.
+Native loads reject unknown workspace, window, pane, command and readiness
+keys before opening logs, invoking a backend or running scripts. Workspace,
+window and pane mappings accept `description` as ignored metadata. Option and
+environment names remain open dictionaries. Command mappings accept `cmd`,
+`enter`, `sleep_before` and `sleep_after`; the readiness catalog accepts only
+`pane_readiness`. Generic conversion preserves source fields. Imported `config`
+and `socket_name` fields are not native load settings; select the endpoint and
+tmux configuration with CLI flags. Python-delegated documents retain extension
+fields, with the existing checks on recognized common values.
 Layout names, checksums, unsigned 32-bit fields, tree structure and required
 pane capacity are checked for every native input before scripts or tmux
 mutations. Names accept abbreviations that are unique on the selected daemon;
