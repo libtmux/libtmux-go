@@ -12,9 +12,11 @@ Install from the repository root:
 $ go install ./workspace/cmd/tmux-workspace
 ```
 
-The workspace module also builds with `GOWORK=off` against its published core
-dependency. Cobra and presentation dependencies remain outside the core tmux
-module.
+Each released workspace version also builds with `GOWORK=off` against the core
+release it requires. A branch that adds to the core builds only with the
+workspace on until that core release is published, which is the order
+[CONTRIBUTING](../.github/CONTRIBUTING.md) sets out. Cobra and presentation
+dependencies remain outside the core tmux module.
 
 ## Commands
 
