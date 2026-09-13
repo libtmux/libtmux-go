@@ -155,7 +155,8 @@ func (r *invocation) loadValidation(cmd *cobra.Command, o *options) error {
 	if r.machine() && !o.detached && !o.append {
 		return usage("machine load requires -d or explicit --append")
 	}
-	if r.progressEnabled(o) && !cmd.Flags().Changed("progress-lines") {
+	_, height := r.progressTerminal(o)
+	if height != 0 && !cmd.Flags().Changed("progress-lines") {
 		if raw := os.Getenv("TMUXP_PROGRESS_LINES"); raw != "" {
 			n, err := strconv.Atoi(raw)
 			if err != nil {
@@ -167,7 +168,7 @@ func (r *invocation) loadValidation(cmd *cobra.Command, o *options) error {
 	if o.progressLines < -1 {
 		return usage("progress-lines must be -1 or nonnegative")
 	}
-	if r.progressEnabled(o) && o.progressFormat == "" {
+	if height != 0 && o.progressFormat == "" {
 		o.progressFormat = os.Getenv("TMUXP_PROGRESS_FORMAT")
 	}
 	if o.progressFormat == "" {
