@@ -47,8 +47,12 @@ func newProgress(out io.Writer, format string, lines, width, height int) *progre
 	return &progressPresenter{out: out, format: format, width: max(1, width), height: height, lines: min(lines, max(0, height-2)), partial: map[string]string{}, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
+func (r *invocation) progressEnabled(o *options) bool {
+	return !r.machine() && !o.noProgress && os.Getenv("TMUXP_PROGRESS") != "0" && terminal(r.err)
+}
+
 func (r *invocation) startProgress(o *options) {
-	if r.machine() || o.noProgress || !terminal(r.err) {
+	if !r.progressEnabled(o) {
 		return
 	}
 	width, height := 80, 24

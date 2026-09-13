@@ -62,6 +62,36 @@ func TestMachineCompletionEnvelope(t *testing.T) {
 	}
 }
 
+func TestInactiveProgressEnvironmentDoesNotRejectLoad(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	missing := filepath.Join(t.TempDir(), "absent.yaml")
+	for _, mode := range []string{"", "--json", "--ndjson"} {
+		t.Run(mode, func(t *testing.T) {
+			args := []string{"load", "-d", missing}
+			if mode != "" {
+				args = append(args, mode)
+			}
+			t.Setenv("TMUXP_PROGRESS_LINES", "")
+			wantCode, wantOut, wantError := invoke(t, args...)
+			for _, invalid := range []string{"not-an-integer", "-2"} {
+				t.Setenv("TMUXP_PROGRESS_LINES", invalid)
+				code, out, diagnostic := invoke(t, args...)
+				if code != wantCode || out != wantOut || diagnostic != wantError {
+					t.Errorf("inactive progress %q: got %d %q %q; want %d %q %q", invalid, code, out, diagnostic, wantCode, wantOut, wantError)
+				}
+			}
+		})
+	}
+}
+
+func TestExplicitInvalidProgressLinesStillRejectLoad(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	code, out, diagnostic := invoke(t, "load", "-d", "--json", "--progress-lines=-2", "absent.yaml")
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "progress-lines must") {
+		t.Fatalf("explicit progress validation: %d %q %q", code, out, diagnostic)
+	}
+}
+
 func TestInvalidSizePrecedesWorkspaceAndBackend(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("TMUXP_DEFAULT_COLUMNS", "invalid")

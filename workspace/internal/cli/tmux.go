@@ -142,7 +142,7 @@ func currentEndpoint(server tmux.Server) error {
 	return usage("selected socket does not identify the current tmux server")
 }
 
-func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
+func (r *invocation) loadValidation(cmd *cobra.Command, o *options) error {
 	if _, _, err := sessionDimensions(); err != nil {
 		return err
 	}
@@ -152,10 +152,10 @@ func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
 	if o.colors88 {
 		return &failure{"unsupported_color_mode", "tmux 3.2a+ rejects the legacy 88-color flag (-8); remove it or use -2 for 256 colors", 2}
 	}
-	if machine && !o.detached && !o.append {
+	if r.machine() && !o.detached && !o.append {
 		return usage("machine load requires -d or explicit --append")
 	}
-	if !cmd.Flags().Changed("progress-lines") {
+	if r.progressEnabled(o) && !cmd.Flags().Changed("progress-lines") {
 		if raw := os.Getenv("TMUXP_PROGRESS_LINES"); raw != "" {
 			n, err := strconv.Atoi(raw)
 			if err != nil {
@@ -167,7 +167,7 @@ func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
 	if o.progressLines < -1 {
 		return usage("progress-lines must be -1 or nonnegative")
 	}
-	if o.progressFormat == "" {
+	if r.progressEnabled(o) && o.progressFormat == "" {
 		o.progressFormat = os.Getenv("TMUXP_PROGRESS_FORMAT")
 	}
 	if o.progressFormat == "" {
@@ -180,7 +180,7 @@ func loadValidation(cmd *cobra.Command, o *options, machine bool) error {
 }
 
 func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
-	if err := loadValidation(cmd, o, r.machine()); err != nil {
+	if err := r.loadValidation(cmd, o); err != nil {
 		return err
 	}
 	if !r.machine() && !o.detached && !o.append && !o.yes && os.Getenv("TMUX") != "" {
