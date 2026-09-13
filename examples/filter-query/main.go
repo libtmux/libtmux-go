@@ -42,7 +42,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	// docs:query-in-go
+	// docs:query-in-go given:ctx context.Context; server tmux.Server
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	// docs:end
 	fmt.Println("active panes:", len(active))
 
-	// docs:query-in-tmux
+	// docs:query-in-tmux given:ctx context.Context; server tmux.Server
 	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 	sessions, err := server.SearchSessions(ctx, &live)
 	// docs:end

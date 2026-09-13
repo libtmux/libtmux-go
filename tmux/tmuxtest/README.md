@@ -21,6 +21,7 @@ pane end with the test:
 <!-- docs:tmuxtest-quickstart -->
 
 ```go
+// Given: ctx context.Context; t *testing.T
 pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
 tmuxtest.WaitForText(ctx, t, pane, "ready")
