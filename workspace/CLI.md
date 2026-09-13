@@ -150,6 +150,9 @@ Machine output always disables terminal rendering.
 Script stdout keeps its destination when redirected or connected to a
 different terminal; the panel retains stdout only when it shares stderr's
 terminal.
+Progress follows terminal resizing and restarts on a fresh line after reflow.
+If the terminal becomes too small, script output streams directly until the
+panel can resume. Fixed line limits remain fixed; `-1` follows the new height.
 
 `--log-level` filters optional warnings and file records. Command failures and
 machine operation records remain visible at every level. `load --log-file`
