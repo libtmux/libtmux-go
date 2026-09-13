@@ -25,6 +25,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- Disable progress and its environment defaults when `TERM` is unset or
+  `dumb`, or stderr's terminal dimensions cannot support the presenter.
 - Human load progress preserves script stdout redirected to a pipe, file or
   another terminal. Output failures remain visible and stop script execution.
 - `tmux-workspace load` ignores progress environment defaults when progress
