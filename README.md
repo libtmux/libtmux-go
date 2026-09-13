@@ -125,16 +125,23 @@ if err != nil {
 
 <!-- docs:end -->
 
-Typed filters compose, and the generated ones push down into tmux's own `-f`
-where tmux can evaluate them:
+Typed filters combine fields and captured relations in Go. They consume the
+snapshot above without another tmux command:
+
+<!-- docs:query-typed-in-go -->
 
 ```go
 filter := tmux.PaneFilter{
-	Active:      tmux.Ptr(true),
-	CurrentPath: tmux.Ptr("/home/you/project"),
+	Active:  new(true),
+	Session: &tmux.SessionFilter{Name: new("libtmux-filter")},
 }
-panes, err := server.SearchPanes(ctx, &filter)
+panes, err := tmuxq.Matching(snapshot.Panes(), filter)
+if err != nil {
+	return err
+}
 ```
+
+<!-- docs:end -->
 
 Runnable: [`examples/filter-query`](examples/filter-query).
 

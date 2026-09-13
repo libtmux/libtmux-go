@@ -14,6 +14,7 @@ $ go -C examples run ./filter-query
 
 ```
 active panes: 1
+typed panes: 1
 live matches: 1
 ```
 
@@ -50,10 +51,27 @@ if err != nil {
 
 <!-- docs:end -->
 
-The snapshot is also consistent with itself in a way repeated reads are not:
-everything in it came from the same instant.
+Typed filters combine fields and captured relations without another tmux command:
 
-These two blocks are generated from [`main.go`](main.go). Editing the program
+<!-- docs:query-typed-in-go -->
+
+```go
+filter := tmux.PaneFilter{
+	Active:  new(true),
+	Session: &tmux.SessionFilter{Name: new("libtmux-filter")},
+}
+panes, err := tmuxq.Matching(snapshot.Panes(), filter)
+if err != nil {
+	return err
+}
+```
+
+<!-- docs:end -->
+
+The snapshot retains the captured hierarchy while repeated reads may observe
+later changes.
+
+These blocks are generated from [`main.go`](main.go). Editing the program
 rewrites them, so they cannot drift from code that compiles and runs.
 
 ## Testing your own version

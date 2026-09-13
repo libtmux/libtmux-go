@@ -30,4 +30,7 @@ func TestFilterQuery(t *testing.T) {
 	if want := "active panes:"; !strings.Contains(printed, want) {
 		t.Errorf("printed %q, want it to contain %q", printed, want)
 	}
+	if want := "typed panes: 1"; !strings.Contains(printed, want) {
+		t.Errorf("printed %q, want it to contain %q", printed, want)
+	}
 }
