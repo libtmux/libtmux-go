@@ -241,7 +241,7 @@ func applyRegions(path string, regions map[string]region) (bool, error) {
 		out = append(out, "")
 		out = append(out, "```go")
 		if source.given != "" {
-			out = append(out, "// Given: "+source.given)
+			out = append(out, givenComment(source.given)...)
 		}
 		out = append(out, source.lines...)
 		out = append(out, "```")
@@ -258,4 +258,26 @@ func applyRegions(path string, regions map[string]region) (bool, error) {
 		return false, nil
 	}
 	return true, os.WriteFile(path, []byte(updated), 0o644)
+}
+
+// givenLineWidth is the repository's Markdown wrap column, applied here so a
+// long given-list does not publish as one unwrapped comment line.
+const givenLineWidth = 80
+
+// givenComment renders a region's given-list as one or more "// " comment
+// lines, breaking only between declarations so each stays whole.
+func givenComment(given string) []string {
+	declarations := strings.Split(given, "; ")
+	lines := []string{"// Given:"}
+	for index, declaration := range declarations {
+		word := declaration
+		if index < len(declarations)-1 {
+			word += ";"
+		}
+		if lines[len(lines)-1] != "//" && len(lines[len(lines)-1])+1+len(word) > givenLineWidth {
+			lines = append(lines, "//")
+		}
+		lines[len(lines)-1] += " " + word
+	}
+	return lines
 }

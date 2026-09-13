@@ -284,7 +284,8 @@ pane's current command — without asking again:
 <!-- docs:subscribing -->
 
 ```go
-// Given: ctx context.Context; session tmux.Session; stream *tmux.NotificationStream
+// Given: ctx context.Context; session tmux.Session;
+// stream *tmux.NotificationStream
 // A subscription is a format tmux evaluates for you: it reports the value
 // when it first looks, about a second later, and then each time it changes.
 if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
@@ -322,7 +323,8 @@ capture written to an `io.Writer` never holds a scrollback in memory:
 <!-- docs:byte-streams -->
 
 ```go
-// Given: ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader; archive string
+// Given: ctx context.Context; server tmux.Server; pane tmux.Pane;
+// payload *strings.Reader; archive string
 name := "payload"
 if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
 	Name: &name,
