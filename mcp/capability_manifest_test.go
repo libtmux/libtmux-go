@@ -158,6 +158,24 @@ func TestCapabilityManifestDefinesTheExactPublicSurface(t *testing.T) {
 	}
 }
 
+func TestSelectLayoutDescribesNamedAndSavedInputs(t *testing.T) {
+	setCapabilityEnvironment(t, "manage", "", "")
+	tools, err := AdvertisedTools(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := namedTool(t, tools, "select_layout")
+	encoded, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, description := range []string{tool.Description, string(encoded)} {
+		if !strings.Contains(description, "abbreviation") || !strings.Contains(description, "saved") {
+			t.Errorf("layout contract omits accepted input forms: %s", description)
+		}
+	}
+}
+
 func TestCapabilityManifestPublishesTypedPrunedReadBatchAuthority(t *testing.T) {
 	setCapabilityEnvironment(t, "inspect", "", "")
 	tools, err := AdvertisedTools(t.Context())

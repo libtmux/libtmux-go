@@ -17,6 +17,67 @@ import (
 )
 
 //libtmux:real-tmux
+func TestSelectLayoutReusesNativeValidation(t *testing.T) {
+	target := tmuxtest.NewServer(t.Context(), t)
+	sessions, err := target.Sessions(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	window, err := sessions[0].ResolveActiveWindow(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, ok := window.Layout()
+	if !ok {
+		t.Fatal("keeper window has no saved layout")
+	}
+	client := inputTestClient(t.Context(), t, target, nil)
+	for _, value := range []string{saved, strings.ToUpper(saved[:4]) + saved[4:], "even-h"} {
+		result := callInputTool(t.Context(), t, client, "select_layout", map[string]any{
+			"window_id": window.ID().String(), "layout": value,
+		})
+		if result.IsError {
+			t.Errorf("valid layout %q refused: %s", value, callToolResultText(result))
+		}
+	}
+	result := callInputTool(t.Context(), t, client, "select_layout", map[string]any{
+		"window_id": "@999999", "layout": "32d2,80x24,0,0{}",
+	})
+	if !result.IsError || !strings.Contains(callToolResultText(result), tmux.ErrInvalidServerCommandRequest.Error()) {
+		t.Errorf("invalid syntax reached target lookup: %s", callToolResultText(result))
+	}
+	result = callInputTool(t.Context(), t, client, "select_layout", map[string]any{
+		"window_id": "@999999", "layout": "even-h",
+	})
+	if !result.IsError || !strings.Contains(callToolResultText(result), "no window @999999") {
+		t.Errorf("valid syntax did not preserve target lookup failure: %s", callToolResultText(result))
+	}
+	version, err := target.Version(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mirrored, err := tmux.ParseVersion("3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for value, wantError := range map[string]bool{
+		"main-h":            version.AtLeast(mirrored),
+		"main-horizontal-m": !version.AtLeast(mirrored),
+	} {
+		result := callInputTool(t.Context(), t, client, "select_layout", map[string]any{
+			"window_id": window.ID().String(), "layout": value,
+		})
+		if result.IsError != wantError {
+			t.Errorf("layout %q on %s: IsError = %t, want %t: %s",
+				value, version, result.IsError, wantError, callToolResultText(result))
+		}
+	}
+	if _, err := window.Refresh(t.Context()); err != nil {
+		t.Fatalf("layout calls lost keeper identity: %v", err)
+	}
+}
+
+//libtmux:real-tmux
 func TestSendConfiguredMembershipReal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
