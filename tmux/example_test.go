@@ -2380,3 +2380,14 @@ func ExamplePane_MarshalJSON() {
 	fmt.Println(string(encoded))
 	// Output: {"id":"","sessionId":"","windowId":"","windowIndex":0,"index":0,"formats":{}}
 }
+
+func ExampleSelectLayoutRequest_Validate() {
+	request := tmux.SelectLayoutRequest{Layout: "b25d,80x24,0,0,0"}
+	fmt.Println(request.Validate())
+
+	request.Spread = true
+	fmt.Println(errors.Is(request.Validate(), tmux.ErrInvalidServerCommandRequest))
+	// Output:
+	// <nil>
+	// true
+}

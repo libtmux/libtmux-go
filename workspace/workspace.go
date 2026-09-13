@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -309,10 +310,10 @@ func windowProblems(index int, window Window) []error {
 			"%w: %swindow %d (%q) has a negative window_index",
 			ErrInvalidWorkspace, where, index, window.Name))
 	}
-	if window.Layout != "" && !validLayout(window.Layout) {
+	if err := (tmux.SelectLayoutRequest{Layout: window.Layout}).Validate(); err != nil {
 		problems = append(problems, fmt.Errorf(
-			"%w: %swindow %d (%q) has an unknown layout %q",
-			ErrInvalidWorkspace, where, index, window.Name, window.Layout))
+			"%w: %swindow %d (%q) has an invalid layout: %w",
+			ErrInvalidWorkspace, where, index, window.Name, err))
 	}
 	if window.Shell != "" && len(window.Panes) > 0 && window.Panes[0].Shell != "" {
 		problems = append(problems, fmt.Errorf(
@@ -335,43 +336,6 @@ func windowPosition(window Window) string {
 		return ""
 	}
 	return "line " + strconv.Itoa(window.line) + ": "
-}
-
-// layoutNames includes layouts newer than the support floor. tmux remains the
-// authority for availability on the running version.
-var layoutNames = map[string]bool{
-	"even-horizontal":          true,
-	"even-vertical":            true,
-	"main-horizontal":          true,
-	"main-horizontal-mirrored": true,
-	"main-vertical":            true,
-	"main-vertical-mirrored":   true,
-	"tiled":                    true,
-}
-
-// validLayout accepts named layouts, a unique prefix of one (tmux's
-// own layout_set_lookup is a prefix match, so "tile" and "even-h" apply on
-// every version and can never reach the 3.3a crash an exact-match guard
-// existed to avoid), and serialized layouts containing commas; tmux
-// validates serialized layout syntax. This check has no live tmux
-// connection and so no version to test ambiguity against: it lets a prefix
-// matching more than one name through rather than refusing tmux might
-// still accept, and Window.SelectLayout is the version-aware authority that
-// resolves or refuses it against the connection actually building this
-// workspace.
-func validLayout(layout string) bool {
-	if layout == "" {
-		return false
-	}
-	if strings.Contains(layout, ",") || layoutNames[layout] {
-		return true
-	}
-	for preset := range layoutNames {
-		if strings.HasPrefix(preset, layout) {
-			return true
-		}
-	}
-	return false
 }
 
 // nested adds the sentinel and source line once.

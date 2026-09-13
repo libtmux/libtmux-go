@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/layout"
 )
 
 // SelectLayoutRequest selects one layout operation. Its zero value reapplies
@@ -27,6 +29,56 @@ type SelectLayoutRequest struct {
 	Previous bool
 }
 
+// Validate checks mode exclusivity, NUL bytes, recognised preset names and
+// checksummed custom-layout syntax without running tmux. Its zero value is valid.
+// Invalid requests match [ErrInvalidServerCommandRequest]. Mirrored presets are
+// accepted here; execution checks tmux version support. Geometry and the number
+// of panes are validated by tmux when the layout is applied.
+func (request SelectLayoutRequest) Validate() error {
+	if err := validateServerCommandArgument("select-layout", "Layout", request.Layout, true); err != nil {
+		return err
+	}
+	modes := 0
+	if request.Layout != "" {
+		modes++
+	}
+	if request.Spread {
+		modes++
+	}
+	if request.Next {
+		modes++
+	}
+	if request.Previous {
+		modes++
+	}
+	if modes > 1 {
+		return invalidServerCommandRequest(
+			"select-layout",
+			"Mode",
+			"",
+			"Layout, Spread, Next, and Previous are mutually exclusive",
+		)
+	}
+
+	if request.Layout == "" || layoutPresets[request.Layout] || layoutMirroredPresets[request.Layout] || layoutLooksLikeJSON(request.Layout) {
+		return nil
+	}
+	if _, custom := layout.Cells(request.Layout); custom {
+		return nil
+	}
+	for _, preset := range layoutAllPresetNames {
+		if strings.HasPrefix(preset, request.Layout) {
+			return nil
+		}
+	}
+	// tmux 3.3a exits the daemon on unknown layout names.
+	return invalidServerCommandRequest(
+		"select-layout", "Layout", request.Layout,
+		"is neither a layout preset nor a tmux layout string; tmux 3.3a exits "+
+			"on an unrecognised layout and destroys every session on the socket",
+	)
+}
+
 // SelectLayout applies one layout operation to the receiver's exact winlink.
 // It changes pane geometry without selecting the window or promising client
 // focus. The materialized receiver is not refreshed, so callers that need
@@ -34,6 +86,9 @@ type SelectLayoutRequest struct {
 // A transport or context error can be delivery-ambiguous; the void result
 // cannot carry partial state and no rollback is attempted.
 func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) error {
+	if err := request.Validate(); err != nil {
+		return err
+	}
 	target, err := exactWindowTarget(w)
 	if err != nil {
 		return err
@@ -244,38 +299,15 @@ func selectLayoutArguments(
 	request SelectLayoutRequest,
 	version Version,
 ) ([]string, error) {
-	if err := validateServerCommandArguments(
-		"select-layout",
-		serverCommandArgument{field: "Target", value: target},
-		serverCommandArgument{field: "Layout", value: request.Layout},
-	); err != nil {
+	if err := validateServerCommandArgument("select-layout", "Target", target, true); err != nil {
+		return nil, err
+	}
+	if err := request.Validate(); err != nil {
 		return nil, err
 	}
 	resolvedLayout, err := validateLayout(request.Layout, version)
 	if err != nil {
 		return nil, err
-	}
-
-	modes := 0
-	if request.Layout != "" {
-		modes++
-	}
-	if request.Spread {
-		modes++
-	}
-	if request.Next {
-		modes++
-	}
-	if request.Previous {
-		modes++
-	}
-	if modes > 1 {
-		return nil, invalidServerCommandRequest(
-			"select-layout",
-			"Mode",
-			"",
-			"Layout, Spread, Next, and Previous are mutually exclusive",
-		)
 	}
 
 	arguments := []string{"select-layout", "-t", target}
