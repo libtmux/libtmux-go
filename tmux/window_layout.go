@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/layout"
 )
@@ -25,11 +26,11 @@ type SelectLayoutRequest struct {
 	Previous bool
 }
 
-// Validate checks mode exclusivity, NUL bytes, recognised preset names and
+// Validate checks mode exclusivity, NUL bytes, candidate preset names and
 // checksummed custom-layout syntax without running tmux. Its zero value is valid.
-// Invalid requests match [ErrInvalidServerCommandRequest]. Mirrored presets are
-// accepted here; execution checks tmux version support. Geometry and the number
-// of panes are validated by tmux when the layout is applied.
+// Invalid requests match [ErrInvalidServerCommandRequest]. Names and abbreviations
+// valid on any supported tmux are accepted here; execution checks daemon support.
+// tmux validates geometry and live pane counts when applying the layout.
 func (request SelectLayoutRequest) Validate() error {
 	if err := validateServerCommandArgument("select-layout", "Layout", request.Layout, true); err != nil {
 		return err
@@ -56,7 +57,7 @@ func (request SelectLayoutRequest) Validate() error {
 		)
 	}
 
-	if request.Layout == "" || layoutPresets[request.Layout] || layoutMirroredPresets[request.Layout] {
+	if request.Layout == "" || layoutName(request.Layout, false) || layoutName(request.Layout, true) {
 		return nil
 	}
 	if _, custom := layout.Cells(request.Layout); custom {
@@ -84,13 +85,11 @@ func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) e
 	if err != nil {
 		return err
 	}
-	// The version is only needed for a name tmux learned partway through the
-	// supported range, so it is not asked for otherwise.
-	var version Version
-	if layoutMirroredPresets[request.Layout] {
-		if version, err = w.server.Version(ctx); err != nil {
-			return err
-		}
+	version, err := w.server.validateLayouts(ctx, func(yield func(string, int) bool) {
+		yield(request.Layout, 1)
+	})
+	if err != nil {
+		return err
 	}
 	arguments, err := selectLayoutArguments(target, request, version)
 	if err != nil {
@@ -99,22 +98,41 @@ func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) e
 	return runWindowLayoutCommand(ctx, w.server, "select-layout", arguments)
 }
 
-// layoutPresets are the arrangements tmux names, and are accepted on every
-// supported version.
-var layoutPresets = map[string]bool{
-	"even-horizontal": true,
-	"even-vertical":   true,
-	"main-horizontal": true,
-	"main-vertical":   true,
-	"tiled":           true,
+var layoutPresets = [...]string{
+	"even-horizontal", "even-vertical", "main-horizontal", "main-vertical", "tiled",
+	"main-horizontal-mirrored", "main-vertical-mirrored",
 }
 
-// layoutMirroredPresets are the arrangements tmux added at 3.5, which put the
-// main pane on the far side. Below that they are names tmux does not know, and
-// an unrecognised name is what the check below exists to stop.
-var layoutMirroredPresets = map[string]bool{
-	"main-horizontal-mirrored": true,
-	"main-vertical-mirrored":   true,
+func layoutName(value string, mirrored bool) bool {
+	names := layoutPresets[:5]
+	if mirrored {
+		names = layoutPresets[:]
+	}
+	if slices.Contains(names, value) {
+		return true
+	}
+	matches := 0
+	for _, name := range names {
+		if strings.HasPrefix(name, value) {
+			matches++
+		}
+	}
+	return matches == 1
+}
+
+func layoutNeedsVersion(value string) bool {
+	return layoutName(value, false) != layoutName(value, true)
+}
+
+func validateLayoutVersion(value string, version Version) error {
+	if !layoutNeedsVersion(value) || layoutName(value, version.AtLeast(layoutMirroredVersion)) {
+		return nil
+	}
+	if layoutName(value, true) {
+		return &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
+	}
+	return invalidServerCommandRequest("select-layout", "Layout", value,
+		"is ambiguous on the running tmux version")
 }
 
 var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
@@ -150,8 +168,8 @@ func selectLayoutArguments(
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-	if layoutMirroredPresets[request.Layout] && !version.AtLeast(layoutMirroredVersion) {
-		return nil, &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
+	if err := validateLayoutVersion(request.Layout, version); err != nil {
+		return nil, err
 	}
 
 	arguments := []string{"select-layout", "-t", target}

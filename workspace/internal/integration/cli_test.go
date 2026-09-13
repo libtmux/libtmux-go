@@ -50,6 +50,33 @@ func daemonPID(t *testing.T, server tmux.Server) string {
 	return value
 }
 
+func TestLayoutPreflightLaterInputBeforeScripts(t *testing.T) {
+	server := tmuxtest.NewServer(t.Context(), t)
+	pid := daemonPID(t, server)
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "script-ran")
+	first, err := json.Marshal(map[string]any{
+		"session_name": "layout-first", "before_script": "touch " + strconv.Quote(marker),
+		"windows": []map[string]any{{"panes": []any{nil}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	one := write(t, dir, "first.json", string(first))
+	two := write(t, dir, "last.json", `{"session_name":"layout-last","windows":[{"layout":"b25d,80x24,0,0,0","panes":[null,null]}]}`)
+	code, out, diagnostic := run(t, "load", "-d", "--json", "-S", server.SocketPath(), "-f", server.ConfigFile(), one, two)
+	if code == 0 || out != "" || !strings.Contains(diagnostic, "layout") {
+		t.Errorf("load = %d %q %q, want preflight error", code, out, diagnostic)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Errorf("before_script ran before later layout refusal: %v", err)
+	}
+	sessions, err := server.Sessions(t.Context())
+	if err != nil || len(sessions) != 1 || daemonPID(t, server) != pid {
+		t.Fatalf("keeper changed: sessions=%v err=%v", sessions, err)
+	}
+}
+
 func TestLoadFreezeReloadAppendAndEnvironment(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()

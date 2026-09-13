@@ -2208,3 +2208,14 @@ func ExampleSelectLayoutRequest_Validate() {
 	// <nil>
 	// true
 }
+
+func ExampleServer_ValidateLayouts() {
+	server := tmux.Server{}
+	err := server.ValidateLayouts(context.Background(), func(yield func(string, int) bool) {
+		if yield("even-h", 2) {
+			yield("b25d,80x24,0,0,0", 2)
+		}
+	})
+	fmt.Println(errors.Is(err, tmux.ErrInvalidServerCommandRequest))
+	// Output: true
+}

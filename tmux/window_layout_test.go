@@ -225,3 +225,35 @@ func TestSelectLayoutRequestValidateWithoutTmux(t *testing.T) {
 		}
 	}
 }
+
+func TestLayoutPreflightPrefixesAndDaemonVersion(t *testing.T) {
+	for _, name := range []string{"even-h", "t", "main-h", "main-horizontal-m"} {
+		if err := (SelectLayoutRequest{Layout: name}).Validate(); err != nil {
+			t.Errorf("Validate(%q) = %v", name, err)
+		}
+	}
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
+		{result: tmuxcmd.Result{}},
+	}}
+	err := (Window{server: serverWithRunner(runner), sessionID: "$7", windowID: "@8"}).SelectLayout(
+		context.Background(), SelectLayoutRequest{Layout: "main-h"})
+	if err != nil {
+		t.Fatalf("SelectLayout(main-h) on old daemon: %v", err)
+	}
+	assertRequestArguments(t, runner.recordedRequests()[0], []string{"display-message", "-p", "tmux #{version}"})
+}
+
+func TestLayoutPreflightPlanRefusesEveryLayoutBeforeDispatch(t *testing.T) {
+	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{Stdout: []string{"@9"}}}}}
+	plan := NewPlan()
+	window := plan.NewWindow(SessionRef("$7"), NewWindowRequest{})
+	plan.SelectLayout(window, SelectLayoutRequest{Layout: "32d2,80x24,0,0{}"})
+	result, err := plan.Run(context.Background(), serverWithRunner(runner))
+	if !errors.Is(err, ErrInvalidServerCommandRequest) {
+		t.Fatalf("Run() = %v, want invalid layout", err)
+	}
+	if runner.callCount() != 0 || result.Ops[0].Status != OpSkipped {
+		t.Fatalf("unsafe plan reached tmux: calls=%d result=%+v", runner.callCount(), result)
+	}
+}

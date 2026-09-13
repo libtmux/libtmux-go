@@ -242,6 +242,20 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := server.ValidateLayouts(r.ctx, func(yield func(string, int) bool) {
+		for _, input := range inputs {
+			if input.plan.Bridge {
+				continue
+			}
+			for _, window := range input.plan.Windows {
+				if !yield(window.Layout, max(1, len(window.Panes))) {
+					return
+				}
+			}
+		}
+	}); err != nil {
+		return err
+	}
 	var borrowed tmux.Session
 	var handoff *loadHandoff
 	if o.append {

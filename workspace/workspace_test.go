@@ -352,6 +352,21 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 		t.Fatalf("NewSessionConnection() error = %v", err)
 	}
 	t.Cleanup(func() { _ = connection.Close() })
+	version, err := connection.Server().Version(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minimum, err := tmux.ParseVersion("3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "main-h"
+	if version.AtLeast(minimum) {
+		name = "main-horizontal-m"
+	}
+	for index := range described.Windows {
+		described.Windows[index].Layout = name
+	}
 
 	disabled := proxy + ".disabled"
 	if err := os.Rename(proxy, disabled); err != nil {
@@ -961,6 +976,26 @@ func TestMalformedLayoutTreeIsRefusedWhileParsing(t *testing.T) {
 		if !errors.Is(err, workspace.ErrInvalidWorkspace) {
 			t.Errorf("Parse(%q) = %v, want ErrInvalidWorkspace", layout, err)
 		}
+	}
+}
+
+func TestLayoutPreflightCapacityBeforeBuild(t *testing.T) {
+	server := tmuxtest.NewServer(t.Context(), t)
+	before, err := server.Sessions(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := workspace.Parse([]byte("session_name: too-few-cells\nwindows:\n  - layout: b25d,80x24,0,0,0\n    panes: [blank, blank]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := workspace.Build(t.Context(), server, parsed)
+	if !errors.Is(err, tmux.ErrInvalidServerCommandRequest) || created.ID() != "" {
+		t.Errorf("Build() = (%s, %v), want preflight refusal without creation", created.ID(), err)
+	}
+	after, err := server.Sessions(t.Context())
+	if err != nil || len(after) != len(before) || after[0].ID() != before[0].ID() {
+		t.Fatalf("preflight changed sessions: before=%v after=%v err=%v", before, after, err)
 	}
 }
 

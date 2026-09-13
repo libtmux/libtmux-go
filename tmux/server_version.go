@@ -22,7 +22,7 @@ var (
 	ErrVersionTooLow = errors.New("tmux: version too low")
 )
 
-// VersionQueryError reports an unsuccessful tmux -V probe. It matches
+// VersionQueryError reports an unsuccessful tmux version probe. It matches
 // [ErrVersionQuery] through errors.Is; callers can recover its fields with
 // errors.As. Library-created errors retain only the exit code; command
 // arguments and output are omitted, although callers may construct values with
