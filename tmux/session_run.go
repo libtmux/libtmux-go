@@ -500,9 +500,10 @@ func (r *Running) Kill(ctx context.Context) error {
 	if _, err := r.session.server.RunShell(ctx, RunShellRequest{
 		TargetPane: r.pane.ID(),
 		Background: true,
-		// Nothing to kill is not a failure, and from tmux 3.5 a run-shell
-		// command that exits nonzero is reported to the caller, so a pane that
-		// has gone must leave this exiting zero rather than complaining.
+		// Nothing to kill is not a failure. Background never reports this
+		// command's exit to the caller, but tmux still posts a nonzero one as
+		// a message once the job finishes, so a pane that has gone must leave
+		// this exiting zero rather than surfacing kill's own failure.
 		Command: "[ -n \"#{pane_pid}\" ] && kill -s KILL -- -#{pane_pid} 2>/dev/null; true",
 	}); err != nil {
 		return fmt.Errorf("kill command: %w", err)
