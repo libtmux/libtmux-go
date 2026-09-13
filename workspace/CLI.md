@@ -140,7 +140,9 @@ Human load progress writes to a terminal on stderr. The `default`, `minimal`,
 `--progress-lines` bounds retained script lines; `-1` uses terminal height and
 `0` streams script output directly. `--no-progress` or `TMUXP_PROGRESS=0`
 disables the presenter. `TMUXP_PROGRESS_FORMAT` and `TMUXP_PROGRESS_LINES`
-provide defaults. Machine output always disables terminal rendering.
+provide defaults while the presenter is active. Disabled progress ignores
+these environment defaults; explicit command-line values are still validated.
+Machine output always disables terminal rendering.
 
 `--log-level` filters optional warnings and file records. Command failures and
 machine operation records remain visible at every level. `load --log-file`
