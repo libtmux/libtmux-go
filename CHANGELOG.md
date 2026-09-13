@@ -9,8 +9,18 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `SelectLayoutRequest.Validate` to check layout requests without tmux I/O.
+  Workspace parsing uses the same validation as core layout operations.
+- `Window.SelectLayout` and `Plan.SelectLayout` reject invalid custom layout
+  checksums, integer overflow and malformed trees before dispatch. Custom
+  layouts support up to 256 nested parents; tmux validates their geometry.
+
 ### workspace
 
+- `Parse` and `tmux-workspace load` validate custom layout syntax before
+  building. Load checks every input before opening tmux or running scripts.
 - `tmux-workspace ls --tree` groups workspaces by directory with sibling
   markers. Human listings escape terminal controls in names and paths;
   machine output preserves the original records.

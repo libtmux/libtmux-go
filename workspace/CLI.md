@@ -102,6 +102,9 @@ command delays and enter-state overrides, history suppression, directories,
 launch-time environment, shell overrides, layouts, explicit window indexes,
 focus, options, before-script execution and pane readiness. A pane environment
 mapping replaces the window mapping; the session environment still applies.
+Custom layout checksums, unsigned 32-bit fields and tree structure are checked
+for every input before tmux is opened or scripts run. Trees may nest up to 256
+parents; geometry remains tmux's responsibility.
 Default history suppression is enabled. `workspace_builder_options` accepts
 `pane_readiness: auto|always|never` and the reference boolean aliases. Auto waits
 for zsh prompts; explicit pane or window launch commands skip readiness waits.
