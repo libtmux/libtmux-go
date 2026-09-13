@@ -31603,7 +31603,7 @@
       "digest": "sha256:5fd6143e3f7f766287b2a50df33a1d84ad67bc0067cf128a1920e0532dd9d697",
       "status": "handwritten",
       "go": [
-        "tmux.Server.RaiseIfDead"
+        "tmux.Server.CheckAlive"
       ],
       "proof": [
         {

@@ -66,7 +66,7 @@ type attachSessionValues struct {
 // With tmux's exit-empty default, a server holding no sessions may exit before
 // the next command even though Start succeeded. Create a session or disable
 // exit-empty in [ServerOptions.ConfigFile] before startup. Use [Server.IsAlive]
-// or [Server.RaiseIfDead] to check it.
+// or [Server.CheckAlive] to check it.
 func (s Server) Start(ctx context.Context) error {
 	result, err := s.literalCmd(ctx, "start-server")
 	return requireServerCommandNoStderr("start-server", result, err)

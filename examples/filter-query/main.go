@@ -54,6 +54,18 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	// docs:end
 	fmt.Println("active panes:", len(active))
 
+	// docs:query-typed-in-go
+	filter := tmux.PaneFilter{
+		Active:  new(true),
+		Session: &tmux.SessionFilter{Name: new("libtmux-filter")},
+	}
+	panes, err := tmuxq.Matching(snapshot.Panes(), filter)
+	if err != nil {
+		return err
+	}
+	// docs:end
+	fmt.Println("typed panes:", len(panes))
+
 	// docs:query-in-tmux
 	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 	sessions, err := server.SearchSessions(ctx, &live)

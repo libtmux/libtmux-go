@@ -37,6 +37,9 @@ func TestServerLivenessDistinguishesDeadFromTransportFailure(t *testing.T) {
 	if err != nil || !alive {
 		t.Fatalf("IsAlive() = (%v, %v), want (true, nil)", alive, err)
 	}
+	if err := server.CheckAlive(context.Background()); err != nil {
+		t.Fatalf("CheckAlive() error = %v, want nil", err)
+	}
 	result, err := server.Cmd(context.Background(), "kill-server")
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("kill-server = (%#v, %v), want exit 0", result, err)
@@ -46,13 +49,18 @@ func TestServerLivenessDistinguishesDeadFromTransportFailure(t *testing.T) {
 	if err != nil || alive {
 		t.Fatalf("IsAlive() = (%v, %v), want (false, nil)", alive, err)
 	}
-	err = server.RaiseIfDead(context.Background())
-	if !errors.Is(err, tmux.ErrCommand) {
-		t.Fatalf("RaiseIfDead() error = %v, want ErrCommand", err)
-	}
-	var commandError *tmux.CommandError
-	if !errors.As(err, &commandError) || commandError.Result.ExitCode == 0 {
-		t.Fatalf("RaiseIfDead() error = %#v, want CommandError with failed result", err)
+	for name, check := range map[string]func(context.Context) error{
+		"CheckAlive":  server.CheckAlive,
+		"RaiseIfDead": server.RaiseIfDead,
+	} {
+		err = check(context.Background())
+		if !errors.Is(err, tmux.ErrNoServer) || !errors.Is(err, tmux.ErrCommand) {
+			t.Fatalf("%s() error = %v, want ErrNoServer and ErrCommand", name, err)
+		}
+		var commandError *tmux.CommandError
+		if !errors.As(err, &commandError) || commandError.Result.ExitCode == 0 {
+			t.Fatalf("%s() error = %#v, want CommandError with failed result", name, err)
+		}
 	}
 }
 
@@ -64,6 +72,9 @@ func TestServerIsAliveReturnsContextError(t *testing.T) {
 	alive, err := server.IsAlive(ctx)
 	if !errors.Is(err, context.Canceled) || alive {
 		t.Fatalf("IsAlive() = (%v, %v), want (false, context.Canceled)", alive, err)
+	}
+	if err := server.CheckAlive(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("CheckAlive() error = %v, want context.Canceled", err)
 	}
 }
 
