@@ -123,11 +123,12 @@ an owned newly created session and preserves a borrowed append session.
 Later failures retain completed tmux effects. JSON summaries identify inputs,
 session IDs and failures. NDJSON emits records as work happens with increasing
 sequence numbers and one terminal `completed` or `failed` event when output
-remains writable. Child stdout and stderr are drained concurrently; retained
-text is capped at 1 MiB per stream. Invalid UTF-8 uses replacement characters
-and control bytes are encoded inside JSON strings. Capture cannot recover
-original process arguments, command history, plugins or before-script
-definitions.
+remains writable. SIGINT and SIGTERM cancel active scripts through the normal
+cleanup path and return exit status 130. Child stdout and stderr are drained
+concurrently; retained text is capped at 1 MiB per stream. Invalid UTF-8 uses
+replacement characters and control bytes are encoded inside JSON strings.
+Capture cannot recover original process arguments, command history, plugins or
+before-script definitions.
 
 After a load processes an input, failures include its observed summary under
 `result` in the JSON stderr diagnostic. Human diagnostics list known session
