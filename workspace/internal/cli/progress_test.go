@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -76,6 +77,42 @@ func TestProgressZeroLinesHandsOffScriptStdout(t *testing.T) {
 	}
 	if out.String() != "raw child output\n" || p.drawn != 0 {
 		t.Fatalf("raw stream handoff failed: %q drawn=%d", out.String(), p.drawn)
+	}
+}
+
+func TestProgressPreservesRedirectedScriptStdout(t *testing.T) {
+	for _, lines := range []int{1, 3, -1} {
+		var out, diagnostic bytes.Buffer
+		p := newProgress(&diagnostic, "minimal", lines, 20, 10)
+		p.rawOut = &out
+		p.begin(loadPlan{Name: "redirected"}, "workspace.yaml")
+		r := &invocation{ctx: t.Context(), out: &out, err: &diagnostic, progress: p}
+		w := &captureWriter{r: r, stream: "stdout"}
+		for _, part := range []string{"child output larger than the panel width", "\nsecond line\n"} {
+			if err := w.emitBytes([]byte(part), true); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if out.String() != "child output larger than the panel width\nsecond line\n" {
+			t.Fatalf("lines=%d lost redirected child output: %q", lines, out.String())
+		}
+	}
+}
+
+func TestProgressPreservesRedirectedStdoutFailure(t *testing.T) {
+	reader, writer := io.Pipe()
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+	var diagnostic bytes.Buffer
+	p := newProgress(&diagnostic, "minimal", 3, 80, 24)
+	p.rawOut = writer
+	if err := p.script("stdout", "child output\n"); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("redirected stdout failure: %v", err)
+	}
+	if err := p.event("warning", map[string]any{"message": "later warning"}); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("redirected stdout failure was overwritten: %v", err)
 	}
 }
 

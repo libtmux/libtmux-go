@@ -33,6 +33,7 @@ type progressPresenter struct {
 	scriptLines                                                                                       []string
 	partial                                                                                           map[string]string
 	waiting                                                                                           bool
+	panelStdout                                                                                       bool
 	err                                                                                               error
 	once                                                                                              sync.Once
 	decorate                                                                                          func(string, string) string
@@ -51,6 +52,15 @@ func (r *invocation) progressEnabled(o *options) bool {
 	return !r.machine() && !o.noProgress && os.Getenv("TMUXP_PROGRESS") != "0" && terminal(r.err)
 }
 
+func sharedTerminal(first, second io.Writer) bool {
+	if !terminal(first) || !terminal(second) {
+		return false
+	}
+	firstInfo, firstErr := first.(*os.File).Stat()
+	secondInfo, secondErr := second.(*os.File).Stat()
+	return firstErr == nil && secondErr == nil && os.SameFile(firstInfo, secondInfo)
+}
+
 func (r *invocation) startProgress(o *options) {
 	if !r.progressEnabled(o) {
 		return
@@ -64,6 +74,7 @@ func (r *invocation) startProgress(o *options) {
 	r.progress = newProgress(r.err, o.progressFormat, o.progressLines, width, height)
 	p := r.progress
 	p.rawOut = r.out
+	p.panelStdout = sharedTerminal(r.out, r.err)
 	p.decorate = func(role, text string) string { return r.styleFor(r.err, role, text) }
 	go func() {
 		defer close(p.done)
@@ -155,6 +166,9 @@ func safeTerminal(value string) string {
 func (p *progressPresenter) script(stream, text string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.err != nil {
+		return p.err
+	}
 	if p.lines == 0 {
 		p.clear()
 		if p.err != nil {
@@ -166,6 +180,10 @@ func (p *progressPresenter) script(stream, text string) error {
 			writer = p.rawOut
 		}
 		_, p.err = io.WriteString(writer, text)
+		return p.err
+	}
+	if stream == "stdout" && p.rawOut != nil && !p.panelStdout {
+		_, p.err = io.WriteString(p.rawOut, text)
 		return p.err
 	}
 	parts := strings.Split(p.partial[stream]+text, "\n")
