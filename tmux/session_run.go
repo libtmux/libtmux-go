@@ -93,6 +93,10 @@ func (s Session) Run(ctx context.Context, command string, options RunOptions) (R
 // status and screen [Session.Run] would have returned, and [Running.Kill]
 // stops the command. Options are exactly Run's.
 //
+// Before tmux 3.7, Start installs an output pipe running cat unless the pane
+// already has a pipe. The window owns that process, including when Keep
+// leaves the finished window in place.
+//
 // If Wait is never called, the window Start created is never removed.
 func (s Session) Start(
 	ctx context.Context,
@@ -141,6 +145,13 @@ func (s Session) Start(
 	fixedNotice := !version.AtLeast(remainOnExitFormatVersion33)
 	if !fixedNotice {
 		if err := pane.SetRemainOnExitFormat(ctx, ""); err != nil {
+			return nil, err
+		}
+	}
+	// Before 3.7, tmux drains pending terminal bytes on exit only when a
+	// pipe is open. The window owns the pipe's lifetime.
+	if piping, _ := pane.Piping(); !piping && !version.AtLeast(captureVersion37) {
+		if err := pane.Pipe(ctx, PipePaneRequest{Command: new("exec cat")}); err != nil {
 			return nil, err
 		}
 	}
