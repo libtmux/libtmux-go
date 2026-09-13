@@ -239,8 +239,24 @@ func Main(m *testing.M) int {
 	return runSuite(m.Run)
 }
 
+// createSuiteRoot answers a canonical directory, since tmux reports a pane's
+// physical path and a test comparing one against a path built from the root
+// would otherwise disagree wherever the base is a symbolic link.
+func createSuiteRoot(base string) (string, error) {
+	root, err := os.MkdirTemp(base, suiteRootPrefix())
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		return "", err
+	}
+	return resolved, nil
+}
+
 func runSuite(run func() int) int {
-	root, err := os.MkdirTemp(shortTempBase(), suiteRootPrefix())
+	root, err := createSuiteRoot(shortTempBase())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, harnessFailure("create short temporary root", err))
 		return 2
