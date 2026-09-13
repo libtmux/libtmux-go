@@ -37,6 +37,12 @@ Modules are tagged per directory, so each carries its own version: the core as
   directory contains spaces, preserving quoted arguments and the script's
   working directory.
 
+### mcp
+
+- `select_layout` accepts unique named-layout abbreviations for the running
+  tmux version and uppercase saved-layout checksums. It uses core validation
+  before window lookup; tool discovery describes named and saved inputs.
+
 ### examples
 
 - `byte-streams` waits for pasted text to appear before compressing the pane
