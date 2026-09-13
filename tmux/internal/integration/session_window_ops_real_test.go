@@ -5,7 +5,11 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -997,5 +1001,97 @@ func TestSessionRunReportsStatusAndScreen(t *testing.T) {
 	}
 	if _, err := server.Pane(ctx, kept.Pane); err != nil {
 		t.Errorf("kept pane %s is gone: %v", kept.Pane, err)
+	}
+}
+
+//libtmux:real-tmux
+func TestCommandWaitDrainsOutputAfterProcessExit(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	session := mustRealSnapshot(t, server).Sessions()[0]
+	control := tmuxtest.NewControlMode(ctx, t, server, session)
+	quote := func(value string) string {
+		return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+	}
+	command := fmt.Sprintf(
+		"%[1]s -S %[2]s wait-for release-output; printf 'one\\ntwo\\n'; %[1]s -S %[2]s wait-for may-exit; exit 7",
+		quote(server.Executable()), quote(server.SocketPath()))
+	running, err := session.Start(ctx, command, tmux.RunOptions{Keep: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane := running.Pane()
+	// A control client with pane output off holds terminal reads while the
+	// command exits, forcing the exit status to arrive before the screen.
+	if reply, err := server.Cmd(ctx, "refresh-client", "-t", control.ClientName().String(),
+		"-A", pane.ID().String()+":off"); err != nil || reply.ExitCode != 0 {
+		t.Fatalf("hold pane output: %+v, %v", reply, err)
+	}
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{
+		Channel: "release-output", Mode: tmux.WaitForModeSignal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// tmux only defers closing a dead pane's terminal when FIONREAD still
+	// shows unread bytes, and FIONREAD can read zero for bytes the kernel has
+	// not yet moved off the pty's flip buffer onto the line discipline it
+	// checks. exit lands the moment printf returns, so without a second gate
+	// tmux can occasionally close the terminal before that move happens,
+	// discarding the command's output instead of merely delaying it. Signaling
+	// this gate from a fresh client process is far slower than that move, so
+	// it is never in flight when the command exits.
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{
+		Channel: "may-exit", Mode: tmux.WaitForModeSignal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
+		refreshed, err := pane.Refresh(ctx)
+		if err != nil {
+			return false, err
+		}
+		status, ok := refreshed.DeadStatus()
+		return ok && status == 7, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if reply, err := server.Cmd(ctx, "refresh-client", "-t", control.ClientName().String(),
+		"-A", pane.ID().String()+":on"); err != nil || reply.ExitCode != 0 {
+		t.Fatalf("release pane output: %+v, %v", reply, err)
+	}
+	result, err := running.Wait(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 7 || !slices.Equal(result.Lines, []string{"one", "two"}) {
+		t.Fatalf("Wait() = %+v, want status 7 and lines [one two]", result)
+	}
+}
+
+//libtmux:real-tmux
+func TestCommandStartPreservesAnExistingOutputPipe(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	session := mustRealSnapshot(t, server).Sessions()[0]
+	output := filepath.Join(t.TempDir(), "output")
+	quoted := "'" + strings.ReplaceAll(output, "'", "'\"'\"'") + "'"
+	if err := session.SetHook(ctx, "after-new-window",
+		fmt.Sprintf("pipe-pane %q", "exec cat > "+quoted)); err != nil {
+		t.Fatal(err)
+	}
+	result, err := session.Run(ctx, "printf 'one\\ntwo\\n'; exit 7", tmux.RunOptions{Keep: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 7 || !slices.Equal(result.Lines, []string{"one", "two"}) {
+		t.Fatalf("Run() = %+v, want status 7 and lines [one two]", result)
+	}
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(context.Context) (bool, error) {
+		data, err := os.ReadFile(output)
+		return string(data) == "one\r\ntwo\r\n", err
+	}); err != nil {
+		t.Fatalf("the configured output pipe lost the command's output: %v", err)
 	}
 }
