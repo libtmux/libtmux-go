@@ -42,7 +42,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	// docs:watching
+	// docs:watching given:ctx context.Context; session tmux.Session
 	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
 	if err != nil {
 		return fmt.Errorf("open notification stream: %w", err)
@@ -67,7 +67,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	// docs:end
 
-	// docs:subscribing
+	// docs:subscribing given:ctx context.Context; session tmux.Session; stream *tmux.NotificationStream
 	// A subscription is a format tmux evaluates for you: it reports the value
 	// when it first looks, about a second later, and then each time it changes.
 	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{

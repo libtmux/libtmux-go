@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -164,6 +165,37 @@ func TestDedentRemovesSharedIndentationOnly(t *testing.T) {
 	for index := range want {
 		if got[index] != want[index] {
 			t.Errorf("dedent()[%d] = %q, want %q", index, got[index], want[index])
+		}
+	}
+}
+
+func TestGivenCommentKeepsAShortListOnOneLine(t *testing.T) {
+	got := givenComment("ctx context.Context; session tmux.Session")
+	want := []string{"// Given: ctx context.Context; session tmux.Session"}
+	if !slices.Equal(got, want) {
+		t.Errorf("givenComment() = %q, want %q", got, want)
+	}
+}
+
+func TestGivenCommentWrapsALongListWithoutSplittingADeclaration(t *testing.T) {
+	given := "ctx context.Context; server tmux.Server; pane tmux.Pane; " +
+		"payload *strings.Reader; archive string"
+	got := givenComment(given)
+	if len(got) < 2 {
+		t.Fatalf("givenComment() = %q, want more than one line", got)
+	}
+	for _, line := range got {
+		if len(line) > givenLineWidth {
+			t.Errorf("givenComment() line %q is %d columns, want at most %d",
+				line, len(line), givenLineWidth)
+		}
+		if !strings.HasPrefix(line, "// ") {
+			t.Errorf("givenComment() line %q does not start a comment", line)
+		}
+	}
+	for declaration := range strings.SplitSeq(given, "; ") {
+		if !strings.Contains(strings.Join(got, " "), declaration) {
+			t.Errorf("givenComment() = %q, want it to contain %q whole", got, declaration)
 		}
 	}
 }

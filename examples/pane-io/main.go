@@ -51,7 +51,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("resolve pane: %w", err)
 	}
 
-	// docs:pane-io
+	// docs:pane-io given:ctx context.Context; pane tmux.Pane
 	// Open the reader before typing, so nothing the command prints is missed.
 	output, err := pane.OpenObservation(ctx)
 	if err != nil {

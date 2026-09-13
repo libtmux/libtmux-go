@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	sourceRegionStart = regexp.MustCompile(`^\s*// docs:([a-z0-9-]+)\s*$`)
+	sourceRegionStart = regexp.MustCompile(`^\s*// docs:([a-z0-9-]+)(?:\s+given:(.*?))?\s*$`)
 	sourceRegionEnd   = regexp.MustCompile(`^\s*// docs:end\s*$`)
 	markdownStart     = regexp.MustCompile(`^<!-- docs:([a-z0-9-]+) -->$`)
 	markdownEnd       = regexp.MustCompile(`^<!-- docs:end -->$`)
@@ -74,6 +74,13 @@ func run(root string) error {
 type region struct {
 	origin string
 	lines  []string
+	// given names the bindings the block reads but does not create, as Go
+	// declarations separated by semicolons:
+	// "ctx context.Context; session tmux.Session". Published
+	// text that leans on a binding it never introduces cannot be run by a
+	// reader, so the block has to say what it assumes and the isolation test
+	// holds it to exactly that list.
+	given string
 }
 
 func collectRegions(root string) (map[string]region, error) {
@@ -103,6 +110,7 @@ func collectFileRegions(path string, regions map[string]region) error {
 	}
 	var (
 		name    string
+		given   string
 		body    []string
 		scanner = bufio.NewScanner(bytes.NewReader(content))
 		line    int
@@ -119,7 +127,7 @@ func collectFileRegions(path string, regions map[string]region) error {
 			if existing, ok := regions[name]; ok {
 				return fmt.Errorf("%s: region %q is already defined in %s", path, name, existing.origin)
 			}
-			regions[name] = region{origin: path, lines: dedent(body)}
+			regions[name] = region{origin: path, lines: dedent(body), given: given}
 			name = ""
 			continue
 		}
@@ -127,7 +135,7 @@ func collectFileRegions(path string, regions map[string]region) error {
 			if name != "" {
 				return fmt.Errorf("%s:%d: region %q starts inside region %q", path, line, match[1], name)
 			}
-			name, body = match[1], nil
+			name, given, body = match[1], strings.TrimSpace(match[2]), nil
 			continue
 		}
 		if name != "" {
@@ -232,6 +240,9 @@ func applyRegions(path string, regions map[string]region) (bool, error) {
 		}
 		out = append(out, "")
 		out = append(out, "```go")
+		if source.given != "" {
+			out = append(out, givenComment(source.given)...)
+		}
 		out = append(out, source.lines...)
 		out = append(out, "```")
 		out = append(out, "")
@@ -247,4 +258,26 @@ func applyRegions(path string, regions map[string]region) (bool, error) {
 		return false, nil
 	}
 	return true, os.WriteFile(path, []byte(updated), 0o644)
+}
+
+// givenLineWidth is the repository's Markdown wrap column, applied here so a
+// long given-list does not publish as one unwrapped comment line.
+const givenLineWidth = 80
+
+// givenComment renders a region's given-list as one or more "// " comment
+// lines, breaking only between declarations so each stays whole.
+func givenComment(given string) []string {
+	declarations := strings.Split(given, "; ")
+	lines := []string{"// Given:"}
+	for index, declaration := range declarations {
+		word := declaration
+		if index < len(declarations)-1 {
+			word += ";"
+		}
+		if lines[len(lines)-1] != "//" && len(lines[len(lines)-1])+1+len(word) > givenLineWidth {
+			lines = append(lines, "//")
+		}
+		lines[len(lines)-1] += " " + word
+	}
+	return lines
 }

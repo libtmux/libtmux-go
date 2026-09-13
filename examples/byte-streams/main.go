@@ -68,7 +68,7 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 	// that reads: a file, a socket, an HTTP body, or this strings.Reader.
 	payload := strings.NewReader("$HOME 'quoted' \"double\" `backtick` \\ done\n")
 
-	// docs:byte-streams
+	// docs:byte-streams given:ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader; archive string
 	name := "payload"
 	if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
 		Name: &name,

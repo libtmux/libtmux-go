@@ -40,6 +40,19 @@ back through an `io.Reader`:
 <!-- docs:quickstart -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+	Name: "libtmux-go-quickstart", WindowName: "start",
+})
+if err != nil {
+	return fmt.Errorf("create session: %w", err)
+}
+defer func() {
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cleanupCancel()
+	err = errors.Join(err, session.Kill(cleanupCtx))
+}()
+
 window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 if err != nil {
 	return fmt.Errorf("create window: %w", err)
@@ -79,6 +92,7 @@ the wait is tmux's own rather than a poll:
 <!-- docs:run-to-completion -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
 if err != nil {
 	return fmt.Errorf("run command: %w", err)
@@ -102,6 +116,7 @@ Two ways to ask, and they answer the same question at different costs.
 <!-- docs:query-in-tmux -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
 live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 sessions, err := server.SearchSessions(ctx, &live)
 ```
@@ -113,6 +128,7 @@ sessions, err := server.SearchSessions(ctx, &live)
 <!-- docs:query-in-go -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
 snapshot, err := server.Snapshot(ctx)
 if err != nil {
 	return err
@@ -131,6 +147,7 @@ snapshot above without another tmux command:
 <!-- docs:query-typed-in-go -->
 
 ```go
+// Given: snapshot tmux.Snapshot
 filter := tmux.PaneFilter{
 	Active:  new(true),
 	Session: &tmux.SessionFilter{Name: new("libtmux-filter")},
@@ -173,6 +190,7 @@ is explicit:
 <!-- docs:control-pool -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 if err != nil {
 	return fmt.Errorf("open control connection: %w", err)
@@ -201,6 +219,7 @@ build is written in one pass:
 <!-- docs:planning -->
 
 ```go
+// Given: window tmux.Window
 plan := tmux.NewPlan()
 plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
@@ -228,6 +247,7 @@ end the stream:
 <!-- docs:watching -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
 if err != nil {
 	return fmt.Errorf("open notification stream: %w", err)
@@ -261,6 +281,8 @@ pane's current command — without asking again:
 <!-- docs:subscribing -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session;
+// stream *tmux.NotificationStream
 // A subscription is a format tmux evaluates for you: it reports the value
 // when it first looks, about a second later, and then each time it changes.
 if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
@@ -298,6 +320,8 @@ capture written to an `io.Writer` never holds a scrollback in memory:
 <!-- docs:byte-streams -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server; pane tmux.Pane;
+// payload *strings.Reader; archive string
 name := "payload"
 if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
 	Name: &name,
@@ -372,6 +396,7 @@ type at it:
 <!-- docs:tmuxtest-quickstart -->
 
 ```go
+// Given: ctx context.Context; t *testing.T
 pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
 tmuxtest.WaitForText(ctx, t, pane, "ready")
