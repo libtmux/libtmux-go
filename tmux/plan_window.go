@@ -79,12 +79,15 @@ func (p *Plan) SelectWindow(target Ref) {
 }
 
 // SelectLayout records a layout applied to the window target names.
+// Run checks every recorded layout before dispatching any operation. Recording
+// and Preview perform no I/O; Preview uses its supplied version for name support.
 func (p *Plan) SelectLayout(target Ref, request SelectLayoutRequest) {
 	p.add(Op{
 		name:   "select-layout",
 		target: target,
+		layout: &request,
 		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
-			return selectLayoutArguments(resolved, request, render.version)
+			return selectLayoutArguments(resolved, request, render.layoutVersion)
 		},
 	})
 }

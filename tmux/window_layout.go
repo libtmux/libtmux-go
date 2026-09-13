@@ -29,11 +29,11 @@ type SelectLayoutRequest struct {
 	Previous bool
 }
 
-// Validate checks mode exclusivity, NUL bytes, recognised preset names and
+// Validate checks mode exclusivity, NUL bytes, candidate preset names and
 // checksummed custom-layout syntax without running tmux. Its zero value is valid.
-// Invalid requests match [ErrInvalidServerCommandRequest]. Mirrored presets are
-// accepted here; execution checks tmux version support. Geometry and the number
-// of panes are validated by tmux when the layout is applied.
+// Invalid requests match [ErrInvalidServerCommandRequest]. Names and abbreviations
+// valid on any supported tmux are accepted here; execution checks daemon support.
+// tmux validates geometry and live pane counts when applying the layout.
 func (request SelectLayoutRequest) Validate() error {
 	if err := validateServerCommandArgument("select-layout", "Layout", request.Layout, true); err != nil {
 		return err
@@ -93,15 +93,11 @@ func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) e
 	if err != nil {
 		return err
 	}
-	// The version is only needed for a name tmux learned partway through the
-	// supported range, a layout shape tmux learned at 3.8, or to resolve a
-	// prefix of either against the presets that exist on this connection, so
-	// it is not asked for otherwise.
-	var version Version
-	if layoutNeedsVersion(request.Layout) {
-		if version, err = w.server.Version(ctx); err != nil {
-			return err
-		}
+	version, err := w.server.validateLayouts(ctx, func(yield func(string, int) bool) {
+		yield(request.Layout, 1)
+	})
+	if err != nil {
+		return err
 	}
 	arguments, err := selectLayoutArguments(target, request, version)
 	if err != nil {
