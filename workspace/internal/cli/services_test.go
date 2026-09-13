@@ -17,7 +17,7 @@ import (
 )
 
 func TestPairedFlagsLastOccurrence(t *testing.T) {
-	for _, args := range [][]string{{"--no-startup", "--use-pythonrc", "--no-vi-mode", "--use-vi-mode"}, {"--use-pythonrc", "--no-startup", "--use-vi-mode", "--no-vi-mode"}} {
+	for _, args := range [][]string{nil, {"--no-startup", "--use-pythonrc", "--no-vi-mode", "--use-vi-mode"}, {"--use-pythonrc", "--no-startup", "--use-vi-mode", "--no-vi-mode"}} {
 		r := &invocation{ctx: context.Background(), in: strings.NewReader(""), out: io.Discard, err: io.Discard}
 		root := r.tree()
 		shell, _, err := root.Find([]string{"shell"})
@@ -30,7 +30,7 @@ func TestPairedFlagsLastOccurrence(t *testing.T) {
 		startup := shell.Flags().Lookup("use-pythonrc").Value.String()
 		vi := shell.Flags().Lookup("use-vi-mode").Value.String()
 		want := "false"
-		if args[0] == "--no-startup" {
+		if len(args) != 0 && args[0] == "--no-startup" {
 			want = "true"
 		}
 		if startup != want || vi != want {
