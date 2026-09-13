@@ -932,7 +932,7 @@ func TestAnUnknownLayoutIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
 	}{
 		{"a misspelling", "main-verticle", true},
 		{"a name tmux knows", "main-vertical", false},
-		{"a layout string tmux printed", "8466,80x24,0,0{78x24,0,0,0}", false},
+		{"a layout string tmux accepts", "2632,80x24,0,0{78x24,0,0,0}", false},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			_, err := workspace.Parse([]byte(
@@ -952,6 +952,15 @@ func TestAnUnknownLayoutIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
 				t.Fatalf("a layout tmux accepts was refused: %v", err)
 			}
 		})
+	}
+}
+
+func TestMalformedLayoutTreeIsRefusedWhileParsing(t *testing.T) {
+	for _, layout := range []string{"32d2,80x24,0,0{}", "ffff,80x24,0,0,0", "12f1,80x24,0,0{39x24,0,0,0,40x24,40,0,1"} {
+		_, err := workspace.Parse([]byte("session_name: invalid\nwindows:\n  - layout: " + layout + "\n"))
+		if !errors.Is(err, workspace.ErrInvalidWorkspace) {
+			t.Errorf("Parse(%q) = %v, want ErrInvalidWorkspace", layout, err)
+		}
 	}
 }
 

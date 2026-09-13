@@ -109,6 +109,10 @@ func TestSelectLayoutRejectsMultipleModesBeforeExecution(t *testing.T) {
 			request: SelectLayoutRequest{Layout: "tiled", Spread: true},
 		},
 		{
+			name:    "mirrored layout and spread",
+			request: SelectLayoutRequest{Layout: "main-horizontal-mirrored", Spread: true},
+		},
+		{
 			name:    "next and previous",
 			request: SelectLayoutRequest{Next: true, Previous: true},
 		},
@@ -175,4 +179,49 @@ func TestSelectLayoutUsesLiteralCommandBoundary(t *testing.T) {
 			t.Fatalf("runner calls = %d, want 0", calls)
 		}
 	})
+}
+
+func TestSelectLayoutRejectsMalformedTreesWithoutDispatch(t *testing.T) {
+	for _, layout := range []string{
+		"32d2,80x24,0,0{}",
+		"4a17,80x24,0,0{39x24,0,0,0,40x24,40,0[]}",
+		"12f1,80x24,0,0{39x24,0,0,0,40x24,40,0,1",
+		"89d5,80x24,0,0{39x24,0,0,0,40x24,40,0,1]",
+		"ffff,80x24,0,0,0",
+	} {
+		t.Run(layout, func(t *testing.T) {
+			if _, err := selectLayoutArguments("$7:0", SelectLayoutRequest{Layout: layout}, Version{}); !errors.Is(err, ErrInvalidServerCommandRequest) {
+				t.Fatalf("unsafe custom layout rendered: %v", err)
+			}
+		})
+	}
+}
+
+func TestSelectLayoutRequestValidateWithoutTmux(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	for _, request := range []SelectLayoutRequest{
+		{},
+		{Layout: "tiled"},
+		{Layout: "main-horizontal-mirrored"},
+		{Layout: "b25d,80x24,0,0,0"},
+		{Next: true},
+		{Previous: true},
+		{Spread: true},
+	} {
+		if err := request.Validate(); err != nil {
+			t.Errorf("Validate(%+v) = %v", request, err)
+		}
+	}
+	for _, request := range []SelectLayoutRequest{
+		{Layout: "tiled\x00"},
+		{Layout: "no-such-layout"},
+		{Layout: "32d2,80x24,0,0{}"},
+		{Layout: "ffff,80x24,0,0,0"},
+		{Layout: "tiled", Next: true},
+		{Next: true, Previous: true},
+	} {
+		if err := request.Validate(); !errors.Is(err, ErrInvalidServerCommandRequest) {
+			t.Errorf("Validate(%+v) = %v, want invalid request", request, err)
+		}
+	}
 }
