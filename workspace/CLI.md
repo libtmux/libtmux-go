@@ -74,10 +74,10 @@ file and atomic publication.
 ## Import source workspaces
 
 Tmuxinator and Teamocil imports validate native workspace shape and layout syntax
-before returning or saving a document. Unknown fields, invalid types, ERB
-expressions and unsupported source behaviour fail before output or overwrite.
-Only one spelling of an aliased field may be present, including null values.
-Generic `convert` continues to preserve arbitrary document fields.
+before returning or saving a document. Unknown fields, invalid types and
+unsupported source behaviour fail before output or overwrite. Only one spelling
+of an aliased field may be present, including null values. Generic `convert`
+continues to preserve arbitrary document fields.
 
 Tmuxinator imports preserve ordered windows and panes, directories, layouts and
 sequential commands. A window command array stays in one pane. Project
@@ -85,14 +85,18 @@ sequential commands. A window command array stays in one pane. Project
 grouping and require explicit panes. `synchronize: true` or `before` enables
 synchronization before sequential pane creation and command delivery; `after`
 enables it after all commands have been sent. Project lifecycle hooks, endpoint
-and runtime settings, and named pane maps require the source tool and are refused.
+and runtime settings, and named pane maps require the source tool and are
+refused. So is ERB markup: Tmuxinator expands it through Ruby before parsing,
+and no native reader does, so an unexpanded template fails before output or
+overwrite.
 
 Teamocil imports preserve window options, directories, layouts, pane commands
 and focus. `commands` arrays retain their `; ` grouping; legacy `splits` and
 `cmd` are accepted. Window options apply before pane creation and command
-delivery. Filters, `clear` and pane widths are refused. Both formats select the
-first window and pane by default; Teamocil's first explicit focus takes
-precedence.
+delivery. Filters, `clear` and pane widths are refused. Teamocil evaluates no
+templates, so `<%` in a Teamocil source is ordinary text and is preserved. Both
+formats select the first window and pane by default; Teamocil's first explicit
+focus takes precedence.
 
 The imported root is absolute and anchored to the import invocation's directory,
 including when the source omits it. Relative window directories resolve relative to
