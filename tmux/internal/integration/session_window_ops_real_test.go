@@ -1018,7 +1018,8 @@ func TestCommandWaitDrainsOutputAfterProcessExit(t *testing.T) {
 	quote := func(value string) string {
 		return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 	}
-	command := fmt.Sprintf("%s -S %s wait-for release-output; printf 'one\\ntwo\\n'; exit 7",
+	command := fmt.Sprintf(
+		"%[1]s -S %[2]s wait-for release-output; printf 'one\\ntwo\\n'; %[1]s -S %[2]s wait-for may-exit; exit 7",
 		quote(server.Executable()), quote(server.SocketPath()))
 	running, err := session.Start(ctx, command, tmux.RunOptions{Keep: true})
 	if err != nil {
@@ -1033,6 +1034,19 @@ func TestCommandWaitDrainsOutputAfterProcessExit(t *testing.T) {
 	}
 	if err := server.WaitFor(ctx, tmux.WaitForRequest{
 		Channel: "release-output", Mode: tmux.WaitForModeSignal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// tmux only defers closing a dead pane's terminal when FIONREAD still
+	// shows unread bytes, and FIONREAD can read zero for bytes the kernel has
+	// not yet moved off the pty's flip buffer onto the line discipline it
+	// checks. exit lands the moment printf returns, so without a second gate
+	// tmux can occasionally close the terminal before that move happens,
+	// discarding the command's output instead of merely delaying it. Signaling
+	// this gate from a fresh client process is far slower than that move, so
+	// it is never in flight when the command exits.
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{
+		Channel: "may-exit", Mode: tmux.WaitForModeSignal,
 	}); err != nil {
 		t.Fatal(err)
 	}
