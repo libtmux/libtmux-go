@@ -69,10 +69,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	// docs:query-in-tmux given:ctx context.Context; server tmux.Server
 	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 	sessions, err := server.SearchSessions(ctx, &live)
-	// docs:end
 	if err != nil {
 		return err
 	}
+	// docs:end
 	fmt.Println("live matches:", len(sessions))
 	return nil
 }

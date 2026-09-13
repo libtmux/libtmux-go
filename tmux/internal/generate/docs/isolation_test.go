@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -37,7 +38,12 @@ import (
 // would reject the unused result even though showing it is the entire point,
 // so each one is read once through the blank identifier.
 
-var packageUse = regexp.MustCompile(`\b([a-z][a-z0-9_]*)\.[A-Z_]`)
+var goDirective = regexp.MustCompile(`(?m)^go (\S+)$`)
+
+var (
+	packageUse  = regexp.MustCompile(`\b([a-z][a-z0-9_]*)\.[A-Z_]`)
+	importBlock = regexp.MustCompile(`(?ms)^import \(\n(.*?)^\)$`)
+)
 
 func TestPublishedRegionsCompileAlone(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..")
@@ -76,7 +82,8 @@ func TestPublishedRegionsCompileAlone(t *testing.T) {
 	}
 }
 
-// publishedRegions lists every region a Markdown document quotes, in order.
+// publishedRegions names every region the Markdown quotes, sorted and
+// deduplicated: a region shown in two documents is one subtest, not two.
 func publishedRegions(root string) ([]string, error) {
 	documents, err := findMarkdown(root)
 	if err != nil {
@@ -116,7 +123,7 @@ func compileAlone(t *testing.T, absRoot string, source region) (string, error) {
 	if imports != "" {
 		b.WriteString("import (\n" + imports + ")\n\n")
 	}
-	b.WriteString("func region() (err error) {\n")
+	b.WriteString("func region() error {\n")
 	for _, declaration := range givenDeclarations(source.given) {
 		b.WriteString("\tvar " + declaration + "\n")
 	}
@@ -126,7 +133,7 @@ func compileAlone(t *testing.T, absRoot string, source region) (string, error) {
 	for _, name := range regionDeclares(source.lines) {
 		b.WriteString("\t_ = " + name + "\n")
 	}
-	b.WriteString("\treturn err\n}\n\nfunc main() { _ = region() }\n")
+	b.WriteString("\treturn nil\n}\n\nfunc main() { _ = region() }\n")
 
 	write := func(name, body string) error {
 		return os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
@@ -134,7 +141,11 @@ func compileAlone(t *testing.T, absRoot string, source region) (string, error) {
 	if err := write("main.go", b.String()); err != nil {
 		return "", err
 	}
-	if err := write("go.mod", "module isolationcheck\n\ngo 1.26.0\n\n"+
+	language, err := languageVersion(absRoot)
+	if err != nil {
+		return "", err
+	}
+	if err := write("go.mod", "module isolationcheck\n\ngo "+language+"\n\n"+
 		"require github.com/libtmux/libtmux-go v0.0.0\n\n"+
 		"replace github.com/libtmux/libtmux-go => "+absRoot+"\n"); err != nil {
 		return "", err
@@ -169,7 +180,7 @@ func importsFor(source region) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	block := regexp.MustCompile(`(?ms)^import \(\n(.*?)^\)$`).FindStringSubmatch(string(content))
+	block := importBlock.FindStringSubmatch(string(content))
 	if block == nil {
 		return "", nil
 	}
@@ -198,12 +209,35 @@ func importsFor(source region) (string, error) {
 // importedName is the identifier an import line binds: its alias when it has
 // one, otherwise the last element of the path.
 func importedName(line string) string {
-	fields := strings.Fields(strings.TrimSpace(line))
-	if len(fields) == 2 {
-		return fields[0]
+	// A trailing comment would otherwise be read as the path, so the quoted
+	// path is taken directly rather than by counting fields.
+	quoted := strings.Index(line, `"`)
+	if quoted == -1 {
+		return ""
 	}
-	path := strings.Trim(fields[len(fields)-1], `"`)
+	end := strings.Index(line[quoted+1:], `"`)
+	if end == -1 {
+		return ""
+	}
+	path := line[quoted+1 : quoted+1+end]
+	if alias := strings.Fields(strings.TrimSpace(line[:quoted])); len(alias) == 1 {
+		return alias[0]
+	}
 	return path[strings.LastIndex(path, "/")+1:]
+}
+
+// languageVersion is the go directive of the module under test, so the
+// throwaway module states the floor once rather than keeping a copy of it.
+func languageVersion(absRoot string) (string, error) {
+	content, err := os.ReadFile(filepath.Join(absRoot, "go.mod"))
+	if err != nil {
+		return "", err
+	}
+	match := goDirective.FindStringSubmatch(string(content))
+	if match == nil {
+		return "", errors.New("no go directive in the module under test")
+	}
+	return match[1], nil
 }
 
 // regionDeclares names the bindings the region introduces at its own top
@@ -262,8 +296,8 @@ func regionDeclares(lines []string) []string {
 }
 
 // The check above passes when every region is honest, which is also what it
-// would do if it had quietly stopped compiling anything. These three pin the
-// mechanism to the two failures it exists to catch, and to the passing case
+// would do if it had quietly stopped compiling anything. These pin the
+// mechanism to the failures it exists to catch, and to the passing case
 // between them, so a refactor that defeats it fails here rather than going
 // unnoticed until a reader copies a snippet that cannot run.
 func TestIsolationCheckFailsForTheIntendedReasons(t *testing.T) {
@@ -273,9 +307,13 @@ func TestIsolationCheckFailsForTheIntendedReasons(t *testing.T) {
 		t.Fatalf("resolve root: %v", err)
 	}
 
-	// One statement that needs exactly two bindings it does not create.
+	// A snippet shaped like the real ones: it needs exactly two bindings it
+	// does not create, and it checks the error it does.
 	body := []string{
 		`session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "demo"})`,
+		`if err != nil {`,
+		`	return err`,
+		`}`,
 	}
 	origin := filepath.Join("..", "..", "..", "..", "examples", "filter-query", "main.go")
 

@@ -29,6 +29,9 @@ evaluates the format itself, so nothing that failed to match is ever sent:
 // Given: ctx context.Context; server tmux.Server
 live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 sessions, err := server.SearchSessions(ctx, &live)
+if err != nil {
+	return err
+}
 ```
 
 <!-- docs:end -->
