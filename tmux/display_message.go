@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -32,8 +33,11 @@ type DisplayMessageRequest struct {
 	NoExpand bool
 	// TargetClient selects the stable client receiving the display; zero omits -c.
 	TargetClient ClientName
-	// Delay sets display duration in milliseconds when nonnil.
-	Delay *int
+	// Delay sets the display duration. Nil uses tmux's display-time option;
+	// an explicit zero waits for a key press unless Notify is set. Values must
+	// be whole milliseconds from zero through 4294967295 milliseconds.
+	// Invalid values return ErrInvalidServerCommandRequest before tmux I/O.
+	Delay *time.Duration
 	// Notify triggers a notification rather than only a status message.
 	Notify bool
 }
@@ -52,7 +56,7 @@ type displayMessageValues struct {
 	message      string
 	format       string
 	targetClient string
-	delay        int
+	delay        int64
 	print        bool
 	allFormats   bool
 	verbose      bool
@@ -161,7 +165,14 @@ func captureDisplayMessageRequest(
 		values.hasClient = true
 	}
 	if request.Delay != nil {
-		values.delay = *request.Delay
+		delay := *request.Delay
+		if delay < 0 || delay%time.Millisecond != 0 || delay/time.Millisecond > 1<<32-1 {
+			return displayMessageValues{}, invalidServerCommandRequest(
+				"display-message", "Delay", delay.String(),
+				"must be whole milliseconds from 0 through 4294967295",
+			)
+		}
+		values.delay = delay.Milliseconds()
 		values.hasDelay = true
 	}
 	return values, nil
@@ -227,7 +238,7 @@ func runDisplayMessage(
 		arguments = append(arguments, "-c", request.targetClient)
 	}
 	if request.hasDelay {
-		arguments = append(arguments, "-d", strconv.Itoa(request.delay))
+		arguments = append(arguments, "-d", strconv.FormatInt(request.delay, 10))
 	}
 	if request.hasFormat {
 		arguments = append(arguments, "-F", request.format)
