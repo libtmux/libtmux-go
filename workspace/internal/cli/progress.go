@@ -48,8 +48,16 @@ func newProgress(out io.Writer, format string, lines, width, height int) *progre
 	return &progressPresenter{out: out, format: format, width: max(1, width), height: height, lines: min(lines, max(0, height-2)), partial: map[string]string{}, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
-func (r *invocation) progressEnabled(o *options) bool {
-	return !r.machine() && !o.noProgress && os.Getenv("TMUXP_PROGRESS") != "0" && terminal(r.err)
+func (r *invocation) progressTerminal(o *options) (int, int) {
+	name := os.Getenv("TERM")
+	if r.machine() || o.noProgress || os.Getenv("TMUXP_PROGRESS") == "0" || name == "" || name == "dumb" || !terminal(r.err) {
+		return 0, 0
+	}
+	width, height, err := term.GetSize(int(r.err.(*os.File).Fd()))
+	if err != nil || width < 2 || height < 3 {
+		return 0, 0
+	}
+	return width, height
 }
 
 func sharedTerminal(first, second io.Writer) bool {
@@ -62,14 +70,9 @@ func sharedTerminal(first, second io.Writer) bool {
 }
 
 func (r *invocation) startProgress(o *options) {
-	if !r.progressEnabled(o) {
+	width, height := r.progressTerminal(o)
+	if height == 0 {
 		return
-	}
-	width, height := 80, 24
-	if file, ok := r.err.(*os.File); ok {
-		if w, h, err := term.GetSize(int(file.Fd())); err == nil && w > 0 && h > 0 {
-			width, height = w, h
-		}
 	}
 	r.progress = newProgress(r.err, o.progressFormat, o.progressLines, width, height)
 	p := r.progress
