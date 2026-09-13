@@ -245,6 +245,13 @@ func TestCommandStreamUntilWaitCompletes(t *testing.T) {
 	// (from a plain screen capture, not the notification stream) always has
 	// it regardless.
 	server := tmuxtest.NewServer(context.Background(), t)
+	server = tmux.RecordCommandFailuresForTest(server, func(arguments, stderr []string, exitCode int, err error) {
+		if slices.ContainsFunc(arguments, func(argument string) bool {
+			return strings.Contains(argument, "respawn-pane")
+		}) {
+			t.Logf("native respawn-pane failure: exit=%d stderr=%q transport=%v", exitCode, stderr, err)
+		}
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	session := oneSession(ctx, t, server)
