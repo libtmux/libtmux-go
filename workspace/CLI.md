@@ -143,6 +143,9 @@ disables the presenter. `TMUXP_PROGRESS_FORMAT` and `TMUXP_PROGRESS_LINES`
 provide defaults while the presenter is active. Disabled progress ignores
 these environment defaults; explicit command-line values are still validated.
 Machine output always disables terminal rendering.
+Script stdout keeps its destination when redirected or connected to a
+different terminal; the panel retains stdout only when it shares stderr's
+terminal.
 
 `--log-level` filters optional warnings and file records. Command failures and
 machine operation records remain visible at every level. `load --log-file`

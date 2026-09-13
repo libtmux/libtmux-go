@@ -25,6 +25,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- Human load progress preserves script stdout redirected to a pipe, file or
+  another terminal. Output failures remain visible and stop script execution.
 - `tmux-workspace load` ignores progress environment defaults when progress
   is disabled, output is machine-readable or stderr is redirected. Explicit
   progress flags retain their validation.
