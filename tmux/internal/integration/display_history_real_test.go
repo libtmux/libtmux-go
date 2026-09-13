@@ -109,6 +109,17 @@ func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 	if err != nil || !slices.Equal(serverOutput, []string{version.String()}) {
 		t.Fatalf("Server.DisplayMessage() = (%#v, %v), want %s", serverOutput, err, version)
 	}
+	for _, delay := range []*time.Duration{
+		nil, new(time.Duration(0)), new(time.Millisecond), new(2 * time.Second),
+		new(4294967295 * time.Millisecond),
+	} {
+		output, err := server.DisplayMessage(ctx, tmux.DisplayMessageRequest{
+			Message: "duration", Print: true, Delay: delay,
+		})
+		if err != nil || !slices.Equal(output, []string{"duration"}) {
+			t.Fatalf("DisplayMessage(Delay %v) = (%#v, %v), want duration", delay, output, err)
+		}
+	}
 	leadingDash, err := server.DisplayMessage(ctx, tmux.DisplayMessageRequest{
 		Message: "-literal", Print: true,
 	})
@@ -222,7 +233,7 @@ func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 		}
 		control := tmuxtest.NewControlMode(context.Background(), t, base, sessions[0])
 		client := control.ClientName()
-		delay := 1
+		delay := time.Millisecond
 		output, displayErr := server.DisplayMessage(ctx, tmux.DisplayMessageRequest{
 			Message: "status-message", TargetClient: client, Delay: &delay, Notify: true,
 		})
