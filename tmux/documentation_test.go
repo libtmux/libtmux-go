@@ -683,10 +683,28 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 				t.Fatalf("run %s: %v\n%s", workflow, err, output)
 			}
 
-			probe := exec.Command("tmux", "list-sessions")
-			probe.Env = isolatedExampleEnvironment(home, tmuxRoot)
-			if output, err := probe.CombinedOutput(); err == nil {
-				t.Fatalf("%s left an isolated tmux server running:\n%s", workflow, output)
+			// An example that kills its last session leaves tmux tearing
+			// down: the server notices it holds none, exits, and unlinks its
+			// socket after the example's own process has already returned. A
+			// single probe can land inside that window and read a server on
+			// its way out as one that was left behind. A server genuinely
+			// leaked never exits, so waiting for the socket to go quiet still
+			// fails on the defect this guards, and stops reporting the
+			// teardown.
+			deadline := time.Now().Add(5 * time.Second)
+			var output []byte
+			for {
+				probe := exec.Command("tmux", "list-sessions")
+				probe.Env = isolatedExampleEnvironment(home, tmuxRoot)
+				out, err := probe.CombinedOutput()
+				if err != nil {
+					break
+				}
+				output = out
+				if time.Now().After(deadline) {
+					t.Fatalf("%s left an isolated tmux server running:\n%s", workflow, output)
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
 		})
 	}
