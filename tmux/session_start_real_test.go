@@ -137,7 +137,9 @@ func TestCommandStreamsWhileRunning(t *testing.T) {
 		t.Fatal("pane reported dead before its trailing sleep finished")
 	}
 
+	started := time.Now()
 	if err := running.Kill(ctx); err != nil {
+		logCommandKillFailure(ctx, t, server, pane, started)
 		t.Fatalf("Kill() error = %v", err)
 	}
 	if _, err := running.Wait(ctx); err != nil {
