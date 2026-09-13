@@ -25,6 +25,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- `tmux-workspace` handles SIGTERM through cancellation, stopping active
+  setup scripts and reporting the final interruption result with status 130.
 - Disable progress and its environment defaults when `TERM` is unset or
   `dumb`, or stderr's terminal dimensions cannot support the presenter.
 - Human load progress preserves script stdout redirected to a pipe, file or
