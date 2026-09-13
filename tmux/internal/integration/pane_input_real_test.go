@@ -58,7 +58,7 @@ func TestSendKeysLiteralCaptureWorkflowAgainstRealTmux(t *testing.T) {
 		t.Fatalf("shell readiness marker = %q, want ready", got)
 	}
 
-	command := "printf 'go-send-capture-workflow\\n'"
+	command := "printf '\\ngo-send-capture-workflow\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
 		Command: &command,
 		Literal: true,
