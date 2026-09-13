@@ -5,8 +5,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -138,6 +142,44 @@ func TestCommandStreamsWhileRunning(t *testing.T) {
 	}
 	if _, err := running.Wait(ctx); err != nil {
 		t.Fatalf("Wait() error = %v", err)
+	}
+}
+
+// Collect only the failed run's state before the fixture removes its server.
+func logCommandKillFailure(ctx context.Context, t *testing.T, server tmux.Server, pane tmux.Pane, started time.Time) {
+	t.Helper()
+	daemonPID, _ := pane.Formats().PID()
+	panePID, _ := pane.ProcessPID()
+	t.Logf("Kill diagnostics: elapsed=%s context=%v daemon=%d pane=%s pid=%d",
+		time.Since(started), ctx.Err(), daemonPID, pane.ID(), panePID)
+	if info, err := os.Stat(server.SocketPath()); err != nil {
+		t.Logf("Kill socket stat: %v", err)
+	} else {
+		t.Logf("Kill socket mode: %s", info.Mode())
+	}
+	for _, arguments := range [][]string{
+		{
+			"display-message", "-p", "-t", pane.ID().String(),
+			"#{pid}:#{session_id}:#{window_id}:#{pane_id}:#{pane_pid}:#{pane_dead}:#{pane_dead_status}:#{pane_dead_signal}",
+		},
+		{"show-messages", "-J"},
+	} {
+		probeCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		result, err := server.Cmd(probeCtx, arguments...)
+		cancel()
+		t.Logf("Kill probe %s: exit=%d stdout=%q stderr=%q error=%v",
+			arguments[0], result.ExitCode, result.Stdout, result.Stderr, err)
+	}
+	if daemonPID > 0 && panePID > 0 {
+		probeCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		arguments := []string{"-p", fmt.Sprintf("%d,%d", daemonPID, panePID)}
+		if runtime.GOOS == "linux" {
+			arguments = append(arguments, "--ppid", strconv.Itoa(daemonPID))
+		}
+		arguments = append(arguments, "-o", "pid,ppid,pgid,sid,stat,wchan,comm")
+		output, err := exec.CommandContext(probeCtx, "ps", arguments...).CombinedOutput()
+		t.Logf("Kill owned process state: %s error=%v", output, err)
 	}
 }
 
@@ -290,6 +332,7 @@ func TestCommandKillStopsIt(t *testing.T) {
 
 	started := time.Now()
 	if err := running.Kill(ctx); err != nil {
+		logCommandKillFailure(ctx, t, server, running.Pane(), started)
 		t.Fatalf("Kill() error = %v", err)
 	}
 	result, err := running.Wait(ctx)
@@ -503,7 +546,9 @@ func TestCommandLeavesNoGoroutines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
+	started := time.Now()
 	if err := killed.Kill(ctx); err != nil {
+		logCommandKillFailure(ctx, t, server, killed.Pane(), started)
 		t.Fatalf("Kill() error = %v", err)
 	}
 	if _, err := killed.Wait(ctx); err != nil {
