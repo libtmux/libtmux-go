@@ -1452,7 +1452,7 @@ Reads only. Repeating it changes nothing.
 
 ### `select_layout`
 
-Change tmux state; no client-supplied executable input. Applies a built-in tmux layout, or a saved layout string from get_window_info.
+Change tmux state; no client-supplied executable input. Applies a named layout, a unique abbreviation for the running tmux version, or a saved layout from get_window_info. Invalid syntax is rejected before window lookup; tmux validates geometry when applying the layout.
 
 Belongs to the `manage` toolset.
 
@@ -1472,7 +1472,7 @@ Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `layout` **required** | string | a built-in tmux layout name, or a saved layout string from get_window_info |
+| `layout` **required** | string | a named layout, a unique abbreviation for the running tmux version, or a saved layout from get_window_info |
 | `window_id` **required** | string | the window id, such as @1 |
 
 | Returns | Type |
