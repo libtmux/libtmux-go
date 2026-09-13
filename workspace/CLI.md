@@ -135,7 +135,8 @@ IDs and stages. Completed results remain available there if output fails or
 publication is interrupted. These outcomes describe what loading observed;
 session liveness may change afterward.
 
-Human load progress writes to a terminal on stderr. The `default`, `minimal`,
+Human load progress requires usable stderr terminal dimensions and a nonempty
+`TERM` other than `dumb`. The `default`, `minimal`,
 `window`, `pane` and `verbose` formats also accept custom template tokens.
 `--progress-lines` bounds retained script lines; `-1` uses terminal height and
 `0` streams script output directly. `--no-progress` or `TMUXP_PROGRESS=0`
