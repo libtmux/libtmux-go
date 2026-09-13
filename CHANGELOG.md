@@ -13,14 +13,21 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 - Add `SelectLayoutRequest.Validate` to check layout requests without tmux I/O.
   Workspace parsing uses the same validation as core layout operations.
+- Add `Server.ValidateLayouts` to check every layout and required pane count
+  before mutation. Version-sensitive names use the selected daemon; only an
+  unbound cold endpoint falls back to the configured client version.
 - `Window.SelectLayout` and `Plan.SelectLayout` reject invalid custom layout
   checksums, integer overflow and malformed trees before dispatch. Custom
   layouts support up to 256 nested parents; tmux validates their geometry.
+- `Window.SelectLayout` and plan execution accept unique named-layout
+  abbreviations for the running tmux version. Plans check every recorded
+  layout before dispatching any operation, including forward references.
 
 ### workspace
 
 - `Parse` and `tmux-workspace load` validate custom layout syntax before
-  building. Load checks every input before opening tmux or running scripts.
+  building. `Build`, `BuildInto` and load check layout availability and pane
+  capacity before mutation; load checks every input before running scripts.
 - `tmux-workspace ls --tree` groups workspaces by directory with sibling
   markers. Human listings escape terminal controls in names and paths;
   machine output preserves the original records.

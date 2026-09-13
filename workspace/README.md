@@ -55,8 +55,11 @@ uses strict errors regardless of the server it is handed, because a workspace
 that half exists is never what the caller wanted.
 
 Custom layouts are checked for their checksum, unsigned 32-bit fields and
-nonempty tree structure before building. Trees may nest up to 256 parents;
-tmux adjusts and validates the resulting geometry.
+nonempty tree structure before building. `Build` and `BuildInto` check every
+layout's desired pane capacity and name availability before making changes.
+Names accept abbreviations unique on the selected daemon; only an unbound
+cold endpoint uses the configured client version. Trees may nest up to 256
+parents; tmux adjusts and validates the resulting geometry.
 
 `Build` creates the session and a temporary control connection in one process,
 then uses that connection for the rest of the build.
