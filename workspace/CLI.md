@@ -127,6 +127,8 @@ remains writable. SIGINT and SIGTERM cancel active scripts through the normal
 cleanup path and return exit status 130. Child stdout and stderr are drained
 concurrently; retained text is capped at 1 MiB per stream. Invalid UTF-8 uses
 replacement characters and control bytes are encoded inside JSON strings.
+On Unix, confirmation and destination prompts also cancel while stdin remains
+open, preserving terminal settings and input intended for later consumers.
 Capture cannot recover original process arguments, command history, plugins or
 before-script definitions.
 

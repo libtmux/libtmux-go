@@ -25,6 +25,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- Interactive prompts on Unix now cancel on SIGINT or SIGTERM while input
+  remains open. Prompts preserve terminal settings and later stdin input.
 - Python shell startup files now require `--use-pythonrc`, matching tmuxp's
   default. Paired startup flags retain last-occurrence precedence.
 - `tmux-workspace` handles SIGTERM through cancellation, stopping active
