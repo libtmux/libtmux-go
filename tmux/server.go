@@ -152,9 +152,9 @@ func (s Server) IsAlive(ctx context.Context) (bool, error) {
 	return false, commandErr
 }
 
-// RaiseIfDead returns a [CommandError] when the configured server is not
+// CheckAlive returns a [CommandError] when the configured server is not
 // alive. Cancellation and transport failures are returned directly.
-func (s Server) RaiseIfDead(ctx context.Context) error {
+func (s Server) CheckAlive(ctx context.Context) error {
 	result, err := s.literalCmd(ctx, "list-sessions")
 	if err != nil {
 		return err
@@ -163,6 +163,13 @@ func (s Server) RaiseIfDead(ctx context.Context) error {
 		return newCommandError("list-sessions", result)
 	}
 	return nil
+}
+
+// RaiseIfDead checks whether the configured server is alive.
+//
+// Deprecated: Use [Server.CheckAlive].
+func (s Server) RaiseIfDead(ctx context.Context) error {
+	return s.CheckAlive(ctx)
 }
 
 func (s Server) connectionState() *serverState {
