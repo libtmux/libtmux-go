@@ -74,8 +74,9 @@ Three things about the format:
   ```
 
   The generator prints that list as the block's first line, so a reader can
-  see what the snippet expects to already have. `TestPublishedRegionsCompileAlone`
-  compiles every published region as the only code in a throwaway module, with
+  see what the snippet expects to already have.
+  `TestPublishedRegionsCompileAlone` compiles every published region as the
+  only code in a throwaway module, with
   the declarations as its local variables, so the list has to be exactly right:
   a binding the region uses and the marker omits fails as `undefined`, and one
   the marker names and the region never touches fails as `declared and not
