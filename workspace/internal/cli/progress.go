@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -37,15 +38,18 @@ type progressPresenter struct {
 	err                                                                                               error
 	once                                                                                              sync.Once
 	decorate                                                                                          func(string, string) string
+	terminal                                                                                          *os.File
+	requestedLines                                                                                    int
 
 	stop, done chan struct{}
 }
 
 func newProgress(out io.Writer, format string, lines, width, height int) *progressPresenter {
+	requestedLines := lines
 	if lines == -1 {
 		lines = max(0, height-2)
 	}
-	return &progressPresenter{out: out, format: format, width: max(1, width), height: height, lines: min(lines, max(0, height-2)), partial: map[string]string{}, stop: make(chan struct{}), done: make(chan struct{})}
+	return &progressPresenter{out: out, format: format, width: max(1, width), height: height, lines: min(lines, max(0, height-2)), requestedLines: requestedLines, partial: map[string]string{}, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
 func (r *invocation) progressTerminal(o *options) (int, int) {
@@ -53,11 +57,24 @@ func (r *invocation) progressTerminal(o *options) (int, int) {
 	if r.machine() || o.noProgress || os.Getenv("TMUXP_PROGRESS") == "0" || name == "" || name == "dumb" || !terminal(r.err) {
 		return 0, 0
 	}
-	width, height, err := term.GetSize(int(r.err.(*os.File).Fd()))
+	width, height, err := progressSize(r.err.(*os.File))
 	if err != nil || width < 2 || height < 3 {
 		return 0, 0
 	}
 	return width, height
+}
+
+func progressSize(file *os.File) (int, int, error) {
+	connection, err := file.SyscallConn()
+	if err != nil {
+		return 0, 0, err
+	}
+	var width, height int
+	var sizeErr error
+	controlErr := connection.Control(func(fd uintptr) {
+		width, height, sizeErr = term.GetSize(int(fd))
+	})
+	return width, height, errors.Join(controlErr, sizeErr)
 }
 
 func sharedTerminal(first, second io.Writer) bool {
@@ -76,6 +93,7 @@ func (r *invocation) startProgress(o *options) {
 	}
 	r.progress = newProgress(r.err, o.progressFormat, o.progressLines, width, height)
 	p := r.progress
+	p.terminal = r.err.(*os.File)
 	p.rawOut = r.out
 	p.panelStdout = sharedTerminal(r.out, r.err)
 	p.decorate = func(role, text string) string { return r.styleFor(r.err, role, text) }
@@ -169,11 +187,12 @@ func safeTerminal(value string) string {
 func (p *progressPresenter) script(stream, text string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.resize()
 	if p.err != nil {
 		return p.err
 	}
 	if p.lines == 0 {
-		p.clear()
+		p.clearDrawn()
 		if p.err != nil {
 			return p.err
 		}
@@ -266,7 +285,45 @@ func (p *progressPresenter) frame() []string {
 	return lines
 }
 
+func (p *progressPresenter) resize() {
+	if p.terminal == nil || p.err != nil {
+		return
+	}
+	width, height, err := progressSize(p.terminal)
+	if err != nil {
+		width, height = 0, 0
+	}
+	if width == p.width && height == p.height {
+		return
+	}
+	if p.drawn > 0 || p.width < 2 || p.height < 3 {
+		// Reflow invalidates the old cursor rows; resume below that frame.
+		_, p.err = io.WriteString(p.out, "\r\n")
+		p.drawn = 0
+	}
+	p.width, p.height = width, height
+	p.lines = p.requestedLines
+	if p.lines == -1 {
+		p.lines = max(0, height-2)
+	}
+	p.lines = min(p.lines, max(0, height-2))
+	if width < 2 {
+		p.lines = 0
+	}
+	if len(p.scriptLines) > p.lines {
+		p.scriptLines = p.scriptLines[len(p.scriptLines)-p.lines:]
+	}
+	if p.lines == 0 {
+		clear(p.partial)
+	}
+}
+
 func (p *progressPresenter) clear() {
+	p.resize()
+	p.clearDrawn()
+}
+
+func (p *progressPresenter) clearDrawn() {
 	if p.drawn == 0 || p.err != nil {
 		return
 	}
@@ -282,10 +339,11 @@ func (p *progressPresenter) clear() {
 }
 
 func (p *progressPresenter) draw() {
-	if p.session == "" || p.err != nil || (p.waiting && p.lines == 0) {
+	p.resize()
+	if p.session == "" || p.err != nil || p.width < 2 || p.height < 3 || (p.waiting && p.lines == 0) {
 		return
 	}
-	p.clear()
+	p.clearDrawn()
 	if p.err != nil {
 		return
 	}
