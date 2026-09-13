@@ -71,6 +71,30 @@ text; it does not answer prompts. `--yes` does not authorize replacement.
 Existing destinations require `--force`. Writes use a same-directory temporary
 file and atomic publication.
 
+## Inspect a workspace through MCP
+
+Loaded workspaces are ordinary tmux sessions. The separate [MCP server](../mcp/)
+can inspect them when both commands select the same socket. Install its command
+from the repository root:
+
+```console
+$ go install ./mcp/cmd/libtmux-mcp
+```
+
+After the detached load above, configure your MCP client to launch
+`libtmux-mcp` with arguments `-socket-name project` and environment variable
+`LIBTMUX_TOOLSETS=inspect`. The socket is selected once when the server starts.
+Use `-socket-path` when the workspace command uses `-S` instead of `-L`.
+
+Discover the advertised tools with `tools/list`, then call `list_sessions` and
+`list_panes`. Call `list_windows` with its `session` argument set to the
+configuration's `session_name`. Use the returned pane IDs with `capture_pane`
+or `wait_for_text`; keep `max_lines` and wait timeouts bounded. A pending text
+wait allows inspection requests on the same connection. `tmux://capabilities`
+reports the selected socket and
+available tools. See the [MCP recipes](../mcp/TOOLS.md#recipes) for live output
+and incremental capture.
+
 ## Execution behavior
 
 Load creates a session, reuses an existing session with the same name, or
