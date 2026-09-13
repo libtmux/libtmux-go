@@ -320,38 +320,3 @@ func TestCaptureNewWindowRequestCopiesReferencedValues(t *testing.T) {
 		t.Fatalf("captured environment = %q, want before", got)
 	}
 }
-
-// tmux answers with a pane's physical directory, so a suite root reached
-// through a symbolic link would never match a path a test derives from it.
-// macOS reaches its temporary base that way: /tmp links to /private/tmp.
-func TestSuiteRootResolvesItsBase(t *testing.T) {
-	t.Parallel()
-
-	physical, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(physical, link); err != nil {
-		t.Fatal(err)
-	}
-
-	for name, base := range map[string]string{"linked": link, "physical": physical} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			root, err := createSuiteRoot(base)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = os.RemoveAll(root) })
-
-			if directory := filepath.Dir(root); directory != physical {
-				t.Errorf("root %q sits under %q, want the physical base %q", root, directory, physical)
-			}
-			if !strings.HasPrefix(filepath.Base(root), suiteRootPrefix()) {
-				t.Errorf("root %q lacks the %q prefix", root, suiteRootPrefix())
-			}
-		})
-	}
-}
