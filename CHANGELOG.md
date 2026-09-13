@@ -25,6 +25,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- Python shell startup files now require `--use-pythonrc`, matching tmuxp's
+  default. Paired startup flags retain last-occurrence precedence.
 - `tmux-workspace` handles SIGTERM through cancellation, stopping active
   setup scripts and reporting the final interruption result with status 130.
 - Disable progress and its environment defaults when `TERM` is unset or

@@ -179,8 +179,9 @@ explicit Python option without starting a compatibility process automatically.
 `shell` and workspace plugin/custom-builder execution require an installed
 tmuxp 1.74.0 distribution. Set `TMUX_WORKSPACE_PYTHON` to its Python executable;
 the CLI checks distribution metadata before invoking it. Python selectors,
-startup settings and vi-mode settings retain their Python meaning. The paired
-startup and vi-mode options use the last occurrence. Missing optional runtimes
+startup settings and vi-mode settings retain their Python meaning. Startup
+files require `--use-pythonrc`; the default is disabled. The paired startup and
+vi-mode options use the last occurrence. Missing optional runtimes
 produce an explicit error. Plugin and custom-builder loads use the same
 append selection as native loads: `--append` targets the retained session even
 when `-d` is also supplied. Append authenticates before checking the Python
