@@ -93,9 +93,10 @@ func (s Session) Run(ctx context.Context, command string, options RunOptions) (R
 // status and screen [Session.Run] would have returned, and [Running.Kill]
 // stops the command. Options are exactly Run's.
 //
-// Before tmux 3.7, Start installs an output pipe running cat unless the pane
-// already has a pipe. The window owns that process, including when Keep
-// leaves the finished window in place.
+// Before tmux 3.7, Start attempts to install an output pipe running cat
+// unless the pane already has a pipe; a failed attempt only forfeits that
+// compatibility help. [Running.Wait] stops a pipe Start installed once the
+// outcome is read, whether or not Keep leaves the window itself in place.
 //
 // If Wait is never called, the window Start created is never removed.
 func (s Session) Start(
@@ -149,11 +150,13 @@ func (s Session) Start(
 		}
 	}
 	// Before 3.7, tmux drains pending terminal bytes on exit only when a
-	// pipe is open. The window owns the pipe's lifetime.
+	// pipe is open. Failing to install one only forfeits that compatibility
+	// help, so it is tolerated rather than failing Start; installedPipe
+	// records the attempt's own result so finish stops only the pipe it
+	// opened, never one a caller's own hook installed.
+	var installedPipe bool
 	if piping, _ := pane.Piping(); !piping && !version.AtLeast(captureVersion37) {
-		if err := pane.Pipe(ctx, PipePaneRequest{Command: new("exec cat")}); err != nil {
-			return nil, err
-		}
+		installedPipe = pane.Pipe(ctx, PipePaneRequest{Command: new("exec cat")}) == nil
 	}
 	// Channels are server-global, and tmux keeps a signal nobody is waiting
 	// for until the next waiter takes it, so each run owns a fresh name.
@@ -170,12 +173,13 @@ func (s Session) Start(
 		return nil, fmt.Errorf("start command: %w", err)
 	}
 	return &Running{
-		session:     s,
-		window:      window,
-		pane:        respawned,
-		channel:     channel,
-		fixedNotice: fixedNotice,
-		keep:        options.Keep,
+		session:       s,
+		window:        window,
+		pane:          respawned,
+		channel:       channel,
+		fixedNotice:   fixedNotice,
+		keep:          options.Keep,
+		installedPipe: installedPipe,
 	}, nil
 }
 
@@ -188,12 +192,13 @@ func (s Session) Start(
 // never reach [PaneObservation.Reader]; [RunResult.Lines] from Wait, a plain
 // screen capture rather than that notification stream, always has it.
 type Running struct {
-	session     Session
-	window      Window
-	pane        Pane
-	channel     string
-	fixedNotice bool
-	keep        bool
+	session       Session
+	window        Window
+	pane          Pane
+	channel       string
+	fixedNotice   bool
+	keep          bool
+	installedPipe bool
 
 	mu     sync.Mutex
 	done   bool
@@ -391,7 +396,9 @@ func (r *Running) askForAReap(ctx context.Context) {
 }
 
 // finish reads the command's outcome after tmux has signaled its pane-died
-// hook and removes the window unless Keep was set.
+// hook and removes the window unless Keep was set. A Keep'd window that Start
+// piped for compatibility keeps that pipe only until here: its job is done
+// once the outcome is read, and a caller can hold the window indefinitely.
 func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	defer func() {
 		if err == nil && r.keep {
@@ -417,6 +424,9 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 		return RunResult{}, fmt.Errorf("read screen: %w", err)
 	}
 	result.Lines = trimScreen(lines, r.fixedNotice)
+	if r.installedPipe && r.keep {
+		_ = finished.Pipe(ctx, PipePaneRequest{})
+	}
 	return result, nil
 }
 
