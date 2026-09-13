@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1006,6 +1007,9 @@ func TestSessionRunReportsStatusAndScreen(t *testing.T) {
 
 //libtmux:real-tmux
 func TestCommandWaitDrainsOutputAfterProcessExit(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("Darwin drains the controlling terminal before process exit")
+	}
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
