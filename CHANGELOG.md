@@ -11,19 +11,19 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux
 
-- `Server.CheckAlive` provides a liveness guard with Go naming. `RaiseIfDead`
+- Add `Server.CheckAlive`, a liveness guard with Go naming. `RaiseIfDead`
   remains as a deprecated forwarding alias. (#16)
 - `DisplayMessageRequest.Delay` now uses `time.Duration`; replace integer
   millisecond values such as `new(250)` with `new(250 * time.Millisecond)`.
   Omitted and explicit zero delays retain their meaning. Negative,
   fractional-millisecond and out-of-range values fail before command dispatch.
   (#16)
-
-- `Running.Wait` retains terminal output when a command exits before tmux
-  finishes reading its pane on versions before 3.7. Kept windows retain the
-  compatibility output pipe until the window is closed. (#16)
-- `Running.Kill` dispatches termination in the background and returns without
-  waiting for a blocked pane command queue. (#16)
+- `Session.Start` now installs a compatibility output pipe before tmux 3.7, so
+  `Running.Wait` no longer reports an empty screen for a command that exited
+  before tmux finished reading its pane. The pipe no longer outlives a kept
+  window's outcome. (#16)
+- `Running.Kill` now returns once tmux accepts the termination request,
+  rather than waiting for a blocked pane command queue to clear. (#16)
 
 ### examples
 
