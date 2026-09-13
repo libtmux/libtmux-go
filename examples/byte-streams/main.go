@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -79,6 +80,15 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 		BufferName: &name, DeleteAfter: true,
 	}); err != nil {
 		return fmt.Errorf("paste payload: %w", err)
+	}
+	// tmux accepts the paste before the pane has echoed it.
+	if err := tmux.Poll(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
+		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
+		return slices.ContainsFunc(lines, func(line string) bool {
+			return strings.Contains(line, "'quoted'")
+		}), err
+	}); err != nil {
+		return fmt.Errorf("wait for pasted payload: %w", err)
 	}
 
 	file, err := os.Create(archive)

@@ -476,3 +476,31 @@ func testExecutable(t *testing.T) string {
 	}
 	return executable
 }
+
+// RecordCommandFailuresForTest observes subprocess failures before a typed
+// operation redacts stderr or performs cleanup. It leaves transport unchanged.
+func RecordCommandFailuresForTest(
+	server Server,
+	record func(arguments, stderr []string, exitCode int, err error),
+) Server {
+	state := *server.state
+	state.executor = failureRecordingRunner{runner: state.executor, record: record}
+	server.state = &state
+	return server
+}
+
+type failureRecordingRunner struct {
+	runner commandRunner
+	record func(arguments, stderr []string, exitCode int, err error)
+}
+
+func (r failureRecordingRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	result, err := r.runner.Run(ctx, request)
+	if err != nil || result.ExitCode != 0 || len(result.Stderr) != 0 {
+		r.record(slices.Clone(request.Arguments), slices.Clone(result.Stderr), result.ExitCode, err)
+	}
+	return result, err
+}

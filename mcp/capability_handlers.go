@@ -111,7 +111,7 @@ type renameWindowCapabilityInput struct {
 
 type selectLayoutCapabilityInput struct {
 	WindowID string `json:"window_id" jsonschema:"the window id, such as @1"`
-	Layout   string `json:"layout" jsonschema:"a built-in tmux layout name"`
+	Layout   string `json:"layout" jsonschema:"a named layout, a unique abbreviation for the running tmux version, or a checksummed saved layout from get_window_info"`
 }
 
 type resizeWindowCapabilityInput struct {

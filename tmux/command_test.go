@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -65,12 +66,19 @@ func TestServerCmdReturnsExactRawStdout(t *testing.T) {
 func TestNewServerRejectsUnknownColorMode(t *testing.T) {
 	t.Parallel()
 
-	server, err := NewServer(ServerOptions{Binary: os.Args[0], Colors: ColorMode(16)})
-	if !errors.Is(err, ErrUnknownColor) {
-		t.Fatalf("NewServer() error = %v, want ErrUnknownColor", err)
-	}
-	if server.state != nil {
-		t.Fatalf("NewServer() server = %#v, want zero server", server)
+	for _, mode := range []ColorMode{16, 88} {
+		t.Run(fmt.Sprint(mode), func(t *testing.T) {
+			server, err := NewServer(ServerOptions{Binary: filepath.Join(t.TempDir(), "missing-tmux"), Colors: mode})
+			if !errors.Is(err, ErrUnknownColor) || !errors.Is(err, ErrInvalidServerOptions) {
+				t.Fatalf("NewServer() error = %v, want ErrUnknownColor and ErrInvalidServerOptions", err)
+			}
+			if color, ok := errors.AsType[*ColorError](err); !ok || color.Mode != mode {
+				t.Fatalf("NewServer() error = %v, want ColorError with mode %d", err, mode)
+			}
+			if server.state != nil {
+				t.Fatalf("NewServer() server = %#v, want zero server", server)
+			}
+		})
 	}
 }
 

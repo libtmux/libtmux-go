@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"gopkg.in/yaml.v3"
 )
 
@@ -309,10 +310,10 @@ func windowProblems(index int, window Window) []error {
 			"%w: %swindow %d (%q) has a negative window_index",
 			ErrInvalidWorkspace, where, index, window.Name))
 	}
-	if window.Layout != "" && !validLayout(window.Layout) {
+	if err := (tmux.SelectLayoutRequest{Layout: window.Layout}).Validate(); err != nil {
 		problems = append(problems, fmt.Errorf(
-			"%w: %swindow %d (%q) has an unknown layout %q",
-			ErrInvalidWorkspace, where, index, window.Name, window.Layout))
+			"%w: %swindow %d (%q) has an invalid layout: %w",
+			ErrInvalidWorkspace, where, index, window.Name, err))
 	}
 	if window.Shell != "" && len(window.Panes) > 0 && window.Panes[0].Shell != "" {
 		problems = append(problems, fmt.Errorf(
@@ -335,24 +336,6 @@ func windowPosition(window Window) string {
 		return ""
 	}
 	return "line " + strconv.Itoa(window.line) + ": "
-}
-
-// layoutNames includes layouts newer than the support floor. tmux remains the
-// authority for availability on the running version.
-var layoutNames = map[string]bool{
-	"even-horizontal":          true,
-	"even-vertical":            true,
-	"main-horizontal":          true,
-	"main-horizontal-mirrored": true,
-	"main-vertical":            true,
-	"main-vertical-mirrored":   true,
-	"tiled":                    true,
-}
-
-// validLayout accepts named layouts and serialized layouts containing commas;
-// tmux validates serialized layout syntax.
-func validLayout(layout string) bool {
-	return strings.Contains(layout, ",") || layoutNames[layout]
 }
 
 // nested adds the sentinel and source line once.

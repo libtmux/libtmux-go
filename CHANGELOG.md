@@ -9,6 +9,58 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `SelectLayoutRequest.Validate` to check layout requests without tmux I/O.
+  Workspace parsing uses the same validation as core layout operations.
+- Add `Server.ValidateLayouts` to check every layout and required pane count
+  before mutation. Version-sensitive names use the selected daemon; only an
+  unbound cold endpoint falls back to the configured client version.
+- `Window.SelectLayout` and `Plan.SelectLayout` reject invalid custom layout
+  checksums, integer overflow and malformed trees before dispatch. Custom
+  layouts support up to 256 nested parents; tmux validates their geometry.
+- `Window.SelectLayout` and plan execution accept unique named-layout
+  abbreviations for the running tmux version. Plans check every recorded
+  layout before dispatching any operation, including forward references.
+
+### workspace
+
+- Interactive prompts on Unix now cancel on SIGINT or SIGTERM while input
+  remains open. Prompts preserve terminal settings and later stdin input.
+- Python shell startup files now require `--use-pythonrc`, matching tmuxp's
+  default. Paired startup flags retain last-occurrence precedence.
+- `tmux-workspace` handles SIGTERM through cancellation, stopping active
+  setup scripts and reporting the final interruption result with status 130.
+- Disable progress and its environment defaults when `TERM` is unset or
+  `dumb`, or stderr's terminal dimensions cannot support the presenter.
+- Human load progress preserves script stdout redirected to a pipe, file or
+  another terminal. Output failures remain visible and stop script execution.
+- `tmux-workspace load` ignores progress environment defaults when progress
+  is disabled, output is machine-readable or stderr is redirected. Explicit
+  progress flags retain their validation.
+- `Parse` and `tmux-workspace load` validate custom layout syntax before
+  building. `Build`, `BuildInto` and load check layout availability and pane
+  capacity before mutation; load checks every input before running scripts.
+- `tmux-workspace ls --tree` groups workspaces by directory with sibling
+  markers. Human listings escape terminal controls in names and paths;
+  machine output preserves the original records.
+- `tmux-workspace load` restores terminal input modes and descriptor flags
+  after an attached client is cancelled, before reporting retained sessions.
+- `before_script` supports dot-relative executable paths when the workspace
+  directory contains spaces, preserving quoted arguments and the script's
+  working directory.
+
+### mcp
+
+- `select_layout` accepts unique named-layout abbreviations for the running
+  tmux version and uppercase saved-layout checksums. It uses core validation
+  before window lookup; tool discovery describes named and saved inputs.
+
+### examples
+
+- `byte-streams` waits for pasted text to appear before compressing the pane
+  screen, so the archive contains the payload even when echo is delayed.
+
 ## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
 
 ### tmux

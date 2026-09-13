@@ -289,7 +289,7 @@ func controlCommandPrefix(ctx context.Context, server tmux.Server) ([]string, er
 	// construction.
 	command := []string{prefix[0]}
 	for _, argument := range prefix[1:] {
-		if argument == "-2" || argument == "-8" {
+		if argument == "-2" {
 			command = append(command, argument)
 		}
 	}

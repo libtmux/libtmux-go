@@ -7,6 +7,10 @@ settled. Pin an exact version.
 
 Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
+The [`tmux-workspace` CLI](CLI.md) provides native workspace management,
+structured output, and optional Python compatibility. The library API below
+retains its own supported-field contract.
+
 This is a consumer of the tmux module, not part of it. The tmux module takes no
 runtime dependency; parsing YAML needs one, so this lives in its own module and
 `go get` on the tmux module never pulls it in.
@@ -45,10 +49,17 @@ workspace that loads is a workspace that was understood. Validation reports
 every problem it finds at once, each with the line it is on, so a file is fixed
 in one pass rather than one run per mistake. It reports every parse
 and validation failure as `ErrInvalidWorkspace`; a failure tmux raises while
-building, such as an unknown layout or option name, is a tmux command error and
-is classified with the tmux package's own sentinels. `Build` uses strict
-errors regardless of the server it is handed, because a workspace that half
-exists is never what the caller wanted.
+building, such as incompatible geometry or an unknown option, is a tmux
+command error and is classified with the tmux package's own sentinels. `Build`
+uses strict errors regardless of the server it is handed, because a workspace
+that half exists is never what the caller wanted.
+
+Custom layouts are checked for their checksum, unsigned 32-bit fields and
+nonempty tree structure before building. `Build` and `BuildInto` check every
+layout's desired pane capacity and name availability before making changes.
+Names accept abbreviations unique on the selected daemon; only an unbound
+cold endpoint uses the configured client version. Trees may nest up to 256
+parents; tmux adjusts and validates the resulting geometry.
 
 `Build` creates the session and a temporary control connection in one process,
 then uses that connection for the rest of the build.
