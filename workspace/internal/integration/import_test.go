@@ -67,7 +67,12 @@ func TestImportedWorkspacesKeepCommandsAndRelocatedDirectories(t *testing.T) {
 				t.Fatal(err)
 			}
 			pid := daemonPID(t, server)
-			dir := t.TempDir()
+			// tmux answers a pane's physical directory, and macOS reaches the
+			// suite root through /tmp, a link to /private/tmp.
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
 			root := filepath.Join(dir, "project root")
 			nested := filepath.Join(root, "nested")
 			if err := os.MkdirAll(nested, 0o700); err != nil {
