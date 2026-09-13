@@ -49,10 +49,14 @@ workspace that loads is a workspace that was understood. Validation reports
 every problem it finds at once, each with the line it is on, so a file is fixed
 in one pass rather than one run per mistake. It reports every parse
 and validation failure as `ErrInvalidWorkspace`; a failure tmux raises while
-building, such as an unknown layout or option name, is a tmux command error and
-is classified with the tmux package's own sentinels. `Build` uses strict
-errors regardless of the server it is handed, because a workspace that half
-exists is never what the caller wanted.
+building, such as incompatible geometry or an unknown option, is a tmux
+command error and is classified with the tmux package's own sentinels. `Build`
+uses strict errors regardless of the server it is handed, because a workspace
+that half exists is never what the caller wanted.
+
+Custom layouts are checked for their checksum, unsigned 32-bit fields and
+nonempty tree structure before building. Trees may nest up to 256 parents;
+tmux adjusts and validates the resulting geometry.
 
 `Build` creates the session and a temporary control connection in one process,
 then uses that connection for the rest of the build.
