@@ -4,6 +4,8 @@ import (
 	"context"
 	"regexp"
 	"slices"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/layout"
 )
 
 // SelectLayoutRequest selects one layout operation. Its zero value reapplies
@@ -23,6 +25,51 @@ type SelectLayoutRequest struct {
 	Previous bool
 }
 
+// Validate checks mode exclusivity, NUL bytes, recognised preset names and
+// checksummed custom-layout syntax without running tmux. Its zero value is valid.
+// Invalid requests match [ErrInvalidServerCommandRequest]. Mirrored presets are
+// accepted here; execution checks tmux version support. Geometry and the number
+// of panes are validated by tmux when the layout is applied.
+func (request SelectLayoutRequest) Validate() error {
+	if err := validateServerCommandArgument("select-layout", "Layout", request.Layout, true); err != nil {
+		return err
+	}
+	modes := 0
+	if request.Layout != "" {
+		modes++
+	}
+	if request.Spread {
+		modes++
+	}
+	if request.Next {
+		modes++
+	}
+	if request.Previous {
+		modes++
+	}
+	if modes > 1 {
+		return invalidServerCommandRequest(
+			"select-layout",
+			"Mode",
+			"",
+			"Layout, Spread, Next, and Previous are mutually exclusive",
+		)
+	}
+
+	if request.Layout == "" || layoutPresets[request.Layout] || layoutMirroredPresets[request.Layout] {
+		return nil
+	}
+	if _, custom := layout.Cells(request.Layout); custom {
+		return nil
+	}
+	// tmux 3.3a exits the daemon on unknown layout names.
+	return invalidServerCommandRequest(
+		"select-layout", "Layout", request.Layout,
+		"is neither a layout preset nor a tmux layout string; tmux 3.3a exits "+
+			"on an unrecognised layout and destroys every session on the socket",
+	)
+}
+
 // SelectLayout applies one layout operation to the receiver's exact winlink.
 // It changes pane geometry without selecting the window or promising client
 // focus. The materialized receiver is not refreshed, so callers that need
@@ -30,6 +77,9 @@ type SelectLayoutRequest struct {
 // A transport or context error can be delivery-ambiguous; the void result
 // cannot carry partial state and no rollback is attempted.
 func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) error {
+	if err := request.Validate(); err != nil {
+		return err
+	}
 	target, err := exactWindowTarget(w)
 	if err != nil {
 		return err
@@ -69,11 +119,6 @@ var layoutMirroredPresets = map[string]bool{
 
 var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 
-// layoutStringPattern matches tmux's own description of an arrangement, which
-// #{window_layout} reports and select-layout accepts back. It begins with a
-// checksum, which is what makes it distinguishable from a name.
-var layoutStringPattern = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
-
 // layoutPanePattern matches one layout cell that holds a pane. tmux dumps such
 // a cell as width x height, offsets, and the pane's own number; cells that only
 // arrange other cells stop after the offsets.
@@ -92,27 +137,6 @@ func layoutListsPane(layout string, pane PaneID) bool {
 	})
 }
 
-// tmux 3.3a exits the server for an unknown layout instead of returning an
-// error, so reject names that are neither presets nor layout strings.
-func validateLayout(layout string, version Version) error {
-	if layout == "" || layoutPresets[layout] || layoutStringPattern.MatchString(layout) {
-		return nil
-	}
-	if layoutMirroredPresets[layout] {
-		if version.AtLeast(layoutMirroredVersion) {
-			return nil
-		}
-		return &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
-	}
-	return invalidServerCommandRequest(
-		"select-layout",
-		"Layout",
-		layout,
-		"is neither a layout preset nor a tmux layout string; tmux 3.3a exits "+
-			"on an unrecognised layout and destroys every session on the socket",
-	)
-}
-
 // selectLayoutArguments renders one select-layout argument vector. It performs
 // no I/O, so a [Plan] can render a layout it has not applied.
 func selectLayoutArguments(
@@ -120,37 +144,14 @@ func selectLayoutArguments(
 	request SelectLayoutRequest,
 	version Version,
 ) ([]string, error) {
-	if err := validateServerCommandArguments(
-		"select-layout",
-		serverCommandArgument{field: "Target", value: target},
-		serverCommandArgument{field: "Layout", value: request.Layout},
-	); err != nil {
+	if err := validateServerCommandArgument("select-layout", "Target", target, true); err != nil {
 		return nil, err
 	}
-	if err := validateLayout(request.Layout, version); err != nil {
+	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-
-	modes := 0
-	if request.Layout != "" {
-		modes++
-	}
-	if request.Spread {
-		modes++
-	}
-	if request.Next {
-		modes++
-	}
-	if request.Previous {
-		modes++
-	}
-	if modes > 1 {
-		return nil, invalidServerCommandRequest(
-			"select-layout",
-			"Mode",
-			"",
-			"Layout, Spread, Next, and Previous are mutually exclusive",
-		)
+	if layoutMirroredPresets[request.Layout] && !version.AtLeast(layoutMirroredVersion) {
+		return nil, &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
 	}
 
 	arguments := []string{"select-layout", "-t", target}

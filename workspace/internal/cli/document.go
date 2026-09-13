@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/mattn/go-shellwords"
 	"gopkg.in/yaml.v3"
 )
@@ -285,6 +286,9 @@ func normalize(doc document, base string) (loadPlan, error) {
 			return plan, fmt.Errorf("window %d must be a mapping", wi)
 		}
 		wp := windowPlan{Name: expand(textValue(w["window_name"])), Layout: expand(textValue(w["layout"]))}
+		if err := (tmux.SelectLayoutRequest{Layout: wp.Layout}).Validate(); err != nil {
+			return plan, fmt.Errorf("window %d has an invalid layout: %w", wi, err)
+		}
 		if strings.ContainsRune(wp.Name, 0) {
 			return plan, errors.New("NUL in window name")
 		}

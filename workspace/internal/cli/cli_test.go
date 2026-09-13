@@ -107,6 +107,25 @@ func TestMalformedBeforeScriptPrecedesBackend(t *testing.T) {
 	}
 }
 
+func TestMalformedLayoutInLaterInputPrecedesBackend(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.json")
+	second := filepath.Join(dir, "second.json")
+	for path, content := range map[string]string{
+		first:  `{"session_name":"first","windows":[{"panes":[null]}]}`,
+		second: `{"session_name":"second","windows":[{"layout":"32d2,80x24,0,0{}","panes":[null]}]}`,
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, out, diagnostic := invoke(t, "load", "-d", "--json", first, second)
+	if code == 0 || out != "" || !strings.Contains(diagnostic, "layout") || strings.Contains(diagnostic, "executable") {
+		t.Fatalf("layout must fail before backend resolution: %d %q %q", code, out, diagnostic)
+	}
+}
+
 func TestBridgeAppendScriptPrecedesRuntime(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("TMUX_WORKSPACE_PYTHON", filepath.Join(t.TempDir(), "missing-python"))

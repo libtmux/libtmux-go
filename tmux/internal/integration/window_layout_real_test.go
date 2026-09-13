@@ -36,6 +36,11 @@ func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {
 		"no-such-layout",
 		"zzzz,80x24,0,0,0", // checksum-shaped, but not hexadecimal
 		"garbage,,,",
+		"32d2,80x24,0,0{}",
+		"4a17,80x24,0,0{39x24,0,0,0,40x24,40,0[]}",
+		"12f1,80x24,0,0{39x24,0,0,0,40x24,40,0,1",
+		"89d5,80x24,0,0{39x24,0,0,0,40x24,40,0,1]",
+		"ffff,80x24,0,0,0",
 	} {
 		t.Run(layout, func(t *testing.T) {
 			err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: layout})
