@@ -38,7 +38,8 @@ type DisplayMessageRequest struct {
 	// be whole milliseconds from zero through 4294967295 milliseconds.
 	// Invalid values return ErrInvalidServerCommandRequest before tmux I/O.
 	Delay *time.Duration
-	// Notify triggers a notification rather than only a status message.
+	// Notify makes the status message ignore key presses, closing only once
+	// Delay elapses.
 	Notify bool
 }
 
