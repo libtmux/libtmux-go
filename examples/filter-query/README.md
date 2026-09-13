@@ -26,6 +26,7 @@ evaluates the format itself, so nothing that failed to match is ever sent:
 <!-- docs:query-in-tmux -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
 live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 sessions, err := server.SearchSessions(ctx, &live)
 ```
@@ -39,6 +40,7 @@ answers from the same moment:
 <!-- docs:query-in-go -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
 snapshot, err := server.Snapshot(ctx)
 if err != nil {
 	return err
@@ -56,6 +58,7 @@ Typed filters combine fields and captured relations without another tmux command
 <!-- docs:query-typed-in-go -->
 
 ```go
+// Given: snapshot tmux.Snapshot
 filter := tmux.PaneFilter{
 	Active:  new(true),
 	Session: &tmux.SessionFilter{Name: new("libtmux-filter")},

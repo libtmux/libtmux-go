@@ -53,7 +53,7 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	fmt.Printf("process path: %d searches\n", searchesPerPath)
 
 	// Keep the connection-bound record; the original still starts subprocesses.
-	// docs:control-pool
+	// docs:control-pool given:ctx context.Context; session tmux.Session
 	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		return fmt.Errorf("open control connection: %w", err)

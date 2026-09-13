@@ -30,6 +30,7 @@ archive: /tmp/libtmux-byte-streams-12345.gz
 <!-- docs:byte-streams -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader; archive string
 name := "payload"
 if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
 	Name: &name,
