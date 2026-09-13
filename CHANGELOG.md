@@ -25,6 +25,9 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- `tmux-workspace load` ignores progress environment defaults when progress
+  is disabled, output is machine-readable or stderr is redirected. Explicit
+  progress flags retain their validation.
 - `Parse` and `tmux-workspace load` validate custom layout syntax before
   building. `Build`, `BuildInto` and load check layout availability and pane
   capacity before mutation; load checks every input before running scripts.
