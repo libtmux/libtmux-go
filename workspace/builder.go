@@ -29,6 +29,8 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 //
 // Build is not atomic. A failure after session creation returns that session;
 // completed mutations remain in tmux. Command failures are not normalized.
+// Every layout is checked against the selected daemon and desired pane count
+// before session creation. tmux validates geometry when applying each layout.
 //
 // Build creates the session and an attached control connection in one process,
 // uses that connection for the build, and closes it before returning. The
@@ -41,6 +43,9 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.Session, error) {
 	request, err := workspace.InitialSessionRequest()
 	if err != nil {
+		return tmux.Session{}, err
+	}
+	if err := workspace.validateLayouts(ctx, server); err != nil {
 		return tmux.Session{}, err
 	}
 	created, connection, err := server.NewSessionConnection(
@@ -76,6 +81,7 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 // creates a session nor opens or owns a connection.
 //
 // BuildInto is not atomic. A failure leaves completed mutations in tmux.
+// Every layout is checked before changing the initial session.
 func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) error {
 	if session.ID() == "" {
 		return tmux.ErrMissingTarget
@@ -84,6 +90,9 @@ func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) e
 		return err
 	}
 	server := session.Server()
+	if err := workspace.validateLayouts(ctx, server); err != nil {
+		return err
+	}
 
 	// The initial window is created with the session before these values are set;
 	// later windows can inherit them at creation.
@@ -124,6 +133,16 @@ func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) e
 		}
 	}
 	return nil
+}
+
+func (w Workspace) validateLayouts(ctx context.Context, server tmux.Server) error {
+	return server.ValidateLayouts(ctx, func(yield func(string, int) bool) {
+		for _, window := range w.Windows {
+			if !yield(window.Layout, max(1, len(window.Panes))) {
+				return
+			}
+		}
+	})
 }
 
 // buildWindow resolves the session's initial window or creates a later one,
