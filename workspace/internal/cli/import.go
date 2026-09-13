@@ -11,8 +11,10 @@ import (
 
 // importWorkspace translates only source behavior represented by the native loader.
 func importWorkspace(doc document, kind string) (document, error) {
-	if err := importTemplates(doc); err != nil {
-		return nil, err
+	if kind == "tmuxinator" {
+		if err := importTemplates(doc); err != nil {
+			return nil, err
+		}
 	}
 	switch kind {
 	case "teamocil":
@@ -324,11 +326,13 @@ func importFirstFocus(items []any) {
 	}
 }
 
+// Tmuxinator expands ERB through Ruby before parsing, and nothing here
+// does, so an unexpanded template would otherwise become a literal command.
 func importTemplates(value any) error {
 	switch v := value.(type) {
 	case string:
 		if strings.Contains(v, "<%") {
-			return errors.New("import does not evaluate ERB templates")
+			return errors.New("tmuxinator ERB templates are unsupported; expand them before import")
 		}
 	case map[string]any:
 		for _, key := range slices.Sorted(maps.Keys(v)) {
