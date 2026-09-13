@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -230,6 +231,29 @@ func flushOutput(writer io.Writer) error {
 	return nil
 }
 
+func promptLine(ctx context.Context, input io.Reader) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if file, ok := input.(*os.File); ok {
+		return promptFileLine(ctx, file)
+	}
+	return bufio.NewReader(&promptInput{ctx: ctx, input: input}).ReadString('\n')
+}
+
+type promptInput struct {
+	ctx   context.Context
+	input io.Reader
+}
+
+func (r *promptInput) Read(data []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	// Leave bytes after this answer available to the next consumer of input.
+	return r.input.Read(data[:min(1, len(data))])
+}
+
 func (r *invocation) prompt(label, fallback string) (string, error) {
 	if r.machine() {
 		return "", usage("%s must be supplied in machine mode", label)
@@ -240,12 +264,10 @@ func (r *invocation) prompt(label, fallback string) (string, error) {
 	if err := flushOutput(r.err); err != nil {
 		return "", err
 	}
-	reader, ok := r.in.(*bufio.Reader)
-	if !ok {
-		reader = bufio.NewReader(r.in)
-		r.in = reader
+	line, err := promptLine(r.ctx, r.in)
+	if r.ctx.Err() != nil {
+		return "", r.ctx.Err()
 	}
-	line, err := reader.ReadString('\n')
 	if err != nil && strings.TrimSpace(line) == "" {
 		return "", errors.New("input required; use explicit noninteractive options")
 	}
