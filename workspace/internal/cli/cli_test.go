@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -201,6 +203,31 @@ func TestConvertPreservesUnknownDocumentAndProtectsFile(t *testing.T) {
 	content, err := os.ReadFile(destination)
 	if err != nil || code != 1 || string(content) != "untouched" || !json.Valid([]byte(diagnostic)) {
 		t.Fatalf("overwrite protection: %d %q %q %v", code, content, diagnostic, err)
+	}
+}
+
+func TestCaptureDestinationStaysInTheWorkspaceDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	directory := filepath.Join(home, ".tmuxp")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	capture := func(name string) error {
+		r := &invocation{ctx: t.Context(), in: strings.NewReader(""), out: io.Discard, err: io.Discard}
+		return r.documentResult(&options{yes: true, quiet: true}, document{"session_name": name}, "", "yaml", nil)
+	}
+	for _, name := range []string{"", ".", "..", "../../escape", "nested/name", `back\slash`, "title\x1b]2;x\a"} {
+		var specific *failure
+		if err := capture(name); !errors.As(err, &specific) || specific.Code != "unsafe_destination" {
+			t.Errorf("session name %q derived a destination: %v", name, err)
+		}
+	}
+	if err := capture("$HOME"); err != nil {
+		t.Fatal(err)
+	}
+	if !isFile(filepath.Join(directory, "$HOME.yaml")) {
+		t.Error("a plain session name did not publish into the workspace directory")
 	}
 }
 
