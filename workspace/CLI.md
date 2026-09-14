@@ -68,10 +68,14 @@ $ tmux-workspace convert \
 
 Machine conversion, import and freeze return a document when `--save-to` is
 absent. `--workspace-format` controls saved YAML or JSON; the output flag
-controls the CLI stream. Human freeze saves a file. `--quiet` suppresses status
-text; it does not answer prompts. `--yes` does not authorize replacement.
-Existing destinations require `--force`. Writes use a same-directory temporary
-file and atomic publication.
+controls the CLI stream. Human freeze saves a file, named after the session in
+the workspace directory. tmux allows a session name that cannot stand alone as
+a file name — one holding a path separator, `..` or a control byte — and freeze
+refuses such a name instead of resolving it; pass `--save-to`. `--quiet`
+suppresses status text; it does not answer prompts. `--yes` does not authorize
+replacement. Existing destinations require `--force`. Writes use a
+same-directory temporary file and atomic publication; the published file keeps
+the mode of a file it replaces and otherwise follows the process creation mask.
 
 ## Import source workspaces
 
