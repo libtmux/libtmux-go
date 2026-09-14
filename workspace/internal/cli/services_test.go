@@ -115,6 +115,32 @@ func TestListHumanTreeGroupsDirectoriesAndEscapesNames(t *testing.T) {
 	}
 }
 
+func TestSearchHumanOutputEscapesNames(t *testing.T) {
+	global := t.TempDir()
+	unsafeName := "gamma\x1b]2;title\a\nname"
+	if err := os.WriteFile(filepath.Join(global, unsafeName+".json"), []byte(`{"session_name":"listed","windows":[{"panes":["blank"]}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", global)
+	t.Setenv("TMUXP_CONFIGDIR", global)
+	t.Setenv("NO_COLOR", "1")
+	t.Chdir(global)
+	code, out, diagnostic := invoke(t, "search", "gamma")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("search: %d %q %q", code, out, diagnostic)
+	}
+	if strings.ContainsAny(out, "\x1b\a") || strings.Contains(out, "title\nname") {
+		t.Errorf("search emitted terminal controls: %q", out)
+	}
+	if !strings.Contains(out, `gamma\x1b]2;title\x07\x0aname`) {
+		t.Errorf("search did not escape the matched name: %q", out)
+	}
+	code, machine, diagnostic := invoke(t, "search", "--json", "gamma")
+	if code != 0 || diagnostic != "" || !strings.Contains(machine, `gamma\u001b]2;title\u0007\nname`) {
+		t.Errorf("machine search changed the underlying name: %d %q %q", code, machine, diagnostic)
+	}
+}
+
 func TestPythonVersionCheckSurvivesOptimization(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("Python compatibility runtime unavailable")
