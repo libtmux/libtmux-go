@@ -19,3 +19,8 @@ func superviseProcess(cmd *exec.Cmd) {
 		return err
 	}
 }
+
+func interruptProcess(cmd *exec.Cmd) {
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGINT) }
+	cmd.WaitDelay = interruptDelay
+}
