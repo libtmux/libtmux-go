@@ -14,24 +14,20 @@ func TestCellsCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fixtures []struct{ ID, Layout string }
+	// Cells counts leaves in a checksummed tree: a preset name and a malformed
+	// tree both report none, while geometry tmux rejects stays countable.
+	var fixtures []struct {
+		ID, Layout string
+		Cells      int
+	}
 	if err := json.Unmarshal(data, &fixtures); err != nil {
 		t.Fatal(err)
-	}
-	// Geometry failures and too few leaves remain syntactically valid.
-	leaves := map[string]int{
-		"leaf-with-id": 1, "leaf-without-id": 1, "two-with-ids": 2,
-		"two-without-ids": 2, "nested": 3, "short-root-geometry": 2,
-		"too-few-cells": 1, "bad-inner-size": 2, "nested-trim-one": 3,
-		"nested-trim-two": 3, "nested-invalid-width": 3,
-		"nested-short-parent": 3, "bad-inner-size-trimmed": 2,
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.ID, func(t *testing.T) {
 			cells, valid := Cells(fixture.Layout)
-			want := leaves[fixture.ID]
-			if valid != (want != 0) || valid && cells != want {
-				t.Fatalf("Cells(%q) = %d, %t; want %d leaves", fixture.Layout, cells, valid, want)
+			if valid != (fixture.Cells != 0) || valid && cells != fixture.Cells {
+				t.Fatalf("Cells(%q) = %d, %t; want %d leaves", fixture.Layout, cells, valid, fixture.Cells)
 			}
 		})
 	}
