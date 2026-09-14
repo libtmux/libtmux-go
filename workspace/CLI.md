@@ -325,3 +325,8 @@ $ python3 workspace/scripts/verify_cli.py \
 The report includes raw timing samples, binary/script hashes, command inventory,
 stream checks and fixture outcomes. A missing example plugin is reported as a
 dependency gap; topology checks do not assert that external applications start.
+
+A check that raises records `FAIL` with the reason, stops the run, and reports
+`"status": "FAIL"` with exit status 1; a fixture that fails to load reports
+`PARTIAL`. Pointing `--binary` at a program that answers nothing, such as
+`/bin/true`, produces that failing report.
