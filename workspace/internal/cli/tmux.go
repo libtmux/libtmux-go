@@ -243,6 +243,18 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if err != nil {
 		return err
 	}
+	var borrowed tmux.Session
+	var handoff *loadHandoff
+	// The borrowed daemon answers the layout preflight, so --append resolves it
+	// first: the version a layout is checked against has to be the one that
+	// will apply it.
+	if o.append {
+		borrowed, err = currentSession(r.ctx, server)
+		if err != nil {
+			return err
+		}
+		server = borrowed.Server()
+	}
 	if err := server.ValidateLayouts(r.ctx, func(yield func(string, int) bool) {
 		for _, input := range inputs {
 			if input.plan.Bridge {
@@ -257,15 +269,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	}); err != nil {
 		return err
 	}
-	var borrowed tmux.Session
-	var handoff *loadHandoff
-	if o.append {
-		borrowed, err = currentSession(r.ctx, server)
-		if err != nil {
-			return err
-		}
-		server = borrowed.Server()
-	} else if !o.detached {
+	if !o.append && !o.detached {
 		handoff, err = r.prepareHandoff(server)
 		if err != nil {
 			return err
