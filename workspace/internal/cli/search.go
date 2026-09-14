@@ -270,7 +270,7 @@ func (r *invocation) writeMatches(matches []map[string]any) error {
 		return r.encode(matches)
 	}
 	for _, match := range matches {
-		if _, err := fmt.Fprintf(r.out, "%s  %s\n", r.style("subject", textValue(match["name"])), r.style("info", textValue(match["path"]))); err != nil {
+		if _, err := fmt.Fprintf(r.out, "%s  %s\n", r.style("subject", safeTerminal(textValue(match["name"]))), r.style("info", safeTerminal(textValue(match["path"])))); err != nil {
 			return err
 		}
 	}
