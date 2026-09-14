@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,49 @@ import (
 
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+// readyMarker is what the setup script writes into the readiness pipe before
+// it execs the command under test.
+const readyMarker = "ready"
+
+// scriptPipe reports the setup script's liveness without naming a process. The
+// script holds the write end and execs a command that inherits it, so the read
+// end delivers the marker once the script runs and end of file once every
+// descendant holding it is gone. A process id would be ambiguous here: the
+// script is a grandchild this test cannot reap, so it reads as running while a
+// zombie and as running again if its number is reused.
+func scriptPipe(t *testing.T, path string) *os.File {
+	t.Helper()
+	if err := syscall.Mkfifo(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pipe, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pipe.Close() })
+	return pipe
+}
+
+// waitForScript reads the readiness marker, treating end of file as the script
+// not having opened the pipe yet.
+func waitForScript(ctx context.Context, pipe *os.File) error {
+	pending := []byte(readyMarker)
+	for len(pending) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := pipe.SetReadDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+			return err
+		}
+		n, err := pipe.Read(pending)
+		pending = pending[n:]
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrDeadlineExceeded) {
+			return err
+		}
+	}
+	return nil
+}
 
 func TestCLISignalsCancelScriptsBeforeExit(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "tmux-workspace")
@@ -36,8 +81,8 @@ func TestCLISignalsCancelScriptsBeforeExit(t *testing.T) {
 				t.Fatal("signal fixture requires a nonempty keeper")
 			}
 			directory := t.TempDir()
-			marker := filepath.Join(directory, "script-pid")
-			script := write(t, directory, "before.sh", "printf '%s' \"$$\" > "+strconv.Quote(marker)+"\nexec sleep 30\n")
+			pipe := scriptPipe(t, filepath.Join(directory, "alive"))
+			script := write(t, directory, "before.sh", "exec 3> "+strconv.Quote(filepath.Join(directory, "alive"))+"\nprintf '%s' "+readyMarker+" >&3\nexec sleep 30\n")
 			config, err := json.Marshal(map[string]any{
 				"session_name": "cancelled", "before_script": "sh " + strconv.Quote(script),
 				"windows": []map[string]any{{"panes": []any{nil}}},
@@ -61,35 +106,19 @@ func TestCLISignalsCancelScriptsBeforeExit(t *testing.T) {
 					_ = command.Wait()
 				}
 			})
-			var scriptPID int
-			for ctx.Err() == nil {
-				content, readErr := os.ReadFile(marker)
-				if readErr == nil {
-					scriptPID, err = strconv.Atoi(string(content))
-					if err == nil && scriptPID > 0 {
-						break
-					}
-				}
-				time.Sleep(10 * time.Millisecond)
+			if err := waitForScript(ctx, pipe); err != nil {
+				t.Fatalf("script readiness: %v", err)
 			}
-			if scriptPID <= 0 {
-				t.Fatalf("script readiness: %v", ctx.Err())
-			}
-			child, err := os.FindProcess(scriptPID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() {
-				_ = child.Kill()
-				_ = child.Release()
-			})
 			if err := command.Process.Signal(signal); err != nil {
 				t.Fatal(err)
 			}
 			_ = command.Wait()
 			waited = true
-			if err := child.Signal(syscall.Signal(0)); err == nil {
-				t.Errorf("%s left the setup script running", signal)
+			if err := pipe.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			if n, err := pipe.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+				t.Errorf("%s left the setup script holding the pipe: read %d, %v", signal, n, err)
 			}
 			if command.ProcessState.ExitCode() != 130 || !strings.Contains(out.String(), `"event":"failed"`) || !strings.Contains(diagnostic.String(), `"code":"interrupted"`) {
 				t.Errorf("signal result: %s stdout=%s stderr=%s", command.ProcessState, out.String(), diagnostic.String())
