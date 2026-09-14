@@ -206,6 +206,27 @@ func TestConvertPreservesUnknownDocumentAndProtectsFile(t *testing.T) {
 	}
 }
 
+func TestPublishedWorkspaceCarriesTheExpectedMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "workspace.yaml")
+	if err := atomicWrite(path, []byte("session_name: first\n"), false); err != nil {
+		t.Fatal(err)
+	}
+	want := os.FileMode(0o666) &^ processUmask()
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != want {
+		t.Fatalf("new workspace mode %v; want %v (%v)", info.Mode().Perm(), want, err)
+	}
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(path, []byte("session_name: second\n"), true); err != nil {
+		t.Fatal(err)
+	}
+	if info, err = os.Stat(path); err != nil || info.Mode().Perm() != 0o640 {
+		t.Fatalf("replacement changed the mode to %v (%v)", info.Mode().Perm(), err)
+	}
+}
+
 func TestHomeExpansionKeepsTrailingElements(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
