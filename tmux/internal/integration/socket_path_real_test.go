@@ -7,12 +7,51 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+//libtmux:real-tmux
+func TestLayoutPreflightPreservesLiveSocketPermissionFailure(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+	server := tmuxtest.NewServer(t.Context(), t)
+	sessions, err := server.Sessions(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Dir(server.SocketPath())
+	info, err := os.Stat(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(directory, info.Mode().Perm()) })
+	if err := os.Chmod(directory, 0); err != nil {
+		t.Fatal(err)
+	}
+	query, err := server.Cmd(t.Context(), "display-message", "-p", "tmux #{version}")
+	if err != nil || query.ExitCode != 1 || !strings.Contains(strings.Join(query.Stderr, "\n"), "Permission denied") {
+		t.Fatalf("permission fixture did not bite: %+v %v", query, err)
+	}
+	err = server.ValidateLayouts(t.Context(), func(yield func(string, int) bool) { yield("main-h", 1) })
+	command, ok := errors.AsType[*tmux.CommandError](err)
+	if !ok || !slices.Equal(command.Result.Stderr, query.Stderr) {
+		t.Fatalf("layout validation lost original permission failure: %v", err)
+	}
+	if err := os.Chmod(directory, info.Mode().Perm()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sessions[0].Refresh(t.Context()); err != nil {
+		t.Fatalf("permission probe lost keeper identity: %v", err)
+	}
+}
 
 // tmux keeps its sockets in TMUX_TMPDIR/tmux-<uid> and refuses that directory
 // if others can reach it. tmux 3.2a reports "error creating"; 3.3a and newer use

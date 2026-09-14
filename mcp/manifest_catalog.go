@@ -355,7 +355,10 @@ func appendManageDefinitions(definitions []toolDefinition) []toolDefinition {
 			sinkMap(input("pane_id", sinkTmuxLookup)), toolDefinition{},
 		), (*tools).catalogSelectPane),
 		defineTool(manage(
-			"select_layout", "Select a layout", "Applies one built-in tmux layout.",
+			"select_layout", "Select a layout",
+			"Applies a named layout, a unique abbreviation for the running tmux version, "+
+				"or a saved layout from get_window_info. Invalid syntax is rejected before "+
+				"window lookup; tmux validates geometry when applying the layout.",
 			sinkMap(input("window_id", sinkTmuxLookup), input("layout", sinkTmuxState)),
 			toolDefinition{},
 		), (*tools).catalogSelectLayout),

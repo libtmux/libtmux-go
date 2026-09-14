@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -120,7 +119,7 @@ func (t *tools) resizePane(
 type selectLayoutInput struct {
 	WindowID    string `json:"windowId,omitempty" jsonschema:"the tmux window id to arrange; empty uses the current window"`
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's current window to arrange when windowId is empty"`
-	Layout      string `json:"layout,omitempty" jsonschema:"even-horizontal, even-vertical, main-horizontal, main-vertical, tiled, main-horizontal-mirrored or main-vertical-mirrored from tmux 3.5, or a layout string from get_window_info"`
+	Layout      string `json:"layout,omitempty" jsonschema:"a named layout, a unique abbreviation for the running tmux version, or a checksummed saved layout from get_window_info"`
 	Spread      bool   `json:"spread,omitempty" jsonschema:"give every pane an equal share of the space"`
 }
 
@@ -128,22 +127,6 @@ type selectLayoutOutput struct {
 	WindowID string `json:"windowId"`
 	Layout   string `json:"layout"`
 }
-
-// tmux 3.3a may crash the server on an unknown layout name. Accept known
-// presets or strings shaped like tmux's serialized layouts.
-var layoutPresets = map[string]bool{
-	"even-horizontal": true,
-	"even-vertical":   true,
-	"main-horizontal": true,
-	"main-vertical":   true,
-	"tiled":           true,
-	// The tmux module version-gates the mirrored layouts added in 3.5.
-	"main-horizontal-mirrored": true,
-	"main-vertical-mirrored":   true,
-}
-
-// layoutString matches tmux's checksum-prefixed serialized layouts.
-var layoutString = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
 
 func (t *tools) selectLayout(
 	ctx context.Context,
@@ -159,19 +142,15 @@ func (t *tools) selectLayout(
 			"layout and spread are alternatives: spread evens the panes already " +
 				"in the window, a layout replaces the arrangement")
 	}
-	if layout != "" && !layoutPresets[layout] && !layoutString.MatchString(layout) {
-		return nil, selectLayoutOutput{}, fmt.Errorf(
-			"%q is neither a tmux layout preset nor a layout string from get_window_info",
-			input.Layout)
+	request := tmux.SelectLayoutRequest{Layout: layout, Spread: input.Spread}
+	if err := request.Validate(); err != nil {
+		return nil, selectLayoutOutput{}, err
 	}
 	window, err := t.resolveWindow(ctx, input.WindowID, input.SessionName)
 	if err != nil {
 		return nil, selectLayoutOutput{}, err
 	}
-	if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{
-		Layout: layout,
-		Spread: input.Spread,
-	}); err != nil {
+	if err := window.SelectLayout(ctx, request); err != nil {
 		return nil, selectLayoutOutput{}, err
 	}
 	applied, err := window.Refresh(ctx)

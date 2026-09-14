@@ -9,6 +9,104 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `SelectLayoutRequest.Validate` to check layout requests without tmux I/O.
+  Workspace parsing uses the same validation as core layout operations. (#15)
+- Add `Server.ValidateLayouts` to check every layout and required pane count
+  before mutation. Version-sensitive names use the selected daemon; only an
+  unbound cold endpoint falls back to the configured client version. (#15)
+- `Window.SelectLayout` and `Plan.SelectLayout` reject invalid custom layout
+  checksums, integer overflow and malformed trees before dispatch. Custom
+  layouts support up to 256 nested parents; tmux validates their geometry. (#15)
+- `Window.SelectLayout` and plan execution accept unique named-layout
+  abbreviations for the running tmux version. Plans check every recorded
+  layout before dispatching any operation, including forward references. (#15)
+- Remove `Color88`. tmux 3.2a and later reject `-8`, so `ServerOptions.Colors`
+  rejects the numeric mode 88 before looking up the executable rather than
+  deferring the failure to the first command. Use `Color256` or the default.
+  (#15)
+
+### workspace
+
+- Add the `tmux-workspace` command, which discovers, loads, captures, converts
+  and imports tmuxp workspaces, with JSON and NDJSON output, terminal load
+  progress and generated shell completion. (#15)
+- Native imports preserve source command grouping, pane order, focus,
+  synchronization phases and directory context after saving elsewhere.
+  Unsupported source fields and invalid converted models fail before
+  publication or overwrite; generic conversion remains lossless. (#15)
+- Tmuxinator imports refuse unexpanded ERB markup before output or overwrite,
+  rather than copying a template into the workspace. Teamocil sources, which
+  no template engine reads, keep such text literally. (#15)
+- Native workspace loads reject unknown execution keys before scripts or tmux
+  mutations. Description metadata and Python extension fields remain
+  supported. (#15)
+- Human load progress follows terminal resizing, streams script output while
+  the panel cannot fit, and resumes below the previous output when it can. (#15)
+- Interactive prompts on Unix now cancel on SIGINT or SIGTERM while input
+  remains open. Prompts preserve terminal settings and later stdin input. (#15)
+- Python shell startup files now require `--use-pythonrc`, matching tmuxp's
+  default. Paired startup flags retain last-occurrence precedence. (#15)
+- `tmux-workspace` handles SIGTERM through cancellation, stopping active
+  setup scripts and reporting the final interruption result with status
+  130. (#15)
+- Disable progress and its environment defaults when `TERM` is unset or
+  `dumb`, or stderr's terminal dimensions cannot support the presenter. (#15)
+- Human load progress preserves script stdout redirected to a pipe, file or
+  another terminal. Output failures remain visible and stop script
+  execution. (#15)
+- `tmux-workspace load` ignores progress environment defaults when progress
+  is disabled, output is machine-readable or stderr is redirected. Explicit
+  progress flags retain their validation. (#15)
+- `Parse` and `tmux-workspace load` validate custom layout syntax before
+  building. `Build`, `BuildInto` and load check layout availability and pane
+  capacity before mutation; load checks every input before running
+  scripts. (#15)
+- `tmux-workspace ls --tree` groups workspaces by directory with sibling
+  markers. Human listings escape terminal controls in names and paths;
+  machine output preserves the original records. (#15)
+- `tmux-workspace load` restores terminal input modes and descriptor flags
+  after an attached client is cancelled, before reporting retained
+  sessions. (#15)
+- `before_script` supports dot-relative executable paths when the workspace
+  directory contains spaces, preserving quoted arguments and the script's
+  working directory. (#15)
+- `tmux-workspace edit` and `tmux-workspace shell` send a cancelled child
+  SIGINT and kill it only if it has not exited two seconds later, so an editor
+  or shell sharing the terminal can restore it. A cancelled `before_script`
+  still stops with SIGKILL to its process group. (#15)
+- `tmux-workspace freeze` refuses a session name that cannot stand alone as a
+  workspace file name, naming `--save-to` instead. A name holding a path
+  separator, `..` or a control byte published the capture outside the
+  workspace directory, and `--yes` skipped the prompt that would have shown
+  it. A derived destination is no longer expanded as a shell word. (#15)
+- NDJSON events no longer write their envelope into the records they report,
+  so the results and errors in a final summary carry no event name or sequence
+  number of their own. (#15)
+- `tmux-workspace search` escapes terminal controls in the names and paths of
+  its human output, as listings do; machine output preserves the original
+  records. (#15)
+- A tilde path keeps a trailing `~` element: `start_directory: ~/projects/~`
+  resolves under the home directory rather than to it. (#15)
+- A saved workspace keeps the mode of the file it replaces, and a new file
+  follows the process creation mask instead of the owner-only mode of the
+  temporary file it is published from. (#15)
+- `tmux-workspace load --append` resolves the borrowed session before checking
+  layouts, so a version-sensitive layout name is checked against the daemon
+  that will apply it and an invocation outside tmux is refused first. (#15)
+
+### mcp
+
+- `select_layout` accepts unique named-layout abbreviations for the running
+  tmux version and uppercase saved-layout checksums. It uses core validation
+  before window lookup; tool discovery describes named and saved inputs. (#15)
+
+### examples
+
+- `byte-streams` waits for pasted text to appear before compressing the pane
+  screen, so the archive contains the payload even when echo is delayed. (#15)
+
 ## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
 
 ### tmux
