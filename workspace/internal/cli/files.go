@@ -301,9 +301,17 @@ func validateFormat(format string) error {
 }
 
 func atomicWrite(path string, data []byte, force bool) error {
-	if _, err := os.Lstat(path); err == nil && !force {
-		return fmt.Errorf("destination exists: %s; use --force to replace", privatePath(path))
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+	// A replacement keeps the mode it replaces; anything else publishes under
+	// the process mask, which the temporary file's own 0600 would narrow.
+	mode := os.FileMode(0o666) &^ processUmask()
+	if info, err := os.Lstat(path); err == nil {
+		if !force {
+			return fmt.Errorf("destination exists: %s; use --force to replace", privatePath(path))
+		}
+		if info.Mode().IsRegular() {
+			mode = info.Mode().Perm()
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	file, err := os.CreateTemp(filepath.Dir(path), ".tmux-workspace-*")
@@ -312,6 +320,10 @@ func atomicWrite(path string, data []byte, force bool) error {
 	}
 	name := file.Name()
 	defer func() { _ = os.Remove(name) }()
+	if err = file.Chmod(mode); err != nil {
+		_ = file.Close()
+		return err
+	}
 	if _, err = file.Write(data); err != nil {
 		_ = file.Close()
 		return err
