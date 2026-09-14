@@ -151,6 +151,37 @@ func TestChildDrainFailureCancelsProcess(t *testing.T) {
 	}
 }
 
+func TestCancelledTerminalChildCleansUp(t *testing.T) {
+	directory := t.TempDir()
+	ready, cleaned := filepath.Join(directory, "ready"), filepath.Join(directory, "cleaned")
+	editor := filepath.Join(directory, "editor.sh")
+	body := "#!/bin/sh\ntrap 'printf cleaned > " + cleaned + "; exit 0' INT\nprintf ready > " + ready + "\nwhile true; do sleep 0.05; done\n"
+	if err := os.WriteFile(editor, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace := filepath.Join(directory, "workspace.yaml")
+	if err := os.WriteFile(workspace, []byte("session_name: edited\nwindows:\n- panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EDITOR", editor)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(ready); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+	r := &invocation{ctx: ctx, in: strings.NewReader(""), out: io.Discard, err: io.Discard}
+	err := r.edit(nil, &options{}, []string{workspace})
+	if _, statErr := os.Stat(cleaned); statErr != nil {
+		t.Errorf("cancelled editor was killed before handling SIGINT: %v (edit: %v)", statErr, err)
+	}
+}
+
 type failingLogFile struct {
 	closeFailure bool
 	writes       int
