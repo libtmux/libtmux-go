@@ -13,8 +13,30 @@ import signal
 import shutil
 import statistics
 import subprocess
+import sys
 import tempfile
 import time
+
+
+class CheckFailed(Exception):
+    """A named check raised; the report records it and the run reports FAIL."""
+
+
+def status_of(report):
+    if any(row["status"] == "FAIL" for row in report["checks"]):
+        return "FAIL"
+    if any(row["load"] != "PASS" for row in report["corpus"]):
+        return "PARTIAL"
+    return "PASS"
+
+
+def finish(args, report):
+    report["status"] = status_of(report)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2)+"\n")
+    print(json.dumps({"status":report["status"], "checks":len(report["checks"]),
+                      "benchmarks":{k:v["median"] for k,v in report["benchmarks"].items()}}))
+    return 1 if report["status"] == "FAIL" else 0
 
 
 def main():
@@ -62,7 +84,12 @@ def main():
                                   capture_output=True, text=True, check=check, timeout=10)
 
         def check(name, action):
-            action()
+            try:
+                action()
+            except Exception as error:
+                detail = f"{type(error).__name__}: {error}".replace(str(root), "<fixture>")
+                report["checks"].append({"name": name, "status": "FAIL", "detail": detail})
+                raise CheckFailed(name) from error
             report["checks"].append({"name": name, "status": "PASS"})
 
         def measured(name, arguments, setup=None, cleanup=None):
@@ -317,25 +344,27 @@ print(json.dumps(rows))
                 assert not result.stdout
                 assert json.loads(result.stderr)["code"] == "usage"
 
-        if args.search_only:
-            check("command graph and all-leaf machine flags", validate_graph)
+        def native_search():
             native = invoke(["search", "--json", "name:sample"],
                             extra_env={"TMUX_WORKSPACE_PYTHON":str(root / "missing-python")})
             assert len(json.loads(native.stdout)) == 1
-            report["checks"].append({"name":"native search without Python", "status":"PASS"})
+
+        def explicit_python():
             explicit = invoke(["search", "--regex-engine", "python", "--json", "(?<=sam)ple"])
             assert len(json.loads(explicit.stdout)) == 1
-            report["checks"].append({"name":"explicit Python expression", "status":"PASS"})
-            measured("search-native-regex", ["search", "--json", "name:sample"])
-            measured("search-explicit-python", ["search", "--regex-engine", "python", "--json", "name:sample"])
-            check("matched pinned read-command boundaries", matched_reference)
-            report["status"] = "PASS"
+
+        if args.search_only:
             report["scope"] = "native-search-return-pass"
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(json.dumps(report, indent=2)+"\n")
-            print(json.dumps({"status":report["status"], "checks":len(report["checks"]),
-                              "benchmarks":{k:v["median"] for k,v in report["benchmarks"].items()}}))
-            return
+            try:
+                check("command graph and all-leaf machine flags", validate_graph)
+                check("native search without Python", native_search)
+                check("explicit Python expression", explicit_python)
+                measured("search-native-regex", ["search", "--json", "name:sample"])
+                measured("search-explicit-python", ["search", "--regex-engine", "python", "--json", "name:sample"])
+                check("matched pinned read-command boundaries", matched_reference)
+            except CheckFailed:
+                pass
+            return finish(args, report)
 
         try:
             report["tmux_version"] = subprocess.check_output(["tmux", "-V"], text=True).strip()
@@ -398,14 +427,12 @@ print(json.dumps(rows))
                     report["corpus"].append(row)
                     tmux("kill-session", "-t", f"corpus-{i}", check=False)
                     print(json.dumps({"fixture":source.name,"load":row["load"]}),flush=True)
+        except CheckFailed:
+            pass
         finally:
             tmux("kill-server", check=False)
-    report["status"] = "PASS" if all(row["load"]=="PASS" for row in report["corpus"]) else "PARTIAL"
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2)+"\n")
-    print(json.dumps({"status":report["status"], "checks":len(report["checks"]),
-                      "benchmarks":{k:v["median"] for k,v in report["benchmarks"].items()}}))
+    return finish(args, report)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
