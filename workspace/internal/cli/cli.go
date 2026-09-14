@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -180,11 +181,12 @@ func (r *invocation) event(event string, data map[string]any) error {
 		return r.writeErr
 	}
 	r.sequence++
-	if data == nil {
-		data = map[string]any{}
-	}
-	data["schema_version"], data["command"], data["event"], data["sequence"] = 1, r.command, event, r.sequence
-	r.writeErr = json.NewEncoder(r.out).Encode(data)
+	// The caller keeps its record: a load reports the same maps again inside
+	// the final summary, where envelope fields would read as nested events.
+	record := make(map[string]any, len(data)+4)
+	maps.Copy(record, data)
+	record["schema_version"], record["command"], record["event"], record["sequence"] = 1, r.command, event, r.sequence
+	r.writeErr = json.NewEncoder(r.out).Encode(record)
 	if f, ok := r.out.(interface{ Flush() error }); ok && r.writeErr == nil {
 		r.writeErr = f.Flush()
 	}

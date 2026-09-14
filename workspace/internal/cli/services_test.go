@@ -151,6 +151,43 @@ func TestChildDrainFailureCancelsProcess(t *testing.T) {
 	}
 }
 
+func TestEventPreservesTheCallersRecord(t *testing.T) {
+	var out bytes.Buffer
+	r := &invocation{ctx: t.Context(), out: &out, err: io.Discard, ndjson: true, command: "load"}
+	entry := map[string]any{"stage": "completed"}
+	summary := map[string]any{"status": "ok", "results": []map[string]any{entry}}
+	if err := r.event("workspace-completed", entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.event("completed", summary); err != nil {
+		t.Fatal(err)
+	}
+	envelope := []string{"schema_version", "command", "event", "sequence"}
+	for _, key := range envelope {
+		if _, annotated := entry[key]; annotated {
+			t.Errorf("event added %q to the record its caller retains", key)
+		}
+	}
+	decoder := json.NewDecoder(strings.NewReader(out.String()))
+	var records []map[string]any
+	for decoder.More() {
+		var record map[string]any
+		if err := decoder.Decode(&record); err != nil {
+			t.Fatal(err)
+		}
+		records = append(records, record)
+	}
+	nested, ok := records[len(records)-1]["results"].([]any)
+	if !ok || len(nested) == 0 {
+		t.Fatalf("summary lost its results: %q", out.String())
+	}
+	for _, key := range envelope {
+		if _, annotated := nested[0].(map[string]any)[key]; annotated {
+			t.Errorf("summary result carries the %q of an earlier event: %q", key, out.String())
+		}
+	}
+}
+
 func TestCancelledTerminalChildCleansUp(t *testing.T) {
 	directory := t.TempDir()
 	ready, cleaned := filepath.Join(directory, "ready"), filepath.Join(directory, "cleaned")
