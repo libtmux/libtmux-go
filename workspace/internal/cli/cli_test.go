@@ -174,6 +174,22 @@ func TestBridgeAppendScriptPrecedesRuntime(t *testing.T) {
 	}
 }
 
+func TestAppendResolvesItsServerBeforeThePreflight(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
+	directory := t.TempDir()
+	path := filepath.Join(directory, "ambiguous.yaml")
+	// An abbreviation whose meaning depends on the tmux version is what sends
+	// the preflight to a daemon for an answer.
+	if err := os.WriteFile(path, []byte("session_name: ambiguous\nwindows:\n- layout: main-h\n  panes: [blank, blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "load", "--append", "-d", "-S", filepath.Join(directory, "absent.sock"), path)
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "--append requires TMUX") {
+		t.Fatalf("append resolution: %d %q %q", code, out, diagnostic)
+	}
+}
+
 func TestHelpWithoutTmux(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, path := range []string{"", "load", "ls", "search", "edit", "freeze", "convert", "import", "import teamocil", "import tmuxinator", "shell", "debug-info"} {
