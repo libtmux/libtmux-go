@@ -94,12 +94,11 @@ func expand(value string) string {
 		}
 		return match
 	})
-	if value == "~" || strings.HasPrefix(value, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			value = filepath.Join(home, strings.TrimPrefix(value, "~/"))
-			if strings.HasSuffix(value, "/~") {
-				value = home
-			}
+	if home, err := os.UserHomeDir(); err == nil {
+		if value == "~" {
+			value = home
+		} else if rest, ok := strings.CutPrefix(value, "~/"); ok {
+			value = filepath.Join(home, rest)
 		}
 	}
 	return value

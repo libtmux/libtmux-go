@@ -206,6 +206,25 @@ func TestConvertPreservesUnknownDocumentAndProtectsFile(t *testing.T) {
 	}
 }
 
+func TestHomeExpansionKeepsTrailingElements(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("WORKSPACE_LEAF", "leaf")
+	for _, test := range []struct{ value, want string }{
+		{"~", home},
+		{"~/", home},
+		{"~/projects", filepath.Join(home, "projects")},
+		{"~/projects/~", filepath.Join(home, "projects", "~")},
+		{"~/~", filepath.Join(home, "~")},
+		{"~/projects/$WORKSPACE_LEAF", filepath.Join(home, "projects", "leaf")},
+		{"relative/~", "relative/~"},
+	} {
+		if got := expand(test.value); got != test.want {
+			t.Errorf("expand(%q) = %q; want %q", test.value, got, test.want)
+		}
+	}
+}
+
 func TestCaptureDestinationStaysInTheWorkspaceDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
