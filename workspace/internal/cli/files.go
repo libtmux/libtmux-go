@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -300,7 +301,6 @@ func validateFormat(format string) error {
 }
 
 func atomicWrite(path string, data []byte, force bool) error {
-	path = expand(path)
 	if _, err := os.Lstat(path); err == nil && !force {
 		return fmt.Errorf("destination exists: %s; use --force to replace", privatePath(path))
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -333,6 +333,16 @@ func atomicWrite(path string, data []byte, force bool) error {
 	return nil
 }
 
+// workspaceFileName reports whether name stands alone as a file name in the
+// default workspace directory. tmux accepts separators, traversal and control
+// bytes in a session name, and a capture derived from one would be published
+// outside that directory or echoed to the terminal unescaped.
+func workspaceFileName(name string) bool {
+	return name != "" && name != "." && name != ".." &&
+		!strings.ContainsAny(name, `/\`) &&
+		!strings.ContainsFunc(name, unicode.IsControl)
+}
+
 func (r *invocation) documentResult(o *options, doc document, source, format string, warnings []string) error {
 	if o.format != "" {
 		format = o.format
@@ -343,19 +353,23 @@ func (r *invocation) documentResult(o *options, doc document, source, format str
 		}
 		return r.encode(doc)
 	}
-	destination := o.saveTo
+	destination := expand(o.saveTo)
 	if destination == "" {
 		base := strings.TrimSuffix(source, filepath.Ext(source))
 		if base == "" {
-			base = expand("~/.tmuxp/" + textValue(doc["session_name"]))
+			name := textValue(doc["session_name"])
+			if !workspaceFileName(name) {
+				return &failure{"unsafe_destination", fmt.Sprintf("session name %q cannot name a workspace file; use --save-to", safeTerminal(name)), 2}
+			}
+			base = filepath.Join(expand("~/.tmuxp"), name)
 		}
 		destination = base + "." + format
 		if !o.yes {
-			var err error
-			destination, err = r.prompt("Save workspace", destination)
+			answer, err := r.prompt("Save workspace", destination)
 			if err != nil {
 				return err
 			}
+			destination = expand(answer)
 		}
 	}
 	var data []byte
