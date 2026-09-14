@@ -22,6 +22,10 @@ import (
 
 const captureLimit = 1024 * 1024
 
+// interruptDelay bounds how long a cancelled child that shares the terminal
+// keeps it after SIGINT before the process is killed outright.
+const interruptDelay = 2 * time.Second
+
 type processResult struct {
 	Stdout    string `json:"stdout"`
 	Stderr    string `json:"stderr"`
@@ -293,6 +297,7 @@ func (r *invocation) interactiveProcess(argv []string, label string) error {
 	}
 	defer func() { _ = terminalFile.Close() }()
 	cmd := exec.CommandContext(r.ctx, argv[0], argv[1:]...)
+	interruptProcess(cmd)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = terminalFile, terminalFile, terminalFile
 	err = cmd.Run()
 	status := 0
@@ -340,6 +345,7 @@ func (r *invocation) edit(_ *cobra.Command, _ *options, args []string) error {
 		result, err = r.process(argv, "", nil, false)
 	} else {
 		cmd := exec.CommandContext(r.ctx, argv[0], argv[1:]...)
+		interruptProcess(cmd)
 		cmd.Stdin = r.in
 		cmd.Stdout = r.out
 		cmd.Stderr = r.err
