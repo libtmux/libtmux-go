@@ -9,6 +9,31 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `Server.CheckAlive`, a liveness guard with Go naming. `RaiseIfDead`
+  remains as a deprecated forwarding alias. (#16)
+- `DisplayMessageRequest.Delay` now uses `time.Duration`; replace integer
+  millisecond values such as `new(250)` with `new(250 * time.Millisecond)`.
+  Omitted and explicit zero delays retain their meaning. Negative,
+  fractional-millisecond and out-of-range values fail before command dispatch.
+  (#16)
+- `Session.Start` now installs a compatibility output pipe before tmux 3.7, so
+  `Running.Wait` no longer reports an empty screen for a command that exited
+  before tmux finished reading its pane. The pipe no longer outlives a kept
+  window's outcome. (#16)
+- `Running.Kill` now returns once tmux accepts the termination request,
+  rather than waiting for a blocked pane command queue to clear. (#16)
+- Format decoding now accepts a backslash-escaped `{` or `}`. A newer tmux's
+  `#{q:}` quoting escapes both; previously any value containing one, such as
+  `buffer_mode_format`, failed with `invalid quoted escape`. (#16)
+
+### examples
+
+- The README's `PaneFilter` example now compiles and filters captured panes with
+  `tmuxq.Matching`. The generated example distinguishes local predicates from
+  live `TmuxFilter` searches. (#16)
+
 ## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
 
 ### tmux

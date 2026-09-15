@@ -42,7 +42,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	// docs:query-in-go
+	// docs:query-in-go given:ctx context.Context; server tmux.Server
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
 		return err
@@ -54,13 +54,25 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	// docs:end
 	fmt.Println("active panes:", len(active))
 
-	// docs:query-in-tmux
-	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
-	sessions, err := server.SearchSessions(ctx, &live)
-	// docs:end
+	// docs:query-typed-in-go given:snapshot tmux.Snapshot
+	filter := tmux.PaneFilter{
+		Active:  new(true),
+		Session: &tmux.SessionFilter{Name: new("libtmux-filter")},
+	}
+	panes, err := tmuxq.Matching(snapshot.Panes(), filter)
 	if err != nil {
 		return err
 	}
+	// docs:end
+	fmt.Println("typed panes:", len(panes))
+
+	// docs:query-in-tmux given:ctx context.Context; server tmux.Server
+	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
+	sessions, err := server.SearchSessions(ctx, &live)
+	if err != nil {
+		return err
+	}
+	// docs:end
 	fmt.Println("live matches:", len(sessions))
 	return nil
 }

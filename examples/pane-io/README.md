@@ -23,6 +23,7 @@ heard ready
 <!-- docs:pane-io -->
 
 ```go
+// Given: ctx context.Context; pane tmux.Pane
 // Open the reader before typing, so nothing the command prints is missed.
 output, err := pane.OpenObservation(ctx)
 if err != nil {

@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -132,6 +133,72 @@ func TestRunShellExitSevenRemainsCompletedOutput(t *testing.T) {
 	}
 	if version.AtLeast(version33) && !version.AtLeast(version35) && len(output) != 0 {
 		t.Fatalf("RunShell(exit 7) = %#v, want empty 3.3-3.4 passthrough", output)
+	}
+}
+
+//libtmux:real-tmux
+func TestCommandKillDoesNotWaitForShellExit(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minimum := interactiveRealVersion(t, "3.5")
+	next := interactiveRealVersion(t, "3.6")
+	if !version.AtLeast(minimum) || version.AtLeast(next) {
+		t.Skip("tmux 3.5 runs jobs through default-shell")
+	}
+	snapshot := mustRealSnapshot(t, server)
+	session := snapshot.Sessions()[0]
+	running, err := session.Start(ctx, "sleep 30", tmux.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	quote := func(value string) string {
+		return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+	}
+	shell := filepath.Join(t.TempDir(), "kill-shell")
+	script := fmt.Sprintf(`#!/bin/sh
+case "$*" in *'kill -s KILL --'*) ;; *) exec /bin/sh "$@" ;; esac
+/bin/sh "$@"
+%s -S %s wait-for -S kill-dispatched
+%s -S %s wait-for release-kill-job
+`,
+		quote(server.Executable()), quote(server.SocketPath()),
+		quote(server.Executable()), quote(server.SocketPath()))
+	if err := os.WriteFile(shell, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SetDefaultShell(ctx, shell); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cleanupCancel()
+		_ = server.WaitFor(cleanupCtx, tmux.WaitForRequest{
+			Channel: "release-kill-job", Mode: tmux.WaitForModeSignal,
+		})
+	})
+
+	killCtx, cancelKill := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelKill()
+	killed := make(chan error, 1)
+	go func() { killed <- running.Kill(killCtx) }()
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{Channel: "kill-dispatched"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-killed; err != nil {
+		t.Fatalf("Kill() waited for the dispatch job: %v", err)
+	}
+	result, err := running.Wait(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Signal == "" {
+		t.Fatalf("Wait() reported no terminating signal: %+v", result)
 	}
 }
 

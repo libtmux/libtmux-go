@@ -31,6 +31,7 @@ and the session is killed on the way out.
 <!-- docs:run-to-completion -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
 if err != nil {
 	return fmt.Errorf("run command: %w", err)
@@ -64,6 +65,7 @@ is still going, so its output can be followed and it can be stopped.
 <!-- docs:run-streaming -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 // Start returns while the command is still running, so its output can be
 // followed and it can be stopped from another goroutine. The stream begins
 // where StreamTo opens it, so this command waits before its first line;

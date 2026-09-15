@@ -66,6 +66,21 @@ Three things about the format:
   `tmuxtest-quickstart` is in a test,
   [`screen_test.go`](../tmux/tmuxtest/screen_test.go), because that is where
   the code it shows belongs.
+- A region that reads a binding it does not create says so on its marker,
+  after `given:`, as Go declarations separated by semicolons:
+
+  ```go
+  	// docs:watching given:ctx context.Context; session tmux.Session
+  ```
+
+  The generator prints that list as the block's first line, so a reader can
+  see what the snippet expects to already have.
+  `TestPublishedRegionsCompileAlone` compiles every published region as the
+  only code in a throwaway module, with
+  the declarations as its local variables, so the list has to be exactly right:
+  a binding the region uses and the marker omits fails as `undefined`, and one
+  the marker names and the region never touches fails as `declared and not
+  used`. Bindings the region creates itself need no declaration.
 
 The loop runs one way. Edit the program, then bring the quote across:
 

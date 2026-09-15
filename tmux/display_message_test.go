@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -62,7 +63,7 @@ func TestDisplayMessageBuildsExactArgumentsByScope(t *testing.T) {
 
 	format := "#{window_id}:#{pane_id}"
 	client := ClientName("/dev/pts/9")
-	delay := 250
+	delay := 250 * time.Millisecond
 	request := DisplayMessageRequest{
 		Message:      "#{version}",
 		Print:        true,
@@ -135,7 +136,7 @@ func TestPaneDisplayMessageAddsUpdateFlagInPythonOrder(t *testing.T) {
 
 	format := "#{pane_id}"
 	client := ClientName("client")
-	delay := 0
+	delay := time.Duration(0)
 	runner := &displayQueueRunner{responses: []displayResponse{
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}}},
 		{result: tmuxcmd.Result{Stdout: []string{"%3"}}},
@@ -229,6 +230,61 @@ func TestDisplayMessageZeroRequestUsesScopeAndReturnsNil(t *testing.T) {
 				t.Fatalf("runner requests = %#v, want one display", requests)
 			}
 			assertDisplayArguments(t, requests[0], test.want)
+		})
+	}
+}
+
+func TestDisplayMessageDelayPreservesOmissionAndMilliseconds(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name  string
+		delay *time.Duration
+		want  []string
+	}{
+		{name: "omitted", want: []string{"display-message"}},
+		{name: "explicit zero", delay: new(time.Duration(0)), want: []string{"display-message", "-d", "0"}},
+		{name: "one millisecond", delay: new(time.Millisecond), want: []string{"display-message", "-d", "1"}},
+		{name: "seconds", delay: new(2 * time.Second), want: []string{"display-message", "-d", "2000"}},
+		{name: "maximum", delay: new(4294967295 * time.Millisecond), want: []string{"display-message", "-d", "4294967295"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runner := &displayQueueRunner{responses: []displayResponse{{}}}
+			_, err := displayServerWithRunner(runner).DisplayMessage(t.Context(), DisplayMessageRequest{Delay: test.delay})
+			if err != nil {
+				t.Fatalf("DisplayMessage() error = %v", err)
+			}
+			requests := runner.recordedRequests()
+			if len(requests) != 1 {
+				t.Fatalf("runner requests = %#v, want one display", requests)
+			}
+			assertDisplayArguments(t, requests[0], test.want)
+		})
+	}
+}
+
+func TestDisplayMessageRejectsUnrepresentableDelayBeforeVersionProbe(t *testing.T) {
+	t.Parallel()
+	for _, delay := range []time.Duration{
+		-time.Millisecond, time.Nanosecond, 1500 * time.Microsecond,
+		4294967296 * time.Millisecond,
+	} {
+		t.Run(delay.String(), func(t *testing.T) {
+			t.Parallel()
+			runner := &displayQueueRunner{}
+			_, err := displayServerWithRunner(runner).DisplayMessage(t.Context(), DisplayMessageRequest{
+				Delay: &delay, NoExpand: true,
+			})
+			if !errors.Is(err, ErrInvalidServerCommandRequest) {
+				t.Fatalf("DisplayMessage() error = %v, want ErrInvalidServerCommandRequest", err)
+			}
+			var requestError *ServerCommandRequestError
+			if !errors.As(err, &requestError) || requestError.Field != "Delay" {
+				t.Fatalf("DisplayMessage() error = %#v, want Delay field", err)
+			}
+			if runner.callCount() != 0 {
+				t.Fatalf("runner calls = %d, want validation before version probe", runner.callCount())
+			}
 		})
 	}
 }
@@ -631,7 +687,7 @@ func TestDisplayMessageCapturesPointerFieldsBeforeVersionProbe(t *testing.T) {
 	server := displayServerWithRunner(runner)
 	format := "before-format"
 	client := ClientName("before-client")
-	delay := 25
+	delay := 25 * time.Millisecond
 	response := make(chan error, 1)
 	go func() {
 		_, err := server.DisplayMessage(context.Background(), DisplayMessageRequest{
@@ -647,7 +703,7 @@ func TestDisplayMessageCapturesPointerFieldsBeforeVersionProbe(t *testing.T) {
 
 	<-runner.versionStarted
 	format = "after-format"
-	delay = 50
+	delay = 50 * time.Millisecond
 	close(runner.releaseVersion)
 	if err := <-response; err != nil {
 		t.Fatalf("DisplayMessage() error = %v", err)

@@ -17,7 +17,7 @@ func TestRunInPaneReachesAnAssertionInFourLines(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// docs:tmuxtest-quickstart
+	// docs:tmuxtest-quickstart given:ctx context.Context; t *testing.T
 	pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
 	tmuxtest.WaitForText(ctx, t, pane, "ready")
@@ -204,7 +204,7 @@ func TestTypeAndWaitReturnsForACommandThatFailed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pane := tmuxtest.RunInPane(ctx, t, "true")
+	pane := tmuxtest.RunInPane(ctx, t, "PS1=''")
 	tmuxtest.TypeAndWait(ctx, t, pane, "printf 'before failing\\n'; false")
 	tmuxtest.WaitForLine(ctx, t, pane, "before failing")
 }

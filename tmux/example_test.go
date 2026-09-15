@@ -111,6 +111,68 @@ func ExampleNewPlan() {
 	// steps [1 2]: chained
 }
 
+func ExampleServer_CheckAlive() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-check-alive",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	if err := server.CheckAlive(ctx); err != nil {
+		fmt.Println("check server:", err)
+		return
+	}
+	fmt.Println("alive")
+	if err := server.Kill(ctx); err != nil {
+		fmt.Println("kill server:", err)
+		return
+	}
+	fmt.Println("absent:", errors.Is(server.CheckAlive(ctx), tmux.ErrNoServer))
+	// Output:
+	// alive
+	// absent: true
+}
+
+func ExampleDisplayMessageRequest() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-display-duration",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	lines, err := server.DisplayMessage(ctx, tmux.DisplayMessageRequest{
+		Message: "build ready", Print: true, Delay: new(250 * time.Millisecond),
+	})
+	if err != nil {
+		fmt.Println("display message:", err)
+		return
+	}
+	fmt.Println(lines[0])
+	_, err = server.DisplayMessage(ctx, tmux.DisplayMessageRequest{
+		Delay: new(time.Microsecond),
+	})
+	fmt.Println("fractional delay rejected:", errors.Is(err, tmux.ErrInvalidServerCommandRequest))
+	// Output:
+	// build ready
+	// fractional delay rejected: true
+}
+
 func ExamplePane_SendKeys() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
