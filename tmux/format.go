@@ -99,9 +99,13 @@ type FormatValues struct {
 }
 
 const (
-	formatFieldSeparator    byte = '|'
-	formatRecordTerminator  byte = '='
-	formatShellEscapedBytes      = "|&;<>()$`\\\"'*?[# =%"
+	formatFieldSeparator   byte = '|'
+	formatRecordTerminator byte = '='
+	// formatShellEscapedBytes lists the bytes tmux's own #{q:} format
+	// modifier may backslash-escape. A next-3.9 build observed it escaping
+	// "{" and "}" as well, which 3.7 and earlier do not; accepting both
+	// keeps decoding a strict superset rather than gating on version.
+	formatShellEscapedBytes = "|&;<>()$`\\\"'*?[{}# =%"
 )
 
 func newFormatValues(version Version, fields []formatField, values []string) (formatValues, error) {

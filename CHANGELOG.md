@@ -24,6 +24,9 @@ Modules are tagged per directory, so each carries its own version: the core as
   window's outcome. (#16)
 - `Running.Kill` now returns once tmux accepts the termination request,
   rather than waiting for a blocked pane command queue to clear. (#16)
+- Format decoding now accepts a backslash-escaped `{` or `}`. A newer tmux's
+  `#{q:}` quoting escapes both; previously any value containing one, such as
+  `buffer_mode_format`, failed with `invalid quoted escape`. (#16)
 
 ### examples
 
