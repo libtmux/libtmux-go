@@ -791,6 +791,14 @@ func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
 	return r.documentResult(o, doc, "", "yaml", warnings)
 }
 
+// interactiveShells names the commands a pane reports when it is simply
+// sitting at a shell. default-shell alone does not cover it: /bin/sh is
+// dash on Linux and bash on macOS, and the pane reports the real program.
+var interactiveShells = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "dash": true, "ash": true,
+	"ksh": true, "mksh": true, "fish": true, "csh": true, "tcsh": true,
+}
+
 func capture(ctx context.Context, session tmux.Session) (document, error) {
 	name, _ := session.Name()
 	doc := document{"session_name": name}
@@ -798,9 +806,14 @@ func capture(ctx context.Context, session tmux.Session) (document, error) {
 	if !ok {
 		return nil, errors.New("capture session lacks snapshot relations")
 	}
-	// The same query load() uses to decide whether to wait for a prompt: "the
-	// session's default shell". A pane still running it round-trips with no
-	// shell_command; anything else needs one to reload faithfully.
+	// Which panes need a shell_command to reload faithfully? A pane sitting at
+	// a shell does not; a pane running anything else does. Panes here are
+	// created bare and driven with send-keys, so pane_start_command is the
+	// same for every one of them and cannot answer this -- the pane's current
+	// command is the only signal. Naming the shell by basename(default-shell)
+	// alone is not enough: with default-shell /bin/sh macOS runs bash and
+	// reports "bash", so freeze wrote shell_command: [bash] into a pane that
+	// had no command at all.
 	defaultShell, err := query(ctx, session.Server(), "show-options", "-A", "-v", "-t", session.ID().String(), "default-shell")
 	if err != nil {
 		return nil, err
@@ -838,9 +851,10 @@ func capture(ctx context.Context, session tmux.Session) (document, error) {
 			cwd, _ := pane.CurrentPath()
 			command, _ := pane.CurrentCommand()
 			active, _ := pane.Active()
+			name := filepath.Base(strings.TrimPrefix(command, "-"))
 			if strings.HasPrefix(command, "-") || strings.HasSuffix(command, "python") || strings.HasSuffix(command, "ruby") || strings.HasSuffix(command, "node") {
 				command = ""
-			} else if filepath.Base(strings.TrimPrefix(command, "-")) == defaultShell {
+			} else if name == defaultShell || interactiveShells[name] {
 				command = ""
 			}
 			p := document{"start_directory": cwd, "focus": active}

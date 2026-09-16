@@ -148,6 +148,47 @@ func TestFreezeYesAnswersFormatPromptWithoutATerminal(t *testing.T) {
 	}
 }
 
+// TestFreezeOmitsTheDefaultShellWhateverItIsNamed covers the macOS half of
+// SPEC 1 item 5. Deciding "is this pane running the default shell?" by
+// comparing pane_current_command against basename(default-shell) is wrong
+// wherever the two names differ: with default-shell /bin/sh, macOS runs bash
+// and reports "bash", so freeze wrote shell_command: [bash] into a document
+// whose pane had no command at all, and reloading it started an explicit bash.
+// The config here reproduces that mismatch on any platform.
+func TestFreezeOmitsTheDefaultShellWhateverItIsNamed(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		Config: []byte("set -g default-shell /bin/sh\nset -g default-command \"/bin/bash -i\"\n"),
+	})
+	dir := t.TempDir()
+	path := write(t, dir, "named.yaml",
+		"session_name: shell-name\nwindows:\n- window_name: only\n  panes:\n  - blank\n")
+	if code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json"); code != 0 {
+		t.Fatalf("load %d %s %s", code, out, diagnostic)
+	}
+	code, out, diagnostic := run(t, "freeze", "shell-name", "-S", server.SocketPath(), "--json")
+	if code != 0 {
+		t.Fatalf("freeze %d %s %s", code, out, diagnostic)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	windows, _ := doc["windows"].([]any)
+	if len(windows) != 1 {
+		t.Fatalf("windows: %+v", doc["windows"])
+	}
+	window, _ := windows[0].(map[string]any)
+	panes, _ := window["panes"].([]any)
+	if len(panes) != 1 {
+		t.Fatalf("panes: %+v", window["panes"])
+	}
+	pane, _ := panes[0].(map[string]any)
+	if command, present := pane["shell_command"]; present {
+		t.Fatalf("pane started with no command still froze shell_command %v; "+
+			"the default shell is /bin/sh but it reports as bash", command)
+	}
+}
+
 // TestFreezeEmitsOptionsAfterAndArrayShellCommand covers two invariants:
 // freeze must write window options under options_after, not options,
 // because automatic-rename: off only holds if applied after the panes exist;
