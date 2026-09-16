@@ -449,7 +449,7 @@ func (r *invocation) importDocument(_ *cobra.Command, o *options, args []string,
 	if err != nil {
 		return err
 	}
-	converted, err := importWorkspace(doc, kind)
+	converted, err := importWorkspace(doc, kind, path)
 	if err != nil {
 		return err
 	}

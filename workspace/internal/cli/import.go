@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
 
 // importWorkspace translates only source behavior represented by the native loader.
-func importWorkspace(doc document, kind string) (document, error) {
+func importWorkspace(doc document, kind, path string) (document, error) {
 	if kind == "tmuxinator" {
 		if err := importTemplates(doc); err != nil {
 			return nil, err
@@ -41,8 +42,16 @@ func importWorkspace(doc document, kind string) (document, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := importString(name, "name"); err != nil {
+	sessionName, err := importString(name, "name")
+	if err != nil {
 		return nil, err
+	}
+	// teamocil's current format has no session field at all; teamocil itself
+	// names the session from the file. tmuxinator always requires a name, so
+	// an explicit null there stays a refusal.
+	if sessionName == "" && kind == "teamocil" {
+		base := filepath.Base(path)
+		sessionName = strings.TrimSuffix(base, filepath.Ext(base))
 	}
 	root, err := importAlias(doc, "root", "project_root")
 	if err != nil {
@@ -75,7 +84,7 @@ func importWorkspace(doc document, kind string) (document, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := document{"session_name": name, "start_directory": absolute}
+	out := document{"session_name": sessionName, "start_directory": absolute}
 	converted := make([]any, 0, len(windows))
 	for index, raw := range windows {
 		var window document
