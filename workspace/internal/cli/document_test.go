@@ -117,6 +117,43 @@ func TestUnknownExecutionFieldOrderIsStable(t *testing.T) {
 	}
 }
 
+// TestNormalizeAcceptsExtensionKeysAtEveryLevel covers S6/B3: a key starting
+// with "x-", at any level, is inert -- accepted and ignored at load, not a
+// refusal. A top-level anchor holder such as "x-pane-defaults: &shell" is
+// the common tmuxp pattern this unblocks.
+func TestNormalizeAcceptsExtensionKeysAtEveryLevel(t *testing.T) {
+	content := `{
+		"session_name": "example", "x-pane-defaults": {"shell_command_before": ["export QA_ANCHOR=1"]},
+		"workspace_builder_options": {"pane_readiness": "never", "x-note": "ignored"},
+		"windows": [{
+			"x-window-note": "ignored",
+			"panes": [{"x-pane-note": "ignored", "shell_command": [{"cmd": "run", "x-command-note": "ignored"}]}]
+		}]
+	}`
+	var doc document
+	if err := json.Unmarshal([]byte(content), &doc); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := normalize(doc, t.TempDir())
+	if err != nil {
+		t.Fatalf("x- prefixed keys must be inert at every level: %v", err)
+	}
+	if len(plan.Windows) != 1 || len(plan.Windows[0].Panes) != 1 || plan.Windows[0].Panes[0].Commands[0].Text != "run" {
+		t.Fatalf("extension keys changed the build: %+v", plan.Windows)
+	}
+}
+
+// TestNormalizeStillRejectsOrdinaryUnknownKeysAndSuggestsXPrefix is S6's
+// negative case: a key that does not start with "x-" is still refused, and
+// the refusal names the "x-" escape hatch.
+func TestNormalizeStillRejectsOrdinaryUnknownKeysAndSuggestsXPrefix(t *testing.T) {
+	doc := document{"session_name": "example", "bogus": 1, "windows": []any{document{"panes": []any{nil}}}}
+	_, err := normalize(doc, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), `unknown field "bogus"`) || !strings.Contains(err.Error(), "x-") {
+		t.Fatalf("unknown field must still be refused and suggest x-: %v", err)
+	}
+}
+
 // TestNormalizePanesEmptySequence covers D3: "panes: []" must build exactly
 // like an omitted panes key -- one pane with no command -- not be refused.
 func TestNormalizePanesEmptySequence(t *testing.T) {

@@ -166,8 +166,11 @@ launch-time environment, shell overrides, layouts, explicit window indexes,
 focus, options, before-script execution and pane readiness. A pane environment
 mapping replaces the window mapping; the session environment still applies.
 Native loads reject unknown workspace, window, pane, command and readiness
-keys before opening logs, invoking a backend or running scripts. Workspace,
-window and pane mappings accept `description` as ignored metadata. Option and
+keys before opening logs, invoking a backend or running scripts, unless the
+key starts with `x-`: an extension key is accepted and ignored at every
+level, so an anchor holder such as `x-pane-defaults: &shell` loads instead of
+refusing the whole document. Workspace, window and pane mappings accept
+`description` as ignored metadata. Option and
 environment names remain open dictionaries. Command mappings accept `cmd`,
 `enter`, `sleep_before` and `sleep_after`; the readiness catalog accepts only
 `pane_readiness`. Generic conversion preserves source fields. Imported `config`

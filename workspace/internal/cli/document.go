@@ -437,8 +437,13 @@ func normalize(doc document, base string) (loadPlan, error) {
 
 func checkFields(doc document, scope string, allowed ...string) error {
 	for _, key := range slices.Sorted(maps.Keys(doc)) {
+		// A key starting with "x-", at any level, is inert: accepted here,
+		// ignored by every field lookup below, and left untouched by convert.
+		if strings.HasPrefix(key, "x-") {
+			continue
+		}
 		if !slices.Contains(allowed, key) {
-			return fmt.Errorf("%s: unknown field %q", scope, key)
+			return fmt.Errorf("%s: unknown field %q (custom fields use an \"x-\" prefix)", scope, key)
 		}
 	}
 	return nil
