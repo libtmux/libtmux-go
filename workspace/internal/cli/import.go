@@ -280,6 +280,17 @@ func importTeamocilWindow(raw any) (document, error) {
 	}
 	converted := make([]any, 0, len(panes))
 	for index, rawPane := range panes {
+		// teamocil's own README writes panes as plain command strings, and
+		// teamocil's importer passes a string through unchanged -- only a
+		// mapping pane is rewritten.
+		if text, ok := rawPane.(string); ok {
+			grouped, err := importCommands(text, "pane commands", "; ")
+			if err != nil {
+				return nil, err
+			}
+			converted = append(converted, document{"shell_command": grouped})
+			continue
+		}
 		pane := mapping(rawPane)
 		if pane == nil {
 			return nil, fmt.Errorf("pane %d must be a mapping", index)
