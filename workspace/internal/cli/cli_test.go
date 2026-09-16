@@ -493,3 +493,53 @@ func TestLoadErrorCodesMatchS14(t *testing.T) {
 		})
 	}
 }
+
+// TestErrorEnvelopeCarriesSchemaVersion covers the rest of S14: every
+// stderr error record is {"schema_version":1,"code":...,"message":...},
+// not just {"code":...,"message":...}.
+func TestErrorEnvelopeCarriesSchemaVersion(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	_, _, diagnostic := invoke(t, "load", "-d", "--json", filepath.Join(t.TempDir(), "missing.yaml"))
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if version, ok := envelope["schema_version"].(float64); !ok || version != 1 {
+		t.Fatalf("schema_version = %v, want 1 (%s)", envelope["schema_version"], diagnostic)
+	}
+}
+
+// TestLoadReportsTmuxUnavailableWhenExecutableMissing covers S14: a missing
+// tmux executable must report tmux_unavailable, not the generic
+// operation_failed serverFor's raw "resolve tmux executable" error fell
+// through to.
+func TestLoadReportsTmuxUnavailableWhenExecutableMissing(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ok.yaml")
+	if err := os.WriteFile(path, []byte("session_name: ok\nwindows:\n- panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "load", "-d", "--yes", "--json", path)
+	if code != 1 || out != "" {
+		t.Fatalf("%d %q %q", code, out, diagnostic)
+	}
+	if got := errorCode(t, diagnostic); got != "tmux_unavailable" {
+		t.Fatalf("code = %q, want tmux_unavailable (%s)", got, diagnostic)
+	}
+}
+
+// TestPromptClassifiesUnansweredInputAsConfirmationRequired covers S14: a
+// confirmation that is needed but impossible -- no terminal, no answer on
+// stdin -- must report confirmation_required. Every command that prompts
+// routes through this one method, so it is tested directly rather than
+// through a specific command.
+func TestPromptClassifiesUnansweredInputAsConfirmationRequired(t *testing.T) {
+	var out bytes.Buffer
+	r := &invocation{ctx: t.Context(), in: strings.NewReader(""), err: &out}
+	_, err := r.prompt("Freeze session (y/n)", "n")
+	var specific *failure
+	if !errors.As(err, &specific) || specific.Code != "confirmation_required" {
+		t.Fatalf("prompt without input = %v, want confirmation_required", err)
+	}
+}

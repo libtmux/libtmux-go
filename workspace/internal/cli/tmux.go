@@ -28,7 +28,11 @@ func serverFor(o *options) (tmux.Server, error) {
 	if o.colors256 {
 		colors = tmux.Color256
 	}
-	return tmux.NewServer(tmux.ServerOptions{SocketName: o.socketName, SocketPath: socketPath, ConfigFile: o.tmuxConfig, Colors: colors})
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: o.socketName, SocketPath: socketPath, ConfigFile: o.tmuxConfig, Colors: colors})
+	if err != nil {
+		return server, &failure{"tmux_unavailable", err.Error(), 1}
+	}
+	return server, nil
 }
 
 func query(ctx context.Context, server tmux.Server, args ...string) (string, error) {
@@ -50,7 +54,17 @@ func query(ctx context.Context, server tmux.Server, args ...string) (string, err
 func findSession(ctx context.Context, server tmux.Server, target string) (tmux.Session, error) {
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
-		return tmux.Session{}, err
+		if errors.Is(err, tmux.ErrNoServer) {
+			return tmux.Session{}, &failure{"tmux_unavailable", err.Error(), 1}
+		}
+		// A server with zero sessions fails the underlying query outright
+		// ("no current target") instead of reporting emptiness; there is
+		// nothing this lookup could have found.
+		message := "no sessions are running"
+		if target != "" {
+			message = fmt.Sprintf("session %q not found", target)
+		}
+		return tmux.Session{}, &failure{"session_not_found", message, 1}
 	}
 	if target == "" {
 		if paneID := os.Getenv("TMUX_PANE"); paneID != "" && currentEndpoint(server) == nil {
@@ -340,8 +354,16 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		entry := map[string]any{"input_index": index, "input": privatePath(input.path), "session_name": input.plan.Name, "session_id": session.ID().String(), "reused": reused}
 		if buildErr != nil {
 			entry["stage"] = "failed"
-			failure := map[string]any{"code": "workspace_failed", "message": buildErr.Error(), "input_index": index, "stage": "load", "session_id": session.ID().String()}
-			failures = append(failures, failure)
+			// build only ever runs tmux mutations and before_script, so any
+			// error that is not already classified (script_failed) is a
+			// tmux command failure.
+			code := "tmux_failed"
+			var specific *failure
+			if errors.As(buildErr, &specific) {
+				code = specific.Code
+			}
+			entryFailure := map[string]any{"code": code, "message": buildErr.Error(), "input_index": index, "stage": "load", "session_id": session.ID().String()}
+			failures = append(failures, entryFailure)
 		} else {
 			last = session
 			lastReused = reused
@@ -407,7 +429,14 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 	}
 	if len(failures) > 0 {
-		return &failure{"load_failed", "one or more workspaces failed; completed effects are retained", 1}
+		// A stderr-only consumer never sees errors[]; give it the first
+		// entry's specific code (tmux_failed, script_failed, ...) rather
+		// than a generic one, keeping the full summary under "result".
+		code, _ := failures[0]["code"].(string)
+		if code == "" {
+			code = "load_failed"
+		}
+		return &failure{code, "one or more workspaces failed; completed effects are retained", 1}
 	}
 	if handoff != nil && last.ID() != "" {
 		if lastReused && !o.yes && !r.machine() {
@@ -517,7 +546,11 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		r.scripts = append(r.scripts, map[string]any{"input_index": inputIndex, "kind": "before-script", "result": result})
 		eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated})
 		if err == nil && result.Status != 0 {
-			err = fmt.Errorf("before_script exited %d: %s", result.Status, result.Stderr)
+			message := fmt.Sprintf("before_script exited %d", result.Status)
+			if result.Stderr != "" {
+				message += ": " + result.Stderr
+			}
+			err = &failure{"script_failed", message, 1}
 		}
 		if err != nil {
 			if created {

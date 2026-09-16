@@ -270,7 +270,7 @@ func (r *invocation) prompt(label, fallback string) (string, error) {
 		return "", r.ctx.Err()
 	}
 	if err != nil && strings.TrimSpace(line) == "" {
-		return "", errors.New("input required; use explicit noninteractive options")
+		return "", &failure{"confirmation_required", "input required; use explicit noninteractive options", 1}
 	}
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -306,7 +306,7 @@ func atomicWrite(path string, data []byte, force bool) error {
 	mode := os.FileMode(0o666) &^ processUmask()
 	if info, err := os.Lstat(path); err == nil {
 		if !force {
-			return fmt.Errorf("destination exists: %s; use --force to replace", privatePath(path))
+			return &failure{"destination_exists", fmt.Sprintf("destination exists: %s; use --force to replace", privatePath(path)), 1}
 		}
 		if info.Mode().IsRegular() {
 			mode = info.Mode().Perm()

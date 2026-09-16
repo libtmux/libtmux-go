@@ -116,9 +116,10 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 	r.logEvent("command-failed", map[string]any{"code": f.Code, "message": f.Message})
 	if r.machine() {
 		value := struct {
+			SchemaVersion int `json:"schema_version"`
 			*failure
 			Result map[string]any `json:"result,omitempty"`
-		}{f, r.loadResult}
+		}{1, f, r.loadResult}
 		if encodeErr := json.NewEncoder(diagnostic).Encode(value); encodeErr != nil {
 			return f.Exit
 		}
@@ -176,7 +177,10 @@ func (r *invocation) encode(value any) error {
 
 func (r *invocation) event(event string, data map[string]any) error {
 	r.logEvent(event, data)
-	if event == "warning" && data["code"] != "workspace_failed" && r.diagnosticLevel() > warningLevel(textValue(data["code"])) {
+	// A load-stage failure is a mandatory result, not an optional
+	// diagnostic: --log-level must never hide it, whichever of the several
+	// build-failure codes it carries.
+	if event == "warning" && data["stage"] != "load" && r.diagnosticLevel() > warningLevel(textValue(data["code"])) {
 		return nil
 	}
 	if !r.ndjson {

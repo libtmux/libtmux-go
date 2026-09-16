@@ -121,7 +121,7 @@ func TestHumanWarningsRemainVisibleWithoutProgress(t *testing.T) {
 		for _, ndjson := range []bool{false, true} {
 			var out, diagnostic bytes.Buffer
 			r := &invocation{ctx: t.Context(), out: &out, err: &diagnostic, color: "never", logLevel: level, ndjson: ndjson}
-			for _, warning := range []map[string]any{{"message": "prompt timeout"}, {"code": "workspace_failed", "message": "workspace error"}} {
+			for _, warning := range []map[string]any{{"message": "prompt timeout"}, {"code": "tmux_failed", "stage": "load", "message": "workspace error"}} {
 				if err := r.event("warning", warning); err != nil {
 					t.Fatal(err)
 				}
