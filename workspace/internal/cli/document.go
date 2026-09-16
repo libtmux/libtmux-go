@@ -104,9 +104,16 @@ func expand(value string) string {
 	return value
 }
 
-func directory(value any, parent string) (string, error) {
+// directory resolves one level's start_directory. Absent (nil, or expanding
+// to empty) propagates inherited unchanged, so a level that names nothing
+// defers to its parent -- and an empty inherited chain all the way to the top
+// leaves the result "", letting tmux fall back to the invoking client's own
+// working directory instead of the workspace document's. A present relative
+// value is always anchored to base, the document's directory, unless an
+// ancestor level already resolved a directory of its own.
+func directory(value any, base, inherited string) (string, error) {
 	if value == nil {
-		return parent, nil
+		return inherited, nil
 	}
 	s, ok := value.(string)
 	if !ok {
@@ -114,10 +121,14 @@ func directory(value any, parent string) (string, error) {
 	}
 	s = expand(s)
 	if s == "" {
-		return parent, nil
+		return inherited, nil
 	}
 	if !filepath.IsAbs(s) {
-		s = filepath.Join(parent, s)
+		anchor := inherited
+		if anchor == "" {
+			anchor = base
+		}
+		s = filepath.Join(anchor, s)
 	}
 	return filepath.Clean(s), nil
 }
@@ -255,7 +266,7 @@ func normalize(doc document, base string) (loadPlan, error) {
 		return plan, errors.New("session_name must be nonempty and contain no colon, period, NUL or newline")
 	}
 	var err error
-	plan.Directory, err = directory(doc["start_directory"], base)
+	plan.Directory, err = directory(doc["start_directory"], base, "")
 	if err != nil {
 		return plan, err
 	}
@@ -315,7 +326,7 @@ func normalize(doc document, base string) (loadPlan, error) {
 		if strings.ContainsRune(wp.Name, 0) {
 			return plan, errors.New("NUL in window name")
 		}
-		wp.Directory, err = directory(w["start_directory"], plan.Directory)
+		wp.Directory, err = directory(w["start_directory"], base, plan.Directory)
 		if err != nil {
 			return plan, err
 		}
@@ -385,7 +396,7 @@ func normalize(doc document, base string) (loadPlan, error) {
 			if shell, exists := p["shell"]; exists {
 				pp.Shell = expand(textValue(shell))
 			}
-			pp.Directory, err = directory(p["start_directory"], wp.Directory)
+			pp.Directory, err = directory(p["start_directory"], base, wp.Directory)
 			if err != nil {
 				return plan, err
 			}
