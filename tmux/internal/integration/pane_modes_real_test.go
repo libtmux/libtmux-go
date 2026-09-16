@@ -481,3 +481,12 @@ func requireRealPaneModeCommandSuccess(
 		)
 	}
 }
+
+func mustPaneModeVersion(t *testing.T, value string) tmux.Version {
+	t.Helper()
+	version, err := tmux.ParseVersion(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return version
+}

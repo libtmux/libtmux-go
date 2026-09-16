@@ -334,15 +334,6 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 	}
 }
 
-func mustPaneModeVersion(t *testing.T, value string) tmux.Version {
-	t.Helper()
-	version, err := tmux.ParseVersion(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return version
-}
-
 // attachRealPTYClient attaches a real, pty-backed tmux client to session and
 // returns it together with the name tmux gave it. Unlike a control-mode
 // client, this one can host a popup on tmux 3.8+.
