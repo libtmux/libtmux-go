@@ -3,10 +3,38 @@ package tmux
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
+
+// The refusal exists because tmux 3.3a exited the whole server on an
+// unrecognised layout - history that justifies refusing on every version,
+// not a live status report about whichever version answered this call. tmux
+// 3.3a's own crash can never be reached, on any version, because this check
+// runs first; wording that reads as "you are at risk on 3.3a" would mislead a
+// caller connected to a version this exact crash cannot happen on.
+func TestInvalidLayoutRefusalReadsAsHistoryNotALiveWarning(t *testing.T) {
+	t.Parallel()
+
+	err := (Window{
+		server:    serverWithRunner(&versionQueueRunner{}),
+		sessionID: "$7",
+		windowID:  "@8",
+	}).SelectLayout(context.Background(), SelectLayoutRequest{Layout: "garbage"})
+	if !errors.Is(err, ErrInvalidServerCommandRequest) {
+		t.Fatalf("SelectLayout() error = %v, want ErrInvalidServerCommandRequest", err)
+	}
+
+	message := err.Error()
+	if strings.Contains(message, "tmux 3.3a exits") {
+		t.Fatalf("message = %q, reads as a live warning about the connected version", message)
+	}
+	if !strings.Contains(message, "every version") {
+		t.Fatalf("message = %q, want it to state the refusal is unconditional", message)
+	}
+}
 
 // libtmux:parity libtmux.window.Window.next_layout
 // libtmux:parity libtmux.window.Window.previous_layout

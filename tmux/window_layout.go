@@ -119,9 +119,8 @@ func layoutListsPane(layout string, pane PaneID) bool {
 	})
 }
 
-// tmux 3.3a exits the server for an unknown layout instead of returning an
-// error, so reject names that are neither presets nor layout strings in
-// either format era.
+// tmux 3.3a exited the server for an unknown layout instead of returning an
+// error, so an unrecognised name is refused on every version, not only 3.3a.
 func validateLayout(layout string, version Version) error {
 	if layout == "" || layoutPresets[layout] || layoutStringPattern.MatchString(layout) {
 		return nil
@@ -142,8 +141,9 @@ func validateLayout(layout string, version Version) error {
 		"select-layout",
 		"Layout",
 		layout,
-		"is neither a layout preset nor a tmux layout string; tmux 3.3a exits "+
-			"on an unrecognised layout and destroys every session on the socket",
+		"is neither a layout preset nor a tmux layout string; refused on "+
+			"every version, since tmux 3.3a once exited the server and "+
+			"destroyed every session on the socket for exactly this",
 	)
 }
 
