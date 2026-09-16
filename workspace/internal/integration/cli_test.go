@@ -148,10 +148,10 @@ func TestFreezeYesAnswersFormatPromptWithoutATerminal(t *testing.T) {
 	}
 }
 
-// TestFreezeSaveToNeedsNoConfirmationWithoutATerminal covers D7/S11: an
-// explicit --save-to is consent to that destination, so freeze must write
-// without --yes even with no terminal attached. --force still governs
-// replacing an existing file.
+// TestFreezeSaveToNeedsNoConfirmationWithoutATerminal: an explicit
+// --save-to is consent to that destination, so freeze must write without
+// --yes even with no terminal attached. --force still governs replacing an
+// existing file.
 func TestFreezeSaveToNeedsNoConfirmationWithoutATerminal(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "frozen-consent"},
@@ -171,7 +171,7 @@ func TestFreezeSaveToNeedsNoConfirmationWithoutATerminal(t *testing.T) {
 	if code == 0 || !strings.Contains(diagnostic, "destination exists") {
 		t.Fatalf("freeze --save-to over an existing file without --force: %d %q %q", code, out, diagnostic)
 	}
-	// Same refusal, --json mode: covers S14's destination_exists code.
+	// Same refusal, --json mode: checks the destination_exists code.
 	code, out, diagnostic = run(t, "freeze", "frozen-consent", "-S", server.SocketPath(), "--save-to", destination, "--json")
 	var envelope map[string]any
 	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
@@ -256,10 +256,10 @@ func TestFreezeOnEmptyServerReportsSessionNotFound(t *testing.T) {
 	}
 }
 
-// TestLoadTmuxFailureReportsTmuxFailedCode covers S14: a tmux command
-// failing while building -- an unknown option here -- must give
-// errors[].code and the stderr record's code tmux_failed, not the generic
-// workspace_failed/load_failed a stderr-only consumer could not branch on.
+// TestLoadTmuxFailureReportsTmuxFailedCode: a tmux command failing while
+// building -- an unknown option here -- must give errors[].code and the
+// stderr record's code tmux_failed, not the generic workspace_failed/
+// load_failed a stderr-only consumer could not branch on.
 func TestLoadTmuxFailureReportsTmuxFailedCode(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
@@ -286,10 +286,10 @@ func TestLoadTmuxFailureReportsTmuxFailedCode(t *testing.T) {
 	}
 }
 
-// TestLoadScriptFailureReportsScriptFailedCode covers S14: a nonzero
-// before_script must give errors[].code and the stderr record's code
-// script_failed, and the message must not end in a bare ": " when the
-// script produced no stderr output.
+// TestLoadScriptFailureReportsScriptFailedCode: a nonzero before_script
+// must give errors[].code and the stderr record's code script_failed, and
+// the message must not end in a bare ": " when the script produced no
+// stderr output.
 func TestLoadScriptFailureReportsScriptFailedCode(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
@@ -833,6 +833,41 @@ func TestLoadLogLevelsAndRegularFiles(t *testing.T) {
 	}
 }
 
+// TestLoadFailureWarningReachesTheLogAtErrorLevel: a load-stage failure's
+// warning must reach --log-file even at --log-level error, which drops an
+// ordinary warning. Its slog level is escalated to Error so the file's own
+// error-level threshold does not drop the record before it is written.
+func TestLoadFailureWarningReachesTheLogAtErrorLevel(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	path := write(t, dir, "fail.yaml", "session_name: log-failure\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
+	logPath := filepath.Join(dir, "fail.log")
+	code, _, _ := run(t, "load", path, "-S", server.SocketPath(), "-d", "--json", "--log-level", "error", "--log-file", logPath)
+	if code != 1 {
+		t.Fatalf("load with a failing before_script: %d", code)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var record struct {
+			Message string `json:"msg"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("invalid log record: %q %v", line, err)
+		}
+		found = found || record.Message == "warning"
+	}
+	if !found {
+		t.Fatalf("--log-level error dropped the load failure: %s", data)
+	}
+}
+
 func TestMalformedBeforeScriptLeavesSessionsUntouched(t *testing.T) {
 	for _, appendMode := range []bool{false, true} {
 		t.Run(strconv.FormatBool(appendMode), func(t *testing.T) {
@@ -1040,6 +1075,36 @@ func TestInitialWindowUsesConfiguredBaseIndex(t *testing.T) {
 	}
 	if snapshot.Windows()[0].Index() != 4 {
 		t.Fatalf("initial index %d", snapshot.Windows()[0].Index())
+	}
+}
+
+// TestBridgeScriptFailureReportsScriptFailedCode: a plugin/builder document
+// runs through the Python bridge subprocess, not a tmux command, so its
+// nonzero exit must not report tmux_failed. A fake TMUX_WORKSPACE_PYTHON
+// answers checkPython's plain "-c" version probe with success and only
+// fails the real bridge invocation ("-u -c ..."), so this needs no
+// installed tmuxp.
+func TestBridgeScriptFailureReportsScriptFailedCode(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	python := write(t, dir, "python", "#!/bin/sh\nif [ \"$1\" = -u ]; then exit 7; fi\nexit 0\n")
+	if err := os.Chmod(python, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_WORKSPACE_PYTHON", python)
+	path := write(t, dir, "plugin.yaml", "session_name: bridge-fail\nplugins: [fake.Plugin]\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--json")
+	if code != 1 || out == "" {
+		t.Fatalf("bridge load with a failing python bridge: %d %q %q", code, out, diagnostic)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v", out, err)
+	}
+	errs, _ := summary["errors"].([]any)
+	entry, _ := first(errs).(map[string]any)
+	if len(errs) != 1 || entry["code"] != "script_failed" {
+		t.Fatalf("errors[0].code = %v, want script_failed (a python bridge exit is not a tmux command failing): %s", entry["code"], out)
 	}
 }
 
@@ -1661,11 +1726,11 @@ func activeWindowID(t *testing.T, server tmux.Server, session string) string {
 	return strings.TrimSpace(string(result.RawStdout))
 }
 
-// TestAppendDoesNotMoveTheClientUnlessFocused covers D6/S10: appending
-// windows to the current session must not change which window is active
-// unless an appended window sets focus: true. The undocumented default that
-// leaks in otherwise is D2's own first-window-wins rule reaching into a
-// session the user already owns.
+// TestAppendDoesNotMoveTheClientUnlessFocused: appending windows to the
+// current session must not change which window is active unless an
+// appended window sets focus: true. The undocumented default that leaks in
+// otherwise is the first-window-wins default for a fresh load reaching
+// into a session the user already owns.
 func TestAppendDoesNotMoveTheClientUnlessFocused(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "owned"},
