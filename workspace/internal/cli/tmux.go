@@ -772,12 +772,19 @@ func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
 			return err
 		}
 		if o.format == "" {
-			o.format, err = r.prompt("Workspace format (yaml/json)", "yaml")
-			if err != nil {
-				return err
-			}
-			if err := validateFormat(o.format); err != nil {
-				return err
+			if o.yes {
+				// --workspace-format documents yaml as its default; --yes
+				// answers this the same way it answers the confirmation
+				// above, instead of leaving a second, unnamed prompt behind.
+				o.format = "yaml"
+			} else {
+				o.format, err = r.prompt("Workspace format (yaml/json)", "yaml")
+				if err != nil {
+					return err
+				}
+				if err := validateFormat(o.format); err != nil {
+					return err
+				}
 			}
 		}
 	}

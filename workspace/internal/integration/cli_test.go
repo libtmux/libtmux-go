@@ -129,6 +129,25 @@ func TestUnknownExecutionFieldsPrecedeScriptsAndMutations(t *testing.T) {
 	}
 }
 
+// TestFreezeYesAnswersFormatPromptWithoutATerminal covers M1: freeze prompted
+// for "Workspace format (yaml/json)" even with --yes and no terminal
+// attached, and --help documents --workspace-format as defaulting to yaml.
+func TestFreezeYesAnswersFormatPromptWithoutATerminal(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "frozen-yes"},
+	})
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "frozen.yaml")
+	code, out, diagnostic := run(t, "freeze", "frozen-yes", "-S", server.SocketPath(),
+		"--save-to", destination, "--force", "--yes")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("freeze --yes without a terminal: %d %q %q", code, out, diagnostic)
+	}
+	if _, err := os.Stat(destination); err != nil {
+		t.Fatalf("freeze --yes did not write %s: %v", destination, err)
+	}
+}
+
 func TestLoadFreezeReloadAppendAndEnvironment(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
