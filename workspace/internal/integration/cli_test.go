@@ -1472,3 +1472,62 @@ func TestScriptPublicationPreservesCleanup(t *testing.T) {
 		})
 	}
 }
+
+func activeWindowID(t *testing.T, server tmux.Server, session string) string {
+	t.Helper()
+	result, err := server.Cmd(t.Context(), "display-message", "-p", "-t", session, "#{window_id}")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("active window of %s: %+v %v", session, result, err)
+	}
+	return strings.TrimSpace(string(result.RawStdout))
+}
+
+// TestAppendDoesNotMoveTheClientUnlessFocused covers D6/S10: appending
+// windows to the current session must not change which window is active
+// unless an appended window sets focus: true. The undocumented default that
+// leaks in otherwise is D2's own first-window-wins rule reaching into a
+// session the user already owns.
+func TestAppendDoesNotMoveTheClientUnlessFocused(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "owned"},
+	})
+	before, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := activeWindowID(t, server, "owned")
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", before.Panes()[0].ID().String())
+
+	dir := t.TempDir()
+	unfocused := write(t, dir, "unfocused.yaml", "session_name: ignored\nwindows:\n- window_name: one\n  panes: [blank]\n- window_name: two\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", unfocused, "-S", server.SocketPath(), "--append", "--json")
+	if code != 0 {
+		t.Fatalf("append: %d %s %s", code, out, diagnostic)
+	}
+	if got := activeWindowID(t, server, "owned"); got != original {
+		t.Fatalf("append without focus moved the client: %s, want %s", got, original)
+	}
+
+	focused := write(t, dir, "focused.yaml", "session_name: ignored\nwindows:\n- window_name: three\n  panes: [blank]\n- window_name: four\n  focus: true\n  panes: [blank]\n")
+	code, out, diagnostic = run(t, "load", focused, "-S", server.SocketPath(), "--append", "--json")
+	if code != 0 {
+		t.Fatalf("append: %d %s %s", code, out, diagnostic)
+	}
+	after, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wantID string
+	for _, window := range after.Windows() {
+		if name, _ := window.Name(); name == "four" {
+			wantID = window.ID().String()
+		}
+	}
+	if wantID == "" {
+		t.Fatal("appended window \"four\" not found")
+	}
+	if got := activeWindowID(t, server, "owned"); got != wantID {
+		t.Fatalf("append with focus: true did not move the client: %s, want %s", got, wantID)
+	}
+}

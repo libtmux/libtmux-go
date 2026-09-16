@@ -551,6 +551,7 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		waitForPrompt = filepath.Base(shell) == "zsh"
 	}
 	var focus tmux.Window
+	var explicitFocus bool
 	baseIndex := bootstrap.Index()
 	if created {
 		value, err := query(r.ctx, server, "show-options", "-A", "-v", "-t", session.ID().String(), "base-index")
@@ -658,14 +659,21 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 				return session, err
 			}
 		}
-		if wp.Focus || focus.ID() == "" {
+		if wp.Focus {
+			focus, explicitFocus = window, true
+		} else if focus.ID() == "" {
 			focus = window
 		}
 		if err := r.event("window-completed", map[string]any{"input_index": inputIndex, "window_id": window.ID().String()}); err != nil {
 			return session, err
 		}
 	}
-	if focus.ID() != "" {
+	// A fresh session needs its client looking at a window, so the default
+	// (first, absent an explicit focus) still applies. Appending to a
+	// session the user already owns must not move them unless a window
+	// asked for it (S10) -- the default-first fallback above exists only to
+	// pick something if focus is requested at all.
+	if focus.ID() != "" && (created || explicitFocus) {
 		if _, err := focus.Select(r.ctx); err != nil {
 			return session, err
 		}
