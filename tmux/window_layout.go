@@ -103,13 +103,28 @@ func layoutLooksLikeJSON(layout string) bool {
 
 // layoutPanePattern matches one layout cell that holds a pane. tmux dumps such
 // a cell as width x height, offsets, and the pane's own number; cells that only
-// arrange other cells stop after the offsets.
+// arrange other cells stop after the offsets. It never matches inside the JSON
+// shape, which carries no such comma-joined run.
 var layoutPanePattern = regexp.MustCompile(`[0-9]+x[0-9]+,-?[0-9]+,-?[0-9]+,([0-9]+)`)
+
+// layoutJSONPanePattern matches one pane's id in the JSON layout shape. Unlike
+// the classic grammar's bare pane number, the JSON id already carries its %
+// sigil.
+var layoutJSONPanePattern = regexp.MustCompile(`"I":"(%[0-9]+)"`)
 
 // layoutListsPane reports whether layout still arranges pane. A layout holding
 // no readable cell reports true, so an arrangement this does not recognise is
 // never mistaken for a pane that closed.
 func layoutListsPane(layout string, pane PaneID) bool {
+	if layoutLooksLikeJSON(layout) {
+		ids := layoutJSONPanePattern.FindAllStringSubmatch(layout, -1)
+		if len(ids) == 0 {
+			return true
+		}
+		return slices.ContainsFunc(ids, func(id []string) bool {
+			return PaneID(id[1]) == pane
+		})
+	}
 	cells := layoutPanePattern.FindAllStringSubmatch(layout, -1)
 	if len(cells) == 0 {
 		return true

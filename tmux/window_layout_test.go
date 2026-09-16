@@ -9,6 +9,37 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
+// Captured by hand from tmux next-3.9 (master-e880cf63) with a control
+// client attached with -f new-layouts: display-message -p '#{window_layout}'
+// for a two-pane vertical split.
+const layoutListsPaneJSONFixture = `{"V":2,"L":{"t":"v","w":80,"h":24,"x":0,"y":0,` +
+	`"c":[{"t":"p","w":80,"h":12,"x":0,"y":0,"l":0,"i":0,"I":"%0"},` +
+	`{"t":"p","w":80,"h":11,"x":0,"y":13,"a":true,"i":1,"I":"%1"}]}}`
+
+// The classic grammar's cell pattern never matches inside JSON, so a JSON
+// layout must be read through its own pane-id shape or every JSON layout
+// reports every pane present, including one that already left.
+func TestLayoutListsPaneReadsJSONShape(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		pane PaneID
+		want bool
+	}{
+		{name: "present", pane: "%1", want: true},
+		{name: "absent", pane: "%99", want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := layoutListsPane(layoutListsPaneJSONFixture, test.pane); got != test.want {
+				t.Fatalf("layoutListsPane(JSON, %q) = %t, want %t", test.pane, got, test.want)
+			}
+		})
+	}
+}
+
 // The refusal exists because tmux 3.3a exited the whole server on an
 // unrecognised layout - history that justifies refusing on every version,
 // not a live status report about whichever version answered this call. tmux
