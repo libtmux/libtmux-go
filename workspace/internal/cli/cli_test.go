@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -79,6 +80,12 @@ func TestVersionReportsItsOwnVersion(t *testing.T) {
 	}
 	if strings.Contains(first, "(Go)") {
 		t.Fatalf("--version first line still carries the port label: %q", first)
+	}
+	// cxx, java, rs and swift all print a bare semantic version. Go build
+	// metadata is always v-prefixed, so without trimming it this port is the
+	// only one that reads "v0.0.1" where its siblings read "0.0.1".
+	if !regexp.MustCompile(`^tmux-workspace [0-9]+\.[0-9]+\.[0-9]+`).MatchString(first) {
+		t.Fatalf("--version first line = %q, want a bare tmux-workspace <major>.<minor>.<patch>", first)
 	}
 	code, machine, diagnostic := invoke(t, "--version", "--json")
 	if code != 0 || diagnostic != "" {
