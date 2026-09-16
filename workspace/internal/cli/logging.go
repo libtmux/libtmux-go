@@ -76,7 +76,7 @@ func (r *invocation) logEvent(event string, data map[string]any) {
 		level = slog.LevelDebug
 	case "warning":
 		level = warningLevel(textValue(data["code"]))
-		if data["code"] == "workspace_failed" {
+		if data["stage"] == "load" {
 			level = slog.LevelError
 		}
 	case "failed", "command-failed":

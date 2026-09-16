@@ -505,7 +505,13 @@ func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *op
 		return borrowed, err
 	}
 	if result.Status != 0 {
-		return borrowed, fmt.Errorf("python workspace bridge exited %d: %s", result.Status, result.Stdout+result.Stderr)
+		// The bridge is a Python subprocess, not a tmux command, so its exit
+		// is classified as a script failure, not tmux_failed.
+		message := fmt.Sprintf("python workspace bridge exited %d", result.Status)
+		if output := result.Stdout + result.Stderr; output != "" {
+			message += ": " + output
+		}
+		return borrowed, &failure{"script_failed", message, 1}
 	}
 	if o.append {
 		return borrowed, nil
