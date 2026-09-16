@@ -64,6 +64,35 @@ func TestMachineCompletionEnvelope(t *testing.T) {
 	}
 }
 
+// TestVersionReportsItsOwnVersion covers M17: --version printed only
+// "tmux-workspace (Go), tmuxp compatibility 1.74.0" and never go's own
+// version, so two go builds were indistinguishable from the CLI. Every port
+// prints "tmux-workspace <version>".
+func TestVersionReportsItsOwnVersion(t *testing.T) {
+	code, out, diagnostic := invoke(t, "--version")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("--version: %d %q %q", code, out, diagnostic)
+	}
+	first, _, _ := strings.Cut(out, "\n")
+	if first != "tmux-workspace "+Version {
+		t.Fatalf("--version first line = %q, want %q", first, "tmux-workspace "+Version)
+	}
+	if strings.Contains(first, "(Go)") {
+		t.Fatalf("--version first line still carries the port label: %q", first)
+	}
+	code, machine, diagnostic := invoke(t, "--version", "--json")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("--version --json: %d %q %q", code, machine, diagnostic)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(machine), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope["version"] != Version {
+		t.Fatalf("--version --json version = %v, want %q", envelope["version"], Version)
+	}
+}
+
 func TestInactiveProgressEnvironmentDoesNotRejectLoad(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	missing := filepath.Join(t.TempDir(), "absent.yaml")

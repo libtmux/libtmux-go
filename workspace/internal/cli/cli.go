@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,20 @@ import (
 )
 
 const referenceVersion = "1.74.0"
+
+// Version is tmux-workspace's own version, reported by --version. Installed
+// binaries derive it from build metadata; source builds use fallbackVersion.
+var Version = buildVersion()
+
+const fallbackVersion = "v0.0.1-alpha.7"
+
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return fallbackVersion
+	}
+	return info.Main.Version
+}
 
 type failure struct {
 	Code    string `json:"code"`
@@ -266,9 +281,12 @@ func (r *invocation) tree() *cobra.Command {
 		}
 		if version {
 			if r.machine() {
-				return r.encode(map[string]any{"program": "tmux-workspace", "port": "go", "tmuxp_compatibility": referenceVersion})
+				return r.encode(map[string]any{"program": "tmux-workspace", "port": "go", "version": Version, "tmuxp_compatibility": referenceVersion})
 			}
-			_, err := fmt.Fprintln(r.out, "tmux-workspace (Go), tmuxp compatibility "+referenceVersion)
+			if _, err := fmt.Fprintln(r.out, "tmux-workspace "+Version); err != nil {
+				return err
+			}
+			_, err := fmt.Fprintln(r.out, "tmuxp compatibility "+referenceVersion)
 			return err
 		}
 		if metadata {
