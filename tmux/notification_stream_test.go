@@ -147,6 +147,51 @@ func TestNotificationOptionsRejectAnUnusableHold(t *testing.T) {
 	}
 }
 
+// tmux 3.8 tightened refresh-client -B's target grammar (monitor_parse in
+// monitor.c) to require an exactly empty target for session scope; any other
+// non-pane, non-window string, including a literal session ID, is now a parse
+// failure that silently drops the subscription instead of arming it. A
+// session ID target used to work by accident on every earlier tested
+// version, whose parser fell back to session scope for anything that was not
+// pane- or window-shaped - verified directly against a real 3.7c and a real
+// next-3.9 server. Session scope has never selected a session tmux did not
+// already have attached, so rendering it empty changes nothing tmux acts on.
+func TestSubscriptionRequestScopeRendersAnEmptyTargetForSessionScope(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		request SubscriptionRequest
+		want    string
+	}{
+		{name: "no scope", request: SubscriptionRequest{}, want: ""},
+		{
+			name:    "session scope",
+			request: SubscriptionRequest{Session: "$0"},
+			want:    "",
+		},
+		{
+			name:    "window scope",
+			request: SubscriptionRequest{Window: "@3"},
+			want:    "@3",
+		},
+		{
+			name:    "pane scope",
+			request: SubscriptionRequest{Pane: "%5"},
+			want:    "%5",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := test.request.scope(); got != test.want {
+				t.Fatalf("scope() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestResumablePaneIDMatchesTmuxsParser(t *testing.T) {
 	t.Parallel()
 
