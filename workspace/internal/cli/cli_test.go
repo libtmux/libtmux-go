@@ -438,3 +438,58 @@ func TestPaneReadinessTimeoutIsQuietByDefault(t *testing.T) {
 		t.Fatal("an unrelated warning must stay visible at the default log level")
 	}
 }
+
+// errorCode decodes the {"code":...} envelope --json/--ndjson write to
+// stderr on failure.
+func errorCode(t *testing.T, diagnostic string) string {
+	t.Helper()
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	code, _ := envelope["code"].(string)
+	return code
+}
+
+// TestLoadErrorCodesMatchS14 covers E3/S14's minimum test: three of the
+// table's four conditions that need no live tmux server (the fourth,
+// session_not_found from a missing freeze target, is
+// TestFreezeMissingSessionReportsSessionNotFound in the integration
+// package, which has one). Before this fix every condition below fell
+// through to the generic "operation_failed".
+func TestLoadErrorCodesMatchS14(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	dir := t.TempDir()
+	tests := []struct {
+		name, content, code string
+		named               bool
+	}{
+		{"missing-file", "", "workspace_not_found", true},
+		{"malformed-document", "a: [\n", "invalid_workspace", false},
+		// The outer loop wraps normalize's error with the failing input's
+		// path (privatePath(path)+": "+message); that prefix must survive
+		// turning the inner error into a *failure, not just get replaced by
+		// its bare, unprefixed message.
+		{"unsupported-key", "session_name: x\nbogus: 1\nwindows:\n- panes: [null]\n", "unsupported_key", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(dir, test.name+".yaml")
+			if test.content != "" {
+				if err := os.WriteFile(path, []byte(test.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			code, out, diagnostic := invoke(t, "load", "-d", "--json", path)
+			if code != 1 || out != "" {
+				t.Fatalf("%s: %d %q %q", test.name, code, out, diagnostic)
+			}
+			if got := errorCode(t, diagnostic); got != test.code {
+				t.Fatalf("%s: code = %q, want %q (%s)", test.name, got, test.code, diagnostic)
+			}
+			if test.named && !strings.Contains(diagnostic, filepath.Base(path)) {
+				t.Fatalf("%s: error dropped the path: %s", test.name, diagnostic)
+			}
+		})
+	}
+}

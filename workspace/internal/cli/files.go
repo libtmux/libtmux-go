@@ -97,7 +97,7 @@ func resolveFile(input, global string) (string, error) {
 				return filepath.Abs(candidate)
 			}
 		}
-		return "", fmt.Errorf("workspace %q not found in %s", input, privatePath(global))
+		return "", &failure{"workspace_not_found", fmt.Sprintf("workspace %q not found in %s", input, privatePath(global)), 1}
 	}
 	path, err := filepath.Abs(input)
 	if err != nil {
@@ -110,10 +110,10 @@ func resolveFile(input, global string) (string, error) {
 				return candidate, nil
 			}
 		}
-		return "", fmt.Errorf("no .tmuxp workspace in %s", privatePath(path))
+		return "", &failure{"workspace_not_found", fmt.Sprintf("no .tmuxp workspace in %s", privatePath(path)), 1}
 	}
 	if !isFile(path) {
-		return "", fmt.Errorf("workspace file %s not found", privatePath(path))
+		return "", &failure{"workspace_not_found", fmt.Sprintf("workspace file %s not found", privatePath(path)), 1}
 	}
 	return path, nil
 }
