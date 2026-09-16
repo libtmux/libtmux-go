@@ -71,6 +71,36 @@ func TestImportPreservesCommandGroupsAndSavedContext(t *testing.T) {
 	}
 }
 
+// TestImportTeamocilDerivesSessionNameFromModernFormat covers H6: teamocil's
+// current format has no session name at all -- the document starts at
+// windows: -- and teamocil itself names the session from the file.
+func TestImportTeamocilDerivesSessionNameFromModernFormat(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "teamv1.yml")
+	content := "windows:\n" +
+		"- name: sample-window\n" +
+		"  root: /tmp\n" +
+		"  layout: tiled\n" +
+		"  panes:\n" +
+		"  - cmd: echo one\n" +
+		"  - cmd: [echo two-a, echo two-b]\n" +
+		"    focus: true\n"
+	if err := os.WriteFile(source, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "import", "teamocil", source, "--json")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("import teamocil without a session name: %d %q %q", code, out, diagnostic)
+	}
+	var doc document
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc["session_name"] != "teamv1" {
+		t.Fatalf("session_name = %v, want the filename %q", doc["session_name"], "teamv1")
+	}
+}
+
 func TestImportRefusesInvalidSourceBeforePublishing(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	tests := []struct{ kind, source, field string }{
