@@ -148,6 +148,60 @@ func TestFreezeYesAnswersFormatPromptWithoutATerminal(t *testing.T) {
 	}
 }
 
+// TestFreezeEmitsOptionsAfterAndArrayShellCommand covers two invariants:
+// freeze must write window options under options_after, not options,
+// because automatic-rename: off only holds if applied after the panes exist;
+// and a pane's shell_command must be omitted when the pane runs the
+// session's default shell and, when emitted for any other pane, must be an
+// array rather than a bare string.
+func TestFreezeEmitsOptionsAfterAndArrayShellCommand(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	path := write(t, dir, "capture.yaml",
+		"session_name: capture-shape\n"+
+			"windows:\n"+
+			"- window_name: only\n"+
+			"  panes:\n"+
+			"  - blank\n"+
+			"  - shell_command: sleep 5\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	if code != 0 {
+		t.Fatalf("load %d %s %s", code, out, diagnostic)
+	}
+	code, out, diagnostic = run(t, "freeze", "capture-shape", "-S", server.SocketPath(), "--json")
+	if code != 0 {
+		t.Fatalf("freeze %d %s %s", code, out, diagnostic)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	windows, _ := doc["windows"].([]any)
+	if len(windows) != 1 {
+		t.Fatalf("windows: %+v", doc["windows"])
+	}
+	window, _ := windows[0].(map[string]any)
+	if _, present := window["options"]; present {
+		t.Fatalf("freeze still emits options: %+v", window)
+	}
+	if _, present := window["options_after"]; !present {
+		t.Fatalf("freeze does not emit options_after: %+v", window)
+	}
+	panes, _ := window["panes"].([]any)
+	if len(panes) != 2 {
+		t.Fatalf("panes: %+v", window["panes"])
+	}
+	first, _ := panes[0].(map[string]any)
+	if _, present := first["shell_command"]; present {
+		t.Fatalf("default-shell pane still carries shell_command: %+v", first)
+	}
+	second, _ := panes[1].(map[string]any)
+	command, ok := second["shell_command"].([]any)
+	if !ok || len(command) != 1 || command[0] != "sleep" {
+		t.Fatalf("non-default pane shell_command = %v, want an array containing sleep", second["shell_command"])
+	}
+}
+
 func TestLoadFreezeReloadAppendAndEnvironment(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
