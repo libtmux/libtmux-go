@@ -277,6 +277,34 @@ func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 	}
 }
 
+// TestLoadStartedEventReportsInputs covers the started event's input-count
+// field name: a cross-port measurement settled on "inputs"; go and ts were
+// the two that carried "input_count".
+func TestLoadStartedEventReportsInputs(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	first := write(t, dir, "first.yaml", "session_name: first\nwindows:\n- panes: [blank]\n")
+	second := write(t, dir, "second.yaml", "session_name: second\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", first, second, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--ndjson")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("load --ndjson: %d %s %s", code, out, diagnostic)
+	}
+	line, _, _ := strings.Cut(out, "\n")
+	var started map[string]any
+	if err := json.Unmarshal([]byte(line), &started); err != nil {
+		t.Fatal(err)
+	}
+	if started["event"] != "started" {
+		t.Fatalf("first record was %v, want started: %s", started["event"], line)
+	}
+	if _, present := started["input_count"]; present {
+		t.Fatalf("started event still carries input_count: %s", line)
+	}
+	if inputs, ok := started["inputs"].(float64); !ok || inputs != 2 {
+		t.Fatalf("started event inputs = %v, want 2: %s", started["inputs"], line)
+	}
+}
+
 func TestLoadNamesOnlyFinalInput(t *testing.T) {
 	for _, plugins := range []bool{false, true} {
 		t.Run("plugins-"+strconv.FormatBool(plugins), func(t *testing.T) {
