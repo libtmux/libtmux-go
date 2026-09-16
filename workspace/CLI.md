@@ -190,9 +190,13 @@ not the default `warning`, matching the reference's own debug-only logging --
 concurrent pane creation occasionally outrunning the wait is expected, not a
 misconfiguration.
 
-Relative directories resolve through the session, window and pane hierarchy
-from the configuration directory. This avoids the reference normalizer's
-missing-parent and mixed-relative-path cases. Before-script argv uses shell
+An explicit relative `start_directory` resolves through the session, window
+and pane hierarchy from the configuration directory. This avoids the
+reference normalizer's missing-parent and mixed-relative-path cases. Absent
+at every level, a session, window or pane's directory stays unset instead of
+defaulting to the configuration directory, so tmux falls back to the
+invocation directory -- matching the reference and the before-script cwd
+below, not the document's own location. Before-script argv uses shell
 quoting without an implicit shell. Native load validates it for every input
 before creating or modifying sessions. Its cwd is the explicit session directory,
 or the invocation cwd when `start_directory` is absent. A failed script removes
