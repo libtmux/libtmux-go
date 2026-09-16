@@ -152,15 +152,19 @@ func pythonExecutable() string {
 
 func (r *invocation) checkPython(tmuxpRequired bool) error {
 	script := "import sys\nif sys.version_info < (3, 10) or sys.version_info.major != 3: raise RuntimeError('Python 3.10 or newer required')\n"
+	requirement := "Python 3.10 or newer"
 	if tmuxpRequired {
 		script += "from importlib.metadata import version\nif version('tmuxp') != '" + referenceVersion + "': raise RuntimeError('tmuxp " + referenceVersion + " required')\n"
+		requirement = "tmuxp " + referenceVersion
 	}
 	result, err := r.process([]string{pythonExecutable(), "-c", script}, "", nil, false)
 	if err != nil {
 		return &failure{"compatibility_runtime", fmt.Sprintf("Python compatibility runtime unavailable: %v; set TMUX_WORKSPACE_PYTHON", err), 1}
 	}
 	if result.Status != 0 {
-		return &failure{"compatibility_runtime", "Python compatibility version check failed: " + strings.TrimSpace(result.Stderr), 1}
+		// The subprocess's stderr is a Python traceback, not a message meant
+		// for a CLI user; report the requirement instead of the mechanism.
+		return &failure{"compatibility_runtime", requirement + " is required; set TMUX_WORKSPACE_PYTHON to a compatible interpreter", 1}
 	}
 	return nil
 }

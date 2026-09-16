@@ -161,6 +161,42 @@ func TestPythonVersionCheckSurvivesOptimization(t *testing.T) {
 	}
 }
 
+// TestCheckPythonReplacesTracebackWithASentence covers the M4 extension: with
+// the bridge interpreter unable to import tmuxp, checkPython embedded the raw
+// subprocess stderr -- a multi-line Python traceback -- in its failure
+// message. dotnet, rs, swift and ts print one sentence naming the required
+// version and TMUX_WORKSPACE_PYTHON instead.
+func TestCheckPythonReplacesTracebackWithASentence(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "python3")
+	script := "#!/bin/sh\ncat <<'EOF' >&2\n" +
+		"Traceback (most recent call last):\n" +
+		"  File \"<string>\", line 4, in <module>\n" +
+		"    if version('tmuxp') != '1.74.0': raise RuntimeError('tmuxp 1.74.0 required')\n" +
+		"importlib.metadata.PackageNotFoundError: No package metadata was found for tmuxp\n" +
+		"EOF\n" +
+		"exit 1\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_WORKSPACE_PYTHON", fake)
+	r := &invocation{ctx: t.Context(), out: io.Discard, err: io.Discard}
+	err := r.checkPython(true)
+	if err == nil {
+		t.Fatal("expected a compatibility failure")
+	}
+	message := err.Error()
+	if strings.Contains(message, "Traceback") {
+		t.Fatalf("checkPython leaked a Python traceback: %q", message)
+	}
+	if !strings.Contains(message, referenceVersion) {
+		t.Fatalf("checkPython did not name the required tmuxp version: %q", message)
+	}
+	if !strings.Contains(message, "TMUX_WORKSPACE_PYTHON") {
+		t.Fatalf("checkPython did not name TMUX_WORKSPACE_PYTHON: %q", message)
+	}
+}
+
 type rejectingWriter struct{}
 
 func (rejectingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

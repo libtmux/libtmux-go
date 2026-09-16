@@ -201,6 +201,21 @@ func TestHelpWithoutTmux(t *testing.T) {
 	}
 }
 
+// TestShellHelpDocumentsThePythonOverride covers O8: every checkPython
+// failure recommends TMUX_WORKSPACE_PYTHON, but no port's --help mentioned it
+// -- the only place the name appeared was the failure the user was trying to
+// get out of.
+func TestShellHelpDocumentsThePythonOverride(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	code, out, diagnostic := invoke(t, "shell", "--help")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("shell --help: %d %q %q", code, out, diagnostic)
+	}
+	if !strings.Contains(out, "TMUX_WORKSPACE_PYTHON") {
+		t.Fatalf("shell --help does not mention TMUX_WORKSPACE_PYTHON: %q", out)
+	}
+}
+
 func TestConvertPreservesUnknownDocumentAndProtectsFile(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "workspace.yaml")
