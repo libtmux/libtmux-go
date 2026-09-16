@@ -612,6 +612,46 @@ func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
 	}
 }
 
+// TestPaneDefaultDirectoryIsInvocationDirectory covers H9: with no
+// start_directory anywhere in the document, tmuxp and the other native ports
+// start every pane in the invocation directory, not the directory the
+// workspace file lives in.
+func TestPaneDefaultDirectoryIsInvocationDirectory(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	invocationDir := t.TempDir()
+	configDir := t.TempDir()
+	t.Chdir(invocationDir)
+	path := write(t, configDir, "no-directory.yaml",
+		"session_name: no-directory\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	if code != 0 {
+		t.Fatalf("load %d %s %s", code, out, diagnostic)
+	}
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane := snapshot.Panes()[0]
+	got, ok := pane.CurrentPath()
+	if !ok {
+		t.Fatal("pane_current_path unavailable")
+	}
+	// Resolve both sides: the macOS runner's TempDir is a symlink
+	// (/var -> /private/var) that tmux reports resolved.
+	gotResolved, err := filepath.EvalSymlinks(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantResolved, err := filepath.EvalSymlinks(invocationDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotResolved != wantResolved {
+		t.Fatalf("pane started in %q, want the invocation directory %q (not the workspace file's directory %q)",
+			got, invocationDir, configDir)
+	}
+}
+
 func TestNeutralExtensionMetadataStaysNative(t *testing.T) {
 	for _, field := range []string{"plugins: []", "workspace_builder_paths: ['.']"} {
 		for _, appendMode := range []bool{false, true} {

@@ -55,7 +55,7 @@ func importWorkspace(doc document, kind string) (document, error) {
 	if _, err := importString(root, "root"); err != nil {
 		return nil, err
 	}
-	absolute, err := directory(root, cwd)
+	absolute, err := directory(root, cwd, cwd)
 	if err != nil {
 		return nil, err
 	}
