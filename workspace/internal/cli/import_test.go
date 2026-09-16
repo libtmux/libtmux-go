@@ -101,6 +101,69 @@ func TestImportTeamocilDerivesSessionNameFromModernFormat(t *testing.T) {
 	}
 }
 
+// TestImportTeamocilAcceptsStringPanes covers B6: teamocil's own README
+// writes panes as plain strings, and teamocil's own importer passes a
+// string pane through unchanged -- only a mapping pane is rewritten.
+func TestImportTeamocilAcceptsStringPanes(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "readme.yml")
+	content := "windows:\n" +
+		"  - name: sample-two-panes\n" +
+		"    root: /tmp\n" +
+		"    layout: even-horizontal\n" +
+		"    panes:\n" +
+		"      - git status\n" +
+		"      - echo two\n"
+	if err := os.WriteFile(source, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "import", "teamocil", source, "--json")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("import teamocil string panes: %d %q %q", code, out, diagnostic)
+	}
+	var doc document
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	windows, _ := doc["windows"].([]any)
+	if len(windows) != 1 {
+		t.Fatalf("windows: %+v", doc["windows"])
+	}
+	panes, _ := mapping(windows[0])["panes"].([]any)
+	if len(panes) != 2 {
+		t.Fatalf("panes: %+v", mapping(windows[0])["panes"])
+	}
+	want := []string{"git status", "echo two"}
+	for i, raw := range panes {
+		pane := mapping(raw)
+		commands, _ := pane["shell_command"].([]any)
+		if len(commands) != 1 || mapping(commands[0])["cmd"] != want[i] {
+			t.Errorf("pane %d shell_command = %+v, want %q", i, pane["shell_command"], want[i])
+		}
+	}
+	if mapping(panes[0])["focus"] != true || mapping(panes[1])["focus"] != false {
+		t.Fatalf("pane focus: %+v", panes)
+	}
+}
+
+// TestImportTeamocilStillRejectsNonMappingNonStringPanes is B6's negative
+// case: a pane that is neither a string nor a mapping is still refused.
+func TestImportTeamocilStillRejectsNonMappingNonStringPanes(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "bad.yml")
+	content := "windows:\n" +
+		"  - name: one\n" +
+		"    panes:\n" +
+		"      - 5\n"
+	if err := os.WriteFile(source, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "import", "teamocil", source, "--json")
+	if code != 1 || out != "" || !strings.Contains(diagnostic, "pane 0 must be a mapping") {
+		t.Fatalf("import teamocil int pane: %d %q %q", code, out, diagnostic)
+	}
+}
+
 func TestImportRefusesInvalidSourceBeforePublishing(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	tests := []struct{ kind, source, field string }{
