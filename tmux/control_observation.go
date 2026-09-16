@@ -112,6 +112,35 @@ func (o *PaneObservation) NextNotification(
 		)
 		return ControlNotification{}, state.loss
 	}
+	// %window-close for the observed window is ambiguous rather than a direct
+	// signal: tmux emits it to every client whose own attached session still
+	// lists the window, regardless of which session the unlink actually
+	// happened on (verified live on 3.7c and next-3.9 with a raw tmux -C
+	// probe) - so it fires both when the attached session itself just lost
+	// the window (only reported as %unlinked-window-close before tmux 3.8;
+	// tmux's events rewrite now fires this notification while the winlink
+	// removal it should reflect is still pending, so it reports the state
+	// from just before the unlink) and, unhelpfully, whenever some other,
+	// unrelated session drops a window this one still holds. A live
+	// membership check resolves which case this is.
+	if notification.Kind() == ControlNotificationWindowClose &&
+		len(arguments) != 0 && WindowID(arguments[0]) == o.windowID {
+		linked, err := o.windowLinkedIntoAttachedSession(ctx)
+		if err != nil {
+			return ControlNotification{}, state.classifyReadError(
+				ctx,
+				err,
+				o.client.closeRequested.Load(),
+			)
+		}
+		if !linked {
+			state.loss = fmt.Errorf(
+				"%w: observed window is no longer linked into the attached session",
+				ErrPaneObservationLost,
+			)
+			return ControlNotification{}, state.loss
+		}
+	}
 	if notification.Kind() == ControlNotificationSessionChanged &&
 		len(arguments) != 0 && SessionID(arguments[0]) != o.sessionID {
 		state.loss = fmt.Errorf(
@@ -136,6 +165,21 @@ func (o *PaneObservation) NextNotification(
 		return ControlNotification{}, state.loss
 	}
 	return notification, nil
+}
+
+// windowLinkedIntoAttachedSession reports whether the observed window is
+// still linked into the observation's attached session, straight from tmux.
+func (o *PaneObservation) windowLinkedIntoAttachedSession(ctx context.Context) (bool, error) {
+	result, err := o.client.Cmd(
+		ctx, "list-windows", "-t", o.sessionID.String(), "-F", "#{window_id}",
+	)
+	if err != nil {
+		return false, err
+	}
+	if result.Failed {
+		return false, failedPaneObservationCommand("list attached-session windows", result)
+	}
+	return slices.Contains(tmuxcmd.SplitStdout(result.RawStdout), o.windowID.String()), nil
 }
 
 func (s *paneObservationState) acquireReadToken(ctx context.Context) error {
