@@ -117,10 +117,10 @@ func TestUnknownExecutionFieldOrderIsStable(t *testing.T) {
 	}
 }
 
-// TestNormalizeAcceptsExtensionKeysAtEveryLevel covers S6/B3: a key starting
-// with "x-", at any level, is inert -- accepted and ignored at load, not a
-// refusal. A top-level anchor holder such as "x-pane-defaults: &shell" is
-// the common tmuxp pattern this unblocks.
+// TestNormalizeAcceptsExtensionKeysAtEveryLevel: a key starting with "x-",
+// at any level, is inert -- accepted and ignored at load, not a refusal. A
+// top-level anchor holder such as "x-pane-defaults: &shell" is the common
+// tmuxp pattern this unblocks.
 func TestNormalizeAcceptsExtensionKeysAtEveryLevel(t *testing.T) {
 	content := `{
 		"session_name": "example", "x-pane-defaults": {"shell_command_before": ["export QA_ANCHOR=1"]},
@@ -143,7 +143,7 @@ func TestNormalizeAcceptsExtensionKeysAtEveryLevel(t *testing.T) {
 	}
 }
 
-// TestNormalizeStillRejectsOrdinaryUnknownKeysAndSuggestsXPrefix is S6's
+// TestNormalizeStillRejectsOrdinaryUnknownKeysAndSuggestsXPrefix is the
 // negative case: a key that does not start with "x-" is still refused, and
 // the refusal names the "x-" escape hatch.
 func TestNormalizeStillRejectsOrdinaryUnknownKeysAndSuggestsXPrefix(t *testing.T) {
@@ -154,8 +154,8 @@ func TestNormalizeStillRejectsOrdinaryUnknownKeysAndSuggestsXPrefix(t *testing.T
 	}
 }
 
-// TestNormalizePanesEmptySequence covers D3: "panes: []" must build exactly
-// like an omitted panes key -- one pane with no command -- not be refused.
+// TestNormalizePanesEmptySequence: "panes: []" must build exactly like an
+// omitted panes key -- one pane with no command -- not be refused.
 func TestNormalizePanesEmptySequence(t *testing.T) {
 	doc := document{"session_name": "example", "windows": []any{document{"panes": []any{}}}}
 	plan, err := normalize(doc, t.TempDir())
@@ -167,7 +167,7 @@ func TestNormalizePanesEmptySequence(t *testing.T) {
 	}
 }
 
-// TestNormalizePanesWrongTypeStillRefused is D3's negative case: a panes
+// TestNormalizePanesWrongTypeStillRefused is the negative case: a panes
 // value that is present but not a sequence at all is still an error.
 func TestNormalizePanesWrongTypeStillRefused(t *testing.T) {
 	doc := document{"session_name": "example", "windows": []any{document{"panes": "not-a-sequence"}}}
