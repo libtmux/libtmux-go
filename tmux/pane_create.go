@@ -293,6 +293,8 @@ func captureNewPaneRequest(request NewPaneRequest) NewPaneRequest {
 // the new pane active in that session and winlink; it is not a global
 // client-focus guarantee. The returned [Pane] is freshly materialized in the
 // receiver SessionID and WindowID rather than by canonical ID-only refresh.
+// [Pane.Split] is the equivalent operation relative to an existing pane
+// rather than its window.
 //
 // If tmux reports a [PaneID] before a transport or refresh failure, the partial
 // result also contains the receiver SessionID and WindowID. Other failures
@@ -309,7 +311,9 @@ func (w Window) SplitPane(ctx context.Context, request SplitPaneRequest) (Pane, 
 // Split creates a tiled pane relative to the receiver's exact linked-pane
 // view. Attach makes the new pane active in that session and winlink; it is not
 // a global client-focus guarantee. The returned [Pane] is freshly materialized
-// in the receiver SessionID and WindowID.
+// in the receiver SessionID and WindowID. Named Split rather than SplitPane to
+// avoid repeating Pane; [Window.SplitPane] is the equivalent operation
+// relative to a window.
 //
 // If tmux reports a [PaneID] before a transport or refresh failure, the partial
 // result also contains the receiver SessionID and WindowID. Other failures
