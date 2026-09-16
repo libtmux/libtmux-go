@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"os"
 	"path/filepath"
@@ -110,7 +111,13 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	missingRoot := filepath.Join(t.TempDir(), "appears-later")
-	name := "frozen-" + filepath.Base(t.TempDir())
+	// t.TempDir()'s own basename is not fit for this: within one test it
+	// increments from a fixed start, so a test's Nth call names the same
+	// directory on every run and every machine (this call, the second in
+	// this test, is always "002"). That makes the socket name machine-wide
+	// constant, which collides with any server a previous run leaked under
+	// the same name. rand.Text() is unique per call instead.
+	name := "frozen-" + rand.Text()
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: name,
 		ProcessEnvironment: []string{
@@ -147,4 +154,42 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 			selection.Path,
 		)
 	}
+}
+
+// t.TempDir()'s own basename is deterministic per call within a test - the
+// Nth call in a given test always ends the same way, on every run and every
+// machine - so a socket name derived from it (the bug this replaces) was
+// machine-wide constant, not unique. This confirms that premise directly,
+// then pins the replacement's actual property: two calls in the same
+// process, the case that would be identical either way, differ.
+func TestFrozenSocketNameIsNotAFixedConstant(t *testing.T) {
+	t.Parallel()
+
+	// Not pinned to Go's exact counter format, which this project does not
+	// control: two independent *testing.T instances taking the same second
+	// call reproduce the same basename as each other, which is the
+	// replaced scheme's actual premise (deterministic, not unique) without
+	// depending on what that basename literally is.
+	outer := secondTempDirCallBasename(t)
+	t.Run("reproduced independently", func(t *testing.T) {
+		if got := secondTempDirCallBasename(t); got != outer {
+			t.Fatalf(
+				"second call's basename = %q here, %q in the sibling instance above, "+
+					"want them identical - that repetition is what made the replaced scheme collide",
+				got, outer,
+			)
+		}
+	})
+
+	first := "frozen-" + rand.Text()
+	second := "frozen-" + rand.Text()
+	if first == second {
+		t.Fatalf("two successive frozen socket names are both %q, want distinct", first)
+	}
+}
+
+func secondTempDirCallBasename(t *testing.T) string {
+	t.Helper()
+	_ = t.TempDir()
+	return filepath.Base(t.TempDir())
 }
