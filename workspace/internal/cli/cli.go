@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"maps"
 	"os"
 	"strconv"
@@ -160,7 +159,7 @@ func (r *invocation) encode(value any) error {
 
 func (r *invocation) event(event string, data map[string]any) error {
 	r.logEvent(event, data)
-	if event == "warning" && data["code"] != "workspace_failed" && r.diagnosticLevel() > slog.LevelWarn {
+	if event == "warning" && data["code"] != "workspace_failed" && r.diagnosticLevel() > warningLevel(textValue(data["code"])) {
 		return nil
 	}
 	if !r.ndjson {

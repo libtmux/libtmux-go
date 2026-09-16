@@ -347,3 +347,43 @@ func TestMissingPanesCreatesBlankPane(t *testing.T) {
 		t.Fatalf("missing panes: %+v %v", plan, err)
 	}
 }
+
+// TestPaneReadinessTimeoutIsQuietByDefault covers the pane-readiness
+// question: tmuxp's own _wait_for_pane_ready logs a missed deadline at debug
+// level, never as a user-facing warning, because concurrent pane creation
+// occasionally outrunning a 2-second shell-prompt wait is expected, not a
+// misconfiguration. pane_readiness_timeout now matches that by requiring
+// --log-level info or debug before it reaches NDJSON or stderr; an unrelated
+// warning code stays visible at the default level.
+func TestPaneReadinessTimeoutIsQuietByDefault(t *testing.T) {
+	for _, test := range []struct {
+		name, logLevel string
+		wantRecord     bool
+	}{
+		{"default", "", false},
+		{"warning", "warning", false},
+		{"info", "info", true},
+		{"debug", "debug", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var out bytes.Buffer
+			r := &invocation{ctx: t.Context(), out: &out, err: io.Discard, ndjson: true, command: "load", logLevel: test.logLevel}
+			data := map[string]any{"code": "pane_readiness_timeout", "message": "pane prompt did not move the cursor within two seconds"}
+			if err := r.event("warning", data); err != nil {
+				t.Fatal(err)
+			}
+			if got := out.Len() > 0; got != test.wantRecord {
+				t.Fatalf("logLevel=%q wrote a record=%v, want %v: %q", test.logLevel, got, test.wantRecord, out.String())
+			}
+		})
+	}
+	var out bytes.Buffer
+	r := &invocation{ctx: t.Context(), out: &out, err: io.Discard, ndjson: true, command: "load"}
+	data := map[string]any{"code": "some_other_condition", "message": "unrelated"}
+	if err := r.event("warning", data); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() == 0 {
+		t.Fatal("an unrelated warning must stay visible at the default log level")
+	}
+}

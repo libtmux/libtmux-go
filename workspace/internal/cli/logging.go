@@ -75,7 +75,7 @@ func (r *invocation) logEvent(event string, data map[string]any) {
 	case "script-output":
 		level = slog.LevelDebug
 	case "warning":
-		level = slog.LevelWarn
+		level = warningLevel(textValue(data["code"]))
 		if data["code"] == "workspace_failed" {
 			level = slog.LevelError
 		}
@@ -83,6 +83,21 @@ func (r *invocation) logEvent(event string, data map[string]any) {
 		level = slog.LevelError
 	}
 	r.log.record(r.ctx, level, r.command, event, data)
+}
+
+// warningLevel resolves a warning event's default visibility. Most warnings
+// stay at LevelWarn, --log-level's default, so they are visible unless the
+// caller quiets warnings entirely. pane_readiness_timeout is the exception:
+// tmuxp's own pane-readiness wait logs a missed 2-second deadline at debug
+// level, never as a user-facing warning, because a slow shell prompt under
+// concurrent pane creation is the expected case, not a misconfiguration.
+// Matching that keeps an occasional, harmless timeout from training users to
+// ignore every warning; --log-level info or debug still surfaces it.
+func warningLevel(code string) slog.Level {
+	if code == "pane_readiness_timeout" {
+		return slog.LevelInfo
+	}
+	return slog.LevelWarn
 }
 
 func (r *invocation) closeLog() {
