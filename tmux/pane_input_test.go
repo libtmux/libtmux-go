@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -446,25 +447,40 @@ func TestSendKeysVersionFailureDoesNotWarnOrExecute(t *testing.T) {
 	}
 }
 
-func TestSendKeysIgnoresCompletedFailuresButSurfacesTransportErrors(t *testing.T) {
+func TestSendKeysSurfacesCompletedAndTransportFailures(t *testing.T) {
 	t.Parallel()
 
-	t.Run("completed failures", func(t *testing.T) {
+	t.Run("completed failure on the send stops before enter", func(t *testing.T) {
 		t.Parallel()
 
 		command := "false"
 		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stderr: []string{"send failed"}, ExitCode: 1}},
-			{result: tmuxcmd.Result{Stderr: []string{"enter failed"}, ExitCode: 1}},
+			{result: tmuxcmd.Result{Stderr: []string{"can't find pane: %4"}, ExitCode: 1}},
 		}}
 		err := paneWithExactTestTarget(serverWithRunner(runner)).SendKeys(
 			context.Background(), SendKeysRequest{Command: &command},
 		)
-		if err != nil {
-			t.Fatalf("SendKeys() error = %v, want nil", err)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %4") {
+			t.Fatalf("SendKeys() error = %v, want a CommandError naming the target", err)
 		}
-		if calls := runner.callCount(); calls != 2 {
-			t.Fatalf("runner calls = %d, want 2", calls)
+		if calls := runner.callCount(); calls != 1 {
+			t.Fatalf("runner calls = %d, want 1: enter must not run after the send fails", calls)
+		}
+	})
+
+	t.Run("completed failure on enter", func(t *testing.T) {
+		t.Parallel()
+
+		command := "echo"
+		runner := &versionQueueRunner{responses: []versionResponse{
+			{result: tmuxcmd.Result{ExitCode: 0}},
+			{result: tmuxcmd.Result{Stderr: []string{"can't find pane: %4"}, ExitCode: 1}},
+		}}
+		err := paneWithExactTestTarget(serverWithRunner(runner)).SendKeys(
+			context.Background(), SendKeysRequest{Command: &command},
+		)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %4") {
+			t.Fatalf("SendKeys() error = %v, want a CommandError naming the target", err)
 		}
 	})
 
@@ -490,42 +506,41 @@ func TestSendKeysIgnoresCompletedFailuresButSurfacesTransportErrors(t *testing.T
 func TestEnterAndClearUseSendKeysRawSemantics(t *testing.T) {
 	t.Parallel()
 
-	t.Run("enter", func(t *testing.T) {
+	t.Run("enter surfaces a completed failure", func(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
-			Stderr: []string{"ignored"}, ExitCode: 1,
+			Stderr: []string{"can't find pane: %7"}, ExitCode: 1,
 		}}}}
 		err := paneWithExactTestTarget(serverWithRunner(runner)).Enter(
 			context.Background(),
 		)
-		if err != nil {
-			t.Fatalf("Enter() error = %v", err)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %7") {
+			t.Fatalf("Enter() error = %v, want a CommandError naming the target", err)
 		}
 		assertRequestArguments(
 			t, runner.recordedRequests()[0], []string{"send-keys", "-t", "$5:0.%7", "--", "Enter"},
 		)
 	})
 
-	t.Run("clear", func(t *testing.T) {
+	t.Run("clear stops at reset's completed failure", func(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stderr: []string{"ignored"}, ExitCode: 1}},
-			{result: tmuxcmd.Result{Stderr: []string{"ignored"}, ExitCode: 1}},
+			{result: tmuxcmd.Result{Stderr: []string{"can't find pane: %7"}, ExitCode: 1}},
 		}}
 		err := paneWithExactTestTarget(serverWithRunner(runner)).Clear(
 			context.Background(),
 		)
-		if err != nil {
-			t.Fatalf("Clear() error = %v", err)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %7") {
+			t.Fatalf("Clear() error = %v, want a CommandError naming the target", err)
 		}
 		requests := runner.recordedRequests()
+		if len(requests) != 1 {
+			t.Fatalf("runner calls = %d, want 1: enter must not run after reset fails", len(requests))
+		}
 		assertRequestArguments(
 			t, requests[0], []string{"send-keys", "-t", "$5:0.%7", "--", "reset"},
-		)
-		assertRequestArguments(
-			t, requests[1], []string{"send-keys", "-t", "$5:0.%7", "--", "Enter"},
 		)
 	})
 }

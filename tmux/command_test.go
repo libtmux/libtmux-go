@@ -656,6 +656,14 @@ func TestAFixedRefusalIsDisclosed(t *testing.T) {
 		t.Errorf("redacted pre-3.7 split error = %q, want tmux's reason", err)
 	}
 
+	// tmux names only its own generated id, never a caller-supplied value.
+	noTarget := CommandResult{ExitCode: 1, Stderr: []string{"can't find pane: %9999"}}
+	if err := newRedactedCommandError("send-keys", noTarget); !strings.Contains(
+		err.Error(), "can't find pane: %9999",
+	) {
+		t.Errorf("redacted missing-target error = %q, want tmux's reason", err)
+	}
+
 	// A message that could carry a caller's value stays withheld.
 	valueBearing := CommandResult{ExitCode: 1, Stderr: []string{"bad value: s3cr3t"}}
 	if err := newRedactedCommandError("split-window", valueBearing); strings.Contains(

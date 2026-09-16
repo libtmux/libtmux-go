@@ -148,7 +148,9 @@ func newCommandError(subcommand string, result CommandResult) *CommandError {
 }
 
 func newRedactedCommandError(subcommand string, result CommandResult) *CommandError {
-	if commandServerUnreachable(result.Stderr) || commandFixedRefusal(result.Stderr) {
+	if commandServerUnreachable(result.Stderr) ||
+		commandFixedRefusal(result.Stderr) ||
+		commandTargetNotFound(result.Stderr) {
 		return newCommandError(subcommand, result)
 	}
 	return &CommandError{

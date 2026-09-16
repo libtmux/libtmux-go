@@ -443,7 +443,7 @@ func TestCapturePaneToBufferRejectsEmptyNameBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestCapturePanePreservesCompletedRawFailures(t *testing.T) {
+func TestCapturePaneSurfacesCompletedRawFailures(t *testing.T) {
 	t.Parallel()
 
 	t.Run("printed", func(t *testing.T) {
@@ -451,16 +451,16 @@ func TestCapturePanePreservesCompletedRawFailures(t *testing.T) {
 
 		runner := &captureQueueRunner{responses: []captureResponse{{result: tmuxcmd.Result{
 			Stdout:   []string{"partial"},
-			Stderr:   []string{"capture failed"},
+			Stderr:   []string{"can't find pane: %4"},
 			ExitCode: 1,
 		}}}}
 		pane := newCaptureTestPane(runner, nil)
 		output, err := pane.Capture(context.Background(), CapturePaneRequest{})
-		if err != nil {
-			t.Fatalf("Capture() error = %v, want nil", err)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %4") {
+			t.Fatalf("Capture() error = %v, want a CommandError naming the target", err)
 		}
 		if !slices.Equal(output, []string{"partial"}) {
-			t.Fatalf("Capture() = %#v, want partial stdout", output)
+			t.Fatalf("Capture() = %#v, want any partial stdout alongside the error", output)
 		}
 	})
 
@@ -468,16 +468,17 @@ func TestCapturePanePreservesCompletedRawFailures(t *testing.T) {
 		t.Parallel()
 
 		runner := &captureQueueRunner{responses: []captureResponse{{result: tmuxcmd.Result{
-			Stderr:   []string{"capture failed"},
+			Stderr:   []string{"can't find pane: %4"},
 			ExitCode: 1,
 		}}}}
 		pane := newCaptureTestPane(runner, nil)
-		if err := pane.CaptureToBuffer(
+		err := pane.CaptureToBuffer(
 			context.Background(),
 			"failed-capture",
 			CapturePaneRequest{},
-		); err != nil {
-			t.Fatalf("CaptureToBuffer() error = %v, want nil", err)
+		)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %4") {
+			t.Fatalf("CaptureToBuffer() error = %v, want a CommandError naming the target", err)
 		}
 	})
 }
