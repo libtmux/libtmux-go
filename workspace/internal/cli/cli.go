@@ -26,14 +26,16 @@ const referenceVersion = "1.74.0"
 // binaries derive it from build metadata; source builds use fallbackVersion.
 var Version = buildVersion()
 
-const fallbackVersion = "v0.0.1-alpha.7"
+const fallbackVersion = "0.0.1-alpha.7"
 
 func buildVersion() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
 		return fallbackVersion
 	}
-	return info.Main.Version
+	// Go module versions always carry a leading v; the other ports print a
+	// bare semantic version, and --version is read across the estate.
+	return strings.TrimPrefix(info.Main.Version, "v")
 }
 
 type failure struct {
