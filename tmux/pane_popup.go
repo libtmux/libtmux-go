@@ -9,6 +9,15 @@ import (
 var (
 	panePopupVersion33 = Version{raw: "3.3", major: 3, minor: 3}
 	panePopupVersion36 = Version{raw: "3.6", major: 3, minor: 6}
+	// panePopupVersion38 is where tmux added an explicit refusal for a
+	// control-mode target client: cmd_display_popup_exec gained
+	// "if (tc->flags & CLIENT_CONTROL) return (CMD_RETURN_NORMAL);"
+	// (cmd-display-menu.c, 3.7c to 3.8-rc), matching tmux's own
+	// regress/control-client-popup.sh ("Popups require a tty overlay and
+	// cannot be displayed by a control client"). tmux answers CMD_RETURN_NORMAL
+	// either way, so nothing distinguishes the refusal from success on the
+	// wire; a caller only learns the popup never ran, if they later look.
+	panePopupVersion38 = Version{raw: "3.8", major: 3, minor: 8}
 )
 
 // DisplayPopupRequest configures a popup overlay. Pointer and map values are
@@ -34,7 +43,11 @@ type DisplayPopupRequest struct {
 	// CloseExisting closes the selected client's existing overlay and prevents
 	// this request from creating a replacement.
 	CloseExisting bool
-	// TargetClient selects the client that receives the overlay; zero lets tmux choose.
+	// TargetClient selects the client that receives the overlay; zero lets tmux
+	// choose. tmux 3.8 and later refuses to host a popup on a control-mode
+	// client, which cannot render an overlay, so an explicit control-mode
+	// TargetClient is rejected on those versions rather than left as the
+	// silent no-op tmux itself returns.
 	TargetClient ClientName
 	// Width is an explicit cell count or percentage and may contain tmux format
 	// expressions. Nil lets tmux choose the default width.
@@ -110,7 +123,13 @@ type displayPopupValues struct {
 //
 // Title, BorderLines, Style, BorderStyle, Environment, and NoBorder require
 // tmux 3.3. CloseOnAnyKey and NoKeys require tmux 3.6. Unsupported fields follow
-// [UnsupportedPolicy].
+// [UnsupportedPolicy]. On tmux 3.8 and later, an explicit TargetClient that
+// resolves to a control-mode client returns [ErrInvalidServerCommandRequest]
+// unless CloseExisting is set: tmux itself answers that combination exactly
+// as it answers success, so nothing on the wire would otherwise say the
+// popup never ran. CloseExisting is exempt because tmux handles it before
+// that refusal on every version, clearing whatever overlay the target has -
+// nothing, for a control-mode client - without creating anything either way.
 //
 // Invalid fields fail before display. Only stderr produces a redacted
 // [CommandError]; nonzero exits without stderr are ignored. Cancellation cannot
@@ -126,9 +145,19 @@ func (p Pane) DisplayPopup(ctx context.Context, request DisplayPopupRequest) err
 	}
 
 	var current Version
-	if values.needsVersion() {
+	if values.needsVersion() || values.targetClient != "" {
 		current, err = p.server.Version(ctx)
 		if err != nil {
+			return err
+		}
+	}
+	// CloseExisting is exempt: cmd_display_popup_exec handles -C before the
+	// CLIENT_CONTROL refusal (cmd-display-menu.c), clearing whatever overlay
+	// the target has - nothing for a control-mode client, which never had
+	// one - and returns without creating anything, on every version. That
+	// path was never broken, so it is not this check's problem.
+	if values.targetClient != "" && !values.closeExisting && current.AtLeast(panePopupVersion38) {
+		if err := requireDisplayPopupTargetSupportsOverlay(ctx, p.server, values.targetClient); err != nil {
 			return err
 		}
 	}
@@ -258,6 +287,34 @@ func captureDisplayPopupRequest(request DisplayPopupRequest) (displayPopupValues
 		values.environment = append(values.environment, key+"="+value)
 	}
 	return values, nil
+}
+
+// requireDisplayPopupTargetSupportsOverlay rejects a target client tmux 3.8+
+// would otherwise silently refuse. tmux answers that refusal exactly as it
+// answers success, so nothing on the wire tells a caller the popup never
+// ran; this catches it before that happens, while it can still be reported.
+// A target lookup failure is not this check's problem: it falls through to
+// the request tmux would have received anyway, which fails or succeeds on
+// its own terms.
+func requireDisplayPopupTargetSupportsOverlay(
+	ctx context.Context,
+	server Server,
+	targetClient string,
+) error {
+	// A lookup failure is deliberately not surfaced here: it is not this
+	// check's problem, and falls through to the request tmux would have
+	// received anyway.
+	target, lookupErr := server.Client(ctx, ClientName(targetClient))
+	if lookupErr == nil {
+		if controlMode, ok := target.ControlMode(); ok && controlMode {
+			return invalidServerCommandRequest(
+				"display-popup", "TargetClient", targetClient,
+				"is a control-mode client; tmux 3.8 and later cannot host a popup on "+
+					"one and silently ignores the command instead of returning an error",
+			)
+		}
+	}
+	return nil
 }
 
 func (values displayPopupValues) needsVersion() bool {
