@@ -1,4 +1,12 @@
-//go:build aix || darwin || dragonfly || freebsd || illumos || linux || netbsd || openbsd || solaris
+//go:build linux
+
+// A popup needs a real tty overlay: tmux 3.8 added an explicit refusal for a
+// control-mode target client ("Popups require a tty overlay and cannot be
+// displayed by a control client", cmd-display-menu.c's cmd_display_popup_exec,
+// confirmed against tmux's own regress/control-client-popup.sh), and it is
+// ignored cleanly rather than reported as an error. These tests need a real,
+// pty-backed attached client, which this harness only provides on Linux
+// (tmuxtest.StartPTYProcess).
 
 package integration
 
@@ -76,7 +84,7 @@ func TestDisplayPopupVersionedFieldsAgainstRealTmux(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
-	control := tmuxtest.NewControlMode(context.Background(), t, server, sessions[0])
+	_, client := attachRealPTYClient(ctx, t, server, sessions[0].ID())
 	panes, err := server.Panes(ctx)
 	if err != nil || len(panes) != 1 {
 		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
@@ -85,7 +93,6 @@ func TestDisplayPopupVersionedFieldsAgainstRealTmux(t *testing.T) {
 	directory := t.TempDir()
 	marker := filepath.Join(directory, "popup-marker")
 	command := "printf '%s' \"${POPUP_VALUE-unset}\" > " + strconv.Quote(marker)
-	client := control.ClientName()
 	title := "go-popup"
 	if err := panes[0].DisplayPopup(ctx, tmux.DisplayPopupRequest{
 		Command:        &command,
@@ -143,7 +150,7 @@ func TestDisplayPopupNoKeysAndCloseOnAnyKeyPrecedenceAgainstRealTmux(t *testing.
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
-	control := tmuxtest.NewControlMode(context.Background(), t, server, sessions[0])
+	_, client := attachRealPTYClient(ctx, t, server, sessions[0].ID())
 	panes, err := server.Panes(ctx)
 	if err != nil || len(panes) != 1 {
 		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
@@ -161,7 +168,6 @@ func TestDisplayPopupNoKeysAndCloseOnAnyKeyPrecedenceAgainstRealTmux(t *testing.
 		"tmux wait-for " + exitLock,
 		"printf exited > " + strconv.Quote(exited),
 	}, "; ")
-	client := control.ClientName()
 	popupDone := make(chan error, 1)
 	go func() {
 		popupDone <- panes[0].DisplayPopup(ctx, tmux.DisplayPopupRequest{
@@ -254,12 +260,12 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 	}); err != nil {
 		t.Fatalf("canonical SelectWindow(shared) error = %v", err)
 	}
-	firstControl := tmuxtest.NewControlMode(context.Background(), t, server, canonicalSession)
-	secondControl := tmuxtest.NewControlMode(context.Background(), t, server, canonicalSession)
-	if firstControl.ClientName() == secondControl.ClientName() {
+	_, firstClient := attachRealPTYClient(ctx, t, server, canonicalSession.ID())
+	_, secondClient := attachRealPTYClient(ctx, t, server, canonicalSession.ID())
+	if firstClient == secondClient {
 		t.Fatalf(
 			"simultaneous client names are both %q, want distinct identities",
-			firstControl.ClientName(),
+			firstClient,
 		)
 	}
 
@@ -289,9 +295,9 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 	if len(defaultResult.Stdout) != 1 {
 		t.Fatalf("default client stdout = %#v, want one row", defaultResult.Stdout)
 	}
-	targetClient := firstControl.ClientName()
+	targetClient := firstClient
 	if defaultResult.Stdout[0] == targetClient.String() {
-		targetClient = secondControl.ClientName()
+		targetClient = secondClient
 	}
 	if defaultResult.Stdout[0] == targetClient.String() {
 		t.Fatalf("explicit target client %q unexpectedly equals tmux default", targetClient)
@@ -317,7 +323,13 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 	}); err != nil {
 		t.Fatalf("DisplayPopup() error = %v", err)
 	}
-	if got := strings.TrimSpace(waitForProcessFile(ctx, t, marker)); got != expectedDirectory {
+	// A real client's #{client_name} is its tty path, itself absolute, so the
+	// template's own separator before it produces a doubled slash once
+	// substituted; the popup's shell tracks $PWD from that literal argument
+	// rather than re-resolving it, so pwd echoes the doubled slash back
+	// verbatim even though it names the same directory. Clean before
+	// comparing; the kernel already resolved cd the same way.
+	if got := filepath.Clean(strings.TrimSpace(waitForProcessFile(ctx, t, marker))); got != expectedDirectory {
 		t.Fatalf("popup expansion context = %q, want %q", got, expectedDirectory)
 	}
 }
@@ -329,4 +341,78 @@ func mustPaneModeVersion(t *testing.T, value string) tmux.Version {
 		t.Fatal(err)
 	}
 	return version
+}
+
+// attachRealPTYClient attaches a real, pty-backed tmux client to session and
+// returns it together with the name tmux gave it. Unlike a control-mode
+// client, this one can host a popup on tmux 3.8+.
+func attachRealPTYClient(
+	ctx context.Context,
+	t *testing.T,
+	server tmux.Server,
+	session tmux.SessionID,
+) (*tmuxtest.PTYProcess, tmux.ClientName) {
+	t.Helper()
+	probe, err := server.Cmd(ctx, "display-message", "-p", "#{pid}")
+	if err != nil || probe.ExitCode != 0 || len(probe.Command) == 0 {
+		t.Fatalf("resolve tmux binary = (%#v, %v)", probe, err)
+	}
+	before := realPTYClientNames(ctx, t, server)
+	process := tmuxtest.StartPTYProcess(
+		ctx,
+		t,
+		probe.Command[0],
+		[]string{
+			"-S", server.SocketPath(),
+			"-f", server.ConfigFile(),
+			"attach-session", "-t", session.String(),
+		},
+		attachHelperEnvironment(nil),
+	)
+	return process, waitForNewRealPTYClient(ctx, t, server, process, before)
+}
+
+// realPTYClientNames snapshots the server's current client names so a later
+// attach can tell which one it added.
+func realPTYClientNames(ctx context.Context, t *testing.T, server tmux.Server) map[string]bool {
+	t.Helper()
+	result, err := server.Cmd(ctx, "list-clients", "-F", "#{client_name}")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("list-clients error = (%#v, %v)", result, err)
+	}
+	names := make(map[string]bool, len(result.Stdout))
+	for _, name := range result.Stdout {
+		names[name] = true
+	}
+	return names
+}
+
+func waitForNewRealPTYClient(
+	ctx context.Context,
+	t *testing.T,
+	server tmux.Server,
+	process *tmuxtest.PTYProcess,
+	before map[string]bool,
+) tmux.ClientName {
+	t.Helper()
+	for {
+		result, err := server.Cmd(ctx, "list-clients", "-F", "#{client_name}")
+		if err == nil && result.ExitCode == 0 {
+			for _, name := range result.Stdout {
+				if !before[name] {
+					return tmux.ClientName(name)
+				}
+			}
+		}
+		select {
+		case <-process.Done():
+			t.Fatalf(
+				"attach process exited before a new client appeared: %v; output %q",
+				process.Wait(ctx), process.Output(),
+			)
+		case <-ctx.Done():
+			t.Fatalf("no new client appeared: %v", ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 }
