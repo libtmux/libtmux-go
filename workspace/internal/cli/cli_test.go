@@ -451,12 +451,11 @@ func errorCode(t *testing.T, diagnostic string) string {
 	return code
 }
 
-// TestLoadErrorCodesMatchS14 covers E3/S14's minimum test: three of the
-// table's four conditions that need no live tmux server (the fourth,
-// session_not_found from a missing freeze target, is
-// TestFreezeMissingSessionReportsSessionNotFound in the integration
-// package, which has one). Before this fix every condition below fell
-// through to the generic "operation_failed".
+// TestLoadErrorCodesMatchS14 checks three machine error codes that need no
+// live tmux server (a fourth, session_not_found from a missing freeze
+// target, is TestFreezeMissingSessionReportsSessionNotFound in the
+// integration package, which has one). Before this fix every condition
+// below fell through to the generic "operation_failed".
 func TestLoadErrorCodesMatchS14(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	dir := t.TempDir()
@@ -494,9 +493,9 @@ func TestLoadErrorCodesMatchS14(t *testing.T) {
 	}
 }
 
-// TestErrorEnvelopeCarriesSchemaVersion covers the rest of S14: every
-// stderr error record is {"schema_version":1,"code":...,"message":...},
-// not just {"code":...,"message":...}.
+// TestErrorEnvelopeCarriesSchemaVersion: every stderr error record is
+// {"schema_version":1,"code":...,"message":...}, not just
+// {"code":...,"message":...}.
 func TestErrorEnvelopeCarriesSchemaVersion(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	_, _, diagnostic := invoke(t, "load", "-d", "--json", filepath.Join(t.TempDir(), "missing.yaml"))
@@ -509,10 +508,9 @@ func TestErrorEnvelopeCarriesSchemaVersion(t *testing.T) {
 	}
 }
 
-// TestLoadReportsTmuxUnavailableWhenExecutableMissing covers S14: a missing
-// tmux executable must report tmux_unavailable, not the generic
-// operation_failed serverFor's raw "resolve tmux executable" error fell
-// through to.
+// TestLoadReportsTmuxUnavailableWhenExecutableMissing: a missing tmux
+// executable must report tmux_unavailable, not the generic operation_failed
+// serverFor's raw "resolve tmux executable" error fell through to.
 func TestLoadReportsTmuxUnavailableWhenExecutableMissing(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	dir := t.TempDir()
@@ -529,11 +527,11 @@ func TestLoadReportsTmuxUnavailableWhenExecutableMissing(t *testing.T) {
 	}
 }
 
-// TestPromptClassifiesUnansweredInputAsConfirmationRequired covers S14: a
-// confirmation that is needed but impossible -- no terminal, no answer on
-// stdin -- must report confirmation_required. Every command that prompts
-// routes through this one method, so it is tested directly rather than
-// through a specific command.
+// TestPromptClassifiesUnansweredInputAsConfirmationRequired: a confirmation
+// that is needed but impossible -- no terminal, no answer on stdin -- must
+// report confirmation_required. Every command that prompts routes through
+// this one method, so it is tested directly rather than through a specific
+// command.
 func TestPromptClassifiesUnansweredInputAsConfirmationRequired(t *testing.T) {
 	var out bytes.Buffer
 	r := &invocation{ctx: t.Context(), in: strings.NewReader(""), err: &out}

@@ -101,9 +101,9 @@ func TestImportTeamocilDerivesSessionNameFromModernFormat(t *testing.T) {
 	}
 }
 
-// TestImportTeamocilAcceptsStringPanes covers B6: teamocil's own README
-// writes panes as plain strings, and teamocil's own importer passes a
-// string pane through unchanged -- only a mapping pane is rewritten.
+// TestImportTeamocilAcceptsStringPanes: teamocil's own README writes panes
+// as plain strings, and teamocil's own importer passes a string pane
+// through unchanged -- only a mapping pane is rewritten.
 func TestImportTeamocilAcceptsStringPanes(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "readme.yml")
@@ -146,7 +146,7 @@ func TestImportTeamocilAcceptsStringPanes(t *testing.T) {
 	}
 }
 
-// TestImportTeamocilStillRejectsNonMappingNonStringPanes is B6's negative
+// TestImportTeamocilStillRejectsNonMappingNonStringPanes is the negative
 // case: a pane that is neither a string nor a mapping is still refused.
 func TestImportTeamocilStillRejectsNonMappingNonStringPanes(t *testing.T) {
 	dir := t.TempDir()

@@ -711,7 +711,7 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 	// A fresh session needs its client looking at a window, so the default
 	// (first, absent an explicit focus) still applies. Appending to a
 	// session the user already owns must not move them unless a window
-	// asked for it (S10) -- the default-first fallback above exists only to
+	// asked for it -- the default-first fallback above exists only to
 	// pick something if focus is requested at all.
 	if focus.ID() != "" && (created || explicitFocus) {
 		if _, err := focus.Select(r.ctx); err != nil {
