@@ -2,8 +2,10 @@ package tmux
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"slices"
+	"strings"
 )
 
 // SelectLayoutRequest selects one layout operation. Its zero value reapplies
@@ -12,8 +14,10 @@ import (
 // rather than passed explicitly. The request contains no retained
 // caller-owned storage and is supported on tmux 3.2a or later.
 type SelectLayoutRequest struct {
-	// Layout names a preset or supplies a tmux layout string; empty selects the
-	// zero-value behavior.
+	// Layout names a preset or supplies a tmux layout string - either the
+	// classic checksum-prefixed grammar every supported version accepts, or
+	// the JSON shape tmux 3.8+ also accepts, exactly as #{window_layout}
+	// reported it; empty selects the zero-value behavior.
 	Layout string
 	// Spread distributes pane space evenly.
 	Spread bool
@@ -35,9 +39,10 @@ func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) e
 		return err
 	}
 	// The version is only needed for a name tmux learned partway through the
-	// supported range, so it is not asked for otherwise.
+	// supported range, or a layout shape tmux learned at 3.8, so it is not
+	// asked for otherwise.
 	var version Version
-	if layoutMirroredPresets[request.Layout] {
+	if layoutMirroredPresets[request.Layout] || layoutLooksLikeJSON(request.Layout) {
 		if version, err = w.server.Version(ctx); err != nil {
 			return err
 		}
@@ -69,10 +74,32 @@ var layoutMirroredPresets = map[string]bool{
 
 var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 
-// layoutStringPattern matches tmux's own description of an arrangement, which
-// #{window_layout} reports and select-layout accepts back. It begins with a
-// checksum, which is what makes it distinguishable from a name.
+// layoutJSONVersion is the tmux feature level at which #{window_layout}
+// switched to a JSON subset for non-control clients and select-layout learned
+// to accept that shape back, alongside the classic grammar it still accepts.
+// tmux CHANGES, 3.7c to 3.8: "Layout strings now use a JSON subset format
+// which includes floating panes. The old format is still accepted."
+var layoutJSONVersion = Version{raw: "3.8", major: 3, minor: 8}
+
+// layoutStringPattern matches tmux's classic description of an arrangement,
+// which #{window_layout} reports (and select-layout accepts back) on every
+// supported version up to and including tmux 3.7c, and which newer tmux still
+// accepts alongside the JSON shape below. It begins with a checksum, which is
+// what makes it distinguishable from a name.
 var layoutStringPattern = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
+
+// layoutLooksLikeJSON reports whether layout is shaped like the JSON layout
+// tmux 3.8+ reports from #{window_layout} and accepts back from
+// select-layout. It checks only the outer envelope - this package treats a
+// layout as an opaque string tmux hands back and forth, never a structure to
+// parse - so a caller's own well-formed JSON round-trips exactly like tmux's.
+func layoutLooksLikeJSON(layout string) bool {
+	trimmed := strings.TrimSpace(layout)
+	if !strings.HasPrefix(trimmed, "{") {
+		return false
+	}
+	return json.Valid([]byte(layout))
+}
 
 // layoutPanePattern matches one layout cell that holds a pane. tmux dumps such
 // a cell as width x height, offsets, and the pane's own number; cells that only
@@ -93,7 +120,8 @@ func layoutListsPane(layout string, pane PaneID) bool {
 }
 
 // tmux 3.3a exits the server for an unknown layout instead of returning an
-// error, so reject names that are neither presets nor layout strings.
+// error, so reject names that are neither presets nor layout strings in
+// either format era.
 func validateLayout(layout string, version Version) error {
 	if layout == "" || layoutPresets[layout] || layoutStringPattern.MatchString(layout) {
 		return nil
@@ -103,6 +131,12 @@ func validateLayout(layout string, version Version) error {
 			return nil
 		}
 		return &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
+	}
+	if layoutLooksLikeJSON(layout) {
+		if version.AtLeast(layoutJSONVersion) {
+			return nil
+		}
+		return &VersionTooLowError{Current: version, Minimum: layoutJSONVersion}
 	}
 	return invalidServerCommandRequest(
 		"select-layout",

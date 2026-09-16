@@ -97,6 +97,87 @@ func TestWindowLayoutCommandsBuildLiteralArguments(t *testing.T) {
 	}
 }
 
+// tmux 3.8 started reporting and accepting a JSON layout shape alongside the
+// classic grammar (CHANGES, 3.7c to 3.8: "Layout strings now use a JSON
+// subset format... The old format is still accepted."). SelectLayout must
+// forward that shape only once the server can actually understand it -
+// tmux 3.3/3.3a exits the whole server on a layout string it does not
+// recognise, and pre-3.8 tmux does not recognise JSON.
+func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
+	t.Parallel()
+
+	// A value tmux would never itself produce, to prove this checks shape and
+	// not this round's specific fixture.
+	const jsonLayout = `{"V":2,"L":{"t":"p","w":81,"h":25,"x":0,"y":0,"a":false,"i":9,"I":"%9"}}`
+
+	t.Run("below 3.8 refuses without reaching tmux", func(t *testing.T) {
+		t.Parallel()
+
+		runner := &versionQueueRunner{responses: []versionResponse{{
+			result: tmuxcmd.Result{Stdout: []string{"tmux 3.7c"}},
+		}}}
+		err := (Window{
+			server:    serverWithRunner(runner),
+			sessionID: "$7",
+			windowID:  "@8",
+		}).SelectLayout(context.Background(), SelectLayoutRequest{Layout: jsonLayout})
+
+		var tooLow *VersionTooLowError
+		if !errors.As(err, &tooLow) {
+			t.Fatalf("SelectLayout() error = %v, want *VersionTooLowError", err)
+		}
+		if tooLow.Minimum.String() != "3.8" {
+			t.Errorf("Minimum = %s, want 3.8", tooLow.Minimum)
+		}
+		if calls := runner.callCount(); calls != 1 {
+			t.Fatalf("runner calls = %d, want 1 (version probe only, no select-layout sent)", calls)
+		}
+	})
+
+	t.Run("3.8 and newer forwards it like any other layout string", func(t *testing.T) {
+		t.Parallel()
+
+		runner := &versionQueueRunner{responses: []versionResponse{
+			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.8"}}},
+			{result: tmuxcmd.Result{Stderr: []string{"stop after argv capture"}, ExitCode: 7}},
+		}}
+		err := (Window{
+			server:    serverWithRunner(runner),
+			sessionID: "$7",
+			windowID:  "@8",
+		}).SelectLayout(context.Background(), SelectLayoutRequest{Layout: jsonLayout})
+
+		if !errors.Is(err, ErrCommand) {
+			t.Fatalf("SelectLayout() error = %v, want ErrCommand", err)
+		}
+		requests := runner.recordedRequests()
+		if len(requests) != 2 {
+			t.Fatalf("request count = %d, want 2 (version probe, then select-layout)", len(requests))
+		}
+		assertRequestArguments(t, requests[1], []string{
+			"select-layout", "-t", "$7:0", jsonLayout,
+		})
+	})
+
+	t.Run("text that merely starts with a brace is never mistaken for JSON", func(t *testing.T) {
+		t.Parallel()
+
+		runner := &versionQueueRunner{}
+		err := (Window{
+			server:    serverWithRunner(runner),
+			sessionID: "$7",
+			windowID:  "@8",
+		}).SelectLayout(context.Background(), SelectLayoutRequest{Layout: "{not json"})
+
+		if !errors.Is(err, ErrInvalidServerCommandRequest) {
+			t.Fatalf("SelectLayout() error = %v, want ErrInvalidServerCommandRequest", err)
+		}
+		if calls := runner.callCount(); calls != 0 {
+			t.Fatalf("runner calls = %d, want 0 (rejected before any probe or command)", calls)
+		}
+	})
+}
+
 func TestSelectLayoutRejectsMultipleModesBeforeExecution(t *testing.T) {
 	t.Parallel()
 
