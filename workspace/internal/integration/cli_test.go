@@ -171,6 +171,15 @@ func TestFreezeSaveToNeedsNoConfirmationWithoutATerminal(t *testing.T) {
 	if code == 0 || !strings.Contains(diagnostic, "destination exists") {
 		t.Fatalf("freeze --save-to over an existing file without --force: %d %q %q", code, out, diagnostic)
 	}
+	// Same refusal, --json mode: covers S14's destination_exists code.
+	code, out, diagnostic = run(t, "freeze", "frozen-consent", "-S", server.SocketPath(), "--save-to", destination, "--json")
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if code == 0 || out != "" || envelope["code"] != "destination_exists" {
+		t.Fatalf("freeze --save-to --json over an existing file: %d %q code=%v", code, out, envelope["code"])
+	}
 }
 
 // TestFreezeMissingSessionReportsSessionNotFound covers the last of E3/S14's
@@ -193,6 +202,103 @@ func TestFreezeMissingSessionReportsSessionNotFound(t *testing.T) {
 	if envelope["code"] != "session_not_found" {
 		t.Fatalf("freeze nosuch code = %v, want %q (%s)", envelope["code"], "session_not_found", diagnostic)
 	}
+}
+
+// TestFreezeOnEmptyServerReportsSessionNotFound is
+// TestFreezeMissingSessionReportsSessionNotFound's other case: a server
+// that is running but owns zero sessions fails its underlying "list
+// windows" query outright ("no current target") rather than reporting an
+// empty session list, which must not surface as the generic
+// operation_failed.
+func TestFreezeOnEmptyServerReportsSessionNotFound(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		Config: []byte("set -g exit-empty off\n"),
+	})
+	if result, err := server.Cmd(t.Context(), "start-server"); err != nil || result.ExitCode != 0 {
+		t.Fatalf("start-server: %+v %v", result, err)
+	}
+	code, out, diagnostic := run(t, "freeze", "nosuch", "-S", server.SocketPath(), "--json")
+	if code != 1 || out != "" {
+		t.Fatalf("freeze nosuch on an empty server: %d %q %q", code, out, diagnostic)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if envelope["code"] != "session_not_found" {
+		t.Fatalf("freeze nosuch on an empty server code = %v, want %q (%s)", envelope["code"], "session_not_found", diagnostic)
+	}
+}
+
+// TestLoadTmuxFailureReportsTmuxFailedCode covers S14: a tmux command
+// failing while building -- an unknown option here -- must give
+// errors[].code and the stderr record's code tmux_failed, not the generic
+// workspace_failed/load_failed a stderr-only consumer could not branch on.
+func TestLoadTmuxFailureReportsTmuxFailedCode(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	path := write(t, dir, "bad-option.yaml", "session_name: bad-option\nwindows:\n- window_name: w\n  options:\n    no-such-option-xyz: 1\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--json")
+	if code != 1 || out == "" {
+		t.Fatalf("load with an invalid option: %d %q %q", code, out, diagnostic)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v", out, err)
+	}
+	errs, _ := summary["errors"].([]any)
+	entry, _ := first(errs).(map[string]any)
+	if len(errs) != 1 || entry["code"] != "tmux_failed" {
+		t.Fatalf("errors[0].code = %v, want tmux_failed: %s", entry["code"], out)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if envelope["code"] != "tmux_failed" {
+		t.Fatalf("stderr record code = %v, want tmux_failed (%s)", envelope["code"], diagnostic)
+	}
+}
+
+// TestLoadScriptFailureReportsScriptFailedCode covers S14: a nonzero
+// before_script must give errors[].code and the stderr record's code
+// script_failed, and the message must not end in a bare ": " when the
+// script produced no stderr output.
+func TestLoadScriptFailureReportsScriptFailedCode(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	path := write(t, dir, "bad-script.yaml", "session_name: bad-script\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--json")
+	if code != 1 || out == "" {
+		t.Fatalf("load with a failing before_script: %d %q %q", code, out, diagnostic)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v", out, err)
+	}
+	errs, _ := summary["errors"].([]any)
+	entry, _ := first(errs).(map[string]any)
+	message, _ := entry["message"].(string)
+	if len(errs) != 1 || entry["code"] != "script_failed" {
+		t.Fatalf("errors[0].code = %v, want script_failed: %s", entry["code"], out)
+	}
+	if strings.HasSuffix(message, ": ") {
+		t.Fatalf("message keeps an empty separator: %q", message)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if envelope["code"] != "script_failed" {
+		t.Fatalf("stderr record code = %v, want script_failed (%s)", envelope["code"], diagnostic)
+	}
+}
+
+func first(items []any) any {
+	if len(items) == 0 {
+		return nil
+	}
+	return items[0]
 }
 
 // TestFreezeOmitsTheDefaultShellWhateverItIsNamed reproduces macOS on Linux,
@@ -385,7 +491,7 @@ func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 	dir := t.TempDir()
 	path := write(t, dir, "fail.yaml", "session_name: failure\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
 	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--ndjson", "--log-level", "critical")
-	if code != 1 || !json.Valid([]byte(diagnostic)) || !strings.Contains(diagnostic, "load_failed") || !strings.Contains(out, `"code":"workspace_failed"`) {
+	if code != 1 || !json.Valid([]byte(diagnostic)) || !strings.Contains(diagnostic, "script_failed") || !strings.Contains(out, `"code":"script_failed"`) {
 		t.Fatalf("failure %d %s %s", code, out, diagnostic)
 	}
 	terminal := 0
