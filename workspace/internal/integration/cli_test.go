@@ -148,13 +148,8 @@ func TestFreezeYesAnswersFormatPromptWithoutATerminal(t *testing.T) {
 	}
 }
 
-// TestFreezeOmitsTheDefaultShellWhateverItIsNamed covers the macOS half of
-// SPEC 1 item 5. Deciding "is this pane running the default shell?" by
-// comparing pane_current_command against basename(default-shell) is wrong
-// wherever the two names differ: with default-shell /bin/sh, macOS runs bash
-// and reports "bash", so freeze wrote shell_command: [bash] into a document
-// whose pane had no command at all, and reloading it started an explicit bash.
-// The config here reproduces that mismatch on any platform.
+// TestFreezeOmitsTheDefaultShellWhateverItIsNamed reproduces macOS on Linux,
+// where /bin/sh is bash: default-shell reads "sh" and the pane reports "bash".
 func TestFreezeOmitsTheDefaultShellWhateverItIsNamed(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		Config: []byte("set -g default-shell /bin/sh\nset -g default-command \"/bin/bash -i\"\n"),
