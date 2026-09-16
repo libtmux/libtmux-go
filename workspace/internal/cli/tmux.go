@@ -284,7 +284,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			return err
 		}
 	}
-	if err := r.event("started", map[string]any{"input_count": len(inputs)}); err != nil {
+	if err := r.event("started", map[string]any{"inputs": len(inputs)}); err != nil {
 		return err
 	}
 	r.startProgress(o)
