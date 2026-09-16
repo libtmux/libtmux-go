@@ -798,6 +798,14 @@ func capture(ctx context.Context, session tmux.Session) (document, error) {
 	if !ok {
 		return nil, errors.New("capture session lacks snapshot relations")
 	}
+	// The same query load() uses to decide whether to wait for a prompt: "the
+	// session's default shell". A pane still running it round-trips with no
+	// shell_command; anything else needs one to reload faithfully.
+	defaultShell, err := query(ctx, session.Server(), "show-options", "-A", "-v", "-t", session.ID().String(), "default-shell")
+	if err != nil {
+		return nil, err
+	}
+	defaultShell = filepath.Base(strings.TrimSpace(defaultShell))
 	result := []any{}
 	for _, window := range windows {
 		name, _ := window.Name()
@@ -820,7 +828,10 @@ func capture(ctx context.Context, session tmux.Session) (document, error) {
 			}
 			options[name] = value
 		}
-		wp["options"] = options
+		// automatic-rename: off (and any other captured option) only holds if
+		// applied after the panes exist; options_after is where load applies
+		// window options at that point.
+		wp["options_after"] = options
 		panes, _ := window.Panes()
 		pp := []any{}
 		for _, pane := range panes {
@@ -829,10 +840,12 @@ func capture(ctx context.Context, session tmux.Session) (document, error) {
 			active, _ := pane.Active()
 			if strings.HasPrefix(command, "-") || strings.HasSuffix(command, "python") || strings.HasSuffix(command, "ruby") || strings.HasSuffix(command, "node") {
 				command = ""
+			} else if filepath.Base(strings.TrimPrefix(command, "-")) == defaultShell {
+				command = ""
 			}
 			p := document{"start_directory": cwd, "focus": active}
 			if command != "" {
-				p["shell_command"] = command
+				p["shell_command"] = []string{command}
 			}
 			pp = append(pp, p)
 		}
