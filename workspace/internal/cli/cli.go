@@ -379,6 +379,9 @@ func (r *invocation) tree() *cobra.Command {
 		imp.AddCommand(child)
 	}
 	shell, sh := add("shell", " [session-name] [window-name]", "open the version-checked Python tmuxp shell", 0, 2, r.shell)
+	shell.Long = shell.Short + "\n\n" +
+		"TMUX_WORKSPACE_PYTHON selects the interpreter that hosts the tmuxp " +
+		"bridge; unset or empty uses python3 from PATH."
 	sockets(shell, sh)
 	shell.Flags().StringVarP(&sh.code, "python-code", "c", "", "execute Python code (default empty: interactive shell)")
 	sh.backend = "best"
