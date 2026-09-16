@@ -33,6 +33,43 @@ func (e *TargetError) Error() string {
 // Unwrap makes TargetError compatible with ErrInvalidTarget.
 func (e *TargetError) Unwrap() error { return ErrInvalidTarget }
 
+// MissingTargetError reports an operation attempted on a zero-value model
+// identity. It matches [ErrMissingTarget] through errors.Is; callers can
+// recover Object with errors.As.
+//
+// A relation accessor such as [Session.ActiveWindow] or [Session.Windows]
+// returns ok false rather than a value with no id, and a creation call such
+// as [Server.NewSession] carries no relations at all - so using a discarded
+// or freshly created value's zero-value fields reaches this error on the
+// first operation. Resolve live state with a Resolve* method or a fresh
+// [Server.Snapshot] instead.
+type MissingTargetError struct {
+	// Object names the tmux object kind with no id: "session", "window",
+	// "pane", or "client".
+	Object string
+}
+
+// Error implements error.
+func (e *MissingTargetError) Error() string {
+	message := fmt.Sprintf("%v: %s has no id", ErrMissingTarget, e.Object)
+	if resolvers := missingTargetResolvers[e.Object]; resolvers != "" {
+		message += "; a relation accessor whose ok was false returns a zero " +
+			e.Object + ", and a created value carries no relations: use " + resolvers
+	}
+	return message
+}
+
+// missingTargetResolvers names the live lookups that return each object kind,
+// the fix for a zero value reached through a discarded relation result.
+var missingTargetResolvers = map[string]string{
+	"session": "Window.ResolveSession or Pane.ResolveSession",
+	"window":  "Session.ResolveActiveWindow or Pane.ResolveWindow",
+	"pane":    "Session.ResolveActivePane or Window.ResolveActivePane",
+}
+
+// Unwrap makes MissingTargetError compatible with ErrMissingTarget.
+func (e *MissingTargetError) Unwrap() error { return ErrMissingTarget }
+
 func validateTypedTarget(subcommand, field, object, target string) error {
 	if err := validateServerCommandArgument(subcommand, field, target, true); err != nil {
 		return err
@@ -42,7 +79,7 @@ func validateTypedTarget(subcommand, field, object, target string) error {
 
 func validateStableTarget(object, target string) error {
 	if target == "" {
-		return ErrMissingTarget
+		return &MissingTargetError{Object: object}
 	}
 	var sigil byte
 	switch object {
