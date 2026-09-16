@@ -27,20 +27,20 @@ func decodeDocument(data []byte) (document, error) {
 	var value document
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&value); err != nil {
-		return nil, fmt.Errorf("decode workspace: %w", err)
+		return nil, &failure{"invalid_workspace", fmt.Sprintf("decode workspace: %v", err), 1}
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return nil, errors.New("multiple YAML documents are not supported")
+			return nil, &failure{"invalid_workspace", "multiple YAML documents are not supported", 1}
 		}
-		return nil, fmt.Errorf("decode trailing document: %w", err)
+		return nil, &failure{"invalid_workspace", fmt.Sprintf("decode trailing document: %v", err), 1}
 	}
 	if value == nil {
-		return nil, errors.New("workspace must be a mapping")
+		return nil, &failure{"invalid_workspace", "workspace must be a mapping", 1}
 	}
 	if _, err := json.Marshal(value); err != nil {
-		return nil, fmt.Errorf("workspace requires JSON-compatible string keys: %w", err)
+		return nil, &failure{"invalid_workspace", fmt.Sprintf("workspace requires JSON-compatible string keys: %v", err), 1}
 	}
 	return value, nil
 }
@@ -53,10 +53,10 @@ func readDocument(path string) (document, error) {
 	if strings.EqualFold(filepath.Ext(path), ".json") {
 		var value document
 		if err := json.Unmarshal(data, &value); err != nil {
-			return nil, fmt.Errorf("decode JSON workspace: %w", err)
+			return nil, &failure{"invalid_workspace", fmt.Sprintf("decode JSON workspace: %v", err), 1}
 		}
 		if value == nil {
-			return nil, errors.New("workspace must be a mapping")
+			return nil, &failure{"invalid_workspace", "workspace must be a mapping", 1}
 		}
 		return value, nil
 	}
@@ -443,7 +443,7 @@ func checkFields(doc document, scope string, allowed ...string) error {
 			continue
 		}
 		if !slices.Contains(allowed, key) {
-			return fmt.Errorf("%s: unknown field %q (custom fields use an \"x-\" prefix)", scope, key)
+			return &failure{"unsupported_key", fmt.Sprintf("%s: unknown field %q (custom fields use an \"x-\" prefix)", scope, key), 1}
 		}
 	}
 	return nil

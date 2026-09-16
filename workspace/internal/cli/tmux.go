@@ -74,7 +74,7 @@ func findSession(ctx context.Context, server tmux.Server, target string) (tmux.S
 			return session, nil
 		}
 	}
-	return tmux.Session{}, fmt.Errorf("session %q not found", target)
+	return tmux.Session{}, &failure{"session_not_found", fmt.Sprintf("session %q not found", target), 1}
 }
 
 func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, error) {
@@ -222,6 +222,13 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		plan, err := normalize(doc, filepath.Dir(path))
 		if err != nil {
+			// Preserve a *failure's code and exit status; only the message
+			// gains the failing input's path, so the classification a
+			// --json/--ndjson consumer branches on survives the wrap.
+			var specific *failure
+			if errors.As(err, &specific) {
+				return &failure{specific.Code, privatePath(path) + ": " + specific.Message, specific.Exit}
+			}
 			return fmt.Errorf("%s: %w", privatePath(path), err)
 		}
 		if plan.Bridge {

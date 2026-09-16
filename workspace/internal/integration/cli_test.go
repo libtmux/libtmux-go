@@ -173,6 +173,28 @@ func TestFreezeSaveToNeedsNoConfirmationWithoutATerminal(t *testing.T) {
 	}
 }
 
+// TestFreezeMissingSessionReportsSessionNotFound covers the last of E3/S14's
+// four minimum-test conditions: a freeze target that does not exist. The
+// other three (workspace_not_found, invalid_workspace, unsupported_key)
+// need no live server and live in the cli package's
+// TestLoadErrorCodesMatchS14.
+func TestFreezeMissingSessionReportsSessionNotFound(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keeper"},
+	})
+	code, out, diagnostic := run(t, "freeze", "nosuch", "-S", server.SocketPath(), "--json")
+	if code != 1 || out != "" {
+		t.Fatalf("freeze nosuch: %d %q %q", code, out, diagnostic)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if envelope["code"] != "session_not_found" {
+		t.Fatalf("freeze nosuch code = %v, want %q (%s)", envelope["code"], "session_not_found", diagnostic)
+	}
+}
+
 // TestFreezeOmitsTheDefaultShellWhateverItIsNamed reproduces macOS on Linux,
 // where /bin/sh is bash: default-shell reads "sh" and the pane reports "bash".
 func TestFreezeOmitsTheDefaultShellWhateverItIsNamed(t *testing.T) {
