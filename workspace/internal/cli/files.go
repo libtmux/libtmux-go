@@ -366,7 +366,8 @@ func (r *invocation) documentResult(o *options, doc document, source, format str
 		return r.encode(doc)
 	}
 	destination := expand(o.saveTo)
-	if destination == "" {
+	usingDefault := destination == ""
+	if usingDefault {
 		base := strings.TrimSuffix(source, filepath.Ext(source))
 		if base == "" {
 			name := textValue(doc["session_name"])
@@ -394,6 +395,14 @@ func (r *invocation) documentResult(o *options, doc document, source, format str
 	}
 	if err != nil {
 		return err
+	}
+	if usingDefault {
+		// tmuxp creates the default workspace directory (~/.tmuxp, or the
+		// convert/import source's own directory) before writing; an
+		// explicit --save-to into a missing directory is left refused.
+		if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+			return err
+		}
 	}
 	if err = atomicWrite(destination, data, o.force); err != nil {
 		return err

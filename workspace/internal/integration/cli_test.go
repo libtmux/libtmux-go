@@ -182,11 +182,37 @@ func TestFreezeSaveToNeedsNoConfirmationWithoutATerminal(t *testing.T) {
 	}
 }
 
-// TestFreezeMissingSessionReportsSessionNotFound covers the last of E3/S14's
-// four minimum-test conditions: a freeze target that does not exist. The
-// other three (workspace_not_found, invalid_workspace, unsupported_key)
-// need no live server and live in the cli package's
-// TestLoadErrorCodesMatchS14.
+// TestFreezeCreatesTheDefaultDestinationDirectory: without --save-to,
+// freeze picks ~/.tmuxp/<session>.<format>, and that directory may not
+// exist yet -- tmuxp's own freeze creates it before writing. An explicit
+// --save-to into a missing directory is unaffected and still fails.
+func TestFreezeCreatesTheDefaultDestinationDirectory(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keep"},
+	})
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	code, out, diagnostic := run(t, "freeze", "keep", "-S", server.SocketPath(), "--yes")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("freeze into a missing default directory: %d %q %q", code, out, diagnostic)
+	}
+	destination := filepath.Join(home, ".tmuxp", "keep.yaml")
+	if _, err := os.Stat(destination); err != nil {
+		t.Fatalf("freeze did not write %s: %v", destination, err)
+	}
+	// The negative case: an explicit --save-to into a missing directory is
+	// not the default destination and still fails.
+	explicit := filepath.Join(t.TempDir(), "missing-dir", "frozen.yaml")
+	code, out, diagnostic = run(t, "freeze", "keep", "-S", server.SocketPath(), "--save-to", explicit)
+	if code == 0 {
+		t.Fatalf("freeze --save-to into a missing directory unexpectedly succeeded: %d %q %q", code, out, diagnostic)
+	}
+}
+
+// TestFreezeMissingSessionReportsSessionNotFound: a freeze target that
+// does not exist reports session_not_found. Three related codes
+// (workspace_not_found, invalid_workspace, unsupported_key) need no live
+// server and live in the cli package's TestLoadErrorCodesMatchS14.
 func TestFreezeMissingSessionReportsSessionNotFound(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keeper"},
