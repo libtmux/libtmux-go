@@ -487,6 +487,67 @@ func TestNewWindowSelectExistingResolvesNoOutputInExactSession(t *testing.T) {
 	})
 }
 
+// tmux 3.8 extended -S to match an exact -t target as well as a window name
+// (cmd-new-window.c, 3.7c to 3.8-rc). Window.NewWindow's target is always
+// exact and always already occupied by the receiver, so from that version on
+// tmux selects the receiver and prints nothing. Unlike the indexed and
+// session-target forms above, no probe is needed: the identity tmux selected
+// is already known without reading anything back from tmux first.
+func TestNewWindowSelectExistingResolvesNoOutputForExactTarget(t *testing.T) {
+	t.Parallel()
+
+	name := "existing"
+	version := mustParseVersion(t, "3.8")
+	sessionFields, err := formatFieldsFor("list-sessions", version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowFields, err := formatFieldsFor("list-windows", version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &versionQueueRunner{responses: []versionResponse{
+		// new-window itself: tmux selected the receiver and printed nothing.
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		liveIdentityResponse(version),
+		{result: tmuxcmd.Result{
+			RawStdout: framedSnapshotRecord(sessionFields, snapshotRowValues(version, map[string]string{
+				"session_id": "$9", "session_name": "receiver",
+			})),
+			ExitCode: 0,
+		}},
+		{result: tmuxcmd.Result{
+			RawStdout: framedSnapshotRecord(windowFields, snapshotRowValues(version, map[string]string{
+				"session_id": "$9", "window_id": "@3", "window_index": "0", "window_name": name,
+			})),
+			ExitCode: 0,
+		}},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		liveIdentityResponse(version),
+	}}
+
+	window, err := (Window{
+		server: serverWithRunner(runner), sessionID: "$9", windowID: "@3",
+	}).NewWindow(context.Background(), NewWindowRequest{
+		Name: &name, Direction: NewWindowDirectionAfter, SelectExisting: true,
+	})
+	if err != nil {
+		t.Fatalf("Window.NewWindow(SelectExisting) error = %v", err)
+	}
+	if window.sessionID != "$9" || window.windowID != "@3" || window.windowIndex != 0 {
+		t.Fatalf("Window.NewWindow(SelectExisting) = %#v, want exact $9:@3 index 0", window)
+	}
+	requests := runner.recordedRequests()
+	if len(requests) == 0 {
+		t.Fatal("no requests recorded")
+	}
+	assertRequestArguments(t, requests[0], []string{
+		"new-window", "-t", "$9:0", "-d", "-P", "-F#{window_id}",
+		"-n", name, "-a", "-S",
+	})
+}
+
 func TestCreationTransportPartialsPreserveReceiverContext(t *testing.T) {
 	t.Parallel()
 

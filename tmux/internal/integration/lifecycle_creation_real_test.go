@@ -175,21 +175,45 @@ func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 	if indexed.ID() == existing.ID() || indexed.Index() != index {
 		t.Fatalf("indexed SelectExisting window = %#v, want a new window at index %d", indexed, index)
 	}
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	// tmux 3.8 extended -S to match an exact -t target, not only a window
+	// name (cmd-new-window.c, 3.7c to 3.8-rc: "if idx != -1: select
+	// winlink_find_by_index(idx)" ahead of the name-matching fallback).
+	// existing.NewWindow's target is always exact and always already
+	// occupied by existing itself, so from that version on tmux selects
+	// existing instead of creating a duplicate; before it, the exact-target
+	// form never matched -S at all and always created one.
+	minimum38, err := tmux.ParseVersion("3.8")
+	if err != nil {
+		t.Fatal(err)
+	}
 	exact, err := existing.NewWindow(ctx, tmux.NewWindowRequest{
 		Name: &name, Direction: tmux.NewWindowDirectionAfter, SelectExisting: true,
 	})
 	if err != nil {
 		t.Fatalf("Window.NewWindow(SelectExisting) error = %v", err)
 	}
-	if exact.ID() == existing.ID() {
-		t.Fatalf("exact-target SelectExisting window = %s, want a newly printed identity", exact.ID())
+	wantCount := before + 2
+	if version.AtLeast(minimum38) {
+		if exact.ID() != existing.ID() {
+			t.Fatalf(
+				"exact-target SelectExisting window on tmux %s = %s, want the receiver %s",
+				version, exact.ID(), existing.ID(),
+			)
+		}
+		wantCount = before + 1
+	} else if exact.ID() == existing.ID() {
+		t.Fatalf(
+			"exact-target SelectExisting window on tmux %s = %s, want a newly printed identity",
+			version, exact.ID(),
+		)
 	}
-	if after := len(mustRealSnapshot(t, server).Windows()); after != before+2 {
-		t.Fatalf("window count after explicit SelectExisting targets = %d, want %d", after, before+2)
-	}
-	version, err := server.Version(ctx)
-	if err != nil {
-		t.Fatalf("Version() error = %v", err)
+	if after := len(mustRealSnapshot(t, server).Windows()); after != wantCount {
+		t.Fatalf("window count after explicit SelectExisting targets on tmux %s = %d, want %d",
+			version, after, wantCount)
 	}
 	minimum34, err := tmux.ParseVersion("3.4")
 	if err != nil {
