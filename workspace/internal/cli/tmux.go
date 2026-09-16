@@ -791,9 +791,8 @@ func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
 	return r.documentResult(o, doc, "", "yaml", warnings)
 }
 
-// interactiveShells names the commands a pane reports when it is simply
-// sitting at a shell. default-shell alone does not cover it: /bin/sh is
-// dash on Linux and bash on macOS, and the pane reports the real program.
+// interactiveShells covers what default-shell alone misses: /bin/sh is dash on
+// Linux and bash on macOS, and the pane reports the real program.
 var interactiveShells = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ash": true,
 	"ksh": true, "mksh": true, "fish": true, "csh": true, "tcsh": true,
@@ -806,14 +805,9 @@ func capture(ctx context.Context, session tmux.Session) (document, error) {
 	if !ok {
 		return nil, errors.New("capture session lacks snapshot relations")
 	}
-	// Which panes need a shell_command to reload faithfully? A pane sitting at
-	// a shell does not; a pane running anything else does. Panes here are
-	// created bare and driven with send-keys, so pane_start_command is the
-	// same for every one of them and cannot answer this -- the pane's current
-	// command is the only signal. Naming the shell by basename(default-shell)
-	// alone is not enough: with default-shell /bin/sh macOS runs bash and
-	// reports "bash", so freeze wrote shell_command: [bash] into a pane that
-	// had no command at all.
+	// A pane sitting at a shell needs no shell_command. pane_start_command
+	// cannot tell one apart here, because panes are created bare and driven
+	// with send-keys, so the current command is the only signal.
 	defaultShell, err := query(ctx, session.Server(), "show-options", "-A", "-v", "-t", session.ID().String(), "default-shell")
 	if err != nil {
 		return nil, err
