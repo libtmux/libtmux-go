@@ -183,6 +183,12 @@ geometry remains tmux's responsibility.
 Default history suppression is enabled. `workspace_builder_options` accepts
 `pane_readiness: auto|always|never` and the reference boolean aliases. Auto waits
 for zsh prompts; explicit pane or window launch commands skip readiness waits.
+The wait polls for up to two seconds, same as the reference. A missed deadline
+is a `pane_readiness_timeout` warning event; commands still send regardless of
+whether the pane answered ready. It surfaces at `--log-level info` or `debug`,
+not the default `warning`, matching the reference's own debug-only logging --
+concurrent pane creation occasionally outrunning the wait is expected, not a
+misconfiguration.
 
 Relative directories resolve through the session, window and pane hierarchy
 from the configuration directory. This avoids the reference normalizer's
