@@ -32,13 +32,19 @@ type controlDialect struct {
 }
 
 func (dialect controlDialect) clientFlags(profile controlClientProfile) []string {
-	flags := make([]string, 0, 2)
+	flags := make([]string, 0, 3)
 	if !profile.receivesPaneOutput() {
 		flags = append(flags, "no-output")
 	}
 	if dialect.version.AtLeast(controlNoDetachVersion36) {
 		flags = append(flags, "no-detach-on-destroy")
 	}
+	// tmux hands a control client the classic window_layout grammar unless it
+	// asks for the JSON shape a plain client already receives on 3.8+; below
+	// that, no version recognizes the flag and server_client_set_flags leaves
+	// it silently unset. attach-session -f and refresh-client -f share the
+	// same flag parser, so requesting it at attach avoids a second round trip.
+	flags = append(flags, "new-layouts")
 	return flags
 }
 
