@@ -776,11 +776,16 @@ func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
 		return r.result(map[string]any{"status": "ok", "workspace": doc, "warnings": warnings})
 	}
 	if !r.machine() {
-		if err := r.confirm("Freeze session", o.yes); err != nil {
-			return err
+		// An explicit --save-to is consent to that destination: no
+		// confirmation prompt, with or without a terminal. --force still
+		// governs replacing a file that already exists there.
+		if o.saveTo == "" {
+			if err := r.confirm("Freeze session", o.yes); err != nil {
+				return err
+			}
 		}
 		if o.format == "" {
-			if o.yes {
+			if o.yes || o.saveTo != "" {
 				// --workspace-format documents yaml as its default; --yes
 				// answers this the same way it answers the confirmation
 				// above, instead of leaving a second, unnamed prompt behind.

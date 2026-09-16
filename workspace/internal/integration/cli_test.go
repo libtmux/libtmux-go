@@ -148,6 +148,31 @@ func TestFreezeYesAnswersFormatPromptWithoutATerminal(t *testing.T) {
 	}
 }
 
+// TestFreezeSaveToNeedsNoConfirmationWithoutATerminal covers D7/S11: an
+// explicit --save-to is consent to that destination, so freeze must write
+// without --yes even with no terminal attached. --force still governs
+// replacing an existing file.
+func TestFreezeSaveToNeedsNoConfirmationWithoutATerminal(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "frozen-consent"},
+	})
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "frozen.yaml")
+	code, out, diagnostic := run(t, "freeze", "frozen-consent", "-S", server.SocketPath(), "--save-to", destination)
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("freeze --save-to without --yes or a terminal: %d %q %q", code, out, diagnostic)
+	}
+	if _, err := os.Stat(destination); err != nil {
+		t.Fatalf("freeze --save-to did not write %s: %v", destination, err)
+	}
+	// The negative case: --save-to alone is not --force, so an existing
+	// destination is still refused.
+	code, out, diagnostic = run(t, "freeze", "frozen-consent", "-S", server.SocketPath(), "--save-to", destination)
+	if code == 0 || !strings.Contains(diagnostic, "destination exists") {
+		t.Fatalf("freeze --save-to over an existing file without --force: %d %q %q", code, out, diagnostic)
+	}
+}
+
 // TestFreezeOmitsTheDefaultShellWhateverItIsNamed reproduces macOS on Linux,
 // where /bin/sh is bash: default-shell reads "sh" and the pane reports "bash".
 func TestFreezeOmitsTheDefaultShellWhateverItIsNamed(t *testing.T) {
