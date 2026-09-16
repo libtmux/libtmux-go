@@ -362,7 +362,10 @@ func normalize(doc document, base string) (loadPlan, error) {
 			return plan, err
 		}
 		panes, ok := w["panes"].([]any)
-		if _, exists := w["panes"]; !exists {
+		// An omitted panes key and an explicit empty sequence both mean one
+		// pane with no command -- tmuxp raises IndexError on the empty form,
+		// but nothing here asked for that.
+		if _, exists := w["panes"]; !exists || (ok && len(panes) == 0) {
 			panes, ok = []any{nil}, true
 		}
 		if !ok || len(panes) == 0 {

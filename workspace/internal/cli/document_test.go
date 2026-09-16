@@ -116,3 +116,26 @@ func TestUnknownExecutionFieldOrderIsStable(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizePanesEmptySequence covers D3: "panes: []" must build exactly
+// like an omitted panes key -- one pane with no command -- not be refused.
+func TestNormalizePanesEmptySequence(t *testing.T) {
+	doc := document{"session_name": "example", "windows": []any{document{"panes": []any{}}}}
+	plan, err := normalize(doc, t.TempDir())
+	if err != nil {
+		t.Fatalf("panes: [] must build like an omitted panes key: %v", err)
+	}
+	if len(plan.Windows) != 1 || len(plan.Windows[0].Panes) != 1 || len(plan.Windows[0].Panes[0].Commands) != 0 {
+		t.Fatalf("panes: [] = %+v, want one pane with no command", plan.Windows)
+	}
+}
+
+// TestNormalizePanesWrongTypeStillRefused is D3's negative case: a panes
+// value that is present but not a sequence at all is still an error.
+func TestNormalizePanesWrongTypeStillRefused(t *testing.T) {
+	doc := document{"session_name": "example", "windows": []any{document{"panes": "not-a-sequence"}}}
+	_, err := normalize(doc, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "panes must be a nonempty sequence") {
+		t.Fatalf("panes: \"not-a-sequence\" must still be refused: %v", err)
+	}
+}
