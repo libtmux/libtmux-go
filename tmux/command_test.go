@@ -647,6 +647,15 @@ func TestAFixedRefusalIsDisclosed(t *testing.T) {
 		t.Errorf("redacted split error = %q, want tmux's reason", err)
 	}
 
+	// tmux 3.2a through 3.6a word the same refusal without "a" (layout.c moved
+	// and reworded it at 3.7).
+	noRoomPre37 := CommandResult{ExitCode: 1, Stderr: []string{"no space for new pane"}}
+	if err := newRedactedCommandError("split-window", noRoomPre37); !strings.Contains(
+		err.Error(), "no space for new pane",
+	) {
+		t.Errorf("redacted pre-3.7 split error = %q, want tmux's reason", err)
+	}
+
 	// A message that could carry a caller's value stays withheld.
 	valueBearing := CommandResult{ExitCode: 1, Stderr: []string{"bad value: s3cr3t"}}
 	if err := newRedactedCommandError("split-window", valueBearing); strings.Contains(

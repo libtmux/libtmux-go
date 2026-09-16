@@ -180,6 +180,9 @@ var commandServerUnreachableSuffixes = [...]string{
 // Fixed refusals contain no caller values and remain safe in redacted errors.
 var commandFixedRefusals = [...]string{
 	"no space for a new pane",
+	// tmux 3.2a through 3.6a word the same refusal without "a"; layout.c moved
+	// and reworded it at 3.7.
+	"no space for new pane",
 }
 
 func commandFixedRefusal(stderr []string) bool {
