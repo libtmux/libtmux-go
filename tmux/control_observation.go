@@ -59,6 +59,28 @@ func (o *PaneObservation) PaneID() PaneID {
 	return o.paneID
 }
 
+// SessionID returns the session the observation's own control client
+// attached to, resolved live when the observation opened - the session a
+// listing must count this client's attachment against, not merely the
+// pane's session at some other, possibly stale, snapshot.
+func (o *PaneObservation) SessionID() SessionID {
+	if o == nil {
+		return ""
+	}
+	return o.sessionID
+}
+
+// ClientName returns the observation's own control client identity - the
+// name a listing of attached clients must exclude, the same way it already
+// excludes a caller's long-lived command connection, so a caller's own
+// stream never reads as another person watching.
+func (o *PaneObservation) ClientName() ClientName {
+	if o == nil || o.client == nil {
+		return ""
+	}
+	return o.client.ClientName()
+}
+
 // Baseline returns an owned copy of the pane's visible text at the observation
 // boundary.
 func (o *PaneObservation) Baseline() []string {
