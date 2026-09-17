@@ -440,6 +440,21 @@ func TestHumanLoadPreflight(t *testing.T) {
 	for _, mode := range []string{"endpoint", "stale-pid", "wrong-terminal", "no-client", "ambiguous", "detached", "append", "choice-detached", "choice-append"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, server, pane := handoffServer(t)
+			if mode == "choice-detached" || mode == "choice-append" {
+				// Replace the pane's interactive shell with a command that
+				// never reads its own stdin, so the keystroke below has
+				// exactly one reader: the load process waiting on the
+				// prompt. respawn-pane allocates a new tty, so the pane is
+				// refreshed before anything opens it.
+				if result, err := server.Cmd(ctx, "respawn-pane", "-k", "-t", pane.ID().String(), "sleep", "300"); err != nil || result.ExitCode != 0 {
+					t.Fatalf("silence pane shell: %+v %v", result, err)
+				}
+				var err error
+				pane, err = pane.Refresh(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
 			input := handoffInput(t, pane)
 			t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
 			t.Setenv("TMUX_PANE", pane.ID().String())
@@ -450,6 +465,7 @@ func TestHumanLoadPreflight(t *testing.T) {
 			flags := []string{"-y"}
 			var reader io.Reader = input
 			control := false
+			answer := ""
 			switch mode {
 			case "endpoint":
 				_, selected, _ = handoffServer(t)
@@ -460,18 +476,19 @@ func TestHumanLoadPreflight(t *testing.T) {
 				reader = handoffInput(t, other)
 			case "ambiguous":
 				handoffClient(ctx, t, server, false)
-			case "detached", "append", "choice-detached", "choice-append":
+			case "detached", "append":
 				control = true
 				reader = strings.NewReader("n\n")
 				flags = []string{"-d"}
-				switch mode {
-				case "append":
+				if mode == "append" {
 					flags = []string{"-d", "--append"}
-				case "choice-detached":
-					flags = nil
-				case "choice-append":
-					flags = nil
-					reader = strings.NewReader("a\n")
+				}
+			case "choice-detached", "choice-append":
+				control = true
+				flags = nil
+				answer = "n"
+				if mode == "choice-append" {
+					answer = "a"
 				}
 			}
 			marker := filepath.Join(t.TempDir(), "script")
@@ -479,7 +496,23 @@ func TestHumanLoadPreflight(t *testing.T) {
 			path := handoffDocument(t, "/bin/sh "+script)
 			args := append([]string{"load", path, "--no-progress", "-S", selected.SocketPath()}, flags...)
 			var out, diagnostic bytes.Buffer
-			code := cli.Run(ctx, args, reader, &out, &diagnostic)
+			var code int
+			if answer != "" {
+				done := make(chan int, 1)
+				go func() {
+					done <- cli.Run(ctx, args, reader, &out, &diagnostic)
+				}()
+				if result, err := server.Cmd(ctx, "send-keys", "-t", pane.ID().String(), answer, "Enter"); err != nil || result.ExitCode != 0 {
+					t.Fatalf("answer prompt: %+v %v", result, err)
+				}
+				select {
+				case code = <-done:
+				case <-ctx.Done():
+					t.Fatal("load did not return after the prompt was answered")
+				}
+			} else {
+				code = cli.Run(ctx, args, reader, &out, &diagnostic)
+			}
 			snapshot, err := selected.Snapshot(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -493,6 +526,36 @@ func TestHumanLoadPreflight(t *testing.T) {
 				t.Fatalf("invalid handoff reached effects: code=%d marker=%v sessions=%d stdout=%q stderr=%q", code, markerErr, len(snapshot.Sessions()), out.String(), diagnostic.String())
 			}
 		})
+	}
+}
+
+// TestRunShellLoadSwitchesWithoutAPane: a run-shell key binding sets TMUX
+// but not TMUX_PANE and has no controlling terminal (`bind-key W run-shell
+// "tmux-workspace load -y w.yaml"`). An attached load must still switch
+// tmux's most recently active client instead of refusing for lack of a
+// terminal, which switch-client needs none of.
+func TestRunShellLoadSwitchesWithoutAPane(t *testing.T) {
+	ctx, server, _ := handoffServer(t)
+	client := handoffClient(ctx, t, server, false)
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", "")
+	path := write(t, t.TempDir(), "runshell.yaml", "session_name: runshell\nwindows:\n- panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-y", "-S", server.SocketPath())
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("run-shell load: %d %q %q", code, out, diagnostic)
+	}
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	live, err := snapshot.ClientByName(client.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	attached, ok := live.AttachedSession()
+	name, _ := attached.Name()
+	if !ok || name != "runshell" {
+		t.Fatalf("client did not switch to the loaded session: ok=%v name=%q", ok, name)
 	}
 }
 
@@ -568,8 +631,10 @@ func TestHumanLoadFlushBeforeHandoff(t *testing.T) {
 			var input io.Reader = handoffInput(t, pane)
 			args := []string{"load", path, "--no-progress", "-S", server.SocketPath()}
 			if prompt {
+				// The prompt's own flush fails before it ever reads an
+				// answer, so a real terminal is enough: the fixture only
+				// needs the prompt to fire, never to be answered.
 				out, diagnostic = &other, &rejected
-				input = strings.NewReader("n\n")
 			} else {
 				args = append(args, "-y")
 			}

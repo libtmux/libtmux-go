@@ -10,21 +10,31 @@ import (
 )
 
 type loadHandoff struct {
-	client   tmux.Client
-	terminal *os.File
-	input    *os.File
+	client    tmux.Client
+	terminal  *os.File
+	input     *os.File
+	anyClient bool
 }
 
 func (r *invocation) prepareHandoff(server tmux.Server) (*loadHandoff, error) {
-	if r.terminalInput == nil || !terminal(r.terminalInput) {
-		return nil, &failure{"terminal_required", "attach requires terminal stdin; use -d", 2}
-	}
 	if os.Getenv("TMUX") == "" {
+		if r.terminalInput == nil || !terminal(r.terminalInput) {
+			return nil, &failure{"terminal_required", "attach requires terminal stdin; use -d", 2}
+		}
 		file, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
 			return nil, &failure{"terminal_required", "attach requires a controlling terminal; use -d", 2}
 		}
 		return &loadHandoff{terminal: file, input: r.terminalInput}, nil
+	}
+	if os.Getenv("TMUX_PANE") == "" {
+		// A run-shell key binding sets TMUX but not TMUX_PANE: switching
+		// needs no terminal and no pane to verify, so tmux picks its own
+		// most recently active client.
+		if err := currentEndpoint(server); err != nil {
+			return nil, err
+		}
+		return &loadHandoff{anyClient: true}, nil
 	}
 	snapshot, pane, err := currentView(r.ctx, server)
 	if err != nil {
@@ -77,6 +87,9 @@ func (h *loadHandoff) close() {
 func (h *loadHandoff) attach(ctx context.Context, session tmux.Session) error {
 	if h.terminal != nil {
 		return session.Attach(ctx, tmux.AttachSessionOptions{Stdin: h.input, Stdout: h.terminal, Stderr: h.terminal})
+	}
+	if h.anyClient {
+		return session.SwitchClient(ctx)
 	}
 	live, err := h.client.Refresh(ctx)
 	if err != nil {
