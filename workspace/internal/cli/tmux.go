@@ -362,6 +362,8 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			if errors.As(buildErr, &specific) {
 				code = specific.Code
 			}
+			var removedErr *removedSessionError
+			entry["removed"] = errors.As(buildErr, &removedErr)
 			entryFailure := map[string]any{"code": code, "message": buildErr.Error(), "input_index": index, "stage": "load", "session_id": session.ID().String()}
 			failures = append(failures, entryFailure)
 		} else {
@@ -436,7 +438,24 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		if code == "" {
 			code = "load_failed"
 		}
-		return &failure{code, "one or more workspaces failed; completed effects are retained", 1}
+		// "Retained" must be true before it is claimed: a completed input,
+		// or a failed one whose session was never this load's to remove
+		// (reused or borrowed/appended), leaves something behind. If every
+		// result is a failure whose own session was created and then
+		// removed, nothing survived, and the message says so instead.
+		retained := false
+		for _, result := range results {
+			if result["stage"] == "completed" || result["removed"] == false {
+				retained = true
+				break
+			}
+		}
+		message := "one or more workspaces failed; completed effects are retained"
+		if !retained {
+			first, _ := failures[0]["message"].(string)
+			message = first + "; the session it created was removed"
+		}
+		return &failure{code, message, 1}
 	}
 	if handoff != nil && last.ID() != "" {
 		if lastReused && !o.yes && !r.machine() {
@@ -519,6 +538,17 @@ func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *op
 	return findSession(r.ctx, server, name)
 }
 
+// removedSessionError marks a build failure that also removed the session
+// build created (a failed before_script never leaves a half-built session
+// behind): the caller must not report that input's effects as retained.
+// Wrapping only fires when Kill itself succeeds; a Kill failure leaves the
+// session's fate unknown, so the failure is left unmarked rather than
+// asserting a removal that may not have happened.
+type removedSessionError struct{ err error }
+
+func (e *removedSessionError) Error() string { return e.err.Error() }
+func (e *removedSessionError) Unwrap() error { return e.err }
+
 func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, error) {
 	created := session.ID() == ""
 	if !created {
@@ -569,6 +599,8 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 				cancel()
 				if killErr != nil {
 					err = errors.Join(err, killErr)
+				} else {
+					err = &removedSessionError{err}
 				}
 			}
 			return session, errors.Join(err, eventErr)

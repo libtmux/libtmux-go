@@ -551,6 +551,83 @@ func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 	}
 }
 
+// TestBeforeScriptFailureHumanMessageNamesRemovedSession: a before_script
+// failure on a session this load created removes that session, so nothing
+// from this input survives. The JSON envelope's
+// results entry must say so (removed:true), and human mode's top error
+// line must not claim "completed effects are retained" when that is false
+// -- it must instead name the failure and say the session was removed.
+func TestBeforeScriptFailureHumanMessageNamesRemovedSession(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	path := write(t, dir, "fail.yaml", "session_name: bsfail\nbefore_script: 'false'\nwindows:\n- panes: [echo x]\n")
+
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "-y", "--json")
+	if code != 1 || out == "" {
+		t.Fatalf("load --json: %d %q %q", code, out, diagnostic)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v", out, err)
+	}
+	results, _ := summary["results"].([]any)
+	entry, _ := first(results).(map[string]any)
+	if len(results) != 1 || entry["removed"] != true {
+		t.Fatalf("results[0].removed = %v, want true: %s", entry["removed"], out)
+	}
+
+	code, out, diagnostic = run(t, "load", path, "-S", server.SocketPath(), "-d", "-y")
+	if code != 1 || out != "" {
+		t.Fatalf("load: %d %q %q", code, out, diagnostic)
+	}
+	if strings.Contains(diagnostic, "retained") {
+		t.Fatalf("human message claims retention when the removed session left nothing to retain: %q", diagnostic)
+	}
+	if !strings.Contains(diagnostic, "removed") {
+		t.Fatalf("human message does not say the session it created was removed: %q", diagnostic)
+	}
+}
+
+// TestBeforeScriptFailureOnBorrowedSessionHumanMessageClaimsRetention is
+// the positive case: a before_script failure on an appended (borrowed)
+// session leaves that session in place (never killed, never owned by this
+// load), so the message correctly says effects are retained.
+func TestBeforeScriptFailureOnBorrowedSessionHumanMessageClaimsRetention(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "owned"},
+	})
+	snapshot, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", snapshot.Panes()[0].ID().String())
+	dir := t.TempDir()
+	path := write(t, dir, "fail-append.yaml", "session_name: unused\nbefore_script: 'false'\nwindows:\n- panes: [blank]\n")
+
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "--append", "-y", "--json")
+	if code != 1 || out == "" {
+		t.Fatalf("load --append --json: %d %q %q", code, out, diagnostic)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v", out, err)
+	}
+	results, _ := summary["results"].([]any)
+	entry, _ := first(results).(map[string]any)
+	if len(results) != 1 || entry["removed"] != false {
+		t.Fatalf("results[0].removed = %v, want false (a borrowed session is never killed): %s", entry["removed"], out)
+	}
+
+	code, out, diagnostic = run(t, "load", path, "-S", server.SocketPath(), "--append", "-y")
+	if code != 1 || out != "" {
+		t.Fatalf("load --append: %d %q %q", code, out, diagnostic)
+	}
+	if !strings.Contains(diagnostic, "retained") {
+		t.Fatalf("human message must claim retention when the borrowed session survived: %q", diagnostic)
+	}
+}
+
 // TestLoadStartedEventReportsInputs covers the started event's input-count
 // field name: a cross-port measurement settled on "inputs"; go and ts were
 // the two that carried "input_count".
