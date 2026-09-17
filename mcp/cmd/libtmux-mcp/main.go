@@ -188,8 +188,12 @@ func reportTools(target tmux.Server, defaultMinimal bool) error {
 		if reach == "" {
 			reach = "unknown"
 		}
+		summary := tool.Description
+		if details, ok := tmuxmcp.ToolDetails(tool.Name); ok {
+			summary = details
+		}
 		fmt.Printf("  %-28s %-10s %-20s %s\n",
-			tool.Name, toolset, reach, firstSentence(tool.Description))
+			tool.Name, toolset, reach, firstSentence(summary))
 	}
 	return nil
 }

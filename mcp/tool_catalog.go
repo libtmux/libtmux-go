@@ -94,3 +94,16 @@ func advertisedToolsFor(ctx context.Context, profile socketProfile) (tools []*sd
 	}
 	return slices.Clone(listed.Tools), nil
 }
+
+// ToolDetails returns what the named tool does, without the capability
+// disclosure every description opens with. The disclosure is shared across a
+// toolset, so a listing that shows only a description's first sentence would
+// otherwise show the same sentence for every tool in it.
+func ToolDetails(name string) (string, bool) {
+	for _, definition := range authoritativeToolManifest {
+		if definition.name == name {
+			return definition.details, true
+		}
+	}
+	return "", false
+}

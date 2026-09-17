@@ -489,7 +489,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogRespawnPane),
 		defineTool(toolDefinition{
 			name: "run_shell_command", title: "Run a shell command",
-			details: "Runs one authored command only for configured singleton membership, checks it before setup and again before dispatch, and waits for framed completion.",
+			details: "Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status.",
 			toolset: toolsetExecute, processReach: processPaneCommand,
 			effects:          effects(effectObserve, effectChange),
 			outputClasses:    outputs(outputTerminalContent, outputTmuxMetadata),
@@ -502,7 +502,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogRunShellCommand),
 		defineTool(toolDefinition{
 			name: "send_keys", title: "Send keys",
-			details: "Sends input after validating sorted configured synchronized membership; reported ids describe preflight membership, not proven effects.",
+			details: "Sends keys to a pane and to every pane synchronize-panes links it with; the ids reported are the panes checked before sending, not proof that each one received the keys.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,
@@ -513,7 +513,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogSendKeys),
 		defineTool(toolDefinition{
 			name: "send_keys_batch", title: "Send keys in a batch",
-			details: "Sends up to sixty-four ordered pane-input operations, each with a fresh configured-membership preflight.",
+			details: "Sends up to sixty-four key sequences in order, rechecking before each one which panes synchronize-panes links to its target.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,
@@ -534,7 +534,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogPasteText),
 		defineTool(toolDefinition{
 			name: "set_synchronize_panes", title: "Set synchronized panes",
-			details: "Sets the window synchronization default; pane-level overrides determine later configured input membership and effects can still differ.",
+			details: "Sets the window synchronization default (synchronize-panes); pane-level overrides still decide which panes receive later input.",
 			toolset: toolsetExecute, processReach: processNone,
 			effects: effects(effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true, amplifiesFutureInput: true,
