@@ -119,6 +119,43 @@ func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 	}
 }
 
+// TestSelectLayoutToolAcceptsAUniquePresetPrefix pins GO2-1/D3 at the MCP
+// surface: select_layout's own pre-check must not reject a unique preset
+// prefix before tmux.Window.SelectLayout gets a chance to resolve it.
+//
+//libtmux:real-tmux
+func TestSelectLayoutToolAcceptsAUniquePresetPrefix(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	request := tmux.NewSessionRequest{Name: "work"}
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{InitialSession: &request})
+
+	window, err := target.Windows(ctx)
+	if err != nil || len(window) != 1 {
+		t.Fatalf("Windows() = (%v, %v), want one window", window, err)
+	}
+	pane, ok, err := window[0].ResolveActivePane(ctx)
+	if err != nil || !ok {
+		t.Fatalf("ResolveActivePane() = (%v, %v, %v), want one pane", pane, ok, err)
+	}
+	if _, err := pane.Split(ctx, tmux.SplitPaneRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	client := inputTestClient(ctx, t, target, nil)
+	windowID := window[0].ID().String()
+
+	applied := callInputTool(ctx, t, client, "select_layout",
+		map[string]any{"window_id": windowID, "layout": "tile"})
+	if applied.IsError {
+		t.Fatalf("select_layout(tile) = %q, want it applied like tiled", callToolResultText(applied))
+	}
+	layout, _ := structuredMap(t, applied)["layout"].(string)
+	if layout == "" {
+		t.Fatal("select_layout(tile) reported no applied layout")
+	}
+}
+
 func paneGeometryByID(t *testing.T, result *sdk.CallToolResult) map[string]paneGeometry {
 	t.Helper()
 	panes, ok := structuredMap(t, result)["panes"].([]any)

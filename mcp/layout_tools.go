@@ -160,10 +160,25 @@ func layoutLooksLikeJSON(layout string) bool {
 // layoutLooksValid screens for obviously wrong input before resolving a
 // window to arrange. It is not the authority on whether the connected tmux
 // actually accepts a given shape - that determination, including whether the
-// server is new enough for the JSON shape, belongs to
-// tmux.Window.SelectLayout, which already version-gates it.
+// server is new enough for the JSON shape or a prefix's resolution is
+// version-gated or ambiguous, belongs to tmux.Window.SelectLayout, which
+// already version-gates it (GO2-1/D3: tmux's own layout_set_lookup is a
+// prefix match, so "tile" and "even-h" apply on every version). A prefix
+// that names more than one preset is let through rather than rejected here,
+// since telling that apart correctly needs the connected version.
 func layoutLooksValid(layout string) bool {
-	return layoutPresets[layout] || layoutString.MatchString(layout) || layoutLooksLikeJSON(layout)
+	if layout == "" {
+		return false
+	}
+	if layoutPresets[layout] || layoutString.MatchString(layout) || layoutLooksLikeJSON(layout) {
+		return true
+	}
+	for preset := range layoutPresets {
+		if strings.HasPrefix(preset, layout) {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *tools) selectLayout(

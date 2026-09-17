@@ -30,6 +30,13 @@ func TestLayoutLooksValidAcceptsBothLayoutShapes(t *testing.T) {
 		{name: "unknown name", layout: "no-such-layout", want: false},
 		{name: "text that merely starts with a brace", layout: "{not json", want: false},
 		{name: "empty", layout: "", want: false},
+		// GO2-1/D3: tmux's own layout_set_lookup is a prefix match, so a
+		// unique prefix applies on every version. This screen defers telling
+		// a unique prefix from an ambiguous one to tmux.Window.SelectLayout,
+		// which knows the connected version; either way it must not reject
+		// the prefix outright before that determination can run.
+		{name: "unique preset prefix", layout: "tile", want: true},
+		{name: "ambiguous preset prefix", layout: "even-", want: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

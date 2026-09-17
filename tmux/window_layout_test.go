@@ -67,6 +67,93 @@ func TestInvalidLayoutRefusalReadsAsHistoryNotALiveWarning(t *testing.T) {
 	}
 }
 
+// GO2-1: tmux's own layout_set_lookup is a prefix match, so "tile" and
+// "even-h" apply on every version and can never reach layout_parse (the
+// 3.3a crash path this package's exact-match guard existed to avoid). A
+// unique prefix resolves to its preset's canonical full name - never the
+// prefix itself - so tmux's own prefix resolution never runs on a value
+// this package already classified; an ambiguous prefix is refused, naming
+// its candidates, without ever reaching tmux.
+func TestValidateLayoutAcceptsAUniquePrefixAndRefusesAnAmbiguousOne(t *testing.T) {
+	t.Parallel()
+
+	pre35, err := ParseVersion("3.2a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	post35, err := ParseVersion("3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name    string
+		layout  string
+		version Version
+		want    string
+		wantErr bool
+	}{
+		{name: "tile resolves to tiled", layout: "tile", version: pre35, want: "tiled"},
+		{name: "even-h resolves to even-horizontal", layout: "even-h", version: pre35, want: "even-horizontal"},
+		{
+			name:   "even- is ambiguous between even-horizontal and even-vertical",
+			layout: "even-", version: pre35, wantErr: true,
+		},
+		{
+			name:   "main-v is unambiguous before mirrored presets exist",
+			layout: "main-v", version: pre35, want: "main-vertical",
+		},
+		{
+			name:   "main-v is ambiguous once mirrored presets exist",
+			layout: "main-v", version: post35, wantErr: true,
+		},
+		{
+			name:   "main-vertical-m resolves to the mirrored preset on 3.5+",
+			layout: "main-vertical-m", version: post35, want: "main-vertical-mirrored",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			resolved, err := validateLayout(test.layout, test.version)
+			if test.wantErr {
+				if !errors.Is(err, ErrInvalidServerCommandRequest) {
+					t.Fatalf("validateLayout(%q) error = %v, want ErrInvalidServerCommandRequest", test.layout, err)
+				}
+				if strings.Contains(err.Error(), "is neither a layout preset") {
+					t.Fatalf("validateLayout(%q) error = %q, want it to name the ambiguous candidates, "+
+						"not claim tmux does not know the spelling", test.layout, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateLayout(%q) error = %v", test.layout, err)
+			}
+			if resolved != test.want {
+				t.Fatalf("validateLayout(%q) = %q, want %q", test.layout, resolved, test.want)
+			}
+		})
+	}
+}
+
+// The refusal for a value that names nothing must still say so - only an
+// ambiguous prefix gets the "ambiguous among" wording above.
+func TestValidateLayoutStillRefusesAnUnrecognisedValue(t *testing.T) {
+	t.Parallel()
+
+	version, err := ParseVersion("3.7c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = validateLayout("zzzz", version)
+	if !errors.Is(err, ErrInvalidServerCommandRequest) {
+		t.Fatalf("validateLayout(\"zzzz\") error = %v, want ErrInvalidServerCommandRequest", err)
+	}
+	if !strings.Contains(err.Error(), "is neither a layout preset") {
+		t.Fatalf("validateLayout(\"zzzz\") error = %q, want the unrecognised-value wording", err)
+	}
+}
+
 // libtmux:parity libtmux.window.Window.next_layout
 // libtmux:parity libtmux.window.Window.previous_layout
 // libtmux:parity libtmux.window.Window.select_layout
