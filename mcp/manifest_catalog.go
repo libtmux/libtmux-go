@@ -508,7 +508,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 			mayReturnUntrustedContent: true,
 			inputSinks: sinkMap(
 				input("pane_id", sinkTmuxLookup), input("keys", sinkPaneInput),
-				input("literal", sinkNone),
+				input("literal", sinkNone), input("enter", sinkPaneInput),
 			),
 		}, (*tools).catalogSendKeys),
 		defineTool(toolDefinition{

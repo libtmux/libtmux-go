@@ -687,19 +687,25 @@ type sendKeysBatchInput struct {
 	// SessionName picks the session when PaneID is empty.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to send to when paneId is empty"`
 	// Keys are tmux key names sent in order, such as ["C-c", "q", "Escape"].
-	// Nothing is appended, so a client driving a program that reads lines adds
-	// "Enter" itself.
-	Keys []string `json:"keys" jsonschema:"tmux key names to send in order, such as [\"C-c\", \"q\", \"Enter\"]"`
+	// Nothing is appended; set Enter to submit, or add a key name such as
+	// "Enter" here when Literal is false.
+	Keys []string `json:"keys" jsonschema:"tmux key names to send in order, such as [\"C-c\", \"q\"]; do not put \"Enter\" here when literal is true, it types the six letters - set enter instead"`
 	// Literal sends the keys as characters rather than looking their names up,
-	// so "Escape" is those six letters.
+	// so "Escape" is those six letters. It never changes Enter below, which
+	// is always a real key press sent after Keys, not appended to them.
 	Literal bool `json:"literal,omitempty" jsonschema:"send the keys as characters rather than as tmux key names"`
+	// Enter presses Enter after Keys, as its own key press rather than
+	// appended text, so it submits even when Literal is true. This is the
+	// unambiguous way to type text and submit it in one call.
+	Enter bool `json:"enter,omitempty" jsonschema:"press Enter after the keys, as a real key press, to submit them"`
 }
 
 // sendKeysBatchOutput reports the source target and accepted key count.
 type sendKeysBatchOutput struct {
 	// PaneID is the resolved source target.
 	PaneID string `json:"paneId"`
-	// Sent is how many keys tmux accepted when the call succeeds.
+	// Sent is how many keys tmux accepted when the call succeeds, including
+	// the separate Enter press when Enter was requested.
 	Sent int `json:"sent"`
 	// ResolvedPaneIDs is sorted configured preflight membership.
 	ResolvedPaneIDs []string `json:"resolvedPaneIds"`
@@ -776,6 +782,19 @@ func (t *tools) sendKeysBatch(
 		return nil, output, fmt.Errorf("sending keys: %w", err)
 	}
 	output.Sent = len(input.Keys)
+	if input.Enter {
+		// A real key press, dispatched on its own so a Literal keys sequence
+		// never carries it: mixing them would type the word "Enter" instead
+		// of pressing it (GO2-4).
+		if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
+			Keys: []string{"Enter"},
+		}); err != nil {
+			return nil, output, fmt.Errorf(
+				"%s sent %d key(s) but the separate Enter failed: %w", tool, output.Sent, err,
+			)
+		}
+		output.Sent++
+	}
 	return nil, output, nil
 }
 

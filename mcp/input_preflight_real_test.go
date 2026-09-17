@@ -82,6 +82,53 @@ func TestSendConfiguredMembershipReal(t *testing.T) {
 	}
 }
 
+// TestSendKeysEnterFlagSubmitsLiteralText pins GO2-4: send_keys and
+// send_keys_batch had no way to type text and submit it unambiguously.
+// literal:true types "Enter" as six letters (tmux's own -l semantics), so a
+// caller who put "Enter" in keys never ran the command; the enter field
+// presses Enter as its own key, dispatched separately from the literal
+// sequence, so it submits regardless of literal.
+//
+//libtmux:real-tmux
+func TestSendKeysEnterFlagSubmitsLiteralText(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	target, _, panes := threePaneInputFixture(ctx, t)
+	client := inputTestClient(ctx, t, target, nil)
+
+	marker := "libtmux-go2-4-enter-single"
+	result := callInputTool(ctx, t, client, "send_keys", map[string]any{
+		"pane_id": panes[0].ID().String(),
+		"keys":    []string{"echo " + marker},
+		"literal": true,
+		"enter":   true,
+	})
+	if result.IsError {
+		t.Fatalf("send_keys(enter) refusal = %q", callToolResultText(result))
+	}
+	if sent := structuredMap(t, result)["sent"]; asFloat(sent) != 2 {
+		t.Errorf("send_keys(enter) sent = %v, want 2 (the command plus the separate Enter)", sent)
+	}
+	tmuxtest.WaitForLine(ctx, t, panes[0], marker)
+
+	batchMarker := "libtmux-go2-4-enter-batch"
+	batch := callInputTool(ctx, t, client, "send_keys_batch", map[string]any{
+		"operations": []map[string]any{
+			{
+				"pane_id": panes[1].ID().String(),
+				"keys":    []string{"echo " + batchMarker},
+				"literal": true,
+				"enter":   true,
+			},
+		},
+	})
+	rows := structuredRows(t, batch, "results")
+	if len(rows) != 1 || rows[0]["error"] != nil {
+		t.Fatalf("send_keys_batch(enter) results = %#v", rows)
+	}
+	tmuxtest.WaitForLine(ctx, t, panes[1], batchMarker)
+}
+
 //libtmux:real-tmux
 func TestRunConfiguredMembershipReal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

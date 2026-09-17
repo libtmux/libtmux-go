@@ -215,8 +215,9 @@ type runShellCommandCapabilityOutput struct {
 
 type sendKeysCapabilityInput struct {
 	PaneID  string   `json:"pane_id" jsonschema:"the pane id, such as %1"`
-	Keys    []string `json:"keys" jsonschema:"key names or literal strings to send"`
+	Keys    []string `json:"keys" jsonschema:"key names or literal strings to send; do not put \"Enter\" here when literal is true, it types the six letters - set enter instead"`
 	Literal bool     `json:"literal,omitempty" jsonschema:"send strings literally instead of as key names"`
+	Enter   bool     `json:"enter,omitempty" jsonschema:"press Enter after keys, as a real key press, to submit them"`
 }
 
 type sendKeysCapabilityOutput struct {
@@ -229,6 +230,7 @@ type sendKeysOperation struct {
 	PaneID  string   `json:"pane_id"`
 	Keys    []string `json:"keys"`
 	Literal bool     `json:"literal,omitempty"`
+	Enter   bool     `json:"enter,omitempty"`
 }
 
 type sendKeysBatchCapabilityInput struct {
@@ -662,7 +664,7 @@ func (t *tools) catalogRunShellCommand(ctx context.Context, request *sdk.CallToo
 
 func (t *tools) catalogSendKeys(ctx context.Context, request *sdk.CallToolRequest, input sendKeysCapabilityInput) (*sdk.CallToolResult, sendKeysCapabilityOutput, error) {
 	result, output, err := t.sendKeysBatch(ctx, request, sendKeysBatchInput{
-		PaneID: input.PaneID, Keys: input.Keys, Literal: input.Literal,
+		PaneID: input.PaneID, Keys: input.Keys, Literal: input.Literal, Enter: input.Enter,
 	}, "send_keys")
 	return result, sendKeysCapabilityOutput{
 		PaneID: output.PaneID, ResolvedPaneIDs: output.ResolvedPaneIDs, Sent: output.Sent,
@@ -680,7 +682,7 @@ func (t *tools) catalogSendKeysBatch(ctx context.Context, request *sdk.CallToolR
 	output := sendKeysBatchCapabilityOutput{Results: make([]sendKeysBatchCapabilityResult, 0, len(input.Operations))}
 	for _, operation := range input.Operations {
 		_, sent, callErr := t.sendKeysBatch(ctx, request, sendKeysBatchInput{
-			PaneID: operation.PaneID, Keys: operation.Keys, Literal: operation.Literal,
+			PaneID: operation.PaneID, Keys: operation.Keys, Literal: operation.Literal, Enter: operation.Enter,
 		}, "send_keys_batch")
 		row := sendKeysBatchCapabilityResult{
 			PaneID: sent.PaneID, ResolvedPaneIDs: sent.ResolvedPaneIDs, Sent: sent.Sent,
