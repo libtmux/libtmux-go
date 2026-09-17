@@ -72,7 +72,8 @@ something drops it, and the most recent buffer is what a person's own paste key
 reaches.
 
 **The archive path carries the process id.** Two runs at once would otherwise
-write the same file.
+write the same file. The archive is the example's output, so it stays for you to
+read with `gzip -dc`; each run leaves one, and nothing removes it.
 
 **A capture is a point in time.** `CaptureTo` writes the screen as it is when
 the call runs. Use `CaptureBoundary` for both ends to take the whole history
