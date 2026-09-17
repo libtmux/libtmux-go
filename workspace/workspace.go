@@ -349,10 +349,29 @@ var layoutNames = map[string]bool{
 	"tiled":                    true,
 }
 
-// validLayout accepts named layouts and serialized layouts containing commas;
-// tmux validates serialized layout syntax.
+// validLayout accepts named layouts, a unique prefix of one (GO2-1/D3: tmux's
+// own layout_set_lookup is a prefix match, so "tile" and "even-h" apply on
+// every version and can never reach the 3.3a crash an exact-match guard
+// existed to avoid), and serialized layouts containing commas; tmux
+// validates serialized layout syntax. This check has no live tmux
+// connection and so no version to test ambiguity against: it lets a prefix
+// matching more than one name through rather than refusing tmux might
+// still accept, and Window.SelectLayout is the version-aware authority that
+// resolves or refuses it against the connection actually building this
+// workspace.
 func validLayout(layout string) bool {
-	return strings.Contains(layout, ",") || layoutNames[layout]
+	if layout == "" {
+		return false
+	}
+	if strings.Contains(layout, ",") || layoutNames[layout] {
+		return true
+	}
+	for preset := range layoutNames {
+		if strings.HasPrefix(preset, layout) {
+			return true
+		}
+	}
+	return false
 }
 
 // nested adds the sentinel and source line once.

@@ -1028,6 +1028,28 @@ func TestAValidationFailureNamesItsLine(t *testing.T) {
 	}
 }
 
+// TestValidateAcceptsAUniquePresetPrefixForLayout pins GO2-1/D3: a unique
+// preset prefix such as "tile" or "even-h" is not rejected as an unknown
+// layout - tmux's own layout_set_lookup already accepts these on every
+// version, so a full exact-match guard refused values tmux itself allows.
+// Validate has no live connection to test ambiguity against, so even an
+// ambiguous prefix such as "main-v" is let through here; Build's
+// Window.SelectLayout is the version-aware authority that resolves or
+// refuses it for real against the connection building the workspace.
+func TestValidateAcceptsAUniquePresetPrefixForLayout(t *testing.T) {
+	for _, layout := range []string{"tile", "even-h", "main-v", "main-vertical", "a1b2,80x24,0,0,0"} {
+		t.Run(layout, func(t *testing.T) {
+			built := workspace.Workspace{
+				SessionName: "prefix-layout",
+				Windows:     []workspace.Window{{Name: "w", Layout: layout}},
+			}
+			if err := built.Validate(); err != nil {
+				t.Fatalf("Validate() with layout %q error = %v, want accepted", layout, err)
+			}
+		})
+	}
+}
+
 // TestValidateReportsEveryProblemAtOnce guards joined validation errors.
 func TestValidateReportsEveryProblemAtOnce(t *testing.T) {
 	_, err := workspace.Parse([]byte(
