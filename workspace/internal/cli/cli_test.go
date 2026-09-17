@@ -197,7 +197,7 @@ func TestBridgeAppendScriptPrecedesRuntime(t *testing.T) {
 	t.Setenv("TMUX_WORKSPACE_PYTHON", filepath.Join(t.TempDir(), "missing-python"))
 	for field, value := range map[string]string{"plugins": `["example.Plugin"]`, "workspace_builder": `"example.Builder"`} {
 		path := filepath.Join(t.TempDir(), "unsafe.json")
-		content := `{"session_name":"unsafe","before_script":"/bin/false","windows":[{"panes":[null]}],"` + field + `":` + value + `}`
+		content := `{"session_name":"unsafe","before_script":"false","windows":[{"panes":[null]}],"` + field + `":` + value + `}`
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}

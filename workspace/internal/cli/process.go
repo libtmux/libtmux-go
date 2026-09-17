@@ -104,6 +104,12 @@ func (w *captureWriter) emitBytes(data []byte, final bool) error {
 	return nil
 }
 
+// childStartError is a child that never ran, as opposed to one that ran and failed.
+type childStartError struct{ err error }
+
+func (e *childStartError) Error() string { return e.err.Error() }
+func (e *childStartError) Unwrap() error { return e.err }
+
 func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bool) (processResult, error) {
 	result := processResult{Encoding: "utf-8-replacement"}
 	if len(argv) == 0 {
@@ -119,7 +125,10 @@ func (r *invocation) process(argv []string, cwd string, input io.Reader, emit bo
 	out := &captureWriter{r: r, stream: "stdout", emit: emit, cancel: cancel}
 	diagnostic := &captureWriter{r: r, stream: "stderr", emit: emit, cancel: cancel}
 	cmd.Stdout, cmd.Stderr = out, diagnostic
-	err := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return result, &childStartError{err}
+	}
+	err := cmd.Wait()
 	if emit {
 		err = errors.Join(err, out.emitBytes(nil, true), diagnostic.emitBytes(nil, true))
 	}
