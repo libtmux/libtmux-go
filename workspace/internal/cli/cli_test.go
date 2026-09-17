@@ -218,7 +218,7 @@ func TestAppendResolvesItsServerBeforeThePreflight(t *testing.T) {
 	if err := os.WriteFile(path, []byte("session_name: ambiguous\nwindows:\n- layout: main-h\n  panes: [blank, blank]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	code, out, diagnostic := invoke(t, "load", "--append", "-d", "-S", filepath.Join(directory, "absent.sock"), path)
+	code, out, diagnostic := invoke(t, "load", "--append", "-S", filepath.Join(directory, "absent.sock"), path)
 	if code != 2 || out != "" || !strings.Contains(diagnostic, "--append requires TMUX") {
 		t.Fatalf("append resolution: %d %q %q", code, out, diagnostic)
 	}
