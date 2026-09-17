@@ -60,6 +60,11 @@ type waitForTextInput struct {
 const (
 	// outcomeMatched means one of Patterns appeared.
 	outcomeMatched = "matched"
+	// outcomeAlreadyOnScreen means a pattern was already on the pane when the
+	// wait attached, so it is not evidence of anything the wait saw happen.
+	// The usual way to reach it is waiting for a marker contained in a command
+	// just sent: a shell echoes the line before running it.
+	outcomeAlreadyOnScreen = "alreadyOnScreen"
 	// outcomeStopped means one of Stop appeared, so the thing being waited for
 	// is not going to happen.
 	outcomeStopped = "stopped"
@@ -79,7 +84,8 @@ const (
 type waitForTextOutput struct {
 	// PaneID is the pane that was watched.
 	PaneID string `json:"paneId"`
-	// Outcome is why the wait ended: matched, stopped, output, or timeout.
+	// Outcome is why the wait ended: matched, alreadyOnScreen, stopped,
+	// output, idle, or timeout.
 	Outcome string `json:"outcome"`
 	// Found reports whether one of Patterns appeared, which is the common
 	// question and would otherwise mean comparing Outcome against two values.
@@ -113,9 +119,10 @@ type waitForTextOutput struct {
 	truncation
 }
 
-// waitForText follows pane output without polling. Existing screen text counts
-// unless SinceEntry is set. Shell echo may match, so authored commands should
-// use run_shell_command.
+// waitForText follows pane output without polling. Text already on the screen
+// answers outcomeAlreadyOnScreen rather than a match, unless SinceEntry skips
+// the entry read; an authored command should use run_shell_command, which
+// reports its exit status.
 func (t *tools) waitForText(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -198,8 +205,12 @@ func (t *tools) waitForText(
 				)
 			}
 			if matchedNow {
+				// Not outcomeMatched: a caller reading the outcome alone would
+				// otherwise take the echo of a command it just sent for the
+				// command's own output. sinceEntry skips this read entirely.
 				return finishWait(
-					&output, outcomeMatched, patternName, true, entry, limits, truncation{}, started,
+					&output, outcomeAlreadyOnScreen, patternName, true, entry,
+					limits, truncation{}, started,
 				)
 			}
 		}
