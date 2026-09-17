@@ -876,6 +876,67 @@ func TestCapabilityManifestDefaultSocketProvenanceControlsTeardownDefault(t *tes
 	}
 }
 
+// TestPinDefaultMinimalCreatesItsOwnSocketDirectory pins GO2-8: the
+// default-dedicated target resolves to an explicit -S path (see
+// WithProcessEnvironmentValue), which skips tmux's own tmux-<uid>/ creation.
+// On a machine where tmux never ran - a fresh TMUX_TMPDIR with no tmux-<uid>/
+// yet - pinDefaultMinimal must create that directory itself (D5), the way
+// tmux does for -L and the default socket.
+func TestPinDefaultMinimalCreatesItsOwnSocketDirectory(t *testing.T) {
+	configPath, cleanupConfig, err := MaterializeMinimalConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cleanupConfig() })
+
+	freshRoot, err := os.MkdirTemp("/tmp", "ltgm8-") //nolint:usetesting // tmux socket paths must stay short
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(freshRoot) })
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName:         "libtmux-mcp",
+		ConfigFile:         configPath,
+		ProcessEnvironment: append(os.Environ(), "TMUX_TMPDIR="+freshRoot),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = target.Kill(ctx)
+	})
+
+	selection, err := target.SocketSelection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(selection.NamedDirectory); statErr == nil {
+		t.Fatalf(
+			"tmux-<uid> directory %q already exists; test setup did not reproduce a fresh TMUX_TMPDIR",
+			selection.NamedDirectory,
+		)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	profile, err := pinDefaultMinimal(ctx, target, "33333333333333333333333333333333")
+	if err != nil {
+		t.Fatalf(
+			"pinDefaultMinimal() where tmux never ran = %v, want the socket directory created like tmux itself would",
+			err,
+		)
+	}
+	if !profile.defaultTeardown {
+		t.Fatalf("profile = %#v, want an owned default-dedicated launch", profile)
+	}
+	alive, err := target.IsAlive(ctx)
+	if err != nil || !alive {
+		t.Fatalf("target alive after pinDefaultMinimal = (%t, %v), want alive", alive, err)
+	}
+}
+
 func TestRunShellCommandHasNoRetiredJobHandles(t *testing.T) {
 	setCapabilityEnvironment(t, "execute", "", "")
 	tools, err := AdvertisedTools(t.Context())

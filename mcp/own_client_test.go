@@ -72,6 +72,35 @@ func TestListingsLeaveOutTheServersOwnClient(t *testing.T) {
 	}
 }
 
+// GO2-10: get_server_info must report the configured socket path even before
+// any tmux daemon has ever started there - list_sessions's own note points
+// agents at get_server_info to find it, so it must be true with no server
+// alive as well as with one.
+//
+//libtmux:real-tmux
+func TestGetServerInfoReportsSocketPathBeforeAnyServerStarts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+
+	var info struct {
+		Alive      bool   `json:"alive"`
+		SocketPath string `json:"socketPath"`
+	}
+	call(ctx, t, session, "get_server_info", nil, &info)
+	if info.Alive {
+		t.Fatal("target was already alive; test setup did not reproduce a never-started server")
+	}
+	if info.SocketPath == "" {
+		t.Fatal("get_server_info socketPath = \"\" with no live server, want the configured socket path")
+	}
+}
+
 func call(ctx context.Context, t *testing.T, session *sdk.ClientSession, name string, arguments map[string]any, into any) {
 	t.Helper()
 	if arguments == nil {

@@ -43,7 +43,7 @@ func (t *tools) getServerInfo(
 	input getServerInfoInput,
 ) (*mcp.CallToolResult, getServerInfoOutput, error) {
 	caller := callerFromEnvironment()
-	output := getServerInfoOutput{CallerPaneID: caller.paneID}
+	output := getServerInfoOutput{CallerPaneID: caller.paneID, SocketPath: t.socketPath(ctx)}
 	if version, err := t.tmux(ctx).Version(ctx); err == nil {
 		output.Version = version.String()
 	}
@@ -61,7 +61,6 @@ func (t *tools) getServerInfo(
 		return nil, getServerInfoOutput{}, err
 	}
 	output.CallerPaneID = caller.paneID
-	output.SocketPath = t.socketPath(ctx)
 	output.InsideThisServer = caller.inside && output.SocketPath != "" &&
 		resolvePath(output.SocketPath) == caller.socket
 
