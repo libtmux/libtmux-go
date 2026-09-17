@@ -71,9 +71,8 @@ func TestImportPreservesCommandGroupsAndSavedContext(t *testing.T) {
 	}
 }
 
-// TestImportTeamocilDerivesSessionNameFromModernFormat covers H6: teamocil's
-// current format has no session name at all -- the document starts at
-// windows: -- and teamocil itself names the session from the file.
+// TestImportTeamocilDerivesSessionNameFromModernFormat checks that a teamocil
+// document starting at windows: is named from its file, as teamocil does.
 func TestImportTeamocilDerivesSessionNameFromModernFormat(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "teamv1.yml")

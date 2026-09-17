@@ -129,9 +129,8 @@ func TestUnknownExecutionFieldsPrecedeScriptsAndMutations(t *testing.T) {
 	}
 }
 
-// TestFreezeYesAnswersFormatPromptWithoutATerminal covers M1: freeze prompted
-// for "Workspace format (yaml/json)" even with --yes and no terminal
-// attached, and --help documents --workspace-format as defaulting to yaml.
+// TestFreezeYesAnswersFormatPromptWithoutATerminal checks that --yes without
+// a terminal takes the documented yaml default instead of prompting.
 func TestFreezeYesAnswersFormatPromptWithoutATerminal(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "frozen-yes"},
@@ -212,7 +211,7 @@ func TestFreezeCreatesTheDefaultDestinationDirectory(t *testing.T) {
 // TestFreezeMissingSessionReportsSessionNotFound: a freeze target that
 // does not exist reports session_not_found. Three related codes
 // (workspace_not_found, invalid_workspace, unsupported_key) need no live
-// server and live in the cli package's TestLoadErrorCodesMatchS14.
+// server and live in the cli package's TestLoadErrorCodes.
 func TestFreezeMissingSessionReportsSessionNotFound(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keeper"},
@@ -963,10 +962,8 @@ func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
 	}
 }
 
-// TestPaneDefaultDirectoryIsInvocationDirectory covers H9: with no
-// start_directory anywhere in the document, tmuxp and the other native ports
-// start every pane in the invocation directory, not the directory the
-// workspace file lives in.
+// TestPaneDefaultDirectoryIsInvocationDirectory checks that with no
+// start_directory, panes start in the invocation directory, as in tmuxp.
 func TestPaneDefaultDirectoryIsInvocationDirectory(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	invocationDir := t.TempDir()

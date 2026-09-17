@@ -161,11 +161,8 @@ func TestPythonVersionCheckSurvivesOptimization(t *testing.T) {
 	}
 }
 
-// TestCheckPythonReplacesTracebackWithASentence covers the M4 extension: with
-// the bridge interpreter unable to import tmuxp, checkPython embedded the raw
-// subprocess stderr -- a multi-line Python traceback -- in its failure
-// message. dotnet, rs, swift and ts print one sentence naming the required
-// version and TMUX_WORKSPACE_PYTHON instead.
+// TestCheckPythonReplacesTracebackWithASentence checks that a bridge
+// interpreter unable to import tmuxp fails with one sentence, not its traceback.
 func TestCheckPythonReplacesTracebackWithASentence(t *testing.T) {
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "python3")
