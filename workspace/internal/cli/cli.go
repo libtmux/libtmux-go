@@ -518,7 +518,7 @@ func sockets(cmd *cobra.Command, o *options) {
 func writeFlags(cmd *cobra.Command, o *options, freeze bool) {
 	if freeze {
 		cmd.Flags().StringVarP(&o.format, "workspace-format", "f", "", "document format: yaml or json (default yaml)")
-		cmd.Flags().StringVarP(&o.saveTo, "save-to", "o", "", "destination (default empty: machine stdout or human prompt)")
+		cmd.Flags().StringVarP(&o.saveTo, "save-to", "o", "", "destination; required unless --json or --ndjson prints the document")
 	} else {
 		cmd.Flags().StringVar(&o.format, "workspace-format", "", "document format: yaml or json (default opposite source for convert, yaml for import)")
 		cmd.Flags().StringVar(&o.saveTo, "save-to", "", "destination (default empty: machine stdout or human prompt)")

@@ -181,26 +181,25 @@ func TestFreezeSaveToNeedsNoConfirmationWithoutATerminal(t *testing.T) {
 	}
 }
 
-// TestFreezeCreatesTheDefaultDestinationDirectory: without --save-to,
-// freeze picks ~/.tmuxp/<session>.<format>, and that directory may not
-// exist yet -- tmuxp's own freeze creates it before writing. An explicit
-// --save-to into a missing directory is unaffected and still fails.
-func TestFreezeCreatesTheDefaultDestinationDirectory(t *testing.T) {
+// TestFreezeWithoutADestinationIsAUsageError: freeze with no --save-to and
+// no machine format is refused before touching tmux, even with --yes and
+// even though the target session exists. An explicit --save-to into a
+// missing directory is a different failure and still fails.
+func TestFreezeWithoutADestinationIsAUsageError(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keep"},
 	})
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	code, out, diagnostic := run(t, "freeze", "keep", "-S", server.SocketPath(), "--yes")
-	if code != 0 || diagnostic != "" {
-		t.Fatalf("freeze into a missing default directory: %d %q %q", code, out, diagnostic)
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "--save-to") {
+		t.Fatalf("freeze without --save-to: %d %q %q", code, out, diagnostic)
 	}
-	destination := filepath.Join(home, ".tmuxp", "keep.yaml")
-	if _, err := os.Stat(destination); err != nil {
-		t.Fatalf("freeze did not write %s: %v", destination, err)
+	if _, err := os.Stat(filepath.Join(home, ".tmuxp")); !os.IsNotExist(err) {
+		t.Fatalf("freeze without --save-to wrote the default directory: %v", err)
 	}
 	// The negative case: an explicit --save-to into a missing directory is
-	// not the default destination and still fails.
+	// a different failure and still fails.
 	explicit := filepath.Join(t.TempDir(), "missing-dir", "frozen.yaml")
 	code, out, diagnostic = run(t, "freeze", "keep", "-S", server.SocketPath(), "--save-to", explicit)
 	if code == 0 {
