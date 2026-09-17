@@ -5,6 +5,8 @@ package integration
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -106,6 +108,65 @@ func TestSnapshotMatchesLinkedRealTmuxGraph(t *testing.T) {
 	}
 	if mouseUTF8, ok := firstPanes[0].MouseUTF8Flag(); !ok {
 		t.Fatalf("MouseUTF8Flag() = (%t, %t), want a present boolean", mouseUTF8, ok)
+	}
+}
+
+// TestSnapshotOnZeroSessionServerIsEmptyNotAnError pins that an alive server
+// with zero sessions still answers every listing. Raw tmux 3.7c refuses
+// list-windows -a, list-panes -a, and list-clients with "no current target"
+// once no session exists to resolve implicitly, even though list-sessions
+// itself succeeds empty and the server is not otherwise broken.
+//
+//libtmux:real-tmux
+func TestSnapshotOnZeroSessionServerIsEmptyNotAnError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	configuration := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(
+		configuration, []byte("set -s exit-empty off\n"), 0o600,
+	); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		ConfigFile: configuration,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = server.Kill(killCtx)
+	})
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() on a zero-session server error = %v, want a working empty snapshot", err)
+	}
+	if got := len(snapshot.Sessions()); got != 0 {
+		t.Fatalf("len(Sessions()) = %d, want 0", got)
+	}
+	if got := len(snapshot.Windows()); got != 0 {
+		t.Fatalf("len(Windows()) = %d, want 0", got)
+	}
+	if got := len(snapshot.Panes()); got != 0 {
+		t.Fatalf("len(Panes()) = %d, want 0", got)
+	}
+	if got := len(snapshot.Clients()); got != 0 {
+		t.Fatalf("len(Clients()) = %d, want 0", got)
+	}
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		t.Fatalf("Sessions() on a zero-session server error = %v, want an empty slice", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("Sessions() = %#v, want empty", sessions)
 	}
 }
 

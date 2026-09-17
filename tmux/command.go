@@ -247,6 +247,19 @@ func commandTargetNotFound(stderr []string) bool {
 	return false
 }
 
+// commandNoCurrentTarget recognizes tmux's "no current target" refusal: an
+// all-server listing that resolves an implicit current session (list-windows
+// -a, list-panes -a, list-clients) refuses this way when the server holds no
+// sessions at all. A server with zero sessions is still a working server.
+func commandNoCurrentTarget(stderr []string) bool {
+	for _, line := range stderr {
+		if strings.Contains(line, "no current target") {
+			return true
+		}
+	}
+	return false
+}
+
 func cloneCommandResult(result CommandResult) CommandResult {
 	result.Command = slices.Clone(result.Command)
 	result.Stdout = slices.Clone(result.Stdout)
