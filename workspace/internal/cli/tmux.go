@@ -551,6 +551,10 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		result, err := r.process(plan.BeforeScript, plan.ScriptDirectory, nil, true)
 		r.scripts = append(r.scripts, map[string]any{"input_index": inputIndex, "kind": "before-script", "result": result})
 		eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated})
+		var start *childStartError
+		if errors.As(err, &start) && r.ctx.Err() == nil {
+			err = &failure{"script_failed", "before_script could not start: " + start.Error(), 1}
+		}
 		if err == nil && result.Status != 0 {
 			message := fmt.Sprintf("before_script exited %d", result.Status)
 			if result.Stderr != "" {

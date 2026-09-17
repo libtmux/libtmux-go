@@ -285,37 +285,43 @@ func TestLoadTmuxFailureReportsTmuxFailedCode(t *testing.T) {
 	}
 }
 
-// TestLoadScriptFailureReportsScriptFailedCode: a nonzero before_script
-// must give errors[].code and the stderr record's code script_failed, and
-// the message must not end in a bare ": " when the script produced no
-// stderr output.
+// TestLoadScriptFailureReportsScriptFailedCode: a before_script that exits
+// nonzero or cannot start gives errors[].code and the stderr record's code
+// script_failed, and the message does not end in a bare ": ".
 func TestLoadScriptFailureReportsScriptFailedCode(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
-	path := write(t, dir, "bad-script.yaml", "session_name: bad-script\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
-	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--json")
-	if code != 1 || out == "" {
-		t.Fatalf("load with a failing before_script: %d %q %q", code, out, diagnostic)
-	}
-	var summary map[string]any
-	if err := json.Unmarshal([]byte(out), &summary); err != nil {
-		t.Fatalf("invalid summary %q: %v", out, err)
-	}
-	errs, _ := summary["errors"].([]any)
-	entry, _ := first(errs).(map[string]any)
-	message, _ := entry["message"].(string)
-	if len(errs) != 1 || entry["code"] != "script_failed" {
-		t.Fatalf("errors[0].code = %v, want script_failed: %s", entry["code"], out)
-	}
-	if strings.HasSuffix(message, ": ") {
-		t.Fatalf("message keeps an empty separator: %q", message)
-	}
-	var envelope map[string]any
-	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
-		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
-	}
-	if envelope["code"] != "script_failed" {
-		t.Fatalf("stderr record code = %v, want script_failed (%s)", envelope["code"], diagnostic)
+	for name, script := range map[string]string{
+		"exits nonzero": "'false'",
+		"cannot start":  filepath.Join(dir, "missing-script"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := write(t, dir, "bad-script.yaml", "session_name: bad-script\nbefore_script: "+script+"\nwindows:\n- panes: [blank]\n")
+			code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--json")
+			if code != 1 || out == "" {
+				t.Fatalf("load with a failing before_script: %d %q %q", code, out, diagnostic)
+			}
+			var summary map[string]any
+			if err := json.Unmarshal([]byte(out), &summary); err != nil {
+				t.Fatalf("invalid summary %q: %v", out, err)
+			}
+			errs, _ := summary["errors"].([]any)
+			entry, _ := first(errs).(map[string]any)
+			message, _ := entry["message"].(string)
+			if len(errs) != 1 || entry["code"] != "script_failed" {
+				t.Fatalf("errors[0].code = %v, want script_failed: %s", entry["code"], out)
+			}
+			if strings.HasSuffix(message, ": ") {
+				t.Fatalf("message keeps an empty separator: %q", message)
+			}
+			var envelope map[string]any
+			if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+				t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+			}
+			if envelope["code"] != "script_failed" {
+				t.Fatalf("stderr record code = %v, want script_failed (%s)", envelope["code"], diagnostic)
+			}
+		})
 	}
 }
 
@@ -514,7 +520,7 @@ windows:
 func TestBeforeScriptFailureRemovesOnlyOwnedSession(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "unrelated"}})
 	dir := t.TempDir()
-	path := write(t, dir, "fail.yaml", "session_name: failure\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
+	path := write(t, dir, "fail.yaml", "session_name: failure\nbefore_script: 'false'\nwindows:\n- panes: [blank]\n")
 	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-d", "--ndjson", "--log-level", "critical")
 	if code != 1 || !json.Valid([]byte(diagnostic)) || !strings.Contains(diagnostic, "script_failed") || !strings.Contains(out, `"code":"script_failed"`) {
 		t.Fatalf("failure %d %s %s", code, out, diagnostic)
@@ -839,7 +845,7 @@ func TestLoadLogLevelsAndRegularFiles(t *testing.T) {
 func TestLoadFailureWarningReachesTheLogAtErrorLevel(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
-	path := write(t, dir, "fail.yaml", "session_name: log-failure\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
+	path := write(t, dir, "fail.yaml", "session_name: log-failure\nbefore_script: 'false'\nwindows:\n- panes: [blank]\n")
 	logPath := filepath.Join(dir, "fail.log")
 	code, _, _ := run(t, "load", path, "-S", server.SocketPath(), "-d", "--json", "--log-level", "error", "--log-file", logPath)
 	if code != 1 {
@@ -951,7 +957,7 @@ func TestBeforeScriptDirectoryAndBorrowedSession(t *testing.T) {
 	pane := snapshot.Panes()[0]
 	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
 	t.Setenv("TMUX_PANE", pane.ID().String())
-	path := write(t, configDir, "fail-append.yaml", "session_name: unused\nbefore_script: /bin/false\nwindows:\n- panes: [blank]\n")
+	path := write(t, configDir, "fail-append.yaml", "session_name: unused\nbefore_script: 'false'\nwindows:\n- panes: [blank]\n")
 	code, _, _ := run(t, "load", path, "-S", server.SocketPath(), "--append", "--json")
 	if code != 1 {
 		t.Fatalf("expected script failure, got %d", code)
