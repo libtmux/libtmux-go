@@ -662,14 +662,13 @@ func TestScriptOutputNamesItsInput(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
 	sources := make([]string, 0, 2)
-	for index, name := range []string{"first", "second"} {
+	for _, name := range []string{"first", "second"} {
 		script := filepath.Join(dir, name+".sh")
 		if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '"+name+"\\n'\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
 		sources = append(sources, write(t, dir, name+".yaml",
 			"session_name: "+name+"\nbefore_script: "+script+"\nwindows:\n- panes: [blank]\n"))
-		_ = index
 	}
 	code, out, diagnostic := run(t, "load", sources[0], sources[1], "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--ndjson")
 	if code != 0 || diagnostic != "" {
