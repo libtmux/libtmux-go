@@ -81,6 +81,9 @@ func (w *captureWriter) emitBytes(data []byte, final bool) error {
 	text := decoded.String()
 	if text != "" {
 		data := map[string]any{"stream": w.stream, "text": text, "encoding": "utf-8-replacement"}
+		if w.r.scriptInput != nil {
+			data["input_index"] = *w.r.scriptInput
+		}
 		if w.r.ndjson {
 			if err := w.r.event("script-output", data); err != nil {
 				return err

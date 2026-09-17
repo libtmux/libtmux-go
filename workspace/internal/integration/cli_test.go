@@ -656,6 +656,46 @@ func TestLoadStartedEventReportsInputs(t *testing.T) {
 	}
 }
 
+// TestScriptOutputNamesItsInput: with several workspaces in one load, every
+// script-output record says which input wrote it.
+func TestScriptOutputNamesItsInput(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	sources := make([]string, 0, 2)
+	for index, name := range []string{"first", "second"} {
+		script := filepath.Join(dir, name+".sh")
+		if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '"+name+"\\n'\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		sources = append(sources, write(t, dir, name+".yaml",
+			"session_name: "+name+"\nbefore_script: "+script+"\nwindows:\n- panes: [blank]\n"))
+		_ = index
+	}
+	code, out, diagnostic := run(t, "load", sources[0], sources[1], "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--ndjson")
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("load --ndjson: %d %s %s", code, out, diagnostic)
+	}
+	seen := map[string]any{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatal(err)
+		}
+		if record["event"] != "script-output" {
+			continue
+		}
+		index, present := record["input_index"]
+		if !present {
+			t.Fatalf("script-output carries no input_index: %s", line)
+		}
+		text, _ := record["text"].(string)
+		seen[strings.TrimSpace(text)] = index
+	}
+	if seen["first"] != float64(0) || seen["second"] != float64(1) {
+		t.Fatalf("script output attributed to %v, want first=0 second=1", seen)
+	}
+}
+
 func TestLoadNamesOnlyFinalInput(t *testing.T) {
 	for _, plugins := range []bool{false, true} {
 		t.Run("plugins-"+strconv.FormatBool(plugins), func(t *testing.T) {

@@ -515,7 +515,9 @@ func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *op
 	if err := r.event("script-started", map[string]any{"input_index": index}); err != nil {
 		return borrowed, err
 	}
+	r.scriptInput = &index
 	result, err := r.process(argv, "", nil, true)
+	r.scriptInput = nil
 	r.scripts = append(r.scripts, map[string]any{"input_index": index, "kind": "python-workspace", "result": result})
 	if eventErr := r.event("script-completed", map[string]any{"input_index": index, "child_status": result.Status, "truncated": result.Truncated}); eventErr != nil {
 		return borrowed, eventErr
@@ -578,7 +580,9 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		if err := r.event("script-started", map[string]any{"input_index": inputIndex}); err != nil {
 			return session, err
 		}
+		r.scriptInput = &inputIndex
 		result, err := r.process(plan.BeforeScript, plan.ScriptDirectory, nil, true)
+		r.scriptInput = nil
 		r.scripts = append(r.scripts, map[string]any{"input_index": inputIndex, "kind": "before-script", "result": result})
 		eventErr := r.event("script-completed", map[string]any{"input_index": inputIndex, "child_status": result.Status, "truncated": result.Truncated})
 		var start *childStartError
