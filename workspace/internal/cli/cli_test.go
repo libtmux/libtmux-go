@@ -65,10 +65,8 @@ func TestMachineCompletionEnvelope(t *testing.T) {
 	}
 }
 
-// TestVersionReportsItsOwnVersion covers M17: --version printed only
-// "tmux-workspace (Go), tmuxp compatibility 1.74.0" and never go's own
-// version, so two go builds were indistinguishable from the CLI. Every port
-// prints "tmux-workspace <version>".
+// TestVersionReportsItsOwnVersion checks --version prints "tmux-workspace
+// <version>" with go's own version, as every port does.
 func TestVersionReportsItsOwnVersion(t *testing.T) {
 	code, out, diagnostic := invoke(t, "--version")
 	if code != 0 || diagnostic != "" {
@@ -237,10 +235,8 @@ func TestHelpWithoutTmux(t *testing.T) {
 	}
 }
 
-// TestShellHelpDocumentsThePythonOverride covers O8: every checkPython
-// failure recommends TMUX_WORKSPACE_PYTHON, but no port's --help mentioned it
-// -- the only place the name appeared was the failure the user was trying to
-// get out of.
+// TestShellHelpDocumentsThePythonOverride checks --help names
+// TMUX_WORKSPACE_PYTHON, the override every bridge failure recommends.
 func TestShellHelpDocumentsThePythonOverride(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	code, out, diagnostic := invoke(t, "shell", "--help")
@@ -451,12 +447,9 @@ func errorCode(t *testing.T, diagnostic string) string {
 	return code
 }
 
-// TestLoadErrorCodesMatchS14 checks three machine error codes that need no
-// live tmux server (a fourth, session_not_found from a missing freeze
-// target, is TestFreezeMissingSessionReportsSessionNotFound in the
-// integration package, which has one). Before this fix every condition
-// below fell through to the generic "operation_failed".
-func TestLoadErrorCodesMatchS14(t *testing.T) {
+// TestLoadErrorCodes checks the machine error codes that need no live tmux
+// server; session_not_found is covered in the integration package.
+func TestLoadErrorCodes(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	dir := t.TempDir()
 	tests := []struct {
