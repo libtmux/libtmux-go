@@ -18,6 +18,29 @@ workspace on until that core release is published, which is the order
 [CONTRIBUTING](../.github/CONTRIBUTING.md) sets out. Cobra and presentation
 dependencies remain outside the core tmux module.
 
+## An example workspace
+
+A workspace names a session and lays out its windows and panes; the full field
+reference is in [README](README.md#supported-fields).
+
+```yaml
+session_name: project
+windows:
+  - window_name: editor
+    layout: main-vertical
+    panes:
+      - vim .
+      - shell_command: [git status]
+  - window_name: logs
+    panes:
+      - start_directory: /var/log
+        shell_command: tail -f syslog
+```
+
+```console
+$ tmux-workspace load ./project.yaml
+```
+
 ## Commands
 
 The command tree includes `load`, `ls`, `search`, `edit`, `freeze`, `convert`,
