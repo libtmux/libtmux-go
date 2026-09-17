@@ -55,6 +55,25 @@ func TestMissingTargetErrorNamesRealResolvers(t *testing.T) {
 	}
 }
 
+// GO2-7: a zero-value Window - the shape a relation accessor's discarded ok
+// or Server.NewSession's created-value-carries-no-relations leaves behind -
+// reports itself as a missing window, not a missing session. Checking
+// sessionID before windowID named the wrong kind and pointed a caller at
+// Window.ResolveSession, which also needs the windowID this handle lacks and
+// so reproduces the identical error.
+func TestMissingTargetErrorForAZeroValueWindowNamesWindow(t *testing.T) {
+	t.Parallel()
+
+	_, err := validateWindowView(Window{})
+	var missing *MissingTargetError
+	if !errors.As(err, &missing) || missing.Object != "window" {
+		t.Fatalf("validateWindowView(Window{}) = %#v, want *MissingTargetError{Object: \"window\"}", err)
+	}
+	if !strings.Contains(err.Error(), "Session.ResolveActiveWindow") {
+		t.Fatalf("validateWindowView(Window{}) error = %q, want it to name Session.ResolveActiveWindow", err)
+	}
+}
+
 // A present but malformed target keeps its existing, already-informative
 // TargetError; only the empty case changes.
 func TestInvalidTargetStillNamesObjectAndValue(t *testing.T) {
