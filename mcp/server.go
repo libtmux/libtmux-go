@@ -158,7 +158,7 @@ func NewServer(target tmux.Server) (*Instance, error) {
 
 func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	instance := newInstance()
-	runtime := newRuntime(instance.ctx, target, instance.terminal)
+	runtime := newRuntime(instance.ctx, target)
 	instance.runtime = runtime
 	tools := newToolRegistry(surface)
 	tools.instance = instance

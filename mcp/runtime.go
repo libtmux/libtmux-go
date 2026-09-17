@@ -52,10 +52,9 @@ func (s runtimeState) String() string {
 // command lane and one owned connection per active wait. Terminal transport
 // failures never reconnect or fall back to another daemon.
 type tmuxRuntime struct {
-	base       tmux.Server
-	ctx        context.Context
-	onTerminal func(error)
-	deps       mcpDependencies
+	base tmux.Server
+	ctx  context.Context
+	deps mcpDependencies
 
 	mutex               sync.Mutex
 	state               runtimeState
@@ -99,12 +98,10 @@ func (a *runtimeAcquisition) liveUnbound() bool {
 func newRuntime(
 	ctx context.Context,
 	base tmux.Server,
-	onTerminal func(error),
 ) *tmuxRuntime {
 	return &tmuxRuntime{
 		base:              base,
 		ctx:               ctx,
-		onTerminal:        onTerminal,
 		deps:              defaultMCPDependencies(),
 		state:             runtimeUnbound,
 		connectionsClosed: make(chan struct{}),
@@ -162,10 +159,19 @@ func (r *tmuxRuntime) acquireCommand(
 			server := r.commandConnection.Server()
 			r.mutex.Unlock()
 			return &runtimeAcquisition{server: server}, nil
-		case runtimeTerminal, runtimeClosed:
+		case runtimeClosed:
 			err := r.stateErrorLocked()
 			r.mutex.Unlock()
 			return nil, err
+		case runtimeTerminal:
+			// A daemon this runtime already lost is never fatal to the
+			// process. Discard it and retry this acquisition as if starting
+			// fresh; the call that hit the loss already reported its own
+			// error at the point it happened.
+			lost := r.healTerminalLocked()
+			r.mutex.Unlock()
+			r.closeLostConnection(lost)
+			continue
 		case runtimeBinding:
 			ready := r.binding
 			r.mutex.Unlock()
@@ -293,10 +299,17 @@ func (r *tmuxRuntime) createSession(
 		case runtimeBound:
 			r.mutex.Unlock()
 			return r.createBoundSession(ctx, request)
-		case runtimeTerminal, runtimeClosed:
+		case runtimeClosed:
 			err := r.stateErrorLocked()
 			r.mutex.Unlock()
 			return tmux.Session{}, err
+		case runtimeTerminal:
+			// The next create_session starts a new server rather than
+			// staying poisoned by a daemon this runtime already lost.
+			lost := r.healTerminalLocked()
+			r.mutex.Unlock()
+			r.closeLostConnection(lost)
+			continue
 		case runtimeBinding:
 			ready := r.binding
 			r.mutex.Unlock()
@@ -495,14 +508,18 @@ func (r *tmuxRuntime) failBinding(
 		r.mutex.Unlock()
 		return true
 	}
+	// D4: a lost or untrusted daemon (including ErrDaemonReplaced) is never
+	// fatal to the process. Record it as terminal for this attempt - the
+	// caller's own error already reports the loss - and leave the connection
+	// to close without adopting it as current; the next top-level
+	// acquisition heals back to unbound and starts fresh.
 	r.original = original
 	r.commandConnection = commandConnection
 	r.cause = err
 	r.state = runtimeTerminal
 	r.finishBindingSignalLocked()
 	r.mutex.Unlock()
-	r.cancelOwner(err)
-	r.startConnectionClose(r.ownedConnections(commandConnection))
+	r.closeLostConnection(commandConnection)
 	return false
 }
 

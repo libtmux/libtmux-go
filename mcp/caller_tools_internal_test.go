@@ -163,7 +163,7 @@ func TestCallerIdentityRetriesTmuxFailure(t *testing.T) {
 				options = executableFixtureOptions(t, fixtureUnavailable, options)
 			}
 			target := mustInternalTmuxServer(t, options)
-			registry := &tools{runtime: newRuntime(t.Context(), target, nil)}
+			registry := &tools{runtime: newRuntime(t.Context(), target)}
 			calls := 0
 			if test.transport {
 				registry.runtime.deps.probeSessions = func(
@@ -212,7 +212,7 @@ func TestCallerIdentityCachesSuccessfulEmptyDiscovery(t *testing.T) {
 	t.Setenv("TMUX", "")
 	t.Setenv("TMUX_PANE", "")
 	target := tmuxtest.NewServer(ctx, t)
-	registry := &tools{runtime: newRuntime(ctx, target, nil)}
+	registry := &tools{runtime: newRuntime(ctx, target)}
 
 	caller, err := registry.callerIdentityFor(ctx)
 	if err != nil || caller.inside {

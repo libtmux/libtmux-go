@@ -33,7 +33,7 @@ func TestWaitForTextRejectsNegativeDurations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(t.Context(), target, nil)
+	runtime := newRuntime(t.Context(), target)
 	registry := &tools{runtime: runtime}
 	for name, input := range map[string]waitForTextInput{
 		"idle":    {IdleSeconds: -1},

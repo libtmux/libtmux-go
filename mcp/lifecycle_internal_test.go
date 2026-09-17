@@ -146,7 +146,12 @@ func terminalFailureInstance(t testing.TB, socketName string) *Instance {
 	return instance
 }
 
-func TestTerminalToolFailureReachesCallerBeforeRunStops(t *testing.T) {
+// TestTerminalToolFailureReachesCallerWithoutStoppingRun pins GO2-9/D4: a
+// terminal tmux failure inside one tool call is reported on that call, and
+// Run keeps serving - it no longer stops the whole MCP process the way it
+// used to. A later, unrelated context cancellation still stops it normally,
+// proving Run is live throughout rather than merely never having noticed.
+func TestTerminalToolFailureReachesCallerWithoutStoppingRun(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	instance := terminalFailureInstance(t, "terminal-run-unused")
@@ -215,19 +220,46 @@ func TestTerminalToolFailureReachesCallerBeforeRunStops(t *testing.T) {
 	}
 	select {
 	case runErr := <-runResult:
-		if !errors.Is(runErr, tmux.ErrDaemonReplaced) {
-			t.Fatalf("Run() error = %v, want ErrDaemonReplaced", runErr)
-		}
-	case <-ctx.Done():
-		t.Fatal("Run did not stop after terminal tool failure")
+		t.Fatalf("Run() stopped after a recoverable tool failure (D4): %v", runErr)
+	case <-time.After(200 * time.Millisecond):
 	}
+	cancel()
+	select {
+	case runErr := <-runResult:
+		if !errors.Is(runErr, context.Canceled) {
+			t.Fatalf("Run() error after cancellation = %v, want context.Canceled", runErr)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run() did not stop after its own context was canceled")
+	}
+}
+
+// terminalFailureInstanceAlreadyMarked builds on terminalFailureInstance, but
+// also marks the instance terminal at the moment the failing tool call is
+// dispatched - the way tmuxRuntime.observe used to do automatically before
+// GO2-9. That wiring is gone (a tool-level tmux failure alone must never stop
+// Run, see the test above); these two tests exercise a separate concern, that
+// a response write failure or a stuck drain still close a session that some
+// other terminal condition already marked.
+func terminalFailureInstanceAlreadyMarked(t testing.TB, socketName string) *Instance {
+	t.Helper()
+	target := mustInternalTmuxServer(t, tmux.ServerOptions{SocketName: socketName})
+	instance := mustInternalMCPServer(t, target)
+	instance.runtime.deps.probeSessions = func(
+		context.Context,
+		tmux.Server,
+	) ([]tmux.Session, error) {
+		instance.terminal(tmux.ErrDaemonReplaced)
+		return nil, tmux.ErrDaemonReplaced
+	}
+	return instance
 }
 
 func TestTerminalResponseWriteFailureClosesTheSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	writeErr := errors.New("response write failed")
-	instance := terminalFailureInstance(t, "terminal-write-unused")
+	instance := terminalFailureInstanceAlreadyMarked(t, "terminal-write-unused")
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	armed := make(chan struct{})
 	gate := &responseGateTransport{
@@ -279,7 +311,7 @@ func TestTerminalResponseWriteFailureClosesTheSession(t *testing.T) {
 func TestTerminalResponseDrainTimeoutClosesAStuckWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	instance := terminalFailureInstance(t, "terminal-stuck-write-unused")
+	instance := terminalFailureInstanceAlreadyMarked(t, "terminal-stuck-write-unused")
 	instance.drainWait = 10 * time.Millisecond
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	armed := make(chan struct{})
