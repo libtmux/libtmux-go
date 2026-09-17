@@ -405,8 +405,9 @@ func (t *tools) getSessionInfo(
 	}
 	formats := session.Formats()
 	path, _ := formats.SessionPath()
+	_, ownSession := t.ownAttachment(ctx)
 	output := getSessionInfoOutput{
-		Session: summarizeSession(session, len(windows)),
+		Session: summarizeSession(session, len(windows), ownSession),
 		Path:    path,
 	}
 	if created, ok := formats.SessionCreated(); ok {

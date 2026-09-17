@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
@@ -124,14 +125,42 @@ func summarizeWindow(window tmux.Window, panes int) windowSummary {
 	}
 }
 
-func summarizeSession(session tmux.Session, windows int) sessionSummary {
+// summarizeSession leaves this server's own command connection out of the
+// attached count: ownSession is the session that connection is attached to.
+func summarizeSession(session tmux.Session, windows int, ownSession string) sessionSummary {
 	formats := session.Formats()
 	name, _ := formats.SessionName()
 	attached, _ := formats.SessionAttached()
+	if ownSession != "" && session.ID().String() == ownSession && attached > 0 {
+		attached--
+	}
 	return sessionSummary{
 		ID:       session.ID().String(),
 		Name:     name,
 		Windows:  windows,
 		Attached: attached,
 	}
+}
+
+// ownAttachment names the client this server's command connection is and the
+// session it is attached to, so listings can leave it out: to an agent, an
+// attached client reads as a person watching. A control-mode command's
+// current client is the connection that sent it. Asked on every call because
+// tmux 3.6 moves the client when its session is destroyed; with no connection
+// bound there is no such client and both are empty.
+func (t *tools) ownAttachment(ctx context.Context) (tmux.ClientName, string) {
+	server := t.tmux(ctx)
+	if !server.ConnectionBound() {
+		return "", ""
+	}
+	format := "#{client_name} #{session_id}"
+	lines, err := server.DisplayMessage(ctx, tmux.DisplayMessageRequest{Print: true, Format: &format})
+	if err != nil || len(lines) != 1 {
+		return "", ""
+	}
+	separator := strings.LastIndex(lines[0], " ")
+	if separator <= 0 {
+		return "", ""
+	}
+	return tmux.ClientName(lines[0][:separator]), lines[0][separator+1:]
 }

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"slices"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -71,7 +72,10 @@ func (t *tools) getServerInfo(
 	output.Sessions = len(snapshot.Sessions())
 	output.Windows = len(snapshot.Windows())
 	output.Panes = len(snapshot.Panes())
-	clients := snapshot.Clients()
+	own, _ := t.ownAttachment(ctx)
+	clients := slices.DeleteFunc(snapshot.Clients(), func(client tmux.Client) bool {
+		return own != "" && client.Name() == own
+	})
 	output.Clients = len(clients)
 	output.AttachedClients = summarizeClients(clients)
 	if input.IncludeMessages {
