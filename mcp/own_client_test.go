@@ -224,15 +224,29 @@ func TestListingsLeaveOutEveryOwnObservationClient(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
+	// Two raw clients only proves tmux itself sees the observation attached;
+	// the runtime's own registration (openObservation's map insert) happens
+	// a moment after, in a separate goroutine. Poll the actual tool, not a
+	// proxy for it, so that narrow window cannot read as a flake.
 	var listed struct {
 		Sessions []struct {
 			ID       string `json:"id"`
 			Attached int    `json:"attached"`
 		} `json:"sessions"`
 	}
-	call(ctx, t, session, "list_sessions", nil, &listed)
-	if len(listed.Sessions) != 1 || listed.Sessions[0].Attached != 0 {
-		t.Fatalf("list_sessions with an observation in flight = %+v, want one session, attached 0", listed)
+	listDeadline := time.Now().Add(2 * time.Second)
+	for {
+		call(ctx, t, session, "list_sessions", nil, &listed)
+		if len(listed.Sessions) != 1 {
+			t.Fatalf("list_sessions with an observation in flight = %+v, want one session", listed)
+		}
+		if listed.Sessions[0].Attached == 0 {
+			break
+		}
+		if time.Now().After(listDeadline) {
+			t.Fatalf("list_sessions with an observation in flight = %+v, want attached 0", listed)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	var info struct {

@@ -777,12 +777,14 @@ func (t *tools) sendKeysBatch(
 			"%s refused: its pane input reservation changed before dispatch", tool,
 		)
 	}
+	paneID := preflight.Source.ID()
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
 	}); err != nil {
 		return nil, output, fmt.Errorf("sending keys: %w", err)
 	}
 	output.Sent = len(input.Keys)
+	t.pending.observeKeys(paneID, input.Keys, input.Literal)
 	if input.Enter {
 		// A real key press, dispatched on its own so a Literal keys sequence
 		// never carries it: mixing them would type the word "Enter" instead
@@ -795,6 +797,7 @@ func (t *tools) sendKeysBatch(
 			)
 		}
 		output.Sent++
+		t.pending.clear(paneID)
 	}
 	return nil, output, nil
 }
@@ -908,6 +911,11 @@ func (t *tools) pasteText(
 	}); err != nil {
 		cleanupErr := t.deletePasteBuffer(server, name)
 		return nil, output, errors.Join(err, cleanupErr)
+	}
+	if input.Enter {
+		t.pending.clear(pane.ID())
+	} else {
+		t.pending.append(pane.ID(), input.Text)
 	}
 	output.Bytes = len(input.Text)
 	return nil, output, nil

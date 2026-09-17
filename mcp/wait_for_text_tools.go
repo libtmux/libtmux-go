@@ -41,6 +41,11 @@ type waitForTextInput struct {
 	// something the pane may have said before and the question is whether it
 	// says it again.
 	SinceEntry bool `json:"sinceEntry,omitempty" jsonschema:"ignore what the pane already shows and match only new output"`
+	// Cursor resumes from a cursor a previous capture_since or wait_for_text
+	// returned, checking what the pane wrote between that point and now
+	// before watching further, instead of checking the attached screen
+	// baseline. Empty checks the baseline as usual.
+	Cursor string `json:"cursor,omitempty" jsonschema:"a cursor an earlier capture_since or wait_for_text returned; checks output since that point instead of the attached baseline"`
 	// IdleSeconds ends the wait when the pane has written nothing for that
 	// long. It is the ending for a program whose output cannot be predicted:
 	// a caller that does not know what "done" prints still knows that done
@@ -97,6 +102,13 @@ type waitForTextOutput struct {
 	// baseline rather than written after it. A client that cares whether
 	// something just happened, as opposed to having happened, checks this.
 	MatchedAtEntry bool `json:"matchedAtEntry"`
+	// PendingInputOnly reports that every entry-baseline occurrence sits on
+	// this pane's own unsubmitted input line - text this server typed but
+	// has not pressed Enter on - rather than output the pane produced. It is
+	// only meaningful alongside MatchedAtEntry, and is the discriminator
+	// between "I am about to type this" and "this already ran": the same
+	// outcomeAlreadyOnScreen reply before and after Enter differs only here.
+	PendingInputOnly bool `json:"pendingInputOnly"`
 	// EntryNote says what happened when a wait ran its whole deadline with the
 	// text it was waiting for already on the pane. That pairing is the one
 	// shape here that reads as a hang, and a client cannot be expected to
@@ -148,6 +160,14 @@ func (t *tools) waitForText(
 	if err != nil {
 		return nil, waitForTextOutput{}, err
 	}
+	var cursor *captureCursor
+	if strings.TrimSpace(input.Cursor) != "" {
+		decoded, err := decodeCursor(input.Cursor)
+		if err != nil {
+			return nil, waitForTextOutput{}, err
+		}
+		cursor = &decoded
+	}
 
 	timeout, clamped := t.resolveWaitTimeout(input.TimeoutSeconds)
 	started := time.Now()
@@ -161,7 +181,7 @@ func (t *tools) waitForText(
 	finishTimeout := func(err error) (*mcp.CallToolResult, waitForTextOutput, error) {
 		if isOwnWaitDeadline(ctx, waitCtx, err) {
 			return finishWait(
-				&output, outcomeTimeout, "", false, nil, limits, truncation{}, started,
+				&output, outcomeTimeout, "", false, false, nil, limits, truncation{}, started,
 			)
 		}
 		return nil, output, err
@@ -177,6 +197,12 @@ func (t *tools) waitForText(
 	if err != nil {
 		return finishTimeout(err)
 	}
+	if cursor != nil && pane.ID().String() != cursor.PaneID {
+		// Resuming on another pane's cursor would report that pane's
+		// history as this one's, which is worse than refusing.
+		return nil, waitForTextOutput{}, fmt.Errorf(
+			"the cursor belongs to pane %s, not %s", cursor.PaneID, pane.ID())
+	}
 	output.PaneID = pane.ID().String()
 	processPane, err := process.Pane(waitCtx, pane.ID())
 	if err != nil {
@@ -189,35 +215,68 @@ func (t *tools) waitForText(
 	}
 	defer t.runtime.releaseObservation(observation)
 	entry := observation.Baseline()
+	// The server knows every key it sent this pane; a match confined to that
+	// unsubmitted line is not a match, however new the bytes look (GO2-6/D1).
+	// The entry check uses one snapshot, taken at this well-defined instant;
+	// the live watch below reads it fresh on every match attempt, because a
+	// wait that attaches before anything is typed must still catch a submit
+	// - or more typing - that happens while it runs.
+	paneID := pane.ID()
+	pending := t.pending.snapshot(paneID)
+	pendingNow := func() string { return t.pending.snapshot(paneID) }
 
 	// Read entry text even when ignored so a timeout can report that the match
 	// was already present rather than implying the pattern failed.
 	presentAtEntry := false
-	if len(patterns) > 0 || len(stops) > 0 {
+	pendingOnlyAtEntry := false
+	switch {
+	case cursor != nil && (len(patterns) > 0 || len(stops) > 0):
+		since, err := t.readSince(waitCtx, processPane, cursor)
+		if err != nil {
+			return nil, output, err
+		}
+		shown := strings.Join(since.lines, "\n")
+		if stopName, isReal, _ := pendingAwareMatch(stops, shown, pending); isReal {
+			return finishWait(
+				&output, outcomeStopped, stopName, false, false, since.lines,
+				limits, truncation{}, started,
+			)
+		}
+		if patternName, isReal, _ := pendingAwareMatch(patterns, shown, pending); isReal {
+			// Genuinely written since the cursor - a match, not a baseline
+			// the wait merely happened to attach after.
+			return finishWait(
+				&output, outcomeMatched, patternName, false, false, since.lines,
+				limits, truncation{}, started,
+			)
+		}
+	case len(patterns) > 0 || len(stops) > 0:
 		shown := strings.Join(entry, "\n")
-		stopName, stopped := firstMatch(stops, shown)
-		patternName, matchedNow := firstMatch(patterns, shown)
-		presentAtEntry = stopped || matchedNow
+		stopName, stopReal, stopPending := pendingAwareMatch(stops, shown, pending)
+		patternName, patternReal, patternPending := pendingAwareMatch(patterns, shown, pending)
+		presentAtEntry = stopReal || stopPending || patternReal || patternPending
+		pendingOnlyAtEntry = presentAtEntry && !stopReal && !patternReal
 		if !input.SinceEntry {
-			if stopped {
+			if stopReal || stopPending {
 				return finishWait(
-					&output, outcomeStopped, stopName, true, entry, limits, truncation{}, started,
+					&output, outcomeStopped, stopName, true, pendingOnlyAtEntry,
+					entry, limits, truncation{}, started,
 				)
 			}
-			if matchedNow {
+			if patternReal || patternPending {
 				// Not outcomeMatched: a caller reading the outcome alone would
 				// otherwise take the echo of a command it just sent for the
 				// command's own output. sinceEntry skips this read entirely.
 				return finishWait(
-					&output, outcomeAlreadyOnScreen, patternName, true, entry,
-					limits, truncation{}, started,
+					&output, outcomeAlreadyOnScreen, patternName, true, pendingOnlyAtEntry,
+					entry, limits, truncation{}, started,
 				)
 			}
 		}
 	}
 	idle := time.Duration(input.IdleSeconds) * time.Second
 	watched := watchPane(
-		waitCtx, observation, pane.ID(), patterns, stops, idle,
+		waitCtx, observation, paneID, patterns, stops, pendingNow, idle,
 	)
 	if watched.err != nil {
 		if !isOwnWaitDeadline(ctx, waitCtx, watched.err) {
@@ -239,6 +298,7 @@ func (t *tools) waitForText(
 		watched.outcome,
 		watched.matched,
 		presentAtEntry,
+		pendingOnlyAtEntry,
 		splitWritten(watched.written),
 		limits,
 		watched.truncation,
@@ -265,12 +325,20 @@ func watchPane(
 	notifications paneNotificationSource,
 	paneID tmux.PaneID,
 	patterns, stops []namedMatcher,
+	pendingNow func() string,
 	idle time.Duration,
 ) paneWatchResult {
 	var result paneWatchResult
 	var normalizer terminalTextNormalizer
 	buffer := make([]byte, 0, min(waitBufferMax, 4096))
 	quiet := time.Now().Add(idle)
+	// stickyPending remembers the last nonempty pending text this watch saw,
+	// even once a submit clears it: the bytes it named can still be sitting,
+	// freshly written, exactly where they were typed, and masking has to
+	// outlive the clear or the same race reopens right after Enter
+	// (GO2-6/D1). One watch call only ever tracks one pane's one line this
+	// way, so remembering it for the rest of this call is enough.
+	var stickyPending string
 	consume := func(data []byte) (string, string, bool) {
 		buffer = normalizer.appendChunk(buffer, data)
 		if len(buffer) > waitBufferMax {
@@ -285,10 +353,24 @@ func watchPane(
 			buffer = append(buffer[:0], buffer[start:]...)
 		}
 		seen := string(buffer)
-		if name, hit := firstMatch(stops, seen); hit {
+		// Read fresh on every attempt, not once up front: a wait that
+		// attaches before anything is typed must still catch a submit, or
+		// more typing, that happens while it is already running.
+		if pendingNow != nil {
+			if fresh := pendingNow(); fresh != "" {
+				stickyPending = fresh
+			}
+		}
+		// A match confined to pending - text this server itself typed but
+		// never submitted, or submitted so recently its echo may still be
+		// the only thing on the stream - is never reported here, however new
+		// the bytes look. It keeps waiting instead: either the line is
+		// submitted and its real output arrives, or genuinely different
+		// output appears elsewhere.
+		if name, isReal, _ := pendingAwareMatch(stops, seen, stickyPending); isReal {
 			return outcomeStopped, name, true
 		}
-		if name, hit := firstMatch(patterns, seen); hit {
+		if name, isReal, _ := pendingAwareMatch(patterns, seen, stickyPending); isReal {
 			return outcomeMatched, name, true
 		}
 		if len(patterns) == 0 && len(stops) == 0 && idle == 0 {
@@ -338,7 +420,7 @@ func watchPane(
 func finishWait(
 	output *waitForTextOutput,
 	outcome, matched string,
-	atEntry bool,
+	atEntry, pendingOnly bool,
 	lines []string,
 	limits bounds,
 	earlier truncation,
@@ -349,19 +431,59 @@ func finishWait(
 	output.Found = outcome == outcomeMatched
 	output.Matched = matched
 	output.MatchedAtEntry = atEntry
-	// Only on the pairing that puzzles, so a note that appears on every wait is
-	// not a note anybody reads.
-	if atEntry && outcome == outcomeTimeout {
+	output.PendingInputOnly = atEntry && pendingOnly
+	// Only on the pairings that puzzle, so a note that appears on every wait
+	// is not a note anybody reads.
+	switch {
+	case atEntry && outcome == outcomeTimeout:
 		output.EntryNote = "the text was already on the pane's attached " +
 			"baseline, and sinceEntry ignored it, so the " +
 			"deadline ran out waiting " +
 			"for it to be written again. The same call without sinceEntry " +
 			"returns at once."
+	case atEntry && outcome == outcomeAlreadyOnScreen && pendingOnly:
+		output.EntryNote = "every occurrence is this server's own " +
+			"unsubmitted input on the pane's current line - text it typed " +
+			"but has not pressed Enter on - not output the pane produced; " +
+			"pendingInputOnly is set for exactly this reason."
+	case atEntry && outcome == outcomeAlreadyOnScreen && !pendingOnly:
+		output.EntryNote = "this text was already real output on the pane " +
+			"before this wait attached, not something the wait saw happen."
 	}
 	output.Lines = kept
 	output.truncation = addTruncation(report, earlier)
 	output.ElapsedSeconds = time.Since(started).Seconds()
 	return textResult(kept), *output, nil
+}
+
+// pendingAwareMatch reports the first pattern in matchers that appears in
+// text, distinguishing a genuine occurrence from one confined entirely to
+// pending: the text this server itself typed into a pane but has not
+// submitted (GO2-6/D1). realHit is true only when a match survives with
+// pending's own occurrence removed - an earlier row, a repeat elsewhere, or
+// output written after a submit. pendingOnly is true when the only
+// occurrence needs that removed text to match at all.
+//
+// One occurrence of pending is removed wherever it sits, not only a trailing
+// suffix: the caller tracks pending live and its own value stops being an
+// exact suffix the moment a submit is sent, while the bytes it named can
+// still be sitting, freshly written, right where they were typed. Removing
+// by content rather than position is what keeps that window closed.
+func pendingAwareMatch(matchers []namedMatcher, text, pending string) (name string, realHit, pendingOnly bool) {
+	if pending == "" {
+		if name, hit := firstMatch(matchers, text); hit {
+			return name, true, false
+		}
+		return "", false, false
+	}
+	masked := strings.Replace(text, pending, "", 1)
+	if name, hit := firstMatch(matchers, masked); hit {
+		return name, true, false
+	}
+	if name, hit := firstMatch(matchers, text); hit {
+		return name, false, true
+	}
+	return "", false, false
 }
 
 // splitWritten turns the normalized pane stream into reply lines.

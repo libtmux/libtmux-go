@@ -77,6 +77,7 @@ func TestWaitForTextReportsItsInternalMatchWindowLoss(t *testing.T) {
 		tmux.PaneID("%1"),
 		nil,
 		nil,
+		nil,
 		time.Millisecond,
 	)
 	if watched.err != nil || watched.outcome != outcomeIdle || watched.matched != "" {
@@ -88,6 +89,7 @@ func TestWaitForTextReportsItsInternalMatchWindowLoss(t *testing.T) {
 		&output,
 		watched.outcome,
 		watched.matched,
+		false,
 		false,
 		splitWritten(watched.written),
 		bounds{lines: ceilingMaxLines, bytes: ceilingMaxBytes},
@@ -107,6 +109,7 @@ func TestPaneWaitSurfacesAnIndependentDeadline(t *testing.T) {
 		t.Context(),
 		failingPaneObservation{err: context.DeadlineExceeded},
 		tmux.PaneID("%1"),
+		nil,
 		nil,
 		nil,
 		time.Minute,

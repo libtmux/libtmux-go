@@ -51,6 +51,7 @@ func TestPaneWaitConsumesTransientNotificationPayload(t *testing.T) {
 		tmux.PaneID("%1"),
 		patterns,
 		nil,
+		nil,
 		0,
 	)
 	if result.err != nil || result.written != "TRANSIENT\nERASED" ||
@@ -66,6 +67,7 @@ func TestPaneWaitDoesNotCallAStreamFailureIdle(t *testing.T) {
 		t.Context(),
 		failingPaneObservation{err: want},
 		tmux.PaneID("%1"),
+		nil,
 		nil,
 		nil,
 		time.Minute,

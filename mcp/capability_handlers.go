@@ -397,7 +397,7 @@ func (t *tools) catalogWaitForText(ctx context.Context, request *sdk.CallToolReq
 	}
 	return t.waitForText(ctx, request, waitForTextInput{
 		PaneID: input.PaneID, Patterns: input.Patterns, Stop: input.Stop,
-		Regex: input.Regex, SinceEntry: input.Cursor != "", TimeoutSeconds: timeout,
+		Regex: input.Regex, Cursor: input.Cursor, TimeoutSeconds: timeout,
 		MaxLines: input.MaxLines,
 	})
 }

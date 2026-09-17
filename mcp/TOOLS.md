@@ -2019,6 +2019,7 @@ Reads only. Repeating it changes nothing.
 | `matchedAtEntry` **required** | boolean |
 | `outcome` **required** | string |
 | `paneId` **required** | string |
+| `pendingInputOnly` **required** | boolean |
 | `truncated` **required** | boolean |
 | `entryNote` | string |
 | `lines` | array |

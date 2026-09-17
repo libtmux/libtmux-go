@@ -444,6 +444,9 @@ type tools struct {
 	callerMutex  sync.Mutex
 	caller       callerIdentity
 	callerCached bool
+	// pending tracks each pane's own unsubmitted input, so wait_for_text never
+	// reports a match confined to it (GO2-6/D1).
+	pending pendingInput
 }
 
 // An invalid target has no socket identity and cannot match the caller.
