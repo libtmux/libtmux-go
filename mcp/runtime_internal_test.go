@@ -78,6 +78,48 @@ func TestRuntimeOwnsOneCommandConnection(t *testing.T) {
 	}
 }
 
+// TestObserveNeverLeavesALostConnectionCurrent guards the GO2-9 recovery path
+// itself: observe must clear commandConnection and original along with
+// marking the runtime terminal, not just close the connection in the
+// background. current() reads commandConnection first regardless of state,
+// so leaving it set would hand a request the exact connection this call just
+// decided was lost or untrusted while it closes underneath the caller.
+func TestObserveNeverLeavesALostConnectionCurrent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "runtime-observe-nil"}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := newRuntime(ctx, target)
+	t.Cleanup(func() { _ = runtime.Close() })
+	if _, err := runtime.command(ctx); err != nil {
+		t.Fatal(err)
+	}
+	runtime.mutex.Lock()
+	bound := runtime.commandConnection
+	runtime.mutex.Unlock()
+	if bound == nil {
+		t.Fatal("runtime did not bind a real command connection")
+	}
+
+	runtime.observe(tmux.ErrControlClosed)
+
+	runtime.mutex.Lock()
+	afterConnection := runtime.commandConnection
+	afterOriginal := runtime.original
+	runtime.mutex.Unlock()
+	if afterConnection != nil {
+		t.Fatal("observe() left a lost command connection stored as current")
+	}
+	if afterOriginal.ID() != "" {
+		t.Fatal("observe() left the lost connection's session stored as current")
+	}
+	if current := runtime.current(); current.ConnectionBound() {
+		t.Fatalf("current() = %#v, want an unbound handle once the daemon is lost", current)
+	}
+}
+
 func TestAwaitCommandRechecksCompletionAtItsDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

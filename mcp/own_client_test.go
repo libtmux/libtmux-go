@@ -2,6 +2,8 @@ package mcp_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -98,6 +100,61 @@ func TestGetServerInfoReportsSocketPathBeforeAnyServerStarts(t *testing.T) {
 	}
 	if info.SocketPath == "" {
 		t.Fatal("get_server_info socketPath = \"\" with no live server, want the configured socket path")
+	}
+}
+
+// TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon pins GO2-3 at the tool
+// surface: a server that is alive but holds no sessions - exactly the state
+// the zero-config default-dedicated MCP leaves a freshly pinned daemon in -
+// must answer get_server_info and let create_session bootstrap the first
+// session, not fail every call with tmux's "no current target".
+//
+//libtmux:real-tmux
+func TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	configuration := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(configuration, []byte("set -s exit-empty off\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	target, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		ConfigFile: configuration,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	t.Cleanup(func() {
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer killCancel()
+		_ = target.Kill(killCtx)
+	})
+	if err := target.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+
+	var info struct {
+		Alive    bool `json:"alive"`
+		Sessions int  `json:"sessions"`
+	}
+	call(ctx, t, session, "get_server_info", nil, &info)
+	if !info.Alive || info.Sessions != 0 {
+		t.Fatalf("get_server_info on a live, empty daemon = %+v, want alive with 0 sessions", info)
+	}
+
+	var created struct {
+		SessionID string `json:"sessionId"`
+	}
+	call(ctx, t, session, "create_session", map[string]any{"session_name": "first"}, &created)
+	if created.SessionID == "" {
+		t.Fatal("create_session on a live, empty daemon did not return a session id")
 	}
 }
 

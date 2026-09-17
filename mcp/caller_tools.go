@@ -184,6 +184,13 @@ func (t *tools) callerFromProcessTree(ctx context.Context) (callerIdentity, erro
 		return callerIdentity{}, err
 	}
 	if result.ExitCode != 0 {
+		// A server with zero sessions is a working server (D6): list-panes -a
+		// refuses "no current target" with nothing to resolve an implicit
+		// current session from, which means no panes, not a failure - the
+		// same tmux behavior Server.Snapshot already reads as empty.
+		if noCurrentTargetStderr(result.Stderr) {
+			return callerIdentity{}, nil
+		}
 		return callerIdentity{}, &tmux.CommandError{Subcommand: "list-panes", Result: result}
 	}
 	for _, line := range result.Stdout {
@@ -200,6 +207,19 @@ func (t *tools) callerFromProcessTree(ctx context.Context) (callerIdentity, erro
 		}, nil
 	}
 	return callerIdentity{}, nil
+}
+
+// noCurrentTargetStderr recognizes tmux's "no current target" refusal: an
+// all-server listing that resolves an implicit current session refuses this
+// way when the server holds no sessions (D6), the same text
+// Server.Snapshot's own no-current-target handling matches.
+func noCurrentTargetStderr(stderr []string) bool {
+	for _, line := range stderr {
+		if strings.Contains(line, "no current target") {
+			return true
+		}
+	}
+	return false
 }
 
 const ancestorDepth = 32

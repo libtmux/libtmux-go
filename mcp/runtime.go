@@ -49,8 +49,11 @@ func (s runtimeState) String() string {
 // tmuxRuntime is the sole mutable owner of MCP execution. Its selector is
 // frozen at construction. Once a daemon is materialized, every command stays
 // on terminal connections opened from the same original session: one retained
-// command lane and one owned connection per active wait. Terminal transport
-// failures never reconnect or fall back to another daemon.
+// command lane and one owned connection per active wait. A terminal transport
+// failure never falls back to a different daemon while it is current, but it
+// is never fatal to the process either (D4): the runtime heals back to
+// unbound on the next acquisition and may bind or bootstrap a fresh daemon
+// then.
 type tmuxRuntime struct {
 	base tmux.Server
 	ctx  context.Context
@@ -508,13 +511,15 @@ func (r *tmuxRuntime) failBinding(
 		r.mutex.Unlock()
 		return true
 	}
-	// D4: a lost or untrusted daemon (including ErrDaemonReplaced) is never
+	// A lost or untrusted daemon (including ErrDaemonReplaced) is never
 	// fatal to the process. Record it as terminal for this attempt - the
-	// caller's own error already reports the loss - and leave the connection
-	// to close without adopting it as current; the next top-level
-	// acquisition heals back to unbound and starts fresh.
+	// caller's own error already reports the loss - without adopting the
+	// connection as current, so a concurrent current() never hands it out
+	// while it closes; the next top-level acquisition heals back to unbound
+	// and starts fresh. original is retained (an acted creation still names
+	// the session it made) even though commandConnection is not.
 	r.original = original
-	r.commandConnection = commandConnection
+	r.commandConnection = nil
 	r.cause = err
 	r.state = runtimeTerminal
 	r.finishBindingSignalLocked()

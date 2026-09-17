@@ -711,11 +711,12 @@ type sendKeysBatchOutput struct {
 	ResolvedPaneIDs []string `json:"resolvedPaneIds"`
 }
 
-// sendKeysBatch sends a sequence of keys without pressing Enter.
+// sendKeysBatch sends a sequence of keys and, when Enter is requested, a
+// separate real Enter key press after them - never appended to a Literal
+// sequence, so it submits regardless of Literal (GO2-4).
 //
 // A program that reads keys rather than lines — an editor, a pager, a menu —
-// is driven by key names in order, and send_keys cannot express that: it
-// appends Enter, so every key would be its own line. This is what lets a
+// is driven by key names in order, not a line at a time; that is what lets a
 // client answer a prompt, quit a pager, or leave an editor.
 func (t *tools) sendKeysBatch(
 	ctx context.Context,

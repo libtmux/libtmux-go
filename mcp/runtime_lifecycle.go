@@ -25,6 +25,8 @@ func (r *tmuxRuntime) observe(err error) {
 	r.cause = err
 	r.state = runtimeTerminal
 	lost := r.commandConnection
+	r.original = tmux.Session{}
+	r.commandConnection = nil
 	r.finishBindingSignalLocked()
 	r.mutex.Unlock()
 	r.closeLostConnection(lost)
