@@ -349,11 +349,16 @@ func pinDefaultMinimal(
 	if err != nil {
 		return socketProfile{}, err
 	}
+	return defaultMinimalProfile(target, present && marker == nonce)
+}
+
+// defaultMinimalProfile describes the default dedicated target, granting
+// default teardown only when owned: this process created that tmux server.
+func defaultMinimalProfile(target tmux.Server, owned bool) (socketProfile, error) {
 	selection, err := target.SocketSelection()
 	if err != nil {
 		return socketProfile{}, err
 	}
-	owned := present && marker == nonce
 	selector := "path:" + selection.Path
 	if filepath.Base(selection.Path) == "libtmux-mcp" {
 		selector = "name:libtmux-mcp"

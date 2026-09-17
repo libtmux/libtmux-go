@@ -51,13 +51,22 @@ func runMain() error {
 		fmt.Println("libtmux-mcp", tmuxmcp.Version)
 		return nil
 	}
-	if *tools {
-		return reportTools()
-	}
-
 	resolvedName, resolvedPath, configFile, socketFrom, minimal, err := resolveTarget(*socketName, *socketPath)
 	if err != nil {
 		return err
+	}
+	if *tools {
+		// The surface depends on whether serving would create the tmux
+		// server, so this asks the same socket serving would use.
+		probe, err := tmux.NewServer(tmux.ServerOptions{
+			SocketName: resolvedName,
+			SocketPath: resolvedPath,
+			Binary:     binaryFrom(*binary),
+		})
+		if err != nil {
+			return err
+		}
+		return reportTools(probe, minimal)
 	}
 	if minimal {
 		var cleanup func() error
@@ -158,10 +167,10 @@ func inspect(target tmux.Server) (context.Context, *sdk.ClientSession, func(), e
 	}, nil
 }
 
-func reportTools() error {
+func reportTools(target tmux.Server, defaultMinimal bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	tools, err := tmuxmcp.AdvertisedTools(ctx)
+	tools, err := tmuxmcp.AdvertisedToolsFor(ctx, target, defaultMinimal)
 	if err != nil {
 		return err
 	}

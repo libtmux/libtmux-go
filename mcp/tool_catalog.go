@@ -3,16 +3,21 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // AdvertisedTools returns caller-owned descriptions of the startup-selected
 // tools. It performs an in-memory MCP handshake without opening tmux or
 // allocating runtime-owned audit resources.
-func AdvertisedTools(ctx context.Context) (tools []*sdk.Tool, err error) {
-	profile := socketProfile{
+//
+// It describes a server that creates the default dedicated tmux server, the
+// widest default surface. [AdvertisedToolsFor] answers for a specific target.
+func AdvertisedTools(ctx context.Context) ([]*sdk.Tool, error) {
+	return advertisedToolsFor(ctx, socketProfile{
 		Selector:                "name:libtmux-mcp",
 		SelectionProvenance:     "default-dedicated",
 		ServerState:             "absent",
@@ -20,7 +25,40 @@ func AdvertisedTools(ctx context.Context) (tools []*sdk.Tool, err error) {
 		NamespaceBoundary:       "tmux-objects-only",
 		AttachCommand:           "tmux -N -L 'libtmux-mcp' attach",
 		defaultTeardown:         true,
+	})
+}
+
+// AdvertisedToolsFor returns the tools a server started now against target
+// would advertise. defaultMinimal selects [RunDefaultMinimal]'s rule, which
+// grants teardown tools only when that server creates the tmux server, so
+// only when none is answering yet; [Run] never grants them by default. It
+// asks whether a tmux server is answering and starts nothing.
+func AdvertisedToolsFor(
+	ctx context.Context,
+	target tmux.Server,
+	defaultMinimal bool,
+) ([]*sdk.Tool, error) {
+	alive, err := target.IsAlive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("inspect selected tmux socket: %w", err)
 	}
+	var profile socketProfile
+	if defaultMinimal {
+		profile, err = defaultMinimalProfile(target, !alive)
+	} else {
+		state := "absent"
+		if alive {
+			state = "existing"
+		}
+		profile, err = profileForTarget(target, state)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return advertisedToolsFor(ctx, profile)
+}
+
+func advertisedToolsFor(ctx context.Context, profile socketProfile) (tools []*sdk.Tool, err error) {
 	surface, err := resolveToolSurface(profile)
 	if err != nil {
 		return nil, err
