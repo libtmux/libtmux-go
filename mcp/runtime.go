@@ -59,19 +59,20 @@ type tmuxRuntime struct {
 	ctx  context.Context
 	deps mcpDependencies
 
-	mutex               sync.Mutex
-	state               runtimeState
-	probe               chan struct{}
-	binding             chan struct{}
-	unboundActive       int
-	unboundDrained      chan struct{}
-	cause               error
-	original            tmux.Session
-	commandConnection   *tmux.Connection
-	observations        sync.WaitGroup
-	connectionCloseOnce sync.Once
-	connectionsClosed   chan struct{}
-	connectionCloseErr  error
+	mutex                 sync.Mutex
+	state                 runtimeState
+	probe                 chan struct{}
+	binding               chan struct{}
+	unboundActive         int
+	unboundDrained        chan struct{}
+	cause                 error
+	original              tmux.Session
+	commandConnection     *tmux.Connection
+	ownObservationClients map[tmux.ClientName]tmux.SessionID
+	observations          sync.WaitGroup
+	connectionCloseOnce   sync.Once
+	connectionsClosed     chan struct{}
+	connectionCloseErr    error
 }
 
 type runtimeAcquisition struct {

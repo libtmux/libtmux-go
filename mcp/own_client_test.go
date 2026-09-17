@@ -158,6 +158,102 @@ func TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon(t *testing.T) {
 	}
 }
 
+// TestListingsLeaveOutEveryOwnObservationClient pins GO2-5/D2: every control
+// client this process owns must be left out of attached listings, not only
+// its one long-lived command connection. wait_for_text and capture_since
+// each open a separate observation client of their own while they run, and
+// a raw list-clients on that server sees them - a detached session must not
+// read as attached just because this process is watching it.
+//
+//libtmux:real-tmux
+func TestListingsLeaveOutEveryOwnObservationClient(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	request := tmux.NewSessionRequest{Name: "detached"}
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &request,
+	})
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+
+	sessions, err := target.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%v, %v)", sessions, err)
+	}
+	window, err := sessions[0].ResolveActiveWindow(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane, ok, err := window.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		t.Fatalf("ResolveActivePane() = (%v, %t, %v)", pane, ok, err)
+	}
+
+	waitDone := make(chan struct{})
+	go func() {
+		defer close(waitDone)
+		_, _ = session.CallTool(ctx, &sdk.CallToolParams{
+			Name: "wait_for_text",
+			Arguments: map[string]any{
+				"pane_id":  pane.ID().String(),
+				"patterns": []string{"never-appears-go2-5"},
+				"timeout":  4,
+			},
+		})
+	}()
+	t.Cleanup(func() { <-waitDone })
+
+	// The observation opens its own control client, alongside the command
+	// connection the earlier own-client test already exercises: two clients,
+	// both this process's own, none of them a person watching.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		clients, err := target.Cmd(ctx, "list-clients")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(clients.Stdout) >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("observation client never attached; list-clients = %v", clients.Stdout)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	var listed struct {
+		Sessions []struct {
+			ID       string `json:"id"`
+			Attached int    `json:"attached"`
+		} `json:"sessions"`
+	}
+	call(ctx, t, session, "list_sessions", nil, &listed)
+	if len(listed.Sessions) != 1 || listed.Sessions[0].Attached != 0 {
+		t.Fatalf("list_sessions with an observation in flight = %+v, want one session, attached 0", listed)
+	}
+
+	var info struct {
+		Session struct {
+			Attached int `json:"attached"`
+		} `json:"session"`
+	}
+	call(ctx, t, session, "get_session_info", map[string]any{"session_id": listed.Sessions[0].ID}, &info)
+	if info.Session.Attached != 0 {
+		t.Fatalf("get_session_info with an observation in flight attached = %d, want 0", info.Session.Attached)
+	}
+
+	var server struct {
+		Clients int `json:"clients"`
+	}
+	call(ctx, t, session, "get_server_info", nil, &server)
+	if server.Clients != 0 {
+		t.Fatalf("get_server_info with an observation in flight clients = %d, want 0", server.Clients)
+	}
+}
+
 func call(ctx context.Context, t *testing.T, session *sdk.ClientSession, name string, arguments map[string]any, into any) {
 	t.Helper()
 	if arguments == nil {

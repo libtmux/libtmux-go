@@ -71,9 +71,9 @@ func (t *tools) getServerInfo(
 	output.Sessions = len(snapshot.Sessions())
 	output.Windows = len(snapshot.Windows())
 	output.Panes = len(snapshot.Panes())
-	own, _ := t.ownAttachment(ctx)
+	own := t.ownAttachment(ctx)
 	clients := slices.DeleteFunc(snapshot.Clients(), func(client tmux.Client) bool {
-		return own != "" && client.Name() == own
+		return own.isOwn(client.Name())
 	})
 	output.Clients = len(clients)
 	output.AttachedClients = summarizeClients(clients)
