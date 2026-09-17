@@ -65,6 +65,9 @@ type invocation struct {
 	progress                 *progressPresenter
 	scripts                  []map[string]any
 	loadResult               map[string]any
+	// scriptInput names the input whose child is writing, so its output events
+	// can be attributed when several workspaces load in one invocation.
+	scriptInput *int
 }
 
 // Run executes one fresh command tree and returns its process exit status.
