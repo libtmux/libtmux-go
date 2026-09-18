@@ -2126,3 +2126,40 @@ func TestReusedSessionNamesTheWindowsItIsMissing(t *testing.T) {
 		t.Fatalf("reuse converged instead of comparing: %+v %v", windows, err)
 	}
 }
+
+// TestFailedAppendListsTheWindowsItKept: an append borrows the user's own
+// session, so a failure cannot roll it back. It keeps what it added, and the
+// message names those windows instead of claiming only that effects are
+// retained.
+func TestFailedAppendListsTheWindowsItKept(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "host"}})
+	before, err := server.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", before.Panes()[0].ID().String())
+	path := write(t, t.TempDir(), "append.yaml", "session_name: appended\nwindows:\n- window_name: kept\n  panes: [blank]\n- window_name: broken\n  options:\n    no-such-option-xyz: 1\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "--append", "--json")
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v (%q)", out, err, diagnostic)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	message, _ := envelope["message"].(string)
+	if code != 1 || summary["status"] != "partial" || !strings.Contains(message, "kept") || !strings.Contains(message, "broken") {
+		t.Fatalf("failed append = %d status %v message %q, want 1, partial and both retained windows named", code, summary["status"], message)
+	}
+	windows, err := server.Cmd(t.Context(), "list-windows", "-t", "host", "-F", "#{window_name}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"kept", "broken"} {
+		if !strings.Contains(string(windows.RawStdout), name) {
+			t.Fatalf("message named a window the server does not hold: %q missing from %q", name, windows.RawStdout)
+		}
+	}
+}
