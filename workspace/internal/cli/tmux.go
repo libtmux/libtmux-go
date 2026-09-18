@@ -778,35 +778,38 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 		if !ok {
 			return session, errors.New("new window has no active pane")
 		}
-		var focusedPane tmux.Pane
-		for pi, pp := range wp.Panes {
-			if pi > 0 {
-				pane, err = pane.Split(r.ctx, tmux.SplitPaneRequest{Direction: tmux.PaneDirectionBelow, StartDirectory: pp.Directory, Command: pp.Shell, Environment: pp.Environment})
-				if err != nil {
+		// Every pane is created and the layout is final before any shell is
+		// typed into: a pane resized after its command redraws the prompt at
+		// a stale width and leaves the shell's partial-line marker behind.
+		panes := make([]tmux.Pane, len(wp.Panes))
+		panes[0] = pane
+		for pi := 1; pi < len(wp.Panes); pi++ {
+			pp := wp.Panes[pi]
+			panes[pi], err = panes[pi-1].Split(r.ctx, tmux.SplitPaneRequest{Direction: tmux.PaneDirectionBelow, StartDirectory: pp.Directory, Command: pp.Shell, Environment: pp.Environment})
+			if err != nil {
+				return session, err
+			}
+			// Keep the window tiled while it grows so a split never starves
+			// for room; the layout below is the one every pane's shell
+			// actually settles into.
+			if pi < len(wp.Panes)-1 {
+				if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: "tiled"}); err != nil {
 					return session, err
 				}
-				// Resize before waiting on this pane's shell, not after: every
-				// layout change this window gets during construction lands
-				// before the next pane's command runs, never after one -- a
-				// resize that follows a command races the shell's own prompt
-				// redraw and can leave it stuck mid-draw.
-				if pi < len(wp.Panes)-1 {
-					if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: "tiled"}); err != nil {
-						return session, err
-					}
-				}
 			}
-			if pi == len(wp.Panes)-1 {
-				layout := wp.Layout
-				if layout == "" && len(wp.Panes) > 1 {
-					layout = "tiled"
-				}
-				if layout != "" {
-					if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: layout}); err != nil {
-						return session, err
-					}
-				}
+		}
+		layout := wp.Layout
+		if layout == "" && len(wp.Panes) > 1 {
+			layout = "tiled"
+		}
+		if layout != "" {
+			if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: layout}); err != nil {
+				return session, err
 			}
+		}
+		var focusedPane tmux.Pane
+		for pi, pp := range wp.Panes {
+			pane := panes[pi]
 			if err := r.event("pane-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "pane_id": pane.ID().String(), "pane_index": pane.Index()}); err != nil {
 				return session, err
 			}
