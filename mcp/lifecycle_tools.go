@@ -174,7 +174,7 @@ func (t *tools) respawnPane(
 	if err != nil {
 		// The mutation succeeded even when a short-lived replacement exits
 		// before readback.
-		if errors.Is(err, tmux.ErrSnapshotNotFound) {
+		if errors.Is(err, tmux.ErrNotFound) {
 			return nil, respawnPaneOutput{PaneID: pane.ID().String(), Gone: true}, nil
 		}
 		return nil, respawnPaneOutput{}, err

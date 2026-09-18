@@ -463,6 +463,12 @@ func TestSendKeysSurfacesCompletedAndTransportFailures(t *testing.T) {
 		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %4") {
 			t.Fatalf("SendKeys() error = %v, want a CommandError naming the target", err)
 		}
+		// A caller reaches a pane that has gone here as often as through a
+		// lookup, so both answer the same sentinel rather than leaving this
+		// one to be read out of tmux's English.
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("SendKeys() error = %v, want ErrNotFound", err)
+		}
 		if calls := runner.callCount(); calls != 1 {
 			t.Fatalf("runner calls = %d, want 1: enter must not run after the send fails", calls)
 		}

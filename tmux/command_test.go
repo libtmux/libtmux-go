@@ -703,3 +703,37 @@ func TestAFixedRefusalIsDisclosed(t *testing.T) {
 		t.Errorf("redacted error disclosed a value: %q", err)
 	}
 }
+
+// tmux names a missing target only in its English diagnostics, so the
+// classification has to hold for the words it uses and refuse the ones that
+// merely start the same way.
+func TestCommandErrorClassifiesAMissingTarget(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		stderr []string
+		want   bool
+	}{
+		{name: "pane", stderr: []string{"can't find pane: %4"}, want: true},
+		{name: "session", stderr: []string{"can't find session: absent"}, want: true},
+		{name: "window without a value", stderr: []string{"can't find window"}, want: true},
+		{name: "terminfo", stderr: []string{"can't find terminfo database"}},
+		{name: "refused split", stderr: []string{"no space for a new pane"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := newCommandError("kill-pane", CommandResult{
+				Stderr: test.stderr, ExitCode: 1,
+			})
+			if got := errors.Is(err, ErrNotFound); got != test.want {
+				t.Fatalf("errors.Is(err, ErrNotFound) = %t, want %t", got, test.want)
+			}
+			if !errors.Is(err, ErrCommand) {
+				t.Fatal("a missing target is still a failed command")
+			}
+		})
+	}
+}

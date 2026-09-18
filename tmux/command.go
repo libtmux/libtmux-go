@@ -25,6 +25,17 @@ var ErrCommand = errors.New("tmux: command failed")
 // during the command.
 var ErrNoServer = errors.New("tmux: no server reached")
 
+// ErrNotFound identifies an operation naming a tmux object that does not
+// exist. A lookup that found nothing matches it, and so does a command tmux
+// refused because the target it named was gone — the same condition reached
+// from either direction. [SnapshotLookupError] and [CommandError] match it
+// through errors.Is.
+//
+// Only a claim of absence this package has not disproved matches. A lookup
+// that reaches a replaced daemon, or whose diagnostic names an object it did
+// not target, reports what it saw rather than an absence.
+var ErrNotFound = errors.New("tmux: object not found")
+
 // ColorMode selects a tmux color-capability override for [ServerOptions].
 type ColorMode int
 
@@ -132,10 +143,31 @@ func (e *CommandError) Unwrap() error {
 	return ErrCommand
 }
 
-// Is reports [ErrNoServer] for a failure that means no tmux server answered:
-// either the command never reached one, or the one it reached is gone.
+// Is reports [ErrNoServer] for a failure that means no tmux server answered —
+// either the command never reached one, or the one it reached is gone — and
+// [ErrNotFound] for one tmux refused because the object it named was absent.
 func (e *CommandError) Is(target error) bool {
-	return target == ErrNoServer && e.noServer
+	switch target {
+	case ErrNoServer:
+		return e.noServer
+	case ErrNotFound:
+		return e.targetNotFound
+	default:
+		return false
+	}
+}
+
+// withoutAbsenceClaim returns err with any claim that tmux's target was
+// missing removed, for a caller that has disproved the absence the claim
+// would otherwise assert. Anything else is returned unchanged.
+func withoutAbsenceClaim(err error) error {
+	commandError, ok := err.(*CommandError)
+	if !ok || !commandError.targetNotFound {
+		return err
+	}
+	cleared := *commandError
+	cleared.targetNotFound = false
+	return &cleared
 }
 
 func newCommandError(subcommand string, result CommandResult) *CommandError {

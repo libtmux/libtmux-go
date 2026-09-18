@@ -259,7 +259,7 @@ func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 		{
 			name:    "destroy-unattached",
 			options: map[string]string{"destroy-unattached": "on"},
-			wantErr: tmux.ErrSnapshotNotFound,
+			wantErr: tmux.ErrNotFound,
 		},
 		{
 			name:          "exit-unattached",

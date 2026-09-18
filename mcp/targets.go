@@ -10,9 +10,9 @@ import (
 )
 
 // notFound adds an actionable listing hint while preserving
-// [tmux.ErrSnapshotNotFound].
+// [tmux.ErrNotFound].
 func notFound(err error, what, id, lister string) error {
-	if !errors.Is(err, tmux.ErrSnapshotNotFound) {
+	if !errors.Is(err, tmux.ErrNotFound) {
 		return err
 	}
 	return missing{fmt.Errorf(
@@ -20,10 +20,10 @@ func notFound(err error, what, id, lister string) error {
 		what, id, lister, what)}
 }
 
-// missing preserves [tmux.ErrSnapshotNotFound] after rewriting its message.
+// missing preserves [tmux.ErrNotFound] after rewriting its message.
 type missing struct{ error }
 
-func (missing) Is(target error) bool { return target == tmux.ErrSnapshotNotFound }
+func (missing) Is(target error) bool { return target == tmux.ErrNotFound }
 
 // resolveSession finds the session a call names, or the only one there is.
 func (t *tools) resolveSession(ctx context.Context, name string) (tmux.Session, error) {

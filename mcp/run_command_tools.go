@@ -545,7 +545,7 @@ func commandRunPresent(
 }
 
 func commandRunDisappeared(err error) bool {
-	return errors.Is(err, tmux.ErrSnapshotNotFound) ||
+	return errors.Is(err, tmux.ErrNotFound) ||
 		errors.Is(err, tmux.ErrDaemonReplaced)
 }
 

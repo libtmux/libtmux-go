@@ -172,7 +172,10 @@ func (s Server) livePointWithTargetValidation(
 				err,
 			)
 		}
-		return formatValues{}, Version{}, snapshotServerIdentity{}, err
+		// An untargeted listing that named an object is describing something
+		// other than the absence of the one asked for, which is why it is not
+		// allowed to read as that absence.
+		return formatValues{}, Version{}, snapshotServerIdentity{}, withoutAbsenceClaim(err)
 	}
 
 	matches := make([]formatValues, 0, 1)
@@ -183,7 +186,7 @@ func (s Server) livePointWithTargetValidation(
 	}
 	selected, err := selectLivePoint(matches, object, identifier, targeted)
 	if err != nil {
-		if errors.Is(err, ErrSnapshotNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			err = s.liveLookupAbsence(ctx, identity, object, identifier, nil)
 		}
 		return formatValues{}, Version{}, snapshotServerIdentity{}, err
@@ -220,7 +223,9 @@ func (s Server) liveLookupAbsence(
 	if !sameSnapshotIdentity(opening, closing) {
 		changeErr := snapshotIdentityChangeError(closing)
 		if listingErr != nil {
-			return errors.Join(listingErr, changeErr)
+			// A second daemon answered, so what the first one could not find
+			// is no longer evidence that it is gone.
+			return errors.Join(withoutAbsenceClaim(listingErr), changeErr)
 		}
 		return changeErr
 	}

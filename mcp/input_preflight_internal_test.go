@@ -387,7 +387,7 @@ func TestCommandRunDisappearanceIsFailClosed(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{name: "pane absent", err: fmt.Errorf("lookup: %w", tmux.ErrSnapshotNotFound), want: true},
+		{name: "pane absent", err: fmt.Errorf("lookup: %w", tmux.ErrNotFound), want: true},
 		{name: "daemon unreachable", err: fmt.Errorf("probe: %w", tmux.ErrNoServer)},
 		{name: "daemon replaced", err: fmt.Errorf("probe: %w", tmux.ErrDaemonReplaced), want: true},
 		{name: "ambiguous outcome", err: tmux.ErrOutcomeUnknown},
@@ -746,7 +746,7 @@ func waitForPaneReplacement(ctx context.Context, pane tmux.Pane, before int) err
 		func(waitCtx context.Context) (bool, error) {
 			pid, err := panePID(waitCtx, pane)
 			if err != nil {
-				if errors.Is(err, tmux.ErrSnapshotNotFound) {
+				if errors.Is(err, tmux.ErrNotFound) {
 					return false, nil
 				}
 				return false, err
