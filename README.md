@@ -18,6 +18,11 @@ refused.
   recent releases.
 - **Records never refresh behind you.** A `Session` you hold is what tmux said
   when you asked, not a live handle that changes underneath.
+- **Unix.** tmux is a Unix program, so driving one needs a Unix host: Linux and
+  macOS run the suites on every change, and the BSDs, illumos and Plan 9 build.
+  A Windows build compiles and resolves a tmux executable by Windows PATH and
+  PATHEXT rules, so a cross-platform program still builds; it has no tmux to
+  reach.
 
 ```console
 $ go get github.com/libtmux/libtmux-go/tmux@latest

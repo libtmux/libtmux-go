@@ -17,8 +17,11 @@ This document defines the architecture of the Go module.
   retained control clients add `no-detach-on-destroy`, which strengthens
   survival after their startup session is destroyed without raising either
   support floor.
-- Operations that may wait for or execute tmux take `context.Context` first.
-  Contexts are never stored in objects.
+- Operations that may wait for or execute tmux take `context.Context` first,
+  and no object stores one. The `io.Reader` and `io.Writer` adapters are the
+  exception the interfaces force: `Read` and `Write` take no context, so
+  `Pane.Writer` and `PaneObservation.Reader` hold the one their constructor
+  was given, and each is scoped to that value rather than to the pane.
 - Ordinary APIs block. Callers decide whether to start goroutines.
 - Public values are concrete and typed. Untyped maps are limited to explicit
   edge decoders and never form the object API. Generator specifications carry
@@ -34,9 +37,9 @@ This document defines the architecture of the Go module.
   concurrent reads. Optional warning handlers are invoked concurrently and must
   provide their own synchronization.
 
-The nested module uses its own semantic versions and `golang/vX.Y.Z` tags. A
-future v2 also adds `/v2` to the module path. The Python release workflow must
-accept only root `vX.Y.Z` tags before the first Go tag is published.
+Each module carries its own semantic version, tagged per directory: the core
+as `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`. A future v2
+also adds `/v2` to the module path.
 
 ## Where each package sits
 
@@ -658,7 +661,7 @@ optional nominal targets whose zero value is not a valid tmux target. Pointers
 remain only where zero or an empty string is meaningful to tmux, and for
 recursive filter structure. Requests copy pointer and map inputs before any
 version query or subprocess call that could let caller mutation change a
-validated request. Contexts are never stored.
+validated request. No request stores a context.
 
 ## Control-mode connections
 
