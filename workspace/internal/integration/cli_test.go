@@ -1910,9 +1910,6 @@ func TestScriptPublicationPreservesCleanup(t *testing.T) {
 				t.Fatal(err)
 			}
 			windows := 2
-			if !appendMode && test.status == 0 {
-				sessions, windows = 3, 3
-			}
 			if len(after.Sessions()) != sessions || len(after.Windows()) != windows || len(after.Panes()) != windows {
 				t.Errorf("cleanup damaged prior effects or retained failed owned session: sessions=%d windows=%d panes=%d", len(after.Sessions()), len(after.Windows()), len(after.Panes()))
 			}
@@ -1924,7 +1921,7 @@ func TestScriptPublicationPreservesCleanup(t *testing.T) {
 				t.Error("original window was removed")
 			}
 			for _, session := range after.Sessions() {
-				if name, _ := session.Name(); test.status != 0 && name == "failed" {
+				if name, _ := session.Name(); name == "failed" {
 					t.Error("failed owned session survived publication failure")
 				}
 			}
@@ -2068,4 +2065,35 @@ func mustSessionID(t *testing.T, snapshot tmux.Snapshot, name string) tmux.Sessi
 	}
 	t.Fatalf("session %q not found", name)
 	return ""
+}
+
+// TestFailedLoadRemovesTheSessionItCreated: reporting that nothing was
+// retained is only honest if nothing was. A load that creates a session and
+// fails partway removes it, so running the same document again fails the same
+// way instead of finding the half-built session, calling it reused, and
+// reporting success for a workspace that is missing a window.
+func TestFailedLoadRemovesTheSessionItCreated(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keeper"}})
+	path := write(t, t.TempDir(), "rerun.yaml", "session_name: rerun\nwindows:\n- window_name: one\n  panes: [blank]\n- window_name: two\n  options:\n    no-such-option-xyz: 1\n  panes: [blank]\n- window_name: three\n  panes: [blank]\n")
+	for _, attempt := range []string{"first", "rerun"} {
+		t.Run(attempt, func(t *testing.T) {
+			code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+			var summary map[string]any
+			if err := json.Unmarshal([]byte(out), &summary); err != nil {
+				t.Fatalf("invalid summary %q: %v (%q)", out, err, diagnostic)
+			}
+			if code != 1 || summary["status"] != "error" {
+				t.Fatalf("load = %d status %v, want 1 and error: %s", code, summary["status"], out)
+			}
+			sessions, err := server.Sessions(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, session := range sessions {
+				if name, _ := session.Name(); name != "keeper" {
+					t.Fatalf("failed load left session %q behind", name)
+				}
+			}
+		})
+	}
 }
