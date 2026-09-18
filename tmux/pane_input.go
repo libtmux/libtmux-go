@@ -412,9 +412,11 @@ func clearHistoryArguments(
 	return arguments, warnings, nil
 }
 
-// Clear sends the text "reset" and then Enter to the receiver's exact linked
-// pane. The pane's current application interprets that input; Clear does not
-// invoke a shell itself. A transport error may leave the text delivered without Enter.
+// Clear types the text "reset" and then Enter into the receiver's exact linked
+// pane, the way a person at the keyboard would. Whatever is running reads it:
+// a shell runs reset(1), and an editor receives the word. Use [Pane.Reset] or
+// [Pane.ClearHistory] to act on the pane itself rather than on its program.
+// A transport error may leave the text delivered without Enter.
 func (p Pane) Clear(ctx context.Context) error {
 	command := "reset"
 	return p.SendKeys(ctx, SendKeysRequest{Command: &command})
@@ -422,19 +424,23 @@ func (p Pane) Clear(ctx context.Context) error {
 
 // Reset submits one tmux command list that resets terminal state and then
 // clears history for the exact linked pane. The mutations are not atomic and
-// may be partial. Completed exit status and stderr are ignored.
+// may be partial. Only stderr makes a completed command a [CommandError];
+// nonzero exits without stderr are ignored. Transport errors are
+// delivery-ambiguous.
 func (p Pane) Reset(ctx context.Context) error {
 	target, err := exactPaneTarget(p)
 	if err != nil {
 		return err
 	}
-	_, err = p.server.Cmd(
+	result, err := p.server.Cmd(
 		ctx,
 		"send-keys", "-t", target, "-R",
 		";",
 		"clear-history", "-t", target,
 	)
-	return err
+	// tmux runs a list until one command fails and merges their output, so the
+	// label names the list rather than guessing which half stderr came from.
+	return requireServerCommandNoStderr("send-keys; clear-history", result, err)
 }
 
 func captureSendKeysRequest(request SendKeysRequest) SendKeysRequest {

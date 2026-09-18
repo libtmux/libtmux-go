@@ -716,13 +716,13 @@ func TestResetUsesOneTrustedTwoTargetCommandList(t *testing.T) {
 	t.Parallel()
 
 	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
-		Stderr: []string{"ignored"}, ExitCode: 1,
+		ExitCode: 1,
 	}}}}
 	err := paneWithExactTestTarget(serverWithRunner(runner)).Reset(
 		context.Background(),
 	)
 	if err != nil {
-		t.Fatalf("Reset() error = %v", err)
+		t.Fatalf("Reset() error = %v, want a bare nonzero exit ignored", err)
 	}
 	requests := runner.recordedRequests()
 	if len(requests) != 1 {
@@ -732,6 +732,16 @@ func TestResetUsesOneTrustedTwoTargetCommandList(t *testing.T) {
 		"send-keys", "-t", "$5:0.%7", "-R", ";",
 		"clear-history", "-t", "$5:0.%7",
 	})
+
+	// Resetting a pane that has gone answered nil, the same silent success
+	// SendKeys and Capture stopped answering.
+	failing := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
+		Stderr: []string{"can't find pane: %7"}, ExitCode: 1,
+	}}}}
+	err = paneWithExactTestTarget(serverWithRunner(failing)).Reset(context.Background())
+	if !errors.Is(err, ErrCommand) || !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Reset() error = %v, want a CommandError matching ErrNotFound", err)
+	}
 }
 
 func TestPaneInputMethodsRejectInvalidTargetBeforeExecution(t *testing.T) {
