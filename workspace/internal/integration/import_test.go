@@ -149,7 +149,11 @@ func TestImportedWorkspacesKeepCommandsAndRelocatedDirectories(t *testing.T) {
 	}
 }
 
-func TestImportedSynchronizationPreservesSequentialDelivery(t *testing.T) {
+// TestImportedSynchronizationMirrorsAcrossTheWindow: a window's panes are all
+// created before any of them receives a command, so synchronize-panes set
+// before construction mirrors every pane's command to every other pane, not
+// only to panes created earlier.
+func TestImportedSynchronizationMirrorsAcrossTheWindow(t *testing.T) {
 	for _, mode := range []string{"tmuxinator/before", "tmuxinator/after", "tmuxinator/none", "teamocil/before", "teamocil/none"} {
 		t.Run(mode, func(t *testing.T) {
 			parts := strings.Split(mode, "/")
@@ -194,7 +198,10 @@ func TestImportedSynchronizationPreservesSequentialDelivery(t *testing.T) {
 			for index, pane := range actual {
 				wanted := []string{"A", "B", "C"}[index]
 				if phase == "before" {
-					wanted = "ABC"[index:]
+					// Every pane in the window exists before any of them
+					// receives a command, so synchronize-panes mirrors every
+					// command to every pane from the first one.
+					wanted = "ABC"
 				}
 				importMarker(t, filepath.Join(dir, "receipt-"+pane.ID().String()), wanted)
 			}
