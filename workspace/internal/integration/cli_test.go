@@ -2097,3 +2097,32 @@ func TestFailedLoadRemovesTheSessionItCreated(t *testing.T) {
 		})
 	}
 }
+
+// TestReusedSessionNamesTheWindowsItIsMissing: reuse is keyed on the session
+// name, so a session that exists satisfies it whatever state it is in. A load
+// that reuses compares the document's windows against what is there and names
+// what is absent, rather than blessing a workspace it never looked at.
+func TestReusedSessionNamesTheWindowsItIsMissing(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	small := write(t, dir, "small.yaml", "session_name: reuse\nwindows:\n- window_name: one\n  panes: [blank]\n")
+	full := write(t, dir, "full.yaml", "session_name: reuse\nwindows:\n- window_name: one\n  panes: [blank]\n- window_name: two\n  panes: [blank]\n")
+	if code, out, diagnostic := run(t, "load", small, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json"); code != 0 {
+		t.Fatalf("first load: %d %q %q", code, out, diagnostic)
+	}
+	code, out, diagnostic := run(t, "load", full, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v (%q)", out, err, diagnostic)
+	}
+	errs, _ := summary["errors"].([]any)
+	entry, _ := first(errs).(map[string]any)
+	message, _ := entry["message"].(string)
+	if code != 1 || summary["status"] != "partial" || !strings.Contains(message, `"two"`) {
+		t.Fatalf("reuse of a session missing a window = %d status %v message %q, want 1, partial and the window named: %s", code, summary["status"], message, out)
+	}
+	windows, err := server.Cmd(t.Context(), "list-windows", "-t", "reuse", "-F", "#{window_name}")
+	if err != nil || strings.TrimSpace(string(windows.RawStdout)) != "one" {
+		t.Fatalf("reuse converged instead of comparing: %+v %v", windows, err)
+	}
+}

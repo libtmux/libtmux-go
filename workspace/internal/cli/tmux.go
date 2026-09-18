@@ -392,6 +392,9 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			if buildErr == nil && exists {
 				session, buildErr = findSession(r.ctx, server, input.plan.Name)
 				reused = true
+				if buildErr == nil {
+					buildErr = reusedSessionGap(r.ctx, server, session, input.plan)
+				}
 			}
 		}
 		if buildErr == nil && !reused {
@@ -612,6 +615,43 @@ type noEffectError struct{ err error }
 
 func (e *noEffectError) Error() string { return e.err.Error() }
 func (e *noEffectError) Unwrap() error { return e.err }
+
+// reusedSessionGap names the windows a reused session does not have. Reuse is
+// keyed on the session name, so a session that exists satisfies it whatever
+// state it is in; comparing is the rule here, and rebuilding is a separate
+// feature. A window the document leaves unnamed cannot be compared by name,
+// so it is not checked.
+func reusedSessionGap(ctx context.Context, server tmux.Server, session tmux.Session, plan loadPlan) error {
+	names, err := query(ctx, server, "list-windows", "-t", session.ID().String(), "-F", "#{window_name}")
+	if err != nil {
+		return err
+	}
+	present := map[string]int{}
+	for _, line := range strings.Split(names, "\n") {
+		if line != "" {
+			present[line]++
+		}
+	}
+	missing := []string{}
+	for _, window := range plan.Windows {
+		if window.Name == "" {
+			continue
+		}
+		if present[window.Name] > 0 {
+			present[window.Name]--
+			continue
+		}
+		missing = append(missing, strconv.Quote(window.Name))
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	label := "window"
+	if len(missing) > 1 {
+		label = "windows"
+	}
+	return &failure{"session_not_found", fmt.Sprintf("session %s already exists and is missing %s %s this workspace describes", strconv.Quote(plan.Name), label, strings.Join(missing, ", ")), 1}
+}
 
 // windowIndexTaken reports whether session already has a window at index,
 // so a collision names its own index instead of tmux's redacted new-window
