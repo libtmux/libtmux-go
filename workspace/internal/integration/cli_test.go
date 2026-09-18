@@ -254,6 +254,27 @@ func TestFreezeOnEmptyServerReportsSessionNotFound(t *testing.T) {
 	}
 }
 
+// TestFreezeOnUnstartedServerReportsSessionNotFound is the third case: a
+// socket whose server has never started holds no session either, so the
+// answer is the one a missing name gets, not tmux's transport error.
+func TestFreezeOnUnstartedServerReportsSessionNotFound(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "cold.sock")
+	code, out, diagnostic := run(t, "freeze", "nosuch", "-S", socket, "--json")
+	if code != 1 || out != "" {
+		t.Fatalf("freeze nosuch on an unstarted server: %d %q %q", code, out, diagnostic)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if envelope["code"] != "session_not_found" {
+		t.Fatalf("code = %v, want %q (%s)", envelope["code"], "session_not_found", diagnostic)
+	}
+	if strings.Contains(diagnostic, "error connecting to") {
+		t.Fatalf("message leaks tmux's socket error: %s", diagnostic)
+	}
+}
+
 // TestLoadTmuxFailureReportsTmuxFailedCode: a tmux command failing while
 // building -- an unknown option here -- must give errors[].code and the
 // stderr record's code tmux_failed, not the generic workspace_failed/

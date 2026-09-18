@@ -54,12 +54,10 @@ func query(ctx context.Context, server tmux.Server, args ...string) (string, err
 func findSession(ctx context.Context, server tmux.Server, target string) (tmux.Session, error) {
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
-		if errors.Is(err, tmux.ErrNoServer) {
-			return tmux.Session{}, &failure{"tmux_unavailable", err.Error(), 1}
-		}
 		// A server with zero sessions fails the underlying query outright
-		// ("no current target") instead of reporting emptiness; there is
-		// nothing this lookup could have found.
+		// ("no current target") instead of reporting emptiness, and a socket
+		// with no server behind it holds no session either; there is nothing
+		// this lookup could have found.
 		message := "no sessions are running"
 		if target != "" {
 			message = fmt.Sprintf("session %q not found", target)
