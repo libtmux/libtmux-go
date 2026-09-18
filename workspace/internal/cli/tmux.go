@@ -371,6 +371,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	var last tmux.Session
 	retainedEffects := false
 	sessionRemoved := false
+	retainedWindows := []string{}
 	for index, input := range inputs {
 		if r.ctx.Err() != nil {
 			break
@@ -383,6 +384,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		var session tmux.Session
 		var buildErr error
+		var built []string
 		reused := false
 		if o.append {
 			session = borrowed
@@ -401,10 +403,10 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			if input.plan.Bridge {
 				session, buildErr = r.bridgeLoad(server, session, o, input.path, input.plan.Name, index)
 			} else {
-				session, buildErr = r.build(server, session, input.plan, index)
+				session, built, buildErr = r.build(server, session, input.plan, index)
 			}
 		}
-		entry := map[string]any{"input_index": index, "input": privatePath(input.path), "session_name": input.plan.Name, "session_id": session.ID().String(), "reused": reused}
+		entry := map[string]any{"input_index": index, "input": privatePath(input.path), "session_name": input.plan.Name, "session_id": session.ID().String(), "reused": reused, "created_windows": built}
 		if buildErr != nil {
 			entry["stage"] = "failed"
 			// build only ever runs tmux mutations and before_script, so any
@@ -427,6 +429,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 				// either: it never created anything to describe either way.
 			default:
 				retainedEffects = true
+				retainedWindows = append(retainedWindows, built...)
 			}
 			entryFailure := map[string]any{"code": code, "message": buildErr.Error(), "input_index": index, "stage": "load", "session_id": session.ID().String()}
 			failures = append(failures, entryFailure)
@@ -434,6 +437,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			last = session
 			entry["stage"] = "completed"
 			retainedEffects = true
+			retainedWindows = append(retainedWindows, built...)
 		}
 		results = append(results, entry)
 		summary["results"], summary["errors"] = results, failures
@@ -515,13 +519,18 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		// behind. Otherwise, a killed session says so; a failure that built
 		// nothing at all (an append or reuse whose first window never took
 		// hold) gets neither clause.
+		first, _ := failures[0]["message"].(string)
 		message := "one or more workspaces failed; completed effects are retained"
-		if !retainedEffects {
-			first, _ := failures[0]["message"].(string)
+		switch {
+		case !retainedEffects:
 			message = first
 			if sessionRemoved {
 				message += "; the session it created was removed"
 			}
+		case len(retainedWindows) > 0:
+			// Nothing here can be rolled back -- an appended or reused session
+			// belongs to the user -- so the message names what it left.
+			message = first + "; windows retained: " + strings.Join(retainedWindows, ", ")
 		}
 		return &failure{code, message, 1}
 	}
@@ -674,53 +683,54 @@ func windowIndexTaken(ctx context.Context, server tmux.Server, session tmux.Sess
 // again on failure: a load only reports that nothing was retained when
 // nothing was, and a half-built session left on the server turns the next run
 // of the same document into a reuse that reports success.
-func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, error) {
+func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, []string, error) {
 	created := session.ID() == ""
-	session, err := r.buildInto(server, session, plan, inputIndex)
+	session, windows, err := r.buildInto(server, session, plan, inputIndex)
 	if err == nil || !created || session.ID() == "" {
-		return session, err
+		return session, windows, err
 	}
 	var removed *removedSessionError
 	if errors.As(err, &removed) {
-		return session, err
+		return session, nil, err
 	}
 	cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	killErr := session.Kill(cleanup)
 	cancel()
 	if killErr != nil {
-		return session, errors.Join(err, killErr)
+		return session, windows, errors.Join(err, killErr)
 	}
-	return session, &removedSessionError{err}
+	return session, nil, &removedSessionError{err}
 }
 
-func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, error) {
+func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, []string, error) {
 	created := session.ID() == ""
+	windows := []string{}
 	if !created {
 		if _, err := session.Refresh(r.ctx); err != nil {
-			return session, err
+			return session, windows, err
 		}
 	}
 	var bootstrap tmux.Window
 	if created {
 		width, height, err := sessionDimensions()
 		if err != nil {
-			return session, err
+			return session, windows, err
 		}
 		session, err = server.NewSession(r.ctx, tmux.NewSessionRequest{Name: plan.Name, StartDirectory: plan.Directory, Environment: plan.Environment, Width: width, Height: height})
 		if err != nil {
-			return session, err
+			return session, windows, err
 		}
 		bootstrap, err = session.ResolveActiveWindow(r.ctx)
 		if err != nil {
-			return session, err
+			return session, windows, err
 		}
 		if err := r.event("session-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "session_name": plan.Name}); err != nil {
-			return session, err
+			return session, windows, err
 		}
 	}
 	if len(plan.BeforeScript) != 0 {
 		if err := r.event("script-started", map[string]any{"input_index": inputIndex}); err != nil {
-			return session, err
+			return session, windows, err
 		}
 		r.scriptInput = &inputIndex
 		result, err := r.process(plan.BeforeScript, plan.ScriptDirectory, nil, true)
@@ -739,32 +749,32 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 			err = &failure{"script_failed", message, 1}
 		}
 		if err != nil {
-			return session, errors.Join(err, eventErr)
+			return session, windows, errors.Join(err, eventErr)
 		}
 		if eventErr != nil {
-			return session, eventErr
+			return session, windows, eventErr
 		}
 	}
 	for _, key := range sortedKeys(plan.Environment) {
 		if err := session.SetEnvironment(r.ctx, key, plan.Environment[key], tmux.SetEnvironmentOptions{}); err != nil {
-			return session, err
+			return session, windows, err
 		}
 	}
 	for _, key := range sortedKeys(plan.GlobalOptions) {
 		if err := setGlobalOption(r.ctx, server, key, plan.GlobalOptions[key]); err != nil {
-			return session, err
+			return session, windows, err
 		}
 	}
 	for _, key := range sortedKeys(plan.Options) {
 		if err := setSessionOption(r.ctx, session, key, plan.Options[key]); err != nil {
-			return session, err
+			return session, windows, err
 		}
 	}
 	waitForPrompt := plan.Readiness == "always"
 	if plan.Readiness == "auto" {
 		shell, err := query(r.ctx, server, "show-options", "-A", "-v", "-t", session.ID().String(), "default-shell")
 		if err != nil {
-			return session, err
+			return session, windows, err
 		}
 		waitForPrompt = filepath.Base(shell) == "zsh"
 	}
@@ -774,11 +784,11 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 	if created {
 		value, err := query(r.ctx, server, "show-options", "-A", "-v", "-t", session.ID().String(), "base-index")
 		if err != nil {
-			return session, err
+			return session, windows, err
 		}
 		baseIndex, err = strconv.Atoi(value)
 		if err != nil {
-			return session, fmt.Errorf("decode base-index: %w", err)
+			return session, windows, fmt.Errorf("decode base-index: %w", err)
 		}
 	}
 	for index, wp := range plan.Windows {
@@ -796,39 +806,44 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 		if requestedIndex != nil && !killingBootstrap {
 			taken, err := windowIndexTaken(r.ctx, server, session, *requestedIndex)
 			if err != nil {
-				return session, err
+				return session, windows, err
 			}
 			if taken {
 				collision := &failure{"tmux_failed", fmt.Sprintf("create window failed: index %d in use", *requestedIndex), 1}
 				if !created && index == 0 {
-					return session, &noEffectError{collision}
+					return session, windows, &noEffectError{collision}
 				}
-				return session, collision
+				return session, windows, collision
 			}
 		}
 		window, err := session.NewWindow(r.ctx, tmux.NewWindowRequest{Name: name, Index: requestedIndex, StartDirectory: first.Directory, Command: first.Shell, Environment: first.Environment, KillExisting: killingBootstrap})
 		if err != nil {
-			return session, err
+			return session, windows, err
 		}
 		if created && index == 0 && window.Index() != bootstrap.Index() {
 			if err := bootstrap.Kill(r.ctx); err != nil {
-				return session, err
+				return session, windows, err
 			}
 		}
+		built, named := window.Name()
+		if !named || built == "" {
+			built = window.ID().String()
+		}
+		windows = append(windows, built)
 		if err := r.event("window-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "window_index": window.Index(), "window_name": wp.Name, "pane_total": len(wp.Panes)}); err != nil {
-			return session, err
+			return session, windows, err
 		}
 		for _, key := range sortedKeys(wp.Options) {
 			if err := window.SetOption(r.ctx, key, wp.Options[key], tmux.SetOptionOptions{}); err != nil {
-				return session, err
+				return session, windows, err
 			}
 		}
 		pane, ok, err := window.ResolveActivePane(r.ctx)
 		if err != nil {
-			return session, err
+			return session, windows, err
 		}
 		if !ok {
-			return session, errors.New("new window has no active pane")
+			return session, windows, errors.New("new window has no active pane")
 		}
 		// Every pane is created and the layout is final before any shell is
 		// typed into: a pane resized after its command redraws the prompt at
@@ -839,14 +854,14 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 			pp := wp.Panes[pi]
 			panes[pi], err = panes[pi-1].Split(r.ctx, tmux.SplitPaneRequest{Direction: tmux.PaneDirectionBelow, StartDirectory: pp.Directory, Command: pp.Shell, Environment: pp.Environment})
 			if err != nil {
-				return session, err
+				return session, windows, err
 			}
 			// Keep the window tiled while it grows so a split never starves
 			// for room; the layout below is the one every pane's shell
 			// actually settles into.
 			if pi < len(wp.Panes)-1 {
 				if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: "tiled"}); err != nil {
-					return session, err
+					return session, windows, err
 				}
 			}
 		}
@@ -856,53 +871,53 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 		}
 		if layout != "" {
 			if err := window.SelectLayout(r.ctx, tmux.SelectLayoutRequest{Layout: layout}); err != nil {
-				return session, err
+				return session, windows, err
 			}
 		}
 		var focusedPane tmux.Pane
 		for pi, pp := range wp.Panes {
 			pane := panes[pi]
 			if err := r.event("pane-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "pane_id": pane.ID().String(), "pane_index": pane.Index()}); err != nil {
-				return session, err
+				return session, windows, err
 			}
 			if waitForPrompt && pp.Shell == "" {
 				ready, err := paneReady(r.ctx, pane)
 				if err != nil {
-					return session, err
+					return session, windows, err
 				}
 				if !ready {
 					if err := r.event("warning", map[string]any{"input_index": inputIndex, "pane_id": pane.ID().String(), "code": "pane_readiness_timeout", "message": "pane prompt did not move the cursor within two seconds"}); err != nil {
-						return session, err
+						return session, windows, err
 					}
 				}
 			}
 			for _, command := range pp.Commands {
 				if err := delay(r.ctx, command.SleepBefore); err != nil {
-					return session, err
+					return session, windows, err
 				}
 				text := command.Text
 				if err := pane.SendKeys(r.ctx, tmux.SendKeysRequest{Command: &text, SuppressHistory: pp.SuppressHistory, SkipEnter: !command.Enter, Literal: true}); err != nil {
-					return session, err
+					return session, windows, err
 				}
 				if err := delay(r.ctx, command.SleepAfter); err != nil {
-					return session, err
+					return session, windows, err
 				}
 			}
 			if pp.Focus {
 				focusedPane = pane
 			}
 			if err := r.event("pane-completed", map[string]any{"input_index": inputIndex, "pane_id": pane.ID().String()}); err != nil {
-				return session, err
+				return session, windows, err
 			}
 		}
 		for _, key := range sortedKeys(wp.OptionsAfter) {
 			if err := window.SetOption(r.ctx, key, wp.OptionsAfter[key], tmux.SetOptionOptions{}); err != nil {
-				return session, err
+				return session, windows, err
 			}
 		}
 		if focusedPane.ID() != "" {
 			if _, err := focusedPane.Select(r.ctx, tmux.PaneSelectRequest{}); err != nil {
-				return session, err
+				return session, windows, err
 			}
 		}
 		if wp.Focus {
@@ -911,7 +926,7 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 			focus = window
 		}
 		if err := r.event("window-completed", map[string]any{"input_index": inputIndex, "window_id": window.ID().String()}); err != nil {
-			return session, err
+			return session, windows, err
 		}
 	}
 	// A fresh session needs its client looking at a window, so the default
@@ -921,10 +936,10 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 	// pick something if focus is requested at all.
 	if focus.ID() != "" && (created || explicitFocus) {
 		if _, err := focus.Select(r.ctx); err != nil {
-			return session, err
+			return session, windows, err
 		}
 	}
-	return session, nil
+	return session, windows, nil
 }
 
 func sortedKeys(m map[string]string) []string {
