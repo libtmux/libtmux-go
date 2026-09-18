@@ -251,7 +251,7 @@ func validateWindowView(window Window) (string, error) {
 	// all-zero value (a relation accessor's discarded ok, or a created value
 	// with no relations) is reported as a missing window, not a missing
 	// session - the wrong kind sends a caller to a resolver that needs the
-	// very window id this handle also lacks (GO2-7).
+	// very window id this handle also lacks.
 	if err := validateTypedTarget(
 		"resolve-window", "WindowID", "window", window.windowID.String(),
 	); err != nil {

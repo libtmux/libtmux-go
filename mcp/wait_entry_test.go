@@ -71,8 +71,8 @@ func TestWaitForTextSeparatesAnEchoFromOutput(t *testing.T) {
 	}
 }
 
-// TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching pins
-// GO2-6/D1's live race, which an entry-baseline read alone cannot catch: the
+// TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching pins the
+// live race an entry-baseline read alone cannot catch: the
 // wait attaches before anything is typed, then this server's own send_keys
 // types a marker without Enter. The kernel's echo of those literal keys is
 // genuinely new output on the notification stream after the wait began
@@ -103,7 +103,7 @@ func TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching(t *testing.T
 	pane := panes[0]
 	tmuxtest.WaitForShellReady(ctx, t, pane)
 
-	const marker = "GO-D1-PENDING-MARKER"
+	const marker = "LIBTMUX-PENDING-MARKER"
 	waitDone := make(chan *sdk.CallToolResult, 1)
 	go func() {
 		result, _ := session.CallTool(ctx, &sdk.CallToolParams{
@@ -182,8 +182,8 @@ func TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching(t *testing.T
 	}
 }
 
-// TestWaitForTextAlreadyOnScreenDistinguishesPendingFromRealOutput pins
-// GO2-6: repeating a plain wait_for_text after Enter must not read
+// TestWaitForTextAlreadyOnScreenDistinguishesPendingFromRealOutput pins that
+// repeating a plain wait_for_text after Enter must not read
 // identically to the pre-Enter call. pendingInputOnly is the discriminator -
 // true while the marker is only this server's own unsubmitted input, false
 // once it has actually run - and entryNote explains either state in words.
@@ -213,7 +213,7 @@ func TestWaitForTextAlreadyOnScreenDistinguishesPendingFromRealOutput(t *testing
 	pane := panes[0]
 	tmuxtest.WaitForShellReady(ctx, t, pane)
 
-	const marker = "GO-D1-FLAG-MARKER"
+	const marker = "LIBTMUX-FLAG-MARKER"
 	var sent struct {
 		Sent int `json:"sent"`
 	}
@@ -258,13 +258,12 @@ func TestWaitForTextAlreadyOnScreenDistinguishesPendingFromRealOutput(t *testing
 	}
 }
 
-// TestWaitForTextResumesFromARealCursor pins GO2-6: cursor is decoded and
+// TestWaitForTextResumesFromARealCursor pins that cursor is decoded and
 // used as a resume position, the same as capture_since's own cursor,
-// instead of its string value being discarded down to a boolean "ignore the
-// baseline" trigger. A cursor taken before a command ran finds that
-// command's output immediately; the pre-fix behavior read the same call as
-// sinceEntry and timed out, because the output already happened before the
-// wait attached to watch for it live.
+// instead of its string value being discarded down to a boolean "ignore
+// the baseline" trigger. A cursor taken before a command ran finds that
+// command's output immediately, rather than timing out waiting for it to
+// happen again.
 //
 //libtmux:real-tmux
 func TestWaitForTextResumesFromARealCursor(t *testing.T) {
@@ -301,7 +300,7 @@ func TestWaitForTextResumesFromARealCursor(t *testing.T) {
 		t.Fatal("capture_since returned no cursor")
 	}
 
-	const marker = "GO-D1-CURSOR-MARKER"
+	const marker = "LIBTMUX-CURSOR-MARKER"
 	command := "echo " + marker
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command, Literal: true}); err != nil {
 		t.Fatal(err)

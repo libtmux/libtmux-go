@@ -82,7 +82,7 @@ func TestSendConfiguredMembershipReal(t *testing.T) {
 	}
 }
 
-// TestSendKeysEnterFlagSubmitsLiteralText pins GO2-4: send_keys and
+// TestSendKeysEnterFlagSubmitsLiteralText pins that send_keys and
 // send_keys_batch had no way to type text and submit it unambiguously.
 // literal:true types "Enter" as six letters (tmux's own -l semantics), so a
 // caller who put "Enter" in keys never ran the command; the enter field

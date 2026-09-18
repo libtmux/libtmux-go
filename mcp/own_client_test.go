@@ -74,7 +74,7 @@ func TestListingsLeaveOutTheServersOwnClient(t *testing.T) {
 	}
 }
 
-// GO2-10: get_server_info must report the configured socket path even before
+// get_server_info must report the configured socket path even before
 // any tmux daemon has ever started there - list_sessions's own note points
 // agents at get_server_info to find it, so it must be true with no server
 // alive as well as with one.
@@ -103,7 +103,7 @@ func TestGetServerInfoReportsSocketPathBeforeAnyServerStarts(t *testing.T) {
 	}
 }
 
-// TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon pins GO2-3 at the tool
+// TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon checks the same at the tool
 // surface: a server that is alive but holds no sessions - exactly the state
 // the zero-config default-dedicated MCP leaves a freshly pinned daemon in -
 // must answer get_server_info and let create_session bootstrap the first
@@ -158,7 +158,7 @@ func TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon(t *testing.T) {
 	}
 }
 
-// TestListingsLeaveOutEveryOwnObservationClient pins GO2-5/D2: every control
+// TestListingsLeaveOutEveryOwnObservationClient pins that every control
 // client this process owns must be left out of attached listings, not only
 // its one long-lived command connection. wait_for_text and capture_since
 // each open a separate observation client of their own while they run, and

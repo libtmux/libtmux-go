@@ -349,7 +349,7 @@ var layoutNames = map[string]bool{
 	"tiled":                    true,
 }
 
-// validLayout accepts named layouts, a unique prefix of one (GO2-1/D3: tmux's
+// validLayout accepts named layouts, a unique prefix of one (tmux's
 // own layout_set_lookup is a prefix match, so "tile" and "even-h" apply on
 // every version and can never reach the 3.3a crash an exact-match guard
 // existed to avoid), and serialized layouts containing commas; tmux

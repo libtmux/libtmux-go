@@ -67,7 +67,7 @@ func TestInvalidLayoutRefusalReadsAsHistoryNotALiveWarning(t *testing.T) {
 	}
 }
 
-// GO2-1: tmux's own layout_set_lookup is a prefix match, so "tile" and
+// tmux's own layout_set_lookup is a prefix match, so "tile" and
 // "even-h" apply on every version and can never reach layout_parse (the
 // 3.3a crash path this package's exact-match guard existed to avoid). A
 // unique prefix resolves to its preset's canonical full name - never the

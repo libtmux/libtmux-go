@@ -12,7 +12,7 @@ import (
 // current input line without a following Enter. wait_for_text uses it so a
 // match whose only occurrence is that pending line - the caller's own
 // unsubmitted input, however new the bytes look on the notification stream -
-// is never reported as output the pane produced (GO2-6/D1).
+// is never reported as output the pane produced.
 //
 // Tracking is best-effort: a key this process cannot represent as literal
 // text, and is not a recognized submit key, leaves pending unchanged rather

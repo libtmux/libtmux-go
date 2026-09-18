@@ -9,7 +9,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// TestMCPSurvivesItsTmuxServerExiting pins GO2-9/D4: an MCP process must stay
+// TestMCPSurvivesItsTmuxServerExiting pins that an MCP process must stay
 // up when its tmux server exits - the last session closing, kill-server, or a
 // first create_session that cannot reach a server. The call that hits the
 // loss reports it; the process itself keeps serving, and the next

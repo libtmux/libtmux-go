@@ -128,7 +128,7 @@ func summarizeWindow(window tmux.Window, panes int) windowSummary {
 // summarizeSession leaves every one of this server's own attached clients out
 // of the attached count: ownAttached is how many of them (the command
 // connection, a wait_for_text or capture_since observation, or several at
-// once) are attached to this exact session (GO2-5/D2).
+// once) are attached to this exact session.
 func summarizeSession(session tmux.Session, windows int, ownAttached int) sessionSummary {
 	formats := session.Formats()
 	name, _ := formats.SessionName()
@@ -146,10 +146,9 @@ func summarizeSession(session tmux.Session, windows int, ownAttached int) sessio
 }
 
 // ownClients is every control client this process currently has open: the
-// long-lived command connection, plus one per in-flight wait_for_text or
-// capture_since observation. To an agent, an attached client reads as a
-// person watching, so a listing must leave all of them out (GO2-5/D2), not
-// only the one long-lived connection GO-11 originally excluded.
+// command connection and any open wait_for_text or capture_since
+// observation. A listing must leave all of them out, or a detached
+// session reads as watched.
 type ownClients struct {
 	names      map[tmux.ClientName]struct{}
 	perSession map[tmux.SessionID]int

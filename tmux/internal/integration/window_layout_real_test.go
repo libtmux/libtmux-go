@@ -108,7 +108,7 @@ func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {
 	}
 }
 
-// TestSelectLayoutAcceptsAUniquePresetPrefix pins GO2-1/D3 against a real
+// TestSelectLayoutAcceptsAUniquePresetPrefix checks the same against a real
 // server: "tile" applies exactly like "tiled" applies, on whatever tmux is on
 // PATH, and an ambiguous prefix is refused client-side, naming its
 // candidates, without ever reaching tmux or disturbing the server.

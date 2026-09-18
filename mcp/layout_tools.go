@@ -162,7 +162,7 @@ func layoutLooksLikeJSON(layout string) bool {
 // actually accepts a given shape - that determination, including whether the
 // server is new enough for the JSON shape or a prefix's resolution is
 // version-gated or ambiguous, belongs to tmux.Window.SelectLayout, which
-// already version-gates it (GO2-1/D3: tmux's own layout_set_lookup is a
+// already version-gates it (tmux's own layout_set_lookup is a
 // prefix match, so "tile" and "even-h" apply on every version). A prefix
 // that names more than one preset is let through rather than rejected here,
 // since telling that apart correctly needs the connected version.

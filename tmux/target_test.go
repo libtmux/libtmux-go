@@ -55,12 +55,12 @@ func TestMissingTargetErrorNamesRealResolvers(t *testing.T) {
 	}
 }
 
-// GO2-7: a zero-value Window - the shape a relation accessor's discarded ok
+// a zero-value Window - the shape a relation accessor's discarded ok
 // or Server.NewSession's created-value-carries-no-relations leaves behind -
-// reports itself as a missing window, not a missing session. Checking
-// sessionID before windowID named the wrong kind and pointed a caller at
-// Window.ResolveSession, which also needs the windowID this handle lacks and
-// so reproduces the identical error.
+// must report itself as a missing window, not a missing session, so the
+// hint points a caller at Session.ResolveActiveWindow rather than at
+// Window.ResolveSession, which needs the same windowID this handle
+// lacks and so would reproduce the identical error.
 func TestMissingTargetErrorForAZeroValueWindowNamesWindow(t *testing.T) {
 	t.Parallel()
 

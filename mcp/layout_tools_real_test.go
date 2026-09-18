@@ -119,7 +119,7 @@ func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 	}
 }
 
-// TestSelectLayoutToolAcceptsAUniquePresetPrefix pins GO2-1/D3 at the MCP
+// TestSelectLayoutToolAcceptsAUniquePresetPrefix checks the same at the MCP
 // surface: select_layout's own pre-check must not reject a unique preset
 // prefix before tmux.Window.SelectLayout gets a chance to resolve it.
 //

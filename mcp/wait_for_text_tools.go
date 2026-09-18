@@ -216,7 +216,7 @@ func (t *tools) waitForText(
 	defer t.runtime.releaseObservation(observation)
 	entry := observation.Baseline()
 	// The server knows every key it sent this pane; a match confined to that
-	// unsubmitted line is not a match, however new the bytes look (GO2-6/D1).
+	// unsubmitted line is not a match, however new the bytes look.
 	// The entry check uses one snapshot, taken at this well-defined instant;
 	// the live watch below reads it fresh on every match attempt, because a
 	// wait that attaches before anything is typed must still catch a submit
@@ -335,9 +335,9 @@ func watchPane(
 	// stickyPending remembers the last nonempty pending text this watch saw,
 	// even once a submit clears it: the bytes it named can still be sitting,
 	// freshly written, exactly where they were typed, and masking has to
-	// outlive the clear or the same race reopens right after Enter
-	// (GO2-6/D1). One watch call only ever tracks one pane's one line this
-	// way, so remembering it for the rest of this call is enough.
+	// outlive the clear or the same race reopens right after Enter. One watch
+	// call only ever tracks one pane's one line this way, so remembering it
+	// for the rest of this call is enough.
 	var stickyPending string
 	consume := func(data []byte) (string, string, bool) {
 		buffer = normalizer.appendChunk(buffer, data)
@@ -459,7 +459,7 @@ func finishWait(
 // pendingAwareMatch reports the first pattern in matchers that appears in
 // text, distinguishing a genuine occurrence from one confined entirely to
 // pending: the text this server itself typed into a pane but has not
-// submitted (GO2-6/D1). realHit is true only when a match survives with
+// submitted. realHit is true only when a match survives with
 // pending's own occurrence removed - an earlier row, a repeat elsewhere, or
 // output written after a submit. pendingOnly is true when the only
 // occurrence needs that removed text to match at all.

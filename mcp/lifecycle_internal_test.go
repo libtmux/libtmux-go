@@ -146,11 +146,11 @@ func terminalFailureInstance(t testing.TB, socketName string) *Instance {
 	return instance
 }
 
-// TestTerminalToolFailureReachesCallerWithoutStoppingRun pins GO2-9/D4: a
-// terminal tmux failure inside one tool call is reported on that call, and
-// Run keeps serving - it no longer stops the whole MCP process the way it
-// used to. A later, unrelated context cancellation still stops it normally,
-// proving Run is live throughout rather than merely never having noticed.
+// TestTerminalToolFailureReachesCallerWithoutStoppingRun pins that a
+// terminal tmux failure inside one tool call is reported on that call
+// without stopping Run. A later, unrelated context cancellation still
+// stops it normally, proving Run is live throughout rather than merely
+// never having noticed.
 func TestTerminalToolFailureReachesCallerWithoutStoppingRun(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -236,11 +236,10 @@ func TestTerminalToolFailureReachesCallerWithoutStoppingRun(t *testing.T) {
 
 // terminalFailureInstanceAlreadyMarked builds on terminalFailureInstance, but
 // also marks the instance terminal at the moment the failing tool call is
-// dispatched - the way tmuxRuntime.observe used to do automatically before
-// GO2-9. That wiring is gone (a tool-level tmux failure alone must never stop
-// Run, see the test above); these two tests exercise a separate concern, that
-// a response write failure or a stuck drain still close a session that some
-// other terminal condition already marked.
+// dispatched, since a tool-level tmux failure alone must never stop Run, as
+// the test above asserts. These two tests exercise a separate concern: that
+// a response write failure or a stuck drain still closes a session that
+// some other terminal condition already marked.
 func terminalFailureInstanceAlreadyMarked(t testing.TB, socketName string) *Instance {
 	t.Helper()
 	target := mustInternalTmuxServer(t, tmux.ServerOptions{SocketName: socketName})

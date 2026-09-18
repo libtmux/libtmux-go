@@ -1028,7 +1028,7 @@ func TestAValidationFailureNamesItsLine(t *testing.T) {
 	}
 }
 
-// TestValidateAcceptsAUniquePresetPrefixForLayout pins GO2-1/D3: a unique
+// TestValidateAcceptsAUniquePresetPrefixForLayout pins that a unique
 // preset prefix such as "tile" or "even-h" is not rejected as an unknown
 // layout - tmux's own layout_set_lookup already accepts these on every
 // version, so a full exact-match guard refused values tmux itself allows.

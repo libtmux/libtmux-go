@@ -713,7 +713,7 @@ type sendKeysBatchOutput struct {
 
 // sendKeysBatch sends a sequence of keys and, when Enter is requested, a
 // separate real Enter key press after them - never appended to a Literal
-// sequence, so it submits regardless of Literal (GO2-4).
+// sequence, so it submits regardless of Literal.
 //
 // A program that reads keys rather than lines — an editor, a pager, a menu —
 // is driven by key names in order, not a line at a time; that is what lets a
@@ -793,7 +793,7 @@ func (t *tools) sendKeysBatch(
 	if input.Enter {
 		// A real key press, dispatched on its own so a Literal keys sequence
 		// never carries it: mixing them would type the word "Enter" instead
-		// of pressing it (GO2-4).
+		// of pressing it.
 		if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 			Keys: []string{"Enter"},
 		}); err != nil {

@@ -78,7 +78,7 @@ func TestRuntimeOwnsOneCommandConnection(t *testing.T) {
 	}
 }
 
-// TestObserveNeverLeavesALostConnectionCurrent guards the GO2-9 recovery path
+// TestObserveNeverLeavesALostConnectionCurrent guards the recovery path
 // itself: observe must clear commandConnection and original along with
 // marking the runtime terminal, not just close the connection in the
 // background. current() reads commandConnection first regardless of state,
@@ -602,12 +602,11 @@ func TestFailedCreationWithAnIDIsTerminal(t *testing.T) {
 	}
 }
 
-// TestRuntimeTerminalErrorsHealOnTheNextAcquisition pins GO2-9/D4: a runtime
-// a terminal error poisoned does not stay poisoned forever. The call that hit
-// the error reports it (asserted directly on observe below); the next
+// TestRuntimeTerminalErrorsHealOnTheNextAcquisition pins that a runtime
+// a terminal error poisoned does not stay poisoned forever. The call that
+// hit the error reports it (asserted directly on observe below); the next
 // acquisition heals the runtime back to unbound instead of returning the
-// stale cause on every future call, which is what used to justify exiting
-// the whole MCP process.
+// stale cause on every future call.
 func TestRuntimeTerminalErrorsHealOnTheNextAcquisition(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

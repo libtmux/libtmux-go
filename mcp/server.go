@@ -445,7 +445,7 @@ type tools struct {
 	caller       callerIdentity
 	callerCached bool
 	// pending tracks each pane's own unsubmitted input, so wait_for_text never
-	// reports a match confined to it (GO2-6/D1).
+	// reports a match confined to it.
 	pending pendingInput
 }
 

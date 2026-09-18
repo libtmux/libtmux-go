@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestWaitForLockDocumentsThePermanentWedge pins GO2-2/X2-1: a cancelled or
+// TestWaitForLockDocumentsThePermanentWedge pins that a cancelled or
 // timed-out ctx while queued for a wait-for lock permanently wedges that
 // channel for every future locker, on every supported tmux version
 // (cmd-wait-for.c cmd_wait_for_unlock hands the mutex to the next queued

@@ -10,7 +10,7 @@ import (
 // can begin waiting for owned resources. wait_for_text and capture_since each
 // open one of these per call, over and above the one long-lived command
 // connection - every one of them is this process attaching a control client
-// of its own, and a listing must leave all of them out (GO2-5/D2), not only
+// of its own, and a listing must leave all of them out, not only
 // the command connection.
 func (r *tmuxRuntime) openObservation(
 	ctx context.Context,
