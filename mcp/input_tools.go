@@ -778,13 +778,18 @@ func (t *tools) sendKeysBatch(
 		)
 	}
 	paneID := preflight.Source.ID()
+	// Recorded before dispatch, because a wait already watching this pane sees
+	// the terminal's echo of these keys the moment tmux takes them. Recording
+	// afterwards leaves a window where that echo reads as output the pane
+	// produced. Keys that never reached tmux leave pending text that was never
+	// typed, which is the direction this tracking is allowed to be wrong in.
+	t.pending.observeKeys(paneID, input.Keys, input.Literal)
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
 	}); err != nil {
 		return nil, output, fmt.Errorf("sending keys: %w", err)
 	}
 	output.Sent = len(input.Keys)
-	t.pending.observeKeys(paneID, input.Keys, input.Literal)
 	if input.Enter {
 		// A real key press, dispatched on its own so a Literal keys sequence
 		// never carries it: mixing them would type the word "Enter" instead
@@ -904,6 +909,11 @@ func (t *tools) pasteText(
 	// Deleted with the paste rather than left behind: tmux keeps buffers until
 	// something drops them, and a client pasting repeatedly would fill a
 	// person's buffer list with text they never copied.
+	if !input.Enter {
+		// Recorded before the paste for the reason sendKeys gives: the echo of
+		// this text can reach a waiting client before this line runs.
+		t.pending.append(pane.ID(), input.Text)
+	}
 	if err := t.runtime.deps.pasteBuffer(ctx, pane, tmux.PasteBufferRequest{
 		BufferName:  &name,
 		DeleteAfter: true,
@@ -914,8 +924,6 @@ func (t *tools) pasteText(
 	}
 	if input.Enter {
 		t.pending.clear(pane.ID())
-	} else {
-		t.pending.append(pane.ID(), input.Text)
 	}
 	output.Bytes = len(input.Text)
 	return nil, output, nil
