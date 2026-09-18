@@ -98,6 +98,12 @@
 // return classified errors such as [CommandError]. Check sentinels with
 // errors.Is and concrete error values with errors.As.
 //
+// A mutation reports a completed failure from what tmux wrote to stderr, not
+// from its exit status: tmux exits nonzero for a target that was already in
+// the state asked for, and saying nothing is how it says so. A command tmux
+// refused for a target it could not find matches [ErrNotFound], as does a
+// lookup that found nothing.
+//
 // Reads use a bool for legitimate absence. Materialized reads return (T, bool);
 // live reads return (T, bool, error), separating "not found" from "could not
 // ask." Collection failures are never converted to empty collections.
