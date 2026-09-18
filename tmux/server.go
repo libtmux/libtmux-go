@@ -20,6 +20,10 @@ type Server struct {
 	// requiresProcess marks exact-output and interactive operations that cannot
 	// cross a persistent control connection.
 	requiresProcess bool
+	// inheritsLocale marks an operation whose tmux output reaches the caller's
+	// own terminal rather than this package, so tmux's locale detection
+	// governs it instead of the UTF-8 commandArguments otherwise asks for.
+	inheritsLocale bool
 }
 
 type serverState struct {
@@ -193,7 +197,7 @@ func (s Server) commandArguments(args []string) []string {
 		config.socketPath,
 		config.socketName,
 	)
-	globalCount := 0
+	globalCount := 1
 	if config.colors != ColorDefault {
 		globalCount++
 	}
@@ -205,6 +209,14 @@ func (s Server) commandArguments(args []string) []string {
 	}
 
 	command := make([]string, 0, globalCount+len(args))
+	// tmux replaces every non-ASCII byte it writes to a command or control
+	// client whose locale does not name UTF-8, so a session named café reads
+	// back as caf_ with no error. Go strings are UTF-8 and the environment
+	// this package runs under is not its to choose, so it asks for UTF-8
+	// rather than inheriting whatever the locale says.
+	if !s.inheritsLocale {
+		command = append(command, "-u")
+	}
 	switch config.colors {
 	case ColorDefault:
 	case Color88:

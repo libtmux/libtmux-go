@@ -619,5 +619,5 @@ func (r *listKeysGateRunner) Run(
 func (r *listKeysGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }

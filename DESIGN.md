@@ -25,6 +25,11 @@ This document defines the architecture of the Go module.
   the Go types and public names used by generated APIs; documentation is not a
   substitute for compiler-visible type information.
 - Matching a snapshot never executes tmux.
+- Text is UTF-8. Every tmux client this package starts asks tmux for UTF-8
+  output, because tmux replaces every non-ASCII byte it writes to a command
+  or control client whose locale does not name UTF-8. Attaching is the
+  exception: its output is the caller's terminal, so the caller's locale
+  governs there.
 - Server handles and derived values are safe for concurrent method calls and
   concurrent reads. Optional warning handlers are invoked concurrently and must
   provide their own synchronization.

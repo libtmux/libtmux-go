@@ -78,6 +78,10 @@ func (s Server) Start(ctx context.Context) error {
 // The call retains caller-supplied files while attached and never owns or
 // closes them. A completed nonzero exit returns [CommandError]; cancellation
 // can end waiting but does not prove that attachment or detachment did not occur.
+//
+// Alone among this package's operations, it leaves tmux's own locale detection
+// alone, because what tmux writes here reaches the caller's terminal rather
+// than this package. See [Session.Attach] for the session-scoped form.
 func (s Server) AttachSession(ctx context.Context, request AttachSessionRequest) error {
 	values, err := captureAttachSessionRequest(request.Target, request.AttachSessionOptions)
 	if err != nil {
@@ -90,7 +94,8 @@ func (s Server) AttachSession(ctx context.Context, request AttachSessionRequest)
 // and blocks until detach or context cancellation. It validates the receiver's
 // stable SessionID, retains but never closes caller-supplied streams, and
 // returns [CommandError] for a completed nonzero exit. Cancellation does not
-// prove attachment or detachment did not occur.
+// prove attachment or detachment did not occur. It leaves tmux's own locale
+// detection alone for the reason [Server.AttachSession] gives.
 func (s Session) Attach(ctx context.Context, options AttachSessionOptions) error {
 	target := s.sessionID.String()
 	if err := validateTypedTarget(
@@ -128,7 +133,7 @@ func (s Server) attachSession(ctx context.Context, values attachSessionValues) e
 	if values.target != "" {
 		arguments = append(arguments, "-t", values.target)
 	}
-	result, err := s.streamingLiteralCmd(
+	result, err := s.inheritLocale().streamingLiteralCmd(
 		ctx,
 		tmuxcmd.Stdio{Stdin: values.stdin, Stdout: values.stdout, Stderr: values.stderr},
 		arguments...,

@@ -1754,7 +1754,7 @@ func (r *mutatingSparseOptionRunner) Run(_ context.Context, request tmuxcmd.Requ
 }
 
 func (r *mutatingSparseOptionRunner) recordedRequests() []tmuxcmd.Request {
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }
 
 func TestTypedChoiceSetterRejectsValuesWithoutDisclosureOrExecution(t *testing.T) {

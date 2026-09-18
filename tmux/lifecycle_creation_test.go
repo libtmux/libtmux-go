@@ -978,5 +978,5 @@ func (r *lifecycleProbeGateRunner) Run(
 func (r *lifecycleProbeGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]tmuxcmd.Request(nil), r.requests...)
+	return withoutGlobalFlags(r.requests)
 }

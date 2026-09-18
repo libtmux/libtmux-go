@@ -125,8 +125,8 @@ func TestDisplayMessageBuildsExactArgumentsByScope(t *testing.T) {
 			if len(requests) != 2 {
 				t.Fatalf("runner requests = %#v, want one version and one display", requests)
 			}
-			assertDisplayArguments(t, requests[0], []string{"-V"})
-			assertDisplayArguments(t, requests[1], test.want)
+			assertRequestArguments(t, requests[0], []string{"-V"})
+			assertRequestArguments(t, requests[1], test.want)
 		})
 	}
 }
@@ -167,8 +167,8 @@ func TestPaneDisplayMessageAddsUpdateFlagInPythonOrder(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("runner requests = %#v, want one version and one display", requests)
 	}
-	assertDisplayArguments(t, requests[0], []string{"-V"})
-	assertDisplayArguments(t, requests[1], []string{
+	assertRequestArguments(t, requests[0], []string{"-V"})
+	assertRequestArguments(t, requests[1], []string{
 		"display-message", "-t", "$1:0.%3", "-p", "-a", "-v", "-l", "-N", "-C",
 		"-c", "client", "-d", "0", "-F", "#{pane_id}", "value",
 	})
@@ -229,7 +229,7 @@ func TestDisplayMessageZeroRequestUsesScopeAndReturnsNil(t *testing.T) {
 			if len(requests) != 1 {
 				t.Fatalf("runner requests = %#v, want one display", requests)
 			}
-			assertDisplayArguments(t, requests[0], test.want)
+			assertRequestArguments(t, requests[0], test.want)
 		})
 	}
 }
@@ -258,7 +258,7 @@ func TestDisplayMessageDelayPreservesOmissionAndMilliseconds(t *testing.T) {
 			if len(requests) != 1 {
 				t.Fatalf("runner requests = %#v, want one display", requests)
 			}
-			assertDisplayArguments(t, requests[0], test.want)
+			assertRequestArguments(t, requests[0], test.want)
 		})
 	}
 }
@@ -306,7 +306,7 @@ func TestDisplayMessageTreatsLeadingDashMessageAsData(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("runner requests = %#v, want one display command", requests)
 	}
-	assertDisplayArguments(
+	assertRequestArguments(
 		t,
 		requests[0],
 		[]string{"display-message", "-p", "--", "-literal"},
@@ -429,8 +429,8 @@ func TestDisplayMessageVersionBoundariesWarnAndOmitUnsupportedFlags(t *testing.T
 			if len(requests) != 2 {
 				t.Fatalf("runner requests = %#v, want one version and one display", requests)
 			}
-			assertDisplayArguments(t, requests[0], []string{"-V"})
-			assertDisplayArguments(t, requests[1], test.wantArgs)
+			assertRequestArguments(t, requests[0], []string{"-V"})
+			assertRequestArguments(t, requests[1], test.wantArgs)
 			if len(warnings) != len(test.wantFeatures) {
 				t.Fatalf("warnings = %#v, want features %#v", warnings, test.wantFeatures)
 			}
@@ -712,7 +712,7 @@ func TestDisplayMessageCapturesPointerFieldsBeforeVersionProbe(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("runner requests = %#v, want version and display", requests)
 	}
-	assertDisplayArguments(t, requests[1], []string{
+	assertRequestArguments(t, requests[1], []string{
 		"display-message", "-p", "-l", "-c", "before-client", "-d", "25",
 		"-F", "before-format", "before-message",
 	})
@@ -761,7 +761,7 @@ func (r *displayQueueRunner) callCount() int {
 func (r *displayQueueRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }
 
 func displayServerWithRunner(runner commandRunner) Server {
@@ -769,13 +769,6 @@ func displayServerWithRunner(runner commandRunner) Server {
 		ServerOptions{Unsupported: DegradeUnsupported},
 		runner,
 	)
-}
-
-func assertDisplayArguments(t *testing.T, request tmuxcmd.Request, want []string) {
-	t.Helper()
-	if !slices.Equal(request.Arguments, want) {
-		t.Fatalf("runner arguments = %#v, want %#v", request.Arguments, want)
-	}
 }
 
 func newDisplayVersionGateRunner() *displayVersionGateRunner {
@@ -804,5 +797,5 @@ func (r *displayVersionGateRunner) Run(
 func (r *displayVersionGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }

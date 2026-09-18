@@ -1550,6 +1550,27 @@ func assertLifecycleArguments(t *testing.T, runner *versionQueueRunner, want []s
 	assertRequestArguments(t, requests[0], want)
 }
 
+// defaultGlobalArguments is what commandArguments prepends for a server built
+// from zero ServerOptions. TestServerBuildsTmuxGlobalArguments pins it, and
+// TestCommandArgumentsRequestUTF8ExceptWhenAttaching pins when it is absent.
+var defaultGlobalArguments = []string{"-u"}
+
+// withoutGlobalFlags drops the leading global arguments so a recorded request
+// reads as the subcommand the test is about. Every recorder returns its
+// requests through this.
+func withoutGlobalFlags(requests []tmuxcmd.Request) []tmuxcmd.Request {
+	stripped := slices.Clone(requests)
+	for index, request := range stripped {
+		if len(request.Arguments) == 0 ||
+			request.Arguments[0] != defaultGlobalArguments[0] {
+			continue
+		}
+		request.Arguments = slices.Clone(request.Arguments[1:])
+		stripped[index] = request
+	}
+	return stripped
+}
+
 func assertRequestArguments(t *testing.T, request tmuxcmd.Request, want []string) {
 	t.Helper()
 	if !slices.Equal(request.Arguments, want) {

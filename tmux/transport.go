@@ -23,6 +23,13 @@ func (s Server) requireProcess() Server {
 	return s
 }
 
+// inheritLocale marks an operation whose tmux output goes to the caller's own
+// terminal, where the caller's locale governs rather than this package's.
+func (s Server) inheritLocale() Server {
+	s.inheritsLocale = true
+	return s
+}
+
 func (s Server) boundToInstance() bool { return s.connection != nil }
 
 // runCommand adds client-global selectors unless an owned connection already

@@ -129,9 +129,10 @@ func TestEnvironmentOperationsBuildScopeSpecificArguments(t *testing.T) {
 				t.Fatalf("environment operation error = %v", err)
 			}
 			requests := runner.recordedRequests()
-			if len(requests) != 1 || !slices.Equal(requests[0].Arguments, test.want) {
-				t.Fatalf("environment arguments = %#v, want %#v", requests, test.want)
+			if len(requests) != 1 {
+				t.Fatalf("environment requests = %#v, want one", requests)
 			}
+			assertRequestArguments(t, requests[0], test.want)
 		})
 	}
 }

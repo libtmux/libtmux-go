@@ -559,7 +559,7 @@ func (r *captureQueueRunner) callCount() int {
 func (r *captureQueueRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }
 
 // newCaptureTestPane builds a pane on a server that omits a capability the

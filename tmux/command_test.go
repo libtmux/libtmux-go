@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"slices"
@@ -100,6 +101,7 @@ func TestServerBuildsTmuxGlobalArguments(t *testing.T) {
 	})
 	got := server.commandArguments([]string{"list-sessions", "-F", "#{session_id}"})
 	want := []string{
+		"-u",
 		"-2",
 		"-f/tmp/libtmux.conf",
 		"-S/tmp/libtmux.sock",
@@ -107,6 +109,30 @@ func TestServerBuildsTmuxGlobalArguments(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("commandArguments() = %#v, want %#v", got, want)
+	}
+	if !slices.Equal(defaultGlobalArguments, []string{"-u"}) {
+		t.Fatalf("defaultGlobalArguments = %#v, want %#v",
+			defaultGlobalArguments, []string{"-u"})
+	}
+}
+
+// tmux replaces every non-ASCII byte it writes to a command or control client
+// whose locale does not name UTF-8, so this package asks for UTF-8 on every
+// command it reads back itself. Attaching writes to the caller's terminal,
+// where the caller's locale governs, and is the one operation that does not.
+func TestCommandArgumentsRequestUTF8ExceptWhenAttaching(t *testing.T) {
+	t.Parallel()
+
+	server := mustNewServer(ServerOptions{})
+	if got := server.commandArguments([]string{"list-sessions"}); !slices.Equal(
+		got, []string{"-u", "list-sessions"},
+	) {
+		t.Fatalf("commandArguments() = %#v, want -u first", got)
+	}
+	if got := server.inheritLocale().commandArguments(
+		[]string{"attach-session"},
+	); !slices.Equal(got, []string{"attach-session"}) {
+		t.Fatalf("inheritLocale().commandArguments() = %#v, want no -u", got)
 	}
 }
 
@@ -457,6 +483,11 @@ func assertExitOnlyCommandErrorRedacts(
 	}
 	assertErrorGraphRedacts(t, err, secret)
 }
+
+// Tests that point ServerOptions.Binary at this test binary run it as a fake
+// tmux, so it has to accept the global flags a real tmux does. Registering -u
+// is how a Go test binary tolerates one; the helper reads os.Args itself.
+func init() { flag.Bool("u", false, "accepted like tmux's own UTF-8 flag") }
 
 func TestServerCommandHelperProcess(t *testing.T) {
 	separator := slices.Index(os.Args, "--")
