@@ -464,16 +464,17 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			}
 		}
 	}
+	if r.ctx.Err() != nil {
+		failures = append(failures, map[string]any{"code": "interrupted", "message": "operation interrupted", "stage": "load"})
+	}
+	// error and retained effects are contradictory: error is the status that
+	// says nothing survived, so anything left on the server is partial.
 	status := "ok"
 	if len(failures) > 0 {
 		status = "partial"
-		if len(failures) == len(results) {
+		if !retainedEffects {
 			status = "error"
 		}
-	}
-	if r.ctx.Err() != nil {
-		status = "partial"
-		failures = append(failures, map[string]any{"code": "interrupted", "message": "operation interrupted", "stage": "load"})
 	}
 	summary["status"], summary["errors"] = status, failures
 	r.loadResult = summary
@@ -629,7 +630,30 @@ func windowIndexTaken(ctx context.Context, server tmux.Server, session tmux.Sess
 	return false, nil
 }
 
+// build creates or extends a session and, when it created one, removes it
+// again on failure: a load only reports that nothing was retained when
+// nothing was, and a half-built session left on the server turns the next run
+// of the same document into a reuse that reports success.
 func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, error) {
+	created := session.ID() == ""
+	session, err := r.buildInto(server, session, plan, inputIndex)
+	if err == nil || !created || session.ID() == "" {
+		return session, err
+	}
+	var removed *removedSessionError
+	if errors.As(err, &removed) {
+		return session, err
+	}
+	cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	killErr := session.Kill(cleanup)
+	cancel()
+	if killErr != nil {
+		return session, errors.Join(err, killErr)
+	}
+	return session, &removedSessionError{err}
+}
+
+func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan loadPlan, inputIndex int) (tmux.Session, error) {
 	created := session.ID() == ""
 	if !created {
 		if _, err := session.Refresh(r.ctx); err != nil {
@@ -675,16 +699,6 @@ func (r *invocation) build(server tmux.Server, session tmux.Session, plan loadPl
 			err = &failure{"script_failed", message, 1}
 		}
 		if err != nil {
-			if created {
-				cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-				killErr := session.Kill(cleanup)
-				cancel()
-				if killErr != nil {
-					err = errors.Join(err, killErr)
-				} else {
-					err = &removedSessionError{err}
-				}
-			}
 			return session, errors.Join(err, eventErr)
 		}
 		if eventErr != nil {
