@@ -1,6 +1,30 @@
 // Package workspace loads and builds the supported subset of tmuxp YAML.
 // Unknown fields are rejected. Python-dependent plugins and before_script are
 // unsupported.
+//
+// # Two implementations
+//
+// This package and the tmux-workspace command are separate implementations,
+// and they read different document languages: a file one accepts is not
+// always a file the other accepts.
+//
+// The command is the tmuxp-compatible one. It expands $VAR inside
+// start_directory, accepts description metadata and keys beginning with x- at
+// every level, runs before_script, loads plugins and a custom
+// workspace_builder through tmuxp, reads workspace_builder_options, and waits
+// for each pane's prompt before typing into it. This package does none of
+// those.
+//
+// In exchange, this package reports every problem in a document at once, each
+// with the line it is on. The command reports one problem per window, also
+// with its line, but a document-level refusal -- an empty windows list, an
+// unusable session_name -- still stops at the first, because there is
+// nothing to carry on into. It also leaves a missing start_directory to the
+// caller through [Workspace.MissingDirectories], where the command warns
+// during a load.
+//
+// Automation that has to follow tmuxp belongs on the command and its JSON
+// output. This package builds the subset documented here from Go.
 package workspace
 
 import (
@@ -12,6 +36,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,8 +64,8 @@ type Workspace struct {
 	// and pane entries add to this list rather than replacing it.
 	CommandsBefore []Command `yaml:"-"`
 	// SuppressHistory prefixes commands with a space unless a window or pane
-	// overrides it.
-	SuppressHistory Bool `yaml:"suppress_history"`
+	// overrides it. Nil suppresses history, matching tmuxp.
+	SuppressHistory *Bool `yaml:"suppress_history"`
 	// Windows are created in order. A workspace needs at least one.
 	Windows []Window `yaml:"windows"`
 }
@@ -309,10 +334,10 @@ func windowProblems(index int, window Window) []error {
 			"%w: %swindow %d (%q) has a negative window_index",
 			ErrInvalidWorkspace, where, index, window.Name))
 	}
-	if window.Layout != "" && !validLayout(window.Layout) {
+	if err := (tmux.SelectLayoutRequest{Layout: window.Layout}).Validate(); err != nil {
 		problems = append(problems, fmt.Errorf(
-			"%w: %swindow %d (%q) has an unknown layout %q",
-			ErrInvalidWorkspace, where, index, window.Name, window.Layout))
+			"%w: %swindow %d (%q) has an invalid layout: %w",
+			ErrInvalidWorkspace, where, index, window.Name, err))
 	}
 	if window.Shell != "" && len(window.Panes) > 0 && window.Panes[0].Shell != "" {
 		problems = append(problems, fmt.Errorf(
@@ -335,24 +360,6 @@ func windowPosition(window Window) string {
 		return ""
 	}
 	return "line " + strconv.Itoa(window.line) + ": "
-}
-
-// layoutNames includes layouts newer than the support floor. tmux remains the
-// authority for availability on the running version.
-var layoutNames = map[string]bool{
-	"even-horizontal":          true,
-	"even-vertical":            true,
-	"main-horizontal":          true,
-	"main-horizontal-mirrored": true,
-	"main-vertical":            true,
-	"main-vertical-mirrored":   true,
-	"tiled":                    true,
-}
-
-// validLayout accepts named layouts and serialized layouts containing commas;
-// tmux validates serialized layout syntax.
-func validLayout(layout string) bool {
-	return strings.Contains(layout, ",") || layoutNames[layout]
 }
 
 // nested adds the sentinel and source line once.

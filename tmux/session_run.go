@@ -466,22 +466,32 @@ func (r *Running) StreamTo(
 }
 
 // Kill asks the tmux server to send SIGKILL to the process group running the
-// command. It does not wait for the process to stop; call Wait to observe the
-// resulting status or signal.
+// command. The request runs through a backgrounded [Server.RunShell], so Kill
+// returns once tmux has accepted it, not once it has run: there is a short
+// window, bounded by the server's own scheduling rather than by anything Kill
+// waits on, in which the process has not yet received the signal. A
+// foreground run-shell would close that window before returning, but only by
+// holding the client until tmux has forked, run, and reaped the job, and
+// under load that wait -- irrelevant to whether the signal went out -- can
+// turn an instant call into a multi-second one.
 //
-// Kill runs through [Server.RunShell] with the pane as its target, so tmux
-// resolves the process group id itself, at the moment it runs, on whatever
-// host the server is on, rather than trusting a process id this program read
-// earlier. A pane that no longer exists makes that id resolve empty and Kill
-// a no-op; Kill reports only whether tmux could dispatch the request, not
-// whether a process still existed to receive it.
+// Kill's return says only that tmux queued the request, never that the kill
+// itself succeeded: the command always exits zero, so a failure such as a pid
+// already gone or permission refused was already unobservable through Kill
+// before backgrounding, and stays that way. Call Wait, which already
+// tolerates a signal that has not landed yet with its own liveness check, to
+// observe the resulting status or signal -- that, not Kill's return, is the
+// actual proof the process died.
+//
+// Kill resolves the process group id itself, at the moment the job runs, on
+// whatever host the server is on, rather than trusting a process id this
+// program read earlier. A pane that no longer exists makes that id resolve
+// empty and Kill a no-op.
 func (r *Running) Kill(ctx context.Context) error {
 	if _, err := r.session.server.RunShell(ctx, RunShellRequest{
 		TargetPane: r.pane.ID(),
-		// Nothing to kill is not a failure, and from tmux 3.5 a run-shell
-		// command that exits nonzero is reported to the caller, so a pane that
-		// has gone must leave this exiting zero rather than complaining.
-		Command: "[ -n \"#{pane_pid}\" ] && kill -s KILL -- -#{pane_pid} 2>/dev/null; true",
+		Command:    "[ -n \"#{pane_pid}\" ] && kill -s KILL -- -#{pane_pid} 2>/dev/null; true",
+		Background: true, // dispatch only; see the doc comment for what that changes
 	}); err != nil {
 		return fmt.Errorf("kill command: %w", err)
 	}

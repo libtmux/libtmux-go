@@ -184,7 +184,7 @@ func TestWindowLayoutAndResizeAgainstRealTmux(t *testing.T) {
 	// A layout string tmux cannot apply still reaches tmux and is refused
 	// there, which is the shape this package cannot check for the caller.
 	if err := window.SelectLayout(
-		ctx, tmux.SelectLayoutRequest{Layout: "bb62,80x24,0,0,0"},
+		ctx, tmux.SelectLayoutRequest{Layout: "b25d,80x24,0,0,0"},
 	); !errors.Is(err, tmux.ErrCommand) {
 		t.Fatalf("SelectLayout(unapplicable layout string) error = %v, want ErrCommand", err)
 	}

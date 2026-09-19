@@ -1,0 +1,197 @@
+[
+  {
+    "id": "even-horizontal",
+    "layout": "even-horizontal",
+    "cells": 0
+  },
+  {
+    "id": "even-vertical",
+    "layout": "even-vertical",
+    "cells": 0
+  },
+  {
+    "id": "main-horizontal",
+    "layout": "main-horizontal",
+    "cells": 0
+  },
+  {
+    "id": "main-vertical",
+    "layout": "main-vertical",
+    "cells": 0
+  },
+  {
+    "id": "tiled",
+    "layout": "tiled",
+    "cells": 0
+  },
+  {
+    "id": "main-horizontal-mirrored",
+    "layout": "main-horizontal-mirrored",
+    "cells": 0
+  },
+  {
+    "id": "main-vertical-mirrored",
+    "layout": "main-vertical-mirrored",
+    "cells": 0
+  },
+  {
+    "id": "t",
+    "layout": "t",
+    "cells": 0
+  },
+  {
+    "id": "even-h",
+    "layout": "even-h",
+    "cells": 0
+  },
+  {
+    "id": "main-h",
+    "layout": "main-h",
+    "cells": 0
+  },
+  {
+    "id": "invalid-layout",
+    "layout": "invalid-layout",
+    "cells": 0
+  },
+  {
+    "id": "f",
+    "layout": "f",
+    "cells": 0
+  },
+  {
+    "id": "dead,",
+    "layout": "dead,",
+    "cells": 0
+  },
+  {
+    "id": "not-a-layout",
+    "layout": "not-a-layout",
+    "cells": 0
+  },
+  {
+    "id": "leaf-with-id",
+    "layout": "b25d,80x24,0,0,0",
+    "cells": 1
+  },
+  {
+    "id": "leaf-without-id",
+    "layout": "c85e,80x24,0,0",
+    "cells": 1
+  },
+  {
+    "id": "two-with-ids",
+    "layout": "89f5,80x24,0,0{39x24,0,0,0,40x24,40,0,1}",
+    "cells": 2
+  },
+  {
+    "id": "two-without-ids",
+    "layout": "203f,80x24,0,0{39x24,0,0,40x24,40,0}",
+    "cells": 2
+  },
+  {
+    "id": "nested",
+    "layout": "ac5c,80x24,0,0{39x24,0,0,0,40x24,40,0[40x11,40,0,1,40x12,40,12,2]}",
+    "cells": 3
+  },
+  {
+    "id": "short-root-geometry",
+    "layout": "8a08,1x1,0,0{39x24,0,0,0,40x24,40,0,1}",
+    "cells": 2
+  },
+  {
+    "id": "truncated-tree",
+    "layout": "12f1,80x24,0,0{39x24,0,0,0,40x24,40,0,1",
+    "cells": 0
+  },
+  {
+    "id": "mismatched-tree",
+    "layout": "89d5,80x24,0,0{39x24,0,0,0,40x24,40,0,1]",
+    "cells": 0
+  },
+  {
+    "id": "empty-tree",
+    "layout": "32d2,80x24,0,0{}",
+    "cells": 0
+  },
+  {
+    "id": "non-cell",
+    "layout": "c4c8,garbage",
+    "cells": 0
+  },
+  {
+    "id": "too-few-cells",
+    "layout": "b25d,80x24,0,0,0",
+    "cells": 1
+  },
+  {
+    "id": "bad-inner-size",
+    "layout": "79f5,80x24,0,0{39x23,0,0,0,40x24,40,0,1}",
+    "cells": 2
+  },
+  {
+    "id": "bad-checksum",
+    "layout": "ffff,80x24,0,0,0",
+    "cells": 0
+  },
+  {
+    "id": "e",
+    "layout": "e",
+    "cells": 0
+  },
+  {
+    "id": "main-",
+    "layout": "main-",
+    "cells": 0
+  },
+  {
+    "id": "main-v",
+    "layout": "main-v",
+    "cells": 0
+  },
+  {
+    "id": "even-vertical-extra",
+    "layout": "even-vertical-extra",
+    "cells": 0
+  },
+  {
+    "id": "nested-trim-one",
+    "layout": "ac5c,80x24,0,0{39x24,0,0,0,40x24,40,0[40x11,40,0,1,40x12,40,12,2]}",
+    "cells": 3
+  },
+  {
+    "id": "nested-trim-two",
+    "layout": "ac5c,80x24,0,0{39x24,0,0,0,40x24,40,0[40x11,40,0,1,40x12,40,12,2]}",
+    "cells": 3
+  },
+  {
+    "id": "nested-invalid-width",
+    "layout": "ae7c,80x24,0,0{39x24,0,0,0,40x24,40,0[39x11,40,0,1,40x12,40,12,2]}",
+    "cells": 3
+  },
+  {
+    "id": "nested-short-parent",
+    "layout": "b33f,80x24,0,0{39x24,0,0,0,1x1,40,0[40x11,40,0,1,40x12,40,12,2]}",
+    "cells": 3
+  },
+  {
+    "id": "trailing-data",
+    "layout": "5bf2,80x24,0,0,0junk",
+    "cells": 0
+  },
+  {
+    "id": "wrong-delimiter",
+    "layout": "925f,80x24,0;0,0",
+    "cells": 0
+  },
+  {
+    "id": "empty-nested-tree",
+    "layout": "4a17,80x24,0,0{39x24,0,0,0,40x24,40,0[]}",
+    "cells": 0
+  },
+  {
+    "id": "bad-inner-size-trimmed",
+    "layout": "79f5,80x24,0,0{39x23,0,0,0,40x24,40,0,1}",
+    "cells": 2
+  }
+]

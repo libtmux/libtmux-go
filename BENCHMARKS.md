@@ -282,3 +282,22 @@ produce the same successful results and differ only in invocations;
 sequence with little to overlap, so the row moves with machine load. The stable
 change is `clients`: every lane is one attached tmux client. Add lanes for
 parallel readers, not for a serial workload.
+
+## What parsing a workspace document costs
+
+No tmux and no disk: decoding YAML into the document map and normalizing it
+into a build plan, on a fixed six-window, three-pane-each document.
+
+```console
+$ go test ./workspace/internal/cli/ -run '^$' -bench 'BenchmarkDecodeDocument|BenchmarkNormalize' -benchmem
+```
+
+| Call | Cost |
+| --- | ---: |
+| `decodeDocument` | 69,629 B/op, 1,260 allocs |
+| `normalizeSource` | 15,272 B/op, 401 allocs |
+
+Recorded on the machine named above, go1.26.5. Watch allocations, not wall
+time, for the reason given above; `decodeDocument` costs more than
+`normalizeSource` because it walks the YAML node tree twice, once to decode
+into the document map and once to record source lines.

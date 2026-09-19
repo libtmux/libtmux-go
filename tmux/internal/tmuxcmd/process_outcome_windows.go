@@ -22,3 +22,7 @@ func processResultExitCode(state *os.ProcessState, outcome processOutcome) int {
 	}
 	return state.ExitCode()
 }
+
+func cancelAttachedProcess(process *os.Process) error {
+	return process.Kill()
+}
