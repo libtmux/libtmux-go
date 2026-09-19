@@ -78,7 +78,11 @@ func TestParseControlNotificationAgainstRealTmux(t *testing.T) {
 //libtmux:real-tmux
 func TestNotificationStreamZeroOptionsRetainsStructureWithoutPaneOutput(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// A ceiling rather than a delay: every wait below ends as soon as its
+	// condition holds. One tight enough to be exceeded on a loaded machine
+	// fails a test with nothing wrong with it, which this one did about once
+	// in five whole-module runs.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {

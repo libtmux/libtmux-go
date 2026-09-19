@@ -2081,7 +2081,7 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 	var pending pendingInput
 	panes := []string{"%7", "%8"}
 
-	text, submits := willType([]string{"rm -rf build"}, true)
+	text, _, submits := willType([]string{"rm -rf build"}, true)
 	if submits {
 		t.Fatal("literal text must not read as a submit")
 	}
@@ -2099,7 +2099,7 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 	}
 
 	// A submit whose dispatch fails must not clear the line.
-	_, submits = willType([]string{"Enter"}, false)
+	_, _, submits = willType([]string{"Enter"}, false)
 	if !submits {
 		t.Fatal("Enter must read as a submit")
 	}
@@ -2111,5 +2111,53 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 		if got := pending.snapshot(tmux.PaneID(pane)); got != "" {
 			t.Errorf("pending on %s = %q after submitting, want nothing", pane, got)
 		}
+	}
+}
+
+// tmux types a key named by one printable character as that character, so a
+// non-literal sequence puts text on the line just as a literal one does.
+// Masking only the literal form let wait_for_text read the caller's own
+// keystrokes as output the pane produced.
+func TestWillTypeModelsNonLiteralKeys(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		keys        []string
+		literal     bool
+		text        string
+		afterSubmit string
+		submits     bool
+	}{
+		{name: "literal text", keys: []string{"ls -al"}, literal: true, text: "ls -al"},
+		{name: "characters", keys: []string{"h", "i"}, text: "hi"},
+		{name: "named space", keys: []string{"h", "Space", "i"}, text: "h i"},
+		{
+			name: "submitted", keys: []string{"h", "i", "Enter"},
+			text: "hi", submits: true,
+		},
+		{
+			// Everything past the submit is a new line, still unsubmitted.
+			name: "typed past a submit", keys: []string{"h", "Enter", "i", "j"},
+			text: "hij", afterSubmit: "ij", submits: true,
+		},
+		{
+			// A key this cannot render leaves the rest alone rather than
+			// guessing, which over-masks.
+			name: "unrenderable key", keys: []string{"a", "C-a", "b"}, text: "ab",
+		},
+		{name: "cursor move only", keys: []string{"Up"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			text, afterSubmit, submits := willType(test.keys, test.literal)
+			if text != test.text || afterSubmit != test.afterSubmit || submits != test.submits {
+				t.Errorf("willType(%#v, %t) = (%q, %q, %t), want (%q, %q, %t)",
+					test.keys, test.literal, text, afterSubmit, submits,
+					test.text, test.afterSubmit, test.submits)
+			}
+		})
 	}
 }

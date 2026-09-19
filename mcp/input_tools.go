@@ -781,7 +781,7 @@ func (t *tools) sendKeysBatch(
 	// linked set rather than the one named: a wait on a sibling sees the same
 	// echo and needs the same masking.
 	typed := preflight.ConfiguredIDs
-	text, submits := willType(input.Keys, input.Literal)
+	text, afterSubmit, submits := willType(input.Keys, input.Literal)
 	restore := t.pending.record(typed, text)
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
@@ -795,6 +795,9 @@ func (t *tools) sendKeysBatch(
 	// output the pane produced.
 	if submits {
 		t.pending.clearAll(typed)
+		// Whatever the sequence typed past its last submit is a new line, and
+		// that line is unsubmitted.
+		t.pending.record(typed, afterSubmit)
 	}
 	output.Sent = len(input.Keys)
 	if input.Enter {

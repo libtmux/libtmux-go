@@ -2,7 +2,11 @@ package tmux
 
 import (
 	"context"
+	"errors"
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -154,5 +158,115 @@ func TestSettleLimitIsReadOnceRatherThanEachPass(t *testing.T) {
 	if settledOnce < deadline-time.Second {
 		t.Errorf("settled for %v of a %v deadline, want nearly all of it",
 			settledOnce, deadline)
+	}
+}
+
+// deadPaneRunner answers every listing with one pane tmux calls dead and has
+// not recorded an outcome for, and never signals the wait-for channel. It is
+// the state waitForExit settles through.
+type deadPaneRunner struct {
+	version Version
+	mu      sync.Mutex
+	settles int
+}
+
+func (r *deadPaneRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		r.mu.Lock()
+		r.settles++
+		r.mu.Unlock()
+		fields, err := formatFieldsFor("list-panes", r.version)
+		if err != nil {
+			return tmuxcmd.Result{}, err
+		}
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(fields, snapshotRowValues(
+			r.version, map[string]string{
+				"session_id": "$1", "window_id": "@1", "window_index": "0",
+				"pane_id": "%1", "pane_index": "0", "pane_dead": "1",
+			},
+		))}, nil
+	case slices.Contains(request.Arguments, "wait-for"):
+		<-ctx.Done()
+		return tmuxcmd.Result{ExitCode: -1}, ctx.Err()
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// waitForExit reads its settle limit once. Reading it each pass shrinks it by
+// the same step the settled total grows by, so the wait ends at half the time
+// the caller allowed - which is what this drives the real loop to catch.
+func TestWaitForExitReadsItsSettleLimitOnce(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &deadPaneRunner{version: version}
+	server := serverWithRunner(runner)
+
+	var asked atomic.Int32
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		pane: Pane{
+			server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+		},
+		channel: "settle",
+		settle: func(context.Context) time.Duration {
+			asked.Add(1)
+			return 3 * outcomeSettleDelay
+		},
+	}
+
+	err := running.waitForExit(context.Background())
+	if !errors.Is(err, ErrOutcomeUnrecorded) {
+		t.Fatalf("waitForExit() error = %v, want ErrOutcomeUnrecorded", err)
+	}
+	if got := asked.Load(); got != 1 {
+		t.Errorf("settle limit read %d times, want once: reading it per pass "+
+			"is what halves the caller's deadline", got)
+	}
+}
+
+// The settle poll backs off. A caller who allowed minutes should not spend
+// them listing panes fifty times a second while tmux catches up.
+func TestSettlePollBacksOff(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &deadPaneRunner{version: version}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		pane: Pane{
+			server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+		},
+		channel: "settle",
+		settle:  func(context.Context) time.Duration { return 500 * time.Millisecond },
+	}
+
+	started := time.Now()
+	if err := running.waitForExit(context.Background()); !errors.Is(err, ErrOutcomeUnrecorded) {
+		t.Fatalf("waitForExit() error = %v, want ErrOutcomeUnrecorded", err)
+	}
+	elapsed := time.Since(started)
+
+	runner.mu.Lock()
+	settles := runner.settles
+	runner.mu.Unlock()
+	// Flat 20ms polling over half a second would be twenty-five listings.
+	if settles > 10 {
+		t.Errorf("settled with %d listings in %v, want a backing-off handful",
+			settles, elapsed)
+	}
+	if settles < 2 {
+		t.Errorf("settled with %d listings, want it to keep asking", settles)
 	}
 }

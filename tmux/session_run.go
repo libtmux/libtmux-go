@@ -199,6 +199,10 @@ type Running struct {
 	fixedNotice   bool
 	keep          bool
 	installedPipe bool
+	// settle answers how long to let tmux catch up before reporting that it
+	// never recorded an outcome. Nil uses settleLimit; a test supplies one to
+	// drive waitForExit without waiting out a real deadline.
+	settle func(context.Context) time.Duration
 
 	mu     sync.Mutex
 	done   bool
@@ -281,6 +285,9 @@ const (
 	outcomeSettleDelay = 20 * time.Millisecond
 	outcomeReapDelay   = 200 * time.Millisecond
 	outcomeSettleLimit = 5 * time.Second
+	// maximumSettleDelay caps the backoff, so a wait bounded by a long
+	// deadline still asks often enough to answer soon after tmux catches up.
+	maximumSettleDelay = time.Second
 )
 
 // signalHandoverDelay is how long the liveness check waits for tmux's own
@@ -306,7 +313,7 @@ func (r *Running) waitForExit(ctx context.Context) error {
 	// Read once. Recomputing it each pass would compare a limit shrinking with
 	// the deadline against a total growing toward it, and the two would meet
 	// at half the time the caller allowed.
-	limit := settleLimit(ctx)
+	limit := r.settleFor(ctx)
 	delay := initialLivenessDelay
 	var settling time.Duration
 	var asked bool
@@ -340,9 +347,12 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			// tmux closes a pane's terminal before it reaps the command,
 			// and reports pane_dead from that closed descriptor alone, so
 			// reading the outcome now would call a command that exited 7 a
-			// command that exited 0. Wait for tmux to catch up.
-			settling += outcomeSettleDelay
-			delay = outcomeSettleDelay
+			// command that exited 0. Wait for tmux to catch up, asking less
+			// often the longer it takes: tmux normally needs one or two of
+			// these, and a caller who allowed minutes should not spend them
+			// listing panes fifty times a second.
+			settling += delay
+			delay = min(max(delay*2, outcomeSettleDelay), maximumSettleDelay)
 			continue
 		}
 		delay = min(delay*2, maximumLivenessDelay)
@@ -360,6 +370,14 @@ func settleLimit(ctx context.Context) time.Duration {
 		return outcomeSettleLimit
 	}
 	return max(outcomeSettleLimit, time.Until(deadline))
+}
+
+// settleFor answers this run's settle limit.
+func (r *Running) settleFor(ctx context.Context) time.Duration {
+	if r.settle != nil {
+		return r.settle(ctx)
+	}
+	return settleLimit(ctx)
 }
 
 // outcomeRecorded reports whether tmux has recorded how the command in pane

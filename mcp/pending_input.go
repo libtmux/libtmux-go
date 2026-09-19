@@ -3,6 +3,8 @@ package mcp
 import (
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
@@ -107,24 +109,51 @@ func (p *pendingInput) clearAll(panes []string) {
 	}
 }
 
-// willType reports what a send_keys-style dispatch puts on the line, and
-// whether it submits it. The two halves are recorded at different moments:
-// text has to be pending before tmux takes it, because the terminal's echo
-// can reach a waiting client first, and a submit may only be recorded once
-// tmux has taken it, because until then the line is still unsubmitted.
-// Recording either the other way round turns a missed match into a false one.
-func willType(keys []string, literal bool) (text string, submits bool) {
+// willType reports what a send_keys-style dispatch puts on the line: text is
+// everything it types, afterSubmit is what it types past the last submit, and
+// submits says whether it submitted at all. The three are recorded at
+// different moments: text has to be pending before tmux takes it, because the
+// terminal's echo can reach a waiting client first, while a submit and the
+// line it starts may only be recorded once tmux has taken them, because until
+// then the old line is still unsubmitted. Recording either the other way
+// round turns a missed match into a false one.
+//
+// A key this cannot render as text - a cursor move, a control key, a
+// backspace - leaves what is pending as it stands rather than guessing at the
+// line. That over-masks, which is the direction this is allowed to be wrong
+// in.
+func willType(keys []string, literal bool) (text, afterSubmit string, submits bool) {
 	if literal {
-		return strings.Join(keys, ""), false
+		joined := strings.Join(keys, "")
+		return joined, "", false
 	}
-	return "", containsSubmitKey(keys)
+	var typed, sinceSubmit strings.Builder
+	for _, key := range keys {
+		switch {
+		case submitKeyNames[key]:
+			submits = true
+			sinceSubmit.Reset()
+			continue
+		case key == "Space":
+			key = " "
+		case !typesOneRune(key):
+			continue
+		}
+		typed.WriteString(key)
+		sinceSubmit.WriteString(key)
+	}
+	if !submits {
+		return typed.String(), "", false
+	}
+	return typed.String(), sinceSubmit.String(), true
 }
 
-func containsSubmitKey(keys []string) bool {
-	for _, key := range keys {
-		if submitKeyNames[key] {
-			return true
-		}
+// typesOneRune reports whether tmux types key as itself. A key named by one
+// printable rune is that rune; every longer name is a key rather than text.
+func typesOneRune(key string) bool {
+	if utf8.RuneCountInString(key) != 1 {
+		return false
 	}
-	return false
+	character, _ := utf8.DecodeRuneInString(key)
+	return unicode.IsPrint(character)
 }
