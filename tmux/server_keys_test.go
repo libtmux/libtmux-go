@@ -47,7 +47,7 @@ func TestServerKeyCommandsBuildExactArguments(t *testing.T) {
 			},
 			want: []string{
 				"bind-key", "-r", "-N", "phase 6 binding", "-T", "root",
-				"F12", "display-message -p bound",
+				"--", "F12", "display-message -p bound",
 			},
 		},
 		{
@@ -57,7 +57,7 @@ func TestServerKeyCommandsBuildExactArguments(t *testing.T) {
 					Key: "F11",
 				})
 			},
-			want: []string{"bind-key", "F11", ""},
+			want: []string{"bind-key", "--", "F11", ""},
 		},
 		{
 			name: "unbind one",
@@ -69,7 +69,7 @@ func TestServerKeyCommandsBuildExactArguments(t *testing.T) {
 					Quiet:    true,
 				})
 			},
-			want: []string{"unbind-key", "-q", "-T", "root", "F12"},
+			want: []string{"unbind-key", "-q", "-T", "root", "--", "F12"},
 		},
 		{
 			name: "unbind all",
@@ -130,7 +130,7 @@ func TestServerListingsBuildExactArgumentsAndOwnOutput(t *testing.T) {
 					ListCommandsRequest{CommandName: &commandName},
 				)
 			},
-			want: []string{"list-commands", "send-keys"},
+			want: []string{"list-commands", "--", "send-keys"},
 		},
 		{
 			name: "list clients",
