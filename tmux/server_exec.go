@@ -93,16 +93,13 @@ const (
 	// WaitForModeLock acquires Channel's tmux mutex, queuing behind another
 	// locker if it is already held.
 	//
-	// A cancelled or timed-out ctx while queued permanently wedges Channel
-	// for every future locker, on every supported tmux version: tmux hands
-	// the mutex to the next queued locker's entry on unlock regardless of
-	// whether that client is still there to receive it, and nothing removes
-	// a queued locker whose client disappeared (cmd-wait-for.c
-	// cmd_wait_for_unlock). This is a tmux limitation with no client-side
-	// recovery - a bounded ctx on a lock wait makes it reachable through the
-	// ordinary public API. Never bound a lock wait with a ctx shorter than
-	// certain success, and never reuse a channel name a bounded lock wait may
-	// have poisoned.
+	// A cancelled or timed-out ctx while queued costs Channel one unlock:
+	// tmux hands the mutex to the next queued client whether or not it is
+	// still there, and the one that has gone cannot pass it on
+	// (cmd-wait-for.c cmd_wait_for_unlock). Unlocking again hands it to the
+	// next real locker, so a channel is not lost, but a program that
+	// abandons lock waits and counts its unlocks will deadlock on its own
+	// arithmetic.
 	WaitForModeLock
 	// WaitForModeUnlock releases Channel's tmux mutex.
 	WaitForModeUnlock
@@ -247,9 +244,8 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 // WaitFor waits for, signals, locks, or unlocks a named tmux channel. It
 // changes only that server-side channel state; cancellation can interrupt the
 // client wait but cannot prove a preceding signal or lock did not take
-// effect. See [WaitForModeLock]: a cancelled or timed-out ctx while queued
-// for a lock permanently wedges that channel for every future locker, a
-// tmux limitation this call cannot work around.
+// effect. See [WaitForModeLock]: abandoning a lock wait costs that channel one
+// unlock.
 func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 	if err := validateServerCommandArgument(
 		"wait-for", "Channel", request.Channel, true,
