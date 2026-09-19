@@ -41,17 +41,25 @@ var submitKeyNames = map[string]bool{
 	"KPEnter": true,
 }
 
-// append adds text to pane's pending, unsubmitted input.
-func (p *pendingInput) append(pane tmux.PaneID, text string) {
-	if text == "" {
-		return
-	}
+// applyDelta trims overflow trailing runes from pane's pending and appends
+// text, returning what was there before. overflow reaches past text typed
+// within the same dispatch - a backspace with nothing of its own call left to
+// erase - and must land on whatever an earlier dispatch left pending, not
+// just on this call's own contribution.
+func (p *pendingInput) applyDelta(pane tmux.PaneID, overflow int, text string) string {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	was := p.byPane[pane]
+	next := trimTrailingRunes(was, overflow) + text
+	if next == "" {
+		delete(p.byPane, pane)
+		return was
+	}
 	if p.byPane == nil {
 		p.byPane = make(map[tmux.PaneID]string)
 	}
-	p.byPane[pane] += text
+	p.byPane[pane] = next
+	return was
 }
 
 // clear reports pane's line as submitted: nothing on it is pending anymore.
@@ -83,9 +91,10 @@ func (p *pendingInput) restore(pane tmux.PaneID, text string) {
 	p.byPane[pane] = text
 }
 
-// record makes text pending on every pane the keys reach and returns a
-// function putting each back as it was, for a dispatch that then fails. Empty
-// text records nothing and returns a no-op.
+// record trims overflow trailing runes already pending, then adds text, on
+// every pane the keys reach; it returns a function putting each back as it
+// was, for a dispatch that then fails. Nothing to trim and nothing to add
+// records nothing and returns a no-op.
 //
 // The snapshot each pane is restored to is read outside the lock that guards
 // the pane, so a second record or clearAll for the same pane while this one
@@ -93,15 +102,14 @@ func (p *pendingInput) restore(pane tmux.PaneID, text string) {
 // grants one caller at a time over any overlapping set of panes, and every
 // caller here resolves the restore before releasing that lease. A caller
 // reaching these without that lease reopens the race.
-func (p *pendingInput) record(panes []string, text string) func() {
-	if text == "" {
+func (p *pendingInput) record(panes []string, overflow int, text string) func() {
+	if overflow == 0 && text == "" {
 		return func() {}
 	}
 	previous := make(map[tmux.PaneID]string, len(panes))
 	for _, pane := range panes {
 		id := tmux.PaneID(pane)
-		previous[id] = p.snapshot(id)
-		p.append(id, text)
+		previous[id] = p.applyDelta(id, overflow, text)
 	}
 	return func() {
 		for id, was := range previous {
@@ -119,16 +127,21 @@ func (p *pendingInput) clearAll(panes []string) {
 
 // willType reports what a send_keys-style dispatch does to a pane's line:
 // text is what it adds before tmux takes it, afterEnd is the line it leaves
-// behind, and endsLine says whether the line it started on is gone by the
-// end. The three are recorded at different moments. text has to be pending
-// before tmux takes the keys, because the terminal's echo can reach a waiting
-// client first. Ending a line may only be recorded once tmux has taken them,
-// because until then the old line is still there and still needs masking -
-// which is why a sequence that ends one adds nothing up front and leaves the
-// old text guarding itself.
+// behind, endsLine says whether the line it started on is gone by the end,
+// and overflow counts an erase that reached past what this call itself typed
+// - a backspace with nothing of its own to erase - which lands on whatever an
+// earlier dispatch left pending instead. text and overflow are recorded
+// together, before tmux takes the keys, because the terminal's echo can reach
+// a waiting client first. Ending a line may only be recorded once tmux has
+// taken them, because until then the old line is still there and still needs
+// masking - which is why a sequence that ends one adds nothing up front and
+// leaves the old text guarding itself.
 //
 // Enter ends a line by submitting it and C-u by discarding it; the mask does
-// not care which, only that what it was covering has gone.
+// not care which, only that what it was covering has gone. Either also
+// discharges any overflow: a fresh line starts with nothing behind it, so an
+// erase against it is a no-op rather than reaching back into a line that has
+// already gone.
 //
 // Masking works by removing the pending text from what the pane shows, so it
 // holds only while that text is on the line verbatim. Typing, erasing, ending
@@ -137,16 +150,16 @@ func (p *pendingInput) clearAll(panes []string) {
 // than a line tmux never drew, because a mask that is not on the line removes
 // nothing and would take what was already tracked down with it. Such a
 // sequence goes unmasked, so a wait can see the keys it typed.
-func willType(keys []string, literal bool) (text, afterEnd string, endsLine bool) {
+func willType(keys []string, literal bool) (text, afterEnd string, endsLine bool, overflow int) {
 	if literal {
 		// tmux writes literal bytes through, and the pane's line discipline
 		// reads a newline among them as Enter, so literal text spanning
 		// lines ends every line but its last.
 		joined := strings.Join(keys, "")
 		if cut := strings.LastIndexAny(joined, "\r\n"); cut >= 0 {
-			return "", joined[cut+1:], true
+			return "", joined[cut+1:], true, 0
 		}
-		return joined, "", false
+		return joined, "", false, 0
 	}
 	var typed strings.Builder
 	for _, key := range keys {
@@ -154,21 +167,26 @@ func willType(keys []string, literal bool) (text, afterEnd string, endsLine bool
 		case submitKeyNames[key] || killLineKeyNames[key]:
 			endsLine = true
 			typed.Reset()
+			overflow = 0
 			continue
 		case eraseKeyNames[key]:
+			if typed.Len() == 0 {
+				overflow++
+				continue
+			}
 			dropLastRune(&typed)
 			continue
 		case key == "Space":
 			key = " "
 		case !typesOneRune(key):
-			return "", "", false
+			return "", "", false, 0
 		}
 		typed.WriteString(key)
 	}
 	if endsLine {
-		return "", typed.String(), true
+		return "", typed.String(), true, 0
 	}
-	return typed.String(), "", false
+	return typed.String(), "", false, overflow
 }
 
 // dropLastRune removes the final rune a builder holds, which is what a
@@ -181,6 +199,15 @@ func dropLastRune(builder *strings.Builder) {
 	_, width := utf8.DecodeLastRuneInString(held)
 	builder.Reset()
 	builder.WriteString(held[:len(held)-width])
+}
+
+// trimTrailingRunes removes up to count runes from the end of text.
+func trimTrailingRunes(text string, count int) string {
+	for ; count > 0 && text != ""; count-- {
+		_, width := utf8.DecodeLastRuneInString(text)
+		text = text[:len(text)-width]
+	}
+	return text
 }
 
 // typesOneRune reports whether tmux types key as itself. A key named by one

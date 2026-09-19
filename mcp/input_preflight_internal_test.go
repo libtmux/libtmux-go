@@ -2081,17 +2081,17 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 	var pending pendingInput
 	panes := []string{"%7", "%8"}
 
-	text, _, endsLine := willType([]string{"rm -rf build"}, true)
+	text, _, endsLine, _ := willType([]string{"rm -rf build"}, true)
 	if endsLine {
 		t.Fatal("literal text must not read as a submit")
 	}
-	pending.record(panes, text)()
+	pending.record(panes, 0, text)()
 	if got := pending.snapshot(tmux.PaneID("%7")); got != "" {
 		t.Errorf("pending = %q after a failed dispatch, want nothing typed", got)
 	}
 
 	// Typed for real this time, on both panes synchronize-panes links.
-	pending.record(panes, text)
+	pending.record(panes, 0, text)
 	for _, pane := range panes {
 		if got := pending.snapshot(tmux.PaneID(pane)); got != "rm -rf build" {
 			t.Errorf("pending on %s = %q, want the typed text", pane, got)
@@ -2099,7 +2099,7 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 	}
 
 	// A submit whose dispatch fails must not clear the line.
-	_, _, endsLine = willType([]string{"Enter"}, false)
+	_, _, endsLine, _ = willType([]string{"Enter"}, false)
 	if !endsLine {
 		t.Fatal("Enter must read as a submit")
 	}
@@ -2111,6 +2111,28 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 		if got := pending.snapshot(tmux.PaneID(pane)); got != "" {
 			t.Errorf("pending on %s = %q after submitting, want nothing", pane, got)
 		}
+	}
+}
+
+// A backspace dispatched on its own, after the character it erases was typed
+// by an earlier call, must still shrink what is pending. Leaving pending too
+// long makes wait_for_text's masking look for a string the line no longer
+// holds; strings.Replace finds no match, so nothing is masked and the
+// caller's own leftover keystroke reads as real output.
+func TestPendingInputTracksAnEraseSentAsItsOwnDispatch(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%1"}
+
+	typed, _, _, _ := willType([]string{"a", "b", "c"}, false)
+	pending.record(panes, 0, typed)
+
+	erase, _, _, overflow := willType([]string{"BSpace"}, false)
+	pending.record(panes, overflow, erase)
+
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "ab" {
+		t.Errorf("pending = %q after a backspace sent on its own, want %q", got, "ab")
 	}
 }
 
@@ -2128,6 +2150,7 @@ func TestWillTypeModelsNonLiteralKeys(t *testing.T) {
 		text     string
 		afterEnd string
 		endsLine bool
+		overflow int
 	}{
 		{name: "literal text", keys: []string{"ls -al"}, literal: true, text: "ls -al"},
 		{name: "characters", keys: []string{"h", "i"}, text: "hi"},
@@ -2171,16 +2194,35 @@ func TestWillTypeModelsNonLiteralKeys(t *testing.T) {
 			name: "literal text spanning lines", keys: []string{"echo mid\nTAIL"},
 			literal: true, afterEnd: "TAIL", endsLine: true,
 		},
+		{
+			// Nothing typed in this call is left to erase; the backspace
+			// reaches past it, for the caller to apply to an earlier one.
+			name: "backspace beyond this call's own text",
+			keys: []string{"BSpace"}, overflow: 1,
+		},
+		{
+			// The first backspace consumes "a"; the second has nothing of
+			// this call's own left and reaches past it too.
+			name: "backspace exhausts this call before it overflows",
+			keys: []string{"a", "BSpace", "BSpace"}, overflow: 1,
+		},
+		{
+			// A submit clears any overflow along with the line: there is
+			// nothing behind a fresh line for a later erase to reach into.
+			name: "a submit discharges overflow", keys: []string{"BSpace", "Enter"},
+			endsLine: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			text, afterEnd, endsLine := willType(test.keys, test.literal)
-			if text != test.text || afterEnd != test.afterEnd || endsLine != test.endsLine {
-				t.Errorf("willType(%#v, %t) = (%q, %q, %t), want (%q, %q, %t)",
-					test.keys, test.literal, text, afterEnd, endsLine,
-					test.text, test.afterEnd, test.endsLine)
+			text, afterEnd, endsLine, overflow := willType(test.keys, test.literal)
+			if text != test.text || afterEnd != test.afterEnd ||
+				endsLine != test.endsLine || overflow != test.overflow {
+				t.Errorf("willType(%#v, %t) = (%q, %q, %t, %d), want (%q, %q, %t, %d)",
+					test.keys, test.literal, text, afterEnd, endsLine, overflow,
+					test.text, test.afterEnd, test.endsLine, test.overflow)
 			}
 		})
 	}
@@ -2195,14 +2237,16 @@ func TestAnUnplaceableSequenceLeavesEarlierPendingAlone(t *testing.T) {
 	var pending pendingInput
 	panes := []string{"%1"}
 
-	typed, _, _ := willType([]string{"old"}, true)
-	pending.record(panes, typed)
+	typed, _, _, _ := willType([]string{"old"}, true)
+	pending.record(panes, 0, typed)
 	if got := pending.snapshot(tmux.PaneID("%1")); got != "old" {
 		t.Fatalf("pending = %q, want the typed text", got)
 	}
 
-	mixed, _, _ := willType([]string{"C-c", "q"}, false)
-	pending.record(panes, mixed)
+	// C-a moves the cursor to the line start; the model cannot place where
+	// "b" then lands, so it must give up rather than guess.
+	mixed, _, _, overflow := willType([]string{"a", "C-a", "b"}, false)
+	pending.record(panes, overflow, mixed)
 	if got := pending.snapshot(tmux.PaneID("%1")); got != "old" {
 		t.Errorf("pending = %q after an unplaceable sequence, want %q untouched",
 			got, "old")
