@@ -376,7 +376,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	if r.progress != nil {
 		defer func() {
 			if err := r.progress.close(); err != nil {
-				r.writeErr = err
+				r.writeErr = outputFailure(err)
 			}
 		}()
 	}
@@ -525,7 +525,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	r.loadResult = summary
 	if r.progress != nil {
 		if err := r.progress.close(); err != nil {
-			return err
+			return outputFailure(err)
 		}
 	}
 	event := "completed"

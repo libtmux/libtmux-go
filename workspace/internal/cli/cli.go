@@ -50,6 +50,21 @@ func usage(format string, args ...any) error {
 	return &failure{"usage", fmt.Sprintf(format, args...), 2}
 }
 
+// outputFailure names a failure to write this tool's own output -- JSON,
+// NDJSON or progress text -- as output_failed, so it carries that
+// classification through an ordinary "return err" and not only through
+// commandFailure's fallback. Not tmux_failed: tmux did not fail. Applied at
+// the boundary where invocation and tmux.go consume a *progressPresenter or
+// an encoder, not inside those types themselves, so their own errors.Is
+// contract on the underlying I/O error is unchanged for a caller that reads
+// their return value directly.
+func outputFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &failure{"output_failed", err.Error(), 1}
+}
+
 type invocation struct {
 	ctx                      context.Context
 	in                       io.Reader
@@ -180,10 +195,11 @@ func (r *invocation) encode(value any) error {
 	if r.writeErr != nil {
 		return r.writeErr
 	}
-	r.writeErr = json.NewEncoder(r.out).Encode(value)
-	if flusher, ok := r.out.(interface{ Flush() error }); ok && r.writeErr == nil {
-		r.writeErr = flusher.Flush()
+	err := json.NewEncoder(r.out).Encode(value)
+	if flusher, ok := r.out.(interface{ Flush() error }); ok && err == nil {
+		err = flusher.Flush()
 	}
+	r.writeErr = outputFailure(err)
 	return r.writeErr
 }
 
@@ -198,11 +214,11 @@ func (r *invocation) event(event string, data map[string]any) error {
 	if !r.ndjson {
 		if !r.machine() {
 			if r.progress != nil {
-				return r.progress.event(event, data)
+				return outputFailure(r.progress.event(event, data))
 			}
 			if event == "warning" {
 				_, err := fmt.Fprintln(r.err, r.style("warning", "warning:")+" "+safeTerminal(textValue(data["message"])))
-				return err
+				return outputFailure(err)
 			}
 		}
 		return nil
@@ -218,10 +234,11 @@ func (r *invocation) event(event string, data map[string]any) error {
 	record := make(map[string]any, len(data)+4)
 	maps.Copy(record, data)
 	record["schema_version"], record["command"], record["event"], record["sequence"] = 1, r.command, event, r.sequence
-	r.writeErr = json.NewEncoder(r.out).Encode(record)
-	if f, ok := r.out.(interface{ Flush() error }); ok && r.writeErr == nil {
-		r.writeErr = f.Flush()
+	err := json.NewEncoder(r.out).Encode(record)
+	if f, ok := r.out.(interface{ Flush() error }); ok && err == nil {
+		err = f.Flush()
 	}
+	r.writeErr = outputFailure(err)
 	return r.writeErr
 }
 

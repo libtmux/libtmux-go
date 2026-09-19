@@ -93,14 +93,14 @@ func (w *captureWriter) emitBytes(data []byte, final bool) error {
 		}
 		if !w.r.machine() {
 			if w.r.progress != nil {
-				return w.r.progress.script(w.stream, text)
+				return outputFailure(w.r.progress.script(w.stream, text))
 			}
 			writer := w.r.err
 			if w.stream == "stdout" {
 				writer = w.r.out
 			}
 			if _, err := io.WriteString(writer, text); err != nil {
-				return err
+				return outputFailure(err)
 			}
 		}
 	}
