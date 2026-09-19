@@ -16,7 +16,8 @@ refused.
   MCP modules. The compatibility matrix checks every release in that range,
   the 3.8 release candidate included.
   The Go floor tracks upstream's support window, which covers the two most
-  recent releases.
+  recent releases, so it rises whenever a Go release retires the oldest -
+  roughly twice a year, and sooner than a toolchain pinned for longer.
 - **Records never refresh behind you.** A `Session` you hold is what tmux said
   when you asked, not a live handle that changes underneath.
 - **Unix.** tmux is a Unix program, so driving one needs a Unix host: Linux and

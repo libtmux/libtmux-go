@@ -27,9 +27,19 @@
 //     [Session.OpenNotifications] or [Server.OpenNotifications].
 //   - Batch dependent commands with [NewPlan].
 //
-// The tmuxtest package runs integration tests against an isolated real tmux.
-// Tests of process behavior can point [ServerOptions.Binary] at an executable
-// fixture; construction still resolves and freezes it.
+// The tmuxtest package runs integration tests against an isolated real tmux,
+// and tmuxtest.ScriptedTmux answers named invocations from an executable it
+// writes, for a test with no tmux to drive.
+//
+// # Commands that need a person
+//
+// Some tmux commands ask an attached client to show something - a menu, a
+// prompt, a chooser, the clock - and do nothing a headless program can
+// observe. Server.CommandPrompt, Server.ConfirmBefore, Server.DisplayMenu,
+// Server.LockClient, Server.LockServer, Pane.ChooseTree, Pane.ChooseBuffer,
+// Pane.ChooseClient, Pane.ClockMode, Pane.CustomizeMode, Pane.DisplayPanes and
+// Pane.FindWindow are those. Pane.DisplayPopup is the exception: it can run a
+// command and is useful with nobody watching.
 //
 // # Naming and call shapes
 //
