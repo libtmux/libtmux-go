@@ -215,3 +215,41 @@ func waitForPanePipeState(
 		}
 	}
 }
+
+// TestPipeTreatsLeadingDashCommandAsPositionalAgainstRealTmux proves the
+// pipe-pane "--" guard against a live tmux: without it, tmux's own parser
+// reads a Command beginning with "-" as pipe-pane's own flags and refuses it
+// before opening a pipe, which is what the raw control below reproduces.
+// pipe-pane exposes no readback of the exact command text, so this checks
+// that the guarded call actually opens a pipe (#{pane_pipe} becomes "1")
+// rather than being refused at the same parse step.
+//
+//libtmux:real-tmux
+func TestPipeTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	panes, err := session.SearchPanes(ctx, nil)
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("SearchPanes() = (%#v, %v), want one pane", panes, err)
+	}
+	pane := panes[0]
+	target := pane.SessionID().String() + ":" + pane.WindowID().String() + "." + pane.ID().String()
+
+	const command = "-not-a-flag"
+	raw, err := server.Cmd(ctx, "pipe-pane", "-t", target, command)
+	if err != nil || raw.ExitCode == 0 {
+		t.Fatalf("unguarded pipe-pane = (%#v, %v), want a parse failure", raw, err)
+	}
+	waitForPanePipeState(ctx, t, server, pane, "0")
+
+	if err := pane.Pipe(ctx, tmux.PipePaneRequest{Command: tmux.Ptr(command)}); err != nil {
+		t.Fatalf("Pipe() error = %v", err)
+	}
+	waitForPanePipeState(ctx, t, server, pane, "1")
+}

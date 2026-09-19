@@ -1161,3 +1161,65 @@ func TestCommandStartPreservesAnExistingOutputPipe(t *testing.T) {
 		t.Fatalf("the configured output pipe lost the command's output: %v", err)
 	}
 }
+
+// TestRenameTreatsLeadingDashNameAsPositionalAgainstRealTmux proves the
+// rename-window and rename-session "--" guards against a live tmux.
+// validateLifecycleSessionName permits a leading dash (it only rejects empty
+// names, ".", ":", and control bytes), so a name like "-dashed" is a legal
+// request that the unguarded call below refuses at tmux's own parser -
+// rename-window/rename-session have no flag using that letter, so "unknown
+// flag -d" comes from tmux itself, before anything is renamed.
+//
+//libtmux:real-tmux
+func TestRenameTreatsLeadingDashNameAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	const name = "-dashed"
+
+	t.Run("window", func(t *testing.T) {
+		session, err := server.NewSession(ctx, tmux.NewSessionRequest{})
+		if err != nil {
+			t.Fatalf("NewSession() error = %v", err)
+		}
+		windows, err := session.SearchWindows(ctx, nil)
+		if err != nil || len(windows) != 1 {
+			t.Fatalf("SearchWindows() = (%#v, %v), want one window", windows, err)
+		}
+		target := windows[0].SessionID().String() + ":" + windows[0].ID().String()
+
+		raw, err := server.Cmd(ctx, "rename-window", "-t", target, name)
+		if err != nil || raw.ExitCode == 0 {
+			t.Fatalf("unguarded rename-window = (%#v, %v), want a parse failure", raw, err)
+		}
+
+		renamed, err := windows[0].Rename(ctx, name)
+		if err != nil {
+			t.Fatalf("Window.Rename() error = %v", err)
+		}
+		if got, _ := renamed.Name(); got != name {
+			t.Fatalf("Window.Rename() name = %q, want %q", got, name)
+		}
+	})
+
+	t.Run("session", func(t *testing.T) {
+		session, err := server.NewSession(ctx, tmux.NewSessionRequest{})
+		if err != nil {
+			t.Fatalf("NewSession() error = %v", err)
+		}
+
+		raw, err := server.Cmd(ctx, "rename-session", "-t", session.ID().String(), name)
+		if err != nil || raw.ExitCode == 0 {
+			t.Fatalf("unguarded rename-session = (%#v, %v), want a parse failure", raw, err)
+		}
+
+		renamed, err := session.Rename(ctx, name)
+		if err != nil {
+			t.Fatalf("Session.Rename() error = %v", err)
+		}
+		if got, _ := renamed.Name(); got != name {
+			t.Fatalf("Session.Rename() name = %q, want %q", got, name)
+		}
+	})
+}

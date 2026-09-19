@@ -55,7 +55,7 @@ func TestWindowRespawnBuildsExactArgumentsAndRedactsCompletedErrors(t *testing.T
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
 		"respawn-window", "-t", "$7:@8", "-k", "-c.",
-		"-eALPHA=first", "-eZED=last", `printf done\;`,
+		"-eALPHA=first", "-eZED=last", "--", `printf done\;`,
 	})
 }
 
@@ -75,7 +75,7 @@ func TestWindowRespawnPreservesNilAndEmptyCommand(t *testing.T) {
 		{
 			name:    "empty remains an operand",
 			command: &empty,
-			want:    []string{"respawn-window", "-t", "$7:@8", "-k", ""},
+			want:    []string{"respawn-window", "-t", "$7:@8", "-k", "--", ""},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

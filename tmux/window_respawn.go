@@ -106,7 +106,7 @@ func respawnRequestArguments(subcommand string, request RespawnRequest) ([]strin
 		arguments = append(arguments, "-e"+key+"="+request.Environment[key])
 	}
 	if request.Command != nil {
-		arguments = append(arguments, *request.Command)
+		arguments = append(arguments, "--", *request.Command)
 	}
 	return arguments, nil
 }

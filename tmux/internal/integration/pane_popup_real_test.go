@@ -334,6 +334,47 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 	}
 }
 
+// TestDisplayPopupTreatsLeadingDashCommandAsPositionalAgainstRealTmux proves
+// the display-popup "--" guard against a live tmux: without it, tmux's own
+// parser reads a Command beginning with "-" as display-popup's own flags and
+// refuses it before ever displaying anything, which the raw control below
+// reproduces. CloseOnExit closes the overlay once the shell exits (success or
+// failure), so DisplayPopup returning with no error proves tmux accepted and
+// ran the guarded value as a real command instead of refusing it as flags.
+//
+//libtmux:real-tmux
+func TestDisplayPopupTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	_, client := attachRealPTYClient(ctx, t, server, sessions[0].ID())
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
+	}
+
+	const command = "-not-a-flag"
+	target := panes[0].SessionID().String() + ":" + panes[0].WindowID().String() +
+		"." + panes[0].ID().String()
+	raw, err := server.Cmd(ctx, "display-popup", "-t", target, "-c", client.String(), command)
+	if err != nil || raw.ExitCode == 0 {
+		t.Fatalf("unguarded display-popup = (%#v, %v), want a parse failure", raw, err)
+	}
+
+	if err := panes[0].DisplayPopup(ctx, tmux.DisplayPopupRequest{
+		Command:      tmux.Ptr(command),
+		CloseOnExit:  true,
+		TargetClient: client,
+	}); err != nil {
+		t.Fatalf("DisplayPopup() error = %v", err)
+	}
+}
+
 // attachRealPTYClient attaches a real, pty-backed tmux client to session and
 // returns it together with the name tmux gave it. Unlike a control-mode
 // client, this one can host a popup on tmux 3.8+.

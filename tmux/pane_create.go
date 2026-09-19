@@ -207,7 +207,7 @@ func newPane(
 		arguments = append(arguments, "-E")
 	}
 	if request.Command != "" {
-		arguments = append(arguments, request.Command)
+		arguments = append(arguments, "--", request.Command)
 	}
 
 	result, err := server.literalCmd(ctx, arguments...)
@@ -476,7 +476,7 @@ func splitPaneArguments(
 		}
 	}
 	if request.Command != "" {
-		arguments = append(arguments, request.Command)
+		arguments = append(arguments, "--", request.Command)
 	}
 	return arguments, warnings, nil
 }
