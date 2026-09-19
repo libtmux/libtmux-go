@@ -83,7 +83,6 @@ func TestUnknownExecutionFieldsPrecedeScriptsAndMutations(t *testing.T) {
 		`"windows":[{"shell_command_befor":"ignored","panes":[null]}]`,
 		`"windows":[{"panes":[{"shell_commmand":"ignored"}]}]`, //nolint:misspell // Deliberately misspelled execution key.
 		`"windows":[{"panes":[{"shell_command":[{"cmd":"ignored","entter":false}]}]}]`,
-		`"workspace_builder_options":{"pane_readines":"never"}`,
 	} {
 		t.Run(fields, func(t *testing.T) {
 			server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true, InitialSession: &tmux.NewSessionRequest{Name: "keeper"}})
@@ -2184,5 +2183,43 @@ func TestFreezeRefusesASessionNameLoadWouldReject(t *testing.T) {
 	}
 	if _, err := os.Stat(destination); !os.IsNotExist(err) {
 		t.Fatalf("freeze wrote a document load would refuse: %v", err)
+	}
+}
+
+// TestReadinessWaitsForAnyShellsPrompt: waiting for a pane's prompt is not
+// conditional on the shell being zsh. Text sent before any shell owns the
+// terminal is echoed by the tty and drawn again when the line editor takes
+// over, so the command appears twice -- under bash as under zsh.
+func TestReadinessWaitsForAnyShellsPrompt(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{Config: []byte("set -g default-shell /bin/sh\nset -g default-command \"sleep 1.2; printf ready; exec /bin/sh\"\n")})
+	path := write(t, t.TempDir(), "anyshell.yaml", "session_name: anyshell\nwindows:\n- panes: [blank]\n")
+	start := time.Now()
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	elapsed := time.Since(start)
+	if code != 0 || diagnostic != "" {
+		t.Fatalf("readiness %d %s %s", code, out, diagnostic)
+	}
+	// The same load without the wait returns before the pane's shell exists.
+	if elapsed < 800*time.Millisecond {
+		t.Fatalf("load returned in %s without waiting for the prompt of a pane whose shell is not zsh", elapsed)
+	}
+}
+
+// TestUnknownBuilderOptionLoadsAndWarns: workspace_builder_options is read by
+// every port and the settings inside it differ between them, so an
+// unrecognised one is reported and the workspace still builds.
+func TestUnknownBuilderOptionLoadsAndWarns(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	path := write(t, t.TempDir(), "catalog.yaml", "session_name: catalog\nworkspace_builder_options:\n  pane_readines: never\nwindows:\n- window_name: w\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--ndjson")
+	if code != 0 {
+		t.Fatalf("load = %d %q %q, want the document to build", code, out, diagnostic)
+	}
+	if !strings.Contains(out, "pane_readines") || !strings.Contains(out, `"event":"warning"`) {
+		t.Fatalf("unknown builder setting was not reported: %q", out)
+	}
+	windows, err := server.Cmd(t.Context(), "list-windows", "-t", "catalog", "-F", "#{window_name}")
+	if err != nil || strings.TrimSpace(string(windows.RawStdout)) != "w" {
+		t.Fatalf("workspace did not build: %+v %v", windows, err)
 	}
 }

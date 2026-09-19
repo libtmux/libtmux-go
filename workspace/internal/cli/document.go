@@ -205,6 +205,9 @@ type loadPlan struct {
 	Environment, Options, GlobalOptions map[string]string
 	Windows                             []windowPlan
 	Bridge                              bool
+	// Warnings are reported once the load starts. Nothing here refuses the
+	// document.
+	Warnings []string
 }
 type windowPlan struct {
 	Name, Directory, Layout string
@@ -258,8 +261,14 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 			return plan, errors.New("workspace_builder_options must be a mapping")
 		}
 		if !plan.Bridge {
-			if err := checkFields(catalog, "workspace_builder_options", "pane_readiness"); err != nil {
-				return plan, err
+			// The key is shared across ports whose settings are not the same
+			// set, so an unrecognised one is reported and ignored rather than
+			// making the document unloadable here.
+			for _, key := range slices.Sorted(maps.Keys(catalog)) {
+				if key == "pane_readiness" || strings.HasPrefix(key, "x-") {
+					continue
+				}
+				plan.Warnings = append(plan.Warnings, fmt.Sprintf("workspace_builder_options: ignoring unknown setting %q", key))
 			}
 		}
 		if value := catalog["pane_readiness"]; value != nil {

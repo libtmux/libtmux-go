@@ -24,8 +24,6 @@ func TestNormalizeRejectsUnknownExecutionFields(t *testing.T) {
 		{"command-typo", `"windows":[{"panes":[{"shell_command":[{"cmd":"run","entter":false}]}]}]`, "command 0", "entter"},
 		{"command-misplaced", `"shell_command_before":[{"cmd":"run","suppress_history":false}]`, "command 0", "suppress_history"},
 		{"command-metadata", `"shell_command_before":[{"cmd":"run","description":"ignored"}]`, "command 0", "description"},
-		{"catalog-typo", `"workspace_builder_options":{"pane_readines":"never"}`, "workspace_builder_options", "pane_readines"},
-		{"catalog-metadata", `"workspace_builder_options":{"description":"ignored"}`, "workspace_builder_options", "description"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			doc := document{"session_name": "example", "windows": []any{document{"panes": []any{nil}}}}
@@ -200,5 +198,26 @@ func TestNormalizeRefusalsCarryTheSharedDocumentCode(t *testing.T) {
 				t.Fatalf("normalize = %v, want code %s exit 1", err, test.code)
 			}
 		})
+	}
+}
+
+// TestUnknownBuilderOptionWarnsRatherThanRefusing: workspace_builder_options
+// is read by every port, and the settings inside it are not the same set
+// everywhere. An unrecognised one is reported and ignored; refusing the
+// document would make a workspace shared between ports unloadable.
+func TestUnknownBuilderOptionWarnsRatherThanRefusing(t *testing.T) {
+	doc := document{"session_name": "example", "windows": []any{document{"panes": []any{nil}}}}
+	if err := json.Unmarshal([]byte(`{"workspace_builder_options":{"pane_readines":"never","pane_readiness":"always"}}`), &doc); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := normalize(doc, t.TempDir())
+	if err != nil {
+		t.Fatalf("normalize refused an unknown builder option: %v", err)
+	}
+	if plan.Readiness != "always" {
+		t.Fatalf("readiness = %q, want the recognised setting honoured", plan.Readiness)
+	}
+	if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], "pane_readines") {
+		t.Fatalf("warnings = %q, want the unknown setting named", plan.Warnings)
 	}
 }
