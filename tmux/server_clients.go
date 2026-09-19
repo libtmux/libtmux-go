@@ -271,6 +271,13 @@ func (s Server) DetachAllClients(
 // SwitchClient switches tmux's current client to targetSession. TargetSession
 // is a validated session name rather than a stable identity; cancellation does
 // not prove the switch did not occur.
+//
+// The target is sent anchored with tmux's "=" exact-match prefix: an
+// unanchored "-t name" resolves by prefix, so a name that matches no session
+// exactly but starts a different one's name would otherwise switch there
+// silently instead of failing. The anchor is safe here because
+// validateLifecycleSessionName has already refused the period or colon that
+// would make "=name" misread the target itself.
 func (s Server) SwitchClient(ctx context.Context, targetSession string) error {
 	if err := validateLifecycleSessionName("target session", targetSession); err != nil {
 		return err
@@ -279,7 +286,7 @@ func (s Server) SwitchClient(ctx context.Context, targetSession string) error {
 		ctx,
 		s,
 		"switch-client",
-		[]string{"switch-client", "-t", targetSession},
+		[]string{"switch-client", "-t", "=" + targetSession},
 	)
 }
 
