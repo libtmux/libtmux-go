@@ -107,6 +107,16 @@ Modules are tagged per directory, so each carries its own version: the core as
   `Clients`, no longer fail on a server that holds no sessions; a
   zero-session server now reads as empty rather than as a command
   failure. (#16)
+- A `Command`, key, hook, buffer, environment value, or new name
+  beginning with `-` was parsed by tmux's own argument parser as a flag
+  instead of reaching the pane, hook, or overlay it named.
+  `DisplayPopup`, `RunShell`, `IfShell`, `WaitFor`, `NewPane`,
+  `SplitPane`, `Session.NewWindow`, `Window.NewWindow`,
+  `Server.NewSession`, `Pane.Respawn`, `Window.Respawn`, `Pane.Pipe`,
+  `Window.Rename`, `Session.Rename`, `Pane.BreakPane`, `BindKey`,
+  `UnbindKey`, `ListCommands`, `ConfirmBefore`, `CommandPrompt`,
+  `DisplayMenu`, and their `Plan` equivalents now send that value after
+  a `--`, matching `DisplayMessage`. (#16)
 
 ### mcp
 
