@@ -111,6 +111,14 @@ func ParseVersion(raw string) (Version, error) {
 		}
 		development = 1
 	}
+	if matches[1] == "next" {
+		// A "next-X.Y" token names the release its development track is
+		// heading toward, not one it has reached, so it ranks below X.Y:
+		// one step under whatever development a same-named qualifier would
+		// already carry, while its own numeric core keeps it correctly
+		// ordered against every other release.
+		development--
+	}
 	return Version{
 		raw:         raw,
 		major:       major,
