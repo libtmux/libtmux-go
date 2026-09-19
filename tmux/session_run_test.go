@@ -1,8 +1,10 @@
 package tmux
 
 import (
+	"context"
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestTrimScreenKeepsOnlyWhatTheCommandShowed(t *testing.T) {
@@ -97,5 +99,29 @@ func TestOutcomeRecordedWaitsForTmuxToReapTheCommand(t *testing.T) {
 				t.Errorf("outcomeRecorded(%v) = %v, want %v", test.formats, got, test.want)
 			}
 		})
+	}
+}
+
+// A deadline is the caller saying how long an answer is worth, so it raises
+// the floor on waiting for tmux to reap rather than being overridden by it.
+// A machine loaded enough to need more than five seconds is exactly where a
+// caller who allowed a minute does not want ErrOutcomeUnrecorded.
+func TestSettleLimitTakesTheLongerOfTheFloorAndTheDeadline(t *testing.T) {
+	t.Parallel()
+
+	if got := settleLimit(context.Background()); got != outcomeSettleLimit {
+		t.Errorf("settleLimit(no deadline) = %v, want %v", got, outcomeSettleLimit)
+	}
+
+	short, cancelShort := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancelShort()
+	if got := settleLimit(short); got != outcomeSettleLimit {
+		t.Errorf("settleLimit(short deadline) = %v, want the floor %v", got, outcomeSettleLimit)
+	}
+
+	long, cancelLong := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelLong()
+	if got := settleLimit(long); got <= outcomeSettleLimit {
+		t.Errorf("settleLimit(minute deadline) = %v, want more than %v", got, outcomeSettleLimit)
 	}
 }

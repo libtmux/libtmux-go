@@ -274,7 +274,9 @@ const (
 // allowed to take before the server is asked to reap, and outcomeSettleLimit
 // how long the whole wait is worth before reporting ErrOutcomeUnrecorded. Both
 // are far past the moment tmux normally needs and are none of a healthy
-// command's time.
+// command's time. outcomeSettleLimit is a floor rather than a ceiling: a
+// caller who gave ctx a longer deadline asked to wait that long, and a loaded
+// machine is exactly where tmux takes more than five seconds to reap.
 const (
 	outcomeSettleDelay = 20 * time.Millisecond
 	outcomeReapDelay   = 200 * time.Millisecond
@@ -323,7 +325,7 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			if outcomeRecorded(pane) {
 				return awaitDeathSignal(ctx, signaled)
 			}
-			if settling >= outcomeSettleLimit {
+			if settling >= settleLimit(ctx) {
 				return fmt.Errorf("%w: pane %s is dead and its command unreaped",
 					ErrOutcomeUnrecorded, pane.ID())
 			}
@@ -341,6 +343,19 @@ func (r *Running) waitForExit(ctx context.Context) error {
 		}
 		delay = min(delay*2, maximumLivenessDelay)
 	}
+}
+
+// settleLimit is how long to let tmux catch up before reporting that it never
+// recorded an outcome. A caller whose ctx runs longer than the built-in floor
+// gets its whole remaining time, because a deadline is the caller saying how
+// long the answer is worth. A shorter deadline still ends the wait: ctx.Done
+// is selected on alongside this.
+func settleLimit(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return outcomeSettleLimit
+	}
+	return max(outcomeSettleLimit, time.Until(deadline))
 }
 
 // outcomeRecorded reports whether tmux has recorded how the command in pane
