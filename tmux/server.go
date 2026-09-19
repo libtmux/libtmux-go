@@ -140,7 +140,8 @@ func (s Server) dispatch(
 // IsAlive reports whether a tmux server answers on the configured socket.
 // Only an absent server reports false without an error: a socket that exists
 // but cannot be reached, such as one the process may not read, is a question
-// that could not be answered and is returned as an error.
+// that could not be answered and is returned as an error. Use
+// [Server.CheckAlive] where an absent server is itself the failure.
 func (s Server) IsAlive(ctx context.Context) (bool, error) {
 	result, err := s.literalCmd(ctx, "list-sessions")
 	if err != nil {
@@ -157,7 +158,9 @@ func (s Server) IsAlive(ctx context.Context) (bool, error) {
 }
 
 // CheckAlive returns a [CommandError] when the configured server is not
-// alive. Cancellation and transport failures are returned directly.
+// alive. Cancellation and transport failures are returned directly. Use
+// [Server.IsAlive] where an absent server is an answer rather than a
+// failure.
 func (s Server) CheckAlive(ctx context.Context) error {
 	result, err := s.literalCmd(ctx, "list-sessions")
 	if err != nil {

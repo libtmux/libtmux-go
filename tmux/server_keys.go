@@ -204,8 +204,10 @@ func (s Server) ListCommands(
 	return runServerListCommand(ctx, s, arguments)
 }
 
-// ListClients returns an owned snapshot of raw tmux client-description lines.
-// A list failure is returned rather than answered with no rows.
+// ListClients returns an owned snapshot of raw tmux client-description lines,
+// the text tmux itself prints. A list failure is returned rather than answered
+// with no rows. [Server.Clients] answers the same question as typed [Client]
+// records and is what most callers want.
 func (s Server) ListClients(ctx context.Context) ([]string, error) {
 	return runServerListCommand(ctx, s, []string{"list-clients"})
 }
