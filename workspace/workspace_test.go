@@ -1164,3 +1164,91 @@ func TestAFailureWithNoLineDoesNotClaimLineZero(t *testing.T) {
 		})
 	}
 }
+
+//libtmux:real-tmux
+func TestBuildRebalancesSoAWindowFitsADefaultTerminal(t *testing.T) {
+	server, ctx := testServer(t)
+	panes := make([]workspace.Pane, 8)
+	for index := range panes {
+		panes[index] = workspace.Pane{Shell: "sleep 300"}
+	}
+	described := workspace.Workspace{
+		SessionName: "rebalanced",
+		Windows:     []workspace.Window{{Name: "many", Panes: panes}},
+	}
+	session, err := workspace.Build(ctx, server, described)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	result, err := session.Server().Cmd(ctx, "list-panes", "-t", session.ID().String(), "-F", "#{pane_id}")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("list panes: %+v %v", result, err)
+	}
+	if got := len(strings.Fields(string(result.RawStdout))); got != len(panes) {
+		t.Fatalf("built %d panes, want %d", got, len(panes))
+	}
+}
+
+//libtmux:real-tmux
+func TestBuildIntoSendsCommandsLiterallyAndSuppressesHistory(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	recorded := filepath.Join(dir, "invocations")
+	proxy := filepath.Join(dir, "tmux")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
+`), 0o700); err != nil {
+		t.Fatalf("write tmux proxy: %v", err)
+	}
+	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		Binary: proxy,
+		ProcessEnvironment: append(os.Environ(),
+			"LIBTMUX_WORKSPACE_INVOCATIONS="+recorded,
+			"LIBTMUX_WORKSPACE_REAL_TMUX="+realBinary,
+		),
+	})
+	described := workspace.Workspace{
+		SessionName: "literal",
+		Windows: []workspace.Window{{
+			Name:  "w",
+			Panes: []workspace.Pane{{Commands: []workspace.Command{{Command: "probe-command"}}}},
+		}},
+	}
+	request, err := described.InitialSessionRequest()
+	if err != nil {
+		t.Fatalf("InitialSessionRequest() error = %v", err)
+	}
+	session, err := server.NewSession(ctx, request)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if err := workspace.BuildInto(ctx, session, described); err != nil {
+		t.Fatalf("BuildInto() error = %v", err)
+	}
+	data, err := os.ReadFile(recorded)
+	if err != nil {
+		t.Fatalf("read tmux invocations: %v", err)
+	}
+	sent := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, "send-keys") && strings.Contains(line, "probe-command") {
+			sent = line
+		}
+	}
+	if sent == "" {
+		t.Fatalf("no send-keys carried the command: %s", data)
+	}
+	if !strings.Contains(sent, "'-l'") {
+		t.Errorf("send-keys sent without -l, so a command that is also a tmux key name is read as that key: %s", sent)
+	}
+	if !strings.Contains(sent, "' probe-command'") {
+		t.Errorf("send-keys sent without the leading space that keeps a command out of shell history: %s", sent)
+	}
+}
