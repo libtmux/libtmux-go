@@ -24,7 +24,6 @@ The CLI is the tmuxp-compatible one — build automation on it and parse its
 | `plugins`, `workspace_builder` | refused | run through tmuxp |
 | `workspace_builder_options` | refused | read |
 | Waiting for a pane's prompt | never | before the pane's first command |
-| Option application order | map order | sorted by name |
 | A missing `start_directory` | `MissingDirectories` | warned on load |
 | Problems reported | every one, with its line | the first, with no position |
 

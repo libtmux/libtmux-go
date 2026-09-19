@@ -1238,3 +1238,69 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 		t.Errorf("send-keys sent without the leading space that keeps a command out of shell history: %s", sent)
 	}
 }
+
+//libtmux:real-tmux
+func TestBuildIntoAppliesOptionsInNameOrder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	recorded := filepath.Join(dir, "invocations")
+	proxy := filepath.Join(dir, "tmux")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
+`), 0o700); err != nil {
+		t.Fatalf("write tmux proxy: %v", err)
+	}
+	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		Binary: proxy,
+		ProcessEnvironment: append(os.Environ(),
+			"LIBTMUX_WORKSPACE_INVOCATIONS="+recorded,
+			"LIBTMUX_WORKSPACE_REAL_TMUX="+realBinary,
+		),
+	})
+	names := []string{"@f", "@e", "@d", "@c", "@b", "@a"}
+	options := map[string]string{}
+	for _, name := range names {
+		options[name] = "set"
+	}
+	described := workspace.Workspace{
+		SessionName: "ordered",
+		Options:     options,
+		Windows: []workspace.Window{{
+			Name:  "w",
+			Panes: []workspace.Pane{{Shell: "sleep 300"}},
+		}},
+	}
+	request, err := described.InitialSessionRequest()
+	if err != nil {
+		t.Fatalf("InitialSessionRequest() error = %v", err)
+	}
+	session, err := server.NewSession(ctx, request)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if err := workspace.BuildInto(ctx, session, described); err != nil {
+		t.Fatalf("BuildInto() error = %v", err)
+	}
+	data, err := os.ReadFile(recorded)
+	if err != nil {
+		t.Fatalf("read tmux invocations: %v", err)
+	}
+	var applied []string
+	for _, line := range strings.Split(string(data), "\n") {
+		for _, name := range names {
+			if strings.Contains(line, "'"+name+"'") {
+				applied = append(applied, name)
+			}
+		}
+	}
+	if !slices.IsSorted(applied) || len(applied) != len(names) {
+		t.Fatalf("options applied in %v, want every name once in sorted order", applied)
+	}
+}

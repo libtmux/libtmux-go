@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -96,21 +98,21 @@ func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) e
 
 	// The initial window is created with the session before these values are set;
 	// later windows can inherit them at creation.
-	for name, value := range workspace.GlobalOptions {
-		if err := setGlobalOption(ctx, server, name, value); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(workspace.GlobalOptions)) {
+		if err := setGlobalOption(ctx, server, name, workspace.GlobalOptions[name]); err != nil {
 			return fmt.Errorf("set global option %q: %w", name, err)
 		}
 	}
 
-	for name, value := range workspace.Environment {
+	for _, name := range slices.Sorted(maps.Keys(workspace.Environment)) {
 		if err := session.SetEnvironment(
-			ctx, name, value, tmux.SetEnvironmentOptions{},
+			ctx, name, workspace.Environment[name], tmux.SetEnvironmentOptions{},
 		); err != nil {
 			return fmt.Errorf("set environment %q: %w", name, err)
 		}
 	}
-	for name, value := range workspace.Options {
-		if err := setSessionOption(ctx, session, name, value); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(workspace.Options)) {
+		if err := setSessionOption(ctx, session, name, workspace.Options[name]); err != nil {
 			return fmt.Errorf("set session option %q: %w", name, err)
 		}
 	}
@@ -194,15 +196,15 @@ func buildWindow(
 		}
 	}
 
-	for name, value := range described.Environment {
+	for _, name := range slices.Sorted(maps.Keys(described.Environment)) {
 		if err := session.SetEnvironment(
-			ctx, name, value, tmux.SetEnvironmentOptions{},
+			ctx, name, described.Environment[name], tmux.SetEnvironmentOptions{},
 		); err != nil {
 			return window, fmt.Errorf("set window environment %q: %w", name, err)
 		}
 	}
-	for name, value := range described.Options {
-		if err := window.SetOption(ctx, name, value, tmux.SetOptionOptions{}); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(described.Options)) {
+		if err := window.SetOption(ctx, name, described.Options[name], tmux.SetOptionOptions{}); err != nil {
 			return window, fmt.Errorf("set window option %q: %w", name, err)
 		}
 	}
@@ -212,8 +214,8 @@ func buildWindow(
 		return window, err
 	}
 
-	for name, value := range described.OptionsAfter {
-		if err := window.SetOption(ctx, name, value, tmux.SetOptionOptions{}); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(described.OptionsAfter)) {
+		if err := window.SetOption(ctx, name, described.OptionsAfter[name], tmux.SetOptionOptions{}); err != nil {
 			return window, fmt.Errorf("set window option %q after panes: %w", name, err)
 		}
 	}
@@ -292,9 +294,9 @@ func buildPanes(
 			continue
 		}
 		describedPane := described.Panes[index]
-		for name, value := range describedPane.Environment {
+		for _, name := range slices.Sorted(maps.Keys(describedPane.Environment)) {
 			if err := session.SetEnvironment(
-				ctx, name, value, tmux.SetEnvironmentOptions{},
+				ctx, name, describedPane.Environment[name], tmux.SetEnvironmentOptions{},
 			); err != nil {
 				return nil, fmt.Errorf("set pane environment %q: %w", name, err)
 			}
