@@ -10436,7 +10436,7 @@
       "digest": "sha256:c32d1f3aa2abae4dd6db94fb680e25ae71cebd7356e595a29d67085d53cbee92",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError",
         "tmux.Session.ResolveActiveWindow"
       ],
@@ -10463,7 +10463,7 @@
       "digest": "sha256:a01ef50239382829f184ce6ac1ac5c38916ca6586e70261c1e6894d401fce3a8",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError",
         "tmux.Session.ResolveActiveWindow"
       ],
@@ -10598,7 +10598,7 @@
       "digest": "sha256:912a9664d6d1101436d26798d48b94c3eacca061e843ba0549fc2704bca430e1",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10620,7 +10620,7 @@
       "digest": "sha256:f34c0cbb4ea16a06b0fd2216206db8bd7b2f5c1b697011c7c97713305434d71f",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10642,7 +10642,7 @@
       "digest": "sha256:fd422ab3a1caf7e920a5c23a81eb4d0a9f21f4e99c2a66318d39c184834b6f05",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10664,7 +10664,7 @@
       "digest": "sha256:847ec4f232c8e12d64d021a2b820cf829261a02c4e8c0a6a52453291a920b45a",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10752,7 +10752,7 @@
       "digest": "sha256:83e459713b46b816794cca4d82be3d289f423d91cf213517a2efebcff5919c24",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10774,7 +10774,7 @@
       "digest": "sha256:7633f98244ee993f6b44f3970368cf9f1479e32287fb72a67d000b383a053308",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10796,7 +10796,7 @@
       "digest": "sha256:a46e51340c77502616300c0f12fd028a0f4a7422749b294b32c862cf0a0317ed",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10883,7 +10883,7 @@
       "digest": "sha256:5a9b090d2883abbc0b22dbe0c4033d9d8f84b10976e15b93c14b4b51eae22cd2",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10905,7 +10905,7 @@
       "digest": "sha256:3e063df74ba343c3abdd2cde930771909c17bc4b9de9a0e1770c6e7a74625964",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10927,7 +10927,7 @@
       "digest": "sha256:6c63cfb56ffd6af7736531d3c83f46635b174b8392543294f63380e070ba713e",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [
@@ -10949,7 +10949,7 @@
       "digest": "sha256:4ed34060ba84b16a734f4f02c23630d89d48d8d904016e4d79cd21db5d9b8228",
       "status": "translation",
       "go": [
-        "tmux.ErrSnapshotNotFound",
+        "tmux.ErrNotFound",
         "tmux.SnapshotLookupError"
       ],
       "proof": [

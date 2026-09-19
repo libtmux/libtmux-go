@@ -172,13 +172,6 @@ func (s Server) CheckAlive(ctx context.Context) error {
 	return nil
 }
 
-// RaiseIfDead checks whether the configured server is alive.
-//
-// Deprecated: Use [Server.CheckAlive].
-func (s Server) RaiseIfDead(ctx context.Context) error {
-	return s.CheckAlive(ctx)
-}
-
 func (s Server) connectionState() *serverState {
 	return s.state
 }

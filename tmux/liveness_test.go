@@ -49,18 +49,13 @@ func TestServerLivenessDistinguishesDeadFromTransportFailure(t *testing.T) {
 	if err != nil || alive {
 		t.Fatalf("IsAlive() = (%v, %v), want (false, nil)", alive, err)
 	}
-	for name, check := range map[string]func(context.Context) error{
-		"CheckAlive":  server.CheckAlive,
-		"RaiseIfDead": server.RaiseIfDead,
-	} {
-		err = check(context.Background())
-		if !errors.Is(err, tmux.ErrNoServer) || !errors.Is(err, tmux.ErrCommand) {
-			t.Fatalf("%s() error = %v, want ErrNoServer and ErrCommand", name, err)
-		}
-		var commandError *tmux.CommandError
-		if !errors.As(err, &commandError) || commandError.Result.ExitCode == 0 {
-			t.Fatalf("%s() error = %#v, want CommandError with failed result", name, err)
-		}
+	err = server.CheckAlive(context.Background())
+	if !errors.Is(err, tmux.ErrNoServer) || !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("CheckAlive() error = %v, want ErrNoServer and ErrCommand", err)
+	}
+	var commandError *tmux.CommandError
+	if !errors.As(err, &commandError) || commandError.Result.ExitCode == 0 {
+		t.Fatalf("CheckAlive() error = %#v, want CommandError with failed result", err)
 	}
 }
 
