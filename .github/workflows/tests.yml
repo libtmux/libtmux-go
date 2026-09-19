@@ -129,6 +129,57 @@ jobs:
             exit 1
           fi
 
+  # An exported identifier can change or vanish without anything saying so: the
+  # changelog is written by hand, and nothing compares what a release exports
+  # against what the last one did. This reports that difference into the run
+  # summary rather than failing on it, because an alpha module breaks its API
+  # on purpose and a gate that forbids it would be turned off.
+  api-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Whole history: the comparison needs the tag the last release carries.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.mod
+            workspace/go.mod
+            mcp/go.mod
+
+      - name: Report the exported API difference since each module's last tag
+        env:
+          GORELEASE: golang.org/x/exp/cmd/gorelease@v0.0.0-20250620022241-b7579e27df2b
+        run: |
+          set -u
+          status=0
+          for module in . workspace mcp; do
+            case $module in
+              .) prefix='v' ;;
+              *) prefix="$module/v" ;;
+            esac
+            tag=$(git tag --list "$prefix*" | sort -V | tail -1)
+            # A nested module is tagged with its directory, and carries the
+            # bare semantic version that tag encodes.
+            base=${tag#"$module/"}
+            if [ -z "$tag" ]; then
+              printf '### %s\n\nNo tag to compare against.\n\n' "$module" \
+                >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            printf '### %s since %s\n\n```\n' "$module" "$tag" \
+              >> "$GITHUB_STEP_SUMMARY"
+            (cd "$module" && go run "$GORELEASE" -base "$base" 2>&1) \
+              >> "$GITHUB_STEP_SUMMARY" || status=$?
+            printf '```\n\n' >> "$GITHUB_STEP_SUMMARY"
+          done
+          printf 'gorelease reported status %s; this job does not fail on it.\n' \
+            "$status"
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
