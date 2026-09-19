@@ -273,14 +273,15 @@ const (
 	maximumLivenessDelay = 30 * time.Second
 )
 
-// outcomeSettleDelay is how often a pane found dead is re-read while tmux has
-// yet to record how its command ended; outcomeReapDelay is how long that is
-// allowed to take before the server is asked to reap, and outcomeSettleLimit
-// how long the whole wait is worth before reporting ErrOutcomeUnrecorded. Both
-// are far past the moment tmux normally needs and are none of a healthy
-// command's time. outcomeSettleLimit is a floor rather than a ceiling: a
-// caller who gave ctx a longer deadline asked to wait that long, and a loaded
-// machine is exactly where tmux takes more than five seconds to reap.
+// outcomeSettleDelay is how soon a pane found dead is re-read while tmux has
+// yet to record how its command ended, and the first of a series that doubles
+// from there; outcomeReapDelay is how long the settling may take before the
+// server is asked to reap, and outcomeSettleLimit how long the whole wait is
+// worth before reporting ErrOutcomeUnrecorded. Both are far past the moment
+// tmux normally needs and are none of a healthy command's time.
+// outcomeSettleLimit is a floor rather than a ceiling: a caller who gave ctx
+// a longer deadline asked to wait that long, and a loaded machine is exactly
+// where tmux takes more than five seconds to reap.
 const (
 	outcomeSettleDelay = 20 * time.Millisecond
 	outcomeReapDelay   = 200 * time.Millisecond
@@ -358,13 +359,22 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			// grows to half a minute for a long command, and charging that
 			// to the first settle would spend the whole allowance on the
 			// wait that found the pane dead - the reap nudge below included.
-			settleDelay = min(settleDelay*2, maximumSettleDelay)
+			settleDelay = nextSettleDelay(settleDelay)
 			settling += settleDelay
 			delay = settleDelay
 			continue
 		}
 		delay = min(delay*2, maximumLivenessDelay)
 	}
+}
+
+// nextSettleDelay is how long to wait before asking tmux again whether it has
+// recorded an outcome. It doubles, so a pane tmux is slow to reap is asked
+// about a handful of times rather than fifty times a second, and stops
+// doubling at maximumSettleDelay, so a wait bounded by a long deadline still
+// answers soon after tmux catches up.
+func nextSettleDelay(current time.Duration) time.Duration {
+	return min(current*2, maximumSettleDelay)
 }
 
 // settleLimit is how long to let tmux catch up before reporting that it never

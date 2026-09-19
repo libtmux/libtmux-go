@@ -357,3 +357,26 @@ func TestSettlingIsNotChargedTheLivenessBackoff(t *testing.T) {
 		t.Error("the reap nudge never fired, which the settle allowance is for")
 	}
 }
+
+// The settle poll doubles and then stops doubling. Without the ceiling a wait
+// bounded by a long deadline would sleep for minutes between asks and answer
+// long after tmux caught up.
+func TestSettleDelayDoublesToACeiling(t *testing.T) {
+	t.Parallel()
+
+	delay := outcomeSettleDelay / 2
+	for range 4 {
+		doubled := nextSettleDelay(delay)
+		if doubled != delay*2 {
+			t.Fatalf("nextSettleDelay(%v) = %v, want it doubled", delay, doubled)
+		}
+		delay = doubled
+	}
+	if got := nextSettleDelay(maximumSettleDelay); got != maximumSettleDelay {
+		t.Errorf("nextSettleDelay(%v) = %v, want the ceiling held",
+			maximumSettleDelay, got)
+	}
+	if got := nextSettleDelay(maximumSettleDelay * 4); got != maximumSettleDelay {
+		t.Errorf("nextSettleDelay(%v) = %v, want the ceiling", maximumSettleDelay*4, got)
+	}
+}
