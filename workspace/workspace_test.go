@@ -1187,6 +1187,14 @@ func TestBuildRebalancesSoAWindowFitsADefaultTerminal(t *testing.T) {
 	if got := len(strings.Fields(string(result.RawStdout))); got != len(panes) {
 		t.Fatalf("built %d panes, want %d", got, len(panes))
 	}
+	active, err := session.Server().Cmd(ctx, "display-message", "-p", "-t", session.ID().String(), "#{pane_index}")
+	if err != nil || active.ExitCode != 0 {
+		t.Fatalf("active pane: %+v %v", active, err)
+	}
+	// With no pane declaring focus, tmuxp leaves the last one it created.
+	if got := strings.TrimSpace(string(active.RawStdout)); got != strconv.Itoa(len(panes)-1) {
+		t.Fatalf("active pane index = %q, want the last pane created", got)
+	}
 }
 
 //libtmux:real-tmux

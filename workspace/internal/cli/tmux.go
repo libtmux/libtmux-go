@@ -935,10 +935,13 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 				return session, windows, err
 			}
 		}
-		if focusedPane.ID() != "" {
-			if _, err := focusedPane.Select(r.ctx, tmux.PaneSelectRequest{}); err != nil {
-				return session, windows, err
-			}
+		// With no pane declaring focus, tmuxp leaves the last pane it created
+		// active; splitting detached leaves the first.
+		if focusedPane.ID() == "" {
+			focusedPane = panes[len(panes)-1]
+		}
+		if _, err := focusedPane.Select(r.ctx, tmux.PaneSelectRequest{}); err != nil {
+			return session, windows, err
 		}
 		if wp.Focus {
 			focus, explicitFocus = window, true

@@ -2263,3 +2263,23 @@ func TestMissingStartDirectoryBuildsAndWarns(t *testing.T) {
 		t.Fatalf("a start_directory that does not exist was not reported: %q", diagnostic)
 	}
 }
+
+// TestDefaultActivePaneIsTheLastOneCreated: with no pane declaring focus,
+// tmuxp leaves the last pane it created active. Splitting detached left the
+// first pane active, so after a load the cursor sat somewhere else than the
+// reference implementation puts it.
+func TestDefaultActivePaneIsTheLastOneCreated(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	path := write(t, t.TempDir(), "active.yaml", "session_name: active\nwindows:\n- window_name: w\n  panes: [blank, blank, blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	if code != 0 {
+		t.Fatalf("load = %d %q %q", code, out, diagnostic)
+	}
+	result, err := server.Cmd(t.Context(), "display-message", "-p", "-t", "active:w", "#{pane_index}")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("active pane: %+v %v", result, err)
+	}
+	if got := strings.TrimSpace(string(result.RawStdout)); got != "2" {
+		t.Fatalf("active pane index = %q, want the last pane created", got)
+	}
+}
