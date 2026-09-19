@@ -279,6 +279,26 @@ the sink and attempts one optional warning after work finishes. Workspace
 results, cancellation and child exit statuses remain unchanged by logging
 failures, including failure to write that secondary warning.
 
+## Machine codes outside the shared set
+
+`--json`/`--ndjson` terminal error records normally carry one of the codes
+shared across every workspace-cli port. A few conditions describe this
+binary's own machinery rather than the workspace or tmux, and keep a code of
+their own instead of borrowing one of the shared ones dishonestly:
+
+| Code | Means |
+| --- | --- |
+| `output_failed` | Writing JSON/NDJSON output, or restoring the terminal on exit, failed. Not `tmux_failed` -- tmux did not fail. |
+| `child_failed` | A spawned child (the Python shell, or a plugin/custom-builder bridge) exited unsuccessfully. |
+| `editor_failed` | The editor launched for an interactive edit exited unsuccessfully. |
+| `compatibility_runtime` | The Python compatibility runtime `shell` and plugin loads depend on is missing or does not meet the version requirement. |
+| `client_changed` | The terminal client identified for handoff changed identity between selection and `switch-client`. |
+| `unsupported_log_file` | `--log-file` on a platform without file-logging support. |
+| `unsupported_terminal` | Terminal state restoration on a platform this binary does not support. |
+
+`interrupted` (exit 130) is a signal outcome, not a refusal or a failure, and
+stands beside the shared set for the same reason.
+
 ## Search and Python compatibility
 
 Search uses native Go regular expressions by default, including `-F` literal
