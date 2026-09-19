@@ -15,6 +15,14 @@ import (
 	"unicode/utf8"
 )
 
+// defaultWaitDelay bounds two things with one number, which is all
+// exec.Cmd offers: how long a tmux process gets to finish writing after it
+// exits, and how long a cancelled one gets before its pipes are closed under
+// it. tmux forks a server that can inherit the pipe, so this fires in normal
+// use and not only on a fault, and TestRunnerBoundsCancellationWhenDescendant-
+// HoldsOutputPipe pins the cancellation half at this value. Widening it to
+// stop a loaded machine reporting exec.ErrWaitDelay for a healthy command
+// would slow every cancellation by the same amount.
 const defaultWaitDelay = 100 * time.Millisecond
 
 // Request describes one subprocess invocation.
