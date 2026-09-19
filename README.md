@@ -491,8 +491,9 @@ tmux's own protocol, so code that opens one needs `NewServer` and a real tmux.
 one absolute executable, and returns an error before starting tmux when
 configuration or resolution fails. Later environment and directory changes do
 not retarget the handle, and the zero `Server` is invalid. Tests of process
-behavior can point `ServerOptions.Binary` at an executable fixture;
-construction still resolves and freezes it. Use `tmuxtest` when the behavior
+behavior can point `ServerOptions.Binary` at an executable fixture, which is
+what `tmuxtest.ScriptedTmux` above writes for you; construction still resolves
+and freezes it. Use `tmuxtest` when the behavior
 belongs to a real tmux daemon.
 
 ## Documentation

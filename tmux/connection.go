@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ErrConnectionRequiresProcess identifies an operation refused because a
@@ -339,7 +340,18 @@ func (c *Connection) Call(
 	if err := c.routeError(ctx, commandServer); err != nil {
 		return nil, err
 	}
-	return c.pool.call(ctx, args, false)
+	// Observed here rather than in the lane, because the lane is also how
+	// Server.runCommand sends and that reports its own.
+	server := c.Server()
+	observer := server.commandObserver()
+	if observer == nil {
+		return c.pool.call(ctx, args, false)
+	}
+	started := time.Now()
+	results, err := c.pool.call(ctx, args, false)
+	observeCommand(observer, args, started, CommandTransportConnection,
+		controlExitCode(results, err), err)
+	return results, err
 }
 
 // CloseContext starts terminal shutdown and waits within ctx. The context

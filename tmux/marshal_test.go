@@ -111,3 +111,28 @@ func TestFormatValuesEncodeVerbatim(t *testing.T) {
 		t.Errorf("formats = %#v, want what tmux said", decoded)
 	}
 }
+
+// Six doc comments promise that decoding changes nothing. A field exported
+// later would quietly break that, and marshalling tests would not notice.
+func TestDecodingARecordChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"id":"%9","sessionId":"$3","windowId":"@4",` +
+		`"windowIndex":7,"index":2,"formats":{"pane_title":"other"}}`)
+	pane := Pane{sessionID: SessionID("$5"), paneID: PaneID("%7"), paneIndex: 1}
+	before, err := json.Marshal(pane)
+	if err != nil {
+		t.Fatalf("Marshal error = %v", err)
+	}
+
+	if err := json.Unmarshal(payload, &pane); err != nil {
+		t.Fatalf("Unmarshal error = %v, want the documented no-op", err)
+	}
+	after, err := json.Marshal(pane)
+	if err != nil {
+		t.Fatalf("Marshal error = %v", err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("Unmarshal changed the record:\n got %s\nwant %s", after, before)
+	}
+}

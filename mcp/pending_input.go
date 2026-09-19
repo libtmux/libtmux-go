@@ -26,6 +26,14 @@ type pendingInput struct {
 	byPane map[tmux.PaneID]string
 }
 
+// eraseKeyNames are tmux key names that remove the character before the
+// cursor, and killLineKeyNames those that discard the line. Both are modelled
+// because correcting a typo is ordinary, and leaving either unmodelled puts
+// the mask out of step with the line.
+var eraseKeyNames = map[string]bool{"BSpace": true, "C-h": true, "DC": true}
+
+var killLineKeyNames = map[string]bool{"C-u": true, "C-c": true}
+
 // submitKeyNames are tmux key names that submit a line the way Enter does.
 var submitKeyNames = map[string]bool{
 	"Enter":   true,
@@ -109,43 +117,70 @@ func (p *pendingInput) clearAll(panes []string) {
 	}
 }
 
-// willType reports what a send_keys-style dispatch puts on the line: text is
-// everything it types, afterSubmit is what it types past the last submit, and
-// submits says whether it submitted at all. The three are recorded at
-// different moments: text has to be pending before tmux takes it, because the
-// terminal's echo can reach a waiting client first, while a submit and the
-// line it starts may only be recorded once tmux has taken them, because until
-// then the old line is still unsubmitted. Recording either the other way
-// round turns a missed match into a false one.
+// willType reports what a send_keys-style dispatch does to a pane's line:
+// text is what it adds before tmux takes it, afterEnd is the line it leaves
+// behind, and endsLine says whether the line it started on is gone by the
+// end. The three are recorded at different moments. text has to be pending
+// before tmux takes the keys, because the terminal's echo can reach a waiting
+// client first. Ending a line may only be recorded once tmux has taken them,
+// because until then the old line is still there and still needs masking -
+// which is why a sequence that ends one adds nothing up front and leaves the
+// old text guarding itself.
 //
-// A key this cannot render as text - a cursor move, a control key, a
-// backspace - leaves what is pending as it stands rather than guessing at the
-// line. That over-masks, which is the direction this is allowed to be wrong
-// in.
-func willType(keys []string, literal bool) (text, afterSubmit string, submits bool) {
+// Enter ends a line by submitting it and C-u by discarding it; the mask does
+// not care which, only that what it was covering has gone.
+//
+// Masking works by removing the pending text from what the pane shows, so it
+// holds only while that text is on the line verbatim. Typing, erasing, ending
+// the line: those are modelled. A sequence carrying anything else - a cursor
+// move, a completion - is not modelled at all, and reports nothing rather
+// than a line tmux never drew, because a mask that is not on the line removes
+// nothing and would take what was already tracked down with it. Such a
+// sequence goes unmasked, so a wait can see the keys it typed.
+func willType(keys []string, literal bool) (text, afterEnd string, endsLine bool) {
 	if literal {
+		// tmux writes literal bytes through, and the pane's line discipline
+		// reads a newline among them as Enter, so literal text spanning
+		// lines ends every line but its last.
 		joined := strings.Join(keys, "")
+		if cut := strings.LastIndexAny(joined, "\r\n"); cut >= 0 {
+			return "", joined[cut+1:], true
+		}
 		return joined, "", false
 	}
-	var typed, sinceSubmit strings.Builder
+	var typed strings.Builder
 	for _, key := range keys {
 		switch {
-		case submitKeyNames[key]:
-			submits = true
-			sinceSubmit.Reset()
+		case submitKeyNames[key] || killLineKeyNames[key]:
+			endsLine = true
+			typed.Reset()
+			continue
+		case eraseKeyNames[key]:
+			dropLastRune(&typed)
 			continue
 		case key == "Space":
 			key = " "
 		case !typesOneRune(key):
-			continue
+			return "", "", false
 		}
 		typed.WriteString(key)
-		sinceSubmit.WriteString(key)
 	}
-	if !submits {
-		return typed.String(), "", false
+	if endsLine {
+		return "", typed.String(), true
 	}
-	return typed.String(), sinceSubmit.String(), true
+	return typed.String(), "", false
+}
+
+// dropLastRune removes the final rune a builder holds, which is what a
+// backspace does to the line.
+func dropLastRune(builder *strings.Builder) {
+	held := builder.String()
+	if held == "" {
+		return
+	}
+	_, width := utf8.DecodeLastRuneInString(held)
+	builder.Reset()
+	builder.WriteString(held[:len(held)-width])
 }
 
 // typesOneRune reports whether tmux types key as itself. A key named by one

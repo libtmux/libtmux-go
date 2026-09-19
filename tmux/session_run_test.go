@@ -270,3 +270,90 @@ func TestSettlePollBacksOff(t *testing.T) {
 		t.Errorf("settled with %d listings, want it to keep asking", settles)
 	}
 }
+
+// aliveThenDeadRunner reports a live pane for a while and a dead, unreaped one
+// after, which is what a command that runs before it exits looks like. A pane
+// that is already dead on the first look never exercises the liveness backoff.
+type aliveThenDeadRunner struct {
+	version    Version
+	mu         sync.Mutex
+	livePolls  int
+	reapAsked  bool
+	settlePoll int
+}
+
+func (r *aliveThenDeadRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		r.mu.Lock()
+		dead := "0"
+		if r.livePolls >= 3 {
+			dead = "1"
+			r.settlePoll++
+		} else {
+			r.livePolls++
+		}
+		r.mu.Unlock()
+		fields, err := formatFieldsFor("list-panes", r.version)
+		if err != nil {
+			return tmuxcmd.Result{}, err
+		}
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(fields, snapshotRowValues(
+			r.version, map[string]string{
+				"session_id": "$1", "window_id": "@1", "window_index": "0",
+				"pane_id": "%1", "pane_index": "0", "pane_dead": dead,
+			},
+		))}, nil
+	case slices.Contains(request.Arguments, "wait-for"):
+		<-ctx.Done()
+		return tmuxcmd.Result{ExitCode: -1}, ctx.Err()
+	}
+	r.mu.Lock()
+	r.reapAsked = true
+	r.mu.Unlock()
+	return tmuxcmd.Result{}, nil
+}
+
+// Settling is timed on its own. Charging it the liveness backoff that ran
+// before the pane died spends the whole allowance on the poll that found it,
+// which both cuts the wait short and skips the reap nudge that exists for a
+// tmux which lost the child's signal.
+func TestSettlingIsNotChargedTheLivenessBackoff(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &aliveThenDeadRunner{version: version}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		pane: Pane{
+			server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+		},
+		channel: "settle",
+		settle:  func(context.Context) time.Duration { return 2 * time.Second },
+	}
+
+	if err := running.waitForExit(context.Background()); !errors.Is(err, ErrOutcomeUnrecorded) {
+		t.Fatalf("waitForExit() error = %v, want ErrOutcomeUnrecorded", err)
+	}
+
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	// One lump of stale liveness delay would end the settle in a poll or two.
+	if runner.settlePoll < 4 {
+		t.Errorf("settled over %d polls, want the allowance spent on settling",
+			runner.settlePoll)
+	}
+	if !runner.reapAsked {
+		t.Error("the reap nudge never fired, which the settle allowance is for")
+	}
+}

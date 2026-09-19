@@ -10,6 +10,7 @@ import "github.com/libtmux/libtmux-go/tmux/tmuxtest"
 
 **Contents** — [Testing a program](#testing-a-program) ·
 [When a wait fails](#when-a-wait-fails) · [The waits](#the-waits) ·
+[Testing without a tmux](#testing-without-a-tmux) ·
 [Testing tmux itself](#testing-tmux-itself) ·
 [What it guarantees](#what-it-guarantees)
 

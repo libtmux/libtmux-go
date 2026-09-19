@@ -33,6 +33,10 @@ This document defines the architecture of the Go module.
   or control client whose locale does not name UTF-8. Attaching is the
   exception: its output is the caller's terminal, so the caller's locale
   governs there.
+- A record encodes to JSON and nothing decodes: what it holds is what tmux
+  said, and a decoded one would carry no server to act through.
+- Every tmux command a server runs is offered to an optional observer,
+  carrying neither the arguments nor the output, which may hold secrets.
 - Server handles and derived values are safe for concurrent method calls and
   concurrent reads. Optional warning handlers are invoked concurrently and must
   provide their own synchronization.

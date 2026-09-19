@@ -315,6 +315,8 @@ func (r *Running) waitForExit(ctx context.Context) error {
 	// at half the time the caller allowed.
 	limit := r.settleFor(ctx)
 	delay := initialLivenessDelay
+	// settleDelay doubles from half a step, so the first settle waits one.
+	settleDelay := outcomeSettleDelay / 2
 	var settling time.Duration
 	var asked bool
 	for {
@@ -351,8 +353,14 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			// often the longer it takes: tmux normally needs one or two of
 			// these, and a caller who allowed minutes should not spend them
 			// listing panes fifty times a second.
-			settling += delay
-			delay = min(max(delay*2, outcomeSettleDelay), maximumSettleDelay)
+			//
+			// Settling is timed on its own. The liveness backoff before it
+			// grows to half a minute for a long command, and charging that
+			// to the first settle would spend the whole allowance on the
+			// wait that found the pane dead - the reap nudge below included.
+			settleDelay = min(settleDelay*2, maximumSettleDelay)
+			settling += settleDelay
+			delay = settleDelay
 			continue
 		}
 		delay = min(delay*2, maximumLivenessDelay)

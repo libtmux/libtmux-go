@@ -19,10 +19,12 @@ var workflowTmuxVersions = regexp.MustCompile(`(?m)^\s+tmux-version:\s*\[([^\]]+
 
 // documentedRange matches a supported range stated to a reader. Whitespace
 // rather than a space: prose wraps, and a range split across two lines is the
-// same promise as one that fits on one. A bound may name a release candidate,
-// which the matrix runs because a tag is immutable whether or not it is final.
+// same promise as one that fits on one. Hyphens too, because a range read as
+// one adjective is written that way and promises the same thing. A bound may
+// name a release candidate, which the matrix runs because a tag is immutable
+// whether or not it is final.
 var documentedRange = regexp.MustCompile(
-	`tmux\s+\*?\*?(\d+\.\d+[a-z]?(?:-rc)?)\s+through\s+(\d+\.\d+[a-z]?(?:-rc)?)`,
+	`tmux\s+\*?\*?(\d+\.\d+[a-z]?(?:-rc)?)[\s-]+through[\s-]+(\d+\.\d+[a-z]?(?:-rc)?)`,
 )
 
 // documentedFloorOnly matches a lower bound stated without an upper one.

@@ -26,6 +26,8 @@
 //     [Session.OpenControl], or receive notifications with
 //     [Session.OpenNotifications] or [Server.OpenNotifications].
 //   - Batch dependent commands with [NewPlan].
+//   - Encode a record as JSON with [Pane.MarshalJSON] and its siblings.
+//   - See what this package runs with [CommandObserver].
 //
 // The tmuxtest package runs integration tests against an isolated real tmux,
 // and tmuxtest.ScriptedTmux answers named invocations from an executable it

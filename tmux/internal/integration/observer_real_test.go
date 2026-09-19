@@ -87,4 +87,25 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 			}
 		})
 	}
+	// Connection.Call is a route of its own into the same lane, and reports
+	// its own trace because the lane reports none.
+	t.Run("connection call", func(t *testing.T) {
+		mutex.Lock()
+		traces = traces[:0]
+		mutex.Unlock()
+
+		if _, err := connection.Call(ctx, "list-sessions"); err != nil {
+			t.Fatalf("Call() error = %v", err)
+		}
+
+		mutex.Lock()
+		defer mutex.Unlock()
+		if len(traces) != 1 {
+			t.Fatalf("one Call produced %d traces, want 1: %v", len(traces), traces)
+		}
+		if traces[0].Subcommand != "list-sessions" ||
+			traces[0].Transport != tmux.CommandTransportConnection {
+			t.Errorf("trace = %v, want list-sessions over a connection", traces[0])
+		}
+	})
 }

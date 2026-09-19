@@ -2081,8 +2081,8 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 	var pending pendingInput
 	panes := []string{"%7", "%8"}
 
-	text, _, submits := willType([]string{"rm -rf build"}, true)
-	if submits {
+	text, _, endsLine := willType([]string{"rm -rf build"}, true)
+	if endsLine {
 		t.Fatal("literal text must not read as a submit")
 	}
 	pending.record(panes, text)()
@@ -2099,8 +2099,8 @@ func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
 	}
 
 	// A submit whose dispatch fails must not clear the line.
-	_, _, submits = willType([]string{"Enter"}, false)
-	if !submits {
+	_, _, endsLine = willType([]string{"Enter"}, false)
+	if !endsLine {
 		t.Fatal("Enter must read as a submit")
 	}
 	if got := pending.snapshot(tmux.PaneID("%7")); got != "rm -rf build" {
@@ -2122,42 +2122,89 @@ func TestWillTypeModelsNonLiteralKeys(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		keys        []string
-		literal     bool
-		text        string
-		afterSubmit string
-		submits     bool
+		name     string
+		keys     []string
+		literal  bool
+		text     string
+		afterEnd string
+		endsLine bool
 	}{
 		{name: "literal text", keys: []string{"ls -al"}, literal: true, text: "ls -al"},
 		{name: "characters", keys: []string{"h", "i"}, text: "hi"},
 		{name: "named space", keys: []string{"h", "Space", "i"}, text: "h i"},
 		{
-			name: "submitted", keys: []string{"h", "i", "Enter"},
-			text: "hi", submits: true,
+			name: "submitted", keys: []string{"h", "i", "Enter"}, endsLine: true,
 		},
 		{
 			// Everything past the submit is a new line, still unsubmitted.
 			name: "typed past a submit", keys: []string{"h", "Enter", "i", "j"},
-			text: "hij", afterSubmit: "ij", submits: true,
+			afterEnd: "ij", endsLine: true,
 		},
 		{
-			// A key this cannot render leaves the rest alone rather than
-			// guessing, which over-masks.
-			name: "unrenderable key", keys: []string{"a", "C-a", "b"}, text: "ab",
+			// "ab" is a line tmux never drew: C-a moved the cursor and the b
+			// went in front. Recording it would put the mask off the line,
+			// and a mask off the line removes nothing - not even the text
+			// tracked before this call.
+			name: "unplaceable key gives up", keys: []string{"a", "C-a", "b"},
+		},
+		{
+			// The schema's own example for keys.
+			name: "interrupt then a character", keys: []string{"C-c", "q"},
+			afterEnd: "q", endsLine: true,
 		},
 		{name: "cursor move only", keys: []string{"Up"}},
+		{
+			// Correcting a typo is ordinary. Leaving the erase unmodelled put
+			// pending out of step with the line, and a mask out of step
+			// removes nothing at all.
+			name: "backspace corrects the line",
+			keys: []string{"D", "O", "N", "X", "BSpace", "E"},
+			text: "DONE",
+		},
+		{
+			name: "kill line", keys: []string{"a", "b", "C-u", "c"},
+			afterEnd: "c", endsLine: true,
+		},
+		{
+			// tmux writes literal bytes through and the line discipline reads
+			// a newline among them as Enter, so this submits mid-text.
+			name: "literal text spanning lines", keys: []string{"echo mid\nTAIL"},
+			literal: true, afterEnd: "TAIL", endsLine: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			text, afterSubmit, submits := willType(test.keys, test.literal)
-			if text != test.text || afterSubmit != test.afterSubmit || submits != test.submits {
+			text, afterEnd, endsLine := willType(test.keys, test.literal)
+			if text != test.text || afterEnd != test.afterEnd || endsLine != test.endsLine {
 				t.Errorf("willType(%#v, %t) = (%q, %q, %t), want (%q, %q, %t)",
-					test.keys, test.literal, text, afterSubmit, submits,
-					test.text, test.afterSubmit, test.submits)
+					test.keys, test.literal, text, afterEnd, endsLine,
+					test.text, test.afterEnd, test.endsLine)
 			}
 		})
+	}
+}
+
+// A sequence this cannot place must not disturb what was already tracked.
+// Recording a line tmux never drew puts the mask off the line, and a mask off
+// the line removes nothing - so the earlier text stops being masked too.
+func TestAnUnplaceableSequenceLeavesEarlierPendingAlone(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%1"}
+
+	typed, _, _ := willType([]string{"old"}, true)
+	pending.record(panes, typed)
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "old" {
+		t.Fatalf("pending = %q, want the typed text", got)
+	}
+
+	mixed, _, _ := willType([]string{"C-c", "q"}, false)
+	pending.record(panes, mixed)
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "old" {
+		t.Errorf("pending = %q after an unplaceable sequence, want %q untouched",
+			got, "old")
 	}
 }
