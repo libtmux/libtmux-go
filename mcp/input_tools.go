@@ -781,8 +781,8 @@ func (t *tools) sendKeysBatch(
 	// linked set rather than the one named: a wait on a sibling sees the same
 	// echo and needs the same masking.
 	typed := preflight.ConfiguredIDs
-	text, afterEnd, endsLine := willType(input.Keys, input.Literal)
-	restore := t.pending.record(typed, text)
+	text, afterEnd, endsLine, overflow := willType(input.Keys, input.Literal)
+	restore := t.pending.record(typed, overflow, text)
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
 	}); err != nil {
@@ -797,7 +797,7 @@ func (t *tools) sendKeysBatch(
 		// The line these keys were typed on has gone, submitted or
 		// discarded, and whatever followed is a new one still unsubmitted.
 		t.pending.clearAll(typed)
-		t.pending.record(typed, afterEnd)
+		t.pending.record(typed, 0, afterEnd)
 	}
 	output.Sent = len(input.Keys)
 	if input.Enter {
@@ -923,7 +923,7 @@ func (t *tools) pasteText(
 	// this text can reach a waiting client before the paste returns. tmux does
 	// not broadcast a paste through synchronize-panes, so only this pane.
 	pasted := []string{pane.ID().String()}
-	restore := t.pending.record(pasted, input.Text)
+	restore := t.pending.record(pasted, 0, input.Text)
 	if err := t.runtime.deps.pasteBuffer(ctx, pane, tmux.PasteBufferRequest{
 		BufferName:  &name,
 		DeleteAfter: true,
