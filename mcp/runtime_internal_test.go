@@ -478,7 +478,7 @@ func TestTerminalProbeFailurePoisonsRuntime(t *testing.T) {
 		t.Fatalf("command error = %v, want ErrDaemonReplaced", err)
 	}
 	if ctx.Err() != nil {
-		t.Fatal("a terminal probe failure must not cancel the MCP process (D4); it stays recoverable")
+		t.Fatal("a terminal probe failure must not cancel the MCP process; it stays recoverable")
 	}
 	runtime.mutex.Lock()
 	state := runtime.state
@@ -515,7 +515,7 @@ func TestNoServerBecomesTerminalOnlyAfterBinding(t *testing.T) {
 		t.Fatalf("bound absence = (%v, %v), want terminal ErrNoServer", state, cause)
 	}
 	if ctx.Err() != nil {
-		t.Fatal("bound absence must not cancel the MCP process (D4); the loss is reported, not fatal")
+		t.Fatal("bound absence must not cancel the MCP process; the loss is reported, not fatal")
 	}
 }
 
@@ -598,7 +598,7 @@ func TestFailedCreationWithAnIDIsTerminal(t *testing.T) {
 			state, cause, original.ID(), want, acted.ID())
 	}
 	if ctx.Err() != nil {
-		t.Fatal("a failed but acted create_session must not cancel the MCP process (D4)")
+		t.Fatal("a failed but acted create_session must not cancel the MCP process")
 	}
 }
 
@@ -618,7 +618,7 @@ func TestRuntimeTerminalErrorsHealOnTheNextAcquisition(t *testing.T) {
 
 	runtime.observe(errors.Join(tmux.ErrOutcomeUnknown, errors.New("reply lost")))
 	if ctx.Err() != nil {
-		t.Fatal("an indeterminate outcome must not cancel the MCP process (D4)")
+		t.Fatal("an indeterminate outcome must not cancel the MCP process")
 	}
 	runtime.mutex.Lock()
 	state := runtime.state

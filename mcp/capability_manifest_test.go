@@ -880,7 +880,7 @@ func TestCapabilityManifestDefaultSocketProvenanceControlsTeardownDefault(t *tes
 // default-dedicated target resolves to an explicit -S path (see
 // WithProcessEnvironmentValue), which skips tmux's own tmux-<uid>/ creation.
 // On a machine where tmux never ran - a fresh TMUX_TMPDIR with no tmux-<uid>/
-// yet - pinDefaultMinimal must create that directory itself (D5), the way
+// yet - pinDefaultMinimal must create that directory itself, the way
 // tmux does for -L and the default socket.
 func TestPinDefaultMinimalCreatesItsOwnSocketDirectory(t *testing.T) {
 	configPath, cleanupConfig, err := MaterializeMinimalConfig()

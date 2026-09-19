@@ -10,7 +10,7 @@ import (
 
 // observe makes errors at every MCP surface terminal without retrying work
 // that may already have acted. The daemon this runtime was using is lost or
-// untrusted (D4), never fatal to the process: the call that hit err already
+// untrusted, never fatal to the process: the call that hit err already
 // reports it, and the next top-level acquisition heals this state back to
 // unbound and starts fresh.
 func (r *tmuxRuntime) observe(err error) {
@@ -34,7 +34,7 @@ func (r *tmuxRuntime) observe(err error) {
 
 // healTerminalLocked discards a runtime lost to a terminal error and returns
 // it to unbound so the next acquisition or session creation retries as if
-// starting fresh (D4). Must hold r.mutex; returns the stale connection this
+// starting fresh. Must hold r.mutex; returns the stale connection this
 // runtime no longer trusts, for the caller to close outside the lock.
 func (r *tmuxRuntime) healTerminalLocked() *tmux.Connection {
 	lost := r.commandConnection

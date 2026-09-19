@@ -54,8 +54,8 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 		)
 		if listErr != nil {
 			// A zero-session server refuses every all-server listing that
-			// resolves an implicit current session with "no current target"
-			// (D6). list-sessions itself never depends on one, so a session
+			// resolves an implicit current session with "no current target".
+			// list-sessions itself never depends on one, so a session
 			// count is already known by the time a later listing can hit
 			// this: read it as empty, not as a failure.
 			if current.command != "list-sessions" &&

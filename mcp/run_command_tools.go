@@ -331,7 +331,7 @@ func (t *tools) startCommand(
 		if errors.Is(err, tmux.ErrOutcomeUnknown) {
 			dispatched = true
 			started.dispatched = true
-			// dispatch already carried its own Enter (D1): whatever was
+			// dispatch already carried its own Enter: whatever was
 			// pending on the line before this call is submitted, delivery
 			// outcome notwithstanding.
 			t.pending.clear(second.Source.ID())

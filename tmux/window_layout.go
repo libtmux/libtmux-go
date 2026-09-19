@@ -178,7 +178,7 @@ func layoutListsPane(layout string, pane PaneID) bool {
 // returns the exact string to send tmux. tmux's own layout_set_lookup is
 // already a prefix match, so a unique prefix ("tile", "even-h") applies on
 // every version and can never reach layout_parse, the 3.3a crash path; this
-// accepts one (D3) and refuses an ambiguous prefix by naming its candidates,
+// accepts one and refuses an ambiguous prefix by naming its candidates,
 // rather than forwarding an ambiguous or unrecognised value for tmux itself
 // to reject. A resolved preset's canonical full name is what reaches tmux,
 // never the prefix the caller typed, so tmux's own resolution never runs on

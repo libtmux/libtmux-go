@@ -220,7 +220,7 @@ func TestTerminalToolFailureReachesCallerWithoutStoppingRun(t *testing.T) {
 	}
 	select {
 	case runErr := <-runResult:
-		t.Fatalf("Run() stopped after a recoverable tool failure (D4): %v", runErr)
+		t.Fatalf("Run() stopped after a recoverable tool failure: %v", runErr)
 	case <-time.After(200 * time.Millisecond):
 	}
 	cancel()

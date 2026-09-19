@@ -51,7 +51,7 @@ func (s runtimeState) String() string {
 // on terminal connections opened from the same original session: one retained
 // command lane and one owned connection per active wait. A terminal transport
 // failure never falls back to a different daemon while it is current, but it
-// is never fatal to the process either (D4): the runtime heals back to
+// is never fatal to the process either: the runtime heals back to
 // unbound on the next acquisition and may bind or bootstrap a fresh daemon
 // then.
 type tmuxRuntime struct {

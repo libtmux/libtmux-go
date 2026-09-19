@@ -360,7 +360,7 @@ func pinDefaultMinimal(
 	// The launcher pins its resolved endpoint as an explicit -S path (see
 	// WithProcessEnvironmentValue), which skips tmux's own tmux-<uid>/
 	// creation for -L and the default socket. This process chose that
-	// directory, unlike an operator-supplied -socket-path (D5), so it may
+	// directory, unlike an operator-supplied -socket-path, so it may
 	// create it the way tmux itself would.
 	selection, err := launcher.SocketSelection()
 	if err != nil {

@@ -147,7 +147,7 @@ tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
 whole 3.2a-through-3.8-rc range. With no matrix directory, the script skips with
 an explanation rather than reporting a pass it did not earn. Set
 `LIBTMUX_MATRIX_REQUIRED=1` for a release gate, where absence must fail. With
-no explicit `LIBTMUX_MATRIX_VERSIONS`, required mode checks all nine supported
+no explicit `LIBTMUX_MATRIX_VERSIONS`, required mode checks all ten supported
 builds; setting it intentionally narrows the run:
 
 ```console
