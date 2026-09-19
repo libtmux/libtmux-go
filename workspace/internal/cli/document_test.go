@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -336,6 +337,46 @@ func TestEveryWindowsProblemIsReportedAtOnce(t *testing.T) {
 	for _, want := range []string{"line 4:", "line 7:"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("refusal = %q, want it to carry %q", err, want)
+		}
+	}
+}
+
+// benchmarkDocument is a six-window, three-pane-each workspace: large enough
+// to exercise every normalizer pass (options, environment, layout
+// validation, command shorthand) without depending on tmux or the disk.
+func benchmarkDocument() []byte {
+	var b strings.Builder
+	b.WriteString("session_name: bench\nstart_directory: .\noptions:\n  status: on\nenvironment:\n  EDITOR: vim\nwindows:\n")
+	for w := range 6 {
+		fmt.Fprintf(&b, "  - window_name: window-%d\n    layout: tiled\n    panes:\n", w)
+		for p := range 3 {
+			fmt.Fprintf(&b, "      - shell_command: echo pane-%d\n        focus: false\n", p)
+		}
+	}
+	return []byte(b.String())
+}
+
+func BenchmarkDecodeDocument(b *testing.B) {
+	text := benchmarkDocument()
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, _, err := decodeDocument(text); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkNormalize(b *testing.B) {
+	text := benchmarkDocument()
+	doc, lines, err := decodeDocument(text)
+	if err != nil {
+		b.Fatal(err)
+	}
+	dir := b.TempDir()
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := normalizeSource(doc, dir, lines); err != nil {
+			b.Fatal(err)
 		}
 	}
 }
