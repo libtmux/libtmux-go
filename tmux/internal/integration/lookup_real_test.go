@@ -285,3 +285,38 @@ func TestResolvedPaneNavigatesFromAWindowOfSeveralPanes(t *testing.T) {
 		})
 	}
 }
+
+// A person names a session; only this package's records carry its id.
+//
+//libtmux:real-tmux
+func TestSessionByNameFindsAndReportsAbsence(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	server := tmuxtest.NewServer(ctx, t)
+	created, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "by-name"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	found, err := server.SessionByName(ctx, "by-name")
+	if err != nil {
+		t.Fatalf("SessionByName() error = %v", err)
+	}
+	if found.ID() != created.ID() {
+		t.Errorf("SessionByName() = %s, want %s", found.ID(), created.ID())
+	}
+	if name, ok := found.Name(); !ok || name != "by-name" {
+		t.Errorf("Name() = (%q, %t), want the name it was looked up by", name, ok)
+	}
+	// A renamed session is no longer at its old name, where a held id would
+	// still reach it: that difference is the reason both lookups exist.
+	if _, err := created.Rename(ctx, "renamed"); err != nil {
+		t.Fatalf("Rename() error = %v", err)
+	}
+	if _, err := server.SessionByName(ctx, "by-name"); !errors.Is(err, tmux.ErrNotFound) {
+		t.Errorf("SessionByName(renamed away) error = %v, want ErrNotFound", err)
+	}
+	if _, err := server.Session(ctx, created.ID()); err != nil {
+		t.Errorf("Session(id) error = %v, want the same session under its new name", err)
+	}
+}

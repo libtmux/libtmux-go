@@ -21,6 +21,40 @@ func (s Server) Session(ctx context.Context, id SessionID) (Session, error) {
 	return snapshot.SessionByID(id)
 }
 
+// SessionByName performs a live lookup of the session tmux knows by name and
+// returns a newly materialized record. A name no session holds reports
+// [ErrNotFound].
+//
+// tmux keeps session names unique, so a name identifies one session for as
+// long as it keeps it. A [SessionID] does not change, which is why the records
+// this package hands back carry one and [Server.Session] takes one; a name is
+// what a person types and what a workspace file records.
+func (s Server) SessionByName(ctx context.Context, name string) (Session, error) {
+	if err := validateLifecycleSessionName("name", name); err != nil {
+		return Session{}, err
+	}
+	snapshot, err := s.searchSnapshot(
+		ctx,
+		"list-sessions",
+		nil,
+		nil,
+		searchSessions,
+		searchRowMatch{field: "session_name", value: name},
+	)
+	if err != nil {
+		return Session{}, err
+	}
+	sessions := snapshot.Sessions()
+	if len(sessions) != 1 {
+		return Session{}, &SnapshotLookupError{
+			Object:     "session",
+			Identifier: name,
+			Matches:    len(sessions),
+		}
+	}
+	return sessions[0], nil
+}
+
 // Window performs a canonical live lookup of id using tmux's canonical session
 // and returns a newly materialized record. It does not preserve a linked-session
 // view; use [Window.ResolveSession] for that exact relationship.
