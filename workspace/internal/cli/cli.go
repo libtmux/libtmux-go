@@ -143,19 +143,25 @@ func Run(ctx context.Context, args []string, in io.Reader, out, diagnostic io.Wr
 }
 
 func (r *invocation) commandFailure(err error) *failure {
+	// The primary error, when there is one, came from a tmux command and is
+	// tmux_failed unless it already names its own code. Falling back to the
+	// output writer or the terminal restore is this tool's own machinery,
+	// not tmux, so an unclassified one of those is output_failed instead --
+	// tmux did not fail, and saying it did sends a reader to the wrong place.
+	code := "tmux_failed"
 	if err == nil {
 		err = r.writeErr
+		code = "output_failed"
 	}
 	if err == nil {
 		err = r.terminalRestoreErr
 		r.terminalRestoreErr = nil
+		code = "output_failed"
 	}
 	if err == nil {
 		return nil
 	}
-	// An error that reached here unclassified came from a tmux command: the
-	// paths that can fail for another reason name their own code.
-	f := &failure{"tmux_failed", err.Error(), 1}
+	f := &failure{code, err.Error(), 1}
 	var specific *failure
 	if errors.As(err, &specific) {
 		f = specific
