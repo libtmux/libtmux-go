@@ -2296,3 +2296,41 @@ func textOf(value any) string {
 	text, _ := value.(string)
 	return text
 }
+
+// TestOneMismatchDoesNotErrorAnotherInputsSuccess: status is derived per
+// result, not per command. A command loading two documents where one builds
+// a session and the other names a session that does not match must still
+// report partial -- the built session is a retained effect, and a mismatch
+// contributes none, but the two do not cancel each other into error.
+func TestOneMismatchDoesNotErrorAnotherInputsSuccess(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	dir := t.TempDir()
+	small := write(t, dir, "small.yaml", "session_name: reuse\nwindows:\n- window_name: one\n  panes: [blank]\n")
+	if code, out, diagnostic := run(t, "load", small, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json"); code != 0 {
+		t.Fatalf("seed load: %d %q %q", code, out, diagnostic)
+	}
+	kept := write(t, dir, "kept.yaml", "session_name: kept\nwindows:\n- window_name: one\n  panes: [blank]\n")
+	full := write(t, dir, "full.yaml", "session_name: reuse\nwindows:\n- window_name: one\n  panes: [blank]\n- window_name: two\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", kept, full, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	var summary map[string]any
+	if err := json.Unmarshal([]byte(out), &summary); err != nil {
+		t.Fatalf("invalid summary %q: %v (%q)", out, err, diagnostic)
+	}
+	errs, _ := summary["errors"].([]any)
+	entry, _ := first(errs).(map[string]any)
+	if code != 1 || summary["status"] != "partial" || entry["code"] != "session_mismatch" {
+		t.Fatalf("mixed result = %d status %v code %v, want 1, partial and session_mismatch: %s", code, summary["status"], entry["code"], out)
+	}
+	results, _ := summary["results"].([]any)
+	if len(results) != 2 {
+		t.Fatalf("results = %v, want an entry for both inputs", results)
+	}
+	completed, _ := results[0].(map[string]any)
+	if completed["session_name"] != "kept" || completed["stage"] != "completed" {
+		t.Fatalf("first input = %v, want kept completed", completed)
+	}
+	exists, err := server.Cmd(t.Context(), "has-session", "-t", "kept")
+	if err != nil || exists.ExitCode != 0 {
+		t.Fatalf("kept session not built: %+v %v", exists, err)
+	}
+}
