@@ -382,6 +382,11 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		if err := r.event("workspace-started", map[string]any{"input_index": index, "input": privatePath(input.path)}); err != nil {
 			return err
 		}
+		for _, warning := range input.plan.Warnings {
+			if err := r.event("warning", map[string]any{"input_index": index, "code": "unsupported_key", "message": warning}); err != nil {
+				return err
+			}
+		}
 		var session tmux.Session
 		var buildErr error
 		var built []string
@@ -770,14 +775,10 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 			return session, windows, err
 		}
 	}
-	waitForPrompt := plan.Readiness == "always"
-	if plan.Readiness == "auto" {
-		shell, err := query(r.ctx, server, "show-options", "-A", "-v", "-t", session.ID().String(), "default-shell")
-		if err != nil {
-			return session, windows, err
-		}
-		waitForPrompt = filepath.Base(shell) == "zsh"
-	}
+	// Readiness is not conditional on the shell. Text sent before any shell
+	// owns the terminal is echoed by the tty and drawn again once the line
+	// editor takes over, so the command appears twice.
+	waitForPrompt := plan.Readiness != "never"
 	var focus tmux.Window
 	var explicitFocus bool
 	baseIndex := bootstrap.Index()
