@@ -228,6 +228,10 @@ func TestKeyCommandsTreatLeadingDashKeyOrNameAsPositionalAgainstRealTmux(t *test
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
 
 	const value = "-zzz-not-a-flag"
 
@@ -268,9 +272,25 @@ func TestKeyCommandsTreatLeadingDashKeyOrNameAsPositionalAgainstRealTmux(t *test
 			t.Fatalf("unguarded list-commands = (%#v, %v), want a parse failure quoting nothing", raw, err)
 		}
 		name := value
-		_, listErr := server.ListCommands(ctx, tmux.ListCommandsRequest{CommandName: &name})
-		if listErr == nil || !strings.Contains(listErr.Error(), value) {
-			t.Fatalf("ListCommands() error = %v, want it to quote %q", listErr, value)
+		rows, listErr := server.ListCommands(ctx, tmux.ListCommandsRequest{CommandName: &name})
+		if version.AtLeast(mustPaneModeVersion(t, "3.6")) {
+			// 3.6 added a cmd_find lookup for list-commands that errors,
+			// quoting the exact name, when nothing matches (cmd-list-keys.c
+			// through 3.6b; cmd-list-commands.c from 3.7).
+			if listErr == nil || !strings.Contains(listErr.Error(), value) {
+				t.Fatalf("ListCommands() error = %v, want it to quote %q", listErr, value)
+			}
+			return
+		}
+		// Before 3.6, an unmatched name is not an error: list-commands scans
+		// the whole command table, matches nothing, and returns empty
+		// output. Reaching that scan rather than being refused as a flag is
+		// still what the guard is responsible for.
+		if listErr != nil || len(rows) != 0 {
+			t.Fatalf(
+				"ListCommands() = (%#v, %v), want no rows and no error on tmux %s",
+				rows, listErr, version,
+			)
 		}
 	})
 }
