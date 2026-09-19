@@ -388,13 +388,13 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			return err
 		}
 		for _, warning := range input.plan.Warnings {
-			if err := r.event("warning", map[string]any{"input_index": index, "code": "unsupported_key", "message": warning}); err != nil {
+			if err := r.event("warning", map[string]any{"input_index": index, "code": warning.Code, "message": warning.Message}); err != nil {
 				return err
 			}
 		}
 		var session tmux.Session
 		var buildErr error
-		var built []string
+		built := []string{}
 		reused := false
 		if o.append {
 			session = borrowed

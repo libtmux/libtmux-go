@@ -207,8 +207,12 @@ type loadPlan struct {
 	Bridge                              bool
 	// Warnings are reported once the load starts. Nothing here refuses the
 	// document.
-	Warnings []string
+	Warnings []planWarning
 }
+
+// planWarning is one reportable problem that does not refuse the document.
+type planWarning struct{ Code, Message string }
+
 type windowPlan struct {
 	Name, Directory, Layout string
 	Index                   *int
@@ -268,7 +272,7 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 				if key == "pane_readiness" || strings.HasPrefix(key, "x-") {
 					continue
 				}
-				plan.Warnings = append(plan.Warnings, fmt.Sprintf("workspace_builder_options: ignoring unknown setting %q", key))
+				plan.Warnings = append(plan.Warnings, planWarning{"unsupported_key", fmt.Sprintf("workspace_builder_options: ignoring unknown setting %q", key)})
 			}
 		}
 		if value := catalog["pane_readiness"]; value != nil {
@@ -469,7 +473,7 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
 			continue
 		}
-		plan.Warnings = append(plan.Warnings, "start_directory is not a directory, tmux will fall back to $HOME: "+path)
+		plan.Warnings = append(plan.Warnings, planWarning{"start_directory_missing", "start_directory is not a directory, tmux will fall back to $HOME: " + path})
 	}
 	return plan, nil
 }
