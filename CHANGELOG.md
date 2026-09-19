@@ -9,6 +9,86 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `Server.SessionByName` to look up a session without listing and
+  comparing every session name. (#16)
+- `Session.ResolveActivePane` and `Window.ResolveActivePane` report absence
+  through `ErrNotFound`. Remove the boolean result from callers. (#16)
+- Add `PaneObservation.WaitFor` to wait for matching output without polling
+  captures. (#16)
+- Window and pane handles remain valid across window renumbering and report
+  a missing target after their window is removed. (#16)
+- `Running.Wait` gives concurrent callers independent context deadlines
+  while preserving the command's recorded outcome. (#16)
+- Buffer transfers, `Pane.CaptureTo` and `Running.StreamTo` return when their
+  contexts end, including when a destination write blocks. (#16)
+- `Running.Kill` returns when tmux accepts the termination request. (#16)
+- `Session.Start` preserves output from commands that exit quickly on tmux
+  versions before 3.7. (#16)
+- Add `tmuxtest.ScriptedTmux` for testing callers without a real daemon.
+  (#16)
+- `Session`, `Window`, `Pane`, `Client`, `FormatValues` and `Snapshot` encode
+  as JSON for inspection and reporting. (#16)
+- Add `ServerOptions.CommandObserver` to report command timing, transport
+  and outcomes without exposing arguments or output. (#16)
+- Pane input, reset and capture operations report tmux refusals instead of
+  succeeding against a missing pane. (#16)
+- `ErrNotFound` replaces `ErrSnapshotNotFound` and also matches commands
+  refused for a missing target. Update error comparisons. (#16)
+- `NewServer` preserves non-ASCII text regardless of the caller's locale.
+  (#16)
+- `Server.CheckAlive` replaces the removed `Server.RaiseIfDead`. (#16)
+- Time-valued options and `DisplayMessageRequest.Delay` use `time.Duration`;
+  replace bare integers with values such as `250*time.Millisecond`. (#16)
+- `FormatValues` decodes quoted braces emitted by newer tmux builds. (#16)
+- Control connections and `Window.SelectLayout` use JSON layouts on tmux
+  3.8 and newer to preserve pane placement. (#16)
+- Session-scoped notification subscriptions work on tmux 3.8 and newer.
+  (#16)
+- `Window.NewWindow` recovers an existing window when `SelectExisting` is
+  set on tmux 3.8 and newer. (#16)
+- `PaneObservation` stays open when an unrelated session's window closes.
+  (#16)
+- Split failures include tmux's explanation on releases before 3.7. (#16)
+- Zero-value object targets report `MissingTargetError` with the object kind
+  and the resolver to use. (#16)
+- `Window.SelectLayout` accepts unique preset prefixes and identifies the
+  candidates when a prefix is ambiguous. (#16)
+- Control notification streams distinguish an unexpected disconnection with
+  `ErrControlStreamLost` from a clean end. (#16)
+- `Server.Snapshot` and its listings return empty results for a server with
+  no sessions. (#16)
+- Positional commands, names, keys and values beginning with `-` remain
+  caller text in direct operations and plans, without changing tmux flags.
+  (#16)
+
+### mcp
+
+- `wait_for_text` distinguishes existing text and pending input from new
+  output. Read the `alreadyOnScreen` outcome and `pendingInputOnly` field in
+  place of `matchedAtEntry`. (#16)
+- `wait_for_text` resumes from the exact position its supplied cursor names.
+  (#16)
+- `select_layout` accepts saved layouts and unique preset prefixes; JSON
+  layouts preserve exact pane placement on tmux 3.8 and newer. (#16)
+- `libtmux-mcp --tools` lists the tools the selected socket would advertise.
+  (#16)
+- `libtmux-mcp` creates its socket directory before starting a daemon. (#16)
+- `libtmux-mcp` recovers after its daemon exits; the next `create_session`
+  can start a new server. (#16)
+- Server inspection and session creation work before a running daemon has
+  any sessions. (#16)
+- `send_keys` and `send_keys_batch` accept `enter` to submit literal text.
+  (#16)
+- Attachment reports exclude every control client this MCP process owns.
+  (#16)
+
+### workspace
+
+- `Build` accepts unique preset layout prefixes, matching the core library.
+  (#16)
+
 ## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
 
 ### tmux
