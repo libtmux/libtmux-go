@@ -781,8 +781,8 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 	if killer.Index() != victimIndex {
 		t.Fatalf("killer index = %d, want %d", killer.Index(), victimIndex)
 	}
-	if _, err := server.Window(ctx, victim.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("victim lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Window(ctx, victim.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("victim lookup error = %v, want ErrNotFound", err)
 	}
 
 	highIndex := 30

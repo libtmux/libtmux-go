@@ -475,8 +475,8 @@ func TestCreatedWindowLookupRequiresOneView(t *testing.T) {
 		t.Fatalf("creation lookup error = %v, want ErrSnapshotAmbiguous", err)
 	}
 	_, err = createdWindowFromSnapshot(snapshot, "$2", "@8")
-	if !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("creation lookup error = %v, want ErrSnapshotNotFound", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("creation lookup error = %v, want ErrNotFound", err)
 	}
 }
 

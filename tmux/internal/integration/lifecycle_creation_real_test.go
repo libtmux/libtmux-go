@@ -130,8 +130,8 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 				windows[0].Index(),
 			)
 		}
-		if _, err := server.Window(ctx, windows[0].ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-			t.Fatalf("lookup replaced receiver error = %v, want ErrSnapshotNotFound", err)
+		if _, err := server.Window(ctx, windows[0].ID()); !errors.Is(err, tmux.ErrNotFound) {
+			t.Fatalf("lookup replaced receiver error = %v, want ErrNotFound", err)
 		}
 	})
 }

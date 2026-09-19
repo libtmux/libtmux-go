@@ -166,6 +166,7 @@ func (e *CommandError) Is(target error) bool {
 // hold what snapshotListing returned, which is unwrapped. Anything else is
 // returned unchanged.
 func withoutAbsenceClaim(err error) error {
+	//nolint:errorlint // must be the unwrapped error, not one wrapping it; see above
 	commandError, ok := err.(*CommandError)
 	if !ok || !commandError.targetNotFound {
 		return err

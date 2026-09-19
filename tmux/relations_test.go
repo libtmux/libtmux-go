@@ -192,8 +192,8 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 		})
 		session := Session{server: serverWithRunner(runner), sessionID: SessionID("$2")}
 		_, err := session.ResolveActiveWindow(context.Background())
-		if !errors.Is(err, ErrSnapshotNotFound) {
-			t.Fatalf("ResolveActiveWindow() error = %v, want ErrSnapshotNotFound", err)
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("ResolveActiveWindow() error = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -222,8 +222,8 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 			windowID: WindowID("@8"), windowIndex: 7,
 		}
 		_, err := window.ResolveSession(context.Background())
-		if !errors.Is(err, ErrSnapshotNotFound) {
-			t.Fatalf("ResolveSession() error = %v, want ErrSnapshotNotFound", err)
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("ResolveSession() error = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -291,7 +291,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				_, _, err := (Session{server: server, sessionID: SessionID("$2")}).ResolveActivePane(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name:    "session receiver ambiguous",
@@ -312,7 +312,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				}).ResolveSession(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "window parent ambiguous",
@@ -338,7 +338,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				_, err := relationshipPane(server).ResolveWindow(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "pane receiver ambiguous",
@@ -361,7 +361,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				_, err := relationshipPane(server).ResolveWindow(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "pane parent window ambiguous",
@@ -384,7 +384,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				_, err := relationshipPane(server).ResolveSession(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "pane parent session ambiguous",

@@ -15,7 +15,8 @@ var (
 	// ErrSnapshotNotFound identifies a point lookup with no matching view.
 	//
 	// Deprecated: Use ErrNotFound, which this is, and which a command refused
-	// for a missing target matches too.
+	// for a missing target matches too. Matching this name therefore now also
+	// matches a CommandError whose target was gone, which it did not before.
 	ErrSnapshotNotFound = ErrNotFound
 	// ErrSnapshotAmbiguous identifies a point lookup with multiple matching
 	// views. SnapshotLookupError matches it through errors.Is.

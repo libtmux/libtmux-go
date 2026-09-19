@@ -77,20 +77,20 @@ func TestLifecycleOperationsAgainstRealTmux(t *testing.T) {
 	if err := pane.Kill(ctx); err != nil {
 		t.Fatalf("Pane.Kill() error = %v", err)
 	}
-	if _, err := server.Pane(ctx, pane.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("lookup killed pane error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Pane(ctx, pane.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("lookup killed pane error = %v, want ErrNotFound", err)
 	}
 	if err := window.Kill(ctx); err != nil {
 		t.Fatalf("Window.Kill() error = %v", err)
 	}
-	if _, err := server.Window(ctx, window.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("lookup killed window error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Window(ctx, window.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("lookup killed window error = %v, want ErrNotFound", err)
 	}
 	if err := session.Kill(ctx); err != nil {
 		t.Fatalf("Session.Kill() error = %v", err)
 	}
-	if _, err := server.Session(ctx, session.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("lookup killed session error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Session(ctx, session.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("lookup killed session error = %v, want ErrNotFound", err)
 	}
 	if err := server.Kill(ctx); err != nil {
 		t.Fatalf("Server.Kill() error = %v", err)
@@ -166,8 +166,8 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 	if session.ID() == firstID {
 		t.Fatalf("replacement session ID = %s, want a new identity", session.ID())
 	}
-	if _, err := server.Session(ctx, firstID); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("lookup replaced session error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Session(ctx, firstID); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("lookup replaced session error = %v, want ErrNotFound", err)
 	}
 
 	index := 7

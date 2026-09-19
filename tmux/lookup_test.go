@@ -334,7 +334,7 @@ func TestServerPointLookupCardinality(t *testing.T) {
 				_, err := server.Session(context.Background(), SessionID("$7"))
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "duplicate session", command: "list-sessions",
@@ -354,7 +354,7 @@ func TestServerPointLookupCardinality(t *testing.T) {
 				_, err := server.Client(context.Background(), ClientName("/dev/pts/9"))
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "duplicate client", command: "list-clients",
@@ -374,7 +374,7 @@ func TestServerPointLookupCardinality(t *testing.T) {
 				_, err := server.Window(context.Background(), WindowID("@9"))
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 	}
 
@@ -420,7 +420,7 @@ func TestServerPointLookupErrorPolicy(t *testing.T) {
 				_, err := server.Window(context.Background(), WindowID("@99"))
 				return err
 			},
-			want: ErrSnapshotNotFound, notWant: ErrCommand,
+			want: ErrNotFound, notWant: ErrCommand,
 		},
 		{
 			name:     "dead server stays loud on lenient handle",
@@ -429,7 +429,7 @@ func TestServerPointLookupErrorPolicy(t *testing.T) {
 				_, err := server.Window(context.Background(), WindowID("@99"))
 				return err
 			},
-			want: ErrCommand, notWant: ErrSnapshotNotFound,
+			want: ErrCommand, notWant: ErrNotFound,
 		},
 		{
 			name:     "unscoped can't-find text remains command error",
@@ -438,7 +438,7 @@ func TestServerPointLookupErrorPolicy(t *testing.T) {
 				_, err := server.Session(context.Background(), SessionID("$99"))
 				return err
 			},
-			want: ErrCommand, notWant: ErrSnapshotNotFound,
+			want: ErrCommand, notWant: ErrNotFound,
 		},
 		{
 			name:     "context error",
@@ -592,7 +592,7 @@ func TestServerPointLookupRejectsIdentityChangeAfterSuccessfulListing(t *testing
 			if identifier != "" {
 				t.Fatalf("lookup returned stale identifier %q with restart error", identifier)
 			}
-			if errors.Is(err, ErrSnapshotNotFound) {
+			if errors.Is(err, ErrNotFound) {
 				t.Fatalf("lookup error = %v, must not return a stale or absent value", err)
 			}
 			if calls := runner.callCount(); calls != 3 {
@@ -694,7 +694,7 @@ func TestServerPointLookupDetectsRestartBeforeReportingAbsence(t *testing.T) {
 			if !errors.Is(err, ErrMalformedSnapshot) {
 				t.Fatalf("lookup error = %v, want ErrMalformedSnapshot", err)
 			}
-			if errors.Is(err, ErrSnapshotNotFound) {
+			if errors.Is(err, ErrNotFound) {
 				t.Fatalf("lookup error = %v, must not report stable absence", err)
 			}
 			if errors.Is(err, ErrCommand) != test.wantCommand {
@@ -716,13 +716,13 @@ func TestServerPointLookupAbsenceClosingProbePolicy(t *testing.T) {
 		closing versionResponse
 		want    error
 	}{
-		{name: "same daemon", closing: liveIdentityResponse(version), want: ErrSnapshotNotFound},
+		{name: "same daemon", closing: liveIdentityResponse(version), want: ErrNotFound},
 		{
 			name: "daemon unavailable",
 			closing: versionResponse{result: tmuxcmd.Result{
 				Stderr: []string{"no server running"}, ExitCode: 1,
 			}},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{name: "closing context canceled", closing: versionResponse{err: context.Canceled}, want: context.Canceled},
 	}

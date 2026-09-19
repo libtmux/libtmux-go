@@ -592,11 +592,11 @@ func TestProjectedFormatAccessorsPreserveDanglingIDs(t *testing.T) {
 	session := snapshot.Sessions()[0]
 	assertProjectedFormatValue(t, "Session.Formats.WindowID", session.Formats().WindowID, "@91")
 	assertProjectedFormatValue(t, "Session.Formats.PaneID", session.Formats().PaneID, "%92")
-	if _, err := snapshot.WindowByID(WindowID("@91")); !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("WindowByID(@91) error = %v, want ErrSnapshotNotFound", err)
+	if _, err := snapshot.WindowByID(WindowID("@91")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("WindowByID(@91) error = %v, want ErrNotFound", err)
 	}
-	if _, err := snapshot.PaneByID(PaneID("%92")); !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("PaneByID(%%92) error = %v, want ErrSnapshotNotFound", err)
+	if _, err := snapshot.PaneByID(PaneID("%92")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PaneByID(%%92) error = %v, want ErrNotFound", err)
 	}
 
 	window := snapshot.Windows()[0]
@@ -604,8 +604,8 @@ func TestProjectedFormatAccessorsPreserveDanglingIDs(t *testing.T) {
 	if _, ok := window.Session(); ok {
 		t.Fatal("window resolved dangling session projection")
 	}
-	if _, err := snapshot.PaneByID(PaneID("%93")); !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("PaneByID(%%93) error = %v, want ErrSnapshotNotFound", err)
+	if _, err := snapshot.PaneByID(PaneID("%93")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PaneByID(%%93) error = %v, want ErrNotFound", err)
 	}
 
 	client := snapshot.Clients()[0]

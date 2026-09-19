@@ -125,6 +125,8 @@ func TestDecodingARecordChangesNothing(t *testing.T) {
 		t.Fatalf("Marshal error = %v", err)
 	}
 
+	//nolint:staticcheck // SA9005 describes the contract under test: decoding
+	// a record has no fields to fill, and this pins that it stays a no-op.
 	if err := json.Unmarshal(payload, &pane); err != nil {
 		t.Fatalf("Unmarshal error = %v, want the documented no-op", err)
 	}

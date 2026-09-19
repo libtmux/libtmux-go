@@ -3,12 +3,13 @@ package tmux
 import (
 	"context"
 	"errors"
-	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 func TestTrimScreenKeepsOnlyWhatTheCommandShowed(t *testing.T) {

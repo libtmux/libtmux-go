@@ -70,12 +70,13 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 					"cannot carry", index, needle)
 			}
 		}
-		condition := "true"
+		var condition strings.Builder
+		condition.WriteString("true")
 		for _, needle := range command.Contains {
-			condition += fmt.Sprintf(
+			fmt.Fprintf(&condition,
 				" && { needle=%s; match \"$@\"; }", shellQuote(needle))
 		}
-		fmt.Fprintf(&body, "if %s; then\n", condition)
+		fmt.Fprintf(&body, "if %s; then\n", condition.String())
 		if command.Stdout != "" {
 			fmt.Fprintf(&body, "  printf %%s %s\n", shellQuote(command.Stdout))
 		}

@@ -1207,7 +1207,7 @@ func ExampleServer_Client() {
 	// A detached server has no clients, so the lookup reports absence as a
 	// classified error rather than an empty value.
 	_, err = server.Client(ctx, tmux.ClientName("/dev/pts/999"))
-	fmt.Println(errors.Is(err, tmux.ErrSnapshotNotFound))
+	fmt.Println(errors.Is(err, tmux.ErrNotFound))
 	// Output: true
 }
 
