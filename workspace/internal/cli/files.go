@@ -137,7 +137,7 @@ func discover(full bool) ([]map[string]any, []map[string]any, error) {
 		if e != nil {
 			return
 		}
-		doc, _ := readDocument(absolute)
+		doc, _, _ := readDocument(absolute)
 		format := "yaml"
 		if strings.ToLower(filepath.Ext(path)) == ".json" {
 			format = "json"
@@ -424,7 +424,7 @@ func (r *invocation) convert(_ *cobra.Command, o *options, args []string) error 
 	if err != nil {
 		return err
 	}
-	doc, err := readDocument(path)
+	doc, _, err := readDocument(path)
 	if err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func (r *invocation) importDocument(_ *cobra.Command, o *options, args []string,
 	if err != nil {
 		return err
 	}
-	doc, err := readDocument(path)
+	doc, _, err := readDocument(path)
 	if err != nil {
 		return err
 	}

@@ -221,14 +221,14 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		if err != nil {
 			return err
 		}
-		doc, err := readDocument(path)
+		doc, lines, err := readDocument(path)
 		if err != nil {
 			return err
 		}
 		if o.session != "" && index == len(args)-1 {
 			doc["session_name"] = o.session
 		}
-		plan, err := normalize(doc, filepath.Dir(path))
+		plan, err := normalizeSource(doc, filepath.Dir(path), lines)
 		if err != nil {
 			// Preserve a *failure's code and exit status; only the message
 			// gains the failing input's path, so the classification a

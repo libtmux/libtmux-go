@@ -53,7 +53,7 @@ func TestJSONExtensionUsesJSONSyntax(t *testing.T) {
 	if err := os.WriteFile(path, []byte("session_name: yaml\nwindows: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := readDocument(path); err == nil {
+	if _, _, err := readDocument(path); err == nil {
 		t.Fatal("YAML content accepted in a JSON document")
 	}
 }
@@ -335,14 +335,14 @@ func TestCaptureDestinationStaysInTheWorkspaceDirectory(t *testing.T) {
 }
 
 func TestDocumentRejectsTrailingYAML(t *testing.T) {
-	_, err := decodeDocument([]byte("session_name: first\n---\nsession_name: second\n"))
+	_, _, err := decodeDocument([]byte("session_name: first\n---\nsession_name: second\n"))
 	if err == nil {
 		t.Fatal("accepted a silently discarded YAML document")
 	}
 }
 
 func TestNormalizeShorthandAndCommandState(t *testing.T) {
-	doc, err := decodeDocument([]byte("session_name: example\nshell_command_before: echo root\nwindows:\n- window_shell: /bin/sh\n  panes:\n  - pane\n  - [echo one, echo two]\n  - shell_command:\n    - {cmd: first, sleep_after: 0.2, enter: false}\n    - second\n    - {cmd: third, sleep_after: 0, enter: true}\n    - fourth\n"))
+	doc, _, err := decodeDocument([]byte("session_name: example\nshell_command_before: echo root\nwindows:\n- window_shell: /bin/sh\n  panes:\n  - pane\n  - [echo one, echo two]\n  - shell_command:\n    - {cmd: first, sleep_after: 0.2, enter: false}\n    - second\n    - {cmd: third, sleep_after: 0, enter: true}\n    - fourth\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ func TestNormalizeExtensionSelection(t *testing.T) {
 		{"malformed-plugins", "plugins: invalid", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			doc, err := decodeDocument([]byte("session_name: example\nbefore_script: /bin/echo native\nwindows: [{panes: [blank]}]\n" + test.field + "\n"))
+			doc, _, err := decodeDocument([]byte("session_name: example\nbefore_script: /bin/echo native\nwindows: [{panes: [blank]}]\n" + test.field + "\n"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -557,5 +557,24 @@ func TestLoadInvalidLayoutReportsInvalidWorkspace(t *testing.T) {
 	}
 	if got := errorCode(t, diagnostic); got != "invalid_workspace" {
 		t.Fatalf("code = %q, want invalid_workspace (%s)", got, diagnostic)
+	}
+}
+
+// TestLoadRefusalNamesTheLine: the position has to survive the wrap that adds
+// the input's path and the classification the machine envelope carries, or
+// only the parser's own tests ever see it.
+func TestLoadRefusalNamesTheLine(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	path := filepath.Join(t.TempDir(), "layout.yaml")
+	document := "session_name: layout\nwindows:\n  - window_name: one\n    panes: [blank]\n  - window_name: two\n    layout: definitely-not-a-layout\n    panes: [blank]\n"
+	if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "load", "-d", "--yes", "--json", path)
+	if code != 1 || out != "" {
+		t.Fatalf("%d %q %q", code, out, diagnostic)
+	}
+	if !strings.Contains(diagnostic, "line 6:") {
+		t.Fatalf("refusal does not name the line the layout is on: %s", diagnostic)
 	}
 }
