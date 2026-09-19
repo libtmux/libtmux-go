@@ -502,13 +502,9 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 		[]versionResponse{{
 			result: tmuxcmd.Result{Stdout: []string{"%9"}, ExitCode: 0},
 		}},
-		lifecycleSnapshotResponses(
+		lifecyclePaneListingResponses(
 			t,
 			version,
-			map[string]string{"session_id": "$1", "session_name": "work"},
-			map[string]string{
-				"session_id": "$1", "window_id": "@8", "window_index": "4",
-			},
 			map[string]string{
 				"session_id": "$1", "window_id": "@8", "window_index": "4",
 				"pane_id": "%9", "pane_index": "1",
@@ -1539,6 +1535,28 @@ func lifecycleSnapshotResponses(
 		responses = append(responses, versionResponse{result: result})
 	}
 	return append(responses, liveIdentityResponse(version))
+}
+
+// lifecyclePaneListingResponses scripts what materializing one pane from its
+// own window's listing asks for: the opening identity probe, the listing, and
+// the closing probe.
+func lifecyclePaneListingResponses(
+	t *testing.T,
+	version Version,
+	paneRow map[string]string,
+) []versionResponse {
+	t.Helper()
+	fields, err := formatFieldsFor("list-panes", version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []versionResponse{
+		liveIdentityResponse(version),
+		{result: tmuxcmd.Result{
+			RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, paneRow)),
+		}},
+		liveIdentityResponse(version),
+	}
 }
 
 func assertLifecycleArguments(t *testing.T, runner *versionQueueRunner, want []string) {

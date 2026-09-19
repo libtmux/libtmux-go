@@ -123,7 +123,9 @@
 // exists, [Server.NewSessionConnection] creates one and keeps the creating
 // control process as its first lane.
 //
-// A plain [Server] starts one tmux process per operation. A [Connection] owns
+// A plain [Server] starts a tmux process for each command it sends, so an
+// operation returning a materialized record costs the listing too. A
+// [Connection] owns
 // persistent command lanes and returns model values already bound to them.
 // Control connections appear as attached tmux clients, affect session_attached
 // and hooks, and must be closed by their owner. On tmux 3.6 and later, their

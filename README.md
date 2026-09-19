@@ -181,7 +181,7 @@ replacement when exact-daemon ownership is required.
 
 | Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
-| process | `NewServer` | one tmux process per operation | one-shot commands |
+| process | `NewServer` | a tmux process per command sent | one-shot commands |
 | connection | `Session.OpenControl` | one tmux client per lane | repeated commands |
 | concurrent | `ConnectionOptions{Lanes: N}` | N tmux clients | parallel readers |
 | chained | `NewPlan` then `Run` | fewer process starts | builds and layouts |

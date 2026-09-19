@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"strconv"
 )
 
 // Session performs a canonical live lookup of id and returns a newly
@@ -319,8 +320,25 @@ func refreshCreatedWindow(
 	return createdWindowFromSnapshot(snapshot, sessionID, windowID)
 }
 
+// refreshExactPane materializes the pane's own winlink view. It lists that
+// one window's panes rather than taking a whole-server snapshot: the view
+// wanted is the one in this window, which a point lookup would not promise
+// for a linked window, and the other three listings a snapshot takes answer
+// nothing this asks.
 func refreshExactPane(ctx context.Context, pane Pane) (Pane, error) {
-	snapshot, err := pane.server.Snapshot(ctx)
+	if _, err := validatePaneView(pane); err != nil {
+		return Pane{}, err
+	}
+	target := pane.sessionID.String() + ":" + strconv.Itoa(pane.windowIndex)
+	snapshot, err := pane.server.searchSnapshot(
+		ctx,
+		"list-panes",
+		[]string{"-t", target},
+		nil,
+		searchPanes,
+		searchRowMatch{field: "session_id", value: pane.sessionID.String()},
+		searchRowMatch{field: "window_id", value: pane.windowID.String()},
+	)
 	if err != nil {
 		return Pane{}, err
 	}
