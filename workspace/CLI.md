@@ -288,8 +288,8 @@ their own instead of borrowing one of the shared ones dishonestly:
 
 | Code | Means |
 | --- | --- |
-| `output_failed` | Writing JSON/NDJSON output, or restoring the terminal on exit, failed. Not `tmux_failed` -- tmux did not fail. |
-| `child_failed` | A spawned child (the Python shell, or a plugin/custom-builder bridge) exited unsuccessfully. |
+| `output_failed` | Writing JSON, NDJSON or human progress output, or restoring the terminal on exit, failed. Not `tmux_failed` -- tmux did not fail. |
+| `child_failed` | The `shell` command's Python child (tmuxp) exited unsuccessfully. A `before_script` or plugin bridge failing during `load` is `script_failed`, not this. |
 | `editor_failed` | The editor launched for an interactive edit exited unsuccessfully. |
 | `compatibility_runtime` | The Python compatibility runtime `shell` and plugin loads depend on is missing or does not meet the version requirement. |
 | `client_changed` | The terminal client identified for handoff changed identity between selection and `switch-client`. |
