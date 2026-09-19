@@ -25,7 +25,7 @@ The CLI is the tmuxp-compatible one — build automation on it and parse its
 | `workspace_builder_options` | refused | read |
 | Waiting for a pane's prompt | never | before the pane's first command |
 | A missing `start_directory` | `MissingDirectories` | warned on load |
-| Problems reported | every one, with its line | the first, with no position |
+| Problems reported | every one, with its line | one per window, with its line; a document-level refusal still stops at the first |
 
 This is a consumer of the tmux module, not part of it. The tmux module takes no
 runtime dependency; parsing YAML needs one, so this lives in its own module and
