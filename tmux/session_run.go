@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -204,10 +205,14 @@ type Running struct {
 	// drive waitForExit without waiting out a real deadline.
 	settle func(context.Context) time.Duration
 
-	mu     sync.Mutex
-	done   bool
-	result RunResult
-	err    error
+	// exited records that some Wait saw the command end; finishing reads the
+	// outcome once after that, and finished closes when result and err hold it.
+	exited    atomic.Bool
+	finishing sync.Once
+	mu        sync.Mutex
+	finished  chan struct{}
+	result    RunResult
+	err       error
 }
 
 // Pane returns the pane the command runs in, materialized immediately after
@@ -225,42 +230,63 @@ func (r *Running) Pane() Pane {
 // make a failed command look successful.
 //
 // Wait may be called more than once and concurrently; every call observes the
-// same completion. Only the first call to reach tmux drives the underlying
-// wait; if its context ends first, that error is the outcome of that call
-// only, and a later call starts a fresh wait, since tmux's one-shot signal is
-// never delivered to a waiter that never received it. A Wait call that ends
-// this way does not remove the window: a canceled Wait can always be retried,
-// so only a Wait that actually observes the command's end does cleanup.
+// same completion. The outcome is read once, as soon as any call sees the
+// command end, on a context no caller's cancellation reaches, because from
+// then on it belongs to every caller. A call whose context ends first reports
+// that context and leaves the window alone; a later call gets the outcome.
 func (r *Running) Wait(ctx context.Context) (RunResult, error) {
-	r.mu.Lock()
-	if r.done {
-		result, err := r.result.clone(), r.err
-		r.mu.Unlock()
-		return result, err
-	}
-	r.mu.Unlock()
-
-	if err := r.waitForExit(ctx); err != nil {
-		// Another Wait may have observed the command's end while this one was
-		// waiting, and its cleanup leaves this one looking at a pane that is
-		// already gone. That completion is the answer both calls share.
-		r.mu.Lock()
-		if r.done {
-			result, observed := r.result.clone(), r.err
-			r.mu.Unlock()
-			return result, observed
+	finished := r.finishedSignal()
+	if !r.exited.Load() {
+		if err := r.waitForExit(ctx); err != nil {
+			// Another Wait may have observed the command's end while this one
+			// was waiting, and its cleanup leaves this one looking at a pane
+			// that is already gone. That completion is the answer both share.
+			select {
+			case <-finished:
+				return r.outcome()
+			default:
+			}
+			return RunResult{}, fmt.Errorf("wait for command: %w", err)
 		}
-		r.mu.Unlock()
-		return RunResult{}, fmt.Errorf("wait for command: %w", err)
 	}
+	r.finishing.Do(func() {
+		r.exited.Store(true)
+		go func() {
+			finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishLimit)
+			defer cancel()
+			result, err := r.finish(finishCtx)
+			r.mu.Lock()
+			r.result, r.err = result, err
+			r.mu.Unlock()
+			close(finished)
+		}()
+	})
+	select {
+	case <-finished:
+		return r.outcome()
+	case <-ctx.Done():
+		return RunResult{}, fmt.Errorf("wait for command: %w", context.Cause(ctx))
+	}
+}
 
+// finishLimit bounds reading an ended command's outcome: a handful of tmux
+// commands, which only a server that has stopped answering takes this long.
+const finishLimit = 10 * time.Second
+
+// finishedSignal returns the channel closed once the outcome is stored.
+func (r *Running) finishedSignal() chan struct{} {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.done {
-		return r.result.clone(), r.err
+	if r.finished == nil {
+		r.finished = make(chan struct{})
 	}
-	r.result, r.err = r.finish(ctx)
-	r.done = true
+	return r.finished
+}
+
+// outcome returns the stored outcome as a copy the caller owns.
+func (r *Running) outcome() (RunResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.result.clone(), r.err
 }
 
@@ -456,7 +482,7 @@ func (r *Running) askForAReap(ctx context.Context) {
 // once the outcome is read, and a caller can hold the window indefinitely.
 func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	defer func() {
-		if err == nil && r.keep {
+		if r.keep {
 			return
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)

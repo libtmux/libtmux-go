@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -379,5 +380,122 @@ func TestSettleDelayDoublesToACeiling(t *testing.T) {
 	}
 	if got := nextSettleDelay(maximumSettleDelay * 4); got != maximumSettleDelay {
 		t.Errorf("nextSettleDelay(%v) = %v, want the ceiling", maximumSettleDelay*4, got)
+	}
+}
+
+// finishingRunner answers for a command that has already ended: its signal
+// arrives at once, and the first read of its outcome blocks until released,
+// which is where a caller's deadline can land.
+type finishingRunner struct {
+	version Version
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+	kills   atomic.Int32
+}
+
+func (r *finishingRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		r.once.Do(func() { close(r.entered) })
+		select {
+		case <-r.release:
+		case <-ctx.Done():
+			return tmuxcmd.Result{ExitCode: -1}, ctx.Err()
+		}
+		fields, err := formatFieldsFor("list-panes", r.version)
+		if err != nil {
+			return tmuxcmd.Result{}, err
+		}
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(fields, snapshotRowValues(
+			r.version, map[string]string{
+				"session_id": "$1", "window_id": "@1", "window_index": "0",
+				"pane_id": "%1", "pane_index": "0", "pane_dead": "1", "pane_dead_status": "7",
+			},
+		))}, nil
+	case slices.Contains(request.Arguments, "kill-window"):
+		r.kills.Add(1)
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// Once the command has ended its outcome belongs to every caller, so no one
+// caller's deadline may decide it: a Wait whose context ends while the outcome
+// is being read reports only its own context, a concurrent Wait answers within
+// its own deadline, and the next Wait gets the command's real status.
+func TestWaitOutcomeOutlivesTheCallerThatReadIt(t *testing.T) {
+	t.Parallel()
+
+	for _, keep := range []bool{true, false} {
+		t.Run(fmt.Sprintf("keep=%v", keep), func(t *testing.T) {
+			t.Parallel()
+
+			version := mustParseVersion(t, "3.7")
+			runner := &finishingRunner{
+				version: version,
+				entered: make(chan struct{}),
+				release: make(chan struct{}),
+			}
+			server := serverWithRunner(runner)
+			running := &Running{
+				session: Session{server: server, sessionID: "$1"},
+				window:  Window{server: server, sessionID: "$1", windowID: "@1"},
+				pane: Pane{
+					server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+				},
+				channel: "finish",
+				keep:    keep,
+			}
+
+			first, cancelFirst := context.WithCancel(context.Background())
+			firstDone := make(chan error, 1)
+			go func() {
+				_, err := running.Wait(first)
+				firstDone <- err
+			}()
+			<-runner.entered
+
+			hurried, cancelHurried := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancelHurried()
+			hurriedDone := make(chan error, 1)
+			go func() {
+				_, err := running.Wait(hurried)
+				hurriedDone <- err
+			}()
+			select {
+			case err := <-hurriedDone:
+				if !errors.Is(err, context.DeadlineExceeded) {
+					t.Errorf("concurrent Wait() error = %v, want its own deadline", err)
+				}
+			case <-time.After(time.Second):
+				t.Error("concurrent Wait() held past its own deadline by another caller's read")
+			}
+			cancelFirst()
+			if err := <-firstDone; !errors.Is(err, context.Canceled) {
+				t.Errorf("first Wait() error = %v, want its own cancellation", err)
+			}
+
+			close(runner.release)
+			result, err := running.Wait(context.Background())
+			if err != nil || result.Status != 7 {
+				t.Fatalf("Wait() after release = (%d, %v), want status 7", result.Status, err)
+			}
+			wantKills := int32(1)
+			if keep {
+				wantKills = 0
+			}
+			if got := runner.kills.Load(); got != wantKills {
+				t.Errorf("kill-window sent %d times with Keep %v, want %d", got, keep, wantKills)
+			}
+		})
 	}
 }
