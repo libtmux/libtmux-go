@@ -362,21 +362,34 @@ func TestSourceFilePreservesTerminalSemicolonPathAgainstRealTmux(t *testing.T) {
 // run-shell "--" guard against a live tmux. Without it, tmux's own argument
 // parser reads a Command beginning with "-" as run-shell's own flags and
 // refuses it before any shell ever runs, which is what the raw control below
-// reproduces (no job, so nothing is ever reported "returned").
+// reproduces: a synchronous parse failure from tmux's own arguments.c, the
+// same on every supported version because it happens before a job exists.
 //
 // The command itself still can't run cleanly here: /bin/sh -c rejects a "-c"
 // operand that itself starts with "-" as a shell invocation option, a
 // limitation of the shell tmux execs and orthogonal to tmux's own argument
 // parsing. tmux reports that job failure as `'<cmd>' returned <n>`
-// (cmd-run-shell.c, stable across every supported tmux release), quoting the
-// exact command string back - proof it reached a real job verbatim, which is
-// everything this guard is responsible for.
+// (cmd-run-shell.c) - proof it reached a real job verbatim - but only when
+// that message reaches the caller: tmux 3.3 through 3.4 send it to whatever
+// pane cmd_find_from_nothing resolves instead (window_copy_add), a
+// regression introduced between 3.2a and 3.3 and restored in 3.5 (fb37d52d,
+// "Restore previous behaviour or writing to stdout if available"), so
+// RunShell's own returned output is empty there even though the job ran and
+// exited zero. What holds on every version, 3.2a through the latest, is
+// that the guarded call completes with no error - the same signal a client
+// gets whether the job's message came back or was captured by a pane - while
+// the unguarded control above always fails before any job exists. The output
+// text itself is checked only from tmux 3.5 onward, where it is delivered.
 //
 //libtmux:real-tmux
 func TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
 
 	const command = "-not-a-flag || true"
 
@@ -391,7 +404,10 @@ func TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.
 
 	output, err := server.RunShell(ctx, tmux.RunShellRequest{Command: command})
 	if err != nil {
-		t.Fatalf("RunShell() error = %v", err)
+		t.Fatalf("RunShell() error = %v, want nil (the guard let a real job run)", err)
+	}
+	if !version.AtLeast(mustPaneModeVersion(t, "3.5")) {
+		return
 	}
 	if len(output) == 0 {
 		t.Fatalf("RunShell() output = %#v, want a job completion line", output)
