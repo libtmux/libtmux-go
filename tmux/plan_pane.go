@@ -74,9 +74,9 @@ func (p *Plan) DisplayMessage(target Ref, format string) {
 		untargets: target == Ref{},
 		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if resolved == "" {
-				return untargetedArguments("display-message", "-p", format)
+				return untargetedArguments("display-message", "-p", "--", format)
 			}
-			return targetedArguments("display-message", resolved, "-p", format)
+			return targetedArguments("display-message", resolved, "-p", "--", format)
 		},
 	})
 }

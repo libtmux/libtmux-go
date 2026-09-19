@@ -48,7 +48,7 @@ func (p *Plan) RenameSession(target Ref, name string) {
 			if err := validateLifecycleSessionName("name", name); err != nil {
 				return nil, err
 			}
-			return targetedArguments("rename-session", resolved, name)
+			return targetedArguments("rename-session", resolved, "--", name)
 		},
 	})
 }
@@ -128,7 +128,7 @@ func (p *Plan) SetEnvironment(target Ref, name, value string) {
 			if err := validateEnvironmentValue(value); err != nil {
 				return nil, err
 			}
-			return targetedArguments("set-environment", resolved, name, value)
+			return targetedArguments("set-environment", resolved, "--", name, value)
 		},
 	})
 }
@@ -143,7 +143,7 @@ func (p *Plan) UnsetEnvironment(target Ref, name string) {
 			if err := validateEnvironmentName(name); err != nil {
 				return nil, err
 			}
-			return targetedArguments("set-environment", resolved, "-u", name)
+			return targetedArguments("set-environment", resolved, "-u", "--", name)
 		},
 	})
 }
