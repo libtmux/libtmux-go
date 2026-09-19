@@ -176,7 +176,14 @@ func sendKeysRequiresVersion(request SendKeysRequest) bool {
 	return request.KeyName || request.TargetClient != ""
 }
 
-// Enter is a separate command and therefore a separate [Plan] step.
+// sendKeysNeedsEnter reports whether the request's text is followed by Enter.
+//
+// It is sent as a second tmux command rather than appended to the first: tmux
+// reads a command list by re-parsing its arguments, which turns a backslash
+// escape in a caller's text into what it escapes - a typed printf 'x\n'
+// reaching the pane as two lines - and reads a trailing semicolon as the
+// list's own separator. Enter is a separate command and therefore a separate
+// [Plan] step.
 func sendKeysNeedsEnter(request SendKeysRequest) bool {
 	return request.CopyModeCommand == nil && request.Command != nil && !request.SkipEnter
 }

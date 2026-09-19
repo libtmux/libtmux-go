@@ -189,3 +189,37 @@ func listings(commands []string) []string {
 	}
 	return kept
 }
+
+// Typed text reaches the pane as itself. A semicolon separates tmux commands
+// and a backslash escapes in them, so both are ways a send that reshapes its
+// arguments corrupts what a caller typed.
+//
+//libtmux:real-tmux
+func TestTypedTextReachesThePaneAsItself(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	pane := tmuxtest.RunInPane(ctx, t, "cat")
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		t.Fatalf("OpenObservation() error = %v", err)
+	}
+	defer func() { _ = observation.Close() }()
+
+	for _, typed := range []string{";", "echo one;", "a;b", `printf 'mark\n'`, `tab\tsep`} {
+		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &typed}); err != nil {
+			t.Fatalf("SendKeys(%q) error = %v", typed, err)
+		}
+		// cat echoes the submitted line back, so what arrives is what the
+		// pane received rather than what tmux was asked to send. The whole
+		// line is compared: a substring search for ";" would be satisfied by
+		// the backslash-escaped form a mis-escaped send delivers.
+		if _, err := observation.WaitFor(ctx, func(text string) bool {
+			return slices.Contains(strings.Split(text, "\n"), typed)
+		}); err != nil {
+			t.Fatalf("WaitFor(%q) error = %v, pane never showed that line", typed, err)
+		}
+	}
+}
