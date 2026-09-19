@@ -4,8 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"slices"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
@@ -131,5 +136,53 @@ func TestScriptedTmuxMatchesWholeArgumentsAndQuotesOutput(t *testing.T) {
 	}
 	if want := []string{"it's a $HOME * [quoted] value"}; !slices.Equal(result.Stdout, want) {
 		t.Errorf("Stdout = %#v, want %#v", result.Stdout, want)
+	}
+}
+
+// A suite running tests in parallel forks constantly, and each fork holds
+// the parent's open descriptors until it execs. Writing the script from a
+// child process, rather than this one, keeps none of those forks from ever
+// holding it open for writing when it runs, which would otherwise fail as
+// "text file busy".
+func TestScriptedTmuxRunsWhileTheProcessForks(t *testing.T) {
+	t.Parallel()
+
+	stop := make(chan struct{})
+	var forks sync.WaitGroup
+	for range 8 {
+		forks.Go(func() {
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_ = exec.Command("/bin/true").Run()
+				}
+			}
+		})
+	}
+	defer func() {
+		close(stop)
+		forks.Wait()
+	}()
+
+	var busy atomic.Int64
+	deadline := time.Now().Add(500 * time.Millisecond)
+	var runs sync.WaitGroup
+	for range 8 {
+		runs.Go(func() {
+			for time.Now().Before(deadline) {
+				binary := tmuxtest.ScriptedTmux(t,
+					tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+				)
+				if err := exec.Command(binary, "-V").Run(); errors.Is(err, syscall.ETXTBSY) {
+					busy.Add(1)
+				}
+			}
+		})
+	}
+	runs.Wait()
+	if n := busy.Load(); n != 0 {
+		t.Errorf("%d scripted runs failed with text file busy", n)
 	}
 }

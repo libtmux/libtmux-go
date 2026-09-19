@@ -2,7 +2,7 @@ package tmuxtest
 
 import (
 	"fmt"
-	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -88,17 +88,16 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	body.WriteString(
 		"printf 'scripted tmux has no answer for: %s\\n' \"$*\" >&2\nexit 1\n")
 
-	// Written without the executable bit and marked afterwards. A file still
-	// open for writing anywhere in this process cannot be executed, and a
-	// suite running tests in parallel forks often enough to hit that window,
-	// which surfaces as "text file busy" rather than as anything to do with
-	// the script.
+	// A child process writes the file, never a descriptor of this one. A fork
+	// anywhere in this process inherits every open descriptor until it execs,
+	// and executing a file some process holds open for writing fails with
+	// "text file busy" (golang/go#22315); marking the file executable only
+	// after closing it does not help, since the fork can still be holding it.
 	path := filepath.Join(t.TempDir(), "tmux")
-	if err := os.WriteFile(path, []byte(body.String()), 0o600); err != nil {
-		t.Fatalf("ScriptedTmux: write %s: %v", path, err)
-	}
-	if err := os.Chmod(path, 0o700); err != nil {
-		t.Fatalf("ScriptedTmux: make %s executable: %v", path, err)
+	write := exec.Command("/bin/sh", "-c", `umask 077 && cat >"$1" && chmod 700 "$1"`, "sh", path)
+	write.Stdin = strings.NewReader(body.String())
+	if output, err := write.CombinedOutput(); err != nil {
+		t.Fatalf("ScriptedTmux: write %s: %v: %s", path, err, output)
 	}
 	absolute, err := filepath.Abs(path)
 	if err != nil {
