@@ -518,6 +518,11 @@ func TestLoadReportsTmuxUnavailableWhenExecutableMissing(t *testing.T) {
 	if got := errorCode(t, diagnostic); got != "tmux_unavailable" {
 		t.Fatalf("code = %q, want tmux_unavailable (%s)", got, diagnostic)
 	}
+	for _, leaked := range []string{"resolve tmux executable", "exec:"} {
+		if strings.Contains(diagnostic, leaked) {
+			t.Fatalf("message carries implementation wording %q: %s", leaked, diagnostic)
+		}
+	}
 }
 
 // TestPromptClassifiesUnansweredInputAsConfirmationRequired: a confirmation
