@@ -19,11 +19,11 @@ type loadHandoff struct {
 func (r *invocation) prepareHandoff(server tmux.Server) (*loadHandoff, error) {
 	if os.Getenv("TMUX") == "" {
 		if r.terminalInput == nil || !terminal(r.terminalInput) {
-			return nil, &failure{"terminal_required", "attach requires terminal stdin; use -d", 2}
+			return nil, usage("attach requires terminal stdin; use -d")
 		}
 		file, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
-			return nil, &failure{"terminal_required", "attach requires a controlling terminal; use -d", 2}
+			return nil, usage("attach requires a controlling terminal; use -d")
 		}
 		return &loadHandoff{terminal: file, input: r.terminalInput}, nil
 	}
