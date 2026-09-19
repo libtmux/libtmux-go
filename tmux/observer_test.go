@@ -82,9 +82,10 @@ func TestCommandTraceCarriesNoArgumentsOrOutput(t *testing.T) {
 }
 
 // The observer's contract is every tmux command, which includes the version
-// probe this package runs on its own behalf and anything sent over a control
-// client rather than a process.
-func TestCommandObserverSeesProbesAndControlCommands(t *testing.T) {
+// probe this package runs on its own behalf. Whether a command carried over a
+// control lane is observed once rather than twice needs a real daemon, and
+// TestOneCommandIsObservedOnceOverEitherTransport covers it.
+func TestCommandObserverSeesTheVersionProbe(t *testing.T) {
 	t.Parallel()
 
 	var mutex sync.Mutex

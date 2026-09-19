@@ -186,7 +186,9 @@ func (s Server) runExactArgv(
 }
 
 // exactArgvSubcommand names the command in an argv that carries its own client
-// globals, which are the flag-shaped arguments before it.
+// globals, which are the flag-shaped arguments before it. Those globals carry
+// any value in the same token, as commandArguments writes them; a flag whose
+// value were a separate token would read as the command.
 func exactArgvSubcommand(arguments []string) []string {
 	for index, argument := range arguments {
 		if !strings.HasPrefix(argument, "-") {

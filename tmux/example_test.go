@@ -2304,6 +2304,9 @@ func ExampleErrNotFound() {
 func ExampleCommandObserver() {
 	var commands []string
 	server, err := tmux.NewServer(tmux.ServerOptions{
+		// A socket of this example's own, so it never reaches a tmux the
+		// reader happens to be running.
+		SocketName: "libtmux-go-example-observer",
 		CommandObserver: func(trace tmux.CommandTrace) {
 			commands = append(commands, trace.Subcommand+" over "+trace.Transport.String())
 		},

@@ -124,6 +124,8 @@ func (c *ControlClient) Call(
 
 // cmd returns one result per executed command in a command list. A failed list
 // includes the failure and omits commands tmux dropped after it.
+// cmd observes what it runs. A caller already observing the command it drives
+// uses cmdUnobserved instead, so one command produces one trace.
 func (c *ControlClient) cmd(
 	ctx context.Context,
 	commandList bool,
@@ -136,6 +138,14 @@ func (c *ControlClient) cmd(
 				controlExitCode(results, err), err)
 		}()
 	}
+	return c.cmdUnobserved(ctx, commandList, args...)
+}
+
+func (c *ControlClient) cmdUnobserved(
+	ctx context.Context,
+	commandList bool,
+	args ...string,
+) ([]ControlCommandResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

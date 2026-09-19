@@ -76,6 +76,13 @@ func (p *pendingInput) restore(pane tmux.PaneID, text string) {
 // record makes text pending on every pane the keys reach and returns a
 // function putting each back as it was, for a dispatch that then fails. Empty
 // text records nothing and returns a no-op.
+//
+// The snapshot each pane is restored to is read outside the lock that guards
+// the pane, so a second record or clearAll for the same pane while this one
+// is unresolved would lose one of them. Nothing does: processPaneInputs
+// grants one caller at a time over any overlapping set of panes, and every
+// caller here resolves the restore before releasing that lease. A caller
+// reaching these without that lease reopens the race.
 func (p *pendingInput) record(panes []string, text string) func() {
 	if text == "" {
 		return func() {}
