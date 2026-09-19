@@ -153,7 +153,9 @@ func (r *invocation) commandFailure(err error) *failure {
 	if err == nil {
 		return nil
 	}
-	f := &failure{"operation_failed", err.Error(), 1}
+	// An error that reached here unclassified came from a tmux command: the
+	// paths that can fail for another reason name their own code.
+	f := &failure{"tmux_failed", err.Error(), 1}
 	var specific *failure
 	if errors.As(err, &specific) {
 		f = specific

@@ -225,7 +225,19 @@ type commandPlan struct {
 	SleepBefore, SleepAfter time.Duration
 }
 
+// normalize resolves doc into a build plan. Every refusal it makes is a defect
+// in the document, so machine output classifies it as such unless a more
+// specific classification was already made.
 func normalize(doc document, base string) (loadPlan, error) {
+	plan, err := normalizeDocument(doc, base)
+	var specific *failure
+	if err == nil || errors.As(err, &specific) {
+		return plan, err
+	}
+	return plan, &failure{"invalid_workspace", err.Error(), 1}
+}
+
+func normalizeDocument(doc document, base string) (loadPlan, error) {
 	plugins := doc["plugins"]
 	if items, ok := plugins.([]any); ok && len(items) == 0 {
 		plugins = nil

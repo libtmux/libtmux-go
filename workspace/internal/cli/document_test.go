@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -174,5 +175,30 @@ func TestNormalizePanesWrongTypeStillRefused(t *testing.T) {
 	_, err := normalize(doc, t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "panes must be a nonempty sequence") {
 		t.Fatalf("panes: \"not-a-sequence\" must still be refused: %v", err)
+	}
+}
+
+// TestNormalizeRefusalsCarryTheSharedDocumentCode: every refusal from
+// normalize is a defect in the document, so machine output classifies it as
+// invalid_workspace. An unknown key keeps its own more specific code.
+func TestNormalizeRefusalsCarryTheSharedDocumentCode(t *testing.T) {
+	for _, test := range []struct{ name, fields, code string }{
+		{"layout", `"windows":[{"layout":"definitely-not-a-layout","panes":[null]}]`, "invalid_workspace"},
+		{"session-name", `"session_name":"my.proj"`, "invalid_workspace"},
+		{"window-index", `"windows":[{"window_index":-1,"panes":[null]}]`, "invalid_workspace"},
+		{"start-directory", `"start_directory":[]`, "invalid_workspace"},
+		{"unknown-key", `"before_scrip":"ignored"`, "unsupported_key"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			doc := document{"session_name": "example", "windows": []any{document{"panes": []any{nil}}}}
+			if err := json.Unmarshal([]byte("{"+test.fields+"}"), &doc); err != nil {
+				t.Fatal(err)
+			}
+			var specific *failure
+			_, err := normalize(doc, t.TempDir())
+			if !errors.As(err, &specific) || specific.Code != test.code || specific.Exit != 1 {
+				t.Fatalf("normalize = %v, want code %s exit 1", err, test.code)
+			}
+		})
 	}
 }
