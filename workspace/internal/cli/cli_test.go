@@ -578,3 +578,31 @@ func TestLoadRefusalNamesTheLine(t *testing.T) {
 		t.Fatalf("refusal does not name the line the layout is on: %s", diagnostic)
 	}
 }
+
+// TestLoadRefusalReportsEveryWindow: several problems have to survive the
+// classification the machine envelope carries. A consumer that reads the
+// code and the message must see all of them, not the first.
+func TestLoadRefusalReportsEveryWindow(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	path := filepath.Join(t.TempDir(), "broken.yaml")
+	document := "session_name: broken\n" +
+		"windows:\n" +
+		"  - window_name: one\n" +
+		"    layout: definitely-not-a-layout\n" +
+		"    panes: [blank]\n" +
+		"  - window_name: two\n" +
+		"    shell_command_befor: oops\n" +
+		"    panes: [blank]\n"
+	if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "load", "-d", "--yes", "--json", path)
+	if code != 1 || out != "" {
+		t.Fatalf("%d %q %q", code, out, diagnostic)
+	}
+	for _, want := range []string{"line 4:", "line 7:"} {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("refusal does not carry %q: %s", want, diagnostic)
+		}
+	}
+}
