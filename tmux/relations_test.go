@@ -118,6 +118,9 @@ func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 
 	t.Run("session active pane", func(t *testing.T) {
 		session, _, _, _ := newSubjects(t)
+		// A scoped resolver reads one pane listing, and each row carries the
+		// session and window fields too, so the graph comes from that alone.
+		session.server = serverWithRunner(paneListingRunner(t, version, records.panes))
 		pane, err := session.ResolveActivePane(context.Background())
 		if err != nil {
 			t.Fatalf("ResolveActivePane() error = %v", err)
@@ -140,6 +143,9 @@ func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 
 	t.Run("window active pane", func(t *testing.T) {
 		_, window, _, _ := newSubjects(t)
+		// A scoped resolver reads one pane listing, and each row carries the
+		// session and window fields too, so the graph comes from that alone.
+		window.server = serverWithRunner(paneListingRunner(t, version, records.panes))
 		pane, err := window.ResolveActivePane(context.Background())
 		if err != nil {
 			t.Fatalf("ResolveActivePane() error = %v", err)
@@ -255,7 +261,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 			sessions: []formatValues{sessionRow}, windows: []formatValues{activeWindow},
 			panes: []formatValues{firstActivePane, secondActivePane},
 		}
-		runner := attachmentSnapshotRunner(t, version, records)
+		runner := paneListingRunner(t, version, records.panes)
 		window := Window{
 			server: serverWithRunner(runner), sessionID: SessionID("$2"),
 			windowID: WindowID("@8"), windowIndex: 7,
@@ -265,10 +271,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 			t.Fatalf("ResolveActivePane() = (%#v, %v), want first active %%2", pane, err)
 		}
 
-		runner = attachmentSnapshotRunner(t, version, snapshotRecords{
-			sessions: []formatValues{sessionRow}, windows: []formatValues{activeWindow},
-		})
-		window.server = serverWithRunner(runner)
+		window.server = serverWithRunner(paneListingRunner(t, version, nil))
 		pane, err = window.ResolveActivePane(context.Background())
 		if !errors.Is(err, ErrNotFound) {
 			t.Fatalf("ResolveActivePane() = (%#v, %v), want ErrNotFound", pane, err)
@@ -288,7 +291,14 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 		{
 			name: "session receiver missing",
 			resolve: func(server Server) error {
-				_, err := (Session{server: server, sessionID: SessionID("$2")}).ResolveActivePane(context.Background())
+				// A session that has gone lists no panes, which is the only
+				// way a scoped listing reports it: tmux answers the command
+				// with an error this package classifies as ErrNotFound, and a
+				// listing that simply comes back empty says the same thing.
+				_, err := (Session{
+					server:    serverWithRunner(paneListingRunner(t, version, nil)),
+					sessionID: SessionID("$2"),
+				}).ResolveActivePane(context.Background())
 				return err
 			},
 			want: ErrNotFound,
@@ -440,12 +450,16 @@ func liveRelationshipRecords(t *testing.T, version Version) snapshotRecords {
 			),
 		},
 		panes: []formatValues{
+			// A pane row carries its window's fields too, window_active
+			// among them, which is how one listing answers for the session.
 			snapshotValues(t, version,
 				"session_id", "$1", "window_id", "@8", "window_index", "1",
+				"window_active", "1",
 				"pane_id", "%1", "pane_index", "0", "pane_active", "1",
 			),
 			snapshotValues(t, version,
 				"session_id", "$2", "window_id", "@8", "window_index", "7",
+				"window_active", "1",
 				"pane_id", "%2", "pane_index", "0", "pane_active", "1",
 			),
 		},

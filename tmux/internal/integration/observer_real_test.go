@@ -3,6 +3,8 @@ package integration
 import (
 	"context"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -108,4 +110,82 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 			t.Errorf("trace = %v, want list-sessions over a connection", traces[0])
 		}
 	})
+}
+
+// Reaching a session's or window's current pane is the first thing almost
+// every program does, and it must cost one listing, not four - each of
+// which asks tmux for every format field.
+//
+//libtmux:real-tmux
+func TestResolvingAnActivePaneListsOnlyItsOwnScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	var mutex sync.Mutex
+	var commands []string
+	observe := func(trace tmux.CommandTrace) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		commands = append(commands, trace.Subcommand)
+	}
+	taken := func() []string {
+		mutex.Lock()
+		defer mutex.Unlock()
+		seen := slices.Clone(commands)
+		commands = commands[:0]
+		return seen
+	}
+
+	initial := tmux.NewSessionRequest{Name: "scoped"}
+	base := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		InitialSession: &initial,
+	})
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath:      base.SocketPath(),
+		ConfigFile:      os.DevNull,
+		CommandObserver: observe,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one session", len(sessions), err)
+	}
+	session := sessions[0]
+	taken()
+
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("Session.ResolveActivePane() error = %v", err)
+	}
+	if got := listings(taken()); !slices.Equal(got, []string{"list-panes"}) {
+		t.Errorf("Session.ResolveActivePane() listed %v, want only list-panes", got)
+	}
+
+	window, err := pane.ResolveWindow(ctx)
+	if err != nil {
+		t.Fatalf("ResolveWindow() error = %v", err)
+	}
+	taken()
+	if _, err := window.ResolveActivePane(ctx); err != nil {
+		t.Fatalf("Window.ResolveActivePane() error = %v", err)
+	}
+	if got := listings(taken()); !slices.Equal(got, []string{"list-panes"}) {
+		t.Errorf("Window.ResolveActivePane() listed %v, want only list-panes", got)
+	}
+}
+
+// listings keeps the commands that read tmux state, dropping the identity
+// probes every snapshot brackets itself with.
+func listings(commands []string) []string {
+	kept := make([]string, 0, len(commands))
+	for _, command := range commands {
+		if strings.HasPrefix(command, "list-") {
+			kept = append(kept, command)
+		}
+	}
+	return kept
 }

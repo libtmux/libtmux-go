@@ -227,3 +227,61 @@ func realCanonicalWinlink(t *testing.T, server tmux.Server, target string) (tmux
 	}
 	return tmux.SessionID(session), index
 }
+
+// A resolver reads the session and window holding its pane out of the pane
+// rows themselves. Every pane of a window names that window, so the records
+// those rows project have to be kept once: a window that appeared twice is as
+// ambiguous to a relation lookup as two different windows, and the pane comes
+// back unable to name where it lives.
+//
+//libtmux:real-tmux
+func TestResolvedPaneNavigatesFromAWindowOfSeveralPanes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	server := tmuxtest.NewServer(ctx, t)
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "several"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
+	}
+	window, err := pane.ResolveWindow(ctx)
+	if err != nil {
+		t.Fatalf("ResolveWindow() error = %v", err)
+	}
+	for range 2 {
+		if _, err := window.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
+			t.Fatalf("SplitPane() error = %v", err)
+		}
+	}
+	// A second window, so the session's own listing spans more than one.
+	if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+		t.Fatalf("NewWindow() error = %v", err)
+	}
+
+	for _, resolve := range []struct {
+		name string
+		call func() (tmux.Pane, error)
+	}{
+		{name: "session", call: func() (tmux.Pane, error) { return session.ResolveActivePane(ctx) }},
+		{name: "window", call: func() (tmux.Pane, error) { return window.ResolveActivePane(ctx) }},
+	} {
+		t.Run(resolve.name, func(t *testing.T) {
+			resolved, err := resolve.call()
+			if err != nil {
+				t.Fatalf("ResolveActivePane() error = %v", err)
+			}
+			holder, ok := resolved.Window()
+			if !ok || holder.ID() != resolved.WindowID() {
+				t.Errorf("Window() = (%s, %t), want %s", holder.ID(), ok, resolved.WindowID())
+			}
+			owner, ok := resolved.Session()
+			if !ok || owner.ID() != resolved.SessionID() {
+				t.Errorf("Session() = (%s, %t), want %s", owner.ID(), ok, resolved.SessionID())
+			}
+		})
+	}
+}

@@ -88,19 +88,50 @@ func (s Session) ResolveActiveWindow(ctx context.Context) (Window, error) {
 	return requiredActiveWindow(live)
 }
 
-// ResolveActivePane snapshots live tmux state and returns the active pane in
-// this session's exact active window. It returns [SnapshotLookupError]
-// cardinality errors, which match [ErrNotFound] when nothing was found.
+// ResolveActivePane returns the active pane in this session's active window,
+// read live. It lists that session's panes rather than taking a whole-server
+// snapshot, because a pane row already carries which window is active. It
+// returns [SnapshotLookupError] cardinality errors, which match [ErrNotFound]
+// when nothing was found.
 func (s Session) ResolveActivePane(ctx context.Context) (Pane, error) {
-	live, err := s.resolveLive(ctx)
+	identifier := s.sessionID.String()
+	if err := validateTypedTarget(
+		"list-panes", "SessionID", "session", identifier,
+	); err != nil {
+		return Pane{}, err
+	}
+	snapshot, err := s.server.hierarchyFromPanes(
+		ctx,
+		[]string{"-s", "-t", identifier},
+		searchRowMatch{field: "session_id", value: identifier},
+	)
 	if err != nil {
 		return Pane{}, err
 	}
-	window, err := requiredActiveWindow(live)
-	if err != nil {
-		return Pane{}, err
+	return activePaneOf(snapshot.Panes(), "session", identifier, true)
+}
+
+// activePaneOf returns the first active pane among rows, as
+// [Window.ActivePane] does for a materialized view. With activeWindow set it
+// also requires the pane's window to be the active one, which is what picks a
+// session's current pane out of every pane it holds.
+func activePaneOf(panes []Pane, object, identifier string, activeWindow bool) (Pane, error) {
+	for _, pane := range panes {
+		if active, ok := pane.Active(); !ok || !active {
+			continue
+		}
+		if activeWindow {
+			if active, ok := pane.formats.getBool("window_active"); !ok || !active {
+				continue
+			}
+		}
+		return pane, nil
 	}
-	return requiredActivePane(window)
+	return Pane{}, &SnapshotLookupError{
+		Object:     "active pane",
+		Identifier: object + " " + identifier,
+		Matches:    0,
+	}
 }
 
 // ResolveSession snapshots live tmux state and returns this exact winlink's
@@ -118,15 +149,25 @@ func (w Window) ResolveSession(ctx context.Context) (Session, error) {
 	)
 }
 
-// ResolveActivePane snapshots live tmux state and returns the first active pane
-// in this exact winlink view. It returns [SnapshotLookupError] cardinality
-// errors, which match [ErrNotFound] when nothing was found.
+// ResolveActivePane returns the active pane in this exact winlink view, read
+// live. It lists that window's panes rather than taking a whole-server
+// snapshot. It returns [SnapshotLookupError] cardinality errors, which match
+// [ErrNotFound] when nothing was found.
 func (w Window) ResolveActivePane(ctx context.Context) (Pane, error) {
-	live, err := w.resolveLive(ctx)
+	target, err := exactWindowTarget(w)
 	if err != nil {
 		return Pane{}, err
 	}
-	return requiredActivePane(live)
+	snapshot, err := w.server.hierarchyFromPanes(
+		ctx,
+		[]string{"-t", target},
+		searchRowMatch{field: "session_id", value: w.sessionID.String()},
+		searchRowMatch{field: "window_id", value: w.windowID.String()},
+	)
+	if err != nil {
+		return Pane{}, err
+	}
+	return activePaneOf(snapshot.Panes(), "window", w.windowID.String(), false)
 }
 
 // ResolveWindow snapshots live tmux state and returns the exact winlink
@@ -229,21 +270,6 @@ func (p Pane) resolveSnapshotWindow() (Window, error) {
 		"window",
 		identifier,
 	)
-}
-
-// requiredActivePane reports the window's active pane, or why it has none.
-// tmux destroys a window with its last pane, so a window without one is a
-// racing or malformed listing rather than an ordinary answer.
-func requiredActivePane(window Window) (Pane, error) {
-	pane, ok := window.ActivePane()
-	if !ok {
-		return Pane{}, &SnapshotLookupError{
-			Object:     "active pane",
-			Identifier: window.windowID.String(),
-			Matches:    0,
-		}
-	}
-	return pane, nil
 }
 
 func requiredActiveWindow(session Session) (Window, error) {
