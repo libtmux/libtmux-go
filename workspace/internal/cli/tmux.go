@@ -94,6 +94,22 @@ func findSession(ctx context.Context, server tmux.Server, target string) (tmux.S
 	return tmux.Session{}, &failure{"session_not_found", fmt.Sprintf("session %q not found", target), 1}
 }
 
+// rejectUnloadableSessionName reports invalid_workspace for a name freeze
+// must never capture: an ordinary "-t name" target reads a period or colon
+// as a separator, so it misses a session_name holding one -- naming that
+// session again only works with an explicit session terminator ("name:"),
+// a form nothing else in this package writes. Depending on version, tmux
+// also either silently rewrites the name at creation or refuses to create it
+// at all. A NUL or newline is refused for the same reason as the separator
+// characters -- neither survives a YAML round trip as a usable target. An
+// empty name, such as freeze's unset default target, passes.
+func rejectUnloadableSessionName(name string) error {
+	if !strings.ContainsAny(name, ".:\x00\r\n") {
+		return nil
+	}
+	return &failure{"invalid_workspace", fmt.Sprintf("session %s cannot be captured: a session_name containing a period, colon, NUL or newline is refused on load, because tmux reads a period and a colon as separators inside a target", strconv.Quote(name)), 1}
+}
+
 func currentSession(ctx context.Context, server tmux.Server) (tmux.Session, error) {
 	if os.Getenv("TMUX_PANE") == "" || os.Getenv("TMUX") == "" {
 		return tmux.Session{}, usage("--append requires TMUX and TMUX_PANE identifying the current session")
@@ -1084,16 +1100,23 @@ func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
 	if len(args) > 0 {
 		target = args[0]
 	}
+	// freeze must never write a document load would refuse, and load
+	// addresses a session the plain way -- "-t name" -- which misreads a
+	// period or colon in the name as a separator. Refuse on the requested
+	// name alone, before any lookup: whether or not such a session exists is
+	// not this check's business.
+	if err := rejectUnloadableSessionName(target); err != nil {
+		return err
+	}
 	session, err := findSession(r.ctx, server, target)
 	if err != nil {
 		return err
 	}
-	// freeze must never write a document load would refuse. tmux runs a
-	// session whose name it cannot address by name; the workspace file
-	// naming it would be unloadable.
+	// The auto-detected current session (an empty target) reaches here
+	// unchecked by the guard above; give it the same treatment.
 	name, _ := session.Name()
-	if strings.ContainsAny(name, ".:\x00\r\n") {
-		return &failure{"invalid_workspace", fmt.Sprintf("session %s cannot be captured: a session_name containing a period, colon, NUL or newline is refused on load, because tmux reads a period and a colon as separators inside a target", strconv.Quote(name)), 1}
+	if err := rejectUnloadableSessionName(name); err != nil {
+		return err
 	}
 	doc, err := capture(r.ctx, session)
 	if err != nil {

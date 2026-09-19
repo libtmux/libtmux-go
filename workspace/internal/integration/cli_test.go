@@ -2171,16 +2171,18 @@ func TestFailedAppendListsTheWindowsItKept(t *testing.T) {
 }
 
 // TestFreezeRefusesASessionNameLoadWouldReject: freeze must never write a
-// document load would refuse. tmux runs a session named my.proj happily, but
-// reads the period as a separator in a target, so load refuses that name --
-// and the user found out at restore, the moment freeze exists to serve.
+// document load would refuse. load reads a period or colon in a target as a
+// separator, so a session_name holding one can never be addressed back, and
+// tmux answers a session created under such a name three different ways
+// across versions (silently renamed, refused outright, or kept but
+// unaddressable by name) -- none of them makes capturing it useful. The
+// refusal belongs to the name freeze was asked for, not to whether a session
+// by that literal name happens to exist, so it holds with no server there to
+// ask and needs no version gate.
 func TestFreezeRefusesASessionNameLoadWouldReject(t *testing.T) {
-	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
-	if result, err := server.Cmd(t.Context(), "new-session", "-d", "-s", "my.proj"); err != nil || result.ExitCode != 0 {
-		t.Skipf("this tmux refuses a dotted session name: %+v %v", result, err)
-	}
+	socket := filepath.Join(t.TempDir(), "cold.sock")
 	destination := filepath.Join(t.TempDir(), "frozen.yaml")
-	code, out, diagnostic := run(t, "freeze", "my.proj", "--save-to", destination, "-S", server.SocketPath(), "--json")
+	code, out, diagnostic := run(t, "freeze", "my.proj", "--save-to", destination, "-S", socket, "--json")
 	var envelope map[string]any
 	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
 		t.Fatalf("invalid error envelope %q: %v (%q)", diagnostic, err, out)
