@@ -535,7 +535,7 @@ func TestBreakPaneUsesLiteral37Workaround(t *testing.T) {
 		"-s", "$1:.%3", "-t", "$1:",
 	})
 	assertRequestArguments(t, requests[2], []string{
-		"rename-window", "-t", "$1:@9", "named\\;",
+		"rename-window", "-t", "$1:@9", "--", "named\\;",
 	})
 	callsBefore := runner.callCount()
 	if err := window.NextLayout(context.Background()); !errors.Is(err, ErrInvalidServerCommandRequest) {

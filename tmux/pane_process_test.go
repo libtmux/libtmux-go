@@ -48,7 +48,7 @@ func TestPaneRespawnUsesExactLinkedTargetAndReturnsRefreshedPane(t *testing.T) {
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
 		"respawn-pane", "-t", "$7:.%9", "-k",
-		"-eALPHA=first", "-eZED=last", "sleep 30",
+		"-eALPHA=first", "-eZED=last", "--", "sleep 30",
 	})
 }
 
@@ -365,7 +365,7 @@ func TestPipeBuildsPythonOrderedArgumentsAndRedactsCompletedErrors(t *testing.T)
 		t.Fatalf("Pipe() CommandError result = %#v, want exit-only redaction", commandError.Result)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"pipe-pane", "-t", "$7:.%9", "-O", "-I", "-o", `cat >> secret\;`,
+		"pipe-pane", "-t", "$7:.%9", "-O", "-I", "-o", "--", `cat >> secret\;`,
 	})
 }
 
@@ -381,7 +381,7 @@ func TestPipePreservesNilAndEmptyCommand(t *testing.T) {
 		{name: "nil stops without operand", want: []string{"pipe-pane", "-t", "$7:.%9"}},
 		{
 			name: "empty remains an operand", command: &empty,
-			want: []string{"pipe-pane", "-t", "$7:.%9", ""},
+			want: []string{"pipe-pane", "-t", "$7:.%9", "--", ""},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

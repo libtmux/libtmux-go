@@ -73,7 +73,7 @@ func TestDisplayPopupBuildsPythonFlagOrderAndExactTarget(t *testing.T) {
 		"display-popup", "-t", "$1:.%3", "-C", "-c", "client-a", "-E", "-E",
 		"-w", "40", "-h", "50%", "-x", "C", "-y", "P", "-d", "/tmp",
 		"-T", "title", "-b", "single", "-s", "bg=blue", "-S", "fg=red",
-		"-eALPHA=first", "-eZED=last", "-B", "-k", "-N", `printf secret\;`,
+		"-eALPHA=first", "-eZED=last", "-B", "-k", "-N", "--", `printf secret\;`,
 	})
 }
 
@@ -316,7 +316,7 @@ func TestDisplayPopupCapturesPointerAndMapValuesBeforeVersionProbe(t *testing.T)
 	assertRequestArguments(t, requests[1], []string{
 		"display-popup", "-t", "$1:.%3", "-c", "before-client",
 		"-d", "/before-directory", "-T", "before-title", "-eKEY=before-value",
-		"before-command",
+		"--", "before-command",
 	})
 }
 

@@ -181,7 +181,7 @@ func newWindowArguments(
 		arguments = append(arguments, "-S")
 	}
 	if request.Command != "" {
-		arguments = append(arguments, request.Command)
+		arguments = append(arguments, "--", request.Command)
 	}
 	return arguments, nil
 }
@@ -357,7 +357,7 @@ func (w Window) Rename(ctx context.Context, name string) (Window, error) {
 	if err != nil {
 		return Window{}, err
 	}
-	result, err := w.server.literalCmd(ctx, "rename-window", "-t", target, name)
+	result, err := w.server.literalCmd(ctx, "rename-window", "-t", target, "--", name)
 	if _, err = requireLifecycleSuccess("rename-window", result, err); err != nil {
 		return Window{}, err
 	}

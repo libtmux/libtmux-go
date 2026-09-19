@@ -339,7 +339,7 @@ func TestNewWindowPreservesOptionalNameAndPythonOptionOrder(t *testing.T) {
 			}
 			want = append(want, test.wantName...)
 			want = append(want,
-				"-eALPHA=first", "-eZED=last", "-a", "-k", "sleep 1m",
+				"-eALPHA=first", "-eZED=last", "-a", "-k", "--", "sleep 1m",
 			)
 			assertLifecycleArguments(t, runner, want)
 		})
@@ -826,7 +826,7 @@ func TestSplitPaneWarnsAndOmitsTmux37FieldsOnOlderTmux(t *testing.T) {
 		t.Fatalf("SplitPane() warnings = %#v, want empty then styling group", warnings)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:@8", "-v", "-P", "-F#{pane_id}", "-d", "sleep 1m",
+		"split-window", "-t", "$7:@8", "-v", "-P", "-F#{pane_id}", "-d", "--", "sleep 1m",
 	})
 }
 

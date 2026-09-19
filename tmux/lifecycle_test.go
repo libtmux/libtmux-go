@@ -352,7 +352,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	assertRequestArguments(t, requests[1], []string{
 		"new-session", "-P", "-F#{session_id}", "-salpha", "-d",
 		"-c", "/work dir", "-n", "editor", "-x", "132", "-y", "43",
-		"-eALPHA=first", "-eZED=last", "sleep 1m",
+		"-eALPHA=first", "-eZED=last", "--", "sleep 1m",
 	})
 }
 
@@ -489,7 +489,7 @@ func TestNewWindowBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
 		"new-window", "-t", "$1:4", "-d", "-P", "-c/work",
-		"-F#{window_id}", "-n", "editor", "sleep 1m",
+		"-F#{window_id}", "-n", "editor", "--", "sleep 1m",
 	})
 }
 
@@ -529,7 +529,7 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
 		"split-window", "-t", "$1:@8", "-h", "-b", "-l10", "-P",
-		"-F#{pane_id}", "-c/work", "-d", "sleep 1m",
+		"-F#{pane_id}", "-c/work", "-d", "--", "sleep 1m",
 	})
 }
 
@@ -588,7 +588,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 		{
 			name:     "rename session",
 			command:  "rename-session",
-			wantArgs: []string{"rename-session", "-t", "$7", "renamed"},
+			wantArgs: []string{"rename-session", "-t", "$7", "--", "renamed"},
 			listing:  "list-sessions",
 			row: map[string]string{
 				"session_id": "$7", "session_name": "renamed",
@@ -606,7 +606,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 		{
 			name:     "rename window",
 			command:  "rename-window",
-			wantArgs: []string{"rename-window", "-t", "$7:@8", "renamed"},
+			wantArgs: []string{"rename-window", "-t", "$7:@8", "--", "renamed"},
 			listing:  "list-windows",
 			row: map[string]string{
 				"session_id": "$7", "window_id": "@8", "window_index": "2", "window_name": "renamed",
@@ -1221,7 +1221,7 @@ func TestWindowRenameAllowsEmptyName(t *testing.T) {
 		t.Fatalf("Window.Rename() name = %q, want empty", name)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"rename-window", "-t", "$7:@8", "",
+		"rename-window", "-t", "$7:@8", "--", "",
 	})
 }
 

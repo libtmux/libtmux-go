@@ -197,7 +197,7 @@ func (p Pane) DisplayPopup(ctx context.Context, request DisplayPopupRequest) err
 		return err
 	}
 	if values.command != nil {
-		arguments = append(arguments, *values.command)
+		arguments = append(arguments, "--", *values.command)
 	}
 	result, err := p.server.literalCmd(ctx, arguments...)
 	return requireRedactedServerCommandNoStderr("display-popup", result, err)
