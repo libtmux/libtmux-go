@@ -225,11 +225,17 @@ func buildWindow(
 			return window, fmt.Errorf("apply layout %q: %w", described.Layout, err)
 		}
 	}
-	for index, pane := range panes {
+	// With no pane declaring focus, tmuxp leaves the last pane it created
+	// active; splitting detached leaves the first.
+	focused := len(panes) - 1
+	for index := range panes {
 		if index < len(described.Panes) && bool(described.Panes[index].Focus) {
-			if _, err := pane.Select(ctx, tmux.PaneSelectRequest{}); err != nil {
-				return window, fmt.Errorf("focus pane %d: %w", index, err)
-			}
+			focused = index
+		}
+	}
+	if focused >= 0 {
+		if _, err := panes[focused].Select(ctx, tmux.PaneSelectRequest{}); err != nil {
+			return window, fmt.Errorf("focus pane %d: %w", focused, err)
 		}
 	}
 	return window, nil
