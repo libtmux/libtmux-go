@@ -270,7 +270,7 @@ func (r *invocation) prompt(label, fallback string) (string, error) {
 		return "", r.ctx.Err()
 	}
 	if err != nil && strings.TrimSpace(line) == "" {
-		return "", &failure{"confirmation_required", "input required; use explicit noninteractive options", 1}
+		return "", usage("input required; use explicit noninteractive options")
 	}
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -372,7 +372,7 @@ func (r *invocation) documentResult(o *options, doc document, source, format str
 		if base == "" {
 			name := textValue(doc["session_name"])
 			if !workspaceFileName(name) {
-				return &failure{"unsafe_destination", fmt.Sprintf("session name %q cannot name a workspace file; use --save-to", safeTerminal(name)), 2}
+				return usage("session name %q cannot name a workspace file; use --save-to", safeTerminal(name))
 			}
 			base = filepath.Join(expand("~/.tmuxp"), name)
 		}

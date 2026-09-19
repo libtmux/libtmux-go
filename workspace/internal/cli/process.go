@@ -309,7 +309,7 @@ func (r *invocation) shell(cmd *cobra.Command, o *options, args []string) error 
 func (r *invocation) interactiveProcess(argv []string, label string) error {
 	terminalFile, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return &failure{"terminal_required", label + " requires a controlling terminal", 2}
+		return usage("%s requires a controlling terminal", label)
 	}
 	defer func() { _ = terminalFile.Close() }()
 	cmd := exec.CommandContext(r.ctx, argv[0], argv[1:]...)

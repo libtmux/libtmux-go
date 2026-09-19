@@ -167,7 +167,7 @@ func (r *invocation) loadValidation(cmd *cobra.Command, o *options) error {
 		return usage("-2 and -8 are mutually exclusive")
 	}
 	if o.colors88 {
-		return &failure{"unsupported_color_mode", "tmux 3.2a+ rejects the legacy 88-color flag (-8); remove it or use -2 for 256 colors", 2}
+		return usage("tmux 3.2a+ rejects the legacy 88-color flag (-8); remove it or use -2 for 256 colors")
 	}
 	if r.machine() && !o.detached && !o.append {
 		return usage("machine load requires -d or explicit --append")
@@ -207,7 +207,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		return err
 	}
 	if !o.detached && !o.append && os.Getenv("TMUX") == "" && !terminal(r.in) {
-		return &failure{"terminal_required", "attach requires terminal stdin; use -d", 2}
+		return usage("attach requires terminal stdin; use -d")
 	}
 	type input struct {
 		path     string
@@ -302,7 +302,7 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	}
 	for _, in := range inputs {
 		if in.plan.Bridge && o.append && in.scripted {
-			return &failure{"unsupported_combination", "--append with Python plugins/custom builders and before_script is unavailable: tmuxp can delete the borrowed session on script failure", 2}
+			return usage("--append with Python plugins/custom builders and before_script is unavailable: tmuxp can delete the borrowed session on script failure")
 		}
 	}
 	if o.logFile != "" {

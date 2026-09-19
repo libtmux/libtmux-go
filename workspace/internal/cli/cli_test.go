@@ -202,7 +202,7 @@ func TestBridgeAppendScriptPrecedesRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		code, out, diagnostic := invoke(t, "load", path, "--append", "--json")
-		if code != 2 || out != "" || !strings.Contains(diagnostic, "unsupported_combination") || !strings.Contains(diagnostic, "before_script") {
+		if code != 2 || out != "" || !strings.Contains(diagnostic, "usage") || !strings.Contains(diagnostic, "before_script") {
 			t.Errorf("%s reached runtime: %d %q %q", field, code, out, diagnostic)
 		}
 	}
@@ -322,7 +322,7 @@ func TestCaptureDestinationStaysInTheWorkspaceDirectory(t *testing.T) {
 	}
 	for _, name := range []string{"", ".", "..", "../../escape", "nested/name", `back\slash`, "title\x1b]2;x\a"} {
 		var specific *failure
-		if err := capture(name); !errors.As(err, &specific) || specific.Code != "unsafe_destination" {
+		if err := capture(name); !errors.As(err, &specific) || specific.Code != "usage" {
 			t.Errorf("session name %q derived a destination: %v", name, err)
 		}
 	}
@@ -525,18 +525,18 @@ func TestLoadReportsTmuxUnavailableWhenExecutableMissing(t *testing.T) {
 	}
 }
 
-// TestPromptClassifiesUnansweredInputAsConfirmationRequired: a confirmation
-// that is needed but impossible -- no terminal, no answer on stdin -- must
-// report confirmation_required. Every command that prompts routes through
-// this one method, so it is tested directly rather than through a specific
-// command.
-func TestPromptClassifiesUnansweredInputAsConfirmationRequired(t *testing.T) {
+// TestPromptClassifiesUnansweredInputAsUsage: a confirmation that is needed
+// but impossible -- no terminal, no answer on stdin -- says the invocation
+// asked for something it cannot get, same as any other invocation mistake.
+// Every command that prompts routes through this one method, so it is
+// tested directly rather than through a specific command.
+func TestPromptClassifiesUnansweredInputAsUsage(t *testing.T) {
 	var out bytes.Buffer
 	r := &invocation{ctx: t.Context(), in: strings.NewReader(""), err: &out}
 	_, err := r.prompt("Freeze session (y/n)", "n")
 	var specific *failure
-	if !errors.As(err, &specific) || specific.Code != "confirmation_required" {
-		t.Fatalf("prompt without input = %v, want confirmation_required", err)
+	if !errors.As(err, &specific) || specific.Code != "usage" || specific.Exit != 2 {
+		t.Fatalf("prompt without input = %v, want usage exit 2", err)
 	}
 }
 

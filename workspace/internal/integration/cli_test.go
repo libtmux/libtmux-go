@@ -847,7 +847,7 @@ func TestLoadColorPreflightAnd256Colors(t *testing.T) {
 	first := write(t, dir, "first.yaml", "session_name: first\nwindows:\n- panes: [blank]\n")
 	last := write(t, dir, "last.yaml", "session_name: last\nwindows:\n- panes: [blank]\n")
 	code, out, diagnostic := run(t, "load", first, last, "-S", server.SocketPath(), "-d", "-8", "--ndjson")
-	if code != 2 || out != "" || !strings.Contains(diagnostic, "unsupported_color_mode") {
+	if code != 2 || out != "" || !strings.Contains(diagnostic, "usage") {
 		t.Errorf("expected color preflight refusal: %d %s %s", code, out, diagnostic)
 	}
 	if _, err := os.Stat(calls); !os.IsNotExist(err) {
@@ -1437,7 +1437,7 @@ func TestPythonShellAndPluginBridge(t *testing.T) {
 		script := "/bin/sh -c 'printf attempted > \"$1\"; exit 7' sh " + strconv.Quote(scriptMarker)
 		path := write(t, dir, "unsafe.json", `{"session_name":"unsafe","before_script":`+strconv.Quote(script)+`,"plugins":["native_plugin.Plugin"],"windows":[{"panes":[null]}]}`)
 		code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "--append", "--json")
-		if code != 2 || out != "" || !strings.Contains(diagnostic, "unsupported_combination") {
+		if code != 2 || out != "" || !strings.Contains(diagnostic, "usage") {
 			t.Errorf("expected preflight refusal: %d %s %s", code, out, diagnostic)
 		}
 		if _, err := os.Stat(scriptMarker); !os.IsNotExist(err) {
