@@ -2246,3 +2246,20 @@ func TestWindowScopedSessionOptionReachesEveryWindow(t *testing.T) {
 		}
 	}
 }
+
+// TestMissingStartDirectoryBuildsAndWarns: tmux starts a pane in $HOME when
+// the directory it was handed does not exist, so a typo in a workspace file
+// is invisible -- the panes come up somewhere else and the load reports
+// success.
+func TestMissingStartDirectoryBuildsAndWarns(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	missing := filepath.Join(t.TempDir(), "definitely", "not", "here")
+	path := write(t, t.TempDir(), "missing.yaml", "session_name: missing\nstart_directory: "+missing+"\nwindows:\n- window_name: w\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d")
+	if code != 0 {
+		t.Fatalf("load = %d %q %q, want the workspace to build", code, out, diagnostic)
+	}
+	if !strings.Contains(diagnostic, missing) || !strings.Contains(diagnostic, "$HOME") {
+		t.Fatalf("a start_directory that does not exist was not reported: %q", diagnostic)
+	}
+}

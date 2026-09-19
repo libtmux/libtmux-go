@@ -221,3 +221,33 @@ func TestUnknownBuilderOptionWarnsRatherThanRefusing(t *testing.T) {
 		t.Fatalf("warnings = %q, want the unknown setting named", plan.Warnings)
 	}
 }
+
+// TestStartDirectoryWarningsAndNullHandling: a start_directory that does not
+// exist still builds -- tmux falls back to $HOME -- so the typo has to be
+// said out loud or the panes come up somewhere else and the load reports
+// success. An explicit YAML null is the absent key, not a refusal and not a
+// crash: bare "~" is null in YAML, where "~/" is the string.
+func TestStartDirectoryWarningsAndNullHandling(t *testing.T) {
+	base := t.TempDir()
+	missing := filepath.Join(base, "definitely", "not", "here")
+	t.Run("missing", func(t *testing.T) {
+		doc := document{"session_name": "example", "start_directory": missing, "windows": []any{document{"panes": []any{nil}}}}
+		plan, err := normalize(doc, base)
+		if err != nil {
+			t.Fatalf("a missing start_directory must still build: %v", err)
+		}
+		if plan.Directory != missing {
+			t.Fatalf("directory = %q, want %q", plan.Directory, missing)
+		}
+		if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], missing) || !strings.Contains(plan.Warnings[0], "$HOME") {
+			t.Fatalf("warnings = %q, want the path named and the fallback explained", plan.Warnings)
+		}
+	})
+	t.Run("null", func(t *testing.T) {
+		doc := document{"session_name": "example", "start_directory": nil, "windows": []any{document{"panes": []any{nil}}}}
+		plan, err := normalize(doc, base)
+		if err != nil || plan.Directory != "" || len(plan.Warnings) != 0 {
+			t.Fatalf("an explicit null start_directory must read as absent: %v %q %q", err, plan.Directory, plan.Warnings)
+		}
+	})
+}
