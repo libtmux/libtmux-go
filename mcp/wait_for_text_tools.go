@@ -216,13 +216,14 @@ func (t *tools) waitForText(
 	defer t.runtime.releaseObservation(observation)
 	entry := observation.Baseline()
 	// The server knows every key it sent this pane; a match confined to that
-	// unsubmitted line is not a match, however new the bytes look.
-	// The entry check uses one snapshot, taken at this well-defined instant;
-	// the live watch below reads it fresh on every match attempt, because a
-	// wait that attaches before anything is typed must still catch a submit
-	// - or more typing - that happens while it runs.
+	// unsubmitted line is not a match, however new the bytes look. Every read
+	// of it is fresh. It has to be for the cursor branch below, which reads
+	// what the pane wrote up to that moment rather than the baseline captured
+	// when the watch attached: text typed between the two is in what it reads
+	// and would not be in a snapshot taken here. The live watch reads it again
+	// on every attempt, because a wait that attaches before anything is typed
+	// must still catch a submit, or more typing, that happens while it runs.
 	paneID := pane.ID()
-	pending := t.pending.snapshot(paneID)
 	pendingNow := func() string { return t.pending.snapshot(paneID) }
 
 	// Read entry text even when ignored so a timeout can report that the match
@@ -236,13 +237,13 @@ func (t *tools) waitForText(
 			return nil, output, err
 		}
 		shown := strings.Join(since.lines, "\n")
-		if stopName, isReal, _ := pendingAwareMatch(stops, shown, pending); isReal {
+		if stopName, isReal, _ := pendingAwareMatch(stops, shown, pendingNow()); isReal {
 			return finishWait(
 				&output, outcomeStopped, stopName, false, false, since.lines,
 				limits, truncation{}, started,
 			)
 		}
-		if patternName, isReal, _ := pendingAwareMatch(patterns, shown, pending); isReal {
+		if patternName, isReal, _ := pendingAwareMatch(patterns, shown, pendingNow()); isReal {
 			// Genuinely written since the cursor - a match, not a baseline
 			// the wait merely happened to attach after.
 			return finishWait(
@@ -252,8 +253,8 @@ func (t *tools) waitForText(
 		}
 	case len(patterns) > 0 || len(stops) > 0:
 		shown := strings.Join(entry, "\n")
-		stopName, stopReal, stopPending := pendingAwareMatch(stops, shown, pending)
-		patternName, patternReal, patternPending := pendingAwareMatch(patterns, shown, pending)
+		stopName, stopReal, stopPending := pendingAwareMatch(stops, shown, pendingNow())
+		patternName, patternReal, patternPending := pendingAwareMatch(patterns, shown, pendingNow())
 		presentAtEntry = stopReal || stopPending || patternReal || patternPending
 		pendingOnlyAtEntry = presentAtEntry && !stopReal && !patternReal
 		if !input.SinceEntry {
