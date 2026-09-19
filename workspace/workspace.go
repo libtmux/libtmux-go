@@ -16,9 +16,12 @@
 // those.
 //
 // In exchange, this package reports every problem in a document at once, each
-// with the line it is on, where the command reports the first and no
-// position. It also leaves a missing start_directory to the caller through
-// [Workspace.MissingDirectories], where the command warns during a load.
+// with the line it is on. The command reports one problem per window, also
+// with its line, but a document-level refusal -- an empty windows list, an
+// unusable session_name -- still stops at the first, because there is
+// nothing to carry on into. It also leaves a missing start_directory to the
+// caller through [Workspace.MissingDirectories], where the command warns
+// during a load.
 //
 // Automation that has to follow tmuxp belongs on the command and its JSON
 // output. This package builds the subset documented here from Go.
