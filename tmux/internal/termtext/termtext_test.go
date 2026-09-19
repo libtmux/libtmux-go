@@ -1,4 +1,4 @@
-package mcp
+package termtext
 
 import (
 	"bytes"
@@ -15,10 +15,10 @@ func TestTerminalTextPreservesPrintableUTF8AcrossChunks(t *testing.T) {
 		{0x94, 0xe6, 0x9d, 0xb1, 0xe4},
 		{0xba, 0xac, '\n'},
 	}
-	var normalizer terminalTextNormalizer
+	var normalizer Normalizer
 	var got []byte
 	for _, chunk := range chunks {
-		got = normalizer.appendChunk(got, chunk)
+		got = normalizer.AppendChunk(got, chunk)
 	}
 
 	const want = "plain\tcafé—東京\n"
@@ -53,10 +53,10 @@ func TestTerminalTextMakesOverwriteControlsReadable(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var normalizer terminalTextNormalizer
+			var normalizer Normalizer
 			var got []byte
 			for _, chunk := range test.chunks {
-				got = normalizer.appendChunk(got, []byte(chunk))
+				got = normalizer.AppendChunk(got, []byte(chunk))
 			}
 			if string(got) != test.want {
 				t.Fatalf("normalized text = %q, want %q", got, test.want)
@@ -113,10 +113,10 @@ func TestTerminalTextStripsCSIAndEscapeControlsAcrossChunks(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var normalizer terminalTextNormalizer
+			var normalizer Normalizer
 			var got []byte
 			for _, chunk := range test.chunks {
-				got = normalizer.appendChunk(got, chunk)
+				got = normalizer.AppendChunk(got, chunk)
 			}
 			if string(got) != test.want {
 				t.Fatalf("normalized text = %q, want %q", got, test.want)
@@ -194,10 +194,10 @@ func TestTerminalTextStripsStringControlsAcrossChunks(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var normalizer terminalTextNormalizer
+			var normalizer Normalizer
 			var got []byte
 			for _, chunk := range test.chunks {
-				got = normalizer.appendChunk(got, chunk)
+				got = normalizer.AppendChunk(got, chunk)
 			}
 			if string(got) != "leftright" {
 				t.Fatalf("normalized text = %q, want %q", got, "leftright")
@@ -222,8 +222,8 @@ func TestTerminalTextCancellationEndsControlStrings(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var normalizer terminalTextNormalizer
-			got := normalizer.appendChunk(nil, []byte(test.input))
+			var normalizer Normalizer
+			got := normalizer.AppendChunk(nil, []byte(test.input))
 			if string(got) != "leftright" {
 				t.Fatalf("normalized text = %q, want %q", got, "leftright")
 			}
@@ -236,9 +236,9 @@ func TestTerminalTextDoesNotBufferControlPayload(t *testing.T) {
 	start := []byte("\x1b]")
 	retained := 0
 	allocations := testing.AllocsPerRun(20, func() {
-		var normalizer terminalTextNormalizer
-		got := normalizer.appendChunk(nil, start)
-		got = normalizer.appendChunk(got, payload)
+		var normalizer Normalizer
+		got := normalizer.AppendChunk(nil, start)
+		got = normalizer.AppendChunk(got, payload)
 		retained += len(got)
 	})
 	if retained != 0 {
@@ -248,10 +248,10 @@ func TestTerminalTextDoesNotBufferControlPayload(t *testing.T) {
 		t.Fatalf("unterminated OSC allocated %.1f times per payload", allocations)
 	}
 
-	var normalizer terminalTextNormalizer
-	got := normalizer.appendChunk(nil, []byte("before\x1b]"))
-	got = normalizer.appendChunk(got, payload)
-	got = normalizer.appendChunk(got, []byte("\x1b\\after"))
+	var normalizer Normalizer
+	got := normalizer.AppendChunk(nil, []byte("before\x1b]"))
+	got = normalizer.AppendChunk(got, payload)
+	got = normalizer.AppendChunk(got, []byte("\x1b\\after"))
 	if string(got) != "beforeafter" {
 		t.Fatalf("normalized text = %q, want %q", got, "beforeafter")
 	}

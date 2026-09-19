@@ -52,6 +52,19 @@ func (c *ControlClient) nextNotificationAfter(
 	return ParseControlNotification(record)
 }
 
+// readyNotificationAfter is nextNotificationAfter without the wait; ok is
+// false when nothing is queued.
+func (c *ControlClient) readyNotificationAfter(
+	sequence uint64,
+) (notification ControlNotification, ok bool, err error) {
+	record, err := c.notifications.nextReady(sequence)
+	if err != nil || record == nil {
+		return ControlNotification{}, false, err
+	}
+	notification, err = ParseControlNotification(record)
+	return notification, true, err
+}
+
 // Notifications returns an iterator over what tmux says without being asked:
 // pane output, and the events behind [ControlNotification].
 //

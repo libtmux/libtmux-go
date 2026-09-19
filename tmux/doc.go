@@ -162,12 +162,13 @@
 // through tmux's own stdin and stdout, which no quoting rule and no command
 // length limit apply to; tmux offers a control client neither stream, so those
 // three need a process and their path-taking siblings are what a connection
-// uses. [ControlClient.NextNotification]
-// waits for pane output as a stream, and [NotificationStream.Subscribe] asks
+// uses. [PaneObservation.WaitFor] waits for a pane to print something,
+// woken by tmux as the pane writes it; [ControlClient.NextNotification] is
+// that same stream as notifications, and [NotificationStream.Subscribe] asks
 // tmux to report a format whenever its value changes. [Server.WaitFor] waits
 // for an explicit tmux channel signal. Polling [Pane.Capture] reads the
-// visible screen and may match a shell's command echo before the command
-// produces output.
+// visible screen on a guess and may match a shell's command echo before the
+// command produces output.
 //
 // # Plans
 //

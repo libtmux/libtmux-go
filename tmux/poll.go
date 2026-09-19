@@ -16,8 +16,13 @@ var ErrPollCondition = errors.New("tmux: poll condition is required")
 //
 // A condition receives ctx and must observe cancellation itself; Poll cannot
 // interrupt one already running. Poll returns condition errors unchanged and
-// ctx.Err when ctx ends first. Use Poll to wait for pane output;
-// [Server.WaitFor] signals tmux's separate wait-for channel.
+// ctx.Err when ctx ends first.
+//
+// Poll is for a state tmux does not announce. Waiting for a pane to print
+// something is not one: [PaneObservation.WaitFor] is woken by tmux as the
+// pane writes, where a poll re-reads the screen on a guess and can match a
+// shell's echo of what was typed. [Server.WaitFor] waits on tmux's separate
+// wait-for channel.
 func Poll(
 	ctx context.Context,
 	interval time.Duration,

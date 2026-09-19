@@ -1,22 +1,15 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
-	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-// waitBufferMax bounds both matching and returned observation text. Prefix
-// loss is reported, and matching is defined over this retained tail.
-const waitBufferMax = ceilingMaxBytes
 
 // waitForTextInput waits for a pane to write something.
 type waitForTextInput struct {
@@ -276,9 +269,7 @@ func (t *tools) waitForText(
 		}
 	}
 	idle := time.Duration(input.IdleSeconds) * time.Second
-	watched := watchPane(
-		waitCtx, observation, paneID, patterns, stops, pendingNow, idle,
-	)
+	watched := watchPane(waitCtx, observation, patterns, stops, pendingNow, idle)
 	if watched.err != nil {
 		if !isOwnWaitDeadline(ctx, waitCtx, watched.err) {
 			return nil, output, watched.err
@@ -323,16 +314,19 @@ type paneWatchResult struct {
 // pane saying something, so it must not count as the pane still working.
 func watchPane(
 	ctx context.Context,
-	notifications paneNotificationSource,
-	paneID tmux.PaneID,
+	source paneTextSource,
 	patterns, stops []namedMatcher,
 	pendingNow func() string,
 	idle time.Duration,
 ) paneWatchResult {
 	var result paneWatchResult
-	var normalizer terminalTextNormalizer
-	buffer := make([]byte, 0, min(waitBufferMax, 4096))
-	quiet := time.Now().Add(idle)
+	waitCtx, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+	var quiet *time.Timer
+	if idle > 0 {
+		quiet = time.AfterFunc(idle, func() { stop(errPaneQuiet) })
+		defer quiet.Stop()
+	}
 	// stickyPending remembers the last nonempty pending text this watch saw,
 	// even once a submit clears it: the bytes it named can still be sitting,
 	// freshly written, exactly where they were typed, and masking has to
@@ -340,20 +334,10 @@ func watchPane(
 	// call only ever tracks one pane's one line this way, so remembering it
 	// for the rest of this call is enough.
 	var stickyPending string
-	consume := func(data []byte) (string, string, bool) {
-		buffer = normalizer.appendChunk(buffer, data)
-		if len(buffer) > waitBufferMax {
-			start := len(buffer) - waitBufferMax
-			for start < len(buffer) && !utf8.RuneStart(buffer[start]) {
-				start++
-			}
-			dropped := buffer[:start]
-			result.TruncatedBytes += len(dropped)
-			result.TruncatedLines += bytes.Count(dropped, []byte{'\n'})
-			result.Truncated = true
-			buffer = append(buffer[:0], buffer[start:]...)
+	text, err := source.WaitFor(waitCtx, func(seen string) bool {
+		if quiet != nil {
+			quiet.Reset(idle)
 		}
-		seen := string(buffer)
 		// Read fresh on every attempt, not once up front: a wait that
 		// attaches before anything is typed must still catch a submit, or
 		// more typing, that happens while it is already running.
@@ -369,53 +353,39 @@ func watchPane(
 		// submitted and its real output arrives, or genuinely different
 		// output appears elsewhere.
 		if name, isReal, _ := pendingAwareMatch(stops, seen, stickyPending); isReal {
-			return outcomeStopped, name, true
+			result.outcome, result.matched = outcomeStopped, name
+			return true
 		}
 		if name, isReal, _ := pendingAwareMatch(patterns, seen, stickyPending); isReal {
-			return outcomeMatched, name, true
+			result.outcome, result.matched = outcomeMatched, name
+			return true
 		}
 		if len(patterns) == 0 && len(stops) == 0 && idle == 0 {
-			return outcomeOutput, "", true
+			result.outcome = outcomeOutput
+			return true
 		}
-		return "", "", false
+		return false
+	})
+	result.written = text.Text
+	result.truncation = truncation{
+		Truncated:      text.DroppedBytes > 0,
+		TruncatedLines: text.DroppedLines,
+		TruncatedBytes: text.DroppedBytes,
 	}
-	for {
-		readCtx, cancelRead := ctx, context.CancelFunc(func() {})
-		if idle > 0 {
-			readCtx, cancelRead = context.WithDeadline(ctx, quiet)
-		}
-		notification, notifyErr := notifications.NextNotification(readCtx)
-		readErr := readCtx.Err()
-		cancelRead()
-		if notifyErr != nil {
-			// The idle window closing is an answer; the whole wait running out
-			// is not. Only the outer context being live tells them apart.
-			if idle > 0 && errors.Is(notifyErr, context.DeadlineExceeded) &&
-				errors.Is(readErr, context.DeadlineExceeded) && ctx.Err() == nil {
-				result.written = string(buffer)
-				result.outcome = outcomeIdle
-				return result
-			}
-			result.written = string(buffer)
-			result.err = paneObservationError(notifyErr)
+	if err != nil {
+		// The idle window closing is an answer; the whole wait running out
+		// is not. Only the outer context being live tells them apart.
+		if errors.Is(context.Cause(waitCtx), errPaneQuiet) && ctx.Err() == nil {
+			result.outcome = outcomeIdle
 			return result
 		}
-		id, data, isOutput := notification.Output()
-		if !isOutput || id != paneID {
-			continue
-		}
-		if len(data) == 0 {
-			continue
-		}
-		quiet = time.Now().Add(idle)
-		if ending, name, done := consume(data); done {
-			result.written = string(buffer)
-			result.outcome = ending
-			result.matched = name
-			return result
-		}
+		result.err = paneObservationError(err)
 	}
+	return result
 }
+
+// errPaneQuiet ends a wait whose pane wrote nothing for its idle window.
+var errPaneQuiet = errors.New("pane went quiet")
 
 // finishWait fills in the parts of the reply that every ending shares.
 func finishWait(

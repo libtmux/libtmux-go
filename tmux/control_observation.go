@@ -114,12 +114,33 @@ func (o *PaneObservation) NextNotification(
 		return ControlNotification{}, err
 	}
 	defer state.releaseReadToken()
+	notification, _, err := o.read(ctx, true)
+	return notification, err
+}
+
+// read returns the next notification after the baseline, applying the loss
+// rules NextNotification documents. The caller holds the read token. With
+// block false it returns ok false at once when nothing is queued.
+func (o *PaneObservation) read(
+	ctx context.Context,
+	block bool,
+) (_ ControlNotification, ok bool, _ error) {
+	state := o.state
 	if state.loss != nil {
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
 	}
-	notification, err := o.client.nextNotificationAfter(ctx, o.after)
+	var notification ControlNotification
+	var err error
+	if block {
+		notification, err = o.client.nextNotificationAfter(ctx, o.after)
+	} else {
+		notification, ok, err = o.client.readyNotificationAfter(o.after)
+		if err == nil && !ok {
+			return ControlNotification{}, false, nil
+		}
+	}
 	if err != nil {
-		return ControlNotification{}, state.classifyReadError(
+		return ControlNotification{}, false, state.classifyReadError(
 			ctx,
 			err,
 			o.client.closeRequested.Load(),
@@ -132,7 +153,7 @@ func (o *PaneObservation) NextNotification(
 			"%w: observed window is no longer linked into the attached session",
 			ErrPaneObservationLost,
 		)
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
 	}
 	// %window-close for the observed window is ambiguous rather than a direct
 	// signal: tmux emits it to every client whose own attached session still
@@ -149,7 +170,7 @@ func (o *PaneObservation) NextNotification(
 		len(arguments) != 0 && WindowID(arguments[0]) == o.windowID {
 		linked, err := o.windowLinkedIntoAttachedSession(ctx)
 		if err != nil {
-			return ControlNotification{}, state.classifyReadError(
+			return ControlNotification{}, false, state.classifyReadError(
 				ctx,
 				err,
 				o.client.closeRequested.Load(),
@@ -160,7 +181,7 @@ func (o *PaneObservation) NextNotification(
 				"%w: observed window is no longer linked into the attached session",
 				ErrPaneObservationLost,
 			)
-			return ControlNotification{}, state.loss
+			return ControlNotification{}, false, state.loss
 		}
 	}
 	if notification.Kind() == ControlNotificationSessionChanged &&
@@ -169,7 +190,7 @@ func (o *PaneObservation) NextNotification(
 			"%w: control client changed sessions",
 			ErrPaneObservationLost,
 		)
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
 	}
 	if notification.Kind() == ControlNotificationExit && len(arguments) != 0 {
 		state.exitReason = arguments[0]
@@ -184,9 +205,9 @@ func (o *PaneObservation) NextNotification(
 			"%w: the observed pane left its window's arrangement",
 			ErrPaneObservationLost,
 		)
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
 	}
-	return notification, nil
+	return notification, true, nil
 }
 
 // windowLinkedIntoAttachedSession reports whether the observed window is
