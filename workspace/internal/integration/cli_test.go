@@ -2223,3 +2223,26 @@ func TestUnknownBuilderOptionLoadsAndWarns(t *testing.T) {
 		t.Fatalf("workspace did not build: %+v %v", windows, err)
 	}
 }
+
+// TestWindowScopedSessionOptionReachesEveryWindow: pane-base-index and its
+// like are window options in tmux, so setting one under the session's
+// options: landed on the window the session was created with -- the one the
+// first window of the document replaces -- and the document's request was
+// silently dropped.
+func TestWindowScopedSessionOptionReachesEveryWindow(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	path := write(t, t.TempDir(), "pbi.yaml", "session_name: pbi\noptions:\n  pane-base-index: 1\nwindows:\n- window_name: first\n  panes: [blank, blank]\n- window_name: second\n  panes: [blank]\n")
+	code, out, diagnostic := run(t, "load", path, "-S", server.SocketPath(), "-f", server.ConfigFile(), "-d", "--json")
+	if code != 0 {
+		t.Fatalf("load = %d %q %q", code, out, diagnostic)
+	}
+	for window, want := range map[string]string{"first": "1 2", "second": "1"} {
+		result, err := server.Cmd(t.Context(), "list-panes", "-t", "pbi:"+window, "-F", "#{pane_index}")
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("list panes of %s: %+v %v", window, result, err)
+		}
+		if got := strings.Join(strings.Fields(string(result.RawStdout)), " "); got != want {
+			t.Fatalf("pane indices of %s = %q, want %q", window, got, want)
+		}
+	}
+}
