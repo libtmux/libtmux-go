@@ -30,7 +30,15 @@ func (t *tools) killSession(
 	if strings.TrimSpace(input.SessionName) == "" {
 		return nil, killSessionOutput{}, errors.New("sessionName is required")
 	}
-	// The "=" prefix anchors the target against tmux prefix and pattern matching.
+	// resolveSession matches the materialized name exactly in Go rather than
+	// through tmux target syntax: an ordinary "-t name" reads a period or
+	// colon in the name as a separator, and tmux applies the "=" exact-match
+	// anchor to the same, already-split session part, so "=name" fails on
+	// exactly the names it looks like it should protect.
+	session, err := t.resolveSession(ctx, input.SessionName)
+	if err != nil {
+		return nil, killSessionOutput{}, err
+	}
 	holdsCaller := false
 	caller, inside, err := t.callerPaneOnThisServer(ctx)
 	if err != nil {
@@ -46,7 +54,7 @@ func (t *tools) killSession(
 			return nil, killSessionOutput{}, err
 		}
 	}
-	if err := t.tmux(ctx).KillSession(ctx, "="+input.SessionName); err != nil {
+	if err := session.Kill(ctx); err != nil {
 		return nil, killSessionOutput{}, err
 	}
 	return nil, killSessionOutput{Killed: input.SessionName}, nil
