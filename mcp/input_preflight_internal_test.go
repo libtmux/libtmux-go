@@ -2136,6 +2136,27 @@ func TestPendingInputTracksAnEraseSentAsItsOwnDispatch(t *testing.T) {
 	}
 }
 
+// This model only ever places the cursor at the end of the tracked line, so
+// Delete - which removes the character after the cursor - always finds
+// nothing there and must leave pending untouched. Shrinking it anyway makes
+// the mask shorter than the line, leaking its untouched tail unmasked.
+func TestPendingInputDeleteAtEndOfLineIsANoOp(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%1"}
+
+	typed, _, _, _ := willType([]string{"a", "b"}, false)
+	pending.record(panes, 0, typed)
+
+	deleted, _, _, overflow := willType([]string{"DC"}, false)
+	pending.record(panes, overflow, deleted)
+
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "ab" {
+		t.Errorf("pending = %q after Delete at end of line, want %q untouched", got, "ab")
+	}
+}
+
 // tmux types a key named by one printable character as that character, so a
 // non-literal sequence puts text on the line just as a literal one does.
 // Masking only the literal form let wait_for_text read the caller's own
