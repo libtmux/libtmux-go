@@ -38,7 +38,7 @@ $ go -C examples test ./...
 Every fenced Go block in this repository's Markdown that sits between `docs:`
 markers is a region of real Go that compiles and runs, copied in by
 `go generate`. The [top-level README](../README.md) is built that way, and so
-are [`filter-query/README.md`](filter-query/README.md) and
+is every per-example README here that shows code, along with
 [`../tmux/tmuxtest/README.md`](../tmux/tmuxtest/README.md).
 
 A region is named where it is written:
@@ -55,7 +55,7 @@ and `<!-- docs:end -->`. Everything between those two lines is replaced by a
 fenced `go` block holding the region. A block outside a marker pair is never
 touched, so a hand-written snippet says so by not being marked.
 
-Three things about the format:
+What to know about the format:
 
 - A name is lowercase letters, digits and hyphens, and is unique across the
   whole repository rather than within its file. Two regions sharing a name is

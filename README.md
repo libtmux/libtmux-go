@@ -13,8 +13,8 @@ refused.
 
 - **No runtime dependencies.** The core module imports only the standard library.
 - **Go 1.26+**, tmux **3.2a through 3.8-rc** across the core, workspace, and
-  MCP modules. The compatibility matrix checks every release in that range,
-  the 3.8 release candidate included.
+  MCP modules. The compatibility matrix checks ten builds spanning that
+  range, the 3.8 release candidate included.
   The Go floor tracks upstream's support window, which covers the two most
   recent releases, so it rises whenever a Go release retires the oldest -
   roughly twice a year, and sooner than a toolchain pinned for longer.
@@ -35,7 +35,7 @@ the tags are `mcp/vN` and `workspace/vN` beside the core's plain `vN`. Pin the
 exact ones you want in your own go.mod; the commands here fetch the newest.
 
 **Contents** — [Quick start](#quick-start) · [Querying](#what-querying-looks-like)
-· [Choosing a mode](#choosing-a-mode) · [Watching tmux](#watching-tmux) ·
+· [Choosing a mode](#choosing-an-execution-path) · [Watching tmux](#watching-tmux) ·
 [Packages](#packages) · [For agents](#for-agents) ·
 [Testing your code](#testing-your-own-code) · [Documentation](#documentation)
 
@@ -505,8 +505,8 @@ rather than searched:
 $ go doc github.com/libtmux/libtmux-go/tmux
 ```
 
-It opens with a task index, then the rule mapping a tmux command to its Go
-method — `kill-pane` is `Pane.Kill`, `rename-session` is `Session.Rename` — so a
+It opens with a task index, and carries the rule mapping a tmux command to its
+Go method — `kill-pane` is `Pane.Kill`, `rename-session` is `Session.Rename` — so a
 command usually leads to its method without a lookup.
 
 | | |
