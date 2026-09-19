@@ -770,9 +770,18 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 			return session, windows, err
 		}
 	}
+	// tmux keeps some of what a document writes under the session's options:
+	// in the window table -- pane-base-index and its like. Those land on the
+	// window the session was created with, which the first window of the
+	// document replaces, so each window created below is given them too.
+	windowScoped := map[string]string{}
 	for _, key := range sortedKeys(plan.Options) {
-		if err := setSessionOption(r.ctx, session, key, plan.Options[key]); err != nil {
+		scope, err := setSessionOption(r.ctx, session, key, plan.Options[key])
+		if err != nil {
 			return session, windows, err
+		}
+		if scope == windowOptionScope {
+			windowScoped[key] = plan.Options[key]
 		}
 	}
 	// Readiness is not conditional on the shell. Text sent before any shell
@@ -833,6 +842,11 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 		windows = append(windows, built)
 		if err := r.event("window-created", map[string]any{"input_index": inputIndex, "session_id": session.ID().String(), "window_id": window.ID().String(), "window_index": window.Index(), "window_name": wp.Name, "pane_total": len(wp.Panes)}); err != nil {
 			return session, windows, err
+		}
+		for _, key := range sortedKeys(windowScoped) {
+			if err := window.SetOption(r.ctx, key, windowScoped[key], tmux.SetOptionOptions{}); err != nil {
+				return session, windows, err
+			}
 		}
 		for _, key := range sortedKeys(wp.Options) {
 			if err := window.SetOption(r.ctx, key, wp.Options[key], tmux.SetOptionOptions{}); err != nil {
@@ -999,18 +1013,28 @@ func setGlobalOption(ctx context.Context, server tmux.Server, name, value string
 	return first
 }
 
-func setSessionOption(ctx context.Context, session tmux.Session, name, value string) error {
+// optionScope names the tmux option table that accepted a write.
+type optionScope int
+
+const (
+	sessionOptionScope optionScope = iota
+	windowOptionScope
+)
+
+// setSessionOption reproduces tmuxp's untyped dispatch across the session and
+// window tables, and reports which one took the value.
+func setSessionOption(ctx context.Context, session tmux.Session, name, value string) (optionScope, error) {
 	first := session.SetOption(ctx, name, value, tmux.SetOptionOptions{})
 	if first == nil {
-		return nil
+		return sessionOptionScope, nil
 	}
 	window, err := session.ResolveActiveWindow(ctx)
 	if err == nil {
 		if err := window.SetOption(ctx, name, value, tmux.SetOptionOptions{}); err == nil {
-			return nil
+			return windowOptionScope, nil
 		}
 	}
-	return first
+	return sessionOptionScope, first
 }
 
 func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
