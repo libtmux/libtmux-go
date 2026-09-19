@@ -357,3 +357,123 @@ func TestSourceFilePreservesTerminalSemicolonPathAgainstRealTmux(t *testing.T) {
 		t.Fatalf("show sourced option = (%#v, %v), want yes", result, err)
 	}
 }
+
+// TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux proves the
+// run-shell "--" guard against a live tmux. Without it, tmux's own argument
+// parser reads a Command beginning with "-" as run-shell's own flags and
+// refuses it before any shell ever runs, which is what the raw control below
+// reproduces (no job, so nothing is ever reported "returned").
+//
+// The command itself still can't run cleanly here: /bin/sh -c rejects a "-c"
+// operand that itself starts with "-" as a shell invocation option, a
+// limitation of the shell tmux execs and orthogonal to tmux's own argument
+// parsing. tmux reports that job failure as `'<cmd>' returned <n>`
+// (cmd-run-shell.c, stable across every supported tmux release), quoting the
+// exact command string back - proof it reached a real job verbatim, which is
+// everything this guard is responsible for.
+//
+//libtmux:real-tmux
+func TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const command = "-not-a-flag || true"
+
+	// Control: the same command without the "--" guard is parsed as flags by
+	// tmux itself, and fails before a shell ever runs.
+	raw, err := server.Cmd(ctx, "run-shell", command)
+	if err != nil || raw.ExitCode == 0 || slices.ContainsFunc(raw.Stdout, func(line string) bool {
+		return strings.Contains(line, "returned")
+	}) {
+		t.Fatalf("unguarded run-shell = (%#v, %v), want a parse failure with no job output", raw, err)
+	}
+
+	output, err := server.RunShell(ctx, tmux.RunShellRequest{Command: command})
+	if err != nil {
+		t.Fatalf("RunShell() error = %v", err)
+	}
+	if len(output) == 0 {
+		t.Fatalf("RunShell() output = %#v, want a job completion line", output)
+	}
+	if want := "'" + command + "' returned "; !strings.HasPrefix(output[len(output)-1], want) {
+		t.Fatalf("RunShell() output tail = %q, want prefix %q", output[len(output)-1], want)
+	}
+}
+
+// TestIfShellTreatsLeadingDashShellCommandAsPositionalAgainstRealTmux proves
+// the if-shell "--" guard: one guard precedes ShellCommand, ThenCommand, and
+// ElseCommand together, so a dash-prefixed condition is enough to show all
+// three still land as positional operands.
+//
+// As with run-shell, /bin/sh -c cannot execute a condition that itself starts
+// with "-", so the condition job exits nonzero for reasons of its own; that
+// is still proof the guarded value reached a real job (and picked the else
+// branch) rather than being refused by tmux before ever running one.
+//
+//libtmux:real-tmux
+func TestIfShellTreatsLeadingDashShellCommandAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const shellCommand = "-not-a-flag || true"
+	thenCommand := "set-option -g @phase6_dash then"
+	elseCommand := "set-option -g @phase6_dash else"
+
+	// Control: refused by tmux's own parser before either branch runs.
+	raw, err := server.Cmd(ctx, "if-shell", shellCommand, thenCommand, elseCommand)
+	if err != nil || raw.ExitCode == 0 {
+		t.Fatalf("unguarded if-shell = (%#v, %v), want a parse failure", raw, err)
+	}
+	result, err := server.Cmd(ctx, "show-options", "-gv", "@phase6_dash")
+	if err != nil || result.ExitCode == 0 {
+		t.Fatalf("show if-shell option after unguarded call = (%#v, %v), want unset", result, err)
+	}
+
+	if err := server.IfShell(ctx, tmux.IfShellRequest{
+		ShellCommand: shellCommand,
+		ThenCommand:  thenCommand,
+		ElseCommand:  &elseCommand,
+	}); err != nil {
+		t.Fatalf("IfShell() error = %v", err)
+	}
+	result, err = server.Cmd(ctx, "show-options", "-gv", "@phase6_dash")
+	if err != nil || !slices.Equal(result.Stdout, []string{"else"}) {
+		t.Fatalf(
+			"show if-shell option = (%#v, %v), want else (the guarded condition ran and failed)",
+			result, err,
+		)
+	}
+}
+
+// TestWaitForTreatsLeadingDashChannelAsPositionalAgainstRealTmux proves the
+// wait-for "--" guard: a channel name is a bare positional argument on every
+// mode, so an unguarded "-S -chan" is parsed as two flag clusters rather than
+// a signal and its channel.
+//
+//libtmux:real-tmux
+func TestWaitForTreatsLeadingDashChannelAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	raw, err := server.Cmd(ctx, "wait-for", "-S", "-dash-channel")
+	if err != nil || raw.ExitCode == 0 {
+		t.Fatalf("unguarded wait-for -S = (%#v, %v), want a parse failure", raw, err)
+	}
+
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{
+		Channel: "-dash-channel",
+		Mode:    tmux.WaitForModeSignal,
+	}); err != nil {
+		t.Fatalf("WaitFor(signal) error = %v", err)
+	}
+	// tmux remembers a signal that arrived with no waiter, so a later plain
+	// wait on the same channel returns at once instead of blocking.
+	waitCtx, waitCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer waitCancel()
+	if err := server.WaitFor(waitCtx, tmux.WaitForRequest{Channel: "-dash-channel"}); err != nil {
+		t.Fatalf("WaitFor(wait) error = %v, want the remembered signal to return at once", err)
+	}
+}
