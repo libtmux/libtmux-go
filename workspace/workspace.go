@@ -40,8 +40,8 @@ type Workspace struct {
 	// and pane entries add to this list rather than replacing it.
 	CommandsBefore []Command `yaml:"-"`
 	// SuppressHistory prefixes commands with a space unless a window or pane
-	// overrides it.
-	SuppressHistory Bool `yaml:"suppress_history"`
+	// overrides it. Nil suppresses history, matching tmuxp.
+	SuppressHistory *Bool `yaml:"suppress_history"`
 	// Windows are created in order. A workspace needs at least one.
 	Windows []Window `yaml:"windows"`
 }

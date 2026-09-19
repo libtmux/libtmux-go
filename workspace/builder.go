@@ -271,6 +271,14 @@ func buildPanes(
 			return nil, fmt.Errorf("split pane %d: %w", index, err)
 		}
 		panes = append(panes, pane)
+		// Halving each pane in turn runs out of room before the fifth at
+		// 80x24; rebalancing after every split reclaims it. described.Layout,
+		// applied once every pane exists, still has the final say.
+		if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{
+			Layout: "tiled",
+		}); err != nil {
+			return nil, fmt.Errorf("rebalance after pane %d: %w", index, err)
+		}
 	}
 
 	for index, pane := range panes {
@@ -302,6 +310,9 @@ func buildPanes(
 					Command:         &text,
 					SuppressHistory: suppress,
 					SkipEnter:       !command.sends(),
+					// A command that is also a tmux key name -- Space, Up,
+					// Escape -- is that key without this.
+					Literal: true,
 				}); err != nil {
 					return nil, fmt.Errorf("run %q in pane %d: %w", command.Command, index, err)
 				}
@@ -339,7 +350,7 @@ func paneSuppressHistory(workspace Workspace, window Window, pane Pane) bool {
 	if window.SuppressHistory != nil {
 		return bool(*window.SuppressHistory)
 	}
-	return bool(workspace.SuppressHistory)
+	return workspace.SuppressHistory == nil || bool(*workspace.SuppressHistory)
 }
 
 func sleep(ctx context.Context, duration time.Duration) error {
