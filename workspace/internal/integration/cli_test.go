@@ -2162,3 +2162,27 @@ func TestFailedAppendListsTheWindowsItKept(t *testing.T) {
 		}
 	}
 }
+
+// TestFreezeRefusesASessionNameLoadWouldReject: freeze must never write a
+// document load would refuse. tmux runs a session named my.proj happily, but
+// reads the period as a separator in a target, so load refuses that name --
+// and the user found out at restore, the moment freeze exists to serve.
+func TestFreezeRefusesASessionNameLoadWouldReject(t *testing.T) {
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
+	if result, err := server.Cmd(t.Context(), "new-session", "-d", "-s", "my.proj"); err != nil || result.ExitCode != 0 {
+		t.Skipf("this tmux refuses a dotted session name: %+v %v", result, err)
+	}
+	destination := filepath.Join(t.TempDir(), "frozen.yaml")
+	code, out, diagnostic := run(t, "freeze", "my.proj", "--save-to", destination, "-S", server.SocketPath(), "--json")
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v (%q)", diagnostic, err, out)
+	}
+	message, _ := envelope["message"].(string)
+	if code != 1 || envelope["code"] != "invalid_workspace" || !strings.Contains(message, "my.proj") {
+		t.Fatalf("freeze of a dotted session = %d %v %q, want 1, invalid_workspace and the session named", code, envelope["code"], message)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("freeze wrote a document load would refuse: %v", err)
+	}
+}
