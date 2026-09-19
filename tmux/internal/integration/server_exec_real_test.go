@@ -427,6 +427,12 @@ func TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.
 // is still proof the guarded value reached a real job (and picked the else
 // branch) rather than being refused by tmux before ever running one.
 //
+// Confirming the unguarded control set nothing has to avoid show-options'
+// own reply to an unset user option, which is not the same on every version:
+// tmux 3.2a answers an unrecognised name with a clean, empty success, while
+// 3.3 and later answer it with "invalid option: <name>" and a nonzero exit.
+// Both leave Stdout empty, which is the one thing checked here.
+//
 //libtmux:real-tmux
 func TestIfShellTreatsLeadingDashShellCommandAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
@@ -443,8 +449,8 @@ func TestIfShellTreatsLeadingDashShellCommandAsPositionalAgainstRealTmux(t *test
 		t.Fatalf("unguarded if-shell = (%#v, %v), want a parse failure", raw, err)
 	}
 	result, err := server.Cmd(ctx, "show-options", "-gv", "@phase6_dash")
-	if err != nil || result.ExitCode == 0 {
-		t.Fatalf("show if-shell option after unguarded call = (%#v, %v), want unset", result, err)
+	if err != nil || len(result.Stdout) != 0 {
+		t.Fatalf("show if-shell option after unguarded call = (%#v, %v), want no stored value", result, err)
 	}
 
 	if err := server.IfShell(ctx, tmux.IfShellRequest{
