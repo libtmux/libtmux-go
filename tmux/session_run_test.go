@@ -488,6 +488,104 @@ func TestFinishStopsAKeptPipeEvenWhenTheOutcomeIsUnreadable(t *testing.T) {
 	}
 }
 
+// claimedWhileWaitingRunner answers wait-for by claiming the command's end on
+// running itself, exactly as a concurrent Wait's success would, before
+// wait-for's own answer is returned - so the claim happens-before the error
+// this test needs a Wait call to survive, with no timing race to arrange.
+type claimedWhileWaitingRunner struct {
+	version       Version
+	running       *Running
+	releaseFinish chan struct{}
+	kills         atomic.Int32
+}
+
+func (r *claimedWhileWaitingRunner) Run(
+	_ context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "wait-for"):
+		r.running.finishing.Do(func() {
+			r.running.exited.Store(true)
+			go func() {
+				<-r.releaseFinish
+				r.running.mu.Lock()
+				r.running.result = RunResult{Status: 42}
+				r.running.mu.Unlock()
+				close(r.running.finishedSignal())
+			}()
+		})
+		return tmuxcmd.Result{ExitCode: -1}, errors.New("signal lost")
+	case slices.Contains(request.Arguments, "kill-window"):
+		r.kills.Add(1)
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// TestWaitDoesNotBlameAConcurrentClaimsCleanupOnItself pins that a Wait call
+// whose own waitForExit fails after another claim already committed to
+// reading the outcome waits for that outcome instead of reporting the
+// claim's own cleanup as this call's failure. exited is stored before that
+// claim's cleanup can make anything look gone, so seeing it true here means
+// the claimed outcome is the true answer, however long it takes to read.
+func TestWaitDoesNotBlameAConcurrentClaimsCleanupOnItself(t *testing.T) {
+	t.Parallel()
+
+	runner := &claimedWhileWaitingRunner{
+		version:       mustParseVersion(t, "3.7"),
+		releaseFinish: make(chan struct{}),
+	}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		window:  Window{server: server, sessionID: "$1", windowID: "@1"},
+		pane:    Pane{server: server, sessionID: "$1", windowID: "@1", paneID: "%1"},
+		channel: "claimed",
+	}
+	runner.running = running
+
+	type outcome struct {
+		result RunResult
+		err    error
+	}
+	waitDone := make(chan outcome, 1)
+	go func() {
+		result, err := running.Wait(context.Background())
+		waitDone <- outcome{result, err}
+	}()
+
+	select {
+	case got := <-waitDone:
+		t.Fatalf("Wait() returned (%+v, %v) before the claimed outcome was "+
+			"ready, want it to wait for that outcome instead", got.result, got.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(runner.releaseFinish)
+
+	select {
+	case got := <-waitDone:
+		if got.err != nil {
+			t.Fatalf("Wait() error = %v, want the claimed outcome", got.err)
+		}
+		if got.result.Status != 42 {
+			t.Errorf("Wait() result.Status = %d, want 42", got.result.Status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Wait() did not return after the claimed outcome was released")
+	}
+	if got := runner.kills.Load(); got != 0 {
+		t.Errorf("kill-window calls = %d, want 0: this call's own failed "+
+			"waitForExit must not trigger its own cleanup", got)
+	}
+}
+
 // Once the command has ended its outcome belongs to every caller, so no one
 // caller's deadline may decide it: a Wait whose context ends while the outcome
 // is being read reports only its own context, a concurrent Wait answers within
