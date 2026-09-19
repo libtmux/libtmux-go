@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"time"
 )
 
 func encodeTypedOptionBool(value bool) string {
@@ -204,4 +205,26 @@ func generatedActiveOptionVariant(
 		active = &definition.variants[index]
 	}
 	return active
+}
+
+// encodeTypedOptionDuration renders value as the whole number of unit tmux
+// stores this option as. A duration tmux cannot hold is refused before the
+// command rather than truncated into one it can: an escape-time of 1500µs is
+// a caller meaning something this option cannot express.
+func encodeTypedOptionDuration(name string, value, unit time.Duration) (string, error) {
+	if value < 0 || value%unit != 0 || value/unit > math.MaxInt32 {
+		return "", invalidServerCommandRequest(
+			"set-option", name, value.String(),
+			"must be a whole number of "+unitName(unit)+" from 0 through 2147483647",
+		)
+	}
+	return strconv.FormatInt(int64(value/unit), 10), nil
+}
+
+// unitName names a unit the way tmux's own options table does.
+func unitName(unit time.Duration) string {
+	if unit == time.Second {
+		return "seconds"
+	}
+	return "milliseconds"
 }

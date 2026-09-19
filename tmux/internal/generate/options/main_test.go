@@ -392,8 +392,10 @@ func mapsValues(values map[string]string) []string {
 }
 
 // pinnedSourceContractDigest locks the normalized options-table.c contract from
-// tmux 3.2a, 3.3a, 3.4, 3.5, 3.6, and 3.7b.
-const pinnedSourceContractDigest = "a5a8f2b5ff77f67b043df7756dee8c5c85f0a60bf850834d3edaa5d994218622"
+// tmux 3.2a, 3.3a, 3.4, 3.5, 3.6, and 3.7b. It covers each option's unit,
+// which that table carries and which decides whether this package renders the
+// option as a duration.
+const pinnedSourceContractDigest = "f51ec724adbdab9fda2575398596d346c3b02b41c2165141586cb946ddfaaf71"
 
 var controlOnlyNotifications = []string{
 	"client-detached-control", "client-session-changed-control", "config-error",

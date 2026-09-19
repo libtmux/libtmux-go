@@ -725,3 +725,63 @@ func TestOptionTargetSentinelSeparatesAMissingWindowFromABadName(t *testing.T) {
 		t.Errorf("got %v, want an option error", err)
 	}
 }
+
+// tmux stores a time option as a whole number of its own unit, and which unit
+// that is differs per option. A caller who says 250ms means 250ms of whichever
+// one tmux keeps, and a duration tmux cannot hold is a mistake worth refusing
+// rather than truncating into one it can.
+//
+//libtmux:real-tmux
+func TestDurationOptionsRoundTripInTmuxsOwnUnits(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "durations"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if err := server.SetEscapeTime(ctx, 250*time.Millisecond); err != nil {
+		t.Fatalf("SetEscapeTime() error = %v", err)
+	}
+	if err := session.SetStatusInterval(ctx, 5*time.Second); err != nil {
+		t.Fatalf("SetStatusInterval() error = %v", err)
+	}
+
+	serverOptions, err := server.Options(ctx)
+	if err != nil {
+		t.Fatalf("Server.Options() error = %v", err)
+	}
+	if got, ok := serverOptions.EscapeTime().Get(); !ok || got != 250*time.Millisecond {
+		t.Errorf("EscapeTime() = (%v, %t), want 250ms", got, ok)
+	}
+	sessionOptions, err := session.Options(ctx)
+	if err != nil {
+		t.Fatalf("Session.Options() error = %v", err)
+	}
+	if got, ok := sessionOptions.StatusInterval().Get(); !ok || got != 5*time.Second {
+		t.Errorf("StatusInterval() = (%v, %t), want 5s", got, ok)
+	}
+	// tmux holds these as milliseconds and seconds, so what it was asked for
+	// is what it stored, not what a Duration happens to print as.
+	raw, _, err := server.RawOption(ctx, "escape-time")
+	if err != nil || raw != "250" {
+		t.Errorf("RawOption(escape-time) = (%q, %v), want tmux's own 250", raw, err)
+	}
+	raw, _, err = session.RawOption(ctx, "status-interval")
+	if err != nil || raw != "5" {
+		t.Errorf("RawOption(status-interval) = (%q, %v), want tmux's own 5", raw, err)
+	}
+
+	for name, set := range map[string]func() error{
+		"sub-millisecond": func() error { return server.SetEscapeTime(ctx, 1500*time.Microsecond) },
+		"sub-second":      func() error { return session.SetStatusInterval(ctx, 1500*time.Millisecond) },
+		"negative":        func() error { return server.SetEscapeTime(ctx, -time.Millisecond) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := set(); !errors.Is(err, tmux.ErrInvalidServerCommandRequest) {
+				t.Errorf("error = %v, want a refusal before tmux", err)
+			}
+		})
+	}
+}

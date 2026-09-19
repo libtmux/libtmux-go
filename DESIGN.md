@@ -644,7 +644,13 @@ the wire object, so the object itself remains the shared wire form.
 Raw option, hook, and environment entries retain their exact tmux strings.
 Generated typed accessors and setters cover known options with the same Go
 value shape. Flags use `bool`, numbers use `int64`, and each tmux choice option
-has a distinct generated string type with prefixed constants and `Valid`.
+has a distinct generated string type with prefixed constants and `Valid`. A
+number tmux's own options table gives a unit uses `time.Duration` instead,
+because which unit it counted was otherwise something a caller had to know:
+`status-interval` is seconds and `escape-time` milliseconds, and neither
+signature said so. The wire value stays the integer tmux stores, so a setter
+refuses a duration that is not a whole number of that unit rather than
+truncating it.
 Choice reads preserve unknown future values as invalid named values; typed
 setters reject values unavailable to the connected tmux version. Raw setters
 remain the escape hatch for unknown names, future values, append behavior, and

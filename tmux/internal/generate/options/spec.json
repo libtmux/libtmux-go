@@ -167,7 +167,8 @@
     {
       "name": "assume-paste-time",
       "goName": "AssumePasteTime",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "milliseconds",
       "array": false,
       "style": false,
       "variants": [
@@ -834,7 +835,8 @@
     {
       "name": "display-panes-time",
       "goName": "DisplayPanesTime",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "milliseconds",
       "array": false,
       "style": false,
       "variants": [
@@ -853,7 +855,8 @@
     {
       "name": "display-time",
       "goName": "DisplayTime",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "milliseconds",
       "array": false,
       "style": false,
       "variants": [
@@ -891,7 +894,8 @@
     {
       "name": "escape-time",
       "goName": "EscapeTime",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "milliseconds",
       "array": false,
       "style": false,
       "variants": [
@@ -1110,7 +1114,8 @@
     {
       "name": "initial-repeat-time",
       "goName": "InitialRepeatTime",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "milliseconds",
       "array": false,
       "style": false,
       "variants": [
@@ -1167,7 +1172,8 @@
     {
       "name": "lock-after-time",
       "goName": "LockAfterTime",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "seconds",
       "array": false,
       "style": false,
       "variants": [
@@ -1968,7 +1974,8 @@
     {
       "name": "prefix-timeout",
       "goName": "PrefixTimeout",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "milliseconds",
       "array": false,
       "style": false,
       "variants": [
@@ -2169,7 +2176,8 @@
     {
       "name": "repeat-time",
       "goName": "RepeatTime",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "milliseconds",
       "array": false,
       "style": false,
       "variants": [
@@ -2408,7 +2416,8 @@
     {
       "name": "status-interval",
       "goName": "StatusInterval",
-      "goType": "int64",
+      "goType": "time.Duration",
+      "unit": "seconds",
       "array": false,
       "style": false,
       "variants": [
