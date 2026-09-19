@@ -9,6 +9,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+## v0.0.1-alpha.8, workspace/v0.0.1-alpha.8, mcp/v0.0.1-alpha.11
+
 ### Development
 
 - The tmux matrix runs 3.8-rc alongside the released versions it already
