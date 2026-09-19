@@ -11,9 +11,9 @@
 // The command is the tmuxp-compatible one. It expands $VAR inside
 // start_directory, accepts description metadata and keys beginning with x- at
 // every level, runs before_script, loads plugins and a custom
-// workspace_builder through tmuxp, reads workspace_builder_options, waits for
-// each pane's prompt before typing into it, and applies options in name
-// order. This package does none of those.
+// workspace_builder through tmuxp, reads workspace_builder_options, and waits
+// for each pane's prompt before typing into it. This package does none of
+// those.
 //
 // In exchange, this package reports every problem in a document at once, each
 // with the line it is on, where the command reports the first and no
