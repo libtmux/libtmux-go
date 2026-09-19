@@ -47,8 +47,8 @@ func TestPaneRespawnUsesExactLinkedTargetAndReturnsRefreshedPane(t *testing.T) {
 		t.Fatalf("Respawn() PaneIndex = %d, want refreshed 2", pane.paneIndex)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"respawn-pane", "-t", "$7:5.%9", "-k",
-		"-eALPHA=first", "-eZED=last", "sleep 30",
+		"respawn-pane", "-t", "$7:.%9", "-k",
+		"-eALPHA=first", "-eZED=last", "--", "sleep 30",
 	})
 }
 
@@ -108,7 +108,7 @@ func TestPasteBufferBuildsPythonOrderedArguments(t *testing.T) {
 	}
 	assertRequestArguments(t, requests[0], []string{"-V"})
 	assertRequestArguments(t, requests[1], []string{
-		"paste-buffer", "-t", "$7:0.%9", "-d", "-r", "-p",
+		"paste-buffer", "-t", "$7:.%9", "-d", "-r", "-p",
 		"-b", `named\;`, "-s", `separator\;`, "-S",
 	})
 }
@@ -124,12 +124,12 @@ func TestPasteBufferPreservesNilAndEmptyValues(t *testing.T) {
 	}{
 		{
 			name: "nil uses top buffer and default separator",
-			want: []string{"paste-buffer", "-t", "$7:0.%9"},
+			want: []string{"paste-buffer", "-t", "$7:.%9"},
 		},
 		{
 			name:    "empty values remain operands",
 			request: PasteBufferRequest{BufferName: &empty, Separator: &empty},
-			want:    []string{"paste-buffer", "-t", "$7:0.%9", "-b", "", "-s", ""},
+			want:    []string{"paste-buffer", "-t", "$7:.%9", "-b", "", "-s", ""},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -163,17 +163,17 @@ func TestPasteBufferVersionGatesNoVis(t *testing.T) {
 		{
 			name:      "not requested does not probe",
 			wantCalls: 1,
-			wantArgs:  []string{"paste-buffer", "-t", "$7:0.%9"},
+			wantArgs:  []string{"paste-buffer", "-t", "$7:.%9"},
 		},
 		{
 			name:    "3.6 warns and omits",
 			version: "3.6", noVis: true, wantCalls: 2, wantWarning: true,
-			wantArgs: []string{"paste-buffer", "-t", "$7:0.%9"},
+			wantArgs: []string{"paste-buffer", "-t", "$7:.%9"},
 		},
 		{
 			name:    "3.7 emits",
 			version: "3.7", noVis: true, wantCalls: 2,
-			wantArgs: []string{"paste-buffer", "-t", "$7:0.%9", "-S"},
+			wantArgs: []string{"paste-buffer", "-t", "$7:.%9", "-S"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -270,7 +270,7 @@ func TestPasteBufferSnapshotsPointerValuesBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want version and paste", requests)
 	}
 	assertRequestArguments(t, requests[1], []string{
-		"paste-buffer", "-t", "$7:0.%9",
+		"paste-buffer", "-t", "$7:.%9",
 		"-b", "before-name", "-s", "before-separator",
 	})
 }
@@ -365,7 +365,7 @@ func TestPipeBuildsPythonOrderedArgumentsAndRedactsCompletedErrors(t *testing.T)
 		t.Fatalf("Pipe() CommandError result = %#v, want exit-only redaction", commandError.Result)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"pipe-pane", "-t", "$7:0.%9", "-O", "-I", "-o", `cat >> secret\;`,
+		"pipe-pane", "-t", "$7:.%9", "-O", "-I", "-o", "--", `cat >> secret\;`,
 	})
 }
 
@@ -378,10 +378,10 @@ func TestPipePreservesNilAndEmptyCommand(t *testing.T) {
 		command *string
 		want    []string
 	}{
-		{name: "nil stops without operand", want: []string{"pipe-pane", "-t", "$7:0.%9"}},
+		{name: "nil stops without operand", want: []string{"pipe-pane", "-t", "$7:.%9"}},
 		{
 			name: "empty remains an operand", command: &empty,
-			want: []string{"pipe-pane", "-t", "$7:0.%9", ""},
+			want: []string{"pipe-pane", "-t", "$7:.%9", "--", ""},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -53,6 +53,17 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 			identity.version,
 		)
 		if listErr != nil {
+			// A zero-session server refuses every all-server listing that
+			// resolves an implicit current session with "no current target".
+			// list-sessions itself never depends on one, so a session
+			// count is already known by the time a later listing can hit
+			// this: read it as empty, not as a failure.
+			if current.command != "list-sessions" &&
+				len(records.sessions) == 0 &&
+				noCurrentTargetListingError(listErr) {
+				*current.target = nil
+				continue
+			}
 			if snapshotCollectionError(listErr) {
 				return s.snapshotAfterListingFailure(ctx, identity, listErr)
 			}
@@ -129,6 +140,15 @@ func (s Server) snapshotListing(
 
 func contextError(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// noCurrentTargetListingError reports tmux's "no current target" refusal.
+func noCurrentTargetListingError(err error) bool {
+	var commandErr *CommandError
+	if !errors.As(err, &commandErr) {
+		return false
+	}
+	return commandNoCurrentTarget(commandErr.Result.Stderr)
 }
 
 func newSnapshot(server Server, version Version, records snapshotRecords) (Snapshot, error) {

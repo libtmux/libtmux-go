@@ -10,6 +10,7 @@ import "github.com/libtmux/libtmux-go/tmux/tmuxtest"
 
 **Contents** — [Testing a program](#testing-a-program) ·
 [When a wait fails](#when-a-wait-fails) · [The waits](#the-waits) ·
+[Testing without a tmux](#testing-without-a-tmux) ·
 [Testing tmux itself](#testing-tmux-itself) ·
 [What it guarantees](#what-it-guarantees)
 
@@ -21,6 +22,7 @@ pane end with the test:
 <!-- docs:tmuxtest-quickstart -->
 
 ```go
+// Given: ctx context.Context; t *testing.T
 pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
 tmuxtest.WaitForText(ctx, t, pane, "ready")
@@ -64,6 +66,30 @@ rather than the scrollback, so what they search is what a failure prints.
 `tmuxtest$ `, so a pane shows the same thing on every machine rather than
 whatever prompt the person running the tests has configured. Ask for it on a
 server you build yourself with `ServerOptions.FixedShell`.
+
+## Testing without a tmux
+
+Where the subject is your own code rather than tmux's behaviour,
+`tmuxtest.ScriptedTmux` writes an executable answering the invocations you
+name and returns its path for `ServerOptions.Binary`. The test then needs no
+tmux installed:
+
+```go
+binary := tmuxtest.ScriptedTmux(t,
+	tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+	tmuxtest.ScriptedCommand{
+		Contains: []string{"kill-pane"},
+		Stderr:   "can't find pane: %7\n",
+		ExitCode: 1,
+	},
+)
+server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+```
+
+`Contains` matches whole arguments, so `kill-pane` answers that subcommand
+whatever flags surround it. It answers commands only: a control connection or
+a notification stream speaks tmux's own protocol, which a script cannot, so
+code opening one needs `NewServer` below and a real tmux.
 
 ## Testing tmux itself
 

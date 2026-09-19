@@ -130,8 +130,8 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 				windows[0].Index(),
 			)
 		}
-		if _, err := server.Window(ctx, windows[0].ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-			t.Fatalf("lookup replaced receiver error = %v, want ErrSnapshotNotFound", err)
+		if _, err := server.Window(ctx, windows[0].ID()); !errors.Is(err, tmux.ErrNotFound) {
+			t.Fatalf("lookup replaced receiver error = %v, want ErrNotFound", err)
 		}
 	})
 }
@@ -175,21 +175,45 @@ func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 	if indexed.ID() == existing.ID() || indexed.Index() != index {
 		t.Fatalf("indexed SelectExisting window = %#v, want a new window at index %d", indexed, index)
 	}
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	// tmux 3.8 extended -S to match an exact -t target, not only a window
+	// name (cmd-new-window.c, 3.7c to 3.8-rc: "if idx != -1: select
+	// winlink_find_by_index(idx)" ahead of the name-matching fallback).
+	// existing.NewWindow's target is always exact and always already
+	// occupied by existing itself, so from that version on tmux selects
+	// existing instead of creating a duplicate; before it, the exact-target
+	// form never matched -S at all and always created one.
+	minimum38, err := tmux.ParseVersion("3.8")
+	if err != nil {
+		t.Fatal(err)
+	}
 	exact, err := existing.NewWindow(ctx, tmux.NewWindowRequest{
 		Name: &name, Direction: tmux.NewWindowDirectionAfter, SelectExisting: true,
 	})
 	if err != nil {
 		t.Fatalf("Window.NewWindow(SelectExisting) error = %v", err)
 	}
-	if exact.ID() == existing.ID() {
-		t.Fatalf("exact-target SelectExisting window = %s, want a newly printed identity", exact.ID())
+	wantCount := before + 2
+	if version.AtLeast(minimum38) {
+		if exact.ID() != existing.ID() {
+			t.Fatalf(
+				"exact-target SelectExisting window on tmux %s = %s, want the receiver %s",
+				version, exact.ID(), existing.ID(),
+			)
+		}
+		wantCount = before + 1
+	} else if exact.ID() == existing.ID() {
+		t.Fatalf(
+			"exact-target SelectExisting window on tmux %s = %s, want a newly printed identity",
+			version, exact.ID(),
+		)
 	}
-	if after := len(mustRealSnapshot(t, server).Windows()); after != before+2 {
-		t.Fatalf("window count after explicit SelectExisting targets = %d, want %d", after, before+2)
-	}
-	version, err := server.Version(ctx)
-	if err != nil {
-		t.Fatalf("Version() error = %v", err)
+	if after := len(mustRealSnapshot(t, server).Windows()); after != wantCount {
+		t.Fatalf("window count after explicit SelectExisting targets on tmux %s = %d, want %d",
+			version, after, wantCount)
 	}
 	minimum34, err := tmux.ParseVersion("3.4")
 	if err != nil {
@@ -361,5 +385,168 @@ func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
 	}
 	if flag, _ := floating.FloatingFlag(); !flag {
 		t.Fatal("floating pane flag = false, want true")
+	}
+}
+
+// TestLifecycleCommandsTreatLeadingDashCommandAsPositionalAgainstRealTmux
+// proves the new-window, split-window, new-session, and respawn "--" guards
+// against a live tmux. Each Command becomes the new pane's own argv
+// (spawn.c), so #{pane_start_command} reads back the exact string tmux
+// stored, dash and all - without the guard, tmux's own parser refuses the
+// value as flags before creating anything, which the raw control reproduces.
+//
+// remain-on-exit keeps the pane around to read: /bin/sh -c rejects a "-c"
+// operand that itself starts with "-" as an option to the shell binary
+// itself, a limitation of the shell tmux execs and orthogonal to tmux's own
+// argument parsing, so the process exits almost immediately either way.
+//
+//libtmux:real-tmux
+func TestLifecycleCommandsTreatLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := server.Cmd(ctx, "set-option", "-g", "remain-on-exit", "on"); err != nil {
+		t.Fatal("set-option remain-on-exit error")
+	}
+
+	// "z" is not a flag letter for any of new-window, split-window,
+	// new-session, or respawn-pane/window, so the unguarded control below is
+	// refused as an unknown flag on every one rather than silently consumed
+	// as some other flag's attached value.
+	const command = "-zzz-not-a-flag"
+
+	for _, test := range []struct {
+		name string
+		// raw reproduces the unguarded call directly against tmux and
+		// returns its result.
+		raw func(ctx context.Context, session tmux.Session) (tmux.CommandResult, error)
+		// guarded performs the equivalent guarded call and returns the exact
+		// target to read #{pane_start_command} back from.
+		guarded func(ctx context.Context, session tmux.Session) (string, error)
+	}{
+		{
+			name: "new-window",
+			raw: func(ctx context.Context, session tmux.Session) (tmux.CommandResult, error) {
+				return server.Cmd(ctx, "new-window", "-t", session.ID().String(), command)
+			},
+			guarded: func(ctx context.Context, session tmux.Session) (string, error) {
+				window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Command: command})
+				if err != nil {
+					return "", err
+				}
+				return session.ID().String() + ":" + window.ID().String(), nil
+			},
+		},
+		{
+			name: "split-window",
+			raw: func(ctx context.Context, session tmux.Session) (tmux.CommandResult, error) {
+				panes, err := session.SearchPanes(ctx, nil)
+				if err != nil || len(panes) != 1 {
+					t.Fatalf("Session.SearchPanes() = (%#v, %v), want one pane", panes, err)
+				}
+				target := panes[0].SessionID().String() + ":" + panes[0].WindowID().String() +
+					"." + panes[0].ID().String()
+				return server.Cmd(ctx, "split-window", "-t", target, command)
+			},
+			guarded: func(ctx context.Context, session tmux.Session) (string, error) {
+				panes, err := session.SearchPanes(ctx, nil)
+				if err != nil || len(panes) != 1 {
+					t.Fatalf("Session.SearchPanes() = (%#v, %v), want one pane", panes, err)
+				}
+				pane, err := panes[0].Split(ctx, tmux.SplitPaneRequest{Command: command})
+				if err != nil {
+					return "", err
+				}
+				return pane.SessionID().String() + ":" + pane.WindowID().String() +
+					"." + pane.ID().String(), nil
+			},
+		},
+		{
+			name: "new-session",
+			raw: func(ctx context.Context, _ tmux.Session) (tmux.CommandResult, error) {
+				return server.Cmd(ctx, "new-session", "-d", command)
+			},
+			guarded: func(ctx context.Context, _ tmux.Session) (string, error) {
+				created, err := server.NewSession(ctx, tmux.NewSessionRequest{Command: command})
+				if err != nil {
+					return "", err
+				}
+				return created.ID().String(), nil
+			},
+		},
+		{
+			name: "respawn-pane",
+			raw: func(ctx context.Context, session tmux.Session) (tmux.CommandResult, error) {
+				panes, err := session.SearchPanes(ctx, nil)
+				if err != nil || len(panes) != 1 {
+					t.Fatalf("Session.SearchPanes() = (%#v, %v), want one pane", panes, err)
+				}
+				target := panes[0].SessionID().String() + ":" + panes[0].WindowID().String() +
+					"." + panes[0].ID().String()
+				return server.Cmd(ctx, "respawn-pane", "-k", "-t", target, command)
+			},
+			guarded: func(ctx context.Context, session tmux.Session) (string, error) {
+				panes, err := session.SearchPanes(ctx, nil)
+				if err != nil || len(panes) != 1 {
+					t.Fatalf("Session.SearchPanes() = (%#v, %v), want one pane", panes, err)
+				}
+				pane, err := panes[0].Respawn(ctx, tmux.RespawnRequest{
+					Command: tmux.Ptr(command), Kill: true,
+				})
+				if err != nil {
+					return "", err
+				}
+				return pane.SessionID().String() + ":" + pane.WindowID().String() +
+					"." + pane.ID().String(), nil
+			},
+		},
+		{
+			name: "respawn-window",
+			raw: func(ctx context.Context, session tmux.Session) (tmux.CommandResult, error) {
+				windows, err := session.SearchWindows(ctx, nil)
+				if err != nil || len(windows) != 1 {
+					t.Fatalf("Session.SearchWindows() = (%#v, %v), want one window", windows, err)
+				}
+				target := windows[0].SessionID().String() + ":" + windows[0].ID().String()
+				return server.Cmd(ctx, "respawn-window", "-k", "-t", target, command)
+			},
+			guarded: func(ctx context.Context, session tmux.Session) (string, error) {
+				windows, err := session.SearchWindows(ctx, nil)
+				if err != nil || len(windows) != 1 {
+					t.Fatalf("Session.SearchWindows() = (%#v, %v), want one window", windows, err)
+				}
+				window, err := windows[0].Respawn(ctx, tmux.RespawnRequest{
+					Command: tmux.Ptr(command), Kill: true,
+				})
+				if err != nil {
+					return "", err
+				}
+				return window.SessionID().String() + ":" + window.ID().String(), nil
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session, err := server.NewSession(ctx, tmux.NewSessionRequest{})
+			if err != nil {
+				t.Fatalf("NewSession() error = %v", err)
+			}
+
+			raw, err := test.raw(ctx, session)
+			if err != nil || raw.ExitCode == 0 {
+				t.Fatalf("unguarded %s = (%#v, %v), want a parse failure", test.name, raw, err)
+			}
+
+			target, err := test.guarded(ctx, session)
+			if err != nil {
+				t.Fatalf("guarded %s error = %v", test.name, err)
+			}
+			result, err := server.Cmd(ctx, "display-message", "-p", "-t", target, "-F", "#{pane_start_command}")
+			if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
+				t.Fatalf("pane_start_command(%s) = (%#v, %v)", target, result, err)
+			}
+			if result.Stdout[0] != command {
+				t.Fatalf("pane_start_command(%s) = %q, want %q", target, result.Stdout[0], command)
+			}
+		})
 	}
 }

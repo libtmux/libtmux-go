@@ -589,7 +589,7 @@ func (r *versionQueueRunner) callCount() int {
 func (r *versionQueueRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }
 
 type blockingVersionRunner struct {

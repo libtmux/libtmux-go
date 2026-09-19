@@ -373,6 +373,28 @@ func attachmentSnapshotRunner(
 	return &versionQueueRunner{responses: responses}
 }
 
+// paneListingRunner answers the one pane listing a scoped resolver makes,
+// bracketed by the identity probes every snapshot takes.
+func paneListingRunner(t *testing.T, version Version, rows []formatValues) *versionQueueRunner {
+	t.Helper()
+	fields := mustFormatFields(t, "list-panes", version)
+	raw := make([]byte, 0)
+	for _, row := range rows {
+		values := snapshotRowValues(version, nil)
+		for _, field := range fields {
+			if value, ok := row.get(field.name); ok {
+				values[field.name] = value
+			}
+		}
+		raw = append(raw, framedSnapshotRecord(fields, values)...)
+	}
+	return &versionQueueRunner{responses: []versionResponse{
+		liveIdentityResponse(version),
+		{result: tmuxcmd.Result{RawStdout: raw, ExitCode: 0}},
+		liveIdentityResponse(version),
+	}}
+}
+
 func mustFormatFields(t *testing.T, command string, version Version) []formatField {
 	t.Helper()
 	fields, err := formatFieldsFor(command, version)

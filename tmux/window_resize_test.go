@@ -35,60 +35,60 @@ func TestResizeWindowBuildsOneModeOfLiteralArguments(t *testing.T) {
 		{
 			name:     "zero numeric values are unset",
 			request:  ResizeWindowRequest{Adjustment: 0, Height: 0, Width: 0},
-			wantArgs: []string{"resize-window", "-t", "$7:0"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8"},
 		},
 		{
 			name: "up",
 			request: ResizeWindowRequest{
 				Direction: WindowResizeDirectionUp, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-U", "2"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-U", "2"},
 		},
 		{
 			name: "down",
 			request: ResizeWindowRequest{
 				Direction: WindowResizeDirectionDown, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-D", "2"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-D", "2"},
 		},
 		{
 			name: "left",
 			request: ResizeWindowRequest{
 				Direction: WindowResizeDirectionLeft, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-L", "2"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-L", "2"},
 		},
 		{
 			name: "right",
 			request: ResizeWindowRequest{
 				Direction: WindowResizeDirectionRight, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-R", "2"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-R", "2"},
 		},
 		{
 			name:     "height",
 			request:  ResizeWindowRequest{Height: 10},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-y10"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-y10"},
 		},
 		{
 			name:     "width",
 			request:  ResizeWindowRequest{Width: 20},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-x20"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-x20"},
 		},
 		{
 			name:     "height and width",
 			request:  ResizeWindowRequest{Height: 10, Width: 20},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-y10", "-x20"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-y10", "-x20"},
 		},
 		{
 			name:     "expand",
 			request:  ResizeWindowRequest{Expand: true},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-A"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-A"},
 		},
 		{
 			name:     "shrink",
 			request:  ResizeWindowRequest{Shrink: true},
-			wantArgs: []string{"resize-window", "-t", "$7:0", "-a"},
+			wantArgs: []string{"resize-window", "-t", "$7:@8", "-a"},
 		},
 	}
 

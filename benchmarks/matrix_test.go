@@ -151,3 +151,34 @@ func probedVersion(ctx context.Context, t *testing.T) tmux.Version {
 	}
 	return version
 }
+
+// Waiting for a pane to print something is the measurement behind the claim
+// that this package does not poll. Both lanes wait for the same output, so
+// what separates them is what they spend to hear about it.
+func TestWaitingEventDrivenCostsFewerProcesses(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	probedVersion(ctx, t)
+	rows, err := measureWaits(ctx)
+	if err != nil {
+		t.Fatalf("measureWaits() error = %v", err)
+	}
+	byMode := map[string]row{}
+	for _, r := range rows {
+		byMode[r.mode] = r
+	}
+	polled, driven := byMode["polled capture"], byMode["event-driven"]
+	if polled.processes == 0 {
+		t.Error("the polled lane recorded no tmux invocations")
+	}
+	if driven.processes >= polled.processes {
+		t.Errorf("waiting on tmux's own notifications cost %d processes per wait, polling %d",
+			driven.processes, polled.processes)
+	}
+	// It hears about the output over an attached client instead.
+	if driven.clients <= polled.clients {
+		t.Errorf("the event-driven lane held %d clients, the polled one %d",
+			driven.clients, polled.clients)
+	}
+}

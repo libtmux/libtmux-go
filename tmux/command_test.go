@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"slices"
@@ -100,6 +101,7 @@ func TestServerBuildsTmuxGlobalArguments(t *testing.T) {
 	})
 	got := server.commandArguments([]string{"list-sessions", "-F", "#{session_id}"})
 	want := []string{
+		"-u",
 		"-2",
 		"-f/tmp/libtmux.conf",
 		"-S/tmp/libtmux.sock",
@@ -107,6 +109,30 @@ func TestServerBuildsTmuxGlobalArguments(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("commandArguments() = %#v, want %#v", got, want)
+	}
+	if !slices.Equal(defaultGlobalArguments, []string{"-u"}) {
+		t.Fatalf("defaultGlobalArguments = %#v, want %#v",
+			defaultGlobalArguments, []string{"-u"})
+	}
+}
+
+// tmux replaces every non-ASCII byte it writes to a command or control client
+// whose locale does not name UTF-8, so this package asks for UTF-8 on every
+// command it reads back itself. Attaching writes to the caller's terminal,
+// where the caller's locale governs, and is the one operation that does not.
+func TestCommandArgumentsRequestUTF8ExceptWhenAttaching(t *testing.T) {
+	t.Parallel()
+
+	server := mustNewServer(ServerOptions{})
+	if got := server.commandArguments([]string{"list-sessions"}); !slices.Equal(
+		got, []string{"-u", "list-sessions"},
+	) {
+		t.Fatalf("commandArguments() = %#v, want -u first", got)
+	}
+	if got := server.inheritLocale().commandArguments(
+		[]string{"attach-session"},
+	); !slices.Equal(got, []string{"attach-session"}) {
+		t.Fatalf("inheritLocale().commandArguments() = %#v, want no -u", got)
 	}
 }
 
@@ -458,6 +484,11 @@ func assertExitOnlyCommandErrorRedacts(
 	assertErrorGraphRedacts(t, err, secret)
 }
 
+// Tests that point ServerOptions.Binary at this test binary run it as a fake
+// tmux, so it has to accept the global flags a real tmux does. Registering -u
+// is how a Go test binary tolerates one; the helper reads os.Args itself.
+func init() { flag.Bool("u", false, "accepted like tmux's own UTF-8 flag") }
+
 func TestServerCommandHelperProcess(t *testing.T) {
 	separator := slices.Index(os.Args, "--")
 	if separator == -1 {
@@ -647,11 +678,62 @@ func TestAFixedRefusalIsDisclosed(t *testing.T) {
 		t.Errorf("redacted split error = %q, want tmux's reason", err)
 	}
 
+	// tmux 3.2a through 3.6a word the same refusal without "a" (layout.c moved
+	// and reworded it at 3.7).
+	noRoomPre37 := CommandResult{ExitCode: 1, Stderr: []string{"no space for new pane"}}
+	if err := newRedactedCommandError("split-window", noRoomPre37); !strings.Contains(
+		err.Error(), "no space for new pane",
+	) {
+		t.Errorf("redacted pre-3.7 split error = %q, want tmux's reason", err)
+	}
+
+	// tmux names only its own generated id, never a caller-supplied value.
+	noTarget := CommandResult{ExitCode: 1, Stderr: []string{"can't find pane: %9999"}}
+	if err := newRedactedCommandError("send-keys", noTarget); !strings.Contains(
+		err.Error(), "can't find pane: %9999",
+	) {
+		t.Errorf("redacted missing-target error = %q, want tmux's reason", err)
+	}
+
 	// A message that could carry a caller's value stays withheld.
 	valueBearing := CommandResult{ExitCode: 1, Stderr: []string{"bad value: s3cr3t"}}
 	if err := newRedactedCommandError("split-window", valueBearing); strings.Contains(
 		err.Error(), "s3cr3t",
 	) {
 		t.Errorf("redacted error disclosed a value: %q", err)
+	}
+}
+
+// tmux names a missing target only in its English diagnostics, so the
+// classification has to hold for the words it uses and refuse the ones that
+// merely start the same way.
+func TestCommandErrorClassifiesAMissingTarget(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		stderr []string
+		want   bool
+	}{
+		{name: "pane", stderr: []string{"can't find pane: %4"}, want: true},
+		{name: "session", stderr: []string{"can't find session: absent"}, want: true},
+		{name: "window without a value", stderr: []string{"can't find window"}, want: true},
+		{name: "terminfo", stderr: []string{"can't find terminfo database"}},
+		{name: "refused split", stderr: []string{"no space for a new pane"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := newCommandError("kill-pane", CommandResult{
+				Stderr: test.stderr, ExitCode: 1,
+			})
+			if got := errors.Is(err, ErrNotFound); got != test.want {
+				t.Fatalf("errors.Is(err, ErrNotFound) = %t, want %t", got, test.want)
+			}
+			if !errors.Is(err, ErrCommand) {
+				t.Fatal("a missing target is still a failed command")
+			}
+		})
 	}
 }

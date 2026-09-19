@@ -198,7 +198,7 @@ func TestSplitPaneCapturesPointersBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("SplitPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-v", "-l10", "-P", "-F#{pane_id}",
+		"split-window", "-t", "$7:@8", "-v", "-l10", "-P", "-F#{pane_id}",
 		"-d", "-eKEY=before", "-s", "before-style", "-S", "before-active",
 		"-R", "before-inactive", "-m", "before-message",
 	})
@@ -229,7 +229,7 @@ func TestSplitPaneCapturesPercentageBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("SplitPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-v", "-l35%", "-P", "-F#{pane_id}",
+		"split-window", "-t", "$7:@8", "-v", "-l35%", "-P", "-F#{pane_id}",
 		"-d", "-E",
 	})
 }
@@ -274,7 +274,7 @@ func TestNewPaneCapturesPointersBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("NewPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"new-pane", "-t", "$7:0", "-x40", "-y10", "-X-2", "-Y3",
+		"new-pane", "-t", "$7:@8", "-x40", "-y10", "-X-2", "-Y3",
 		"-s", "before-style", "-S", "before-active", "-R", "before-inactive",
 		"-m", "before-message", "-P", "-F#{pane_id}", "-d", "-eKEY=before",
 	})
@@ -339,7 +339,7 @@ func TestNewWindowPreservesOptionalNameAndPythonOptionOrder(t *testing.T) {
 			}
 			want = append(want, test.wantName...)
 			want = append(want,
-				"-eALPHA=first", "-eZED=last", "-a", "-k", "sleep 1m",
+				"-eALPHA=first", "-eZED=last", "-a", "-k", "--", "sleep 1m",
 			)
 			assertLifecycleArguments(t, runner, want)
 		})
@@ -363,7 +363,7 @@ func TestWindowNewWindowUsesExactLinkedTargetAndRejectsIndex(t *testing.T) {
 			t.Fatalf("Window.NewWindow() error = %v, want ErrCommand", err)
 		}
 		assertLifecycleArguments(t, runner, []string{
-			"new-window", "-t", "$9:0", "-d", "-P", "-F#{window_id}", "-b",
+			"new-window", "-t", "$9:@3", "-d", "-P", "-F#{window_id}", "-b",
 		})
 	})
 
@@ -417,7 +417,7 @@ func TestNewWindowSelectExistingDoesNotRecoverForExplicitPlacement(t *testing.T)
 				})
 			},
 			want: []string{
-				"new-window", "-t", "$9:0", "-d", "-P", "-F#{window_id}",
+				"new-window", "-t", "$9:@3", "-d", "-P", "-F#{window_id}",
 				"-n", name, "-a", "-S",
 			},
 		},
@@ -484,6 +484,67 @@ func TestNewWindowSelectExistingResolvesNoOutputInExactSession(t *testing.T) {
 	})
 	assertRequestArguments(t, requests[3], []string{
 		"new-window", "-t", "$9", "-d", "-P", "-F#{window_id}", "-n", name, "-S",
+	})
+}
+
+// tmux 3.8 extended -S to match an exact -t target as well as a window name
+// (cmd-new-window.c, 3.7c to 3.8-rc). Window.NewWindow's target is always
+// exact and always already occupied by the receiver, so from that version on
+// tmux selects the receiver and prints nothing. Unlike the indexed and
+// session-target forms above, no probe is needed: the identity tmux selected
+// is already known without reading anything back from tmux first.
+func TestNewWindowSelectExistingResolvesNoOutputForExactTarget(t *testing.T) {
+	t.Parallel()
+
+	name := "existing"
+	version := mustParseVersion(t, "3.8")
+	sessionFields, err := formatFieldsFor("list-sessions", version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowFields, err := formatFieldsFor("list-windows", version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &versionQueueRunner{responses: []versionResponse{
+		// new-window itself: tmux selected the receiver and printed nothing.
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		liveIdentityResponse(version),
+		{result: tmuxcmd.Result{
+			RawStdout: framedSnapshotRecord(sessionFields, snapshotRowValues(version, map[string]string{
+				"session_id": "$9", "session_name": "receiver",
+			})),
+			ExitCode: 0,
+		}},
+		{result: tmuxcmd.Result{
+			RawStdout: framedSnapshotRecord(windowFields, snapshotRowValues(version, map[string]string{
+				"session_id": "$9", "window_id": "@3", "window_index": "0", "window_name": name,
+			})),
+			ExitCode: 0,
+		}},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		{result: tmuxcmd.Result{ExitCode: 0}},
+		liveIdentityResponse(version),
+	}}
+
+	window, err := (Window{
+		server: serverWithRunner(runner), sessionID: "$9", windowID: "@3",
+	}).NewWindow(context.Background(), NewWindowRequest{
+		Name: &name, Direction: NewWindowDirectionAfter, SelectExisting: true,
+	})
+	if err != nil {
+		t.Fatalf("Window.NewWindow(SelectExisting) error = %v", err)
+	}
+	if window.sessionID != "$9" || window.windowID != "@3" || window.windowIndex != 0 {
+		t.Fatalf("Window.NewWindow(SelectExisting) = %#v, want exact $9:@3 index 0", window)
+	}
+	requests := runner.recordedRequests()
+	if len(requests) == 0 {
+		t.Fatal("no requests recorded")
+	}
+	assertRequestArguments(t, requests[0], []string{
+		"new-window", "-t", "$9:@3", "-d", "-P", "-F#{window_id}",
+		"-n", name, "-a", "-S",
 	})
 }
 
@@ -710,7 +771,7 @@ func TestSplitPaneBuildsExtendedPythonOptionOrder(t *testing.T) {
 		t.Fatalf("SplitPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-h", "-b", "-l10", "-f", "-Z",
+		"split-window", "-t", "$7:@8", "-h", "-b", "-l10", "-f", "-Z",
 		"-P", "-F#{pane_id}", "-c/work", "-d", "-eALPHA=first", "-eZED=last",
 		"-E", "-s", style, "-S", active, "-R", inactive, "-m", message, "-k",
 	})
@@ -729,7 +790,7 @@ func TestPaneSplitUsesExactPaneTarget(t *testing.T) {
 		t.Fatalf("Pane.Split() error = %v, want ErrCommand", err)
 	}
 	assertLifecycleArguments(t, runner, []string{
-		"split-window", "-t", "$7:0.%9", "-h", "-P", "-F#{pane_id}", "-d",
+		"split-window", "-t", "$7:.%9", "-h", "-P", "-F#{pane_id}", "-d",
 	})
 }
 
@@ -765,7 +826,7 @@ func TestSplitPaneWarnsAndOmitsTmux37FieldsOnOlderTmux(t *testing.T) {
 		t.Fatalf("SplitPane() warnings = %#v, want empty then styling group", warnings)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-v", "-P", "-F#{pane_id}", "-d", "sleep 1m",
+		"split-window", "-t", "$7:@8", "-v", "-P", "-F#{pane_id}", "-d", "--", "sleep 1m",
 	})
 }
 
@@ -837,7 +898,7 @@ func TestNewPaneBuildsPythonOptionOrderAndExactTarget(t *testing.T) {
 		t.Fatalf("Pane.NewPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"new-pane", "-t", "$7:0.%9", "-x40", "-y10", "-X-2", "-Y3", "-Z",
+		"new-pane", "-t", "$7:.%9", "-x40", "-y10", "-X-2", "-Y3", "-Z",
 		"-s", style, "-S", active, "-R", inactive, "-m", message, "-k",
 		"-P", "-F#{pane_id}", "-c/work", "-d", "-eALPHA=first", "-eZED=last", "-E",
 	})
@@ -917,5 +978,5 @@ func (r *lifecycleProbeGateRunner) Run(
 func (r *lifecycleProbeGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]tmuxcmd.Request(nil), r.requests...)
+	return withoutGlobalFlags(r.requests)
 }

@@ -55,6 +55,9 @@ type ServerOptions struct {
 	// WarningHandler receives nonfatal compatibility warnings. Nil discards
 	// warnings. See WarningHandler for delivery and concurrency semantics.
 	WarningHandler WarningHandler
+	// CommandObserver receives one record per tmux command run. Nil observes
+	// nothing. See CommandObserver for delivery and concurrency semantics.
+	CommandObserver CommandObserver
 }
 
 type serverConfig struct {
@@ -69,6 +72,7 @@ type serverConfig struct {
 	socketSelection              SocketSelection
 	unsupported                  UnsupportedPolicy
 	warningHandler               WarningHandler
+	commandObserver              CommandObserver
 }
 
 type serverDependencies struct {
@@ -228,6 +232,7 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 		processEnvironment: environment,
 		unsupported:        options.Unsupported,
 		warningHandler:     options.WarningHandler,
+		commandObserver:    options.CommandObserver,
 	}
 	if configuredEnvironment {
 		config.configuredProcessEnvironment = slices.Clone(environment)

@@ -12,9 +12,6 @@ var (
 	// ErrMalformedSnapshot identifies invalid required fields in decoded rows.
 	// SnapshotDecodeError matches it through errors.Is.
 	ErrMalformedSnapshot = errors.New("tmux: malformed snapshot")
-	// ErrSnapshotNotFound identifies a point lookup with no matching view.
-	// SnapshotLookupError matches it through errors.Is.
-	ErrSnapshotNotFound = errors.New("tmux: snapshot object not found")
 	// ErrSnapshotAmbiguous identifies a point lookup with multiple matching
 	// views. SnapshotLookupError matches it through errors.Is.
 	ErrSnapshotAmbiguous = errors.New("tmux: snapshot object is ambiguous")
@@ -54,7 +51,7 @@ func (e *SnapshotDecodeError) Error() string {
 func (e *SnapshotDecodeError) Unwrap() error { return ErrMalformedSnapshot }
 
 // SnapshotLookupError reports the cardinality of an unsuccessful point lookup.
-// It matches [ErrSnapshotNotFound] or [ErrSnapshotAmbiguous] through errors.Is;
+// It matches [ErrNotFound] or [ErrSnapshotAmbiguous] through errors.Is;
 // callers can recover its target and count with errors.As.
 type SnapshotLookupError struct {
 	// Object names the requested snapshot object kind.
@@ -68,7 +65,7 @@ type SnapshotLookupError struct {
 // Error implements error.
 func (e *SnapshotLookupError) Error() string {
 	if e.Matches == 0 {
-		return fmt.Sprintf("%v: %s %q", ErrSnapshotNotFound, e.Object, e.Identifier)
+		return fmt.Sprintf("%v: %s %q", ErrNotFound, e.Object, e.Identifier)
 	}
 	return fmt.Sprintf(
 		"%v: %s %q has %d views",
@@ -82,7 +79,7 @@ func (e *SnapshotLookupError) Error() string {
 // Unwrap classifies the failed lookup by cardinality.
 func (e *SnapshotLookupError) Unwrap() error {
 	if e.Matches == 0 {
-		return ErrSnapshotNotFound
+		return ErrNotFound
 	}
 	return ErrSnapshotAmbiguous
 }
@@ -237,7 +234,7 @@ func (s Snapshot) ClientsSeq() iter.Seq[Client] {
 }
 
 // SessionByID returns the sole session view with id. It never queries tmux and
-// returns a [SnapshotLookupError] matching [ErrSnapshotNotFound] otherwise.
+// returns a [SnapshotLookupError] matching [ErrNotFound] otherwise.
 func (s Snapshot) SessionByID(id SessionID) (Session, error) {
 	if s.state == nil {
 		return lookupSnapshotValue[Session](nil, nil, "session", id.String())
@@ -284,7 +281,7 @@ func (s Snapshot) PanesByID(id PaneID) []Pane {
 }
 
 // ClientByName returns the sole client view with name. It never queries tmux
-// and returns a [SnapshotLookupError] matching [ErrSnapshotNotFound] or
+// and returns a [SnapshotLookupError] matching [ErrNotFound] or
 // [ErrSnapshotAmbiguous] when cardinality is not one.
 func (s Snapshot) ClientByName(name ClientName) (Client, error) {
 	if s.state == nil {

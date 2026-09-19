@@ -8,8 +8,11 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// observe makes errors at every MCP surface terminal without retrying work that
-// may already have acted.
+// observe makes errors at every MCP surface terminal without retrying work
+// that may already have acted. The daemon this runtime was using is lost or
+// untrusted, never fatal to the process: the call that hit err already
+// reports it, and the next top-level acquisition heals this state back to
+// unbound and starts fresh.
 func (r *tmuxRuntime) observe(err error) {
 	if err == nil || !r.isTerminalError(err) {
 		return
@@ -21,18 +24,36 @@ func (r *tmuxRuntime) observe(err error) {
 	}
 	r.cause = err
 	r.state = runtimeTerminal
-	commandConnection := r.commandConnection
-	connections := r.ownedConnectionsLocked(commandConnection)
+	lost := r.commandConnection
+	r.original = tmux.Session{}
+	r.commandConnection = nil
 	r.finishBindingSignalLocked()
 	r.mutex.Unlock()
-	r.cancelOwner(err)
-	r.startConnectionClose(connections)
+	r.closeLostConnection(lost)
 }
 
-func (r *tmuxRuntime) cancelOwner(err error) {
-	if r.onTerminal != nil {
-		r.onTerminal(err)
+// healTerminalLocked discards a runtime lost to a terminal error and returns
+// it to unbound so the next acquisition or session creation retries as if
+// starting fresh. Must hold r.mutex; returns the stale connection this
+// runtime no longer trusts, for the caller to close outside the lock.
+func (r *tmuxRuntime) healTerminalLocked() *tmux.Connection {
+	lost := r.commandConnection
+	r.original = tmux.Session{}
+	r.commandConnection = nil
+	r.cause = nil
+	r.state = runtimeUnbound
+	return lost
+}
+
+// closeLostConnection discards a connection this runtime no longer trusts,
+// without touching the once-only close [tmuxRuntime.Close] performs: that one
+// must wait for whichever connection is current when the process actually
+// shuts down, not the first one this runtime ever lost.
+func (r *tmuxRuntime) closeLostConnection(connection *tmux.Connection) {
+	if connection == nil {
+		return
 	}
+	go func() { _ = connection.Close() }()
 }
 
 // isTerminalError classifies target absence only after this runtime has bound
@@ -97,14 +118,6 @@ func (r *tmuxRuntime) startConnectionClose(connections []*tmux.Connection) {
 			close(r.connectionsClosed)
 		}()
 	})
-}
-
-func (r *tmuxRuntime) ownedConnections(
-	commandConnection *tmux.Connection,
-) []*tmux.Connection {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	return r.ownedConnectionsLocked(commandConnection)
 }
 
 // ownedConnectionsLocked snapshots the command connection before close starts.

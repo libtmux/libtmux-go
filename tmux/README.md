@@ -72,7 +72,7 @@ windows, err := session.SearchWindows(ctx, nil)   // asks tmux
 ## Options and hooks
 
 Every tmux option and hook has a typed accessor, and the tmux name maps to the
-Go name by one rule (see "Finding an option or hook" in the package docs):
+Go name by one rule (see "Naming and call shapes" in the package docs):
 
 ```go
 options, err := session.Options(ctx)
@@ -105,10 +105,10 @@ failures are Go errors.
 
 ## Waiting for a pane
 
-This has its own section in the package documentation, and it is worth reading
-before writing a poll loop: a shell echoes the command you sent, so searching the
-screen for what you are waiting for finds your own request. Three approaches, in
-the order worth reaching for them, are documented under "Waiting for a pane".
+Worth reading before writing a poll loop: a shell echoes the command you sent,
+so searching the screen for what you are waiting for finds your own request.
+"Execution modes" in the package documentation covers the ways to wait, in the
+order worth reaching for them.
 
 ## Reading further
 

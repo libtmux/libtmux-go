@@ -49,27 +49,30 @@ func (s runtimeState) String() string {
 // tmuxRuntime is the sole mutable owner of MCP execution. Its selector is
 // frozen at construction. Once a daemon is materialized, every command stays
 // on terminal connections opened from the same original session: one retained
-// command lane and one owned connection per active wait. Terminal transport
-// failures never reconnect or fall back to another daemon.
+// command lane and one owned connection per active wait. A terminal transport
+// failure never falls back to a different daemon while it is current, but it
+// is never fatal to the process either: the runtime heals back to
+// unbound on the next acquisition and may bind or bootstrap a fresh daemon
+// then.
 type tmuxRuntime struct {
-	base       tmux.Server
-	ctx        context.Context
-	onTerminal func(error)
-	deps       mcpDependencies
+	base tmux.Server
+	ctx  context.Context
+	deps mcpDependencies
 
-	mutex               sync.Mutex
-	state               runtimeState
-	probe               chan struct{}
-	binding             chan struct{}
-	unboundActive       int
-	unboundDrained      chan struct{}
-	cause               error
-	original            tmux.Session
-	commandConnection   *tmux.Connection
-	observations        sync.WaitGroup
-	connectionCloseOnce sync.Once
-	connectionsClosed   chan struct{}
-	connectionCloseErr  error
+	mutex                 sync.Mutex
+	state                 runtimeState
+	probe                 chan struct{}
+	binding               chan struct{}
+	unboundActive         int
+	unboundDrained        chan struct{}
+	cause                 error
+	original              tmux.Session
+	commandConnection     *tmux.Connection
+	ownObservationClients map[tmux.ClientName]tmux.SessionID
+	observations          sync.WaitGroup
+	connectionCloseOnce   sync.Once
+	connectionsClosed     chan struct{}
+	connectionCloseErr    error
 }
 
 type runtimeAcquisition struct {
@@ -99,12 +102,10 @@ func (a *runtimeAcquisition) liveUnbound() bool {
 func newRuntime(
 	ctx context.Context,
 	base tmux.Server,
-	onTerminal func(error),
 ) *tmuxRuntime {
 	return &tmuxRuntime{
 		base:              base,
 		ctx:               ctx,
-		onTerminal:        onTerminal,
 		deps:              defaultMCPDependencies(),
 		state:             runtimeUnbound,
 		connectionsClosed: make(chan struct{}),
@@ -162,10 +163,19 @@ func (r *tmuxRuntime) acquireCommand(
 			server := r.commandConnection.Server()
 			r.mutex.Unlock()
 			return &runtimeAcquisition{server: server}, nil
-		case runtimeTerminal, runtimeClosed:
+		case runtimeClosed:
 			err := r.stateErrorLocked()
 			r.mutex.Unlock()
 			return nil, err
+		case runtimeTerminal:
+			// A daemon this runtime already lost is never fatal to the
+			// process. Discard it and retry this acquisition as if starting
+			// fresh; the call that hit the loss already reported its own
+			// error at the point it happened.
+			lost := r.healTerminalLocked()
+			r.mutex.Unlock()
+			r.closeLostConnection(lost)
+			continue
 		case runtimeBinding:
 			ready := r.binding
 			r.mutex.Unlock()
@@ -293,10 +303,17 @@ func (r *tmuxRuntime) createSession(
 		case runtimeBound:
 			r.mutex.Unlock()
 			return r.createBoundSession(ctx, request)
-		case runtimeTerminal, runtimeClosed:
+		case runtimeClosed:
 			err := r.stateErrorLocked()
 			r.mutex.Unlock()
 			return tmux.Session{}, err
+		case runtimeTerminal:
+			// The next create_session starts a new server rather than
+			// staying poisoned by a daemon this runtime already lost.
+			lost := r.healTerminalLocked()
+			r.mutex.Unlock()
+			r.closeLostConnection(lost)
+			continue
 		case runtimeBinding:
 			ready := r.binding
 			r.mutex.Unlock()
@@ -495,14 +512,20 @@ func (r *tmuxRuntime) failBinding(
 		r.mutex.Unlock()
 		return true
 	}
+	// A lost or untrusted daemon (including ErrDaemonReplaced) is never
+	// fatal to the process. Record it as terminal for this attempt - the
+	// caller's own error already reports the loss - without adopting the
+	// connection as current, so a concurrent current() never hands it out
+	// while it closes; the next top-level acquisition heals back to unbound
+	// and starts fresh. original is retained (an acted creation still names
+	// the session it made) even though commandConnection is not.
 	r.original = original
-	r.commandConnection = commandConnection
+	r.commandConnection = nil
 	r.cause = err
 	r.state = runtimeTerminal
 	r.finishBindingSignalLocked()
 	r.mutex.Unlock()
-	r.cancelOwner(err)
-	r.startConnectionClose(r.ownedConnections(commandConnection))
+	r.closeLostConnection(commandConnection)
 	return false
 }
 

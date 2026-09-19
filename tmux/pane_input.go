@@ -132,8 +132,10 @@ func validateSendKeySequenceRequest(p Pane, request SendKeySequenceRequest) erro
 //
 // KeyName and TargetClient require tmux 3.4 and follow [UnsupportedPolicy].
 //
-// Completed exit status and stderr are ignored. Transport and context errors
-// are delivery-ambiguous, including between Command and the separate Enter.
+// A completed nonzero exit or stderr, from either the Command send or the
+// separate Enter, becomes a redacted [CommandError]: Command may carry a
+// caller's secret, so only tmux's exit code is retained. Transport and
+// context errors are delivery-ambiguous, including between Command and Enter.
 func (p Pane) SendKeys(ctx context.Context, request SendKeysRequest) error {
 	request = captureSendKeysRequest(request)
 	if err := validateSendKeysRequest(p, request); err != nil {
@@ -159,7 +161,8 @@ func (p Pane) SendKeys(ctx context.Context, request SendKeysRequest) error {
 	if err := p.server.reportUnsupported(warnings); err != nil {
 		return err
 	}
-	if _, err := p.server.literalCmd(ctx, arguments...); err != nil {
+	result, err := p.server.literalCmd(ctx, arguments...)
+	if err := requireRedactedServerCommandNoStderr("send-keys", result, err); err != nil {
 		return err
 	}
 	if !sendKeysNeedsEnter(request) {
@@ -173,7 +176,14 @@ func sendKeysRequiresVersion(request SendKeysRequest) bool {
 	return request.KeyName || request.TargetClient != ""
 }
 
-// Enter is a separate command and therefore a separate [Plan] step.
+// sendKeysNeedsEnter reports whether the request's text is followed by Enter.
+//
+// It is sent as a second tmux command rather than appended to the first: tmux
+// reads a command list by re-parsing its arguments, which turns a backslash
+// escape in a caller's text into what it escapes - a typed printf 'x\n'
+// reaching the pane as two lines - and reads a trailing semicolon as the
+// list's own separator. Enter is a separate command and therefore a separate
+// [Plan] step.
 func sendKeysNeedsEnter(request SendKeysRequest) bool {
 	return request.CopyModeCommand == nil && request.Command != nil && !request.SkipEnter
 }
@@ -275,11 +285,12 @@ func (w paneWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-// Enter sends the Enter key to the receiver's exact linked pane. Completed
-// exit status and stderr are ignored; transport errors are delivery-ambiguous.
+// Enter sends the Enter key to the receiver's exact linked pane. A completed
+// nonzero exit or stderr becomes a redacted [CommandError]; transport errors
+// are delivery-ambiguous.
 func (p Pane) Enter(ctx context.Context) error {
-	_, err := p.literalCmd(ctx, "send-keys", "--", "Enter")
-	return err
+	result, err := p.literalCmd(ctx, "send-keys", "--", "Enter")
+	return requireRedactedServerCommandNoStderr("send-keys", result, err)
 }
 
 // enterArguments renders [Pane.Enter] for a [Plan] without I/O.
@@ -408,9 +419,11 @@ func clearHistoryArguments(
 	return arguments, warnings, nil
 }
 
-// Clear sends the text "reset" and then Enter to the receiver's exact linked
-// pane. The pane's current application interprets that input; Clear does not
-// invoke a shell itself. A transport error may leave the text delivered without Enter.
+// Clear types the text "reset" and then Enter into the receiver's exact linked
+// pane, the way a person at the keyboard would. Whatever is running reads it:
+// a shell runs reset(1), and an editor receives the word. Use [Pane.Reset] or
+// [Pane.ClearHistory] to act on the pane itself rather than on its program.
+// A transport error may leave the text delivered without Enter.
 func (p Pane) Clear(ctx context.Context) error {
 	command := "reset"
 	return p.SendKeys(ctx, SendKeysRequest{Command: &command})
@@ -418,19 +431,23 @@ func (p Pane) Clear(ctx context.Context) error {
 
 // Reset submits one tmux command list that resets terminal state and then
 // clears history for the exact linked pane. The mutations are not atomic and
-// may be partial. Completed exit status and stderr are ignored.
+// may be partial. Only stderr makes a completed command a [CommandError];
+// nonzero exits without stderr are ignored. Transport errors are
+// delivery-ambiguous.
 func (p Pane) Reset(ctx context.Context) error {
 	target, err := exactPaneTarget(p)
 	if err != nil {
 		return err
 	}
-	_, err = p.server.Cmd(
+	result, err := p.server.Cmd(
 		ctx,
 		"send-keys", "-t", target, "-R",
 		";",
 		"clear-history", "-t", target,
 	)
-	return err
+	// tmux runs a list until one command fails and merges their output, so the
+	// label names the list rather than guessing which half stderr came from.
+	return requireServerCommandNoStderr("send-keys; clear-history", result, err)
 }
 
 func captureSendKeysRequest(request SendKeysRequest) SendKeysRequest {

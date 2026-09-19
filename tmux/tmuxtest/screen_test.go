@@ -17,7 +17,7 @@ func TestRunInPaneReachesAnAssertionInFourLines(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// docs:tmuxtest-quickstart
+	// docs:tmuxtest-quickstart given:ctx context.Context; t *testing.T
 	pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
 	tmuxtest.WaitForText(ctx, t, pane, "ready")
@@ -127,9 +127,9 @@ func TestWaitForShellReadyPrecedesTheFirstCommand(t *testing.T) {
 
 	server := tmuxtest.NewServer(ctx, t)
 	session := tmuxtest.NewSession(ctx, t, server, tmux.NewSessionRequest{})
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%t, %v), want a pane", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v, want a pane", err)
 	}
 
 	tmuxtest.WaitForShellReady(ctx, t, pane)
@@ -204,7 +204,7 @@ func TestTypeAndWaitReturnsForACommandThatFailed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pane := tmuxtest.RunInPane(ctx, t, "true")
+	pane := tmuxtest.RunInPane(ctx, t, "PS1=''")
 	tmuxtest.TypeAndWait(ctx, t, pane, "printf 'before failing\\n'; false")
 	tmuxtest.WaitForLine(ctx, t, pane, "before failing")
 }

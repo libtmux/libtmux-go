@@ -21,6 +21,40 @@ func (s Server) Session(ctx context.Context, id SessionID) (Session, error) {
 	return snapshot.SessionByID(id)
 }
 
+// SessionByName performs a live lookup of the session tmux knows by name and
+// returns a newly materialized record. A name no session holds reports
+// [ErrNotFound].
+//
+// tmux keeps session names unique, so a name identifies one session for as
+// long as it keeps it. A [SessionID] does not change, which is why the records
+// this package hands back carry one and [Server.Session] takes one; a name is
+// what a person types and what a workspace file records.
+func (s Server) SessionByName(ctx context.Context, name string) (Session, error) {
+	if err := validateLifecycleSessionName("name", name); err != nil {
+		return Session{}, err
+	}
+	snapshot, err := s.searchSnapshot(
+		ctx,
+		"list-sessions",
+		nil,
+		nil,
+		searchSessions,
+		searchRowMatch{field: "session_name", value: name},
+	)
+	if err != nil {
+		return Session{}, err
+	}
+	sessions := snapshot.Sessions()
+	if len(sessions) != 1 {
+		return Session{}, &SnapshotLookupError{
+			Object:     "session",
+			Identifier: name,
+			Matches:    len(sessions),
+		}
+	}
+	return sessions[0], nil
+}
+
 // Window performs a canonical live lookup of id using tmux's canonical session
 // and returns a newly materialized record. It does not preserve a linked-session
 // view; use [Window.ResolveSession] for that exact relationship.
@@ -172,7 +206,10 @@ func (s Server) livePointWithTargetValidation(
 				err,
 			)
 		}
-		return formatValues{}, Version{}, snapshotServerIdentity{}, err
+		// An untargeted listing that named an object is describing something
+		// other than the absence of the one asked for, which is why it is not
+		// allowed to read as that absence.
+		return formatValues{}, Version{}, snapshotServerIdentity{}, withoutAbsenceClaim(err)
 	}
 
 	matches := make([]formatValues, 0, 1)
@@ -183,7 +220,7 @@ func (s Server) livePointWithTargetValidation(
 	}
 	selected, err := selectLivePoint(matches, object, identifier, targeted)
 	if err != nil {
-		if errors.Is(err, ErrSnapshotNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			err = s.liveLookupAbsence(ctx, identity, object, identifier, nil)
 		}
 		return formatValues{}, Version{}, snapshotServerIdentity{}, err
@@ -220,7 +257,9 @@ func (s Server) liveLookupAbsence(
 	if !sameSnapshotIdentity(opening, closing) {
 		changeErr := snapshotIdentityChangeError(closing)
 		if listingErr != nil {
-			return errors.Join(listingErr, changeErr)
+			// A second daemon answered, so what the first one could not find
+			// is no longer evidence that it is gone.
+			return errors.Join(withoutAbsenceClaim(listingErr), changeErr)
 		}
 		return changeErr
 	}
@@ -314,8 +353,27 @@ func refreshCreatedWindow(
 	return createdWindowFromSnapshot(snapshot, sessionID, windowID)
 }
 
+// refreshExactPane materializes the pane's own winlink view. It lists that
+// one window's panes rather than taking a whole-server snapshot: the view
+// wanted is the one in this window, which a point lookup would not promise
+// for a linked window, and a snapshot's other listings answer nothing this
+// asks.
 func refreshExactPane(ctx context.Context, pane Pane) (Pane, error) {
-	snapshot, err := pane.server.Snapshot(ctx)
+	if _, err := validatePaneView(pane); err != nil {
+		return Pane{}, err
+	}
+	target, err := exactPaneTarget(pane)
+	if err != nil {
+		return Pane{}, err
+	}
+	snapshot, err := pane.server.searchSnapshot(
+		ctx,
+		"list-panes",
+		[]string{"-t", target},
+		nil,
+		searchPanes,
+		searchRowMatch{field: "session_id", value: pane.sessionID.String()},
+	)
 	if err != nil {
 		return Pane{}, err
 	}
@@ -361,12 +419,12 @@ func exactWindowFromSnapshot(snapshot Snapshot, window Window) (Window, error) {
 		windowID:  window.windowID,
 		index:     window.windowIndex,
 	}
-	return lookupSnapshotValue(
-		snapshot.state.windows,
-		snapshot.state.windowsByWinlink[key],
-		"window",
-		identifier,
-	)
+	indexes := snapshot.state.windowsByWinlink[key]
+	if len(indexes) == 0 {
+		indexes = inSession(snapshot.state.windows, snapshot.state.windowsByID[window.windowID],
+			window.sessionID, func(w Window) SessionID { return w.sessionID })
+	}
+	return lookupSnapshotValue(snapshot.state.windows, indexes, "window", identifier)
 }
 
 func exactPaneFromSnapshot(snapshot Snapshot, pane Pane) (Pane, error) {
@@ -382,12 +440,25 @@ func exactPaneFromSnapshot(snapshot Snapshot, pane Pane) (Pane, error) {
 		},
 		paneID: pane.paneID,
 	}
-	return lookupSnapshotValue(
-		snapshot.state.panes,
-		snapshot.state.panesByView[key],
-		"pane",
-		identifier,
-	)
+	indexes := snapshot.state.panesByView[key]
+	if len(indexes) == 0 {
+		indexes = inSession(snapshot.state.panes, snapshot.state.panesByID[pane.paneID],
+			pane.sessionID, func(p Pane) SessionID { return p.sessionID })
+	}
+	return lookupSnapshotValue(snapshot.state.panes, indexes, "pane", identifier)
+}
+
+// inSession narrows indexes to the views in session, for a record whose index
+// or window moved after it was read: it is still the one view of that id in
+// its session, unless the session links the window twice.
+func inSession[T any](values []T, indexes []int, session SessionID, sessionOf func(T) SessionID) []int {
+	var matches []int
+	for _, index := range indexes {
+		if sessionOf(values[index]) == session {
+			matches = append(matches, index)
+		}
+	}
+	return matches
 }
 
 func createdWindowFromSnapshot(

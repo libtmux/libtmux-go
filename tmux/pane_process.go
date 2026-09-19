@@ -100,7 +100,7 @@ func pipePaneArguments(target string, request PipePaneRequest) ([]string, error)
 		arguments = append(arguments, "-o")
 	}
 	if request.Command != nil {
-		arguments = append(arguments, *request.Command)
+		arguments = append(arguments, "--", *request.Command)
 	}
 	return arguments, nil
 }

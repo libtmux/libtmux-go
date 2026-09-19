@@ -10,66 +10,34 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-type failingPaneObservation struct{ err error }
-
-func (f failingPaneObservation) NextNotification(
-	context.Context,
-) (tmux.ControlNotification, error) {
-	return tmux.ControlNotification{}, f.err
+// paneTexts answers a wait as a pane observation would: match sees each text
+// in turn, and once they are spent the wait ends with err, or with ctx.
+type paneTexts struct {
+	texts []tmux.PaneText
+	err   error
 }
 
-type onePaneNotification struct {
-	notification tmux.ControlNotification
-	read         bool
-}
-
-func (s *onePaneNotification) NextNotification(
-	context.Context,
-) (tmux.ControlNotification, error) {
-	if s.read {
-		return tmux.ControlNotification{}, errors.New("notification read twice")
+func (p *paneTexts) WaitFor(
+	ctx context.Context,
+	match func(string) bool,
+) (tmux.PaneText, error) {
+	var last tmux.PaneText
+	for _, text := range p.texts {
+		last = text
+		if match(text.Text) {
+			return text, nil
+		}
 	}
-	s.read = true
-	return s.notification, nil
-}
-
-func TestPaneWaitConsumesTransientNotificationPayload(t *testing.T) {
-	patterns, err := compileNamedMatchers([]string{"TRANSIENT"}, false, true)
-	if err != nil {
-		t.Fatal(err)
+	if p.err != nil {
+		return last, p.err
 	}
-	notification, err := tmux.ParseControlNotification(
-		[]byte(`%output %1 TRANSIENT\015ERASED`),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := &onePaneNotification{notification: notification}
-	result := watchPane(
-		t.Context(),
-		source,
-		tmux.PaneID("%1"),
-		patterns,
-		nil,
-		0,
-	)
-	if result.err != nil || result.written != "TRANSIENT\nERASED" ||
-		result.outcome != outcomeMatched || result.matched != "TRANSIENT" {
-		t.Fatalf("watchPane() = (%q, %q, %q, %v), want transient stream match",
-			result.written, result.outcome, result.matched, result.err)
-	}
+	<-ctx.Done()
+	return last, ctx.Err()
 }
 
 func TestPaneWaitDoesNotCallAStreamFailureIdle(t *testing.T) {
 	want := errors.New("notification stream failed")
-	result := watchPane(
-		t.Context(),
-		failingPaneObservation{err: want},
-		tmux.PaneID("%1"),
-		nil,
-		nil,
-		time.Minute,
-	)
+	result := watchPane(t.Context(), &paneTexts{err: want}, nil, nil, nil, time.Minute)
 	if result.outcome != "" || !errors.Is(result.err, want) ||
 		!errors.Is(result.err, errPaneObservationLost) {
 		t.Fatalf("watchPane() = (%q, %v), want classified stream failure",

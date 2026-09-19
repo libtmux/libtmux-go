@@ -331,6 +331,10 @@ func (t *tools) startCommand(
 		if errors.Is(err, tmux.ErrOutcomeUnknown) {
 			dispatched = true
 			started.dispatched = true
+			// dispatch already carried its own Enter: whatever was
+			// pending on the line before this call is submitted, delivery
+			// outcome notwithstanding.
+			t.pending.clear(second.Source.ID())
 			return started, err
 		}
 		_ = os.RemoveAll(directory)
@@ -338,6 +342,7 @@ func (t *tools) startCommand(
 	}
 	dispatched = true
 	started.dispatched = true
+	t.pending.clear(second.Source.ID())
 	return started, nil
 }
 
@@ -540,7 +545,7 @@ func commandRunPresent(
 }
 
 func commandRunDisappeared(err error) bool {
-	return errors.Is(err, tmux.ErrSnapshotNotFound) ||
+	return errors.Is(err, tmux.ErrNotFound) ||
 		errors.Is(err, tmux.ErrDaemonReplaced)
 }
 

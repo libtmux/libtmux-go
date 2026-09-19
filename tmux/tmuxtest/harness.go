@@ -1,6 +1,9 @@
 // Package tmuxtest runs your program inside a real tmux and lets a test assert
 // on what it drew. It isolates servers and polls panes instead of sleeping.
 //
+// It needs a real tmux, so it runs on Unix; [Main] reports an unsupported
+// platform rather than starting one. [StartPTYProcess] needs Linux.
+//
 // # Testing a program
 //
 // [RunInPane] owns the server, session, and pane for the test:

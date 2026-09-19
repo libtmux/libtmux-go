@@ -49,7 +49,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 
 	// The split's forward reference is usable before tmux reports its pane ID.
-	// docs:planning
+	// docs:planning given:window tmux.Window
 	plan := tmux.NewPlan()
 	plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 	editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})

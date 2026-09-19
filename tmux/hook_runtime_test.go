@@ -90,7 +90,7 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window hooks",
-			want: []string{"show-options", "-t", "$7:3", "-w", "-A", "-H"},
+			want: []string{"show-options", "-t", "@8", "-w", "-A", "-H"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				_, err := window.Hooks(context.Background())
 				return err
@@ -98,7 +98,7 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "pane hooks",
-			want: []string{"show-options", "-t", "$7:3.%9", "-p", "-A", "-H"},
+			want: []string{"show-options", "-t", "$7:.%9", "-p", "-A", "-H"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				_, err := pane.Hooks(context.Background())
 				return err
@@ -130,7 +130,7 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window raw hook",
-			want: []string{"show-options", "-t", "$7:3", "-w", "-H", "-q", "-v", "--", "pane-died[0]"},
+			want: []string{"show-options", "-t", "@8", "-w", "-H", "-q", "-v", "--", "pane-died[0]"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				_, _, err := window.RawHook(context.Background(), "pane-died[0]")
 				return err
@@ -138,7 +138,7 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "pane raw hook",
-			want: []string{"show-options", "-t", "$7:3.%9", "-p", "-H", "-q", "-v", "--", "pane-died[0]"},
+			want: []string{"show-options", "-t", "$7:.%9", "-p", "-H", "-q", "-v", "--", "pane-died[0]"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				_, _, err := pane.RawHook(context.Background(), "pane-died[0]")
 				return err
@@ -160,14 +160,14 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window set hook",
-			want: []string{"set-hook", "-t", "$7:3", "-w", "--", "pane-died[0]", "display-message set"},
+			want: []string{"set-hook", "-t", "@8", "-w", "--", "pane-died[0]", "display-message set"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.SetHook(context.Background(), "pane-died[0]", "display-message set")
 			},
 		},
 		{
 			name: "pane set hook",
-			want: []string{"set-hook", "-t", "$7:3.%9", "-p", "--", "pane-died[0]", "display-message set"},
+			want: []string{"set-hook", "-t", "$7:.%9", "-p", "--", "pane-died[0]", "display-message set"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.SetHook(context.Background(), "pane-died[0]", "display-message set")
 			},
@@ -188,14 +188,14 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window append hook",
-			want: []string{"set-hook", "-t", "$7:3", "-w", "-a", "--", "pane-died", "display-message append"},
+			want: []string{"set-hook", "-t", "@8", "-w", "-a", "--", "pane-died", "display-message append"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.AppendHook(context.Background(), "pane-died", "display-message append")
 			},
 		},
 		{
 			name: "pane append hook",
-			want: []string{"set-hook", "-t", "$7:3.%9", "-p", "-a", "--", "pane-died", "display-message append"},
+			want: []string{"set-hook", "-t", "$7:.%9", "-p", "-a", "--", "pane-died", "display-message append"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.AppendHook(context.Background(), "pane-died", "display-message append")
 			},
@@ -216,14 +216,14 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window unset hook",
-			want: []string{"set-hook", "-t", "$7:3", "-w", "-u", "--", "pane-died"},
+			want: []string{"set-hook", "-t", "@8", "-w", "-u", "--", "pane-died"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.UnsetHook(context.Background(), "pane-died")
 			},
 		},
 		{
 			name: "pane unset hook",
-			want: []string{"set-hook", "-t", "$7:3.%9", "-p", "-u", "--", "pane-died"},
+			want: []string{"set-hook", "-t", "$7:.%9", "-p", "-u", "--", "pane-died"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.UnsetHook(context.Background(), "pane-died")
 			},
@@ -244,14 +244,14 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window run hook",
-			want: []string{"set-hook", "-t", "$7:3", "-w", "-R", "--", "pane-died[0]"},
+			want: []string{"set-hook", "-t", "$7:@8", "-w", "-R", "--", "pane-died[0]"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.RunHook(context.Background(), "pane-died[0]")
 			},
 		},
 		{
 			name: "pane run hook",
-			want: []string{"set-hook", "-t", "$7:3.%9", "-p", "-R", "--", "pane-died[0]"},
+			want: []string{"set-hook", "-t", "$7:.%9", "-p", "-R", "--", "pane-died[0]"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.RunHook(context.Background(), "pane-died[0]")
 			},
@@ -282,7 +282,7 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window set hooks",
-			want: []string{"set-hook", "-t", "$7:3", "-w", "--", "pane-died[3]", "display-message bulk"},
+			want: []string{"set-hook", "-t", "@8", "-w", "--", "pane-died[3]", "display-message bulk"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				values, err := NewSparseArray(SparseEntry[string]{Index: 3, Value: "display-message bulk"})
 				if err != nil {
@@ -294,7 +294,7 @@ func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "pane set hooks",
-			want: []string{"set-hook", "-t", "$7:3.%9", "-p", "--", "pane-died[3]", "display-message bulk"},
+			want: []string{"set-hook", "-t", "$7:.%9", "-p", "--", "pane-died[3]", "display-message bulk"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				values, err := NewSparseArray(SparseEntry[string]{Index: 3, Value: "display-message bulk"})
 				if err != nil {
@@ -529,14 +529,14 @@ func TestSingleHookMutationsPreserveUnknownPassThrough(t *testing.T) {
 		},
 		{
 			name: "window unset unknown",
-			want: []string{"set-hook", "-t", "$7:3", "-w", "-u", "--", "future-hook"},
+			want: []string{"set-hook", "-t", "@8", "-w", "-u", "--", "future-hook"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.UnsetHook(context.Background(), "future-hook")
 			},
 		},
 		{
 			name: "pane run custom",
-			want: []string{"set-hook", "-t", "$7:3.%9", "-p", "-R", "--", "@custom-hook"},
+			want: []string{"set-hook", "-t", "$7:.%9", "-p", "-R", "--", "@custom-hook"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.RunHook(context.Background(), "@custom-hook")
 			},

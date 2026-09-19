@@ -687,29 +687,36 @@ type sendKeysBatchInput struct {
 	// SessionName picks the session when PaneID is empty.
 	SessionName string `json:"sessionName,omitempty" jsonschema:"which session's active pane to send to when paneId is empty"`
 	// Keys are tmux key names sent in order, such as ["C-c", "q", "Escape"].
-	// Nothing is appended, so a client driving a program that reads lines adds
-	// "Enter" itself.
-	Keys []string `json:"keys" jsonschema:"tmux key names to send in order, such as [\"C-c\", \"q\", \"Enter\"]"`
+	// Nothing is appended; set Enter to submit, or add a key name such as
+	// "Enter" here when Literal is false.
+	Keys []string `json:"keys" jsonschema:"tmux key names to send in order, such as [\"C-c\", \"q\"]; do not put \"Enter\" here when literal is true, it types the five letters - set enter instead"`
 	// Literal sends the keys as characters rather than looking their names up,
-	// so "Escape" is those six letters.
+	// so "Escape" is those six letters. It never changes Enter below, which
+	// is always a real key press sent after Keys, not appended to them.
 	Literal bool `json:"literal,omitempty" jsonschema:"send the keys as characters rather than as tmux key names"`
+	// Enter presses Enter after Keys, as its own key press rather than
+	// appended text, so it submits even when Literal is true. This is the
+	// unambiguous way to type text and submit it in one call.
+	Enter bool `json:"enter,omitempty" jsonschema:"press Enter after the keys, as a real key press, to submit them"`
 }
 
 // sendKeysBatchOutput reports the source target and accepted key count.
 type sendKeysBatchOutput struct {
 	// PaneID is the resolved source target.
 	PaneID string `json:"paneId"`
-	// Sent is how many keys tmux accepted when the call succeeds.
+	// Sent is how many keys tmux accepted when the call succeeds, including
+	// the separate Enter press when Enter was requested.
 	Sent int `json:"sent"`
 	// ResolvedPaneIDs is sorted configured preflight membership.
 	ResolvedPaneIDs []string `json:"resolvedPaneIds"`
 }
 
-// sendKeysBatch sends a sequence of keys without pressing Enter.
+// sendKeysBatch sends a sequence of keys and, when Enter is requested, a
+// separate real Enter key press after them - never appended to a Literal
+// sequence, so it submits regardless of Literal.
 //
 // A program that reads keys rather than lines — an editor, a pager, a menu —
-// is driven by key names in order, and send_keys cannot express that: it
-// appends Enter, so every key would be its own line. This is what lets a
+// is driven by key names in order, not a line at a time; that is what lets a
 // client answer a prompt, quit a pager, or leave an editor.
 func (t *tools) sendKeysBatch(
 	ctx context.Context,
@@ -770,12 +777,43 @@ func (t *tools) sendKeysBatch(
 			"%s refused: its pane input reservation changed before dispatch", tool,
 		)
 	}
+	// Every pane the keys reach, which under synchronize-panes is the whole
+	// linked set rather than the one named: a wait on a sibling sees the same
+	// echo and needs the same masking.
+	typed := preflight.ConfiguredIDs
+	text, afterEnd, endsLine, overflow := willType(input.Keys, input.Literal)
+	restore := t.pending.record(typed, overflow, text)
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
 	}); err != nil {
+		// Nothing was typed, so pending must not claim it was.
+		restore()
 		return nil, output, fmt.Errorf("sending keys: %w", err)
 	}
+	// Submitting is recorded only now: until tmux has the keys, the line is
+	// still unsubmitted, and clearing early would let a wait read it as
+	// output the pane produced.
+	if endsLine {
+		// The line these keys were typed on has gone, submitted or
+		// discarded, and whatever followed is a new one still unsubmitted.
+		t.pending.clearAll(typed)
+		t.pending.record(typed, 0, afterEnd)
+	}
 	output.Sent = len(input.Keys)
+	if input.Enter {
+		// A real key press, dispatched on its own so a Literal keys sequence
+		// never carries it: mixing them would type the word "Enter" instead
+		// of pressing it.
+		if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
+			Keys: []string{"Enter"},
+		}); err != nil {
+			return nil, output, fmt.Errorf(
+				"%s sent %d key(s) but the separate Enter failed: %w", tool, output.Sent, err,
+			)
+		}
+		output.Sent++
+		t.pending.clearAll(typed)
+	}
 	return nil, output, nil
 }
 
@@ -881,13 +919,22 @@ func (t *tools) pasteText(
 	// Deleted with the paste rather than left behind: tmux keeps buffers until
 	// something drops them, and a client pasting repeatedly would fill a
 	// person's buffer list with text they never copied.
+	// Recorded before the paste for the reason sendKeys gives: the echo of
+	// this text can reach a waiting client before the paste returns. tmux does
+	// not broadcast a paste through synchronize-panes, so only this pane.
+	pasted := []string{pane.ID().String()}
+	restore := t.pending.record(pasted, 0, input.Text)
 	if err := t.runtime.deps.pasteBuffer(ctx, pane, tmux.PasteBufferRequest{
 		BufferName:  &name,
 		DeleteAfter: true,
 		Bracket:     bracket,
 	}); err != nil {
+		restore()
 		cleanupErr := t.deletePasteBuffer(server, name)
 		return nil, output, errors.Join(err, cleanupErr)
+	}
+	if input.Enter {
+		t.pending.clearAll(pasted)
 	}
 	output.Bytes = len(input.Text)
 	return nil, output, nil

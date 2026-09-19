@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,5 +105,73 @@ func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {
 	}
 	if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: applied}); err != nil {
 		t.Fatalf("tmux's own layout string %q was refused: %v", applied, err)
+	}
+}
+
+// TestSelectLayoutAcceptsAUniquePresetPrefix checks the same against a real
+// server: "tile" applies exactly like "tiled" applies, on whatever tmux is on
+// PATH, and an ambiguous prefix is refused client-side, naming its
+// candidates, without ever reaching tmux or disturbing the server.
+//
+//libtmux:real-tmux
+func TestSelectLayoutAcceptsAUniquePresetPrefix(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("Sessions() = (%d, %v)", len(sessions), err)
+	}
+	window, err := sessions[0].NewWindow(ctx, tmux.NewWindowRequest{})
+	if err != nil {
+		t.Fatalf("NewWindow() error = %v", err)
+	}
+	if _, err := window.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
+		t.Fatalf("SplitPane() error = %v", err)
+	}
+
+	if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: "even-vertical"}); err != nil {
+		t.Fatalf("SelectLayout(even-vertical) error = %v", err)
+	}
+	if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: "tile"}); err != nil {
+		t.Fatalf("SelectLayout(tile) error = %v, want it applied like tiled", err)
+	}
+	fromPrefix, err := window.Refresh(ctx)
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	prefixLayout, ok := fromPrefix.Layout()
+	if !ok || prefixLayout == "" {
+		t.Fatal("window reported no layout after tile")
+	}
+
+	if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: "even-vertical"}); err != nil {
+		t.Fatalf("SelectLayout(even-vertical) error = %v", err)
+	}
+	if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: "tiled"}); err != nil {
+		t.Fatalf("SelectLayout(tiled) error = %v", err)
+	}
+	fromFullName, err := window.Refresh(ctx)
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	fullNameLayout, ok := fromFullName.Layout()
+	if !ok || fullNameLayout == "" {
+		t.Fatal("window reported no layout after tiled")
+	}
+	if prefixLayout != fullNameLayout {
+		t.Fatalf("SelectLayout(tile) produced %q, SelectLayout(tiled) produced %q, want them equal", prefixLayout, fullNameLayout)
+	}
+
+	err = window.SelectLayout(ctx, tmux.SelectLayoutRequest{Layout: "even-"})
+	if !errors.Is(err, tmux.ErrInvalidServerCommandRequest) {
+		t.Fatalf("SelectLayout(even-) error = %v, want ErrInvalidServerCommandRequest", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "even-horizontal") || !strings.Contains(err.Error(), "even-vertical") {
+		t.Fatalf("SelectLayout(even-) error = %v, want it to name both candidates", err)
+	}
+	alive, err := server.IsAlive(ctx)
+	if err != nil || !alive {
+		t.Fatalf("the tmux server did not survive an ambiguous prefix: (%t, %v)", alive, err)
 	}
 }

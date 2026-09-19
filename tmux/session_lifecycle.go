@@ -112,7 +112,7 @@ func renderNewSessionArguments(
 	}
 	arguments = append(arguments, environment...)
 	if request.Command != "" {
-		arguments = append(arguments, request.Command)
+		arguments = append(arguments, "--", request.Command)
 	}
 	return arguments, nil
 }
@@ -269,7 +269,7 @@ func (s Session) Rename(ctx context.Context, name string) (Session, error) {
 	if err := validateLifecycleSessionName("name", name); err != nil {
 		return Session{}, err
 	}
-	result, err := s.literalCmd(ctx, "rename-session", name)
+	result, err := s.literalCmd(ctx, "rename-session", "--", name)
 	if _, err = requireLifecycleSuccess("rename-session", result, err); err != nil {
 		return Session{}, err
 	}

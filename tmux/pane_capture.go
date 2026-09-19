@@ -110,8 +110,8 @@ type CapturePaneRequest struct {
 }
 
 // Capture captures printed content from the receiver's exact linked pane.
-// It returns a caller-owned slice. A completed nonzero exit or stderr does not
-// become a [CommandError]; any stdout is returned without an error.
+// It returns a caller-owned slice. A completed nonzero exit or stderr becomes
+// a [CommandError]; any stdout tmux still printed is returned alongside it.
 //
 // This is a point-in-time capture rather than a stream; the zero request reads
 // the visible screen. It may include a shell's echo of [Pane.SendKeys] input.
@@ -144,8 +144,8 @@ func (p Pane) CaptureBytes(
 
 // CaptureToBuffer captures content from the receiver's exact linked pane
 // into the nonempty named tmux buffer. The buffer is owned by tmux and no
-// printed output is returned. A completed nonzero exit or stderr does not
-// become a [CommandError].
+// printed output is returned. A completed nonzero exit or stderr becomes a
+// [CommandError].
 //
 // Invalid requests fail before execution. Transport and context errors are
 // delivery-ambiguous: the buffer may already have changed.
@@ -229,7 +229,8 @@ func (p Pane) capturePane(
 		// so printed captures always use a subprocess.
 		p.server = p.server.requireProcess()
 	}
-	return p.literalCmd(ctx, arguments...)
+	result, err := p.literalCmd(ctx, arguments...)
+	return result, requireServerCommandNoStderr("capture-pane", result, err)
 }
 
 // captureArguments validates request and builds its capture-pane argument

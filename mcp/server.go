@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime/debug"
 	"slices"
@@ -157,7 +158,7 @@ func NewServer(target tmux.Server) (*Instance, error) {
 
 func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	instance := newInstance()
-	runtime := newRuntime(instance.ctx, target, instance.terminal)
+	runtime := newRuntime(instance.ctx, target)
 	instance.runtime = runtime
 	tools := newToolRegistry(surface)
 	tools.instance = instance
@@ -318,6 +319,20 @@ func runPinnedSurface(ctx context.Context, target tmux.Server, surface toolSurfa
 	return instance.Run(ctx, stdio())
 }
 
+// ensureSocketDirectory creates dir with the same permissions tmux gives
+// tmux-<uid>/ (mode 0700) when this process is the one choosing its own
+// socket. It tolerates the directory already existing and leaves any
+// ownership or permission mismatch for tmux itself to refuse.
+func ensureSocketDirectory(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
+		return err
+	}
+	return nil
+}
+
 func newMinimalOwnerNonce() (string, error) {
 	value := make([]byte, 16)
 	if _, err := rand.Read(value); err != nil {
@@ -342,6 +357,18 @@ func pinDefaultMinimal(
 	if err != nil {
 		return socketProfile{}, err
 	}
+	// The launcher pins its resolved endpoint as an explicit -S path (see
+	// WithProcessEnvironmentValue), which skips tmux's own tmux-<uid>/
+	// creation for -L and the default socket. This process chose that
+	// directory, unlike an operator-supplied -socket-path, so it may
+	// create it the way tmux itself would.
+	selection, err := launcher.SocketSelection()
+	if err != nil {
+		return socketProfile{}, err
+	}
+	if err := ensureSocketDirectory(selection.NamedDirectory); err != nil {
+		return socketProfile{}, fmt.Errorf("create tmux socket directory: %w", err)
+	}
 	if err := launcher.Start(ctx); err != nil {
 		return socketProfile{}, err
 	}
@@ -349,11 +376,16 @@ func pinDefaultMinimal(
 	if err != nil {
 		return socketProfile{}, err
 	}
+	return defaultMinimalProfile(target, present && marker == nonce)
+}
+
+// defaultMinimalProfile describes the default dedicated target, granting
+// default teardown only when owned: this process created that tmux server.
+func defaultMinimalProfile(target tmux.Server, owned bool) (socketProfile, error) {
 	selection, err := target.SocketSelection()
 	if err != nil {
 		return socketProfile{}, err
 	}
-	owned := present && marker == nonce
 	selector := "path:" + selection.Path
 	if filepath.Base(selection.Path) == "libtmux-mcp" {
 		selector = "name:libtmux-mcp"
@@ -412,6 +444,9 @@ type tools struct {
 	callerMutex  sync.Mutex
 	caller       callerIdentity
 	callerCached bool
+	// pending tracks each pane's own unsubmitted input, so wait_for_text never
+	// reports a match confined to it.
+	pending pendingInput
 }
 
 // An invalid target has no socket identity and cannot match the caller.

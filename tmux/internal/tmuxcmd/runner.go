@@ -15,6 +15,19 @@ import (
 	"unicode/utf8"
 )
 
+// defaultWaitDelay bounds two things with one number, which is all exec.Cmd
+// offers: how long a tmux process gets to finish writing after it exits, and
+// how long a cancelled one gets before its pipes are closed under it.
+// TestRunnerBoundsCancellationWhenDescendantHoldsOutputPipe pins the
+// cancellation half at this value, so widening it to stop a loaded machine
+// reporting exec.ErrWaitDelay for a healthy command would slow every
+// cancellation by the same amount.
+//
+// The value is empirical. A daemonized tmux server does not hold the pipe:
+// proc_fork_and_daemon calls daemon(1, 0), which reopens the child's standard
+// descriptors on /dev/null, and 120 fresh-socket runs at this delay produced
+// no expiry. What makes a loaded machine report one is not identified, so
+// treat the number as measured rather than derived.
 const defaultWaitDelay = 100 * time.Millisecond
 
 // Request describes one subprocess invocation.

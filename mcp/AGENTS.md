@@ -41,10 +41,10 @@ Four things are worth knowing.
 **Give the server the environment a client would.** An MCP client starts its
 servers with a curated environment, not the shell's. Declaring only what the
 server needs in the config's `env` is what a real client does, and it is what
-found the control-connection hang: without a UTF-8 locale, tmux rewrites
-control characters in format output, a tab separator came back as an
-underscore, and the tmux module's client-registration poll never matched.
-Testing with an inherited shell environment hides that entire class of bug.
+found the control-connection hang the tmux module now prevents by asking tmux
+for UTF-8: a tab separator in format output came back as an underscore, and the
+client-registration poll never matched. That one is fixed, but testing with an
+inherited shell environment hides the whole class it came from.
 
 **`libtmux-mcp: terminated signal received` is not a fault.** It is the server
 handling the SIGTERM it gets when a client tears the transport down, including

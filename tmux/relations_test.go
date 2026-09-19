@@ -118,12 +118,15 @@ func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 
 	t.Run("session active pane", func(t *testing.T) {
 		session, _, _, _ := newSubjects(t)
-		pane, ok, err := session.ResolveActivePane(context.Background())
+		// A scoped resolver reads one pane listing, and each row carries the
+		// session and window fields too, so the graph comes from that alone.
+		session.server = serverWithRunner(paneListingRunner(t, version, records.panes))
+		pane, err := session.ResolveActivePane(context.Background())
 		if err != nil {
 			t.Fatalf("ResolveActivePane() error = %v", err)
 		}
-		if !ok || pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
-			t.Fatalf("ResolveActivePane() = (%#v, %t), want exact $2:7:%%2 view", pane, ok)
+		if pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
+			t.Fatalf("ResolveActivePane() = %#v, want exact $2:7:%%2 view", pane)
 		}
 	})
 
@@ -140,12 +143,15 @@ func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 
 	t.Run("window active pane", func(t *testing.T) {
 		_, window, _, _ := newSubjects(t)
-		pane, ok, err := window.ResolveActivePane(context.Background())
+		// A scoped resolver reads one pane listing, and each row carries the
+		// session and window fields too, so the graph comes from that alone.
+		window.server = serverWithRunner(paneListingRunner(t, version, records.panes))
+		pane, err := window.ResolveActivePane(context.Background())
 		if err != nil {
 			t.Fatalf("ResolveActivePane() error = %v", err)
 		}
-		if !ok || pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
-			t.Fatalf("ResolveActivePane() = (%#v, %t), want exact $2:7:%%2 view", pane, ok)
+		if pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
+			t.Fatalf("ResolveActivePane() = %#v, want exact $2:7:%%2 view", pane)
 		}
 	})
 
@@ -192,8 +198,8 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 		})
 		session := Session{server: serverWithRunner(runner), sessionID: SessionID("$2")}
 		_, err := session.ResolveActiveWindow(context.Background())
-		if !errors.Is(err, ErrSnapshotNotFound) {
-			t.Fatalf("ResolveActiveWindow() error = %v, want ErrSnapshotNotFound", err)
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("ResolveActiveWindow() error = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -222,8 +228,8 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 			windowID: WindowID("@8"), windowIndex: 7,
 		}
 		_, err := window.ResolveSession(context.Background())
-		if !errors.Is(err, ErrSnapshotNotFound) {
-			t.Fatalf("ResolveSession() error = %v, want ErrSnapshotNotFound", err)
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("ResolveSession() error = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -255,23 +261,20 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 			sessions: []formatValues{sessionRow}, windows: []formatValues{activeWindow},
 			panes: []formatValues{firstActivePane, secondActivePane},
 		}
-		runner := attachmentSnapshotRunner(t, version, records)
+		runner := paneListingRunner(t, version, records.panes)
 		window := Window{
 			server: serverWithRunner(runner), sessionID: SessionID("$2"),
 			windowID: WindowID("@8"), windowIndex: 7,
 		}
-		pane, ok, err := window.ResolveActivePane(context.Background())
-		if err != nil || !ok || pane.paneID != PaneID("%2") {
-			t.Fatalf("ResolveActivePane() = (%#v, %t, %v), want first active %%2", pane, ok, err)
+		pane, err := window.ResolveActivePane(context.Background())
+		if err != nil || pane.paneID != PaneID("%2") {
+			t.Fatalf("ResolveActivePane() = (%#v, %v), want first active %%2", pane, err)
 		}
 
-		runner = attachmentSnapshotRunner(t, version, snapshotRecords{
-			sessions: []formatValues{sessionRow}, windows: []formatValues{activeWindow},
-		})
-		window.server = serverWithRunner(runner)
-		pane, ok, err = window.ResolveActivePane(context.Background())
-		if err != nil || ok {
-			t.Fatalf("ResolveActivePane() = (%#v, %t, %v), want zero, false, nil", pane, ok, err)
+		window.server = serverWithRunner(paneListingRunner(t, version, nil))
+		pane, err = window.ResolveActivePane(context.Background())
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("ResolveActivePane() = (%#v, %v), want ErrNotFound", pane, err)
 		}
 	})
 
@@ -288,10 +291,17 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 		{
 			name: "session receiver missing",
 			resolve: func(server Server) error {
-				_, _, err := (Session{server: server, sessionID: SessionID("$2")}).ResolveActivePane(context.Background())
+				// A session that has gone lists no panes, which is the only
+				// way a scoped listing reports it: tmux answers the command
+				// with an error this package classifies as ErrNotFound, and a
+				// listing that simply comes back empty says the same thing.
+				_, err := (Session{
+					server:    serverWithRunner(paneListingRunner(t, version, nil)),
+					sessionID: SessionID("$2"),
+				}).ResolveActivePane(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name:    "session receiver ambiguous",
@@ -312,7 +322,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				}).ResolveSession(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "window parent ambiguous",
@@ -338,7 +348,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				_, err := relationshipPane(server).ResolveWindow(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "pane receiver ambiguous",
@@ -361,7 +371,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				_, err := relationshipPane(server).ResolveWindow(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "pane parent window ambiguous",
@@ -384,7 +394,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 				_, err := relationshipPane(server).ResolveSession(context.Background())
 				return err
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "pane parent session ambiguous",
@@ -440,12 +450,16 @@ func liveRelationshipRecords(t *testing.T, version Version) snapshotRecords {
 			),
 		},
 		panes: []formatValues{
+			// A pane row carries its window's fields too, window_active
+			// among them, which is how one listing answers for the session.
 			snapshotValues(t, version,
 				"session_id", "$1", "window_id", "@8", "window_index", "1",
+				"window_active", "1",
 				"pane_id", "%1", "pane_index", "0", "pane_active", "1",
 			),
 			snapshotValues(t, version,
 				"session_id", "$2", "window_id", "@8", "window_index", "7",
+				"window_active", "1",
 				"pane_id", "%2", "pane_index", "0", "pane_active", "1",
 			),
 		},

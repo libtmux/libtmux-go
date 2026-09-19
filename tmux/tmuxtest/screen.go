@@ -1,6 +1,7 @@
 package tmuxtest
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -14,14 +15,9 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// Pane waits poll because tmux provides no screen-settled signal. Failures print
+// waitBudget bounds a pane wait whose context has no deadline. Failures print
 // the last screen read.
-const (
-	// pollInterval is how often a wait re-reads the local pane.
-	pollInterval = 10 * time.Millisecond
-	// waitBudget bounds a wait whose context has no deadline.
-	waitBudget = 30 * time.Second
-)
+const waitBudget = 30 * time.Second
 
 // Screen returns the pane's visible lines, top to bottom, with tmux's trailing
 // blank lines removed.
@@ -86,13 +82,9 @@ func WaitForScreen(
 	defer cancel()
 
 	var last []string
-	err := WaitFor(ctx, pollInterval, func(ctx context.Context) (bool, error) {
-		screen, err := readScreen(ctx, pane)
-		if err != nil {
-			return false, err
-		}
+	err := waitForScreen(ctx, pane, func(screen []string) bool {
 		last = screen
-		return match(screen), nil
+		return match(screen)
 	})
 	if err == nil {
 		return
@@ -168,22 +160,38 @@ func RunInPane(ctx context.Context, t testing.TB, command string) tmux.Pane {
 		InitialSession: &initialSession,
 	})
 	session := NewSession(ctx, t, server, tmux.NewSessionRequest{})
-	pane, ok, err := session.ResolveActivePane(ctx)
+	pane, err := session.ResolveActivePane(ctx)
 	if err != nil {
 		t.Fatal(harnessFailure("resolve pane for command", err))
-	}
-	if !ok {
-		t.Fatal(harnessFailure("resolve pane for command", errNoActivePane))
 	}
 	WaitForShellReady(ctx, t, pane)
 	Type(ctx, t, pane, command)
 	return pane
 }
 
-var (
-	errNilScreenMatch = errors.New("screen condition is nil")
-	errNoActivePane   = errors.New("session reported no active pane")
-)
+var errNilScreenMatch = errors.New("screen condition is nil")
+
+// waitForScreen reads the screen once, then again each time the pane writes,
+// until match accepts it. tmux pushes each write, so nothing is polled; the
+// observation opens before the first read so a write between the two is not
+// missed.
+func waitForScreen(ctx context.Context, pane tmux.Pane, match func([]string) bool) error {
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = observation.Close() }()
+	screen, err := readScreen(ctx, pane)
+	if err != nil || match(screen) {
+		return err
+	}
+	var readErr error
+	_, err = observation.WaitFor(ctx, func(string) bool {
+		screen, readErr = readScreen(ctx, pane)
+		return readErr != nil || match(screen)
+	})
+	return cmp.Or(readErr, err)
+}
 
 func waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, ok := ctx.Deadline(); ok {

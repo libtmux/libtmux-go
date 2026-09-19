@@ -178,7 +178,9 @@ func (p Pane) BreakPane(ctx context.Context, request BreakPaneRequest) (Window, 
 	}
 	if isBroken37 && request.Name != "" {
 		target := p.sessionID.String() + ":" + window.windowID.String()
-		renameResult, renameErr := p.server.literalCmd(ctx, "rename-window", "-t", target, request.Name)
+		renameResult, renameErr := p.server.literalCmd(
+			ctx, "rename-window", "-t", target, "--", request.Name,
+		)
 		if _, renameErr = requireLifecycleSuccess("rename-window", renameResult, renameErr); renameErr != nil {
 			return window, renameErr
 		}

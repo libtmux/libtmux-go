@@ -365,8 +365,8 @@ func TestZeroSnapshotReturnsNonNilEmptySlices(t *testing.T) {
 		snapshot.Panes() == nil || snapshot.Clients() == nil {
 		t.Fatal("zero Snapshot returned a nil collection")
 	}
-	if _, err := snapshot.SessionByID(SessionID("$0")); !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("SessionByID() error = %v, want ErrSnapshotNotFound", err)
+	if _, err := snapshot.SessionByID(SessionID("$0")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("SessionByID() error = %v, want ErrNotFound", err)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -111,6 +112,68 @@ func ExampleNewPlan() {
 	// steps [1 2]: chained
 }
 
+func ExampleServer_CheckAlive() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-check-alive",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	if err := server.CheckAlive(ctx); err != nil {
+		fmt.Println("check server:", err)
+		return
+	}
+	fmt.Println("alive")
+	if err := server.Kill(ctx); err != nil {
+		fmt.Println("kill server:", err)
+		return
+	}
+	fmt.Println("absent:", errors.Is(server.CheckAlive(ctx), tmux.ErrNoServer))
+	// Output:
+	// alive
+	// absent: true
+}
+
+func ExampleDisplayMessageRequest() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-display-duration",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "build"}); err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	lines, err := server.DisplayMessage(ctx, tmux.DisplayMessageRequest{
+		Message: "build ready", Print: true, Delay: new(250 * time.Millisecond),
+	})
+	if err != nil {
+		fmt.Println("display message:", err)
+		return
+	}
+	fmt.Println(lines[0])
+	_, err = server.DisplayMessage(ctx, tmux.DisplayMessageRequest{
+		Delay: new(time.Microsecond),
+	})
+	fmt.Println("fractional delay rejected:", errors.Is(err, tmux.ErrInvalidServerCommandRequest))
+	// Output:
+	// build ready
+	// fractional delay rejected: true
+}
+
 func ExamplePane_SendKeys() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
@@ -128,8 +191,8 @@ func ExamplePane_SendKeys() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
 		fmt.Println("resolve pane:", err)
 		return
 	}
@@ -188,8 +251,8 @@ func ExamplePane_CaptureBytes() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
 		fmt.Println("resolve pane:", err)
 		return
 	}
@@ -978,9 +1041,9 @@ func ExamplePane_Capture() {
 	}
 	// ResolveActivePane reports absence as ok=false rather than as an error,
 	// because a session can exist with no active pane.
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 	command := "printf 'build ready\\n'"
@@ -1109,9 +1172,9 @@ func ExampleServer_Pane() {
 		fmt.Println("create session:", err)
 		return
 	}
-	created, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	created, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 
@@ -1144,7 +1207,7 @@ func ExampleServer_Client() {
 	// A detached server has no clients, so the lookup reports absence as a
 	// classified error rather than an empty value.
 	_, err = server.Client(ctx, tmux.ClientName("/dev/pts/999"))
-	fmt.Println(errors.Is(err, tmux.ErrSnapshotNotFound))
+	fmt.Println(errors.Is(err, tmux.ErrNotFound))
 	// Output: true
 }
 
@@ -1433,9 +1496,9 @@ func ExampleServer_WaitFor_paneCompletion() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 
@@ -1474,9 +1537,9 @@ func ExamplePoll() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 	command := "printf 'build ready\\n'"
@@ -1539,9 +1602,9 @@ func ExampleControlClient_NextNotification() {
 		fmt.Println("create window:", err)
 		return
 	}
-	pane, ok, err := window.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := window.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 
@@ -1597,9 +1660,9 @@ func ExamplePane_CaptureToFile() {
 		return
 	}
 	defer func() { _ = connection.Close() }()
-	pane, ok, err := connection.Session().ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := connection.Session().ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 
@@ -1679,9 +1742,9 @@ func ExamplePane_OpenObservation() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 
@@ -1824,9 +1887,9 @@ func ExamplePane_Writer() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 	observation, err := pane.OpenObservation(ctx)
@@ -1859,6 +1922,53 @@ func ExamplePane_Writer() {
 	// two
 }
 
+func ExamplePaneObservation_WaitFor() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-observation-waitfor",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "wait", Command: "sh"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
+		return
+	}
+	// Open the wait before typing, so output between the two is not missed.
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		fmt.Println("open observation:", err)
+		return
+	}
+	defer func() { _ = observation.Close() }()
+
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'build ready\\n'"); err != nil {
+		fmt.Println("write:", err)
+		return
+	}
+	// tmux wakes the wait as the pane writes; nothing polls. The shell echoes
+	// the command first, so match the line the command prints, not its text.
+	text, err := observation.WaitFor(ctx, func(text string) bool {
+		return strings.Contains(text, "build ready\n")
+	})
+	if err != nil {
+		fmt.Println("wait for output:", err)
+		return
+	}
+	fmt.Println(strings.Contains(text.Text, "build ready"))
+	// Output: true
+}
+
 func ExamplePaneObservation_Reader() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
@@ -1876,9 +1986,9 @@ func ExamplePaneObservation_Reader() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 	observation, err := pane.OpenObservation(ctx)
@@ -1916,9 +2026,9 @@ func ExamplePaneObservation_Notifications() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 	observation, err := pane.OpenObservation(ctx)
@@ -2121,9 +2231,9 @@ func ExamplePane_CaptureTo() {
 		fmt.Println("create session:", err)
 		return
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		fmt.Println("resolve pane:", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		fmt.Println("resolve pane:", err)
 		return
 	}
 	command := "printf 'captured\\n'"
@@ -2196,4 +2306,77 @@ func ExampleRunning_StreamTo() {
 	}
 	fmt.Println(strings.TrimSpace(printed.String()), result.Status)
 	// Output: streaming 0
+}
+
+func ExampleErrNotFound() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-notfound",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "project"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{})
+	if err != nil {
+		fmt.Println("create window:", err)
+		return
+	}
+	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{})
+	if err != nil {
+		fmt.Println("split pane:", err)
+		return
+	}
+	if err := pane.Kill(ctx); err != nil {
+		fmt.Println("kill pane:", err)
+		return
+	}
+
+	// A lookup that found nothing and a command tmux refused for a target
+	// that is gone are the same condition, so one check covers both.
+	_, lookupErr := server.Pane(ctx, tmux.PaneID("%999999"))
+	commandErr := pane.Kill(ctx)
+	fmt.Println(errors.Is(lookupErr, tmux.ErrNotFound), errors.Is(commandErr, tmux.ErrNotFound))
+	// Output: true true
+}
+
+func ExampleCommandObserver() {
+	var commands []string
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		// A socket of this example's own, so it never reaches a tmux the
+		// reader happens to be running.
+		SocketName: "libtmux-go-example-observer",
+		CommandObserver: func(trace tmux.CommandTrace) {
+			commands = append(commands, trace.Subcommand+" over "+trace.Transport.String())
+		},
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	// The observer sees the command whether or not tmux liked it.
+	_, _ = server.Cmd(context.Background(), "list-sessions")
+	fmt.Println(commands[0])
+	// Output: list-sessions over process
+}
+
+func ExamplePane_MarshalJSON() {
+	// A record encodes its identity and what tmux said when it was
+	// materialized. The zero record has neither, which is what makes the
+	// shape readable here without a tmux.
+	encoded, err := json.Marshal(tmux.Pane{})
+	if err != nil {
+		fmt.Println("marshal:", err)
+		return
+	}
+	fmt.Println(string(encoded))
+	// Output: {"id":"","sessionId":"","windowId":"","windowIndex":0,"index":0,"formats":{}}
 }

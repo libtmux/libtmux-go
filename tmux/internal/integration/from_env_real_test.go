@@ -78,8 +78,8 @@ func TestPaneFromEnvReportsMissingPaneOnLiveServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_, err := tmux.PaneFromEnv(ctx, env)
-	if !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("PaneFromEnv() error = %v, want ErrSnapshotNotFound", err)
+	if !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("PaneFromEnv() error = %v, want ErrNotFound", err)
 	}
 	if errors.Is(err, tmux.ErrCommand) {
 		t.Fatalf("PaneFromEnv() error = %v, live-server absence must not be ErrCommand", err)

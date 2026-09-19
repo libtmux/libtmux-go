@@ -112,7 +112,7 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window options",
-			want: []string{"show-options", "-t", "$7:3", "-w", "-A"},
+			want: []string{"show-options", "-t", "@8", "-w", "-A"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				_, err := window.Options(context.Background())
 				return err
@@ -120,7 +120,7 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "pane options",
-			want: []string{"show-options", "-t", "$7:3.%9", "-p", "-A"},
+			want: []string{"show-options", "-t", "$7:.%9", "-p", "-A"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				_, err := pane.Options(context.Background())
 				return err
@@ -160,7 +160,7 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window raw option",
-			want: []string{"show-options", "-t", "$7:3", "-w", "-q", "-v", "--", "@custom"},
+			want: []string{"show-options", "-t", "@8", "-w", "-q", "-v", "--", "@custom"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				_, _, err := window.RawOption(context.Background(), "@custom")
 				return err
@@ -168,7 +168,7 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "pane raw option",
-			want: []string{"show-options", "-t", "$7:3.%9", "-p", "-q", "-v", "--", "@custom"},
+			want: []string{"show-options", "-t", "$7:.%9", "-p", "-q", "-v", "--", "@custom"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				_, _, err := pane.RawOption(context.Background(), "@custom")
 				return err
@@ -190,14 +190,14 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window set option",
-			want: []string{"set-option", "-t", "$7:3", "-w", "-F", "-o", "-q", "--", "@custom", "value"},
+			want: []string{"set-option", "-t", "$7:@8", "-w", "-F", "-o", "-q", "--", "@custom", "value"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.SetOption(context.Background(), "@custom", "value", allSetOptionOptions())
 			},
 		},
 		{
 			name: "pane set option",
-			want: []string{"set-option", "-t", "$7:3.%9", "-p", "-F", "-o", "-q", "--", "@custom", "value"},
+			want: []string{"set-option", "-t", "$7:.%9", "-p", "-F", "-o", "-q", "--", "@custom", "value"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.SetOption(context.Background(), "@custom", "value", allSetOptionOptions())
 			},
@@ -218,14 +218,14 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window append option",
-			want: []string{"set-option", "-t", "$7:3", "-w", "-a", "-F", "-o", "-q", "--", "@custom", "value"},
+			want: []string{"set-option", "-t", "$7:@8", "-w", "-a", "-F", "-o", "-q", "--", "@custom", "value"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.AppendOption(context.Background(), "@custom", "value", allSetOptionOptions())
 			},
 		},
 		{
 			name: "pane append option",
-			want: []string{"set-option", "-t", "$7:3.%9", "-p", "-a", "-F", "-o", "-q", "--", "@custom", "value"},
+			want: []string{"set-option", "-t", "$7:.%9", "-p", "-a", "-F", "-o", "-q", "--", "@custom", "value"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.AppendOption(context.Background(), "@custom", "value", allSetOptionOptions())
 			},
@@ -246,7 +246,7 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "window unset panes",
-			want: []string{"set-option", "-t", "$7:3", "-w", "-U", "-q", "--", "window-style"},
+			want: []string{"set-option", "-t", "@8", "-w", "-U", "-q", "--", "window-style"},
 			run: func(_ Server, _ Session, window Window, _ Pane) error {
 				return window.UnsetOption(
 					context.Background(),
@@ -257,7 +257,7 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 		},
 		{
 			name: "pane unset option",
-			want: []string{"set-option", "-t", "$7:3.%9", "-p", "-u", "-q", "--", "@custom"},
+			want: []string{"set-option", "-t", "$7:.%9", "-p", "-u", "-q", "--", "@custom"},
 			run: func(_ Server, _ Session, _ Window, pane Pane) error {
 				return pane.UnsetOption(context.Background(), "@custom", UnsetOptionOptions{Quiet: true})
 			},
@@ -515,8 +515,8 @@ func TestOptionMutationPreflightQueriesVersionOnlyWhenScopeRequiresIt(t *testing
 		requests := runner.recordedRequests()
 		want := [][]string{
 			{"-V"},
-			{"set-option", "-t", "$7:3.%9", "-p", "--", "pane-active-border-style", "fg=red"},
-			{"set-option", "-t", "$7:3.%9", "-p", "-a", "--", "pane-active-border-style", ",bold"},
+			{"set-option", "-t", "$7:.%9", "-p", "--", "pane-active-border-style", "fg=red"},
+			{"set-option", "-t", "$7:.%9", "-p", "-a", "--", "pane-active-border-style", ",bold"},
 		}
 		if len(requests) != len(want) {
 			t.Fatalf("versioned option requests = %#v, want %#v", requests, want)
@@ -1248,10 +1248,10 @@ func TestTypedScalarOptionSettersEncodeEveryValueKindAndScope(t *testing.T) {
 		{name: "session bool", want: []string{"set-option", "-t", "$7", "--", "mouse", "on"}, run: func(_ Server, session Session, _ Window, _ Pane) error {
 			return session.SetMouse(context.Background(), true)
 		}},
-		{name: "window string", want: []string{"set-option", "-t", "$7:3", "-w", "--", "pane-border-format", `#{pane_id}\;`}, run: func(_ Server, _ Session, window Window, _ Pane) error {
+		{name: "window string", want: []string{"set-option", "-t", "@8", "-w", "--", "pane-border-format", `#{pane_id}\;`}, run: func(_ Server, _ Session, window Window, _ Pane) error {
 			return window.SetPaneBorderFormat(context.Background(), "#{pane_id};")
 		}},
-		{name: "pane bool", want: []string{"set-option", "-t", "$7:3.%9", "-p", "--", "synchronize-panes", "off"}, run: func(_ Server, _ Session, _ Window, pane Pane) error {
+		{name: "pane bool", want: []string{"set-option", "-t", "$7:.%9", "-p", "--", "synchronize-panes", "off"}, run: func(_ Server, _ Session, _ Window, pane Pane) error {
 			return pane.SetSynchronizePanes(context.Background(), false)
 		}},
 		{name: "global session string", want: []string{"set-option", "-g", "--", "status-left", `private\;`}, run: func(server Server, _ Session, _ Window, _ Pane) error {
@@ -1343,9 +1343,9 @@ func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 			versionProbe: true,
 			want: [][]string{
 				{"-V"},
-				{"set-option", "-t", "$7:3", "-w", "--", "pane-colours", ""},
-				{"set-option", "-t", "$7:3", "-w", "--", "pane-colours[0]", ""},
-				{"set-option", "-t", "$7:3", "-w", "--", "pane-colours[4]", `trailing\;`},
+				{"set-option", "-t", "@8", "-w", "--", "pane-colours", ""},
+				{"set-option", "-t", "@8", "-w", "--", "pane-colours[0]", ""},
+				{"set-option", "-t", "@8", "-w", "--", "pane-colours[4]", `trailing\;`},
 			},
 			run: func(_ Server, _ Session, window Window, _ Pane) (SetArrayResult, error) {
 				return window.SetPaneColours(context.Background(), values)
@@ -1356,9 +1356,9 @@ func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 			versionProbe: true,
 			want: [][]string{
 				{"-V"},
-				{"set-option", "-t", "$7:3.%9", "-p", "--", "pane-colours", ""},
-				{"set-option", "-t", "$7:3.%9", "-p", "--", "pane-colours[0]", ""},
-				{"set-option", "-t", "$7:3.%9", "-p", "--", "pane-colours[4]", `trailing\;`},
+				{"set-option", "-t", "$7:.%9", "-p", "--", "pane-colours", ""},
+				{"set-option", "-t", "$7:.%9", "-p", "--", "pane-colours[0]", ""},
+				{"set-option", "-t", "$7:.%9", "-p", "--", "pane-colours[4]", `trailing\;`},
 			},
 			run: func(_ Server, _ Session, _ Window, pane Pane) (SetArrayResult, error) {
 				return pane.SetPaneColours(context.Background(), values)
@@ -1754,7 +1754,7 @@ func (r *mutatingSparseOptionRunner) Run(_ context.Context, request tmuxcmd.Requ
 }
 
 func (r *mutatingSparseOptionRunner) recordedRequests() []tmuxcmd.Request {
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }
 
 func TestTypedChoiceSetterRejectsValuesWithoutDisclosureOrExecution(t *testing.T) {

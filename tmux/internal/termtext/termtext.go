@@ -1,31 +1,41 @@
-package mcp
+// Package termtext turns the bytes a terminal program writes into text a
+// match can read.
+package termtext
 
 import (
 	"unicode"
 	"unicode/utf8"
 )
 
-type terminalTextState uint8
+type parseState uint8
 
 const (
-	terminalTextGround terminalTextState = iota
-	terminalTextEscape
-	terminalTextEscapeIntermediate
-	terminalTextCSI
-	terminalTextOSC
-	terminalTextOSCEscape
-	terminalTextControlString
-	terminalTextControlStringEscape
+	stateGround parseState = iota
+	stateEscape
+	stateEscapeIntermediate
+	stateCSI
+	stateOSC
+	stateOSCEscape
+	stateControlString
+	stateControlStringEscape
 )
 
-type terminalTextNormalizer struct {
-	state          terminalTextState
+// Normalizer converts a terminal byte stream to plain text, chunk by chunk.
+// Escape and control sequences are dropped, UTF-8 split across chunks is
+// joined, and a carriage return or backspace that would overwrite text starts
+// a new line instead, so nothing a program wrote is hidden from a match. The
+// zero value is ready to use.
+type Normalizer struct {
+	state          parseState
 	pendingUTF8    [utf8.UTFMax]byte
 	pendingUTF8Len int
 	afterCR        bool
 }
 
-func (n *terminalTextNormalizer) appendChunk(dst, chunk []byte) []byte {
+// AppendChunk appends chunk's text to dst and returns the extended slice. A
+// sequence or character that chunk ends partway through is completed by the
+// next call.
+func (n *Normalizer) AppendChunk(dst, chunk []byte) []byte {
 	for n.pendingUTF8Len > 0 {
 		for !utf8.FullRune(n.pendingUTF8[:n.pendingUTF8Len]) && len(chunk) > 0 {
 			n.pendingUTF8[n.pendingUTF8Len] = chunk[0]
@@ -66,7 +76,7 @@ func (n *terminalTextNormalizer) appendChunk(dst, chunk []byte) []byte {
 	return dst
 }
 
-func (n *terminalTextNormalizer) appendByte(dst []byte, value byte) []byte {
+func (n *Normalizer) appendByte(dst []byte, value byte) []byte {
 	if value >= 0x80 {
 		if value <= 0x9f {
 			n.appendC1(rune(value))
@@ -75,73 +85,73 @@ func (n *terminalTextNormalizer) appendByte(dst []byte, value byte) []byte {
 	}
 
 	switch n.state {
-	case terminalTextGround:
-	case terminalTextEscape:
+	case stateGround:
+	case stateEscape:
 		switch {
 		case value == 0x1b:
 		case value == '[':
-			n.state = terminalTextCSI
+			n.state = stateCSI
 		case value == ']':
-			n.state = terminalTextOSC
+			n.state = stateOSC
 		case value == 'P', value == 'X', value == '^', value == '_':
-			n.state = terminalTextControlString
+			n.state = stateControlString
 		case value >= 0x20 && value <= 0x2f:
-			n.state = terminalTextEscapeIntermediate
+			n.state = stateEscapeIntermediate
 		case value >= 0x30 && value <= 0x7e,
 			value == 0x18, value == 0x1a:
-			n.state = terminalTextGround
+			n.state = stateGround
 		}
 		return dst
-	case terminalTextEscapeIntermediate:
+	case stateEscapeIntermediate:
 		switch {
 		case value == 0x1b:
-			n.state = terminalTextEscape
+			n.state = stateEscape
 		case value >= 0x30 && value <= 0x7e,
 			value == 0x18, value == 0x1a:
-			n.state = terminalTextGround
+			n.state = stateGround
 		}
 		return dst
-	case terminalTextCSI:
+	case stateCSI:
 		switch {
 		case value == 0x1b:
-			n.state = terminalTextEscape
+			n.state = stateEscape
 		case value >= 0x40 && value <= 0x7e,
 			value == 0x18, value == 0x1a:
-			n.state = terminalTextGround
+			n.state = stateGround
 		}
 		return dst
-	case terminalTextOSC:
+	case stateOSC:
 		switch value {
 		case 0x07, 0x18, 0x1a:
-			n.state = terminalTextGround
+			n.state = stateGround
 		case 0x1b:
-			n.state = terminalTextOSCEscape
+			n.state = stateOSCEscape
 		}
 		return dst
-	case terminalTextOSCEscape:
+	case stateOSCEscape:
 		switch value {
 		case 0x07, 0x18, 0x1a, '\\':
-			n.state = terminalTextGround
+			n.state = stateGround
 		case 0x1b:
 		default:
-			n.state = terminalTextOSC
+			n.state = stateOSC
 		}
 		return dst
-	case terminalTextControlString:
+	case stateControlString:
 		switch value {
 		case 0x18, 0x1a:
-			n.state = terminalTextGround
+			n.state = stateGround
 		case 0x1b:
-			n.state = terminalTextControlStringEscape
+			n.state = stateControlStringEscape
 		}
 		return dst
-	case terminalTextControlStringEscape:
+	case stateControlStringEscape:
 		switch value {
 		case 0x18, 0x1a, '\\':
-			n.state = terminalTextGround
+			n.state = stateGround
 		case 0x1b:
 		default:
-			n.state = terminalTextControlString
+			n.state = stateControlString
 		}
 		return dst
 	}
@@ -163,7 +173,7 @@ func (n *terminalTextNormalizer) appendByte(dst []byte, value byte) []byte {
 		n.afterCR = false
 		return append(dst, value)
 	case 0x1b:
-		n.state = terminalTextEscape
+		n.state = stateEscape
 		return dst
 	}
 	if value >= 0x20 && value < 0x7f {
@@ -173,25 +183,25 @@ func (n *terminalTextNormalizer) appendByte(dst []byte, value byte) []byte {
 	return dst
 }
 
-func (n *terminalTextNormalizer) appendRune(dst []byte, decoded rune, encoded []byte) []byte {
+func (n *Normalizer) appendRune(dst []byte, decoded rune, encoded []byte) []byte {
 	if decoded >= 0x80 && decoded <= 0x9f {
 		n.appendC1(decoded)
 		return dst
 	}
 	switch n.state {
-	case terminalTextGround, terminalTextEscape,
-		terminalTextEscapeIntermediate, terminalTextCSI:
-	case terminalTextOSCEscape:
-		n.state = terminalTextOSC
+	case stateGround, stateEscape,
+		stateEscapeIntermediate, stateCSI:
+	case stateOSCEscape:
+		n.state = stateOSC
 		return dst
-	case terminalTextControlStringEscape:
-		n.state = terminalTextControlString
+	case stateControlStringEscape:
+		n.state = stateControlString
 		return dst
-	case terminalTextOSC, terminalTextControlString:
+	case stateOSC, stateControlString:
 		return dst
 	}
-	if n.state != terminalTextGround {
-		n.state = terminalTextGround
+	if n.state != stateGround {
+		n.state = stateGround
 	}
 	if unicode.IsPrint(decoded) {
 		n.afterCR = false
@@ -200,32 +210,32 @@ func (n *terminalTextNormalizer) appendRune(dst []byte, decoded rune, encoded []
 	return dst
 }
 
-func (n *terminalTextNormalizer) appendC1(value rune) {
+func (n *Normalizer) appendC1(value rune) {
 	if n.inControlString() {
 		if value == 0x9c {
-			n.state = terminalTextGround
-		} else if n.state == terminalTextOSCEscape {
-			n.state = terminalTextOSC
-		} else if n.state == terminalTextControlStringEscape {
-			n.state = terminalTextControlString
+			n.state = stateGround
+		} else if n.state == stateOSCEscape {
+			n.state = stateOSC
+		} else if n.state == stateControlStringEscape {
+			n.state = stateControlString
 		}
 		return
 	}
 	switch value {
 	case 0x9b:
-		n.state = terminalTextCSI
+		n.state = stateCSI
 	case 0x9d:
-		n.state = terminalTextOSC
+		n.state = stateOSC
 	case 0x90, 0x98, 0x9e, 0x9f:
-		n.state = terminalTextControlString
+		n.state = stateControlString
 	default:
-		n.state = terminalTextGround
+		n.state = stateGround
 	}
 }
 
-func (n *terminalTextNormalizer) inControlString() bool {
-	return n.state == terminalTextOSC ||
-		n.state == terminalTextOSCEscape ||
-		n.state == terminalTextControlString ||
-		n.state == terminalTextControlStringEscape
+func (n *Normalizer) inControlString() bool {
+	return n.state == stateOSC ||
+		n.state == stateOSCEscape ||
+		n.state == stateControlString ||
+		n.state == stateControlStringEscape
 }

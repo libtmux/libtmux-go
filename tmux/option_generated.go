@@ -2,7 +2,10 @@
 
 package tmux
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // ActivityAction is a typed value for the "activity-action" tmux option. Its zero value is invalid.
 type ActivityAction string
@@ -1819,7 +1822,7 @@ type ServerOptionValues struct {
 	defaultClientCommand        OptionValue[string]
 	defaultTerminal             OptionValue[string]
 	editor                      OptionValue[string]
-	escapeTime                  OptionValue[int64]
+	escapeTime                  OptionValue[time.Duration]
 	exitEmpty                   OptionValue[bool]
 	exitUnattached              OptionValue[bool]
 	extendedKeys                OptionValue[ExtendedKeys]
@@ -1829,7 +1832,7 @@ type ServerOptionValues struct {
 	historyFile                 OptionValue[string]
 	inputBufferSize             OptionValue[int64]
 	messageLimit                OptionValue[int64]
-	prefixTimeout               OptionValue[int64]
+	prefixTimeout               OptionValue[time.Duration]
 	promptHistoryLimit          OptionValue[int64]
 	setClipboard                OptionValue[SetClipboard]
 	terminalFeatures            OptionValue[SparseArray[string]]
@@ -1874,9 +1877,9 @@ func (v ServerOptionValues) DefaultTerminal() OptionValue[string] { return v.def
 // Available as STRING since tmux 3.2a; set it with [Server.SetEditor].
 func (v ServerOptionValues) Editor() OptionValue[string] { return v.editor }
 
-// EscapeTime returns materialized "escape-time" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// EscapeTime returns materialized "escape-time" as [OptionValue] with value type OptionValue[time.Duration] from server option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Server.SetEscapeTime].
-func (v ServerOptionValues) EscapeTime() OptionValue[int64] { return v.escapeTime }
+func (v ServerOptionValues) EscapeTime() OptionValue[time.Duration] { return v.escapeTime }
 
 // ExitEmpty returns materialized "exit-empty" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
 // Available as FLAG since tmux 3.2a; set it with [Server.SetExitEmpty].
@@ -1916,9 +1919,9 @@ func (v ServerOptionValues) InputBufferSize() OptionValue[int64] { return v.inpu
 // Available as NUMBER since tmux 3.2a; set it with [Server.SetMessageLimit].
 func (v ServerOptionValues) MessageLimit() OptionValue[int64] { return v.messageLimit }
 
-// PrefixTimeout returns materialized "prefix-timeout" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
+// PrefixTimeout returns materialized "prefix-timeout" as [OptionValue] with value type OptionValue[time.Duration] from server option values; it does not query tmux.
 // Available as NUMBER since tmux 3.5; set it with [Server.SetPrefixTimeout].
-func (v ServerOptionValues) PrefixTimeout() OptionValue[int64] { return v.prefixTimeout }
+func (v ServerOptionValues) PrefixTimeout() OptionValue[time.Duration] { return v.prefixTimeout }
 
 // PromptHistoryLimit returns materialized "prompt-history-limit" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
 // Available as NUMBER since tmux 3.3; set it with [Server.SetPromptHistoryLimit].
@@ -1974,7 +1977,7 @@ func newServerOptionValues(values []decodedOptionValue) ServerOptionValues {
 		case "editor":
 			result.editor = optionValueFromDecoded(value.stringValue, value.origin)
 		case "escape-time":
-			result.escapeTime = optionValueFromDecoded(value.int64Value, value.origin)
+			result.escapeTime = optionValueFromDecoded(time.Duration(value.int64Value)*time.Millisecond, value.origin)
 		case "exit-empty":
 			result.exitEmpty = optionValueFromDecoded(value.boolValue, value.origin)
 		case "exit-unattached":
@@ -1994,7 +1997,7 @@ func newServerOptionValues(values []decodedOptionValue) ServerOptionValues {
 		case "message-limit":
 			result.messageLimit = optionValueFromDecoded(value.int64Value, value.origin)
 		case "prefix-timeout":
-			result.prefixTimeout = optionValueFromDecoded(value.int64Value, value.origin)
+			result.prefixTimeout = optionValueFromDecoded(time.Duration(value.int64Value)*time.Millisecond, value.origin)
 		case "prompt-history-limit":
 			result.promptHistoryLimit = optionValueFromDecoded(value.int64Value, value.origin)
 		case "set-clipboard":
@@ -2017,7 +2020,7 @@ func newServerOptionValues(values []decodedOptionValue) ServerOptionValues {
 // Use [Session.RawOption] or [GlobalSessionScope.RawOption] for caller-named or undecoded values.
 type SessionOptionValues struct {
 	activityAction           OptionValue[ActivityAction]
-	assumePasteTime          OptionValue[int64]
+	assumePasteTime          OptionValue[time.Duration]
 	baseIndex                OptionValue[int64]
 	bellAction               OptionValue[BellAction]
 	defaultCommand           OptionValue[string]
@@ -2027,13 +2030,13 @@ type SessionOptionValues struct {
 	detachOnDestroy          OptionValue[DetachOnDestroy]
 	displayPanesActiveColour OptionValue[string]
 	displayPanesColour       OptionValue[string]
-	displayPanesTime         OptionValue[int64]
-	displayTime              OptionValue[int64]
+	displayPanesTime         OptionValue[time.Duration]
+	displayTime              OptionValue[time.Duration]
 	focusFollowsMouse        OptionValue[bool]
 	historyLimit             OptionValue[int64]
-	initialRepeatTime        OptionValue[int64]
+	initialRepeatTime        OptionValue[time.Duration]
 	keyTable                 OptionValue[string]
-	lockAfterTime            OptionValue[int64]
+	lockAfterTime            OptionValue[time.Duration]
 	lockCommand              OptionValue[string]
 	messageCommandStyle      OptionValue[string]
 	messageFormat            OptionValue[string]
@@ -2046,7 +2049,7 @@ type SessionOptionValues struct {
 	promptCursorColour       OptionValue[string]
 	promptCursorStyle        OptionValue[PromptCursorStyle]
 	renumberWindows          OptionValue[bool]
-	repeatTime               OptionValue[int64]
+	repeatTime               OptionValue[time.Duration]
 	setTitles                OptionValue[bool]
 	setTitlesString          OptionValue[string]
 	silenceAction            OptionValue[SilenceAction]
@@ -2054,7 +2057,7 @@ type SessionOptionValues struct {
 	statusBG                 OptionValue[string]
 	statusFG                 OptionValue[string]
 	statusFormat             OptionValue[SparseArray[string]]
-	statusInterval           OptionValue[int64]
+	statusInterval           OptionValue[time.Duration]
 	statusJustify            OptionValue[StatusJustify]
 	statusKeys               OptionValue[StatusKeys]
 	statusLeft               OptionValue[string]
@@ -2076,9 +2079,9 @@ type SessionOptionValues struct {
 // Available as CHOICE since tmux 3.2a (choices: "none", "any", "current", "other"); set it with [Session.SetActivityAction] or [GlobalSessionScope.SetActivityAction].
 func (v SessionOptionValues) ActivityAction() OptionValue[ActivityAction] { return v.activityAction }
 
-// AssumePasteTime returns materialized "assume-paste-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// AssumePasteTime returns materialized "assume-paste-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetAssumePasteTime] or [GlobalSessionScope.SetAssumePasteTime].
-func (v SessionOptionValues) AssumePasteTime() OptionValue[int64] { return v.assumePasteTime }
+func (v SessionOptionValues) AssumePasteTime() OptionValue[time.Duration] { return v.assumePasteTime }
 
 // BaseIndex returns materialized "base-index" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetBaseIndex] or [GlobalSessionScope.SetBaseIndex].
@@ -2120,13 +2123,13 @@ func (v SessionOptionValues) DisplayPanesActiveColour() OptionValue[string] {
 // Available as COLOUR since tmux 3.2a; set it with [Session.SetDisplayPanesColour] or [GlobalSessionScope.SetDisplayPanesColour].
 func (v SessionOptionValues) DisplayPanesColour() OptionValue[string] { return v.displayPanesColour }
 
-// DisplayPanesTime returns materialized "display-panes-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// DisplayPanesTime returns materialized "display-panes-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetDisplayPanesTime] or [GlobalSessionScope.SetDisplayPanesTime].
-func (v SessionOptionValues) DisplayPanesTime() OptionValue[int64] { return v.displayPanesTime }
+func (v SessionOptionValues) DisplayPanesTime() OptionValue[time.Duration] { return v.displayPanesTime }
 
-// DisplayTime returns materialized "display-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// DisplayTime returns materialized "display-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetDisplayTime] or [GlobalSessionScope.SetDisplayTime].
-func (v SessionOptionValues) DisplayTime() OptionValue[int64] { return v.displayTime }
+func (v SessionOptionValues) DisplayTime() OptionValue[time.Duration] { return v.displayTime }
 
 // FocusFollowsMouse returns materialized "focus-follows-mouse" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
 // Available as FLAG since tmux 3.7; set it with [Session.SetFocusFollowsMouse] or [GlobalSessionScope.SetFocusFollowsMouse].
@@ -2136,17 +2139,19 @@ func (v SessionOptionValues) FocusFollowsMouse() OptionValue[bool] { return v.fo
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetHistoryLimit] or [GlobalSessionScope.SetHistoryLimit].
 func (v SessionOptionValues) HistoryLimit() OptionValue[int64] { return v.historyLimit }
 
-// InitialRepeatTime returns materialized "initial-repeat-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// InitialRepeatTime returns materialized "initial-repeat-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.6; set it with [Session.SetInitialRepeatTime] or [GlobalSessionScope.SetInitialRepeatTime].
-func (v SessionOptionValues) InitialRepeatTime() OptionValue[int64] { return v.initialRepeatTime }
+func (v SessionOptionValues) InitialRepeatTime() OptionValue[time.Duration] {
+	return v.initialRepeatTime
+}
 
 // KeyTable returns materialized "key-table" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
 // Available as STRING since tmux 3.2a; set it with [Session.SetKeyTable] or [GlobalSessionScope.SetKeyTable].
 func (v SessionOptionValues) KeyTable() OptionValue[string] { return v.keyTable }
 
-// LockAfterTime returns materialized "lock-after-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// LockAfterTime returns materialized "lock-after-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetLockAfterTime] or [GlobalSessionScope.SetLockAfterTime].
-func (v SessionOptionValues) LockAfterTime() OptionValue[int64] { return v.lockAfterTime }
+func (v SessionOptionValues) LockAfterTime() OptionValue[time.Duration] { return v.lockAfterTime }
 
 // LockCommand returns materialized "lock-command" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
 // Available as STRING since tmux 3.2a; set it with [Session.SetLockCommand] or [GlobalSessionScope.SetLockCommand].
@@ -2202,9 +2207,9 @@ func (v SessionOptionValues) PromptCursorStyle() OptionValue[PromptCursorStyle] 
 // Available as FLAG since tmux 3.2a; set it with [Session.SetRenumberWindows] or [GlobalSessionScope.SetRenumberWindows].
 func (v SessionOptionValues) RenumberWindows() OptionValue[bool] { return v.renumberWindows }
 
-// RepeatTime returns materialized "repeat-time" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// RepeatTime returns materialized "repeat-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetRepeatTime] or [GlobalSessionScope.SetRepeatTime].
-func (v SessionOptionValues) RepeatTime() OptionValue[int64] { return v.repeatTime }
+func (v SessionOptionValues) RepeatTime() OptionValue[time.Duration] { return v.repeatTime }
 
 // SetTitles returns materialized "set-titles" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
 // Available as FLAG since tmux 3.2a; set it with [Session.SetTitles] or [GlobalSessionScope.SetTitles].
@@ -2235,9 +2240,9 @@ func (v SessionOptionValues) StatusFG() OptionValue[string] { return v.statusFG 
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionOptionValues) StatusFormat() OptionValue[SparseArray[string]] { return v.statusFormat }
 
-// StatusInterval returns materialized "status-interval" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
+// StatusInterval returns materialized "status-interval" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
 // Available as NUMBER since tmux 3.2a; set it with [Session.SetStatusInterval] or [GlobalSessionScope.SetStatusInterval].
-func (v SessionOptionValues) StatusInterval() OptionValue[int64] { return v.statusInterval }
+func (v SessionOptionValues) StatusInterval() OptionValue[time.Duration] { return v.statusInterval }
 
 // StatusJustify returns materialized "status-justify" as [OptionValue] with value type OptionValue[StatusJustify] from session option values; it does not query tmux.
 // Available as CHOICE since tmux 3.2a (choices: "left", "centre", "right", "absolute-centre"); set it with [Session.SetStatusJustify] or [GlobalSessionScope.SetStatusJustify].
@@ -2312,7 +2317,7 @@ func newSessionOptionValues(values []decodedOptionValue) SessionOptionValues {
 		case "activity-action":
 			result.activityAction = optionValueFromDecoded(ActivityAction(value.stringValue), value.origin)
 		case "assume-paste-time":
-			result.assumePasteTime = optionValueFromDecoded(value.int64Value, value.origin)
+			result.assumePasteTime = optionValueFromDecoded(time.Duration(value.int64Value)*time.Millisecond, value.origin)
 		case "base-index":
 			result.baseIndex = optionValueFromDecoded(value.int64Value, value.origin)
 		case "bell-action":
@@ -2332,19 +2337,19 @@ func newSessionOptionValues(values []decodedOptionValue) SessionOptionValues {
 		case "display-panes-colour":
 			result.displayPanesColour = optionValueFromDecoded(value.stringValue, value.origin)
 		case "display-panes-time":
-			result.displayPanesTime = optionValueFromDecoded(value.int64Value, value.origin)
+			result.displayPanesTime = optionValueFromDecoded(time.Duration(value.int64Value)*time.Millisecond, value.origin)
 		case "display-time":
-			result.displayTime = optionValueFromDecoded(value.int64Value, value.origin)
+			result.displayTime = optionValueFromDecoded(time.Duration(value.int64Value)*time.Millisecond, value.origin)
 		case "focus-follows-mouse":
 			result.focusFollowsMouse = optionValueFromDecoded(value.boolValue, value.origin)
 		case "history-limit":
 			result.historyLimit = optionValueFromDecoded(value.int64Value, value.origin)
 		case "initial-repeat-time":
-			result.initialRepeatTime = optionValueFromDecoded(value.int64Value, value.origin)
+			result.initialRepeatTime = optionValueFromDecoded(time.Duration(value.int64Value)*time.Millisecond, value.origin)
 		case "key-table":
 			result.keyTable = optionValueFromDecoded(value.stringValue, value.origin)
 		case "lock-after-time":
-			result.lockAfterTime = optionValueFromDecoded(value.int64Value, value.origin)
+			result.lockAfterTime = optionValueFromDecoded(time.Duration(value.int64Value)*time.Second, value.origin)
 		case "lock-command":
 			result.lockCommand = optionValueFromDecoded(value.stringValue, value.origin)
 		case "message-command-style":
@@ -2370,7 +2375,7 @@ func newSessionOptionValues(values []decodedOptionValue) SessionOptionValues {
 		case "renumber-windows":
 			result.renumberWindows = optionValueFromDecoded(value.boolValue, value.origin)
 		case "repeat-time":
-			result.repeatTime = optionValueFromDecoded(value.int64Value, value.origin)
+			result.repeatTime = optionValueFromDecoded(time.Duration(value.int64Value)*time.Millisecond, value.origin)
 		case "set-titles":
 			result.setTitles = optionValueFromDecoded(value.boolValue, value.origin)
 		case "set-titles-string":
@@ -2386,7 +2391,7 @@ func newSessionOptionValues(values []decodedOptionValue) SessionOptionValues {
 		case "status-format":
 			result.statusFormat = optionValueFromDecoded(value.sparseStringValue, value.origin)
 		case "status-interval":
-			result.statusInterval = optionValueFromDecoded(value.int64Value, value.origin)
+			result.statusInterval = optionValueFromDecoded(time.Duration(value.int64Value)*time.Second, value.origin)
 		case "status-justify":
 			result.statusJustify = optionValueFromDecoded(StatusJustify(value.stringValue), value.origin)
 		case "status-keys":
@@ -4602,22 +4607,30 @@ func (p Pane) SetAlternateScreen(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "alternate-screen", encodeTypedOptionBool(value), false)
 }
 
-// SetAssumePasteTime stores the "assume-paste-time" session option as int64 (tmux 3.2a or later).
+// SetAssumePasteTime stores the "assume-paste-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.AssumePasteTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
-func (s Session) SetAssumePasteTime(ctx context.Context, value int64) error {
+func (s Session) SetAssumePasteTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
 		return err
 	}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("assume-paste-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encoded, false)
 }
 
-// SetAssumePasteTime stores the "assume-paste-time" session option as int64 (tmux 3.2a or later).
+// SetAssumePasteTime stores the "assume-paste-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.AssumePasteTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-func (s GlobalSessionScope) SetAssumePasteTime(ctx context.Context, value int64) error {
+func (s GlobalSessionScope) SetAssumePasteTime(ctx context.Context, value time.Duration) error {
 	server := s.server
 	scope := []string{"-g"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("assume-paste-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encoded, false)
 }
 
 // SetAutomaticRename stores the "automatic-rename" window option as bool (tmux 3.2a or later).
@@ -5122,40 +5135,56 @@ func (s GlobalSessionScope) SetDisplayPanesColour(ctx context.Context, value str
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-colour", value, false)
 }
 
-// SetDisplayPanesTime stores the "display-panes-time" session option as int64 (tmux 3.2a or later).
+// SetDisplayPanesTime stores the "display-panes-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.DisplayPanesTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
-func (s Session) SetDisplayPanesTime(ctx context.Context, value int64) error {
+func (s Session) SetDisplayPanesTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
 		return err
 	}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("display-panes-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encoded, false)
 }
 
-// SetDisplayPanesTime stores the "display-panes-time" session option as int64 (tmux 3.2a or later).
+// SetDisplayPanesTime stores the "display-panes-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.DisplayPanesTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-func (s GlobalSessionScope) SetDisplayPanesTime(ctx context.Context, value int64) error {
+func (s GlobalSessionScope) SetDisplayPanesTime(ctx context.Context, value time.Duration) error {
 	server := s.server
 	scope := []string{"-g"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("display-panes-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encoded, false)
 }
 
-// SetDisplayTime stores the "display-time" session option as int64 (tmux 3.2a or later).
+// SetDisplayTime stores the "display-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.DisplayTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
-func (s Session) SetDisplayTime(ctx context.Context, value int64) error {
+func (s Session) SetDisplayTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
 		return err
 	}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("display-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encoded, false)
 }
 
-// SetDisplayTime stores the "display-time" session option as int64 (tmux 3.2a or later).
+// SetDisplayTime stores the "display-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.DisplayTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-func (s GlobalSessionScope) SetDisplayTime(ctx context.Context, value int64) error {
+func (s GlobalSessionScope) SetDisplayTime(ctx context.Context, value time.Duration) error {
 	server := s.server
 	scope := []string{"-g"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("display-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encoded, false)
 }
 
 // SetEditor stores the "editor" server option as string (tmux 3.2a or later).
@@ -5166,12 +5195,16 @@ func (s Server) SetEditor(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "editor", value, false)
 }
 
-// SetEscapeTime stores the "escape-time" server option as int64 (tmux 3.2a or later).
+// SetEscapeTime stores the "escape-time" server option as time.Duration (tmux 3.2a or later).
 // Read it with [ServerOptionValues.EscapeTime] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
-func (s Server) SetEscapeTime(ctx context.Context, value int64) error {
+func (s Server) SetEscapeTime(ctx context.Context, value time.Duration) error {
 	server := s
 	scope := []string{"-s"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "escape-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("escape-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "escape-time", encoded, false)
 }
 
 // SetExitEmpty stores the "exit-empty" server option as bool (tmux 3.2a or later).
@@ -5284,22 +5317,30 @@ func (s GlobalSessionScope) SetHistoryLimit(ctx context.Context, value int64) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "history-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetInitialRepeatTime stores the "initial-repeat-time" session option as int64 (tmux 3.6 or later).
+// SetInitialRepeatTime stores the "initial-repeat-time" session option as time.Duration (tmux 3.6 or later).
 // Read it with [SessionOptionValues.InitialRepeatTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
-func (s Session) SetInitialRepeatTime(ctx context.Context, value int64) error {
+func (s Session) SetInitialRepeatTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
 		return err
 	}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "initial-repeat-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("initial-repeat-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "initial-repeat-time", encoded, false)
 }
 
-// SetInitialRepeatTime stores the "initial-repeat-time" session option as int64 (tmux 3.6 or later).
+// SetInitialRepeatTime stores the "initial-repeat-time" session option as time.Duration (tmux 3.6 or later).
 // Read it with [SessionOptionValues.InitialRepeatTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-func (s GlobalSessionScope) SetInitialRepeatTime(ctx context.Context, value int64) error {
+func (s GlobalSessionScope) SetInitialRepeatTime(ctx context.Context, value time.Duration) error {
 	server := s.server
 	scope := []string{"-g"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "initial-repeat-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("initial-repeat-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "initial-repeat-time", encoded, false)
 }
 
 // SetInputBufferSize stores the "input-buffer-size" server option as int64 (tmux 3.6 or later).
@@ -5328,22 +5369,30 @@ func (s GlobalSessionScope) SetKeyTable(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "key-table", value, false)
 }
 
-// SetLockAfterTime stores the "lock-after-time" session option as int64 (tmux 3.2a or later).
+// SetLockAfterTime stores the "lock-after-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.LockAfterTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
-func (s Session) SetLockAfterTime(ctx context.Context, value int64) error {
+func (s Session) SetLockAfterTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
 		return err
 	}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("lock-after-time", value, time.Second)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encoded, false)
 }
 
-// SetLockAfterTime stores the "lock-after-time" session option as int64 (tmux 3.2a or later).
+// SetLockAfterTime stores the "lock-after-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.LockAfterTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-func (s GlobalSessionScope) SetLockAfterTime(ctx context.Context, value int64) error {
+func (s GlobalSessionScope) SetLockAfterTime(ctx context.Context, value time.Duration) error {
 	server := s.server
 	scope := []string{"-g"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("lock-after-time", value, time.Second)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encoded, false)
 }
 
 // SetLockCommand stores the "lock-command" session option as string (tmux 3.2a or later).
@@ -6024,12 +6073,16 @@ func (s GlobalSessionScope) SetPrefix(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prefix", value, false)
 }
 
-// SetPrefixTimeout stores the "prefix-timeout" server option as int64 (tmux 3.5 or later).
+// SetPrefixTimeout stores the "prefix-timeout" server option as time.Duration (tmux 3.5 or later).
 // Read it with [ServerOptionValues.PrefixTimeout] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
-func (s Server) SetPrefixTimeout(ctx context.Context, value int64) error {
+func (s Server) SetPrefixTimeout(ctx context.Context, value time.Duration) error {
 	server := s
 	scope := []string{"-s"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "prefix-timeout", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("prefix-timeout", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "prefix-timeout", encoded, false)
 }
 
 // SetPrefix2 stores the "prefix2" session option as string (tmux 3.2a or later).
@@ -6186,22 +6239,30 @@ func (s GlobalSessionScope) SetRenumberWindows(ctx context.Context, value bool) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "renumber-windows", encodeTypedOptionBool(value), false)
 }
 
-// SetRepeatTime stores the "repeat-time" session option as int64 (tmux 3.2a or later).
+// SetRepeatTime stores the "repeat-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.RepeatTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
-func (s Session) SetRepeatTime(ctx context.Context, value int64) error {
+func (s Session) SetRepeatTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
 		return err
 	}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("repeat-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encoded, false)
 }
 
-// SetRepeatTime stores the "repeat-time" session option as int64 (tmux 3.2a or later).
+// SetRepeatTime stores the "repeat-time" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.RepeatTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-func (s GlobalSessionScope) SetRepeatTime(ctx context.Context, value int64) error {
+func (s GlobalSessionScope) SetRepeatTime(ctx context.Context, value time.Duration) error {
 	server := s.server
 	scope := []string{"-g"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("repeat-time", value, time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encoded, false)
 }
 
 // SetScrollOnClear stores the "scroll-on-clear" window option as bool (tmux 3.3 or later).
@@ -6384,22 +6445,30 @@ func (s GlobalSessionScope) SetStatusFG(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-fg", value, false)
 }
 
-// SetStatusInterval stores the "status-interval" session option as int64 (tmux 3.2a or later).
+// SetStatusInterval stores the "status-interval" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.StatusInterval] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
-func (s Session) SetStatusInterval(ctx context.Context, value int64) error {
+func (s Session) SetStatusInterval(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
 	if err != nil {
 		return err
 	}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("status-interval", value, time.Second)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encoded, false)
 }
 
-// SetStatusInterval stores the "status-interval" session option as int64 (tmux 3.2a or later).
+// SetStatusInterval stores the "status-interval" session option as time.Duration (tmux 3.2a or later).
 // Read it with [SessionOptionValues.StatusInterval] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
-func (s GlobalSessionScope) SetStatusInterval(ctx context.Context, value int64) error {
+func (s GlobalSessionScope) SetStatusInterval(ctx context.Context, value time.Duration) error {
 	server := s.server
 	scope := []string{"-g"}
-	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encodeTypedOptionInt64(value), false)
+	encoded, err := encodeTypedOptionDuration("status-interval", value, time.Second)
+	if err != nil {
+		return err
+	}
+	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encoded, false)
 }
 
 // SetStatusJustify stores the "status-justify" session option as StatusJustify (tmux 3.2a or later).

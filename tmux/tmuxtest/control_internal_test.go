@@ -103,6 +103,7 @@ printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"
 		t.Fatalf("read proxy arguments: %v", err)
 	}
 	wantArguments := []string{
+		"-u",
 		"-2",
 		"-frelative.conf",
 		"-Lnamed",

@@ -689,6 +689,30 @@ func TestOptionTargetSentinelSeparatesAMissingWindowFromABadName(t *testing.T) {
 		t.Errorf("a missing target must not report an unknown option: %v", err)
 	}
 
+	// Linked into two sessions, the window's target once carried a session,
+	// and tmux sets a missing window's option on that session's current one.
+	shared, err := session.NewWindow(ctx, tmux.NewWindowRequest{})
+	if err != nil {
+		t.Fatalf("create shared window: %v", err)
+	}
+	other, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "targets-other"})
+	if err != nil {
+		t.Fatalf("create other session: %v", err)
+	}
+	if err := shared.Link(ctx, tmux.LinkWindowRequest{TargetSession: other.ID(), Detach: true}); err != nil {
+		t.Fatalf("link shared window: %v", err)
+	}
+	if shared, err = server.Window(ctx, shared.ID()); err != nil {
+		t.Fatalf("read linked window: %v", err)
+	}
+	if err := shared.Kill(ctx); err != nil {
+		t.Fatalf("kill shared window: %v", err)
+	}
+	err = shared.SetOption(ctx, "remain-on-exit", "on", tmux.SetOptionOptions{})
+	if !errors.Is(err, tmux.ErrOptionTarget) {
+		t.Errorf("setting an option on a killed linked window gave %v, want ErrOptionTarget", err)
+	}
+
 	live, err := session.NewWindow(ctx, tmux.NewWindowRequest{})
 	if err != nil {
 		t.Fatalf("create second window: %v", err)
@@ -699,5 +723,65 @@ func TestOptionTargetSentinelSeparatesAMissingWindowFromABadName(t *testing.T) {
 	}
 	if !errors.Is(err, tmux.ErrOption) {
 		t.Errorf("got %v, want an option error", err)
+	}
+}
+
+// tmux stores a time option as a whole number of its own unit, and which unit
+// that is differs per option. A caller who says 250ms means 250ms of whichever
+// one tmux keeps, and a duration tmux cannot hold is a mistake worth refusing
+// rather than truncating into one it can.
+//
+//libtmux:real-tmux
+func TestDurationOptionsRoundTripInTmuxsOwnUnits(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "durations"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if err := server.SetEscapeTime(ctx, 250*time.Millisecond); err != nil {
+		t.Fatalf("SetEscapeTime() error = %v", err)
+	}
+	if err := session.SetStatusInterval(ctx, 5*time.Second); err != nil {
+		t.Fatalf("SetStatusInterval() error = %v", err)
+	}
+
+	serverOptions, err := server.Options(ctx)
+	if err != nil {
+		t.Fatalf("Server.Options() error = %v", err)
+	}
+	if got, ok := serverOptions.EscapeTime().Get(); !ok || got != 250*time.Millisecond {
+		t.Errorf("EscapeTime() = (%v, %t), want 250ms", got, ok)
+	}
+	sessionOptions, err := session.Options(ctx)
+	if err != nil {
+		t.Fatalf("Session.Options() error = %v", err)
+	}
+	if got, ok := sessionOptions.StatusInterval().Get(); !ok || got != 5*time.Second {
+		t.Errorf("StatusInterval() = (%v, %t), want 5s", got, ok)
+	}
+	// tmux holds these as milliseconds and seconds, so what it was asked for
+	// is what it stored, not what a Duration happens to print as.
+	raw, _, err := server.RawOption(ctx, "escape-time")
+	if err != nil || raw != "250" {
+		t.Errorf("RawOption(escape-time) = (%q, %v), want tmux's own 250", raw, err)
+	}
+	raw, _, err = session.RawOption(ctx, "status-interval")
+	if err != nil || raw != "5" {
+		t.Errorf("RawOption(status-interval) = (%q, %v), want tmux's own 5", raw, err)
+	}
+
+	for name, set := range map[string]func() error{
+		"sub-millisecond": func() error { return server.SetEscapeTime(ctx, 1500*time.Microsecond) },
+		"sub-second":      func() error { return session.SetStatusInterval(ctx, 1500*time.Millisecond) },
+		"negative":        func() error { return server.SetEscapeTime(ctx, -time.Millisecond) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := set(); !errors.Is(err, tmux.ErrInvalidServerCommandRequest) {
+				t.Errorf("error = %v, want a refusal before tmux", err)
+			}
+		})
 	}
 }

@@ -145,6 +145,26 @@ func TestNewSessionConnectionRejectsBeforeStartingTmux(t *testing.T) {
 	}
 }
 
+// Without new-layouts, tmux hands a control client the classic
+// window_layout grammar on every version, which does not survive a
+// save-and-restore round trip on 3.8+ the way JSON does. The flag is
+// unconditional because it is a documented no-op below 3.8 - see
+// TestControlDialectAdaptsClientFlags, which exercises 3.2a through 3.7.
+func TestControlDialectAlwaysRequestsJSONLayouts(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"3.2a", "3.7c", "3.8", "3.9"} {
+		for _, profile := range []controlClientProfile{
+			controlCommands, controlNotificationsNoPaneOutput, controlNotificationsFull,
+		} {
+			dialect := controlDialect{version: mustParseVersion(t, version)}
+			if got := dialect.clientFlags(profile); !slices.Contains(got, "new-layouts") {
+				t.Fatalf("clientFlags(%v) at %s = %#v, want new-layouts", profile, version, got)
+			}
+		}
+	}
+}
+
 func TestControlDialectAdaptsClientFlags(t *testing.T) {
 	t.Parallel()
 
@@ -154,15 +174,15 @@ func TestControlDialectAdaptsClientFlags(t *testing.T) {
 		profile controlClientProfile
 		want    []string
 	}{
-		{name: "3.2a full notifications", version: "3.2a", profile: controlNotificationsFull},
-		{name: "3.2a notifications without pane output", version: "3.2a", profile: controlNotificationsNoPaneOutput, want: []string{"no-output"}},
-		{name: "3.2a commands", version: "3.2a", profile: controlCommands, want: []string{"no-output"}},
-		{name: "3.5 commands", version: "3.5", profile: controlCommands, want: []string{"no-output"}},
-		{name: "3.6 full notifications", version: "3.6", profile: controlNotificationsFull, want: []string{"no-detach-on-destroy"}},
-		{name: "3.6 notifications without pane output", version: "3.6", profile: controlNotificationsNoPaneOutput, want: []string{"no-output", "no-detach-on-destroy"}},
-		{name: "3.6 commands", version: "3.6", profile: controlCommands, want: []string{"no-output", "no-detach-on-destroy"}},
-		{name: "3.6 invalid profile", version: "3.6", profile: controlClientProfile(255), want: []string{"no-output", "no-detach-on-destroy"}},
-		{name: "3.7 commands", version: "3.7", profile: controlCommands, want: []string{"no-output", "no-detach-on-destroy"}},
+		{name: "3.2a full notifications", version: "3.2a", profile: controlNotificationsFull, want: []string{"new-layouts"}},
+		{name: "3.2a notifications without pane output", version: "3.2a", profile: controlNotificationsNoPaneOutput, want: []string{"no-output", "new-layouts"}},
+		{name: "3.2a commands", version: "3.2a", profile: controlCommands, want: []string{"no-output", "new-layouts"}},
+		{name: "3.5 commands", version: "3.5", profile: controlCommands, want: []string{"no-output", "new-layouts"}},
+		{name: "3.6 full notifications", version: "3.6", profile: controlNotificationsFull, want: []string{"no-detach-on-destroy", "new-layouts"}},
+		{name: "3.6 notifications without pane output", version: "3.6", profile: controlNotificationsNoPaneOutput, want: []string{"no-output", "no-detach-on-destroy", "new-layouts"}},
+		{name: "3.6 commands", version: "3.6", profile: controlCommands, want: []string{"no-output", "no-detach-on-destroy", "new-layouts"}},
+		{name: "3.6 invalid profile", version: "3.6", profile: controlClientProfile(255), want: []string{"no-output", "no-detach-on-destroy", "new-layouts"}},
+		{name: "3.7 commands", version: "3.7", profile: controlCommands, want: []string{"no-output", "no-detach-on-destroy", "new-layouts"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -182,9 +202,9 @@ func TestNewSessionConnectionArgumentsUseControlDialect(t *testing.T) {
 		version string
 		want    string
 	}{
-		{version: "3.2a", want: "-fno-output"},
-		{version: "3.5", want: "-fno-output"},
-		{version: "3.6", want: "-fno-output,no-detach-on-destroy"},
+		{version: "3.2a", want: "-fno-output,new-layouts"},
+		{version: "3.5", want: "-fno-output,new-layouts"},
+		{version: "3.6", want: "-fno-output,no-detach-on-destroy,new-layouts"},
 	} {
 		t.Run(test.version, func(t *testing.T) {
 			t.Parallel()

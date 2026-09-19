@@ -269,9 +269,9 @@ func TestCaptureShowsTheShellEchoBeforeTheOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("resolve pane: ok=%v err=%v", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
 	}
 
 	command := "sleep 600; printf 'pane ready\\n'"

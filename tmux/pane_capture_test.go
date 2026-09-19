@@ -92,7 +92,7 @@ func TestCapturePaneBuildsExactArguments(t *testing.T) {
 		t.Fatalf("version arguments = %#v, want -V", requests[0].Arguments)
 	}
 	want := []string{
-		"capture-pane", "-t", "$5:0.%7", "-p",
+		"capture-pane", "-t", "$5:.%7", "-p",
 		"-S", "-2", "-E", "-",
 		"-e", "-C", "-J", "-N", "-T", "-a", "-q", "-M", "-P", "-H", "-L", "-F",
 	}
@@ -132,7 +132,7 @@ func TestCapturePaneSkipsVersionProbeWithoutGatedFeatures(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one capture", requests)
 	}
 	want := []string{
-		"capture-pane", "-t", "$5:0.%7", "-p", "-S", "0", "-E", "1",
+		"capture-pane", "-t", "$5:.%7", "-p", "-S", "0", "-E", "1",
 		"-e", "-C", "-J", "-N", "-a", "-q", "-P",
 	}
 	if !slices.Equal(requests[0].Arguments, want) {
@@ -171,7 +171,7 @@ func TestCaptureBytesReturnsExactOwnedOutput(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one capture", requests)
 	}
 	wantArguments := []string{
-		"capture-pane", "-t", "$5:0.%7", "-p", "-S", "0", "-E", "1",
+		"capture-pane", "-t", "$5:.%7", "-p", "-S", "0", "-E", "1",
 	}
 	if !slices.Equal(requests[0].Arguments, wantArguments) {
 		t.Fatalf("capture arguments = %#v, want %#v", requests[0].Arguments, wantArguments)
@@ -323,7 +323,7 @@ func TestCapturePaneToBufferUsesStaticResultShape(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one capture", requests)
 	}
 	want := []string{
-		"capture-pane", "-t", "$5:0.%7", "-b", "saved-capture", "-S", "-", "-E", "4",
+		"capture-pane", "-t", "$5:.%7", "-b", "saved-capture", "-S", "-", "-E", "4",
 	}
 	if !slices.Equal(requests[0].Arguments, want) {
 		t.Fatalf("capture arguments = %#v, want %#v", requests[0].Arguments, want)
@@ -367,7 +367,7 @@ func TestCaptureToFileUsesOnlyCommandsThatPrintNothing(t *testing.T) {
 		t.Fatalf("capture buffer = %q, want a name owned by this package", buffer)
 	}
 	for index, want := range [][]string{
-		{"capture-pane", "-t", "$5:0.%7", "-b", buffer, "-S", "-"},
+		{"capture-pane", "-t", "$5:.%7", "-b", buffer, "-S", "-"},
 		{"save-buffer", "-b", buffer, "--", path},
 		{"delete-buffer", "-b", buffer},
 	} {
@@ -443,7 +443,7 @@ func TestCapturePaneToBufferRejectsEmptyNameBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestCapturePanePreservesCompletedRawFailures(t *testing.T) {
+func TestCapturePaneSurfacesCompletedRawFailures(t *testing.T) {
 	t.Parallel()
 
 	t.Run("printed", func(t *testing.T) {
@@ -451,16 +451,16 @@ func TestCapturePanePreservesCompletedRawFailures(t *testing.T) {
 
 		runner := &captureQueueRunner{responses: []captureResponse{{result: tmuxcmd.Result{
 			Stdout:   []string{"partial"},
-			Stderr:   []string{"capture failed"},
+			Stderr:   []string{"can't find pane: %4"},
 			ExitCode: 1,
 		}}}}
 		pane := newCaptureTestPane(runner, nil)
 		output, err := pane.Capture(context.Background(), CapturePaneRequest{})
-		if err != nil {
-			t.Fatalf("Capture() error = %v, want nil", err)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %4") {
+			t.Fatalf("Capture() error = %v, want a CommandError naming the target", err)
 		}
 		if !slices.Equal(output, []string{"partial"}) {
-			t.Fatalf("Capture() = %#v, want partial stdout", output)
+			t.Fatalf("Capture() = %#v, want any partial stdout alongside the error", output)
 		}
 	})
 
@@ -468,16 +468,17 @@ func TestCapturePanePreservesCompletedRawFailures(t *testing.T) {
 		t.Parallel()
 
 		runner := &captureQueueRunner{responses: []captureResponse{{result: tmuxcmd.Result{
-			Stderr:   []string{"capture failed"},
+			Stderr:   []string{"can't find pane: %4"},
 			ExitCode: 1,
 		}}}}
 		pane := newCaptureTestPane(runner, nil)
-		if err := pane.CaptureToBuffer(
+		err := pane.CaptureToBuffer(
 			context.Background(),
 			"failed-capture",
 			CapturePaneRequest{},
-		); err != nil {
-			t.Fatalf("CaptureToBuffer() error = %v, want nil", err)
+		)
+		if !errors.Is(err, ErrCommand) || !strings.Contains(err.Error(), "can't find pane: %4") {
+			t.Fatalf("CaptureToBuffer() error = %v, want a CommandError naming the target", err)
 		}
 	})
 }
@@ -558,7 +559,7 @@ func (r *captureQueueRunner) callCount() int {
 func (r *captureQueueRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }
 
 // newCaptureTestPane builds a pane on a server that omits a capability the

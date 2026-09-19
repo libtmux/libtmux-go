@@ -118,7 +118,10 @@ type SubscriptionRequest struct {
 	Name string
 	// Format is the tmux format to evaluate, such as #{pane_current_command}.
 	Format string
-	// Session scopes evaluation to one session.
+	// Session scopes evaluation to the stream's attached session. tmux always
+	// evaluates a session-scoped subscription against the control client's own
+	// session, so this only requests that scope; it is not a selector, and any
+	// value is equivalent to the stream's own session.
 	Session SessionID
 	// Window scopes evaluation to one window.
 	Window WindowID
@@ -159,10 +162,17 @@ func (r SubscriptionRequest) validate() error {
 	return nil
 }
 
+// scope renders the target segment of refresh-client -B's
+// name:target:format grammar. Session scope has no target of its own - tmux
+// always evaluates it against the control client's attached session - so it
+// renders empty, like the unscoped default. tmux 3.8 tightened that grammar
+// to require target be exactly empty for session scope; anything else that is
+// not a pane or window form, including a literal session ID, is now a parse
+// failure that silently drops the subscription (monitor_parse in monitor.c).
+// Earlier tmux was permissive there, so this also matches every older,
+// supported version.
 func (r SubscriptionRequest) scope() string {
 	switch {
-	case r.Session != "":
-		return r.Session.String()
 	case r.Window != "":
 		return r.Window.String()
 	case r.Pane != "":

@@ -8,8 +8,8 @@
 # pane_start_path does not exist before 3.3. A single-version gate cannot see
 # either.
 #
-# It is separate from the ordinary gate because it is slow -- six modules
-# against nine tmux builds -- and because it needs a matrix of tmux builds a
+# It is separate from the ordinary gate because it is slow -- every module
+# against every tmux build -- and because it needs a matrix of tmux builds a
 # checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
 # <version>/bin/tmux, or let it look where the matrix is usually built. Narrow
 # what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS. Set
@@ -88,7 +88,7 @@ for module in "${modules[@]}"; do
     fi
 done
 
-supported_versions=(3.2a 3.3a 3.4 3.5 3.6 3.7 3.7a 3.7b 3.7c)
+supported_versions=(3.2a 3.3a 3.4 3.5 3.6 3.7 3.7a 3.7b 3.7c 3.8-rc)
 versions=()
 if [[ -n ${LIBTMUX_MATRIX_VERSIONS:-} ]]; then
     read -r -a versions <<< "$LIBTMUX_MATRIX_VERSIONS"

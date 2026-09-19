@@ -207,6 +207,94 @@ func TestBindEmptyNoOpCommandAgainstRealTmux(t *testing.T) {
 	}
 }
 
+// TestKeyCommandsTreatLeadingDashKeyOrNameAsPositionalAgainstRealTmux proves
+// the bind-key, unbind-key, and list-commands "--" guards against a live
+// tmux. Without the guard, tmux's own parser reads a value beginning with "-"
+// as that subcommand's own flags and refuses it as an unknown flag before
+// ever reaching key or command lookup, which the raw unguarded control below
+// reproduces. cmd-bind-key.c, cmd-unbind-key.c, and cmd-list-commands.c all
+// echo the exact lookup value back in their own diagnostic once it reaches
+// them, which the raw guarded control (explicit "--") reproduces too - proof
+// that a "--" ahead of the value is what makes the difference.
+//
+// BindKey and UnbindKey redact completed stderr, so their returned error
+// cannot be inspected for that echoed text; what is checked there is that the
+// typed call reaches tmux at all ([tmux.ErrCommand]) rather than being
+// rejected before send, with the raw calls above supplying the wire-level
+// evidence for what tmux does with the guard.
+//
+//libtmux:real-tmux
+func TestKeyCommandsTreatLeadingDashKeyOrNameAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+
+	const value = "-zzz-not-a-flag"
+
+	t.Run("bind-key", func(t *testing.T) {
+		raw, err := server.Cmd(ctx, "bind-key", value, "display-message -p ok")
+		if err != nil || raw.ExitCode == 0 || containsAllLine(raw.Stderr, value) {
+			t.Fatalf("unguarded bind-key = (%#v, %v), want a parse failure quoting nothing", raw, err)
+		}
+		guarded, err := server.Cmd(ctx, "bind-key", "--", value, "display-message -p ok")
+		if err != nil || guarded.ExitCode == 0 || !containsAllLine(guarded.Stderr, value) {
+			t.Fatalf("guarded bind-key = (%#v, %v), want a lookup failure quoting %q", guarded, err, value)
+		}
+		bindErr := server.BindKey(ctx, tmux.BindKeyRequest{Key: value, Command: "display-message -p ok"})
+		if !errors.Is(bindErr, tmux.ErrCommand) {
+			t.Fatalf("BindKey() error = %v, want ErrCommand (reached tmux)", bindErr)
+		}
+	})
+
+	t.Run("unbind-key", func(t *testing.T) {
+		raw, err := server.Cmd(ctx, "unbind-key", value)
+		if err != nil || raw.ExitCode == 0 || containsAllLine(raw.Stderr, value) {
+			t.Fatalf("unguarded unbind-key = (%#v, %v), want a parse failure quoting nothing", raw, err)
+		}
+		guarded, err := server.Cmd(ctx, "unbind-key", "--", value)
+		if err != nil || guarded.ExitCode == 0 || !containsAllLine(guarded.Stderr, value) {
+			t.Fatalf("guarded unbind-key = (%#v, %v), want a lookup failure quoting %q", guarded, err, value)
+		}
+		key := value
+		unbindErr := server.UnbindKey(ctx, tmux.UnbindKeyRequest{Key: &key})
+		if !errors.Is(unbindErr, tmux.ErrCommand) {
+			t.Fatalf("UnbindKey() error = %v, want ErrCommand (reached tmux)", unbindErr)
+		}
+	})
+
+	t.Run("list-commands", func(t *testing.T) {
+		raw, err := server.Cmd(ctx, "list-commands", value)
+		if err != nil || raw.ExitCode == 0 || containsAllLine(raw.Stderr, value) {
+			t.Fatalf("unguarded list-commands = (%#v, %v), want a parse failure quoting nothing", raw, err)
+		}
+		name := value
+		rows, listErr := server.ListCommands(ctx, tmux.ListCommandsRequest{CommandName: &name})
+		if version.AtLeast(mustPaneModeVersion(t, "3.6")) {
+			// 3.6 added a cmd_find lookup for list-commands that errors,
+			// quoting the exact name, when nothing matches (cmd-list-keys.c
+			// through 3.6b; cmd-list-commands.c from 3.7).
+			if listErr == nil || !strings.Contains(listErr.Error(), value) {
+				t.Fatalf("ListCommands() error = %v, want it to quote %q", listErr, value)
+			}
+			return
+		}
+		// Before 3.6, an unmatched name is not an error: list-commands scans
+		// the whole command table, matches nothing, and returns empty
+		// output. Reaching that scan rather than being refused as a flag is
+		// still what the guard is responsible for.
+		if listErr != nil || len(rows) != 0 {
+			t.Fatalf(
+				"ListCommands() = (%#v, %v), want no rows and no error on tmux %s",
+				rows, listErr, version,
+			)
+		}
+	})
+}
+
 // libtmux:parity libtmux.server.Server.list_clients
 // libtmux:parity libtmux.server.Server.list_commands
 // libtmux:parity libtmux.server.Server.list_commands#parameter-branch:command_name:a5ecee67e253

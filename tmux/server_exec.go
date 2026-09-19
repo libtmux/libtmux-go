@@ -90,7 +90,16 @@ const (
 	WaitForModeWait WaitForMode = iota
 	// WaitForModeSignal signals Channel and wakes waiters.
 	WaitForModeSignal
-	// WaitForModeLock acquires Channel's tmux mutex.
+	// WaitForModeLock acquires Channel's tmux mutex, queuing behind another
+	// locker if it is already held.
+	//
+	// A cancelled or timed-out ctx while queued costs Channel one unlock:
+	// tmux hands the mutex to the next queued client whether or not it is
+	// still there, and the one that has gone cannot pass it on
+	// (cmd-wait-for.c cmd_wait_for_unlock). Unlocking again hands it to the
+	// next real locker, so a channel is not lost, but a program that
+	// abandons lock waits and counts its unlocks will deadlock on its own
+	// arithmetic.
 	WaitForModeLock
 	// WaitForModeUnlock releases Channel's tmux mutex.
 	WaitForModeUnlock
@@ -208,7 +217,7 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 			return nil, err
 		}
 	}
-	arguments = append(arguments, request.Command)
+	arguments = append(arguments, "--", request.Command)
 	if len(extraArguments) != 0 {
 		if current.AtLeast(serverExecVersion37) {
 			arguments = append(arguments, extraArguments...)
@@ -234,7 +243,9 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 
 // WaitFor waits for, signals, locks, or unlocks a named tmux channel. It
 // changes only that server-side channel state; cancellation can interrupt the
-// client wait but cannot prove a preceding signal or lock did not take effect.
+// client wait but cannot prove a preceding signal or lock did not take
+// effect. See [WaitForModeLock]: abandoning a lock wait costs that channel one
+// unlock.
 func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 	if err := validateServerCommandArgument(
 		"wait-for", "Channel", request.Channel, true,
@@ -261,7 +272,7 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 			"is unsupported",
 		)
 	}
-	arguments = append(arguments, request.Channel)
+	arguments = append(arguments, "--", request.Channel)
 	result, err := s.literalCmd(ctx, arguments...)
 	return requireRedactedServerCommandNoStderr("wait-for", result, err)
 }
@@ -294,7 +305,7 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if targetPane != "" {
 		arguments = append(arguments, "-t", targetPane)
 	}
-	arguments = append(arguments, request.ShellCommand, request.ThenCommand)
+	arguments = append(arguments, "--", request.ShellCommand, request.ThenCommand)
 	if request.ElseCommand != nil {
 		arguments = append(arguments, *request.ElseCommand)
 	}

@@ -333,12 +333,15 @@ func connectedExampleClient(
 	ctx context.Context,
 	target tmux.Server,
 ) (*sdk.ClientSession, string, func()) {
-	created, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
+	// A plain POSIX shell, as byte-streams uses: a login shell's prompt can
+	// be long enough to wrap a typed command, and a line editor's redraw can
+	// then leave a row ending in the very word an example waits for.
+	created, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work", Command: "sh"})
 	if err != nil {
 		panic(err)
 	}
-	pane, ok, err := created.ResolveActivePane(ctx)
-	if err != nil || !ok {
+	pane, err := created.ResolveActivePane(ctx)
+	if err != nil {
 		killExampleServer(target)
 		if err != nil {
 			panic(err)

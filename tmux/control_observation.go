@@ -59,6 +59,28 @@ func (o *PaneObservation) PaneID() PaneID {
 	return o.paneID
 }
 
+// SessionID returns the session the observation's own control client
+// attached to, resolved live when the observation opened - the session a
+// listing must count this client's attachment against, not merely the
+// pane's session at some other, possibly stale, snapshot.
+func (o *PaneObservation) SessionID() SessionID {
+	if o == nil {
+		return ""
+	}
+	return o.sessionID
+}
+
+// ClientName returns the observation's own control client identity - the
+// name a listing of attached clients must exclude, the same way it already
+// excludes a caller's long-lived command connection, so a caller's own
+// stream never reads as another person watching.
+func (o *PaneObservation) ClientName() ClientName {
+	if o == nil || o.client == nil {
+		return ""
+	}
+	return o.client.ClientName()
+}
+
 // Baseline returns an owned copy of the pane's visible text at the observation
 // boundary.
 func (o *PaneObservation) Baseline() []string {
@@ -92,12 +114,33 @@ func (o *PaneObservation) NextNotification(
 		return ControlNotification{}, err
 	}
 	defer state.releaseReadToken()
+	notification, _, err := o.read(ctx, true)
+	return notification, err
+}
+
+// read returns the next notification after the baseline, applying the loss
+// rules NextNotification documents. The caller holds the read token. With
+// block false it returns ok false at once when nothing is queued.
+func (o *PaneObservation) read(
+	ctx context.Context,
+	block bool,
+) (_ ControlNotification, ok bool, _ error) {
+	state := o.state
 	if state.loss != nil {
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
 	}
-	notification, err := o.client.nextNotificationAfter(ctx, o.after)
+	var notification ControlNotification
+	var err error
+	if block {
+		notification, err = o.client.nextNotificationAfter(ctx, o.after)
+	} else {
+		notification, ok, err = o.client.readyNotificationAfter(o.after)
+		if err == nil && !ok {
+			return ControlNotification{}, false, nil
+		}
+	}
 	if err != nil {
-		return ControlNotification{}, state.classifyReadError(
+		return ControlNotification{}, false, state.classifyReadError(
 			ctx,
 			err,
 			o.client.closeRequested.Load(),
@@ -110,7 +153,35 @@ func (o *PaneObservation) NextNotification(
 			"%w: observed window is no longer linked into the attached session",
 			ErrPaneObservationLost,
 		)
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
+	}
+	// %window-close for the observed window is ambiguous rather than a direct
+	// signal: tmux emits it to every client whose own attached session still
+	// lists the window, regardless of which session the unlink actually
+	// happened on - so it fires both when the attached session itself just
+	// lost the window (before tmux 3.8 that case reported
+	// %unlinked-window-close instead; the events rewrite since fires this
+	// notification while the winlink removal it reflects is still pending,
+	// so it reports the state from just before the unlink) and whenever some
+	// other, unrelated session drops a window this one still holds. A live
+	// membership check resolves which case this is.
+	if notification.Kind() == ControlNotificationWindowClose &&
+		len(arguments) != 0 && WindowID(arguments[0]) == o.windowID {
+		linked, err := o.windowLinkedIntoAttachedSession(ctx)
+		if err != nil {
+			return ControlNotification{}, false, state.classifyReadError(
+				ctx,
+				err,
+				o.client.closeRequested.Load(),
+			)
+		}
+		if !linked {
+			state.loss = fmt.Errorf(
+				"%w: observed window is no longer linked into the attached session",
+				ErrPaneObservationLost,
+			)
+			return ControlNotification{}, false, state.loss
+		}
 	}
 	if notification.Kind() == ControlNotificationSessionChanged &&
 		len(arguments) != 0 && SessionID(arguments[0]) != o.sessionID {
@@ -118,7 +189,7 @@ func (o *PaneObservation) NextNotification(
 			"%w: control client changed sessions",
 			ErrPaneObservationLost,
 		)
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
 	}
 	if notification.Kind() == ControlNotificationExit && len(arguments) != 0 {
 		state.exitReason = arguments[0]
@@ -133,9 +204,24 @@ func (o *PaneObservation) NextNotification(
 			"%w: the observed pane left its window's arrangement",
 			ErrPaneObservationLost,
 		)
-		return ControlNotification{}, state.loss
+		return ControlNotification{}, false, state.loss
 	}
-	return notification, nil
+	return notification, true, nil
+}
+
+// windowLinkedIntoAttachedSession reports whether the observed window is
+// still linked into the observation's attached session, straight from tmux.
+func (o *PaneObservation) windowLinkedIntoAttachedSession(ctx context.Context) (bool, error) {
+	result, err := o.client.Cmd(
+		ctx, "list-windows", "-t", o.sessionID.String(), "-F", "#{window_id}",
+	)
+	if err != nil {
+		return false, err
+	}
+	if result.Failed {
+		return false, failedPaneObservationCommand("list attached-session windows", result)
+	}
+	return slices.Contains(tmuxcmd.SplitStdout(result.RawStdout), o.windowID.String()), nil
 }
 
 func (s *paneObservationState) acquireReadToken(ctx context.Context) error {

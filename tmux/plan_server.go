@@ -78,7 +78,7 @@ func setOptionArguments(target string, request SetPlanOptionRequest) ([]string, 
 	if target != "" {
 		arguments = append(arguments, "-t", target)
 	}
-	arguments = append(arguments, request.Name)
+	arguments = append(arguments, "--", request.Name)
 	if !request.Unset {
 		arguments = append(arguments, request.Value)
 	}
@@ -110,7 +110,7 @@ func (p *Plan) SetHook(target Ref, name, command string, global bool) {
 			if resolved != "" {
 				arguments = append(arguments, "-t", resolved)
 			}
-			return append(arguments, name, command), nil
+			return append(arguments, "--", name, command), nil
 		},
 	})
 }
@@ -122,9 +122,9 @@ func (p *Plan) SetBuffer(name, data string) {
 		untargets: true,
 		build: func(_, _ string, _ planRenderContext) ([]string, error) {
 			if name == "" {
-				return untargetedArguments("set-buffer", data)
+				return untargetedArguments("set-buffer", "--", data)
 			}
-			return untargetedArguments("set-buffer", "-b", name, data)
+			return untargetedArguments("set-buffer", "-b", name, "--", data)
 		},
 	})
 }

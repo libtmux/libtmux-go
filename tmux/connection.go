@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ErrConnectionRequiresProcess identifies an operation refused because a
@@ -32,13 +33,19 @@ type controlDialect struct {
 }
 
 func (dialect controlDialect) clientFlags(profile controlClientProfile) []string {
-	flags := make([]string, 0, 2)
+	flags := make([]string, 0, 3)
 	if !profile.receivesPaneOutput() {
 		flags = append(flags, "no-output")
 	}
 	if dialect.version.AtLeast(controlNoDetachVersion36) {
 		flags = append(flags, "no-detach-on-destroy")
 	}
+	// tmux hands a control client the classic window_layout grammar unless it
+	// asks for the JSON shape a plain client already receives on 3.8+; below
+	// that, no version recognizes the flag and server_client_set_flags leaves
+	// it silently unset. attach-session -f and refresh-client -f share the
+	// same flag parser, so requesting it at attach avoids a second round trip.
+	flags = append(flags, "new-layouts")
 	return flags
 }
 
@@ -57,6 +64,10 @@ type ConnectionOptions struct {
 // trigger tmux's destroy-unattached or exit-unattached policy. On tmux 3.6 or
 // later, destroying its initial session moves the clients to another session
 // when one exists; the retained Session value keeps its original identity.
+//
+// It is what a record runs through. [Server.OpenControl] returns a
+// [ControlClient] instead, one client carrying commands and notifications
+// with no record bound to it.
 type Connection struct {
 	server  Server
 	session Session
@@ -329,7 +340,18 @@ func (c *Connection) Call(
 	if err := c.routeError(ctx, commandServer); err != nil {
 		return nil, err
 	}
-	return c.pool.call(ctx, args, false)
+	// Observed here rather than in the lane, because the lane is also how
+	// Server.runCommand sends and that reports its own.
+	server := c.Server()
+	observer := server.commandObserver()
+	if observer == nil {
+		return c.pool.call(ctx, args, false)
+	}
+	started := time.Now()
+	results, err := c.pool.call(ctx, args, false)
+	observeCommand(observer, args, started, CommandTransportConnection,
+		controlExitCode(results, err), err)
+	return results, err
 }
 
 // CloseContext starts terminal shutdown and waits within ctx. The context

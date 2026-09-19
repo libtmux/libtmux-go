@@ -1,8 +1,16 @@
 package tmux
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 func TestTrimScreenKeepsOnlyWhatTheCommandShowed(t *testing.T) {
@@ -95,6 +103,556 @@ func TestOutcomeRecordedWaitsForTmuxToReapTheCommand(t *testing.T) {
 			pane := Pane{formats: formatValues{values: test.formats}}
 			if got := outcomeRecorded(pane); got != test.want {
 				t.Errorf("outcomeRecorded(%v) = %v, want %v", test.formats, got, test.want)
+			}
+		})
+	}
+}
+
+// A deadline is the caller saying how long an answer is worth, so it raises
+// the floor on waiting for tmux to reap rather than being overridden by it.
+// A machine loaded enough to need more than five seconds is exactly where a
+// caller who allowed a minute does not want ErrOutcomeUnrecorded.
+func TestSettleLimitTakesTheLongerOfTheFloorAndTheDeadline(t *testing.T) {
+	t.Parallel()
+
+	if got := settleLimit(context.Background()); got != outcomeSettleLimit {
+		t.Errorf("settleLimit(no deadline) = %v, want %v", got, outcomeSettleLimit)
+	}
+
+	short, cancelShort := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancelShort()
+	if got := settleLimit(short); got != outcomeSettleLimit {
+		t.Errorf("settleLimit(short deadline) = %v, want the floor %v", got, outcomeSettleLimit)
+	}
+
+	long, cancelLong := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelLong()
+	if got := settleLimit(long); got <= outcomeSettleLimit {
+		t.Errorf("settleLimit(minute deadline) = %v, want more than %v", got, outcomeSettleLimit)
+	}
+}
+
+// The limit is read once. Reading it each pass would shrink it by the same
+// step the settled total grows by, and the wait would end at half the time
+// the caller allowed rather than at the deadline.
+func TestSettleLimitIsReadOnceRatherThanEachPass(t *testing.T) {
+	t.Parallel()
+
+	deadline := time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+
+	once := settleLimit(ctx)
+	var settledOnce, settledEachPass time.Duration
+	for settledOnce < once {
+		settledOnce += outcomeSettleDelay
+	}
+	// Replay the loop as it would run if the limit moved with the clock.
+	for remaining := deadline; settledEachPass < max(outcomeSettleLimit, remaining); {
+		settledEachPass += outcomeSettleDelay
+		remaining -= outcomeSettleDelay
+	}
+	if settledEachPass >= settledOnce {
+		t.Fatalf("recomputing each pass settled for %v, reading once %v: the "+
+			"replay does not reproduce the halving it guards against",
+			settledEachPass, settledOnce)
+	}
+	if settledOnce < deadline-time.Second {
+		t.Errorf("settled for %v of a %v deadline, want nearly all of it",
+			settledOnce, deadline)
+	}
+}
+
+// deadPaneRunner answers every listing with one pane tmux calls dead and has
+// not recorded an outcome for, and never signals the wait-for channel. It is
+// the state waitForExit settles through.
+type deadPaneRunner struct {
+	version Version
+	mu      sync.Mutex
+	settles int
+}
+
+func (r *deadPaneRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		r.mu.Lock()
+		r.settles++
+		r.mu.Unlock()
+		fields, err := formatFieldsFor("list-panes", r.version)
+		if err != nil {
+			return tmuxcmd.Result{}, err
+		}
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(fields, snapshotRowValues(
+			r.version, map[string]string{
+				"session_id": "$1", "window_id": "@1", "window_index": "0",
+				"pane_id": "%1", "pane_index": "0", "pane_dead": "1",
+			},
+		))}, nil
+	case slices.Contains(request.Arguments, "wait-for"):
+		<-ctx.Done()
+		return tmuxcmd.Result{ExitCode: -1}, ctx.Err()
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// waitForExit reads its settle limit once. Reading it each pass shrinks it by
+// the same step the settled total grows by, so the wait ends at half the time
+// the caller allowed - which is what this drives the real loop to catch.
+func TestWaitForExitReadsItsSettleLimitOnce(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &deadPaneRunner{version: version}
+	server := serverWithRunner(runner)
+
+	var asked atomic.Int32
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		pane: Pane{
+			server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+		},
+		channel: "settle",
+		settle: func(context.Context) time.Duration {
+			asked.Add(1)
+			return 3 * outcomeSettleDelay
+		},
+	}
+
+	err := running.waitForExit(context.Background())
+	if !errors.Is(err, ErrOutcomeUnrecorded) {
+		t.Fatalf("waitForExit() error = %v, want ErrOutcomeUnrecorded", err)
+	}
+	if got := asked.Load(); got != 1 {
+		t.Errorf("settle limit read %d times, want once: reading it per pass "+
+			"is what halves the caller's deadline", got)
+	}
+}
+
+// The settle poll backs off. A caller who allowed minutes should not spend
+// them listing panes fifty times a second while tmux catches up.
+func TestSettlePollBacksOff(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &deadPaneRunner{version: version}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		pane: Pane{
+			server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+		},
+		channel: "settle",
+		settle:  func(context.Context) time.Duration { return 500 * time.Millisecond },
+	}
+
+	started := time.Now()
+	if err := running.waitForExit(context.Background()); !errors.Is(err, ErrOutcomeUnrecorded) {
+		t.Fatalf("waitForExit() error = %v, want ErrOutcomeUnrecorded", err)
+	}
+	elapsed := time.Since(started)
+
+	runner.mu.Lock()
+	settles := runner.settles
+	runner.mu.Unlock()
+	// Flat 20ms polling over half a second would be twenty-five listings.
+	if settles > 10 {
+		t.Errorf("settled with %d listings in %v, want a backing-off handful",
+			settles, elapsed)
+	}
+	if settles < 2 {
+		t.Errorf("settled with %d listings, want it to keep asking", settles)
+	}
+}
+
+// aliveThenDeadRunner reports a live pane for a while and a dead, unreaped one
+// after, which is what a command that runs before it exits looks like. A pane
+// that is already dead on the first look never exercises the liveness backoff.
+type aliveThenDeadRunner struct {
+	version    Version
+	mu         sync.Mutex
+	livePolls  int
+	reapAsked  bool
+	settlePoll int
+}
+
+func (r *aliveThenDeadRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		r.mu.Lock()
+		dead := "0"
+		if r.livePolls >= 3 {
+			dead = "1"
+			r.settlePoll++
+		} else {
+			r.livePolls++
+		}
+		r.mu.Unlock()
+		fields, err := formatFieldsFor("list-panes", r.version)
+		if err != nil {
+			return tmuxcmd.Result{}, err
+		}
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(fields, snapshotRowValues(
+			r.version, map[string]string{
+				"session_id": "$1", "window_id": "@1", "window_index": "0",
+				"pane_id": "%1", "pane_index": "0", "pane_dead": dead,
+			},
+		))}, nil
+	case slices.Contains(request.Arguments, "wait-for"):
+		<-ctx.Done()
+		return tmuxcmd.Result{ExitCode: -1}, ctx.Err()
+	}
+	r.mu.Lock()
+	r.reapAsked = true
+	r.mu.Unlock()
+	return tmuxcmd.Result{}, nil
+}
+
+// Settling is timed on its own. Charging it the liveness backoff that ran
+// before the pane died spends the whole allowance on the poll that found it,
+// which both cuts the wait short and skips the reap nudge that exists for a
+// tmux which lost the child's signal.
+func TestSettlingIsNotChargedTheLivenessBackoff(t *testing.T) {
+	t.Parallel()
+
+	version := mustParseVersion(t, "3.7")
+	runner := &aliveThenDeadRunner{version: version}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		pane: Pane{
+			server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+		},
+		channel: "settle",
+		settle:  func(context.Context) time.Duration { return 2 * time.Second },
+	}
+
+	if err := running.waitForExit(context.Background()); !errors.Is(err, ErrOutcomeUnrecorded) {
+		t.Fatalf("waitForExit() error = %v, want ErrOutcomeUnrecorded", err)
+	}
+
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	// One lump of stale liveness delay would end the settle in a poll or two.
+	if runner.settlePoll < 4 {
+		t.Errorf("settled over %d polls, want the allowance spent on settling",
+			runner.settlePoll)
+	}
+	if !runner.reapAsked {
+		t.Error("the reap nudge never fired, which the settle allowance is for")
+	}
+}
+
+// The settle poll doubles and then stops doubling. Without the ceiling a wait
+// bounded by a long deadline would sleep for minutes between asks and answer
+// long after tmux caught up.
+func TestSettleDelayDoublesToACeiling(t *testing.T) {
+	t.Parallel()
+
+	delay := outcomeSettleDelay / 2
+	for range 4 {
+		doubled := nextSettleDelay(delay)
+		if doubled != delay*2 {
+			t.Fatalf("nextSettleDelay(%v) = %v, want it doubled", delay, doubled)
+		}
+		delay = doubled
+	}
+	if got := nextSettleDelay(maximumSettleDelay); got != maximumSettleDelay {
+		t.Errorf("nextSettleDelay(%v) = %v, want the ceiling held",
+			maximumSettleDelay, got)
+	}
+	if got := nextSettleDelay(maximumSettleDelay * 4); got != maximumSettleDelay {
+		t.Errorf("nextSettleDelay(%v) = %v, want the ceiling", maximumSettleDelay*4, got)
+	}
+}
+
+// finishingRunner answers for a command that has already ended: its signal
+// arrives at once, and the first read of its outcome blocks until released,
+// which is where a caller's deadline can land.
+type finishingRunner struct {
+	version Version
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+	kills   atomic.Int32
+}
+
+func (r *finishingRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		r.once.Do(func() { close(r.entered) })
+		select {
+		case <-r.release:
+		case <-ctx.Done():
+			return tmuxcmd.Result{ExitCode: -1}, ctx.Err()
+		}
+		fields, err := formatFieldsFor("list-panes", r.version)
+		if err != nil {
+			return tmuxcmd.Result{}, err
+		}
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(fields, snapshotRowValues(
+			r.version, map[string]string{
+				"session_id": "$1", "window_id": "@1", "window_index": "0",
+				"pane_id": "%1", "pane_index": "0", "pane_dead": "1", "pane_dead_status": "7",
+			},
+		))}, nil
+	case slices.Contains(request.Arguments, "kill-window"):
+		r.kills.Add(1)
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// unreadableOutcomeRunner fails every list-panes lookup, the way a loaded
+// server answering finish's own listing might, and tracks pipe-pane and
+// kill-window calls separately.
+type unreadableOutcomeRunner struct {
+	version   Version
+	pipeStops atomic.Int32
+	kills     atomic.Int32
+}
+
+func (r *unreadableOutcomeRunner) Run(
+	_ context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		return tmuxcmd.Result{ExitCode: -1}, errors.New("pane listing unreachable")
+	case slices.Contains(request.Arguments, "pipe-pane"):
+		r.pipeStops.Add(1)
+	case slices.Contains(request.Arguments, "kill-window"):
+		r.kills.Add(1)
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// TestFinishStopsAKeptPipeEvenWhenTheOutcomeIsUnreadable pins that a Keep'd
+// Running's Start-installed compatibility pipe is stopped on every path out of
+// finish, not only the one that reads the outcome cleanly: Keep never kills
+// the window, so nothing else ever stops that pipe, and a pane listing that
+// fails while reading the outcome must not leave a "cat" process piping the
+// kept pane forever.
+func TestFinishStopsAKeptPipeEvenWhenTheOutcomeIsUnreadable(t *testing.T) {
+	t.Parallel()
+
+	runner := &unreadableOutcomeRunner{version: mustParseVersion(t, "3.6")}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session:       Session{server: server, sessionID: "$1"},
+		window:        Window{server: server, sessionID: "$1", windowID: "@1"},
+		pane:          Pane{server: server, sessionID: "$1", windowID: "@1", paneID: "%1"},
+		keep:          true,
+		installedPipe: true,
+	}
+
+	if _, err := running.finish(context.Background()); err == nil {
+		t.Fatal("finish() error = nil, want the pane listing failure")
+	}
+	if got := runner.pipeStops.Load(); got != 1 {
+		t.Errorf("pipe-pane stop calls = %d, want 1", got)
+	}
+	if got := runner.kills.Load(); got != 0 {
+		t.Errorf("kill-window calls = %d, want 0 for Keep", got)
+	}
+}
+
+// claimedWhileWaitingRunner answers wait-for by claiming the command's end on
+// running itself, exactly as a concurrent Wait's success would, before
+// wait-for's own answer is returned - so the claim happens-before the error
+// this test needs a Wait call to survive, with no timing race to arrange.
+type claimedWhileWaitingRunner struct {
+	version       Version
+	running       *Running
+	releaseFinish chan struct{}
+	kills         atomic.Int32
+}
+
+func (r *claimedWhileWaitingRunner) Run(
+	_ context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "wait-for"):
+		r.running.finishing.Do(func() {
+			r.running.exited.Store(true)
+			go func() {
+				<-r.releaseFinish
+				r.running.mu.Lock()
+				r.running.result = RunResult{Status: 42}
+				r.running.mu.Unlock()
+				close(r.running.finishedSignal())
+			}()
+		})
+		return tmuxcmd.Result{ExitCode: -1}, errors.New("signal lost")
+	case slices.Contains(request.Arguments, "kill-window"):
+		r.kills.Add(1)
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// TestWaitDoesNotBlameAConcurrentClaimsCleanupOnItself pins that a Wait call
+// whose own waitForExit fails after another claim already committed to
+// reading the outcome waits for that outcome instead of reporting the
+// claim's own cleanup as this call's failure. exited is stored before that
+// claim's cleanup can make anything look gone, so seeing it true here means
+// the claimed outcome is the true answer, however long it takes to read.
+func TestWaitDoesNotBlameAConcurrentClaimsCleanupOnItself(t *testing.T) {
+	t.Parallel()
+
+	runner := &claimedWhileWaitingRunner{
+		version:       mustParseVersion(t, "3.7"),
+		releaseFinish: make(chan struct{}),
+	}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session: Session{server: server, sessionID: "$1"},
+		window:  Window{server: server, sessionID: "$1", windowID: "@1"},
+		pane:    Pane{server: server, sessionID: "$1", windowID: "@1", paneID: "%1"},
+		channel: "claimed",
+	}
+	runner.running = running
+
+	type outcome struct {
+		result RunResult
+		err    error
+	}
+	waitDone := make(chan outcome, 1)
+	go func() {
+		result, err := running.Wait(context.Background())
+		waitDone <- outcome{result, err}
+	}()
+
+	select {
+	case got := <-waitDone:
+		t.Fatalf("Wait() returned (%+v, %v) before the claimed outcome was "+
+			"ready, want it to wait for that outcome instead", got.result, got.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(runner.releaseFinish)
+
+	select {
+	case got := <-waitDone:
+		if got.err != nil {
+			t.Fatalf("Wait() error = %v, want the claimed outcome", got.err)
+		}
+		if got.result.Status != 42 {
+			t.Errorf("Wait() result.Status = %d, want 42", got.result.Status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Wait() did not return after the claimed outcome was released")
+	}
+	if got := runner.kills.Load(); got != 0 {
+		t.Errorf("kill-window calls = %d, want 0: this call's own failed "+
+			"waitForExit must not trigger its own cleanup", got)
+	}
+}
+
+// Once the command has ended its outcome belongs to every caller, so no one
+// caller's deadline may decide it: a Wait whose context ends while the outcome
+// is being read reports only its own context, a concurrent Wait answers within
+// its own deadline, and the next Wait gets the command's real status.
+func TestWaitOutcomeOutlivesTheCallerThatReadIt(t *testing.T) {
+	t.Parallel()
+
+	for _, keep := range []bool{true, false} {
+		t.Run(fmt.Sprintf("keep=%v", keep), func(t *testing.T) {
+			t.Parallel()
+
+			version := mustParseVersion(t, "3.7")
+			runner := &finishingRunner{
+				version: version,
+				entered: make(chan struct{}),
+				release: make(chan struct{}),
+			}
+			server := serverWithRunner(runner)
+			running := &Running{
+				session: Session{server: server, sessionID: "$1"},
+				window:  Window{server: server, sessionID: "$1", windowID: "@1"},
+				pane: Pane{
+					server: server, sessionID: "$1", windowID: "@1", paneID: "%1",
+				},
+				channel: "finish",
+				keep:    keep,
+			}
+
+			first, cancelFirst := context.WithCancel(context.Background())
+			firstDone := make(chan error, 1)
+			go func() {
+				_, err := running.Wait(first)
+				firstDone <- err
+			}()
+			<-runner.entered
+
+			hurried, cancelHurried := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancelHurried()
+			hurriedDone := make(chan error, 1)
+			go func() {
+				_, err := running.Wait(hurried)
+				hurriedDone <- err
+			}()
+			select {
+			case err := <-hurriedDone:
+				if !errors.Is(err, context.DeadlineExceeded) {
+					t.Errorf("concurrent Wait() error = %v, want its own deadline", err)
+				}
+			case <-time.After(time.Second):
+				t.Error("concurrent Wait() held past its own deadline by another caller's read")
+			}
+			cancelFirst()
+			if err := <-firstDone; !errors.Is(err, context.Canceled) {
+				t.Errorf("first Wait() error = %v, want its own cancellation", err)
+			}
+
+			close(runner.release)
+			result, err := running.Wait(context.Background())
+			if err != nil || result.Status != 7 {
+				t.Fatalf("Wait() after release = (%d, %v), want status 7", result.Status, err)
+			}
+			wantKills := int32(1)
+			if keep {
+				wantKills = 0
+			}
+			if got := runner.kills.Load(); got != wantKills {
+				t.Errorf("kill-window sent %d times with Keep %v, want %d", got, keep, wantKills)
 			}
 		})
 	}

@@ -93,7 +93,7 @@ func (s Server) BindKey(ctx context.Context, request BindKeyRequest) error {
 	if hasKeyTable {
 		arguments = append(arguments, "-T", keyTable)
 	}
-	arguments = append(arguments, request.Key, request.Command)
+	arguments = append(arguments, "--", request.Key, request.Command)
 	return runServerKeyCommand(ctx, s, "bind-key", arguments)
 }
 
@@ -133,7 +133,7 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 		arguments = append(arguments, "-T", keyTable)
 	}
 	if hasKey {
-		arguments = append(arguments, key)
+		arguments = append(arguments, "--", key)
 	}
 	return runServerKeyCommand(ctx, s, "unbind-key", arguments)
 }
@@ -199,13 +199,15 @@ func (s Server) ListCommands(
 	}
 	arguments := []string{"list-commands"}
 	if hasCommandName {
-		arguments = append(arguments, commandName)
+		arguments = append(arguments, "--", commandName)
 	}
 	return runServerListCommand(ctx, s, arguments)
 }
 
-// ListClients returns an owned snapshot of raw tmux client-description lines.
-// A list failure is returned rather than answered with no rows.
+// ListClients returns an owned snapshot of raw tmux client-description lines,
+// the text tmux itself prints. A list failure is returned rather than answered
+// with no rows. [Server.Clients] answers the same question as typed [Client]
+// records and is what most callers want.
 func (s Server) ListClients(ctx context.Context) ([]string, error) {
 	return runServerListCommand(ctx, s, []string{"list-clients"})
 }

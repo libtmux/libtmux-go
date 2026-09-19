@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -93,6 +94,11 @@ func (s Session) Run(ctx context.Context, command string, options RunOptions) (R
 // status and screen [Session.Run] would have returned, and [Running.Kill]
 // stops the command. Options are exactly Run's.
 //
+// Before tmux 3.7, Start attempts to install an output pipe running cat
+// unless the pane already has a pipe; a failed attempt only forfeits that
+// compatibility help. [Running.Wait] stops a pipe Start installed once the
+// outcome is read, whether or not Keep leaves the window itself in place.
+//
 // If Wait is never called, the window Start created is never removed.
 func (s Session) Start(
 	ctx context.Context,
@@ -121,12 +127,9 @@ func (s Session) Start(
 		defer cancel()
 		_ = window.Kill(cleanupCtx)
 	}()
-	pane, ok, err := window.ResolveActivePane(ctx)
+	pane, err := window.ResolveActivePane(ctx)
 	if err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, errors.New("tmux: new window reported no pane")
 	}
 	if err := pane.SetRemainOnExit(ctx, RemainOnExitOn); err != nil {
 		return nil, err
@@ -144,6 +147,15 @@ func (s Session) Start(
 			return nil, err
 		}
 	}
+	// Before 3.7, tmux drains pending terminal bytes on exit only when a
+	// pipe is open. Failing to install one only forfeits that compatibility
+	// help, so it is tolerated rather than failing Start; installedPipe
+	// records the attempt's own result so finish stops only the pipe it
+	// opened, never one a caller's own hook installed.
+	var installedPipe bool
+	if piping, _ := pane.Piping(); !piping && !version.AtLeast(captureVersion37) {
+		installedPipe = pane.Pipe(ctx, PipePaneRequest{Command: new("exec cat")}) == nil
+	}
 	// Channels are server-global, and tmux keeps a signal nobody is waiting
 	// for until the next waiter takes it, so each run owns a fresh name.
 	channel := "libtmux-go-run-" + rand.Text()
@@ -159,12 +171,13 @@ func (s Session) Start(
 		return nil, fmt.Errorf("start command: %w", err)
 	}
 	return &Running{
-		session:     s,
-		window:      window,
-		pane:        respawned,
-		channel:     channel,
-		fixedNotice: fixedNotice,
-		keep:        options.Keep,
+		session:       s,
+		window:        window,
+		pane:          respawned,
+		channel:       channel,
+		fixedNotice:   fixedNotice,
+		keep:          options.Keep,
+		installedPipe: installedPipe,
 	}, nil
 }
 
@@ -177,17 +190,26 @@ func (s Session) Start(
 // never reach [PaneObservation.Reader]; [RunResult.Lines] from Wait, a plain
 // screen capture rather than that notification stream, always has it.
 type Running struct {
-	session     Session
-	window      Window
-	pane        Pane
-	channel     string
-	fixedNotice bool
-	keep        bool
+	session       Session
+	window        Window
+	pane          Pane
+	channel       string
+	fixedNotice   bool
+	keep          bool
+	installedPipe bool
+	// settle answers how long to let tmux catch up before reporting that it
+	// never recorded an outcome. Nil uses settleLimit; a test supplies one to
+	// drive waitForExit without waiting out a real deadline.
+	settle func(context.Context) time.Duration
 
-	mu     sync.Mutex
-	done   bool
-	result RunResult
-	err    error
+	// exited records that some Wait saw the command end; finishing reads the
+	// outcome once after that, and finished closes when result and err hold it.
+	exited    atomic.Bool
+	finishing sync.Once
+	mu        sync.Mutex
+	finished  chan struct{}
+	result    RunResult
+	err       error
 }
 
 // Pane returns the pane the command runs in, materialized immediately after
@@ -205,42 +227,71 @@ func (r *Running) Pane() Pane {
 // make a failed command look successful.
 //
 // Wait may be called more than once and concurrently; every call observes the
-// same completion. Only the first call to reach tmux drives the underlying
-// wait; if its context ends first, that error is the outcome of that call
-// only, and a later call starts a fresh wait, since tmux's one-shot signal is
-// never delivered to a waiter that never received it. A Wait call that ends
-// this way does not remove the window: a canceled Wait can always be retried,
-// so only a Wait that actually observes the command's end does cleanup.
+// same completion. The outcome is read once, as soon as any call sees the
+// command end, on a context no caller's cancellation reaches, because from
+// then on it belongs to every caller. A call whose context ends first reports
+// that context and leaves the window alone; a later call gets the outcome.
 func (r *Running) Wait(ctx context.Context) (RunResult, error) {
-	r.mu.Lock()
-	if r.done {
-		result, err := r.result.clone(), r.err
-		r.mu.Unlock()
-		return result, err
-	}
-	r.mu.Unlock()
-
-	if err := r.waitForExit(ctx); err != nil {
-		// Another Wait may have observed the command's end while this one was
-		// waiting, and its cleanup leaves this one looking at a pane that is
-		// already gone. That completion is the answer both calls share.
-		r.mu.Lock()
-		if r.done {
-			result, observed := r.result.clone(), r.err
-			r.mu.Unlock()
-			return result, observed
+	finished := r.finishedSignal()
+	if !r.exited.Load() {
+		if err := r.waitForExit(ctx); err != nil {
+			// Another Wait may have claimed the command's end while this one
+			// was waiting: exited is stored before that claim's own tmux
+			// round trips run, so seeing it true here means this call's
+			// failure is that claim's cleanup making the pane look gone,
+			// not a real outcome of its own. That completion is the answer
+			// every caller shares once claimed, however long finishing it
+			// takes, so this waits for it rather than reporting the
+			// cleanup's side effect as this call's own failure.
+			if r.exited.Load() {
+				select {
+				case <-finished:
+					return r.outcome()
+				case <-ctx.Done():
+					return RunResult{}, fmt.Errorf("wait for command: %w", context.Cause(ctx))
+				}
+			}
+			return RunResult{}, fmt.Errorf("wait for command: %w", err)
 		}
-		r.mu.Unlock()
-		return RunResult{}, fmt.Errorf("wait for command: %w", err)
 	}
+	r.finishing.Do(func() {
+		r.exited.Store(true)
+		go func() {
+			finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishLimit)
+			defer cancel()
+			result, err := r.finish(finishCtx)
+			r.mu.Lock()
+			r.result, r.err = result, err
+			r.mu.Unlock()
+			close(finished)
+		}()
+	})
+	select {
+	case <-finished:
+		return r.outcome()
+	case <-ctx.Done():
+		return RunResult{}, fmt.Errorf("wait for command: %w", context.Cause(ctx))
+	}
+}
 
+// finishLimit bounds reading an ended command's outcome: a handful of tmux
+// commands, which only a server that has stopped answering takes this long.
+const finishLimit = 10 * time.Second
+
+// finishedSignal returns the channel closed once the outcome is stored.
+func (r *Running) finishedSignal() chan struct{} {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.done {
-		return r.result.clone(), r.err
+	if r.finished == nil {
+		r.finished = make(chan struct{})
 	}
-	r.result, r.err = r.finish(ctx)
-	r.done = true
+	return r.finished
+}
+
+// outcome returns the stored outcome as a copy the caller owns.
+func (r *Running) outcome() (RunResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.result.clone(), r.err
 }
 
@@ -253,16 +304,22 @@ const (
 	maximumLivenessDelay = 30 * time.Second
 )
 
-// outcomeSettleDelay is how often a pane found dead is re-read while tmux has
-// yet to record how its command ended; outcomeReapDelay is how long that is
-// allowed to take before the server is asked to reap, and outcomeSettleLimit
-// how long the whole wait is worth before reporting ErrOutcomeUnrecorded. Both
-// are far past the moment tmux normally needs and are none of a healthy
-// command's time.
+// outcomeSettleDelay is how soon a pane found dead is re-read while tmux has
+// yet to record how its command ended, and the first of a series that doubles
+// from there; outcomeReapDelay is how long the settling may take before the
+// server is asked to reap, and outcomeSettleLimit how long the whole wait is
+// worth before reporting ErrOutcomeUnrecorded. Both are far past the moment
+// tmux normally needs and are none of a healthy command's time.
+// outcomeSettleLimit is a floor rather than a ceiling: a caller who gave ctx
+// a longer deadline asked to wait that long, and a loaded machine is exactly
+// where tmux takes more than five seconds to reap.
 const (
 	outcomeSettleDelay = 20 * time.Millisecond
 	outcomeReapDelay   = 200 * time.Millisecond
 	outcomeSettleLimit = 5 * time.Second
+	// maximumSettleDelay caps the backoff, so a wait bounded by a long
+	// deadline still asks often enough to answer soon after tmux catches up.
+	maximumSettleDelay = time.Second
 )
 
 // signalHandoverDelay is how long the liveness check waits for tmux's own
@@ -285,7 +342,13 @@ func (r *Running) waitForExit(ctx context.Context) error {
 		signaled <- r.session.server.WaitFor(waitCtx, WaitForRequest{Channel: r.channel})
 	}()
 
+	// Read once. Recomputing it each pass would compare a limit shrinking with
+	// the deadline against a total growing toward it, and the two would meet
+	// at half the time the caller allowed.
+	limit := r.settleFor(ctx)
 	delay := initialLivenessDelay
+	// settleDelay doubles from half a step, so the first settle waits one.
+	settleDelay := outcomeSettleDelay / 2
 	var settling time.Duration
 	var asked bool
 	for {
@@ -307,7 +370,7 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			if outcomeRecorded(pane) {
 				return awaitDeathSignal(ctx, signaled)
 			}
-			if settling >= outcomeSettleLimit {
+			if settling >= limit {
 				return fmt.Errorf("%w: pane %s is dead and its command unreaped",
 					ErrOutcomeUnrecorded, pane.ID())
 			}
@@ -318,13 +381,52 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			// tmux closes a pane's terminal before it reaps the command,
 			// and reports pane_dead from that closed descriptor alone, so
 			// reading the outcome now would call a command that exited 7 a
-			// command that exited 0. Wait for tmux to catch up.
-			settling += outcomeSettleDelay
-			delay = outcomeSettleDelay
+			// command that exited 0. Wait for tmux to catch up, asking less
+			// often the longer it takes: tmux normally needs one or two of
+			// these, and a caller who allowed minutes should not spend them
+			// listing panes fifty times a second.
+			//
+			// Settling is timed on its own. The liveness backoff before it
+			// grows to half a minute for a long command, and charging that
+			// to the first settle would spend the whole allowance on the
+			// wait that found the pane dead - the reap nudge below included.
+			settleDelay = nextSettleDelay(settleDelay)
+			settling += settleDelay
+			delay = settleDelay
 			continue
 		}
 		delay = min(delay*2, maximumLivenessDelay)
 	}
+}
+
+// nextSettleDelay is how long to wait before asking tmux again whether it has
+// recorded an outcome. It doubles, so a pane tmux is slow to reap is asked
+// about a handful of times rather than fifty times a second, and stops
+// doubling at maximumSettleDelay, so a wait bounded by a long deadline still
+// answers soon after tmux catches up.
+func nextSettleDelay(current time.Duration) time.Duration {
+	return min(current*2, maximumSettleDelay)
+}
+
+// settleLimit is how long to let tmux catch up before reporting that it never
+// recorded an outcome. A caller whose ctx runs longer than the built-in floor
+// gets its whole remaining time, because a deadline is the caller saying how
+// long the answer is worth. A shorter deadline still ends the wait: ctx.Done
+// is selected on alongside this.
+func settleLimit(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return outcomeSettleLimit
+	}
+	return max(outcomeSettleLimit, time.Until(deadline))
+}
+
+// settleFor answers this run's settle limit.
+func (r *Running) settleFor(ctx context.Context) time.Duration {
+	if r.settle != nil {
+		return r.settle(ctx)
+	}
+	return settleLimit(ctx)
 }
 
 // outcomeRecorded reports whether tmux has recorded how the command in pane
@@ -380,10 +482,20 @@ func (r *Running) askForAReap(ctx context.Context) {
 }
 
 // finish reads the command's outcome after tmux has signaled its pane-died
-// hook and removes the window unless Keep was set.
+// hook and removes the window unless Keep was set. A Keep'd window that Start
+// piped for compatibility keeps that pipe only until here: its job is done
+// once the outcome is read, and a caller can hold the window indefinitely.
 func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	defer func() {
-		if err == nil && r.keep {
+		if r.keep {
+			// Nothing else ever stops a compatibility pipe on a kept window,
+			// so it runs on every path out of this function, not only the one
+			// that reads the outcome cleanly.
+			if r.installedPipe {
+				stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+				defer cancel()
+				_ = r.pane.Pipe(stopCtx, PipePaneRequest{})
+			}
 			return
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
@@ -453,7 +565,9 @@ func (r *Running) StreamTo(
 	// lets the copy return at all, because a pane's output stream has no end of
 	// its own.
 	stopStreaming()
-	copyErr := <-copied
+	// A destination that blocks regardless of cancellation must not hold this
+	// call: ending the read does not end a stuck Write.
+	copyErr := awaitCopy(ctx, copied)
 	switch {
 	case waitErr != nil:
 		return result, waitErr
@@ -478,9 +592,11 @@ func (r *Running) StreamTo(
 func (r *Running) Kill(ctx context.Context) error {
 	if _, err := r.session.server.RunShell(ctx, RunShellRequest{
 		TargetPane: r.pane.ID(),
-		// Nothing to kill is not a failure, and from tmux 3.5 a run-shell
-		// command that exits nonzero is reported to the caller, so a pane that
-		// has gone must leave this exiting zero rather than complaining.
+		Background: true,
+		// Nothing to kill is not a failure. Background never reports this
+		// command's exit to the caller, but tmux still posts a nonzero one as
+		// a message once the job finishes, so a pane that has gone must leave
+		// this exiting zero rather than surfacing kill's own failure.
 		Command: "[ -n \"#{pane_pid}\" ] && kill -s KILL -- -#{pane_pid} 2>/dev/null; true",
 	}); err != nil {
 		return fmt.Errorf("kill command: %w", err)

@@ -111,7 +111,7 @@ type renameWindowCapabilityInput struct {
 
 type selectLayoutCapabilityInput struct {
 	WindowID string `json:"window_id" jsonschema:"the window id, such as @1"`
-	Layout   string `json:"layout" jsonschema:"a built-in tmux layout name"`
+	Layout   string `json:"layout" jsonschema:"a built-in tmux layout name, or a saved layout string from get_window_info"`
 }
 
 type resizeWindowCapabilityInput struct {
@@ -215,8 +215,9 @@ type runShellCommandCapabilityOutput struct {
 
 type sendKeysCapabilityInput struct {
 	PaneID  string   `json:"pane_id" jsonschema:"the pane id, such as %1"`
-	Keys    []string `json:"keys" jsonschema:"key names or literal strings to send"`
+	Keys    []string `json:"keys" jsonschema:"key names or literal strings to send; do not put \"Enter\" here when literal is true, it types the five letters - set enter instead"`
 	Literal bool     `json:"literal,omitempty" jsonschema:"send strings literally instead of as key names"`
+	Enter   bool     `json:"enter,omitempty" jsonschema:"press Enter after keys, as a real key press, to submit them"`
 }
 
 type sendKeysCapabilityOutput struct {
@@ -229,6 +230,7 @@ type sendKeysOperation struct {
 	PaneID  string   `json:"pane_id"`
 	Keys    []string `json:"keys"`
 	Literal bool     `json:"literal,omitempty"`
+	Enter   bool     `json:"enter,omitempty"`
 }
 
 type sendKeysBatchCapabilityInput struct {
@@ -395,7 +397,7 @@ func (t *tools) catalogWaitForText(ctx context.Context, request *sdk.CallToolReq
 	}
 	return t.waitForText(ctx, request, waitForTextInput{
 		PaneID: input.PaneID, Patterns: input.Patterns, Stop: input.Stop,
-		Regex: input.Regex, SinceEntry: input.Cursor != "", TimeoutSeconds: timeout,
+		Regex: input.Regex, Cursor: input.Cursor, TimeoutSeconds: timeout,
 		MaxLines: input.MaxLines,
 	})
 }
@@ -662,7 +664,7 @@ func (t *tools) catalogRunShellCommand(ctx context.Context, request *sdk.CallToo
 
 func (t *tools) catalogSendKeys(ctx context.Context, request *sdk.CallToolRequest, input sendKeysCapabilityInput) (*sdk.CallToolResult, sendKeysCapabilityOutput, error) {
 	result, output, err := t.sendKeysBatch(ctx, request, sendKeysBatchInput{
-		PaneID: input.PaneID, Keys: input.Keys, Literal: input.Literal,
+		PaneID: input.PaneID, Keys: input.Keys, Literal: input.Literal, Enter: input.Enter,
 	}, "send_keys")
 	return result, sendKeysCapabilityOutput{
 		PaneID: output.PaneID, ResolvedPaneIDs: output.ResolvedPaneIDs, Sent: output.Sent,
@@ -680,7 +682,7 @@ func (t *tools) catalogSendKeysBatch(ctx context.Context, request *sdk.CallToolR
 	output := sendKeysBatchCapabilityOutput{Results: make([]sendKeysBatchCapabilityResult, 0, len(input.Operations))}
 	for _, operation := range input.Operations {
 		_, sent, callErr := t.sendKeysBatch(ctx, request, sendKeysBatchInput{
-			PaneID: operation.PaneID, Keys: operation.Keys, Literal: operation.Literal,
+			PaneID: operation.PaneID, Keys: operation.Keys, Literal: operation.Literal, Enter: operation.Enter,
 		}, "send_keys_batch")
 		row := sendKeysBatchCapabilityResult{
 			PaneID: sent.PaneID, ResolvedPaneIDs: sent.ResolvedPaneIDs, Sent: sent.Sent,
