@@ -91,8 +91,8 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	// A child process writes the file, never a descriptor of this one. A fork
 	// anywhere in this process inherits every open descriptor until it execs,
 	// and executing a file some process holds open for writing fails with
-	// "text file busy" (golang/go#22315); marking the file executable only
-	// after closing it does not help, since the fork can still be holding it.
+	// "text file busy"; marking the file executable only after closing it
+	// does not help, since the fork can still be holding it.
 	path := filepath.Join(t.TempDir(), "tmux")
 	write := exec.Command("/bin/sh", "-c", `umask 077 && cat >"$1" && chmod 700 "$1"`, "sh", path)
 	write.Stdin = strings.NewReader(body.String())

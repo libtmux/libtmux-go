@@ -113,8 +113,9 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 }
 
 // Reaching a session's or window's current pane is the first thing almost
-// every program does, and it must cost one listing, not four - each of
-// which asks tmux for every format field.
+// every program does, and it must cost one listing, not a whole-server
+// snapshot's one listing per relation kind, each asking tmux for every
+// format field.
 //
 //libtmux:real-tmux
 func TestResolvingAnActivePaneListsOnlyItsOwnScope(t *testing.T) {

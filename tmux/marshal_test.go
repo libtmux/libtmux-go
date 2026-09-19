@@ -112,8 +112,9 @@ func TestFormatValuesEncodeVerbatim(t *testing.T) {
 	}
 }
 
-// Six doc comments promise that decoding changes nothing. A field exported
-// later would quietly break that, and marshalling tests would not notice.
+// Every MarshalJSON doc comment above promises that decoding changes nothing.
+// A field exported later would quietly break that, and marshalling tests
+// would not notice.
 func TestDecodingARecordChangesNothing(t *testing.T) {
 	t.Parallel()
 
