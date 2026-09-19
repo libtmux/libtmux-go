@@ -226,13 +226,9 @@ func buildPanes(
 	described Window,
 	directory string,
 ) ([]tmux.Pane, error) {
-	first, ok, err := window.ResolveActivePane(ctx)
+	first, err := window.ResolveActivePane(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve initial pane: %w", err)
-	}
-	if !ok {
-		return nil, fmt.Errorf("%w: window %q has no initial pane",
-			ErrInvalidWorkspace, described.Name)
 	}
 	panes := []tmux.Pane{first}
 

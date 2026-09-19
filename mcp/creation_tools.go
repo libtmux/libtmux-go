@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -66,15 +65,9 @@ func (t *tools) createWindow(
 	if lookupErr != nil {
 		return t.partialWindowFailure(created, lookupErr)
 	}
-	pane, ok, paneErr := fresh.ResolveActivePane(ctx)
+	pane, paneErr := fresh.ResolveActivePane(ctx)
 	if paneErr != nil {
 		return t.partialWindowFailure(created, paneErr)
-	}
-	if !ok {
-		return t.partialWindowFailure(
-			created,
-			errors.New("created window has no active pane"),
-		)
 	}
 	created.PaneID = pane.ID().String()
 	return nil, created, nil

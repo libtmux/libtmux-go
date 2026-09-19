@@ -37,6 +37,11 @@ func run() error {
 		return err
 	}
 	fmt.Print(table(rows, version, describeMachine()))
+	waits, err := measureWaits(ctx)
+	if err != nil {
+		return err
+	}
+	fmt.Print(waitTable(waits))
 	return nil
 }
 

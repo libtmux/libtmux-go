@@ -33,7 +33,7 @@ func TestDecodeFormatRecordsPreservesQuotedValues(t *testing.T) {
 		{name: "pane_title"},
 		{name: "pane_current_path"},
 	}
-	output := []byte("dev:␞|line1\nline2|pipe\\|percent\\%\\ back\\\\slash=\n開発|:|=\n")
+	output := []byte("dev:␞|line1\nline2|pipe\\|percent\\%\\ back\\\\slash=\n開発|:|\\{tag\\}=\n")
 
 	records, err := decodeFormatRecords(output, version, fields)
 	if err != nil {
@@ -48,6 +48,11 @@ func TestDecodeFormatRecordsPreservesQuotedValues(t *testing.T) {
 	assertFormatValue(t, records[0], "pane_current_path", "pipe|percent% back\\slash", true)
 	assertFormatValue(t, records[1], "window_name", "開発", true)
 	assertFormatValue(t, records[1], "pane_title", ":", true)
+	// tmux's own #{q:} quoting started escaping braces (observed on a
+	// next-3.9 build; not yet in a numbered release), so a value containing
+	// literal "{" or "}" comes back backslash-escaped. Decoding must strip
+	// that escape rather than reject it.
+	assertFormatValue(t, records[1], "pane_current_path", "{tag}", true)
 	if got := records[0].tmuxVersion(); got.Compare(version) != 0 {
 		t.Fatalf("tmuxVersion() = %s, want %s", got, version)
 	}
@@ -587,11 +592,11 @@ func TestProjectedFormatAccessorsPreserveDanglingIDs(t *testing.T) {
 	session := snapshot.Sessions()[0]
 	assertProjectedFormatValue(t, "Session.Formats.WindowID", session.Formats().WindowID, "@91")
 	assertProjectedFormatValue(t, "Session.Formats.PaneID", session.Formats().PaneID, "%92")
-	if _, err := snapshot.WindowByID(WindowID("@91")); !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("WindowByID(@91) error = %v, want ErrSnapshotNotFound", err)
+	if _, err := snapshot.WindowByID(WindowID("@91")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("WindowByID(@91) error = %v, want ErrNotFound", err)
 	}
-	if _, err := snapshot.PaneByID(PaneID("%92")); !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("PaneByID(%%92) error = %v, want ErrSnapshotNotFound", err)
+	if _, err := snapshot.PaneByID(PaneID("%92")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PaneByID(%%92) error = %v, want ErrNotFound", err)
 	}
 
 	window := snapshot.Windows()[0]
@@ -599,8 +604,8 @@ func TestProjectedFormatAccessorsPreserveDanglingIDs(t *testing.T) {
 	if _, ok := window.Session(); ok {
 		t.Fatal("window resolved dangling session projection")
 	}
-	if _, err := snapshot.PaneByID(PaneID("%93")); !errors.Is(err, ErrSnapshotNotFound) {
-		t.Fatalf("PaneByID(%%93) error = %v, want ErrSnapshotNotFound", err)
+	if _, err := snapshot.PaneByID(PaneID("%93")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PaneByID(%%93) error = %v, want ErrNotFound", err)
 	}
 
 	client := snapshot.Clients()[0]

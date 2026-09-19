@@ -1,9 +1,12 @@
 package tmux
 
 import (
+	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A malformed notification belongs to whatever else shares the connection, so
@@ -38,5 +41,91 @@ func TestPaneObservationReaderSkipsAMalformedNotification(t *testing.T) {
 	}
 	if got := string(buffer[:n]); got != "heard" {
 		t.Errorf("Read() = %q, want %q", got, "heard")
+	}
+}
+
+// %window-close for the observed window is ambiguous: tmux sends it to every
+// client whose own attached session still lists the window, regardless of
+// which session actually lost it (verified live against a real 3.7c and a
+// real next-3.9 server). NextNotification must resolve that with a live
+// membership check rather than declaring loss outright - otherwise an
+// unrelated session unlinking a window this one still holds would end every
+// observation that happens to share it.
+func TestPaneObservationVerifiesAmbiguousWindowCloseBeforeDeclaringLoss(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		attachedWindows string
+		wantLoss        bool
+	}{
+		{
+			name:            "window gone from the attached session: loss",
+			attachedWindows: "@9\n",
+			wantLoss:        true,
+		},
+		{
+			name:            "window still linked elsewhere's close is a false alarm",
+			attachedWindows: "@1\n@9\n",
+			wantLoss:        false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			client, reader := newRequestLoopTestClient(t)
+			client.notifications = newControlNotificationQueue(defaultControlNotificationLimit)
+			t.Cleanup(func() { _ = client.notifications.Close() })
+			if err := client.notifications.append(1, []byte("%window-close @1")); err != nil {
+				t.Fatal(err)
+			}
+
+			observation := &PaneObservation{
+				client:    client,
+				paneID:    "%1",
+				windowID:  "@1",
+				sessionID: "$0",
+				state:     newPaneObservationState(),
+			}
+
+			type outcome struct {
+				notification ControlNotification
+				err          error
+			}
+			result := make(chan outcome, 1)
+			go func() {
+				notification, err := observation.NextNotification(context.Background())
+				result <- outcome{notification: notification, err: err}
+			}()
+
+			_ = readRequestLoopLine(t, reader)
+			readRequestLoopFence(t, reader)
+			completeControlRequest(
+				client,
+				controlFrame{rawStdout: []byte(test.attachedWindows)},
+			)
+
+			select {
+			case got := <-result:
+				if test.wantLoss {
+					if !errors.Is(got.err, ErrPaneObservationLost) {
+						t.Fatalf("NextNotification() = (%#v, %v), want ErrPaneObservationLost",
+							got.notification, got.err)
+					}
+					return
+				}
+				if got.err != nil {
+					t.Fatalf("NextNotification() error = %v, want the window-close notification passed through",
+						got.err)
+				}
+				if got.notification.Kind() != ControlNotificationWindowClose {
+					t.Fatalf("NextNotification() = %#v, want the window-close notification", got.notification)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("NextNotification() did not return")
+			}
+		})
 	}
 }

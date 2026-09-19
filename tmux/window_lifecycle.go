@@ -85,7 +85,7 @@ func (s Session) NewWindow(ctx context.Context, request NewWindowRequest) (Windo
 	if request.Index != nil {
 		target += ":" + strconv.Itoa(*request.Index)
 	}
-	return newWindow(ctx, s.server, s.sessionID, target, request, request.Index == nil)
+	return newWindow(ctx, s.server, s.sessionID, target, request, request.Index == nil, "")
 }
 
 // NewWindow creates a window relative to the receiver's exact winlink. Set
@@ -94,9 +94,13 @@ func (s Session) NewWindow(ctx context.Context, request NewWindowRequest) (Windo
 // receiver's occupied index and normally returns a command error;
 // KillExisting can destroy and replace that target. Attach changes the current
 // window only in that target session. Index is rejected before execution
-// because the receiver already supplies the target position. SelectExisting
-// has no no-output recovery on this exact-target form; tmux must print the
-// created WindowID.
+// because the receiver already supplies the target position. On tmux 3.8 and
+// later, SelectExisting's -S also matches the receiver's own exact target
+// (extended there to match -t as well as a window's name), so it always
+// selects the receiver itself and prints nothing; the identity is already
+// known without a probe. Earlier tmux only matched -S by name here, and
+// always printed a created WindowID because the exact-target form never
+// carries a bare name to match against.
 //
 // If tmux reports an ID before a transport or refresh failure, the partial result
 // contains it and the receiver SessionID with Index -1. Other failures return
@@ -110,7 +114,7 @@ func (w Window) NewWindow(ctx context.Context, request NewWindowRequest) (Window
 	if err != nil {
 		return Window{}, err
 	}
-	return newWindow(ctx, w.server, w.sessionID, target, request, false)
+	return newWindow(ctx, w.server, w.sessionID, target, request, false, w.windowID)
 }
 
 // newWindowArguments renders one new-window argument vector. It performs no
@@ -177,7 +181,7 @@ func newWindowArguments(
 		arguments = append(arguments, "-S")
 	}
 	if request.Command != "" {
-		arguments = append(arguments, request.Command)
+		arguments = append(arguments, "--", request.Command)
 	}
 	return arguments, nil
 }
@@ -189,6 +193,11 @@ func newWindow(
 	target string,
 	request NewWindowRequest,
 	selectExistingEligible bool,
+	// exactTargetWindowID is the receiver's own WindowID when target names an
+	// exact window (Window.NewWindow), empty otherwise (Session.NewWindow).
+	// It resolves -S's no-output selection on tmux 3.8+ without a probe: the
+	// window tmux selected there can only be the receiver itself.
+	exactTargetWindowID WindowID,
 ) (Window, error) {
 	name := ""
 	if request.Name != nil {
@@ -226,8 +235,18 @@ func newWindow(
 	if err != nil {
 		return Window{}, err
 	}
-	if len(result.Stdout) == 0 && request.SelectExisting && selectExistingEligible {
-		return selectedExistingWindow(ctx, server, sessionID, selectionName)
+	if len(result.Stdout) == 0 && request.SelectExisting {
+		switch {
+		case selectExistingEligible:
+			return selectedExistingWindow(ctx, server, sessionID, selectionName)
+		case exactTargetWindowID != "":
+			// tmux 3.8 extended -S to match an exact -t target, not only a
+			// window name (cmd-new-window.c, 3.7c to 3.8-rc: idx != -1 now
+			// selects winlink_find_by_index(idx) before falling back to name
+			// matching). The receiver's own target always resolves to
+			// itself, so tmux selects the receiver and prints nothing.
+			return refreshCreatedWindow(ctx, server, sessionID, exactTargetWindowID)
+		}
 	}
 	identity, err := lifecycleStableIdentity("window", result.Stdout)
 	if err != nil {
@@ -338,7 +357,7 @@ func (w Window) Rename(ctx context.Context, name string) (Window, error) {
 	if err != nil {
 		return Window{}, err
 	}
-	result, err := w.server.literalCmd(ctx, "rename-window", "-t", target, name)
+	result, err := w.server.literalCmd(ctx, "rename-window", "-t", target, "--", name)
 	if _, err = requireLifecycleSuccess("rename-window", result, err); err != nil {
 		return Window{}, err
 	}

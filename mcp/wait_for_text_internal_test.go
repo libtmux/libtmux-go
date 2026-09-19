@@ -12,28 +12,12 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-type queuedPaneNotifications struct {
-	items []tmux.ControlNotification
-}
-
-func (q *queuedPaneNotifications) NextNotification(
-	ctx context.Context,
-) (tmux.ControlNotification, error) {
-	if len(q.items) != 0 {
-		next := q.items[0]
-		q.items = q.items[1:]
-		return next, nil
-	}
-	<-ctx.Done()
-	return tmux.ControlNotification{}, ctx.Err()
-}
-
 func TestWaitForTextRejectsNegativeDurations(t *testing.T) {
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "negative-wait-unused"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(t.Context(), target, nil)
+	runtime := newRuntime(t.Context(), target)
 	registry := &tools{runtime: runtime}
 	for name, input := range map[string]waitForTextInput{
 		"idle":    {IdleSeconds: -1},
@@ -66,19 +50,8 @@ func TestWaitForTextSchemaRejectsNegativeDurations(t *testing.T) {
 }
 
 func TestWaitForTextReportsItsInternalMatchWindowLoss(t *testing.T) {
-	payload := strings.Repeat("x", waitBufferMax+100)
-	notification, err := tmux.ParseControlNotification([]byte("%output %1 " + payload))
-	if err != nil {
-		t.Fatal(err)
-	}
-	watched := watchPane(
-		t.Context(),
-		&queuedPaneNotifications{items: []tmux.ControlNotification{notification}},
-		tmux.PaneID("%1"),
-		nil,
-		nil,
-		time.Millisecond,
-	)
+	source := &paneTexts{texts: []tmux.PaneText{{Text: "tail", DroppedBytes: 150}}}
+	watched := watchPane(t.Context(), source, nil, nil, nil, time.Millisecond)
 	if watched.err != nil || watched.outcome != outcomeIdle || watched.matched != "" {
 		t.Fatalf("watchPane() = (%q, %q, %q, %v)",
 			watched.written, watched.outcome, watched.matched, watched.err)
@@ -88,6 +61,7 @@ func TestWaitForTextReportsItsInternalMatchWindowLoss(t *testing.T) {
 		&output,
 		watched.outcome,
 		watched.matched,
+		false,
 		false,
 		splitWritten(watched.written),
 		bounds{lines: ceilingMaxLines, bytes: ceilingMaxBytes},
@@ -104,12 +78,7 @@ func TestWaitForTextReportsItsInternalMatchWindowLoss(t *testing.T) {
 
 func TestPaneWaitSurfacesAnIndependentDeadline(t *testing.T) {
 	watched := watchPane(
-		t.Context(),
-		failingPaneObservation{err: context.DeadlineExceeded},
-		tmux.PaneID("%1"),
-		nil,
-		nil,
-		time.Minute,
+		t.Context(), &paneTexts{err: context.DeadlineExceeded}, nil, nil, nil, time.Minute,
 	)
 	if watched.outcome != "" || !errors.Is(watched.err, context.DeadlineExceeded) {
 		t.Fatalf("watchPane() = (%q, %v), want independent deadline error",
@@ -126,9 +95,9 @@ func TestWaitForTextTimeoutIncludesPaneSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pane, ok, err := created.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("resolve active pane = (%v, %t, %v)", pane, ok, err)
+	pane, err := created.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("resolve active pane error = %v", err)
 	}
 	instance := mustInternalMCPServer(t, target)
 	command, err := instance.runtime.command(ctx)
@@ -182,9 +151,9 @@ func TestInstanceCloseJoinsTimedOutPaneObservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pane, ok, err := created.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("resolve active pane = (%v, %t, %v)", pane, ok, err)
+	pane, err := created.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("resolve active pane error = %v", err)
 	}
 	instance := mustInternalMCPServer(t, target)
 	for range 2 {

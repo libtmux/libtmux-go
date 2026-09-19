@@ -46,7 +46,7 @@ func TestKillOptionsBuildExactTargetsAndPythonOrder(t *testing.T) {
 			t.Fatalf("KillOthers() error = %v", err)
 		}
 		assertRequestArguments(t, runner.recordedRequests()[0], []string{
-			"kill-window", "-t", "$1:0", "-a",
+			"kill-window", "-t", "$1:@2", "-a",
 		})
 	})
 
@@ -60,7 +60,7 @@ func TestKillOptionsBuildExactTargetsAndPythonOrder(t *testing.T) {
 			t.Fatalf("KillOthers() error = %v", err)
 		}
 		assertRequestArguments(t, runner.recordedRequests()[0], []string{
-			"kill-pane", "-t", "$1:0.%3", "-a",
+			"kill-pane", "-t", "$1:.%3", "-a",
 		})
 	})
 }

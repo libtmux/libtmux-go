@@ -352,7 +352,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	assertRequestArguments(t, requests[1], []string{
 		"new-session", "-P", "-F#{session_id}", "-salpha", "-d",
 		"-c", "/work dir", "-n", "editor", "-x", "132", "-y", "43",
-		"-eALPHA=first", "-eZED=last", "sleep 1m",
+		"-eALPHA=first", "-eZED=last", "--", "sleep 1m",
 	})
 }
 
@@ -489,7 +489,7 @@ func TestNewWindowBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
 		"new-window", "-t", "$1:4", "-d", "-P", "-c/work",
-		"-F#{window_id}", "-n", "editor", "sleep 1m",
+		"-F#{window_id}", "-n", "editor", "--", "sleep 1m",
 	})
 }
 
@@ -502,13 +502,9 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 		[]versionResponse{{
 			result: tmuxcmd.Result{Stdout: []string{"%9"}, ExitCode: 0},
 		}},
-		lifecycleSnapshotResponses(
+		lifecyclePaneListingResponses(
 			t,
 			version,
-			map[string]string{"session_id": "$1", "session_name": "work"},
-			map[string]string{
-				"session_id": "$1", "window_id": "@8", "window_index": "4",
-			},
 			map[string]string{
 				"session_id": "$1", "window_id": "@8", "window_index": "4",
 				"pane_id": "%9", "pane_index": "1",
@@ -532,8 +528,8 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 		t.Fatalf("SplitPane() = %#v, want live %%9 model", pane)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"split-window", "-t", "$1:4", "-h", "-b", "-l10", "-P",
-		"-F#{pane_id}", "-c/work", "-d", "sleep 1m",
+		"split-window", "-t", "$1:@8", "-h", "-b", "-l10", "-P",
+		"-F#{pane_id}", "-c/work", "-d", "--", "sleep 1m",
 	})
 }
 
@@ -592,7 +588,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 		{
 			name:     "rename session",
 			command:  "rename-session",
-			wantArgs: []string{"rename-session", "-t", "$7", "renamed"},
+			wantArgs: []string{"rename-session", "-t", "$7", "--", "renamed"},
 			listing:  "list-sessions",
 			row: map[string]string{
 				"session_id": "$7", "session_name": "renamed",
@@ -610,7 +606,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 		{
 			name:     "rename window",
 			command:  "rename-window",
-			wantArgs: []string{"rename-window", "-t", "$7:0", "renamed"},
+			wantArgs: []string{"rename-window", "-t", "$7:@8", "--", "renamed"},
 			listing:  "list-windows",
 			row: map[string]string{
 				"session_id": "$7", "window_id": "@8", "window_index": "2", "window_name": "renamed",
@@ -628,7 +624,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 		{
 			name:     "select window",
 			command:  "select-window",
-			wantArgs: []string{"select-window", "-t", "$7:0"},
+			wantArgs: []string{"select-window", "-t", "$7:@8"},
 			listing:  "list-windows",
 			row: map[string]string{
 				"session_id": "$7", "window_id": "@8", "window_index": "2", "window_active": "1",
@@ -1129,7 +1125,7 @@ func TestLifecycleCreationExpandsCurrentUserStartDirectory(t *testing.T) {
 				return err
 			},
 			wantArgs: []string{
-				"split-window", "-t", "$1:0", "-v", "-P", "-F#{pane_id}",
+				"split-window", "-t", "$1:@2", "-v", "-P", "-F#{pane_id}",
 				"-c" + wantDirectory, "-d",
 			},
 		},
@@ -1225,7 +1221,7 @@ func TestWindowRenameAllowsEmptyName(t *testing.T) {
 		t.Fatalf("Window.Rename() name = %q, want empty", name)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"rename-window", "-t", "$7:0", "",
+		"rename-window", "-t", "$7:@8", "--", "",
 	})
 }
 
@@ -1541,6 +1537,28 @@ func lifecycleSnapshotResponses(
 	return append(responses, liveIdentityResponse(version))
 }
 
+// lifecyclePaneListingResponses scripts what materializing one pane from its
+// own window's listing asks for: the opening identity probe, the listing, and
+// the closing probe.
+func lifecyclePaneListingResponses(
+	t *testing.T,
+	version Version,
+	paneRow map[string]string,
+) []versionResponse {
+	t.Helper()
+	fields, err := formatFieldsFor("list-panes", version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []versionResponse{
+		liveIdentityResponse(version),
+		{result: tmuxcmd.Result{
+			RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, paneRow)),
+		}},
+		liveIdentityResponse(version),
+	}
+}
+
 func assertLifecycleArguments(t *testing.T, runner *versionQueueRunner, want []string) {
 	t.Helper()
 	requests := runner.recordedRequests()
@@ -1548,6 +1566,27 @@ func assertLifecycleArguments(t *testing.T, runner *versionQueueRunner, want []s
 		t.Fatalf("request count = %d, want 1", len(requests))
 	}
 	assertRequestArguments(t, requests[0], want)
+}
+
+// defaultGlobalArguments is what commandArguments prepends for a server built
+// from zero ServerOptions. TestServerBuildsTmuxGlobalArguments pins it, and
+// TestCommandArgumentsRequestUTF8ExceptWhenAttaching pins when it is absent.
+var defaultGlobalArguments = []string{"-u"}
+
+// withoutGlobalFlags drops the leading global arguments so a recorded request
+// reads as the subcommand the test is about. Every recorder returns its
+// requests through this.
+func withoutGlobalFlags(requests []tmuxcmd.Request) []tmuxcmd.Request {
+	stripped := slices.Clone(requests)
+	for index, request := range stripped {
+		if len(request.Arguments) == 0 ||
+			request.Arguments[0] != defaultGlobalArguments[0] {
+			continue
+		}
+		request.Arguments = slices.Clone(request.Arguments[1:])
+		stripped[index] = request
+	}
+	return stripped
 }
 
 func assertRequestArguments(t *testing.T, request tmuxcmd.Request, want []string) {

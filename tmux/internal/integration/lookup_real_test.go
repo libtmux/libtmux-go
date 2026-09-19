@@ -117,12 +117,12 @@ func TestLiveRelationshipResolversAgainstRealTmux(t *testing.T) {
 	if activeWindow.SessionID() != wantWindow.SessionID() || activeWindow.ID() != wantWindow.ID() || activeWindow.Index() != wantWindow.Index() {
 		t.Fatalf("Session.ResolveActiveWindow() = %#v, want %#v", activeWindow, wantWindow)
 	}
-	activePane, found, err := pointSession.ResolveActivePane(ctx)
+	activePane, err := pointSession.ResolveActivePane(ctx)
 	if err != nil {
 		t.Fatalf("Session.ResolveActivePane() error = %v", err)
 	}
-	if !found || activePane.ID() != wantPane.ID() || activePane.WindowIndex() != wantPane.WindowIndex() {
-		t.Fatalf("Session.ResolveActivePane() = (%#v, %t), want %#v", activePane, found, wantPane)
+	if activePane.ID() != wantPane.ID() || activePane.WindowIndex() != wantPane.WindowIndex() {
+		t.Fatalf("Session.ResolveActivePane() = %#v, want %#v", activePane, wantPane)
 	}
 
 	pointWindow, err := server.Window(ctx, wantWindow.ID())
@@ -136,12 +136,12 @@ func TestLiveRelationshipResolversAgainstRealTmux(t *testing.T) {
 	if parentSession.ID() != pointWindow.SessionID() {
 		t.Fatalf("Window.ResolveSession() = %#v, want %s", parentSession, pointWindow.SessionID())
 	}
-	windowPane, found, err := pointWindow.ResolveActivePane(ctx)
+	windowPane, err := pointWindow.ResolveActivePane(ctx)
 	if err != nil {
 		t.Fatalf("Window.ResolveActivePane() error = %v", err)
 	}
-	if !found || windowPane.ID() != wantPane.ID() || windowPane.WindowIndex() != pointWindow.Index() {
-		t.Fatalf("Window.ResolveActivePane() = (%#v, %t), want pane %s in index %d", windowPane, found, wantPane.ID(), pointWindow.Index())
+	if windowPane.ID() != wantPane.ID() || windowPane.WindowIndex() != pointWindow.Index() {
+		t.Fatalf("Window.ResolveActivePane() = %#v, want pane %s in index %d", windowPane, wantPane.ID(), pointWindow.Index())
 	}
 
 	pointPane, err := server.Pane(ctx, wantPane.ID())
@@ -226,4 +226,97 @@ func realCanonicalWinlink(t *testing.T, server tmux.Server, target string) (tmux
 		t.Fatal("canonical winlink has empty session")
 	}
 	return tmux.SessionID(session), index
+}
+
+// A resolver reads the session and window holding its pane out of the pane
+// rows themselves. Every pane of a window names that window, so the records
+// those rows project have to be kept once: a window that appeared twice is as
+// ambiguous to a relation lookup as two different windows, and the pane comes
+// back unable to name where it lives.
+//
+//libtmux:real-tmux
+func TestResolvedPaneNavigatesFromAWindowOfSeveralPanes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	server := tmuxtest.NewServer(ctx, t)
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "several"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
+	}
+	window, err := pane.ResolveWindow(ctx)
+	if err != nil {
+		t.Fatalf("ResolveWindow() error = %v", err)
+	}
+	for range 2 {
+		if _, err := window.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
+			t.Fatalf("SplitPane() error = %v", err)
+		}
+	}
+	// A second window, so the session's own listing spans more than one.
+	if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+		t.Fatalf("NewWindow() error = %v", err)
+	}
+
+	for _, resolve := range []struct {
+		name string
+		call func() (tmux.Pane, error)
+	}{
+		{name: "session", call: func() (tmux.Pane, error) { return session.ResolveActivePane(ctx) }},
+		{name: "window", call: func() (tmux.Pane, error) { return window.ResolveActivePane(ctx) }},
+	} {
+		t.Run(resolve.name, func(t *testing.T) {
+			resolved, err := resolve.call()
+			if err != nil {
+				t.Fatalf("ResolveActivePane() error = %v", err)
+			}
+			holder, ok := resolved.Window()
+			if !ok || holder.ID() != resolved.WindowID() {
+				t.Errorf("Window() = (%s, %t), want %s", holder.ID(), ok, resolved.WindowID())
+			}
+			owner, ok := resolved.Session()
+			if !ok || owner.ID() != resolved.SessionID() {
+				t.Errorf("Session() = (%s, %t), want %s", owner.ID(), ok, resolved.SessionID())
+			}
+		})
+	}
+}
+
+// A person names a session; only this package's records carry its id.
+//
+//libtmux:real-tmux
+func TestSessionByNameFindsAndReportsAbsence(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	server := tmuxtest.NewServer(ctx, t)
+	created, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "by-name"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	found, err := server.SessionByName(ctx, "by-name")
+	if err != nil {
+		t.Fatalf("SessionByName() error = %v", err)
+	}
+	if found.ID() != created.ID() {
+		t.Errorf("SessionByName() = %s, want %s", found.ID(), created.ID())
+	}
+	if name, ok := found.Name(); !ok || name != "by-name" {
+		t.Errorf("Name() = (%q, %t), want the name it was looked up by", name, ok)
+	}
+	// A renamed session is no longer at its old name, where a held id would
+	// still reach it: that difference is the reason both lookups exist.
+	if _, err := created.Rename(ctx, "renamed"); err != nil {
+		t.Fatalf("Rename() error = %v", err)
+	}
+	if _, err := server.SessionByName(ctx, "by-name"); !errors.Is(err, tmux.ErrNotFound) {
+		t.Errorf("SessionByName(renamed away) error = %v, want ErrNotFound", err)
+	}
+	if _, err := server.Session(ctx, created.ID()); err != nil {
+		t.Errorf("Session(id) error = %v, want the same session under its new name", err)
+	}
 }

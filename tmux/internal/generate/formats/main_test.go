@@ -596,8 +596,8 @@ func TestCheckedInFormatSpecGeneratesCheckedInOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read checked-in format spec: %v", err)
 	}
-	if len(spec.Fields) != 200 {
-		t.Fatalf("checked-in format fields = %d, want 200", len(spec.Fields))
+	if len(spec.Fields) != 212 {
+		t.Fatalf("checked-in format fields = %d, want 212", len(spec.Fields))
 	}
 	if spec.Schema != 2 {
 		t.Fatalf("checked-in format schema = %d, want 2", spec.Schema)

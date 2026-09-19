@@ -1374,7 +1374,7 @@ Belongs to the `execute` toolset.
 
 ### `run_shell_command`
 
-Run a shell command in a pane with your user's permissions. Runs one authored command only for configured singleton membership, checks it before setup and again before dispatch, and waits for framed completion.
+Run a shell command in a pane with your user's permissions. Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status.
 
 Belongs to the `execute` toolset.
 
@@ -1452,7 +1452,7 @@ Reads only. Repeating it changes nothing.
 
 ### `select_layout`
 
-Change tmux state; no client-supplied executable input. Applies one built-in tmux layout.
+Change tmux state; no client-supplied executable input. Applies a built-in tmux layout, or a saved layout string from get_window_info.
 
 Belongs to the `manage` toolset.
 
@@ -1472,7 +1472,7 @@ Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `layout` **required** | string | a built-in tmux layout name |
+| `layout` **required** | string | a built-in tmux layout name, or a saved layout string from get_window_info |
 | `window_id` **required** | string | the window id, such as @1 |
 
 | Returns | Type |
@@ -1538,7 +1538,7 @@ Changes tmux state.
 
 ### `send_keys`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends input after validating sorted configured synchronized membership; reported ids describe preflight membership, not proven effects.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends keys to a pane and to every pane synchronize-panes links it with; the ids reported are the panes checked before sending, not proof that each one received the keys.
 
 Belongs to the `execute` toolset.
 
@@ -1558,8 +1558,9 @@ Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `keys` **required** | array | key names or literal strings to send |
+| `keys` **required** | array | key names or literal strings to send; do not put "Enter" here when literal is true, it types the five letters - set enter instead |
 | `pane_id` **required** | string | the pane id, such as %1 |
+| `enter` | boolean | press Enter after keys, as a real key press, to submit them |
 | `literal` | boolean | send strings literally instead of as key names |
 
 | Returns | Type |
@@ -1570,7 +1571,7 @@ Changes tmux state.
 
 ### `send_keys_batch`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends up to sixty-four ordered pane-input operations, each with a fresh configured-membership preflight.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Sends up to sixty-four key sequences in order, rechecking before each one which panes synchronize-panes links to its target.
 
 Belongs to the `execute` toolset.
 
@@ -1694,7 +1695,7 @@ Changes tmux state.
 
 ### `set_synchronize_panes`
 
-Change tmux state; no client-supplied executable input. Sets the window synchronization default; pane-level overrides determine later configured input membership and effects can still differ.
+Change tmux state; no client-supplied executable input. Sets the window synchronization default (synchronize-panes); pane-level overrides still decide which panes receive later input.
 
 Belongs to the `execute` toolset.
 
@@ -2018,6 +2019,7 @@ Reads only. Repeating it changes nothing.
 | `matchedAtEntry` **required** | boolean |
 | `outcome` **required** | string |
 | `paneId` **required** | string |
+| `pendingInputOnly` **required** | boolean |
 | `truncated` **required** | boolean |
 | `entryNote` | string |
 | `lines` | array |

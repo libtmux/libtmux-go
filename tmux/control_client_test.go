@@ -658,8 +658,16 @@ func TestNotificationsReportAnUnreadableRecordAndKeepGoing(t *testing.T) {
 	if want := []string{"first", "second"}; !slices.Equal(names, want) {
 		t.Errorf("notifications read = %#v, want %#v", names, want)
 	}
-	if len(reported) != 1 || !errors.Is(reported[0], ErrUnknownControlNotification) {
-		t.Errorf("errors reported = %#v, want one unknown-notification error", reported)
+	// The unknown-notification error does not end the loop; the natural end
+	// of this fixture's stream, with no Close requested, does, and that end
+	// must itself be reported, not silently swallowed.
+	if len(reported) != 2 ||
+		!errors.Is(reported[0], ErrUnknownControlNotification) ||
+		!errors.Is(reported[1], ErrControlStreamLost) {
+		t.Errorf(
+			"errors reported = %#v, want [unknown-notification, ErrControlStreamLost]",
+			reported,
+		)
 	}
 }
 
@@ -711,6 +719,28 @@ func TestNotificationsLeaveTheRestOfTheQueueForTheNextReader(t *testing.T) {
 // newQueuedNotificationClient returns a control client whose notification
 // queue holds what stream carries, without a tmux process: the stream is read
 // to its end before the client is returned.
+func TestNextNotificationNamesAnUnrequestedStreamEnd(t *testing.T) {
+	t.Parallel()
+
+	client := newQueuedNotificationClient(t, "%exit server exited\n")
+	if _, err := client.NextNotification(context.Background()); err != nil {
+		t.Fatalf("NextNotification() = %v, want the %%exit notification", err)
+	}
+	_, err := client.NextNotification(context.Background())
+	if !errors.Is(err, ErrControlStreamLost) || !errors.Is(err, io.EOF) ||
+		!strings.Contains(err.Error(), "server exited") {
+		t.Fatalf("NextNotification() = %v, want a stream loss naming tmux's reason", err)
+	}
+
+	client = newQueuedNotificationClient(t, "%exit server exited\n")
+	client.closeRequested.Store(true)
+	_, _ = client.NextNotification(context.Background())
+	if _, err := client.NextNotification(context.Background()); !errors.Is(err, os.ErrClosed) ||
+		errors.Is(err, ErrControlStreamLost) {
+		t.Fatalf("NextNotification() after Close = %v, want os.ErrClosed and no loss", err)
+	}
+}
+
 func newQueuedNotificationClient(t *testing.T, stream string) *ControlClient {
 	t.Helper()
 

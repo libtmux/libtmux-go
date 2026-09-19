@@ -35,7 +35,19 @@ func sessionOptionRuntimeScope(session Session) (Server, []string, error) {
 	return session.server, []string{"-t", target}, nil
 }
 
+// windowOptionRuntimeScope names the window by id alone: options and hooks
+// belong to the window, not to one of its links, and a session in the target
+// would let tmux set a missing window's option on that session's current one.
 func windowOptionRuntimeScope(window Window) (Server, []string, error) {
+	if _, err := validateWindowView(window); err != nil {
+		return Server{}, nil, err
+	}
+	return window.server, []string{"-t", window.windowID.String(), "-w"}, nil
+}
+
+// windowFormatScope keeps the session a linked window is viewed from, for the
+// operations whose formats tmux expands in that session.
+func windowFormatScope(window Window) (Server, []string, error) {
 	target, err := exactWindowTarget(window)
 	if err != nil {
 		return Server{}, nil, err

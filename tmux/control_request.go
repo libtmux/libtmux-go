@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -123,7 +124,24 @@ func (c *ControlClient) Call(
 
 // cmd returns one result per executed command in a command list. A failed list
 // includes the failure and omits commands tmux dropped after it.
+// cmd observes what it runs. A caller already observing the command it drives
+// uses cmdUnobserved instead, so one command produces one trace.
 func (c *ControlClient) cmd(
+	ctx context.Context,
+	commandList bool,
+	args ...string,
+) (results []ControlCommandResult, err error) {
+	if observer := c.server.commandObserver(); observer != nil {
+		started := time.Now()
+		defer func() {
+			observeCommand(observer, args, started, CommandTransportConnection,
+				controlExitCode(results, err), err)
+		}()
+	}
+	return c.cmdUnobserved(ctx, commandList, args...)
+}
+
+func (c *ControlClient) cmdUnobserved(
 	ctx context.Context,
 	commandList bool,
 	args ...string,
@@ -306,4 +324,20 @@ func (c *ControlClient) calibrateReplyFence(ctx context.Context) error {
 	}
 	c.replyFence = fence
 	return nil
+}
+
+// controlExitCode renders a control-mode outcome as the exit code a trace
+// carries. tmux reports a failed command over control mode by closing its
+// frame with %error rather than with a status, so a failed frame reads as 1
+// and a local failure as the -1 that means no tmux command ran.
+func controlExitCode(results []ControlCommandResult, err error) int {
+	if err != nil {
+		return -1
+	}
+	for _, result := range results {
+		if result.Failed {
+			return 1
+		}
+	}
+	return 0
 }

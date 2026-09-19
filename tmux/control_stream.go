@@ -12,15 +12,33 @@ import (
 )
 
 // NextNotification returns the next ordered control-mode notification. Exactly
-// one caller may execute it at a time. Natural process exit preserves queued
-// notifications until they drain through io.EOF; Close releases the queue and
-// makes subsequent reads report os.ErrClosed. A terminal reader error follows
-// notifications queued before that failure. A full bounded queue likewise
-// drains before reporting [ControlNotificationOverflowError].
+// one caller may execute it at a time. Close releases the queue and makes
+// subsequent reads report os.ErrClosed, drained through queued notifications
+// first. Natural process exit before a caller asked to close instead reports
+// [ErrControlStreamLost] - most often because the server the underlying tmux
+// client was attached to exited - naming the tmux exit reason when one was
+// sent. A terminal reader error follows notifications queued before that
+// failure. A full bounded queue likewise drains before reporting
+// [ControlNotificationOverflowError].
 func (c *ControlClient) NextNotification(
 	ctx context.Context,
 ) (ControlNotification, error) {
-	return c.nextNotificationAfter(ctx, 0)
+	notification, err := c.nextNotificationAfter(ctx, 0)
+	if err == nil || !errors.Is(err, io.EOF) {
+		return notification, err
+	}
+	if c.closeRequested.Load() {
+		return ControlNotification{}, os.ErrClosed
+	}
+	c.stateMu.Lock()
+	reason := c.lastExitReason
+	c.stateMu.Unlock()
+	if reason != "" {
+		return ControlNotification{}, fmt.Errorf(
+			"%w: tmux exited the client: %s: %w", ErrControlStreamLost, reason, err,
+		)
+	}
+	return ControlNotification{}, fmt.Errorf("%w: %w", ErrControlStreamLost, err)
 }
 
 func (c *ControlClient) nextNotificationAfter(
@@ -32,6 +50,19 @@ func (c *ControlClient) nextNotificationAfter(
 		return ControlNotification{}, err
 	}
 	return ParseControlNotification(record)
+}
+
+// readyNotificationAfter is nextNotificationAfter without the wait; ok is
+// false when nothing is queued.
+func (c *ControlClient) readyNotificationAfter(
+	sequence uint64,
+) (notification ControlNotification, ok bool, err error) {
+	record, err := c.notifications.nextReady(sequence)
+	if err != nil || record == nil {
+		return ControlNotification{}, false, err
+	}
+	notification, err = ParseControlNotification(record)
+	return notification, true, err
 }
 
 // Notifications returns an iterator over what tmux says without being asked:
@@ -50,9 +81,9 @@ func (c *ControlClient) nextNotificationAfter(
 //	}
 //
 // Malformed or unknown notifications yield their error and iteration continues.
-// Every other error ends the stream after being yielded.
-//
-// Natural tmux exit drains queued notifications and then ends without error.
+// Every other error ends the stream after being yielded, including the
+// [ErrControlStreamLost] or os.ErrClosed [ControlClient.NextNotification]
+// reports at a natural end.
 //
 // Leaving early preserves queued notifications for the next read.
 func (c *ControlClient) Notifications(
@@ -70,7 +101,12 @@ func notificationSeq(
 	return func(yield func(ControlNotification, error) bool) {
 		for {
 			notification, err := next(ctx)
-			if errors.Is(err, io.EOF) {
+			// Identity, not errors.Is: a richly wrapped loss such as
+			// ErrPaneObservationLost or ErrControlStreamLost can unwrap to
+			// io.EOF too, and must still be yielded rather than silently
+			// swallowed here. Only the bare sentinel itself means "clean end,
+			// nothing more to report."
+			if err == io.EOF { //nolint:errorlint // see comment above
 				return
 			}
 			if !yield(notification, err) {
@@ -119,6 +155,7 @@ func (c *ControlClient) readStream() {
 			}
 			if notification != nil {
 				c.trackSessionChange(notification)
+				c.trackExitReason(notification)
 				wireSequence++
 				if appendErr := c.notifications.append(
 					wireSequence,
@@ -173,6 +210,30 @@ func (c *ControlClient) trackSessionChange(record []byte) {
 	}
 	c.stateMu.Lock()
 	c.currentSessionID = SessionID(arguments[0])
+	c.stateMu.Unlock()
+}
+
+// trackExitReason records the tail of a %exit notification as it streams
+// past, so a later unsolicited EOF can name why tmux ended the connection
+// even though the caller may have already read past that notification.
+func (c *ControlClient) trackExitReason(record []byte) {
+	const kind = ControlNotificationExit
+	if !bytes.HasPrefix(record, []byte(kind)) {
+		return
+	}
+	if len(record) > len(kind) && record[len(kind)] != ' ' {
+		return
+	}
+	notification, err := ParseControlNotification(record)
+	if err != nil || notification.Kind() != ControlNotificationExit {
+		return
+	}
+	var reason string
+	if arguments := notification.Arguments(); len(arguments) != 0 {
+		reason = arguments[0]
+	}
+	c.stateMu.Lock()
+	c.lastExitReason = reason
 	c.stateMu.Unlock()
 }
 

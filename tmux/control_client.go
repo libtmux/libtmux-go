@@ -13,6 +13,13 @@ import (
 // began closing or lost its protocol stream.
 var ErrControlClosed = errors.New("tmux: control client is closed")
 
+// ErrControlStreamLost identifies a [ControlClient.NextNotification] stream
+// that ended before the caller asked to close it, distinct from the clean
+// end an explicit Close or CloseContext produces. It is most often the
+// underlying tmux client process exiting because the server it was attached
+// to did.
+var ErrControlStreamLost = errors.New("tmux: control stream lost")
+
 // ErrOutcomeUnknown identifies a command whose write began but whose reply
 // boundary was not observed. The operation may have changed tmux.
 var ErrOutcomeUnknown = errors.New("tmux: command outcome is unknown")
@@ -24,6 +31,11 @@ var ErrControlReplyCount = errors.New("tmux: control command did not return exac
 // ControlClient is one attached tmux control-mode process. Create one with
 // [Server.OpenControl]. Concurrent Cmd, Wait, and close calls are supported;
 // exactly one caller may execute NextNotification at a time.
+//
+// It is the low-level handle: it carries commands and notifications on one
+// client and can [ControlClient.Reconnect], but records do not run through it.
+// [Session.OpenControl] returns a [Connection] instead, whose lanes the
+// sessions, windows and panes obtained from it use for their own commands.
 type ControlClient struct {
 	server     Server
 	session    Session
@@ -47,6 +59,11 @@ type ControlClient struct {
 	readErr          error
 	waitErr          error
 	currentSessionID SessionID
+	// lastExitReason is the tail of the most recent %exit notification read
+	// off the wire, tracked as notifications arrive rather than as a caller
+	// consumes them. Empty means either none arrived or tmux sent a bare
+	// %exit with no reason.
+	lastExitReason string
 
 	closeRequested atomic.Bool
 	closeOnce      sync.Once

@@ -111,7 +111,11 @@ func (w Window) SetOption(
 	value string,
 	options SetOptionOptions,
 ) error {
-	server, scope, err := windowOptionRuntimeScope(w)
+	scopeOf := windowOptionRuntimeScope
+	if options.ExpandFormat {
+		scopeOf = windowFormatScope
+	}
+	server, scope, err := scopeOf(w)
 	if err != nil {
 		return err
 	}
@@ -222,7 +226,11 @@ func (w Window) AppendOption(
 	value string,
 	options SetOptionOptions,
 ) error {
-	server, scope, err := windowOptionRuntimeScope(w)
+	scopeOf := windowOptionRuntimeScope
+	if options.ExpandFormat {
+		scopeOf = windowFormatScope
+	}
+	server, scope, err := scopeOf(w)
 	if err != nil {
 		return err
 	}

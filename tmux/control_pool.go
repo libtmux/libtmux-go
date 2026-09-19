@@ -114,7 +114,9 @@ func (p *controlLanePool) call(
 	if err != nil {
 		return nil, err
 	}
-	results, err := client.cmd(ctx, commandList, arguments...)
+	// Unobserved: both callers report their own, Server.runCommand for the
+	// commands it sends down this lane and Connection.Call for its own.
+	results, err := client.cmdUnobserved(ctx, commandList, arguments...)
 	p.release(client, err)
 	return results, err
 }

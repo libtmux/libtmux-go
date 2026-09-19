@@ -61,7 +61,7 @@ func (p *Plan) RenameWindow(target Ref, name string) {
 			); err != nil {
 				return nil, err
 			}
-			return targetedArguments("rename-window", resolved, name)
+			return targetedArguments("rename-window", resolved, "--", name)
 		},
 	})
 }

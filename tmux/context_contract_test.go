@@ -82,7 +82,7 @@ func TestReadOnlyOperationsPreserveContextCancellation(t *testing.T) {
 		{
 			name: "session resolve active pane",
 			call: func(server Server, ctx context.Context) error {
-				_, _, err := (Session{server: server, sessionID: "$1"}).ResolveActivePane(ctx)
+				_, err := (Session{server: server, sessionID: "$1"}).ResolveActivePane(ctx)
 				return err
 			},
 		},
@@ -98,7 +98,7 @@ func TestReadOnlyOperationsPreserveContextCancellation(t *testing.T) {
 		{
 			name: "window resolve active pane",
 			call: func(server Server, ctx context.Context) error {
-				_, _, err := (Window{
+				_, err := (Window{
 					server: server, sessionID: "$1", windowID: "@1", windowIndex: 0,
 				}).ResolveActivePane(ctx)
 				return err

@@ -56,19 +56,29 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	pane, ok, err := session.ResolveActivePane(ctx)
+	pane, err := session.ResolveActivePane(ctx)
 	if err != nil {
 		return fmt.Errorf("find pane: %w", err)
-	}
-	if !ok {
-		return errors.New("session reported no pane")
 	}
 
 	// A payload with the characters a shell would fight over, from anything
 	// that reads: a file, a socket, an HTTP body, or this strings.Reader.
+	const marker = "'quoted'"
 	payload := strings.NewReader("$HOME 'quoted' \"double\" `backtick` \\ done\n")
 
-	// docs:byte-streams
+	// docs:byte-streams given:ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader; archive string; marker string
+	// Pasting hands the bytes to the pane's pty; the program reading it echoes
+	// them back on its own schedule. Watch before pasting, so the wait cannot
+	// start after the bytes it is waiting for already arrived, and capture only
+	// once they are on the screen -- a capture taken straight after the paste
+	// archives whatever the pane happened to be showing, which on a loaded
+	// machine is still an empty screen.
+	observation, err := pane.OpenObservation(ctx)
+	if err != nil {
+		return fmt.Errorf("observe pane: %w", err)
+	}
+	defer func() { err = errors.Join(err, observation.Close()) }()
+
 	name := "payload"
 	if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
 		Name: &name,
@@ -79,6 +89,21 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 		BufferName: &name, DeleteAfter: true,
 	}); err != nil {
 		return fmt.Errorf("paste payload: %w", err)
+	}
+	// The pane announces the bytes as it echoes them, so nothing here has to
+	// guess how long that takes or re-capture on a timer.
+	seen := strings.Builder{}
+	for _, line := range observation.Baseline() {
+		seen.WriteString(line)
+	}
+	for !strings.Contains(seen.String(), marker) {
+		notification, err := observation.NextNotification(ctx)
+		if err != nil {
+			return fmt.Errorf("follow pane output: %w", err)
+		}
+		if _, output, ok := notification.Output(); ok {
+			seen.Write(output)
+		}
 	}
 
 	file, err := os.Create(archive)

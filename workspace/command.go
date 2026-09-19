@@ -5,7 +5,7 @@ import (
 	"math"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // Command is one command to run in a pane. YAML accepts either a bare string or

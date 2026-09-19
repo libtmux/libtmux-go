@@ -438,8 +438,8 @@ func TestPaneEnvironmentAcceptsAnyNonemptyPercentTargetAndLetsTmuxClassifyIt(t *
 				serverWithRunner(runner),
 				paneID,
 			)
-			if !errors.Is(err, ErrSnapshotNotFound) || errors.Is(err, ErrNotInsideTmux) || errors.Is(err, ErrInvalidTarget) {
-				t.Fatalf("discovery error = %v, want tmux-classified ErrSnapshotNotFound", err)
+			if !errors.Is(err, ErrNotFound) || errors.Is(err, ErrNotInsideTmux) || errors.Is(err, ErrInvalidTarget) {
+				t.Fatalf("discovery error = %v, want tmux-classified ErrNotFound", err)
 			}
 			requests := runner.recordedRequests()
 			if len(requests) != 3 || !strings.Contains(strings.Join(requests[1].Arguments, " "), "-t "+rawPaneID) {
@@ -466,7 +466,7 @@ func TestDiscoverEnvironmentHierarchyDistinguishesMissingPaneFromDeadServer(t *t
 				{result: tmuxcmd.Result{Stderr: []string{"can't find pane: %99"}, ExitCode: 1}},
 				liveIdentityResponse(version),
 			},
-			want: ErrSnapshotNotFound,
+			want: ErrNotFound,
 		},
 		{
 			name: "dead before opening probe",
@@ -474,7 +474,7 @@ func TestDiscoverEnvironmentHierarchyDistinguishesMissingPaneFromDeadServer(t *t
 				Stderr: []string{"no server running"}, ExitCode: 1,
 			}}},
 			want:   ErrCommand,
-			reject: ErrSnapshotNotFound,
+			reject: ErrNotFound,
 		},
 		{
 			name:      "context remains visible",

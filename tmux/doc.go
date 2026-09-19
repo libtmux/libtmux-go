@@ -1,5 +1,5 @@
 // Package tmux provides a typed, context-aware API for tmux 3.2a through
-// tmux 3.7c.
+// tmux 3.8-rc.
 //
 //	import "github.com/libtmux/libtmux-go/tmux"
 //
@@ -26,10 +26,23 @@
 //     [Session.OpenControl], or receive notifications with
 //     [Session.OpenNotifications] or [Server.OpenNotifications].
 //   - Batch dependent commands with [NewPlan].
+//   - Encode a record as JSON with [Pane.MarshalJSON] and its siblings.
+//   - See what this package runs with [CommandObserver].
 //
-// The tmuxtest package runs integration tests against an isolated real tmux.
-// Tests of process behavior can point [ServerOptions.Binary] at an executable
-// fixture; construction still resolves and freezes it.
+// The tmuxtest package runs integration tests against an isolated real tmux,
+// and tmuxtest.ScriptedTmux answers named invocations from an executable it
+// writes, for a test with no tmux to drive.
+//
+// # Commands that need a person
+//
+// Some tmux commands ask an attached client to show something - a menu, a
+// prompt, a chooser, the clock - and do nothing a headless program can
+// observe: [Server.CommandPrompt], [Server.ConfirmBefore],
+// [Server.DisplayMenu], [Server.LockClient], [Server.LockServer],
+// [Pane.ChooseTree], [Pane.ChooseBuffer], [Pane.ChooseClient],
+// [Pane.ClockMode], [Pane.CustomizeMode], [Pane.DisplayPanes] and
+// [Pane.FindWindow]. [Pane.DisplayPopup] is the exception: it can run a
+// command and is useful with nobody watching.
 //
 // # Naming and call shapes
 //
@@ -98,6 +111,12 @@
 // return classified errors such as [CommandError]. Check sentinels with
 // errors.Is and concrete error values with errors.As.
 //
+// A mutation reports a completed failure from what tmux wrote to stderr, not
+// from its exit status: tmux exits nonzero for a target that was already in
+// the state asked for, and saying nothing is how it says so. A command tmux
+// refused for a target it could not find matches [ErrNotFound], as does a
+// lookup that found nothing.
+//
 // Reads use a bool for legitimate absence. Materialized reads return (T, bool);
 // live reads return (T, bool, error), separating "not found" from "could not
 // ask." Collection failures are never converted to empty collections.
@@ -117,8 +136,10 @@
 // exists, [Server.NewSessionConnection] creates one and keeps the creating
 // control process as its first lane.
 //
-// A plain [Server] starts one tmux process per operation. A [Connection] owns
-// persistent command lanes and returns model values already bound to them.
+// A plain [Server] starts a tmux process for each command it sends, so an
+// operation returning a materialized record costs the listing too. A
+// [Connection] owns persistent command lanes and returns model values
+// already bound to them.
 // Control connections appear as attached tmux clients, affect session_attached
 // and hooks, and must be closed by their owner. On tmux 3.6 and later, their
 // clients move to another session when the initial session is destroyed. On
@@ -141,12 +162,13 @@
 // through tmux's own stdin and stdout, which no quoting rule and no command
 // length limit apply to; tmux offers a control client neither stream, so those
 // three need a process and their path-taking siblings are what a connection
-// uses. [ControlClient.NextNotification]
-// waits for pane output as a stream, and [NotificationStream.Subscribe] asks
+// uses. [PaneObservation.WaitFor] waits for a pane to print something,
+// woken by tmux as the pane writes it; [ControlClient.NextNotification] is
+// that same stream as notifications, and [NotificationStream.Subscribe] asks
 // tmux to report a format whenever its value changes. [Server.WaitFor] waits
 // for an explicit tmux channel signal. Polling [Pane.Capture] reads the
-// visible screen and may match a shell's command echo before the command
-// produces output.
+// visible screen on a guess and may match a shell's command echo before the
+// command produces output.
 //
 // # Plans
 //

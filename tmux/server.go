@@ -20,6 +20,10 @@ type Server struct {
 	// requiresProcess marks exact-output and interactive operations that cannot
 	// cross a persistent control connection.
 	requiresProcess bool
+	// inheritsLocale marks an operation whose tmux output reaches the caller's
+	// own terminal rather than this package, so tmux's locale detection
+	// governs it instead of the UTF-8 commandArguments otherwise asks for.
+	inheritsLocale bool
 }
 
 type serverState struct {
@@ -136,7 +140,8 @@ func (s Server) dispatch(
 // IsAlive reports whether a tmux server answers on the configured socket.
 // Only an absent server reports false without an error: a socket that exists
 // but cannot be reached, such as one the process may not read, is a question
-// that could not be answered and is returned as an error.
+// that could not be answered and is returned as an error. Use
+// [Server.CheckAlive] where an absent server is itself the failure.
 func (s Server) IsAlive(ctx context.Context) (bool, error) {
 	result, err := s.literalCmd(ctx, "list-sessions")
 	if err != nil {
@@ -152,9 +157,11 @@ func (s Server) IsAlive(ctx context.Context) (bool, error) {
 	return false, commandErr
 }
 
-// RaiseIfDead returns a [CommandError] when the configured server is not
-// alive. Cancellation and transport failures are returned directly.
-func (s Server) RaiseIfDead(ctx context.Context) error {
+// CheckAlive returns a [CommandError] when the configured server is not
+// alive. Cancellation and transport failures are returned directly. Use
+// [Server.IsAlive] where an absent server is an answer rather than a
+// failure.
+func (s Server) CheckAlive(ctx context.Context) error {
 	result, err := s.literalCmd(ctx, "list-sessions")
 	if err != nil {
 		return err
@@ -186,7 +193,7 @@ func (s Server) commandArguments(args []string) []string {
 		config.socketPath,
 		config.socketName,
 	)
-	globalCount := 0
+	globalCount := 1
 	if config.colors != ColorDefault {
 		globalCount++
 	}
@@ -198,6 +205,15 @@ func (s Server) commandArguments(args []string) []string {
 	}
 
 	command := make([]string, 0, globalCount+len(args))
+	// tmux replaces every non-ASCII byte in a format it expands for a command
+	// or control client whose locale does not name UTF-8, so a session named
+	// café reads back as caf_ with no error. Captured bytes go out whole
+	// either way; formats are what this is for. Go strings are UTF-8 and the environment
+	// this package runs under is not its to choose, so it asks for UTF-8
+	// rather than inheriting whatever the locale says.
+	if !s.inheritsLocale {
+		command = append(command, "-u")
+	}
 	switch config.colors {
 	case ColorDefault:
 	case Color88:

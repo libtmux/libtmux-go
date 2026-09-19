@@ -218,7 +218,7 @@ func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest)
 	if values.hasClient {
 		arguments = append(arguments, "-t", values.targetClient)
 	}
-	arguments = append(arguments, values.command)
+	arguments = append(arguments, "--", values.command)
 
 	result, err := s.literalCmd(ctx, arguments...)
 	return requireRedactedServerCommandNoStderr("confirm-before", result, err)
@@ -296,7 +296,7 @@ func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest)
 	if values.hasClient {
 		arguments = append(arguments, "-t", values.targetClient)
 	}
-	arguments = append(arguments, values.template)
+	arguments = append(arguments, "--", values.template)
 
 	result, err := s.literalCmd(ctx, arguments...)
 	return requireRedactedServerCommandNoStderr("command-prompt", result, err)
@@ -397,6 +397,7 @@ func (s Server) DisplayMenu(ctx context.Context, request DisplayMenuRequest) err
 	if values.stayOpen {
 		arguments = append(arguments, "-O")
 	}
+	arguments = append(arguments, "--")
 	for _, menuItem := range values.items {
 		arguments = append(arguments, menuItem.Name)
 		if menuItem.Name != "" {

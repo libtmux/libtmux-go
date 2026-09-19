@@ -12,8 +12,9 @@ var errPaneObservationLost = errors.New(
 	"pane output could not be preserved from the observation boundary",
 )
 
-type paneNotificationSource interface {
-	NextNotification(context.Context) (tmux.ControlNotification, error)
+// paneTextSource is what a wait reads from a pane observation.
+type paneTextSource interface {
+	WaitFor(context.Context, func(string) bool) (tmux.PaneText, error)
 }
 
 func paneObservationError(err error) error {

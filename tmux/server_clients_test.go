@@ -1038,5 +1038,5 @@ func (r *clientVersionGateRunner) Run(
 func (r *clientVersionGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }

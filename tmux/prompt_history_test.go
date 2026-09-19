@@ -66,12 +66,12 @@ func TestPromptHistoryBuildsExactArgumentsForClosedTypes(t *testing.T) {
 					if len(requests) != 2 {
 						t.Fatalf("runner requests = %#v, want version and %s", requests, operation)
 					}
-					assertHistoryArguments(t, requests[0], []string{"-V"})
+					assertRequestArguments(t, requests[0], []string{"-V"})
 					arguments := []string{operation + "-prompt-history"}
 					if test.argument != "" {
 						arguments = append(arguments, "-T", test.argument)
 					}
-					assertHistoryArguments(t, requests[1], arguments)
+					assertRequestArguments(t, requests[1], arguments)
 				})
 			}
 		})
@@ -170,7 +170,7 @@ func TestPromptHistoryRequiresTmux33BeforeCommand(t *testing.T) {
 			if len(requests) != 1 {
 				t.Fatalf("runner requests = %#v, want only version probe", requests)
 			}
-			assertHistoryArguments(t, requests[0], []string{"-V"})
+			assertRequestArguments(t, requests[0], []string{"-V"})
 		})
 	}
 }
@@ -379,9 +379,9 @@ func TestPromptHistoryOperationsShareOneSuccessfulVersionProbe(t *testing.T) {
 	if len(requests) != 3 {
 		t.Fatalf("runner requests = %#v, want one version and two history calls", requests)
 	}
-	assertHistoryArguments(t, requests[0], []string{"-V"})
-	assertHistoryArguments(t, requests[1], []string{"show-prompt-history", "-T", "command"})
-	assertHistoryArguments(t, requests[2], []string{"clear-prompt-history", "-T", "command"})
+	assertRequestArguments(t, requests[0], []string{"-V"})
+	assertRequestArguments(t, requests[1], []string{"show-prompt-history", "-T", "command"})
+	assertRequestArguments(t, requests[2], []string{"clear-prompt-history", "-T", "command"})
 }
 
 type historyResponse struct {
@@ -419,16 +419,9 @@ func (r *historyQueueRunner) callCount() int {
 func (r *historyQueueRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }
 
 func historyServerWithRunner(runner commandRunner) Server {
 	return serverWithRunner(runner)
-}
-
-func assertHistoryArguments(t *testing.T, request tmuxcmd.Request, want []string) {
-	t.Helper()
-	if !slices.Equal(request.Arguments, want) {
-		t.Fatalf("runner arguments = %#v, want %#v", request.Arguments, want)
-	}
 }

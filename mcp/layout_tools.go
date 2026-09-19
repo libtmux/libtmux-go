@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -142,8 +143,43 @@ var layoutPresets = map[string]bool{
 	"main-vertical-mirrored":   true,
 }
 
-// layoutString matches tmux's checksum-prefixed serialized layouts.
+// layoutString matches tmux's classic checksum-prefixed serialized layouts,
+// which every supported version accepts.
 var layoutString = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
+
+// layoutLooksLikeJSON matches the JSON layout shape tmux 3.8+ reports from
+// get_window_info and accepts back from select-layout, alongside the classic
+// grammar it still accepts too. This checks only the outer envelope, since
+// this tool treats a layout as an opaque string round-tripped through tmux,
+// never a structure to parse.
+func layoutLooksLikeJSON(layout string) bool {
+	trimmed := strings.TrimSpace(layout)
+	return strings.HasPrefix(trimmed, "{") && json.Valid([]byte(layout))
+}
+
+// layoutLooksValid screens for obviously wrong input before resolving a
+// window to arrange. It is not the authority on whether the connected tmux
+// actually accepts a given shape - that determination, including whether the
+// server is new enough for the JSON shape or a prefix's resolution is
+// version-gated or ambiguous, belongs to tmux.Window.SelectLayout, which
+// already version-gates it (tmux's own layout_set_lookup is a
+// prefix match, so "tile" and "even-h" apply on every version). A prefix
+// that names more than one preset is let through rather than rejected here,
+// since telling that apart correctly needs the connected version.
+func layoutLooksValid(layout string) bool {
+	if layout == "" {
+		return false
+	}
+	if layoutPresets[layout] || layoutString.MatchString(layout) || layoutLooksLikeJSON(layout) {
+		return true
+	}
+	for preset := range layoutPresets {
+		if strings.HasPrefix(preset, layout) {
+			return true
+		}
+	}
+	return false
+}
 
 func (t *tools) selectLayout(
 	ctx context.Context,
@@ -159,7 +195,7 @@ func (t *tools) selectLayout(
 			"layout and spread are alternatives: spread evens the panes already " +
 				"in the window, a layout replaces the arrangement")
 	}
-	if layout != "" && !layoutPresets[layout] && !layoutString.MatchString(layout) {
+	if layout != "" && !layoutLooksValid(layout) {
 		return nil, selectLayoutOutput{}, fmt.Errorf(
 			"%q is neither a tmux layout preset nor a layout string from get_window_info",
 			input.Layout)

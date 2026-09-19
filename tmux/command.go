@@ -25,6 +25,17 @@ var ErrCommand = errors.New("tmux: command failed")
 // during the command.
 var ErrNoServer = errors.New("tmux: no server reached")
 
+// ErrNotFound identifies an operation naming a tmux object that does not
+// exist. A lookup that found nothing matches it, and so does a command tmux
+// refused because the target it named was gone — the same condition reached
+// from either direction. [SnapshotLookupError] and [CommandError] match it
+// through errors.Is.
+//
+// Only a claim of absence this package has not disproved matches. A lookup
+// that reaches a replaced daemon, or whose diagnostic names an object it did
+// not target, reports what it saw rather than an absence.
+var ErrNotFound = errors.New("tmux: object not found")
+
 // ColorMode selects a tmux color-capability override for [ServerOptions].
 type ColorMode int
 
@@ -132,10 +143,37 @@ func (e *CommandError) Unwrap() error {
 	return ErrCommand
 }
 
-// Is reports [ErrNoServer] for a failure that means no tmux server answered:
-// either the command never reached one, or the one it reached is gone.
+// Is reports [ErrNoServer] for a failure that means no tmux server answered —
+// either the command never reached one, or the one it reached is gone — and
+// [ErrNotFound] for one tmux refused because the object it named was absent.
 func (e *CommandError) Is(target error) bool {
-	return target == ErrNoServer && e.noServer
+	switch target {
+	case ErrNoServer:
+		return e.noServer
+	case ErrNotFound:
+		return e.targetNotFound
+	default:
+		return false
+	}
+}
+
+// withoutAbsenceClaim returns err with any claim that tmux's target was
+// missing removed, for a caller that has disproved the absence the claim
+// would otherwise assert.
+//
+// err has to be the [CommandError] itself rather than one wrapping it, because
+// clearing a claim inside a chain would mean rebuilding the chain. Its callers
+// hold what snapshotListing returned, which is unwrapped. Anything else is
+// returned unchanged.
+func withoutAbsenceClaim(err error) error {
+	//nolint:errorlint // must be the unwrapped error, not one wrapping it; see above
+	commandError, ok := err.(*CommandError)
+	if !ok || !commandError.targetNotFound {
+		return err
+	}
+	cleared := *commandError
+	cleared.targetNotFound = false
+	return &cleared
 }
 
 func newCommandError(subcommand string, result CommandResult) *CommandError {
@@ -148,7 +186,9 @@ func newCommandError(subcommand string, result CommandResult) *CommandError {
 }
 
 func newRedactedCommandError(subcommand string, result CommandResult) *CommandError {
-	if commandServerUnreachable(result.Stderr) || commandFixedRefusal(result.Stderr) {
+	if commandServerUnreachable(result.Stderr) ||
+		commandFixedRefusal(result.Stderr) ||
+		commandTargetNotFound(result.Stderr) {
 		return newCommandError(subcommand, result)
 	}
 	return &CommandError{
@@ -180,6 +220,9 @@ var commandServerUnreachableSuffixes = [...]string{
 // Fixed refusals contain no caller values and remain safe in redacted errors.
 var commandFixedRefusals = [...]string{
 	"no space for a new pane",
+	// tmux 3.2a through 3.6a word the same refusal without "a"; layout.c moved
+	// and reworded it at 3.7.
+	"no space for new pane",
 }
 
 func commandFixedRefusal(stderr []string) bool {
@@ -237,6 +280,19 @@ func commandTargetNotFound(stderr []string) bool {
 				strings.HasSuffix(line, "can't find "+object) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// commandNoCurrentTarget recognizes tmux's "no current target" refusal: an
+// all-server listing that resolves an implicit current session (list-windows
+// -a, list-panes -a, list-clients) refuses this way when the server holds no
+// sessions at all. A server with zero sessions is still a working server.
+func commandNoCurrentTarget(stderr []string) bool {
+	for _, line := range stderr {
+		if strings.Contains(line, "no current target") {
+			return true
 		}
 	}
 	return false

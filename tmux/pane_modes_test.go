@@ -22,19 +22,19 @@ func TestPaneModeCommandsUseExactPaneContext(t *testing.T) {
 	}{
 		{name: "copy", operation: func(pane Pane) error {
 			return pane.CopyMode(context.Background(), CopyModeRequest{})
-		}, want: []string{"copy-mode", "-t", "$1:0.%3"}},
+		}, want: []string{"copy-mode", "-t", "$1:.%3"}},
 		{name: "clock", operation: func(pane Pane) error {
 			return pane.ClockMode(context.Background())
-		}, want: []string{"clock-mode", "-t", "$1:0.%3"}},
+		}, want: []string{"clock-mode", "-t", "$1:.%3"}},
 		{name: "choose buffer", operation: func(pane Pane) error {
 			return pane.ChooseBuffer(context.Background())
-		}, want: []string{"choose-buffer", "-t", "$1:0.%3"}},
+		}, want: []string{"choose-buffer", "-t", "$1:.%3"}},
 		{name: "choose client", operation: func(pane Pane) error {
 			return pane.ChooseClient(context.Background())
-		}, want: []string{"choose-client", "-t", "$1:0.%3"}},
+		}, want: []string{"choose-client", "-t", "$1:.%3"}},
 		{name: "customize", operation: func(pane Pane) error {
 			return pane.CustomizeMode(context.Background())
-		}, want: []string{"customize-mode", "-t", "$1:0.%3"}},
+		}, want: []string{"customize-mode", "-t", "$1:.%3"}},
 	}
 
 	for _, test := range tests {
@@ -83,7 +83,7 @@ func TestCopyModeBuildsPythonFlagOrder(t *testing.T) {
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[0], []string{"-V"})
 	assertRequestArguments(t, requests[1], []string{
-		"copy-mode", "-t", "$1:0.%3", "-u", "-e", "-M", "-d", "-s", "%9", "-q",
+		"copy-mode", "-t", "$1:.%3", "-u", "-e", "-M", "-d", "-s", "%9", "-q",
 	})
 }
 
@@ -108,7 +108,7 @@ func TestCopyModeWarnsAndOmitsPageDownBefore35(t *testing.T) {
 		t.Fatalf("CopyMode() error = %v", err)
 	}
 	requests := runner.recordedRequests()
-	assertRequestArguments(t, requests[1], []string{"copy-mode", "-t", "$1:0.%3"})
+	assertRequestArguments(t, requests[1], []string{"copy-mode", "-t", "$1:.%3"})
 	if len(warnings) != 1 || warnings[0].Feature != "page_down" ||
 		warnings[0].RequiredVersion.String() != "3.5" {
 		t.Fatalf("warnings = %#v", warnings)
@@ -133,7 +133,7 @@ func TestCopyModeZeroSourceOmitsFlagBeforePageDownVersionProbe(t *testing.T) {
 	}
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[1], []string{
-		"copy-mode", "-t", "$1:0.%3", "-d", "-q",
+		"copy-mode", "-t", "$1:.%3", "-d", "-q",
 	})
 }
 
@@ -180,7 +180,7 @@ func TestChooseTreeBuildsTypedSortAndLiteralFields(t *testing.T) {
 	}
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[0], []string{
-		"choose-tree", "-t", "$1:0.%3", "-s", "-w", "-Z", "-r",
+		"choose-tree", "-t", "$1:.%3", "-s", "-w", "-Z", "-r",
 		"-F", `#{session_name}\;`, "-f", "#{session_attached}", "-O", "name",
 	})
 }
@@ -216,7 +216,7 @@ func TestFindWindowAndDisplayPanesBuildDistinctTargetShapes(t *testing.T) {
 	}
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[0], []string{
-		"find-window", "-t", "$1:0.%3", "-C", "-i", "-N", "-r", "-T", "--", `needle\;`,
+		"find-window", "-t", "$1:.%3", "-C", "-i", "-N", "-r", "-T", "--", `needle\;`,
 	})
 	assertRequestArguments(t, requests[1], []string{"display-panes", "-d", "250", "-N"})
 }
@@ -235,7 +235,7 @@ func TestFindWindowProtectsLeadingDashMatch(t *testing.T) {
 	}
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[0], []string{
-		"find-window", "-t", "$1:0.%3", "--", "-needle",
+		"find-window", "-t", "$1:.%3", "--", "-needle",
 	})
 }
 

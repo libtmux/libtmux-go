@@ -129,11 +129,11 @@ func TestSessionKillGroupCompatibilityAgainstRealTmux(t *testing.T) {
 	if err := base.KillWith(ctx, tmux.SessionKillRequest{Group: true}); err != nil {
 		t.Fatalf("KillWith(Group) error = %v", err)
 	}
-	if _, err := server.Session(ctx, base.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("base lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Session(ctx, base.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("base lookup error = %v, want ErrNotFound", err)
 	}
-	if _, err := server.Session(ctx, peerID); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("grouped peer lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Session(ctx, peerID); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("grouped peer lookup error = %v, want ErrNotFound", err)
 	}
 }
 
@@ -163,8 +163,8 @@ func TestSessionKillAllExceptAgainstRealTmux(t *testing.T) {
 		t.Fatalf("keeper session lookup error = %v", err)
 	}
 	for _, killed := range []tmux.SessionID{first.ID(), second.ID()} {
-		if _, err := server.Session(ctx, killed); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-			t.Fatalf("killed session %s lookup error = %v, want ErrSnapshotNotFound", killed, err)
+		if _, err := server.Session(ctx, killed); !errors.Is(err, tmux.ErrNotFound) {
+			t.Fatalf("killed session %s lookup error = %v, want ErrNotFound", killed, err)
 		}
 	}
 }
@@ -279,8 +279,8 @@ func TestTargetedSessionAndWindowKillsAgainstRealTmux(t *testing.T) {
 	if err := server.KillSession(ctx, "server-kill-target"); err != nil {
 		t.Fatalf("KillSession(prefix) error = %v", err)
 	}
-	if _, err := server.Session(ctx, targetSession.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("target session lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Session(ctx, targetSession.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("target session lookup error = %v, want ErrNotFound", err)
 	}
 
 	session := tmuxtest.NewSession(
@@ -305,23 +305,23 @@ func TestTargetedSessionAndWindowKillsAgainstRealTmux(t *testing.T) {
 	if err := session.KillWindow(ctx, tmux.KillWindowRequest{Index: &index}); err != nil {
 		t.Fatalf("KillWindow(Index) error = %v", err)
 	}
-	if _, err := server.Window(ctx, indexed.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("indexed window lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Window(ctx, indexed.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("indexed window lookup error = %v, want ErrNotFound", err)
 	}
 
 	name := "string-target"
 	if err := session.KillWindow(ctx, tmux.KillWindowRequest{Target: &name}); err != nil {
 		t.Fatalf("KillWindow(Target) error = %v", err)
 	}
-	if _, err := server.Window(ctx, stringTarget.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("string-target window lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Window(ctx, stringTarget.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("string-target window lookup error = %v, want ErrNotFound", err)
 	}
 
 	if err := session.KillWindow(ctx, tmux.KillWindowRequest{}); err != nil {
 		t.Fatalf("KillWindow(current) error = %v", err)
 	}
-	if _, err := server.Window(ctx, initialWindowID); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("current window lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Window(ctx, initialWindowID); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("current window lookup error = %v, want ErrNotFound", err)
 	}
 	if _, err := server.Window(ctx, keep.ID()); err != nil {
 		t.Fatalf("survivor window lookup error = %v", err)
@@ -371,8 +371,8 @@ func TestWindowKillOthersUsesLinkedReceiverSessionAgainstRealTmux(t *testing.T) 
 		t.Fatalf("linked Window.KillOthers() error = %v", err)
 	}
 
-	if _, err := server.Window(ctx, betaInitial); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("beta initial window lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Window(ctx, betaInitial); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("beta initial window lookup error = %v, want ErrNotFound", err)
 	}
 	if _, err := server.Window(ctx, alphaExtra.ID()); err != nil {
 		t.Fatalf("alpha extra window should survive beta KillOthers: %v", err)

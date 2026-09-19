@@ -172,6 +172,20 @@ func (s Server) searchSnapshot(
 	collection searchCollection,
 	matches ...searchRowMatch,
 ) (Snapshot, error) {
+	return s.searchSnapshotProjected(ctx, command, extra, filter, collection, false, matches...)
+}
+
+// searchSnapshotProjected is searchSnapshot with hierarchy reporting whether
+// each row also materializes the session and window it names.
+func (s Server) searchSnapshotProjected(
+	ctx context.Context,
+	command string,
+	extra []string,
+	filter *TmuxFilter,
+	collection searchCollection,
+	hierarchy bool,
+	matches ...searchRowMatch,
+) (Snapshot, error) {
 	filterArguments, err := captureSearchFilter(command, filter)
 	if err != nil {
 		return Snapshot{}, err
@@ -215,13 +229,41 @@ func (s Server) searchSnapshot(
 	if !sameSnapshotIdentity(identity, closing) {
 		return Snapshot{}, snapshotIdentityChangeError(closing)
 	}
-	return newSnapshotWithIdentity(
-		s,
-		identity.version,
-		searchSnapshotRecords(collection, rows),
-		searchListedCollection(collection),
-		&identity,
-	)
+	records, listed := searchSnapshotRecords(collection, rows), searchListedCollection(collection)
+	if hierarchy {
+		records = paneRowHierarchy(rows)
+		listed = listedSessions | listedWindows | listedPanes
+	}
+	return newSnapshotWithIdentity(s, identity.version, records, listed, &identity)
+}
+
+// paneRowHierarchy reads the sessions and windows holding rows out of the rows
+// themselves, which carry every session- and window-scope field. Each is kept
+// once: a window's panes each name it, and a record that appeared twice would
+// be as ambiguous to a relation lookup as two different windows.
+func paneRowHierarchy(rows []formatValues) snapshotRecords {
+	records := snapshotRecords{panes: rows}
+	sessions := make(map[string]struct{}, len(rows))
+	windows := make(map[winlinkKey]struct{}, len(rows))
+	for _, row := range rows {
+		sessionID, _ := row.get("session_id")
+		if _, seen := sessions[sessionID]; !seen {
+			sessions[sessionID] = struct{}{}
+			records.sessions = append(records.sessions, row)
+		}
+		windowID, _ := row.get("window_id")
+		index, _ := row.getInt("window_index")
+		key := winlinkKey{
+			sessionID: SessionID(sessionID),
+			windowID:  WindowID(windowID),
+			index:     index,
+		}
+		if _, seen := windows[key]; !seen {
+			windows[key] = struct{}{}
+			records.windows = append(records.windows, row)
+		}
+	}
+	return records
 }
 
 func captureSearchFilter(command string, filter *TmuxFilter) ([]string, error) {
@@ -265,6 +307,21 @@ func searchListedCollection(collection searchCollection) snapshotCollections {
 		return listedClients
 	}
 	return 0
+}
+
+// hierarchyFromPanes lists panes and reads the sessions and windows holding
+// them out of the same rows, which carry every session- and window-scope
+// field. One listing therefore materializes the graph those panes sit in,
+// where listing each kind separately costs a command apiece and asks tmux for
+// the same values again.
+func (s Server) hierarchyFromPanes(
+	ctx context.Context,
+	extra []string,
+	matches ...searchRowMatch,
+) (Snapshot, error) {
+	return s.searchSnapshotProjected(
+		ctx, "list-panes", extra, nil, searchPanes, true, matches...,
+	)
 }
 
 func searchSnapshotRecords(collection searchCollection, rows []formatValues) snapshotRecords {

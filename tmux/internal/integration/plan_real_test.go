@@ -724,9 +724,9 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewWindow() error = %v", err)
 		}
-		existing, ok, err := window.ResolveActivePane(ctx)
-		if err != nil || !ok {
-			t.Fatalf("ResolveActivePane() = (%v, %v)", ok, err)
+		existing, err := window.ResolveActivePane(ctx)
+		if err != nil {
+			t.Fatalf("ResolveActivePane() error = %v", err)
 		}
 		if _, err := existing.SetTitle(ctx, "alpha"); err != nil {
 			t.Fatalf("SetTitle() error = %v", err)
@@ -851,5 +851,119 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestPlanTreatsLeadingDashTextAsPositionalAgainstRealTmux proves the "--"
+// guards on Plan's own argument renderers, which duplicate rather than share
+// the immediate methods' renderers for SetOption, SetHook, SetBuffer,
+// SetEnvironment, UnsetEnvironment, RenameWindow, RenameSession, and
+// DisplayMessage. Each duplicate needed its own fix, so each is exercised
+// here even though the immediate-method equivalents are already covered
+// elsewhere.
+//
+//libtmux:real-tmux
+func TestPlanTreatsLeadingDashTextAsPositionalAgainstRealTmux(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+
+	const (
+		dashName    = "-dashed-name"
+		dashValue   = "-dashed-value"
+		dashEnvName = "-dashed-env"
+		dashData    = "-dashed-buffer-data"
+		dashFormat  = "-dashed-literal-format"
+	)
+
+	plan := tmux.NewPlan()
+	session := plan.NewSession(tmux.NewSessionRequest{})
+	plan.RenameSession(session, dashName)
+	window := plan.NewWindow(session, tmux.NewWindowRequest{})
+	plan.RenameWindow(window, dashName)
+	plan.SetOption(tmux.Ref{}, tmux.SetPlanOptionRequest{
+		Name: "@plan_dash_option", Value: dashValue, Global: true,
+	})
+	plan.SetEnvironment(session, dashEnvName, dashValue)
+	plan.SetBuffer("", dashData)
+	plan.DisplayMessage(window, dashFormat)
+
+	result, err := plan.Run(ctx, server)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !result.OK() {
+		for index, op := range result.Ops {
+			t.Logf("  %2d %-16s %-8s %v", index, op.Command, op.Status, op.Err)
+		}
+		t.Fatalf("Run() did not complete: %v", result.Err())
+	}
+
+	renamedSession, err := server.Session(ctx, tmux.SessionID(result.Ops[0].Created))
+	if err != nil {
+		t.Fatalf("Session() error = %v", err)
+	}
+	if name, _ := renamedSession.Name(); name != dashName {
+		t.Fatalf("Plan.RenameSession() name = %q, want %q", name, dashName)
+	}
+
+	renamedWindow, err := server.Window(ctx, tmux.WindowID(result.Ops[2].Created))
+	if err != nil {
+		t.Fatalf("Window() error = %v", err)
+	}
+	if name, _ := renamedWindow.Name(); name != dashName {
+		t.Fatalf("Plan.RenameWindow() name = %q, want %q", name, dashName)
+	}
+
+	optionResult, err := server.Cmd(ctx, "show-options", "-gv", "@plan_dash_option")
+	if err != nil || !slices.Equal(optionResult.Stdout, []string{dashValue}) {
+		t.Fatalf("Plan.SetOption() = (%#v, %v), want %q", optionResult, err, dashValue)
+	}
+
+	envValue, ok, err := renamedSession.GetEnvironment(ctx, dashEnvName)
+	if err != nil || !ok || envValue.Value != dashValue {
+		t.Fatalf("Plan.SetEnvironment() = (%#v, %t, %v), want %q", envValue, ok, err, dashValue)
+	}
+
+	buffer, err := server.ShowBuffer(ctx, nil)
+	if err != nil || buffer != dashData {
+		t.Fatalf("Plan.SetBuffer() = (%q, %v), want %q", buffer, err, dashData)
+	}
+
+	messageStep := result.Ops[len(result.Ops)-1]
+	if !slices.Equal(messageStep.Stdout, []string{dashFormat}) {
+		t.Fatalf("Plan.DisplayMessage() = %#v, want [%q]", messageStep.Stdout, dashFormat)
+	}
+
+	unsetPlan := tmux.NewPlan()
+	unsetPlan.UnsetEnvironment(tmux.SessionRef(renamedSession.ID()), dashEnvName)
+	if _, err := unsetPlan.Run(ctx, server); err != nil {
+		t.Fatalf("Run(UnsetEnvironment) error = %v", err)
+	}
+	if _, ok, err := renamedSession.GetEnvironment(ctx, dashEnvName); err != nil || ok {
+		t.Fatalf("GetEnvironment() after Plan.UnsetEnvironment() = (%t, %v), want removed", ok, err)
+	}
+
+	// SetHook's command is itself parsed as a tmux command at registration
+	// time, so a dash-prefixed one can never be valid syntax - guarded or
+	// not. What "--" changes is which parser rejects it: unguarded, tmux's
+	// own set-hook flags reject it as "unknown flag"; guarded, it reaches
+	// command lookup and is rejected as "unknown command", quoting the exact
+	// text back. That is still proof of verbatim arrival, and Plan surfaces
+	// the raw, unredacted tmux error.
+	const dashCommand = "-dashed-not-a-command"
+	hookPlan := tmux.NewPlan()
+	hookPlan.SetHook(tmux.Ref{}, "after-new-window", dashCommand, true)
+	hookResult, err := hookPlan.Run(ctx, server)
+	if err != nil {
+		t.Fatalf("Run(SetHook) error = %v", err)
+	}
+	if len(hookResult.Ops) != 1 || hookResult.Ops[0].Status != tmux.OpFailed ||
+		hookResult.Ops[0].Err == nil ||
+		!strings.Contains(hookResult.Ops[0].Err.Error(), "unknown command: "+dashCommand) {
+		t.Fatalf(
+			"Plan.SetHook(dash command) = %#v, want a failed op quoting %q",
+			hookResult.Ops, dashCommand,
+		)
 	}
 }

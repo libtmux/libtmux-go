@@ -149,45 +149,61 @@ func (q *controlNotificationQueue) next(
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		q.mu.Lock()
-		if q.closed {
-			q.mu.Unlock()
-			return nil, os.ErrClosed
+		record, ready, err := q.take(after)
+		if err != nil || record != nil {
+			return record, err
 		}
-		if q.used != 0 {
-			var header [controlNotificationHeaderSize]byte
-			q.readLocked(0, header[:])
-			sequence := binary.BigEndian.Uint64(header[:8])
-			length := int(binary.BigEndian.Uint32(header[8:]))
-			record := make([]byte, length)
-			q.readLocked(controlNotificationHeaderSize, record)
-			storedBytes := controlNotificationHeaderSize + length
-			q.clearLocked(storedBytes)
-			q.head = (q.head + storedBytes) % len(q.data)
-			q.used -= storedBytes
-			if q.used == 0 {
-				q.head = 0
-			}
-			q.mu.Unlock()
-			if sequence <= after {
-				continue
-			}
-			return record, nil
-		}
-		if q.finished {
-			terminalErr := q.err
-			q.mu.Unlock()
-			if terminalErr != nil {
-				return nil, terminalErr
-			}
-			return nil, io.EOF
-		}
-		ready := q.ready
-		q.mu.Unlock()
 		select {
 		case <-ready:
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		}
+	}
+}
+
+// nextReady is next without the wait: it returns nil at once when nothing
+// after sequence is queued.
+func (q *controlNotificationQueue) nextReady(after uint64) ([]byte, error) {
+	if q == nil {
+		return nil, io.EOF
+	}
+	record, _, err := q.take(after)
+	return record, err
+}
+
+// take removes and returns the first queued record after sequence. With none
+// queued it returns the queue's end, or the channel that signals the next.
+func (q *controlNotificationQueue) take(after uint64) ([]byte, <-chan struct{}, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for {
+		if q.closed {
+			return nil, nil, os.ErrClosed
+		}
+		if q.used == 0 {
+			if !q.finished {
+				return nil, q.ready, nil
+			}
+			if q.err != nil {
+				return nil, nil, q.err
+			}
+			return nil, nil, io.EOF
+		}
+		var header [controlNotificationHeaderSize]byte
+		q.readLocked(0, header[:])
+		sequence := binary.BigEndian.Uint64(header[:8])
+		length := int(binary.BigEndian.Uint32(header[8:]))
+		record := make([]byte, length)
+		q.readLocked(controlNotificationHeaderSize, record)
+		storedBytes := controlNotificationHeaderSize + length
+		q.clearLocked(storedBytes)
+		q.head = (q.head + storedBytes) % len(q.data)
+		q.used -= storedBytes
+		if q.used == 0 {
+			q.head = 0
+		}
+		if sequence > after {
+			return record, nil, nil
 		}
 	}
 }

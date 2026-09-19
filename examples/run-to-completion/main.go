@@ -43,7 +43,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	// docs:run-to-completion
+	// docs:run-to-completion given:ctx context.Context; session tmux.Session
 	result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
 	if err != nil {
 		return fmt.Errorf("run command: %w", err)
@@ -54,7 +54,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	fmt.Println("exited", result.Status)
 	// docs:end
 
-	// docs:run-streaming
+	// docs:run-streaming given:ctx context.Context; session tmux.Session
 	// Start returns while the command is still running, so its output can be
 	// followed and it can be stopped from another goroutine. The stream begins
 	// where StreamTo opens it, so this command waits before its first line;

@@ -49,7 +49,7 @@ func (c Client) ResolveAttachment(ctx context.Context) (ClientAttachment, error)
 		return ClientAttachment{}, err
 	}
 	live, err := snapshot.ClientByName(c.clientName)
-	if errors.Is(err, ErrSnapshotNotFound) {
+	if errors.Is(err, ErrNotFound) {
 		return ClientAttachment{}, nil
 	}
 	if err != nil {
@@ -60,7 +60,7 @@ func (c Client) ResolveAttachment(ctx context.Context) (ClientAttachment, error)
 	}
 
 	session, err := snapshot.SessionByID(live.attachment.sessionID)
-	if errors.Is(err, ErrSnapshotNotFound) {
+	if errors.Is(err, ErrNotFound) {
 		return ClientAttachment{}, nil
 	}
 	if err != nil {

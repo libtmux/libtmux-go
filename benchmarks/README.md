@@ -8,15 +8,15 @@ $ go -C benchmarks run .
 
 ```
 building a 6-pane window, tmux 3.7c
-12th Gen Intel(R) Core(TM) i7-12700H, 20 threads, linux, go1.26.5
+12th Gen Intel(R) Core(TM) i7-12700H, 10 threads, linux, go1.26.5
 
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   195ms          32        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                 72ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4              70ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    69ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       13ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                   102ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 18ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              21ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    48ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection        8ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## Reading it

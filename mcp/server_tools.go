@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"slices"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -42,7 +43,7 @@ func (t *tools) getServerInfo(
 	input getServerInfoInput,
 ) (*mcp.CallToolResult, getServerInfoOutput, error) {
 	caller := callerFromEnvironment()
-	output := getServerInfoOutput{CallerPaneID: caller.paneID}
+	output := getServerInfoOutput{CallerPaneID: caller.paneID, SocketPath: t.socketPath(ctx)}
 	if version, err := t.tmux(ctx).Version(ctx); err == nil {
 		output.Version = version.String()
 	}
@@ -60,7 +61,6 @@ func (t *tools) getServerInfo(
 		return nil, getServerInfoOutput{}, err
 	}
 	output.CallerPaneID = caller.paneID
-	output.SocketPath = t.socketPath(ctx)
 	output.InsideThisServer = caller.inside && output.SocketPath != "" &&
 		resolvePath(output.SocketPath) == caller.socket
 
@@ -71,7 +71,10 @@ func (t *tools) getServerInfo(
 	output.Sessions = len(snapshot.Sessions())
 	output.Windows = len(snapshot.Windows())
 	output.Panes = len(snapshot.Panes())
-	clients := snapshot.Clients()
+	own := t.ownAttachment(ctx)
+	clients := slices.DeleteFunc(snapshot.Clients(), func(client tmux.Client) bool {
+		return own.isOwn(client.Name())
+	})
 	output.Clients = len(clients)
 	output.AttachedClients = summarizeClients(clients)
 	if input.IncludeMessages {

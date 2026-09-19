@@ -88,19 +88,50 @@ func (s Session) ResolveActiveWindow(ctx context.Context) (Window, error) {
 	return requiredActiveWindow(live)
 }
 
-// ResolveActivePane snapshots live tmux state and returns the active pane in
-// this session's exact active window. A missing active pane returns ok false.
-func (s Session) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
-	live, err := s.resolveLive(ctx)
-	if err != nil {
-		return Pane{}, false, err
+// ResolveActivePane returns the active pane in this session's active window,
+// read live. It lists that session's panes rather than taking a whole-server
+// snapshot, because a pane row already carries which window is active. It
+// returns [SnapshotLookupError] cardinality errors, which match [ErrNotFound]
+// when nothing was found.
+func (s Session) ResolveActivePane(ctx context.Context) (Pane, error) {
+	identifier := s.sessionID.String()
+	if err := validateTypedTarget(
+		"list-panes", "SessionID", "session", identifier,
+	); err != nil {
+		return Pane{}, err
 	}
-	window, err := requiredActiveWindow(live)
+	snapshot, err := s.server.hierarchyFromPanes(
+		ctx,
+		[]string{"-s", "-t", identifier},
+		searchRowMatch{field: "session_id", value: identifier},
+	)
 	if err != nil {
-		return Pane{}, false, err
+		return Pane{}, err
 	}
-	pane, ok := window.ActivePane()
-	return pane, ok, nil
+	return activePaneOf(snapshot.Panes(), "session", identifier, true)
+}
+
+// activePaneOf returns the first active pane among rows, as
+// [Window.ActivePane] does for a materialized view. With activeWindow set it
+// also requires the pane's window to be the active one, which is what picks a
+// session's current pane out of every pane it holds.
+func activePaneOf(panes []Pane, object, identifier string, activeWindow bool) (Pane, error) {
+	for _, pane := range panes {
+		if active, ok := pane.Active(); !ok || !active {
+			continue
+		}
+		if activeWindow {
+			if active, ok := pane.formats.getBool("window_active"); !ok || !active {
+				continue
+			}
+		}
+		return pane, nil
+	}
+	return Pane{}, &SnapshotLookupError{
+		Object:     "active pane",
+		Identifier: object + " " + identifier,
+		Matches:    0,
+	}
 }
 
 // ResolveSession snapshots live tmux state and returns this exact winlink's
@@ -118,15 +149,25 @@ func (w Window) ResolveSession(ctx context.Context) (Session, error) {
 	)
 }
 
-// ResolveActivePane snapshots live tmux state and returns the first active pane
-// in this exact winlink view. A missing active pane returns ok false.
-func (w Window) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
-	live, err := w.resolveLive(ctx)
+// ResolveActivePane returns the active pane in this exact winlink view, read
+// live. It lists that window's panes rather than taking a whole-server
+// snapshot. It returns [SnapshotLookupError] cardinality errors, which match
+// [ErrNotFound] when nothing was found.
+func (w Window) ResolveActivePane(ctx context.Context) (Pane, error) {
+	target, err := exactWindowTarget(w)
 	if err != nil {
-		return Pane{}, false, err
+		return Pane{}, err
 	}
-	pane, ok := live.ActivePane()
-	return pane, ok, nil
+	snapshot, err := w.server.hierarchyFromPanes(
+		ctx,
+		[]string{"-t", target},
+		searchRowMatch{field: "session_id", value: w.sessionID.String()},
+		searchRowMatch{field: "window_id", value: w.windowID.String()},
+	)
+	if err != nil {
+		return Pane{}, err
+	}
+	return activePaneOf(snapshot.Panes(), "window", w.windowID.String(), false)
 }
 
 // ResolveWindow snapshots live tmux state and returns the exact winlink
@@ -247,13 +288,18 @@ func requiredActiveWindow(session Session) (Window, error) {
 }
 
 func validateWindowView(window Window) (string, error) {
+	// A Window's own identity is its window id: check it first so an
+	// all-zero value (a relation accessor's discarded ok, or a created value
+	// with no relations) is reported as a missing window, not a missing
+	// session - the wrong kind sends a caller to a resolver that needs the
+	// very window id this handle also lacks.
 	if err := validateTypedTarget(
-		"resolve-window", "SessionID", "session", window.sessionID.String(),
+		"resolve-window", "WindowID", "window", window.windowID.String(),
 	); err != nil {
 		return "", err
 	}
 	if err := validateTypedTarget(
-		"resolve-window", "WindowID", "window", window.windowID.String(),
+		"resolve-window", "SessionID", "session", window.sessionID.String(),
 	); err != nil {
 		return "", err
 	}

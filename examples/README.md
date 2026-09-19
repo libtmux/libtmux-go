@@ -38,7 +38,7 @@ $ go -C examples test ./...
 Every fenced Go block in this repository's Markdown that sits between `docs:`
 markers is a region of real Go that compiles and runs, copied in by
 `go generate`. The [top-level README](../README.md) is built that way, and so
-are [`filter-query/README.md`](filter-query/README.md) and
+is every per-example README here that shows code, along with
 [`../tmux/tmuxtest/README.md`](../tmux/tmuxtest/README.md).
 
 A region is named where it is written:
@@ -55,7 +55,7 @@ and `<!-- docs:end -->`. Everything between those two lines is replaced by a
 fenced `go` block holding the region. A block outside a marker pair is never
 touched, so a hand-written snippet says so by not being marked.
 
-Three things about the format:
+What to know about the format:
 
 - A name is lowercase letters, digits and hyphens, and is unique across the
   whole repository rather than within its file. Two regions sharing a name is
@@ -66,6 +66,21 @@ Three things about the format:
   `tmuxtest-quickstart` is in a test,
   [`screen_test.go`](../tmux/tmuxtest/screen_test.go), because that is where
   the code it shows belongs.
+- A region that reads a binding it does not create says so on its marker,
+  after `given:`, as Go declarations separated by semicolons:
+
+  ```go
+  	// docs:watching given:ctx context.Context; session tmux.Session
+  ```
+
+  The generator prints that list as the block's first line, so a reader can
+  see what the snippet expects to already have.
+  `TestPublishedRegionsCompileAlone` compiles every published region as the
+  only code in a throwaway module, with
+  the declarations as its local variables, so the list has to be exactly right:
+  a binding the region uses and the marker omits fails as `undefined`, and one
+  the marker names and the region never touches fails as `declared and not
+  used`. Bindings the region creates itself need no declaration.
 
 The loop runs one way. Edit the program, then bring the quote across:
 

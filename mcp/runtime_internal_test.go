@@ -41,7 +41,7 @@ func TestRuntimeOwnsOneCommandConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	command, err := runtime.command(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -78,6 +78,48 @@ func TestRuntimeOwnsOneCommandConnection(t *testing.T) {
 	}
 }
 
+// TestObserveNeverLeavesALostConnectionCurrent guards the recovery path
+// itself: observe must clear commandConnection and original along with
+// marking the runtime terminal, not just close the connection in the
+// background. current() reads commandConnection first regardless of state,
+// so leaving it set would hand a request the exact connection this call just
+// decided was lost or untrusted while it closes underneath the caller.
+func TestObserveNeverLeavesALostConnectionCurrent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "runtime-observe-nil"}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := newRuntime(ctx, target)
+	t.Cleanup(func() { _ = runtime.Close() })
+	if _, err := runtime.command(ctx); err != nil {
+		t.Fatal(err)
+	}
+	runtime.mutex.Lock()
+	bound := runtime.commandConnection
+	runtime.mutex.Unlock()
+	if bound == nil {
+		t.Fatal("runtime did not bind a real command connection")
+	}
+
+	runtime.observe(tmux.ErrControlClosed)
+
+	runtime.mutex.Lock()
+	afterConnection := runtime.commandConnection
+	afterOriginal := runtime.original
+	runtime.mutex.Unlock()
+	if afterConnection != nil {
+		t.Fatal("observe() left a lost command connection stored as current")
+	}
+	if afterOriginal.ID() != "" {
+		t.Fatal("observe() left the lost connection's session stored as current")
+	}
+	if current := runtime.current(); current.ConnectionBound() {
+		t.Fatalf("current() = %#v, want an unbound handle once the daemon is lost", current)
+	}
+}
+
 func TestAwaitCommandRechecksCompletionAtItsDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -86,11 +128,11 @@ func TestAwaitCommandRechecksCompletionAtItsDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pane, ok, err := created.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%v, %t, %v)", pane, ok, err)
+	pane, err := created.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	t.Cleanup(func() { _ = runtime.Close() })
 	directory := t.TempDir()
 	statusPath := filepath.Join(directory, "status")
@@ -129,7 +171,7 @@ func TestAbsentRuntimeStaysUnboundUntilAtomicCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	process, err := runtime.command(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +228,7 @@ func TestBootstrapWaitsForAnUnboundRequestToDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	acquired, err := runtime.acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -253,7 +295,7 @@ func TestDiscoveryWaitsForAnUnboundRequestToDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	first, err := runtime.acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -297,7 +339,7 @@ func TestDiscoveryReprobesWhenItsCandidateDisappears(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	lease, err := runtime.acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -351,7 +393,7 @@ func TestToolSurfaceHoldsItsUnboundLeaseThroughTheHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	registry := &tools{runtime: runtime}
 	entered := make(chan struct{})
 	finish := make(chan struct{})
@@ -422,11 +464,12 @@ func waitForRuntimeState(t *testing.T, runtime *tmuxRuntime, want runtimeState) 
 
 func TestTerminalProbeFailurePoisonsRuntime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "runtime-probe-unused"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	runtime.deps.probeSessions = func(context.Context, tmux.Server) ([]tmux.Session, error) {
 		return nil, tmux.ErrDaemonReplaced
 	}
@@ -434,8 +477,8 @@ func TestTerminalProbeFailurePoisonsRuntime(t *testing.T) {
 	if _, err := runtime.command(context.Background()); !errors.Is(err, tmux.ErrDaemonReplaced) {
 		t.Fatalf("command error = %v, want ErrDaemonReplaced", err)
 	}
-	if ctx.Err() == nil {
-		t.Fatal("terminal probe failure did not cancel its owner")
+	if ctx.Err() != nil {
+		t.Fatal("a terminal probe failure must not cancel the MCP process; it stays recoverable")
 	}
 	runtime.mutex.Lock()
 	state := runtime.state
@@ -452,7 +495,7 @@ func TestNoServerBecomesTerminalOnlyAfterBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 
 	runtime.observe(tmux.ErrNoServer)
 	runtime.mutex.Lock()
@@ -471,18 +514,19 @@ func TestNoServerBecomesTerminalOnlyAfterBinding(t *testing.T) {
 	if state != runtimeTerminal || !errors.Is(cause, tmux.ErrNoServer) {
 		t.Fatalf("bound absence = (%v, %v), want terminal ErrNoServer", state, cause)
 	}
-	if ctx.Err() == nil {
-		t.Fatal("bound absence did not cancel its owner")
+	if ctx.Err() != nil {
+		t.Fatal("bound absence must not cancel the MCP process; the loss is reported, not fatal")
 	}
 }
 
 func TestLateBindingCannotReviveTerminalRuntime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "runtime-late-unused"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	runtime.mutex.Lock()
 	runtime.state = runtimeBinding
 	runtime.binding = make(chan struct{})
@@ -508,7 +552,7 @@ func TestPreConnectionCancellationReturnsToUnbound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	runtime.mutex.Lock()
 	runtime.state = runtimeBinding
 	runtime.binding = make(chan struct{})
@@ -528,12 +572,13 @@ func TestPreConnectionCancellationReturnsToUnbound(t *testing.T) {
 
 func TestFailedCreationWithAnIDIsTerminal(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
 	acted, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "acted-creation"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 	runtime.mutex.Lock()
 	runtime.state = runtimeBinding
 	runtime.binding = make(chan struct{})
@@ -552,31 +597,47 @@ func TestFailedCreationWithAnIDIsTerminal(t *testing.T) {
 		t.Fatalf("failed acted creation = (%v, %v, %s), want (terminal, %v, %s)",
 			state, cause, original.ID(), want, acted.ID())
 	}
-	if ctx.Err() == nil {
-		t.Fatal("failed acted creation did not cancel its owner")
+	if ctx.Err() != nil {
+		t.Fatal("a failed but acted create_session must not cancel the MCP process")
 	}
 }
 
-func TestRuntimeTerminalErrorsNeverFallBack(t *testing.T) {
+// TestRuntimeTerminalErrorsHealOnTheNextAcquisition pins that a runtime
+// a terminal error poisoned does not stay poisoned forever. The call that
+// hit the error reports it (asserted directly on observe below); the next
+// acquisition heals the runtime back to unbound instead of returning the
+// stale cause on every future call.
+func TestRuntimeTerminalErrorsHealOnTheNextAcquisition(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "runtime-terminal-unused"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 
 	runtime.observe(errors.Join(tmux.ErrOutcomeUnknown, errors.New("reply lost")))
-	if ctx.Err() == nil {
-		t.Fatal("indeterminate runtime did not cancel its owner")
-	}
-	if _, err := runtime.command(context.Background()); !errors.Is(err, tmux.ErrOutcomeUnknown) {
-		t.Fatalf("command after indeterminate outcome error = %v, want ErrOutcomeUnknown", err)
+	if ctx.Err() != nil {
+		t.Fatal("an indeterminate outcome must not cancel the MCP process")
 	}
 	runtime.mutex.Lock()
 	state := runtime.state
 	runtime.mutex.Unlock()
 	if state != runtimeTerminal {
-		t.Fatalf("state = %v, want runtimeTerminal", state)
+		t.Fatalf("state right after observe = %v, want runtimeTerminal", state)
+	}
+
+	// The next acquisition - standing in for the next tool call - heals the
+	// runtime rather than reliving the stale cause forever. This target has
+	// no daemon, so a healed, unbound read reports absence, not an error.
+	if _, err := runtime.command(context.Background()); err != nil {
+		t.Fatalf("command() after healing = %v, want nil (absent target, not an error)", err)
+	}
+	runtime.mutex.Lock()
+	state = runtime.state
+	runtime.mutex.Unlock()
+	if state != runtimeUnbound {
+		t.Fatalf("state after healing = %v, want runtimeUnbound", state)
 	}
 }
 
@@ -587,7 +648,7 @@ func TestContextualUnknownOutcomeDoesNotPoisonUnboundRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntime(ctx, target, func(error) { cancel() })
+	runtime := newRuntime(ctx, target)
 
 	runtime.observe(errors.Join(tmux.ErrOutcomeUnknown, context.Canceled))
 	runtime.mutex.Lock()

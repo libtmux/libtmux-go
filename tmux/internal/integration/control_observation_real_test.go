@@ -239,6 +239,8 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 	// prompt each shell draws belongs before the observation's baseline.
 	tmuxtest.WaitForShellReady(ctx, t, first)
 	tmuxtest.WaitForShellReady(ctx, t, second)
+	// A queued command's output can follow its prompt on the same terminal line.
+	tmuxtest.TypeAndWait(ctx, t, first, "PS1=''")
 
 	observation, err := first.OpenObservation(ctx)
 	if err != nil {
@@ -251,8 +253,14 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForPaneCapture(ctx, t, second, "other-pane")
-	// Two lines in one write: each newline is Enter.
-	if _, err := fmt.Fprint(first.Writer(ctx), "printf 'alpha\\n'\nprintf 'omega\\n'\n"); err != nil {
+	// Queue both lines before either prints; each newline must submit Enter.
+	if _, err := fmt.Fprint(first.Writer(ctx), "tmux wait-for writer-ready; printf 'alpha\\n'\nprintf 'omega\\n'\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{
+		Channel: "writer-ready",
+		Mode:    tmux.WaitForModeSignal,
+	}); err != nil {
 		t.Fatal(err)
 	}
 

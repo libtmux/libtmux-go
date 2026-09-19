@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
@@ -124,14 +125,65 @@ func summarizeWindow(window tmux.Window, panes int) windowSummary {
 	}
 }
 
-func summarizeSession(session tmux.Session, windows int) sessionSummary {
+// summarizeSession leaves every one of this server's own attached clients out
+// of the attached count: ownAttached is how many of them (the command
+// connection, a wait_for_text or capture_since observation, or several at
+// once) are attached to this exact session.
+func summarizeSession(session tmux.Session, windows int, ownAttached int) sessionSummary {
 	formats := session.Formats()
 	name, _ := formats.SessionName()
 	attached, _ := formats.SessionAttached()
+	attached -= ownAttached
+	if attached < 0 {
+		attached = 0
+	}
 	return sessionSummary{
 		ID:       session.ID().String(),
 		Name:     name,
 		Windows:  windows,
 		Attached: attached,
 	}
+}
+
+// ownClients is every control client this process currently has open: the
+// command connection and any open wait_for_text or capture_since
+// observation. A listing must leave all of them out, or a detached
+// session reads as watched.
+type ownClients struct {
+	names      map[tmux.ClientName]struct{}
+	perSession map[tmux.SessionID]int
+}
+
+// isOwn reports whether name is one of this process's own control clients.
+func (o ownClients) isOwn(name tmux.ClientName) bool {
+	_, ok := o.names[name]
+	return ok
+}
+
+// attachedIn is how many of this process's own clients are attached to
+// sessionID.
+func (o ownClients) attachedIn(sessionID tmux.SessionID) int {
+	return o.perSession[sessionID]
+}
+
+// ownAttachment collects every control client this process currently owns.
+// The command connection's own client is asked on every call because tmux
+// 3.6 moves it when its session is destroyed; with no connection bound there
+// is none. Every open observation is already tracked by the runtime, so no
+// further tmux round trip is needed for those.
+func (t *tools) ownAttachment(ctx context.Context) ownClients {
+	names, perSession := t.runtime.ownObservationSnapshot()
+	server := t.tmux(ctx)
+	if server.ConnectionBound() {
+		format := "#{client_name} #{session_id}"
+		if lines, err := server.DisplayMessage(
+			ctx, tmux.DisplayMessageRequest{Print: true, Format: &format},
+		); err == nil && len(lines) == 1 {
+			if separator := strings.LastIndex(lines[0], " "); separator > 0 {
+				names[tmux.ClientName(lines[0][:separator])] = struct{}{}
+				perSession[tmux.SessionID(lines[0][separator+1:])]++
+			}
+		}
+	}
+	return ownClients{names: names, perSession: perSession}
 }

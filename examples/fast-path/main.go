@@ -53,7 +53,7 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	fmt.Printf("process path: %d searches\n", searchesPerPath)
 
 	// Keep the connection-bound record; the original still starts subprocesses.
-	// docs:control-pool
+	// docs:control-pool given:ctx context.Context; session tmux.Session
 	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		return fmt.Errorf("open control connection: %w", err)
@@ -69,12 +69,12 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 
 	// Arbitrary pane output can end a control frame. Exact printed capture needs
 	// the original subprocess handle; file staging stays on the connection.
-	processPane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
+	processPane, err := session.ResolveActivePane(ctx)
+	if err != nil {
 		return fmt.Errorf("resolve process pane: %w", err)
 	}
-	connectedPane, ok, err := connected.ResolveActivePane(ctx)
-	if err != nil || !ok {
+	connectedPane, err := connected.ResolveActivePane(ctx)
+	if err != nil {
 		return fmt.Errorf("resolve connected pane: %w", err)
 	}
 	if _, err := connectedPane.Capture(ctx, tmux.CapturePaneRequest{}); !errors.Is(

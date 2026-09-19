@@ -34,7 +34,7 @@ func TestConfirmBeforeBuildsExactArguments(t *testing.T) {
 		{"-V"},
 		{
 			"confirm-before", "-b", "-p", "Continue?", "-c", "a", "-y",
-			"-t", "/dev/pts/9", "set -g @confirmed yes",
+			"-t", "/dev/pts/9", "--", "set -g @confirmed yes",
 		},
 	})
 }
@@ -72,7 +72,7 @@ func TestCommandPromptBuildsExactArguments(t *testing.T) {
 		{
 			"command-prompt", "-b", "-1", "-k", "-i", "-N", "-F", "-l",
 			"-e", "-C", "-p", "Name:", "-I", "initial", "-T",
-			"window-target", "-t", "client", "set -g @value '%1'",
+			"window-target", "-t", "client", "--", "set -g @value '%1'",
 		},
 	})
 }
@@ -148,7 +148,7 @@ func TestDisplayMenuBuildsTypedItemArguments(t *testing.T) {
 			"display-menu", "-T", "Actions", "-c", "/dev/pts/8", "-t", "%3",
 			"-x", "C", "-y", "P", "-C", "1", "-b", "single", "-s",
 			"bg=blue", "-S", "fg=red", "-H", "bg=yellow", "-M", "-O",
-			"First", "1", "select-pane -t %1", "",
+			"--", "First", "1", "select-pane -t %1", "",
 			"Second", "2", "select-pane -t %2",
 		},
 	})
@@ -225,7 +225,7 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 		}
 		assertWarningFeatures(t, warnings, "confirm_key", "default_yes")
 		assertInteractiveRequests(t, runner, [][]string{
-			{"-V"}, {"confirm-before", "-b", "display-message ok"},
+			{"-V"}, {"confirm-before", "-b", "--", "display-message ok"},
 		})
 	})
 
@@ -254,7 +254,7 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 		}
 		assertWarningFeatures(t, warnings, "literal", "bspace_exit", "no_freeze")
 		assertInteractiveRequests(t, runner, [][]string{
-			{"-V"}, {"command-prompt", "-b", "-F", "display-message %1"},
+			{"-V"}, {"command-prompt", "-b", "-F", "--", "display-message %1"},
 		})
 	})
 
@@ -294,7 +294,7 @@ func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 			"border_style", "selected_style", "mouse",
 		)
 		assertInteractiveRequests(t, runner, [][]string{
-			{"-V"}, {"display-menu", "-O", "One", "1", "select-pane"},
+			{"-V"}, {"display-menu", "-O", "--", "One", "1", "select-pane"},
 		})
 	})
 }
@@ -436,7 +436,7 @@ func TestInteractiveCommandsUseLiteralArgumentSeam(t *testing.T) {
 			t.Fatalf("CommandPrompt() error = %v", err)
 		}
 		assertInteractiveRequests(t, runner, [][]string{
-			{"-V"}, {"command-prompt", "-b", `display-message literal\;`},
+			{"-V"}, {"command-prompt", "-b", "--", `display-message literal\;`},
 		})
 	})
 

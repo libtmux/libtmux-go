@@ -17,21 +17,33 @@ This document defines the architecture of the Go module.
   retained control clients add `no-detach-on-destroy`, which strengthens
   survival after their startup session is destroyed without raising either
   support floor.
-- Operations that may wait for or execute tmux take `context.Context` first.
-  Contexts are never stored in objects.
+- Operations that may wait for or execute tmux take `context.Context` first,
+  and no object stores one. The `io.Reader` and `io.Writer` adapters are the
+  exception the interfaces force: `Read` and `Write` take no context, so
+  `Pane.Writer` and `PaneObservation.Reader` hold the one their constructor
+  was given, and each is scoped to that value rather than to the pane.
 - Ordinary APIs block. Callers decide whether to start goroutines.
 - Public values are concrete and typed. Untyped maps are limited to explicit
   edge decoders and never form the object API. Generator specifications carry
   the Go types and public names used by generated APIs; documentation is not a
   substitute for compiler-visible type information.
 - Matching a snapshot never executes tmux.
+- Text is UTF-8. Every tmux client this package starts asks tmux for UTF-8
+  output, because tmux replaces every non-ASCII byte it writes to a command
+  or control client whose locale does not name UTF-8. Attaching is the
+  exception: its output is the caller's terminal, so the caller's locale
+  governs there.
+- A record encodes to JSON and nothing decodes: what it holds is what tmux
+  said, and a decoded one would carry no server to act through.
+- Every tmux command a server runs is offered to an optional observer,
+  carrying neither the arguments nor the output, which may hold secrets.
 - Server handles and derived values are safe for concurrent method calls and
   concurrent reads. Optional warning handlers are invoked concurrently and must
   provide their own synchronization.
 
-The nested module uses its own semantic versions and `golang/vX.Y.Z` tags. A
-future v2 also adds `/v2` to the module path. The Python release workflow must
-accept only root `vX.Y.Z` tags before the first Go tag is published.
+Each module carries its own semantic version, tagged per directory: the core
+as `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`. A future v2
+also adds `/v2` to the module path.
 
 ## Where each package sits
 
@@ -85,8 +97,12 @@ its parts cannot be separated without cycles. `Session` returns `Window`,
 generated filters name all four. Splitting along those types would require a
 shared package holding most of the model anyway, or interfaces standing in for
 concrete values the compatibility contract keeps concrete. Navigability is
-therefore a naming and view-type problem rather than a packaging one, which is
-why format values live behind `Formats` instead of on each receiver.
+therefore a naming and view-type problem rather than a packaging one. Each
+record carries the accessors for its own kind, which is the surface the parity
+manifest binds, named without the scope prefix tmux repeats in every field.
+`Formats` is the second view, and the only one where a field from another
+scope appears: a pane's `Formats` answers `SessionName`, which `Pane` itself
+does not.
 
 A dependency analysis over the root package -- asking each used object where it
 was declared -- found `control`, `filter` and `search` reachable in one
@@ -328,13 +344,24 @@ fetches it once instead of making every caller write the same follow-up query.
 
 That convenience is not free, and the rule is a judgement rather than a
 necessity. tmux prints nothing on a successful mutation, so a returned model is
-always an extra materialization: measured against tmux 3.7b, a point lookup
-costs three tmux invocations, `Window.SelectLayout` adds one more, while
-`Window.Rename` adds four and `Pane.Select` adds seven. A caller who wanted the
+always an extra materialization: measured against tmux 3.7d with
+`ServerOptions.CommandObserver`, a point lookup costs three tmux commands on a
+server whose identity has not been read yet and one after, and `Window.Rename`
+and `Pane.Select` each add one listing of the scope they changed.
+`Window.SelectLayout` adds none, because it returns `error`. A caller who wanted the
 fresh record would pay the same to call `Refresh`, and a caller who did not
 pays anyway. Nothing in tmux forces the choice either way: a stale view still
-resolves, because tmux matches a `%pane` or `@window` identifier ahead of the
-session and index that precede it.
+resolves, because a record addresses its window as `@window`, and its pane as
+`$session:.%pane`, which a renumber or a move does not change. A window linked
+into several sessions adds its session, and one its session links twice falls
+back to `$session:index`, the one case an id cannot settle. The session is left
+out otherwise because tmux resolves a missing `@window` inside a named session
+to that session's current window for the commands that tolerate a failed
+target, `set-option` among them. Options and hooks belong to the window, so
+they name it alone, except where tmux expands a format in the session the view
+belongs to: `ExpandFormat`, `RunHook` and `DisplayMessage` keep the session,
+and on a window linked into several sessions that has since gone they can
+still reach that session's current window.
 
 Everything else returns `error`, including the materialized fields that
 describe what a record is *doing*: `pane_in_mode` and `pane_mode`, `pane_pipe`
@@ -617,7 +644,13 @@ the wire object, so the object itself remains the shared wire form.
 Raw option, hook, and environment entries retain their exact tmux strings.
 Generated typed accessors and setters cover known options with the same Go
 value shape. Flags use `bool`, numbers use `int64`, and each tmux choice option
-has a distinct generated string type with prefixed constants and `Valid`.
+has a distinct generated string type with prefixed constants and `Valid`. A
+number tmux's own options table gives a unit uses `time.Duration` instead,
+because which unit it counted was otherwise something a caller had to know:
+`status-interval` is seconds and `escape-time` milliseconds, and neither
+signature said so. The wire value stays the integer tmux stores, so a setter
+refuses a duration that is not a whole number of that unit rather than
+truncating it.
 Choice reads preserve unknown future values as invalid named values; typed
 setters reject values unavailable to the connected tmux version. Raw setters
 remain the escape hatch for unknown names, future values, append behavior, and
@@ -653,7 +686,7 @@ optional nominal targets whose zero value is not a valid tmux target. Pointers
 remain only where zero or an empty string is meaningful to tmux, and for
 recursive filter structure. Requests copy pointer and map inputs before any
 version query or subprocess call that could let caller mutation change a
-validated request. Contexts are never stored.
+validated request. No request stores a context.
 
 ## Control-mode connections
 

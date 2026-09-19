@@ -12,12 +12,19 @@ option and hook as a typed accessor, and errors classified by what tmux actually
 refused.
 
 - **No runtime dependencies.** The core module imports only the standard library.
-- **Go 1.26+**, tmux **3.2a through 3.7c** across the core, workspace, and MCP
-  modules. The compatibility matrix checks every release in that range.
+- **Go 1.26+**, tmux **3.2a through 3.8-rc** across the core, workspace, and
+  MCP modules. The compatibility matrix checks ten builds spanning that
+  range, the 3.8 release candidate included.
   The Go floor tracks upstream's support window, which covers the two most
-  recent releases.
+  recent releases, so it rises whenever a Go release retires the oldest -
+  roughly twice a year, and sooner than a toolchain pinned for longer.
 - **Records never refresh behind you.** A `Session` you hold is what tmux said
   when you asked, not a live handle that changes underneath.
+- **Unix.** tmux is a Unix program, so driving one needs a Unix host: Linux and
+  macOS run the suites on every change, and the BSDs, illumos and Plan 9 build.
+  A Windows build compiles and resolves a tmux executable by Windows PATH and
+  PATHEXT rules, so a cross-platform program still builds; it has no tmux to
+  reach.
 
 ```console
 $ go get github.com/libtmux/libtmux-go/tmux@latest
@@ -28,7 +35,7 @@ the tags are `mcp/vN` and `workspace/vN` beside the core's plain `vN`. Pin the
 exact ones you want in your own go.mod; the commands here fetch the newest.
 
 **Contents** — [Quick start](#quick-start) · [Querying](#what-querying-looks-like)
-· [Choosing a mode](#choosing-a-mode) · [Watching tmux](#watching-tmux) ·
+· [Choosing a mode](#choosing-an-execution-path) · [Watching tmux](#watching-tmux) ·
 [Packages](#packages) · [For agents](#for-agents) ·
 [Testing your code](#testing-your-own-code) · [Documentation](#documentation)
 
@@ -40,6 +47,19 @@ back through an `io.Reader`:
 <!-- docs:quickstart -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+	Name: "libtmux-go-quickstart", WindowName: "start",
+})
+if err != nil {
+	return fmt.Errorf("create session: %w", err)
+}
+defer func() {
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cleanupCancel()
+	err = errors.Join(err, session.Kill(cleanupCtx))
+}()
+
 window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 if err != nil {
 	return fmt.Errorf("create window: %w", err)
@@ -79,6 +99,7 @@ the wait is tmux's own rather than a poll:
 <!-- docs:run-to-completion -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
 if err != nil {
 	return fmt.Errorf("run command: %w", err)
@@ -102,8 +123,12 @@ Two ways to ask, and they answer the same question at different costs.
 <!-- docs:query-in-tmux -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
 live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
 sessions, err := server.SearchSessions(ctx, &live)
+if err != nil {
+	return err
+}
 ```
 
 <!-- docs:end -->
@@ -113,6 +138,7 @@ sessions, err := server.SearchSessions(ctx, &live)
 <!-- docs:query-in-go -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server
 snapshot, err := server.Snapshot(ctx)
 if err != nil {
 	return err
@@ -125,16 +151,24 @@ if err != nil {
 
 <!-- docs:end -->
 
-Typed filters compose, and the generated ones push down into tmux's own `-f`
-where tmux can evaluate them:
+Typed filters combine fields and captured relations in Go. They consume the
+snapshot above without another tmux command:
+
+<!-- docs:query-typed-in-go -->
 
 ```go
+// Given: snapshot tmux.Snapshot
 filter := tmux.PaneFilter{
-	Active:      tmux.Ptr(true),
-	CurrentPath: tmux.Ptr("/home/you/project"),
+	Active:  new(true),
+	Session: &tmux.SessionFilter{Name: new("libtmux-filter")},
 }
-panes, err := server.SearchPanes(ctx, &filter)
+panes, err := tmuxq.Matching(snapshot.Panes(), filter)
+if err != nil {
+	return err
+}
 ```
+
+<!-- docs:end -->
 
 Runnable: [`examples/filter-query`](examples/filter-query).
 
@@ -148,7 +182,7 @@ replacement when exact-daemon ownership is required.
 
 | Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
-| process | `NewServer` | one tmux process per operation | one-shot commands |
+| process | `NewServer` | a tmux process per command sent | one-shot commands |
 | connection | `Session.OpenControl` | one tmux client per lane | repeated commands |
 | concurrent | `ConnectionOptions{Lanes: N}` | N tmux clients | parallel readers |
 | chained | `NewPlan` then `Run` | fewer process starts | builds and layouts |
@@ -166,6 +200,7 @@ is explicit:
 <!-- docs:control-pool -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 if err != nil {
 	return fmt.Errorf("open control connection: %w", err)
@@ -194,6 +229,7 @@ build is written in one pass:
 <!-- docs:planning -->
 
 ```go
+// Given: window tmux.Window
 plan := tmux.NewPlan()
 plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
 editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
@@ -221,6 +257,7 @@ end the stream:
 <!-- docs:watching -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
 stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
 if err != nil {
 	return fmt.Errorf("open notification stream: %w", err)
@@ -254,6 +291,8 @@ pane's current command — without asking again:
 <!-- docs:subscribing -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session;
+// stream *tmux.NotificationStream
 // A subscription is a format tmux evaluates for you: it reports the value
 // when it first looks, about a second later, and then each time it changes.
 if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
@@ -291,6 +330,20 @@ capture written to an `io.Writer` never holds a scrollback in memory:
 <!-- docs:byte-streams -->
 
 ```go
+// Given: ctx context.Context; server tmux.Server; pane tmux.Pane;
+// payload *strings.Reader; archive string; marker string
+// Pasting hands the bytes to the pane's pty; the program reading it echoes
+// them back on its own schedule. Watch before pasting, so the wait cannot
+// start after the bytes it is waiting for already arrived, and capture only
+// once they are on the screen -- a capture taken straight after the paste
+// archives whatever the pane happened to be showing, which on a loaded
+// machine is still an empty screen.
+observation, err := pane.OpenObservation(ctx)
+if err != nil {
+	return fmt.Errorf("observe pane: %w", err)
+}
+defer func() { err = errors.Join(err, observation.Close()) }()
+
 name := "payload"
 if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
 	Name: &name,
@@ -301,6 +354,21 @@ if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
 	BufferName: &name, DeleteAfter: true,
 }); err != nil {
 	return fmt.Errorf("paste payload: %w", err)
+}
+// The pane announces the bytes as it echoes them, so nothing here has to
+// guess how long that takes or re-capture on a timer.
+seen := strings.Builder{}
+for _, line := range observation.Baseline() {
+	seen.WriteString(line)
+}
+for !strings.Contains(seen.String(), marker) {
+	notification, err := observation.NextNotification(ctx)
+	if err != nil {
+		return fmt.Errorf("follow pane output: %w", err)
+	}
+	if _, output, ok := notification.Output(); ok {
+		seen.Write(output)
+	}
 }
 
 file, err := os.Create(archive)
@@ -365,6 +433,7 @@ type at it:
 <!-- docs:tmuxtest-quickstart -->
 
 ```go
+// Given: ctx context.Context; t *testing.T
 pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
 
 tmuxtest.WaitForText(ctx, t, pane, "ready")
@@ -398,12 +467,33 @@ func TestSomething(t *testing.T) {
 }
 ```
 
+Where the behavior under test is your own code rather than tmux's, script a
+tmux instead of starting one. `tmuxtest.ScriptedTmux` writes an executable that
+answers the invocations you name, so the test needs no tmux installed:
+
+```go
+server, err := tmux.NewServer(tmux.ServerOptions{
+	Binary: tmuxtest.ScriptedTmux(t,
+		tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+		tmuxtest.ScriptedCommand{
+			Contains: []string{"kill-pane"},
+			Stderr:   "can't find pane: %7\n",
+			ExitCode: 1,
+		},
+	),
+})
+```
+
+It answers commands only. Control connections and notification streams speak
+tmux's own protocol, so code that opens one needs `NewServer` and a real tmux.
+
 `NewServer` snapshots its effective environment and working directory, resolves
 one absolute executable, and returns an error before starting tmux when
 configuration or resolution fails. Later environment and directory changes do
 not retarget the handle, and the zero `Server` is invalid. Tests of process
-behavior can point `ServerOptions.Binary` at an executable fixture;
-construction still resolves and freezes it. Use `tmuxtest` when the behavior
+behavior can point `ServerOptions.Binary` at an executable fixture, which is
+what `tmuxtest.ScriptedTmux` above writes for you; construction still resolves
+and freezes it. Use `tmuxtest` when the behavior
 belongs to a real tmux daemon.
 
 ## Documentation
@@ -415,8 +505,8 @@ rather than searched:
 $ go doc github.com/libtmux/libtmux-go/tmux
 ```
 
-It opens with a task index, then the rule mapping a tmux command to its Go
-method — `kill-pane` is `Pane.Kill`, `rename-session` is `Session.Rename` — so a
+It opens with a task index, and carries the rule mapping a tmux command to its
+Go method — `kill-pane` is `Pane.Kill`, `rename-session` is `Session.Rename` — so a
 command usually leads to its method without a lookup.
 
 | | |

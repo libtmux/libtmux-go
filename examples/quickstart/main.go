@@ -32,6 +32,7 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
+	// docs:quickstart given:ctx context.Context; server tmux.Server
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
 		Name: "libtmux-go-quickstart", WindowName: "start",
 	})
@@ -44,7 +45,6 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	// docs:quickstart
 	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 	if err != nil {
 		return fmt.Errorf("create window: %w", err)

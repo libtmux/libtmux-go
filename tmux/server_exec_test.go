@@ -62,7 +62,7 @@ func TestRunShellBuildsExactArguments(t *testing.T) {
 	assertRequestArguments(t, requests[0], []string{"-V"})
 	assertRequestArguments(t, requests[1], []string{
 		"run-shell", "-d", "250", "-C", "-t", "%9", "-c", "~/workspace", "-E",
-		"echo #{1}-#{2}", "alpha", "beta",
+		"--", "echo #{1}-#{2}", "alpha", "beta",
 	})
 }
 
@@ -84,7 +84,7 @@ func TestRunShellBackgroundReturnsNilWithoutVersionProbe(t *testing.T) {
 	if output != nil {
 		t.Fatalf("RunShell(background) = %#v, want nil", output)
 	}
-	assertServerExecArguments(t, runner, []string{"run-shell", "-b", "printf ignored"})
+	assertServerExecArguments(t, runner, []string{"run-shell", "-b", "--", "printf ignored"})
 }
 
 func TestNestedCommandsPreserveTerminalSeparators(t *testing.T) {
@@ -105,7 +105,7 @@ func TestNestedCommandsPreserveTerminalSeparators(t *testing.T) {
 				)
 				return err
 			},
-			want: []string{"run-shell", `printf nested\;`},
+			want: []string{"run-shell", "--", `printf nested\;`},
 		},
 		{
 			name: "if shell",
@@ -118,6 +118,7 @@ func TestNestedCommandsPreserveTerminalSeparators(t *testing.T) {
 			},
 			want: []string{
 				"if-shell",
+				"--",
 				`true\;`,
 				`display-message nested\;`,
 				`display-message otherwise\;`,
@@ -155,7 +156,7 @@ func TestRunShellWarnsAndOmitsUnsupportedFeatures(t *testing.T) {
 			name:        "start directory before 3.4",
 			version:     "3.3",
 			request:     RunShellRequest{Command: "true", StartDirectory: &directory},
-			wantArgs:    []string{"run-shell", "true"},
+			wantArgs:    []string{"run-shell", "--", "true"},
 			wantFeature: "start_directory",
 			wantMinimum: "3.4",
 		},
@@ -163,7 +164,7 @@ func TestRunShellWarnsAndOmitsUnsupportedFeatures(t *testing.T) {
 			name:        "stderr before 3.6",
 			version:     "3.5",
 			request:     RunShellRequest{Command: "true", ShowStderr: true},
-			wantArgs:    []string{"run-shell", "true"},
+			wantArgs:    []string{"run-shell", "--", "true"},
 			wantFeature: "show_stderr",
 			wantMinimum: "3.6",
 		},
@@ -171,7 +172,7 @@ func TestRunShellWarnsAndOmitsUnsupportedFeatures(t *testing.T) {
 			name:        "positional arguments before 3.7",
 			version:     "3.6",
 			request:     RunShellRequest{Command: "true", Args: []string{"ignored"}},
-			wantArgs:    []string{"run-shell", "true"},
+			wantArgs:    []string{"run-shell", "--", "true"},
 			wantFeature: "args",
 			wantMinimum: "3.7",
 		},
@@ -245,7 +246,7 @@ func TestRunShellOrdersWarningsAndExecutesOneReducedCommand(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one version and one run-shell", requests)
 	}
 	assertRequestArguments(t, requests[0], []string{"-V"})
-	assertRequestArguments(t, requests[1], []string{"run-shell", "true"})
+	assertRequestArguments(t, requests[1], []string{"run-shell", "--", "true"})
 	wantFeatures := []string{"start_directory", "show_stderr", "args"}
 	features := make([]string, len(warnings))
 	for index, warning := range warnings {
@@ -281,7 +282,7 @@ func TestRunShellClonesArgsBeforeVersionProbe(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("runner requests = %#v, want version and run-shell", requests)
 	}
-	assertRequestArguments(t, requests[1], []string{"run-shell", "echo #{1}", "before"})
+	assertRequestArguments(t, requests[1], []string{"run-shell", "--", "echo #{1}", "before"})
 }
 
 // libtmux:parity libtmux.server.Server.run_shell#parameter-branch:cwd:c8f5f1bebe8f
@@ -315,7 +316,7 @@ func TestRunShellCapturesPointerFieldsBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want version and run-shell", requests)
 	}
 	assertRequestArguments(t, requests[1], []string{
-		"run-shell", "-d", "before-delay", "-c", "before-directory", "true",
+		"run-shell", "-d", "before-delay", "-c", "before-directory", "--", "true",
 	})
 }
 
@@ -351,7 +352,7 @@ func TestWaitForBuildsExactArguments(t *testing.T) {
 			if test.flag != "" {
 				want = append(want, test.flag)
 			}
-			want = append(want, "phase6")
+			want = append(want, "--", "phase6")
 			assertServerExecArguments(t, runner, want)
 		})
 	}
@@ -381,7 +382,7 @@ func TestIfShellBuildsExactArguments(t *testing.T) {
 		t.Fatalf("IfShell() error = %v", err)
 	}
 	assertServerExecArguments(t, runner, []string{
-		"if-shell", "-b", "-t", "%4", "test -f marker",
+		"if-shell", "-b", "-t", "%4", "--", "test -f marker",
 		"set -g @branch yes", "set -g @branch no",
 	})
 }
@@ -810,5 +811,5 @@ func (r *runShellGateRunner) Run(_ context.Context, request tmuxcmd.Request) (tm
 func (r *runShellGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.requests)
+	return withoutGlobalFlags(r.requests)
 }

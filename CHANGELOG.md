@@ -9,6 +9,164 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `Server.SessionByName`, which looks up a session by name and reports
+  `ErrNotFound` for one no session holds, instead of listing every session
+  and comparing names. (#16)
+- `Session.ResolveActivePane` and `Window.ResolveActivePane` now cost one
+  tmux command and return `(Pane, error)` rather than `(Pane, bool,
+  error)`, matching `ErrNotFound` for a missing active pane. Replace
+  `pane, ok, err := ...` with `pane, err := ...`. (#16)
+- Add `PaneObservation.WaitFor`, which wakes as soon as a pane's output
+  matches, instead of polling `Pane.Capture` through `Poll`. `tmuxtest`
+  and the MCP server's `wait_for_text` both run on it. (#16)
+- A `Window` or `Pane` value held across a renumber now still reaches the
+  window it was created from, or reports `ErrNotFound` once that window
+  is gone. Setting an option or hook on a gone window now reports
+  `ErrOptionTarget`. (#16)
+- `Running.Wait` no longer lets one caller's expired context decide the
+  outcome for everyone, and now waits as long as its own context allows
+  for tmux to record it, rather than giving up after five seconds with
+  `ErrOutcomeUnrecorded`; a context with no deadline is unchanged. (#16)
+- `Server.LoadBufferFrom`, `Server.SaveBufferTo`, `Pane.CaptureTo`, and
+  `Running.StreamTo` now end when their context does, instead of blocking
+  on an orphaned process or an uncancellable destination write.
+  `Running.Kill` returns once tmux accepts the termination request,
+  rather than waiting for a blocked pane command queue to clear. (#16)
+- `Window.SplitPane`, `Pane.Split`, `Pane.Join`, `Pane.Move`, and
+  `Pane.BreakPane` now list only the affected window to materialize the
+  pane they return, instead of taking a whole-server snapshot. (#16)
+- Add `tmuxtest.ScriptedTmux`, which writes an executable that answers the
+  tmux invocations a test names, so code that drives this package can be
+  tested without a real tmux. (#16)
+- `Session`, `Window`, `Pane`, `Client`, `FormatValues`, and `Snapshot`
+  now encode to JSON. They do not decode: a decoded record would name a
+  server and a pane it could never act on. (#16)
+- Add `ServerOptions.CommandObserver`, which receives a `CommandTrace` —
+  subcommand, transport, duration, and exit code, never arguments or
+  output — for every command a server runs, including calls over an
+  owned connection. (#16)
+- `Pane.Reset`, `Pane.SendKeys`, `Pane.Enter`, `Pane.Capture`,
+  `Pane.CaptureBytes`, and `Pane.CaptureToBuffer` now return a
+  `CommandError` when tmux writes to stderr, instead of reporting success
+  against a gone pane. (#16)
+- Add `ErrNotFound`, matched by both a lookup that finds nothing and a
+  command tmux refuses for a missing target. It replaces
+  `ErrSnapshotNotFound`, which is removed — match `ErrNotFound`
+  instead. (#16)
+- `NewServer` now asks tmux for UTF-8 output on every command and control
+  client; under a locale that didn't request it, a session named `café`
+  read back as `caf_`. `Server.AttachSession` and `Session.Attach` keep
+  tmux's own locale detection. (#16)
+- `Server.RaiseIfDead` is renamed to `Server.CheckAlive`. The old name is
+  removed rather than kept as an alias. (#16)
+- Nine time options, including `escape-time` and `status-interval`, are
+  now `time.Duration`, not a bare `int64` — `SetStatusInterval(5)` meant
+  seconds, `SetEscapeTime(5)` milliseconds. Replace a bare number, e.g.
+  `SetEscapeTime(ctx, 250*time.Millisecond)`. (#16)
+- `DisplayMessageRequest.Delay` likewise now uses `time.Duration`;
+  replace `new(250)` with `new(250 * time.Millisecond)`. Omitted and zero
+  delays keep their meaning. (#16)
+- `Session.Start` now installs a compatibility output pipe on tmux
+  versions before 3.7, so `Running.Wait` no longer reports an empty
+  screen for a command that exited before tmux finished reading its
+  pane. (#16)
+- `FormatValues` now decodes a backslash-escaped `{` or `}`; a value such
+  as `buffer_mode_format` previously failed with `invalid quoted
+  escape`. (#16)
+- Every control connection now requests JSON `window_layout` values via
+  tmux's `new-layouts` flag; `Window.SelectLayout` accepts that shape and
+  `PaneObservation` reads it correctly. Classic layouts saved and
+  restored on tmux 3.8+ only approximated pane order. (#16)
+- On tmux 3.8 and later, `NotificationStream.Subscribe`'s session-scoped
+  form sends an empty target, `Pane.DisplayPopup` returns
+  `ErrInvalidServerCommandRequest` for a control-mode `TargetClient`, and
+  `NewWindow`'s `SelectExisting` recovers instead of erroring;
+  `FormatValues` gains 12 new field accessors. (#16)
+- `PaneObservation.NextNotification` no longer reports
+  `ErrPaneObservationLost` for a `%window-close` from an unrelated
+  session; it now checks that the observed window actually left. (#16)
+- `Window.SplitPane` and `Pane.Split` now disclose tmux's pre-3.7 "no
+  space for new pane" refusal, which previously reported only an exit
+  code. (#16)
+- A zero-value `Session`, `Window`, `Pane`, or `Client` target now
+  returns a `MissingTargetError` naming the missing kind and the
+  `Resolve*` method to call, instead of the unqualified
+  `ErrMissingTarget` sentinel. (#16)
+- `Window.SelectLayout` now accepts a preset prefix that names exactly
+  one layout, such as `tile`, on every version; an ambiguous prefix is
+  refused, naming its candidates. (#16)
+- Add `PaneObservation.ClientName` and `PaneObservation.SessionID`,
+  naming the observation's own control client and the session it
+  resolved when it opened. (#16)
+- `ControlClient.NextNotification` and `NotificationStream.Next` now
+  report a stream that ends without a `Close` as `ErrControlStreamLost`,
+  instead of a bare `io.EOF` indistinguishable from a clean end. (#16)
+- `Server.Snapshot`, and so `Sessions`, `Windows`, `Panes`, and
+  `Clients`, no longer fail on a server that holds no sessions; a
+  zero-session server now reads as empty rather than as a command
+  failure. (#16)
+- A `Command`, key, hook, buffer, environment value, or new name
+  beginning with `-` was parsed by tmux's own argument parser as a flag
+  instead of reaching the pane, hook, or overlay it named.
+  `DisplayPopup`, `RunShell`, `IfShell`, `WaitFor`, `NewPane`,
+  `SplitPane`, `Session.NewWindow`, `Window.NewWindow`,
+  `Server.NewSession`, `Pane.Respawn`, `Window.Respawn`, `Pane.Pipe`,
+  `Window.Rename`, `Session.Rename`, `Pane.BreakPane`, `BindKey`,
+  `UnbindKey`, `ListCommands`, `ConfirmBefore`, `CommandPrompt`,
+  `DisplayMenu`, and their `Plan` equivalents now send that value after
+  a `--`, matching `DisplayMessage`. (#16)
+
+### mcp
+
+- `send_keys`, `send_keys_batch`, `paste_text`, and `run_shell_command`
+  now track a pane's unsubmitted input, and `wait_for_text` no longer
+  matches that pending text as new output — previously reachable by
+  attaching a wait before typing. (#16)
+- `select_layout` now accepts a saved layout string from
+  `get_window_info`, including tmux 3.8's JSON shape, and layout
+  save-and-restore is now exact on tmux 3.8+. (#16)
+- `libtmux-mcp --tools` now lists exactly the tools serving that socket
+  would advertise, instead of always listing teardown tools, and prints
+  each tool's own summary rather than the whole toolset's disclosure.
+  (#16)
+- `libtmux-mcp` now creates its own socket directory before starting
+  tmux, instead of failing where tmux had never run; `get_server_info`
+  reports `socketPath` even with no server alive. (#16)
+- `libtmux-mcp` no longer exits when its tmux daemon goes away; the call
+  that hits the loss reports a tool failure, and the next
+  `create_session` starts a new server. (#16)
+- `get_server_info`'s caller detection and `create_session`'s
+  self-detection no longer fail on a server that is alive but holds no
+  sessions yet. (#16)
+- `select_layout`'s own pre-check now accepts a unique preset prefix such
+  as `tile`, matching `Window.SelectLayout`, instead of rejecting it
+  first. (#16)
+- `send_keys` and `send_keys_batch` gain an `enter` field that presses
+  Enter after `keys` regardless of `literal`. Before this, `literal:true`
+  sent `"Enter"` as five literal letters and reported success. (#16)
+- `list_sessions`, `get_session_info`, and `get_server_info` now leave
+  out every control client this process owns, not only its long-lived
+  command connection, so a detached session no longer reads as
+  attached. (#16)
+- `wait_for_text` now answers `alreadyOnScreen`, with `pendingInputOnly`
+  and an `entryNote`, instead of `matched` with `matchedAtEntry`, for a
+  pattern already on the pane; its `cursor` now resumes from the exact
+  position a prior call named. (#16)
+
+### workspace
+
+- `Parse` and `Build` now parse YAML with `go.yaml.in/yaml/v3`, the
+  maintained continuation of the archived `gopkg.in/yaml.v3`. (#16)
+- `Build` now accepts a preset layout prefix that names exactly one
+  layout, matching the tmux module's `Window.SelectLayout`. (#16)
+
+### examples
+
+- The README's `PaneFilter` example now compiles and filters captured
+  panes with `tmuxq.Matching`. (#16)
+
 ## v0.0.1-alpha.7, workspace/v0.0.1-alpha.7, mcp/v0.0.1-alpha.10
 
 ### tmux

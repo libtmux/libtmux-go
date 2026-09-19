@@ -125,7 +125,7 @@ func TestObjectLiteralCmdEscapesTargetAndArguments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("literalCmd() error = %v", err)
 	}
-	want := []string{"send-keys", "-t", `$1:3.%3`, `literal\;`}
+	want := []string{"send-keys", "-t", `$1:.%3`, `literal\;`}
 	requests := runner.recordedRequests()
 	if len(requests) != 1 || !slices.Equal(requests[0].Arguments, want) {
 		t.Fatalf("literalCmd() arguments = %#v, want %#v", requests, want)

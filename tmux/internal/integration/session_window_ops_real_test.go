@@ -5,7 +5,12 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -776,8 +781,8 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 	if killer.Index() != victimIndex {
 		t.Fatalf("killer index = %d, want %d", killer.Index(), victimIndex)
 	}
-	if _, err := server.Window(ctx, victim.ID()); !errors.Is(err, tmux.ErrSnapshotNotFound) {
-		t.Fatalf("victim lookup error = %v, want ErrSnapshotNotFound", err)
+	if _, err := server.Window(ctx, victim.ID()); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("victim lookup error = %v, want ErrNotFound", err)
 	}
 
 	highIndex := 30
@@ -863,6 +868,68 @@ func TestWindowUnlinkTargetsDuplicateWinlinkByIndexAgainstRealTmux(t *testing.T)
 	}
 	if !retainedNine {
 		t.Fatal("index 9 was unlinked instead of index 7")
+	}
+}
+
+// A record held across a renumber must reach its own window or report it
+// gone; the index it was read at now names a different window.
+//
+//libtmux:real-tmux
+func TestRecordsSurviveWindowRenumberAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	session := mustRealSnapshot(t, server).Sessions()[0]
+	gone, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("gone")})
+	if err != nil {
+		t.Fatalf("NewWindow(gone) error = %v", err)
+	}
+	moved, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("moved")})
+	if err != nil {
+		t.Fatalf("NewWindow(moved) error = %v", err)
+	}
+	pane, err := moved.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
+	}
+	for _, args := range [][]string{
+		{"kill-window", "-t", gone.ID().String()},
+		{"move-window", "-r", "-t", session.ID().String()},
+	} {
+		if _, err := server.Cmd(ctx, args...); err != nil {
+			t.Fatalf("Cmd(%v) error = %v", args, err)
+		}
+	}
+
+	if _, err := gone.Rename(ctx, "stale"); !errors.Is(err, tmux.ErrNotFound) {
+		t.Errorf("Rename(killed window) error = %v, want ErrNotFound", err)
+	}
+	neighbour, err := server.Window(ctx, moved.ID())
+	if err != nil {
+		t.Fatalf("Window(moved) error = %v", err)
+	}
+	if name, _ := neighbour.Name(); name != "moved" {
+		t.Fatalf("killed window's Rename renamed %s to %q", moved.ID(), name)
+	}
+	renamed, err := moved.Rename(ctx, "renamed")
+	if err != nil {
+		t.Fatalf("Rename(renumbered window) error = %v", err)
+	}
+	if name, _ := renamed.Name(); renamed.ID() != moved.ID() || name != "renamed" ||
+		renamed.Index() != gone.Index() {
+		t.Errorf("Rename() = %s %q at %d, want %s %q at %d",
+			renamed.ID(), name, renamed.Index(), moved.ID(), "renamed", gone.Index())
+	}
+	rotated, err := moved.Rotate(ctx, tmux.RotateWindowRequest{})
+	if err != nil || rotated.ID() != moved.ID() || rotated.Index() != gone.Index() {
+		t.Errorf("Rotate(renumbered window) = (%s at %d, %v), want %s at %d",
+			rotated.ID(), rotated.Index(), err, moved.ID(), gone.Index())
+	}
+	selected, err := pane.Select(ctx, tmux.PaneSelectRequest{})
+	if err != nil || selected.ID() != pane.ID() || selected.WindowIndex() != gone.Index() {
+		t.Errorf("Select(pane in renumbered window) = (%s at %d, %v), want %s at %d",
+			selected.ID(), selected.WindowIndex(), err, pane.ID(), gone.Index())
 	}
 }
 
@@ -998,4 +1065,161 @@ func TestSessionRunReportsStatusAndScreen(t *testing.T) {
 	if _, err := server.Pane(ctx, kept.Pane); err != nil {
 		t.Errorf("kept pane %s is gone: %v", kept.Pane, err)
 	}
+}
+
+//libtmux:real-tmux
+func TestCommandWaitDrainsOutputAfterProcessExit(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("Darwin drains the controlling terminal before process exit")
+	}
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	session := mustRealSnapshot(t, server).Sessions()[0]
+	control := tmuxtest.NewControlMode(ctx, t, server, session)
+	quote := func(value string) string {
+		return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+	}
+	command := fmt.Sprintf(
+		"%[1]s -S %[2]s wait-for release-output; printf 'one\\ntwo\\n'; %[1]s -S %[2]s wait-for may-exit; exit 7",
+		quote(server.Executable()), quote(server.SocketPath()))
+	running, err := session.Start(ctx, command, tmux.RunOptions{Keep: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane := running.Pane()
+	// A control client with pane output off holds terminal reads while the
+	// command exits, forcing the exit status to arrive before the screen.
+	if reply, err := server.Cmd(ctx, "refresh-client", "-t", control.ClientName().String(),
+		"-A", pane.ID().String()+":off"); err != nil || reply.ExitCode != 0 {
+		t.Fatalf("hold pane output: %+v, %v", reply, err)
+	}
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{
+		Channel: "release-output", Mode: tmux.WaitForModeSignal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// tmux only defers closing a dead pane's terminal when FIONREAD still
+	// shows unread bytes, and FIONREAD can read zero for bytes the kernel has
+	// not yet moved off the pty's flip buffer onto the line discipline it
+	// checks. exit lands the moment printf returns, so without a second gate
+	// tmux can occasionally close the terminal before that move happens,
+	// discarding the command's output instead of merely delaying it. Signaling
+	// this gate from a fresh client process is far slower than that move, so
+	// it is never in flight when the command exits.
+	if err := server.WaitFor(ctx, tmux.WaitForRequest{
+		Channel: "may-exit", Mode: tmux.WaitForModeSignal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
+		refreshed, err := pane.Refresh(ctx)
+		if err != nil {
+			return false, err
+		}
+		status, ok := refreshed.DeadStatus()
+		return ok && status == 7, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if reply, err := server.Cmd(ctx, "refresh-client", "-t", control.ClientName().String(),
+		"-A", pane.ID().String()+":on"); err != nil || reply.ExitCode != 0 {
+		t.Fatalf("release pane output: %+v, %v", reply, err)
+	}
+	result, err := running.Wait(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 7 || !slices.Equal(result.Lines, []string{"one", "two"}) {
+		t.Fatalf("Wait() = %+v, want status 7 and lines [one two]", result)
+	}
+}
+
+//libtmux:real-tmux
+func TestCommandStartPreservesAnExistingOutputPipe(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	session := mustRealSnapshot(t, server).Sessions()[0]
+	output := filepath.Join(t.TempDir(), "output")
+	quoted := "'" + strings.ReplaceAll(output, "'", "'\"'\"'") + "'"
+	if err := session.SetHook(ctx, "after-new-window",
+		fmt.Sprintf("pipe-pane %q", "exec cat > "+quoted)); err != nil {
+		t.Fatal(err)
+	}
+	result, err := session.Run(ctx, "printf 'one\\ntwo\\n'; exit 7", tmux.RunOptions{Keep: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 7 || !slices.Equal(result.Lines, []string{"one", "two"}) {
+		t.Fatalf("Run() = %+v, want status 7 and lines [one two]", result)
+	}
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(context.Context) (bool, error) {
+		data, err := os.ReadFile(output)
+		return string(data) == "one\r\ntwo\r\n", err
+	}); err != nil {
+		t.Fatalf("the configured output pipe lost the command's output: %v", err)
+	}
+}
+
+// TestRenameTreatsLeadingDashNameAsPositionalAgainstRealTmux proves the
+// rename-window and rename-session "--" guards against a live tmux.
+// validateLifecycleSessionName permits a leading dash (it only rejects empty
+// names, ".", ":", and control bytes), so a name like "-dashed" is a legal
+// request that the unguarded call below refuses at tmux's own parser -
+// rename-window/rename-session have no flag using that letter, so "unknown
+// flag -d" comes from tmux itself, before anything is renamed.
+//
+//libtmux:real-tmux
+func TestRenameTreatsLeadingDashNameAsPositionalAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	const name = "-dashed"
+
+	t.Run("window", func(t *testing.T) {
+		session, err := server.NewSession(ctx, tmux.NewSessionRequest{})
+		if err != nil {
+			t.Fatalf("NewSession() error = %v", err)
+		}
+		windows, err := session.SearchWindows(ctx, nil)
+		if err != nil || len(windows) != 1 {
+			t.Fatalf("SearchWindows() = (%#v, %v), want one window", windows, err)
+		}
+		target := windows[0].SessionID().String() + ":" + windows[0].ID().String()
+
+		raw, err := server.Cmd(ctx, "rename-window", "-t", target, name)
+		if err != nil || raw.ExitCode == 0 {
+			t.Fatalf("unguarded rename-window = (%#v, %v), want a parse failure", raw, err)
+		}
+
+		renamed, err := windows[0].Rename(ctx, name)
+		if err != nil {
+			t.Fatalf("Window.Rename() error = %v", err)
+		}
+		if got, _ := renamed.Name(); got != name {
+			t.Fatalf("Window.Rename() name = %q, want %q", got, name)
+		}
+	})
+
+	t.Run("session", func(t *testing.T) {
+		session, err := server.NewSession(ctx, tmux.NewSessionRequest{})
+		if err != nil {
+			t.Fatalf("NewSession() error = %v", err)
+		}
+
+		raw, err := server.Cmd(ctx, "rename-session", "-t", session.ID().String(), name)
+		if err != nil || raw.ExitCode == 0 {
+			t.Fatalf("unguarded rename-session = (%#v, %v), want a parse failure", raw, err)
+		}
+
+		renamed, err := session.Rename(ctx, name)
+		if err != nil {
+			t.Fatalf("Session.Rename() error = %v", err)
+		}
+		if got, _ := renamed.Name(); got != name {
+			t.Fatalf("Session.Rename() name = %q, want %q", got, name)
+		}
+	})
 }

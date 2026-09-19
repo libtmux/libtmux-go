@@ -229,9 +229,10 @@ func (t *tools) listSessions(
 	}
 	sessions := snapshot.Sessions()
 	summaries := make([]sessionSummary, 0, len(sessions))
+	own := t.ownAttachment(ctx)
 	for _, session := range sessions {
 		windows, _ := session.Windows()
-		summary := summarizeSession(session, len(windows))
+		summary := summarizeSession(session, len(windows), own.attachedIn(session.ID()))
 		switch {
 		case input.Name != "" && !containsFold(summary.Name, input.Name):
 			continue

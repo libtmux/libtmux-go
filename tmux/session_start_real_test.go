@@ -670,3 +670,62 @@ func TestCommandWaitEndsWhenTheSignalIsLost(t *testing.T) {
 		t.Errorf("Wait() = %+v, want the command's pane", result)
 	}
 }
+
+// blockingWriter holds every Write until it is released, which is what a
+// destination on a stalled socket does to a copy that cancellation cannot reach.
+type blockingWriter struct {
+	entered  chan struct{}
+	released chan struct{}
+	once     sync.Once
+}
+
+func newBlockingWriter(t *testing.T) *blockingWriter {
+	t.Helper()
+	w := &blockingWriter{
+		entered:  make(chan struct{}),
+		released: make(chan struct{}),
+	}
+	// Let the parked goroutine go, or the test binary cannot exit.
+	t.Cleanup(func() { close(w.released) })
+	return w
+}
+
+func (w *blockingWriter) Write(p []byte) (int, error) {
+	w.once.Do(func() { close(w.entered) })
+	<-w.released
+	return len(p), nil
+}
+
+//libtmux:real-tmux
+func TestCommandStreamToDoesNotHangOnAStuckDestination(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	session := oneSession(ctx, t, server)
+
+	// The stream begins where StreamTo opens it, so the command must still be
+	// printing by then for anything to reach the destination at all.
+	running, err := session.Start(ctx,
+		"sh -c 'sleep 0.4; echo stuck; sleep 0.3; exit 0'", tmux.RunOptions{})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	destination := newBlockingWriter(t)
+	returned := make(chan error, 1)
+	go func() { _, streamErr := running.StreamTo(ctx, destination); returned <- streamErr }()
+
+	select {
+	case <-destination.entered:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the copy never reached the destination, so nothing was blocked")
+	}
+	select {
+	case streamErr := <-returned:
+		if streamErr == nil {
+			t.Fatal("StreamTo() error = nil, want the context that ended the wait")
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("StreamTo() never returned: a stuck destination held the call past its context")
+	}
+}

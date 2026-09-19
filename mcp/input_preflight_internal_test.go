@@ -387,7 +387,7 @@ func TestCommandRunDisappearanceIsFailClosed(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{name: "pane absent", err: fmt.Errorf("lookup: %w", tmux.ErrSnapshotNotFound), want: true},
+		{name: "pane absent", err: fmt.Errorf("lookup: %w", tmux.ErrNotFound), want: true},
 		{name: "daemon unreachable", err: fmt.Errorf("probe: %w", tmux.ErrNoServer)},
 		{name: "daemon replaced", err: fmt.Errorf("probe: %w", tmux.ErrDaemonReplaced), want: true},
 		{name: "ambiguous outcome", err: tmux.ErrOutcomeUnknown},
@@ -746,7 +746,7 @@ func waitForPaneReplacement(ctx context.Context, pane tmux.Pane, before int) err
 		func(waitCtx context.Context) (bool, error) {
 			pid, err := panePID(waitCtx, pane)
 			if err != nil {
-				if errors.Is(err, tmux.ErrSnapshotNotFound) {
+				if errors.Is(err, tmux.ErrNotFound) {
 					return false, nil
 				}
 				return false, err
@@ -2069,5 +2069,207 @@ func TestPasteTextStagesPayloadsBeyondTmuxCommandLimit(t *testing.T) {
 	}
 	if got.String() != text {
 		t.Fatalf("staged buffer holds %d bytes, want the %d pasted", got.Len(), len(text))
+	}
+}
+
+// A failed dispatch must leave pending as it was. Recording a submit before
+// tmux has the keys, and not putting it back, would let wait_for_text read a
+// line that is still unsubmitted as output the pane produced.
+func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%7", "%8"}
+
+	text, _, endsLine, _ := willType([]string{"rm -rf build"}, true)
+	if endsLine {
+		t.Fatal("literal text must not read as a submit")
+	}
+	pending.record(panes, 0, text)()
+	if got := pending.snapshot(tmux.PaneID("%7")); got != "" {
+		t.Errorf("pending = %q after a failed dispatch, want nothing typed", got)
+	}
+
+	// Typed for real this time, on both panes synchronize-panes links.
+	pending.record(panes, 0, text)
+	for _, pane := range panes {
+		if got := pending.snapshot(tmux.PaneID(pane)); got != "rm -rf build" {
+			t.Errorf("pending on %s = %q, want the typed text", pane, got)
+		}
+	}
+
+	// A submit whose dispatch fails must not clear the line.
+	_, _, endsLine, _ = willType([]string{"Enter"}, false)
+	if !endsLine {
+		t.Fatal("Enter must read as a submit")
+	}
+	if got := pending.snapshot(tmux.PaneID("%7")); got != "rm -rf build" {
+		t.Errorf("pending = %q before the submit is dispatched, want it held", got)
+	}
+	pending.clearAll(panes)
+	for _, pane := range panes {
+		if got := pending.snapshot(tmux.PaneID(pane)); got != "" {
+			t.Errorf("pending on %s = %q after submitting, want nothing", pane, got)
+		}
+	}
+}
+
+// A backspace dispatched on its own, after the character it erases was typed
+// by an earlier call, must still shrink what is pending. Leaving pending too
+// long makes wait_for_text's masking look for a string the line no longer
+// holds; strings.Replace finds no match, so nothing is masked and the
+// caller's own leftover keystroke reads as real output.
+func TestPendingInputTracksAnEraseSentAsItsOwnDispatch(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%1"}
+
+	typed, _, _, _ := willType([]string{"a", "b", "c"}, false)
+	pending.record(panes, 0, typed)
+
+	erase, _, _, overflow := willType([]string{"BSpace"}, false)
+	pending.record(panes, overflow, erase)
+
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "ab" {
+		t.Errorf("pending = %q after a backspace sent on its own, want %q", got, "ab")
+	}
+}
+
+// This model only ever places the cursor at the end of the tracked line, so
+// Delete - which removes the character after the cursor - always finds
+// nothing there and must leave pending untouched. Shrinking it anyway makes
+// the mask shorter than the line, leaking its untouched tail unmasked.
+func TestPendingInputDeleteAtEndOfLineIsANoOp(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%1"}
+
+	typed, _, _, _ := willType([]string{"a", "b"}, false)
+	pending.record(panes, 0, typed)
+
+	deleted, _, _, overflow := willType([]string{"DC"}, false)
+	pending.record(panes, overflow, deleted)
+
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "ab" {
+		t.Errorf("pending = %q after Delete at end of line, want %q untouched", got, "ab")
+	}
+}
+
+// tmux types a key named by one printable character as that character, so a
+// non-literal sequence puts text on the line just as a literal one does.
+// Masking only the literal form let wait_for_text read the caller's own
+// keystrokes as output the pane produced.
+func TestWillTypeModelsNonLiteralKeys(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		keys     []string
+		literal  bool
+		text     string
+		afterEnd string
+		endsLine bool
+		overflow int
+	}{
+		{name: "literal text", keys: []string{"ls -al"}, literal: true, text: "ls -al"},
+		{name: "characters", keys: []string{"h", "i"}, text: "hi"},
+		{name: "named space", keys: []string{"h", "Space", "i"}, text: "h i"},
+		{
+			name: "submitted", keys: []string{"h", "i", "Enter"}, endsLine: true,
+		},
+		{
+			// Everything past the submit is a new line, still unsubmitted.
+			name: "typed past a submit", keys: []string{"h", "Enter", "i", "j"},
+			afterEnd: "ij", endsLine: true,
+		},
+		{
+			// "ab" is a line tmux never drew: C-a moved the cursor and the b
+			// went in front. Recording it would put the mask off the line,
+			// and a mask off the line removes nothing - not even the text
+			// tracked before this call.
+			name: "unplaceable key gives up", keys: []string{"a", "C-a", "b"},
+		},
+		{
+			// The schema's own example for keys.
+			name: "interrupt then a character", keys: []string{"C-c", "q"},
+			afterEnd: "q", endsLine: true,
+		},
+		{name: "cursor move only", keys: []string{"Up"}},
+		{
+			// Correcting a typo is ordinary. Leaving the erase unmodelled put
+			// pending out of step with the line, and a mask out of step
+			// removes nothing at all.
+			name: "backspace corrects the line",
+			keys: []string{"D", "O", "N", "X", "BSpace", "E"},
+			text: "DONE",
+		},
+		{
+			name: "kill line", keys: []string{"a", "b", "C-u", "c"},
+			afterEnd: "c", endsLine: true,
+		},
+		{
+			// tmux writes literal bytes through and the line discipline reads
+			// a newline among them as Enter, so this submits mid-text.
+			name: "literal text spanning lines", keys: []string{"echo mid\nTAIL"},
+			literal: true, afterEnd: "TAIL", endsLine: true,
+		},
+		{
+			// Nothing typed in this call is left to erase; the backspace
+			// reaches past it, for the caller to apply to an earlier one.
+			name: "backspace beyond this call's own text",
+			keys: []string{"BSpace"}, overflow: 1,
+		},
+		{
+			// The first backspace consumes "a"; the second has nothing of
+			// this call's own left and reaches past it too.
+			name: "backspace exhausts this call before it overflows",
+			keys: []string{"a", "BSpace", "BSpace"}, overflow: 1,
+		},
+		{
+			// A submit clears any overflow along with the line: there is
+			// nothing behind a fresh line for a later erase to reach into.
+			name: "a submit discharges overflow", keys: []string{"BSpace", "Enter"},
+			endsLine: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			text, afterEnd, endsLine, overflow := willType(test.keys, test.literal)
+			if text != test.text || afterEnd != test.afterEnd ||
+				endsLine != test.endsLine || overflow != test.overflow {
+				t.Errorf("willType(%#v, %t) = (%q, %q, %t, %d), want (%q, %q, %t, %d)",
+					test.keys, test.literal, text, afterEnd, endsLine, overflow,
+					test.text, test.afterEnd, test.endsLine, test.overflow)
+			}
+		})
+	}
+}
+
+// A sequence this cannot place must not disturb what was already tracked.
+// Recording a line tmux never drew puts the mask off the line, and a mask off
+// the line removes nothing - so the earlier text stops being masked too.
+func TestAnUnplaceableSequenceLeavesEarlierPendingAlone(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%1"}
+
+	typed, _, _, _ := willType([]string{"old"}, true)
+	pending.record(panes, 0, typed)
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "old" {
+		t.Fatalf("pending = %q, want the typed text", got)
+	}
+
+	// C-a moves the cursor to the line start; the model cannot place where
+	// "b" then lands, so it must give up rather than guess.
+	mixed, _, _, overflow := willType([]string{"a", "C-a", "b"}, false)
+	pending.record(panes, overflow, mixed)
+	if got := pending.snapshot(tmux.PaneID("%1")); got != "old" {
+		t.Errorf("pending = %q after an unplaceable sequence, want %q untouched",
+			got, "old")
 	}
 }
