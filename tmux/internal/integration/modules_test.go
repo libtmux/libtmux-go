@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -254,16 +255,29 @@ func TestPublishedMCPModuleExcludesDeveloperCommands(t *testing.T) {
 // Keeping internal beneath tmux prevents sibling consumer modules importing it.
 func TestTheCoreKeepsItsPrivatePackagesToItself(t *testing.T) {
 	root := repositoryRoot(t)
-	probe := filepath.Join(root, "mcp", "zz_internal_boundary_probe.go")
-	source := "package mcp\n\n" +
-		`import _ "github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"` + "\n"
-	if err := os.WriteFile(probe, []byte(source), 0o600); err != nil {
+	goDirective, err := moduleGoDirective(root)
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Remove(probe) })
+	// A module of its own rather than a file dropped into mcp: a probe written
+	// into the repository is visible to every other test building that module
+	// while it is there, and TestEveryModuleBuildsWithWorkspaceSources builds
+	// exactly that one.
+	directory := t.TempDir()
+	writeDownstreamFile(t, filepath.Join(directory, "go.mod"), fmt.Sprintf(
+		`module example.invalid/libtmux-boundary-probe
+
+go %s
+
+require github.com/libtmux/libtmux-go v0.0.0
+
+replace github.com/libtmux/libtmux-go => %q
+`, goDirective, root))
+	writeDownstreamFile(t, filepath.Join(directory, "probe.go"), "package probe\n\n"+
+		`import _ "github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"`+"\n")
 
 	build := exec.Command("go", "build", "./...")
-	build.Dir = filepath.Join(root, "mcp")
+	build.Dir = directory
 	build.Env = append(os.Environ(), "GOWORK=off")
 	output, err := build.CombinedOutput()
 	if err == nil {
