@@ -635,11 +635,12 @@ type noEffectError struct{ err error }
 func (e *noEffectError) Error() string { return e.err.Error() }
 func (e *noEffectError) Unwrap() error { return e.err }
 
-// reusedSessionGap names the windows a reused session does not have. Reuse is
-// keyed on the session name, so a session that exists satisfies it whatever
-// state it is in; comparing is the rule here, and rebuilding is a separate
-// feature. A window the document leaves unnamed cannot be compared by name,
-// so it is not checked.
+// reusedSessionGap reports the first window a reused session does not have.
+// Reuse is keyed on the session name, so a session that exists satisfies it
+// whatever state it is in; comparing is the rule here, and rebuilding is a
+// separate feature. Nothing is built and nothing is changed, so the failure
+// is marked as leaving no effect behind. A window the document leaves unnamed
+// cannot be compared by name, so it is not checked.
 func reusedSessionGap(ctx context.Context, server tmux.Server, session tmux.Session, plan loadPlan) error {
 	names, err := query(ctx, server, "list-windows", "-t", session.ID().String(), "-F", "#{window_name}")
 	if err != nil {
@@ -651,7 +652,6 @@ func reusedSessionGap(ctx context.Context, server tmux.Server, session tmux.Sess
 			present[line]++
 		}
 	}
-	missing := []string{}
 	for _, window := range plan.Windows {
 		if window.Name == "" {
 			continue
@@ -660,16 +660,9 @@ func reusedSessionGap(ctx context.Context, server tmux.Server, session tmux.Sess
 			present[window.Name]--
 			continue
 		}
-		missing = append(missing, strconv.Quote(window.Name))
+		return &noEffectError{&failure{"session_mismatch", fmt.Sprintf("session %s exists and does not match this workspace: it has no window %s", strconv.Quote(plan.Name), strconv.Quote(window.Name)), 1}}
 	}
-	if len(missing) == 0 {
-		return nil
-	}
-	label := "window"
-	if len(missing) > 1 {
-		label = "windows"
-	}
-	return &failure{"session_not_found", fmt.Sprintf("session %s already exists and is missing %s %s this workspace describes", strconv.Quote(plan.Name), label, strings.Join(missing, ", ")), 1}
+	return nil
 }
 
 // windowIndexTaken reports whether session already has a window at index,
