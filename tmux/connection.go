@@ -63,6 +63,10 @@ type ConnectionOptions struct {
 // trigger tmux's destroy-unattached or exit-unattached policy. On tmux 3.6 or
 // later, destroying its initial session moves the clients to another session
 // when one exists; the retained Session value keeps its original identity.
+//
+// It is what a record runs through. [Server.OpenControl] returns a
+// [ControlClient] instead, one client carrying commands and notifications
+// with no record bound to it.
 type Connection struct {
 	server  Server
 	session Session

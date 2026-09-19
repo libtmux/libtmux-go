@@ -31,6 +31,11 @@ var ErrControlReplyCount = errors.New("tmux: control command did not return exac
 // ControlClient is one attached tmux control-mode process. Create one with
 // [Server.OpenControl]. Concurrent Cmd, Wait, and close calls are supported;
 // exactly one caller may execute NextNotification at a time.
+//
+// It is the low-level handle: it carries commands and notifications on one
+// client and can [ControlClient.Reconnect], but records do not run through it.
+// [Session.OpenControl] returns a [Connection] instead, whose lanes the
+// sessions, windows and panes obtained from it use for their own commands.
 type ControlClient struct {
 	server     Server
 	session    Session

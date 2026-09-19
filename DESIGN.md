@@ -93,8 +93,12 @@ its parts cannot be separated without cycles. `Session` returns `Window`,
 generated filters name all four. Splitting along those types would require a
 shared package holding most of the model anyway, or interfaces standing in for
 concrete values the compatibility contract keeps concrete. Navigability is
-therefore a naming and view-type problem rather than a packaging one, which is
-why format values live behind `Formats` instead of on each receiver.
+therefore a naming and view-type problem rather than a packaging one. Each
+record carries the accessors for its own kind, which is the surface the parity
+manifest binds, named without the scope prefix tmux repeats in every field.
+`Formats` is the second view, and the only one where a field from another
+scope appears: a pane's `Formats` answers `SessionName`, which `Pane` itself
+does not.
 
 A dependency analysis over the root package -- asking each used object where it
 was declared -- found `control`, `filter` and `search` reachable in one
