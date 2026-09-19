@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -116,7 +117,7 @@ func (r *invocation) nativeMatches(patterns []searchPattern, records []searchRec
 							matchedFields = append(matchedFields, field)
 						}
 						part := text[found[0]:found[1]]
-						if !contains(matches[field], part) {
+						if !slices.Contains(matches[field], part) {
 							matches[field] = append(matches[field], part)
 						}
 					}
@@ -149,7 +150,7 @@ func (r *invocation) search(cmd *cobra.Command, o *options, args []string) error
 			if !ok {
 				return usage("unknown search field %q", field)
 			}
-			if !contains(fields, canonical) {
+			if !slices.Contains(fields, canonical) {
 				fields = append(fields, canonical)
 			}
 		}

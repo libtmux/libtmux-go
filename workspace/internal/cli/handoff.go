@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -75,7 +76,7 @@ func (r *invocation) prepareHandoff(server tmux.Server) (*loadHandoff, error) {
 			continue
 		}
 		flags, hasFlags := client.Flags()
-		if !hasFlags || contains(strings.Split(flags, ","), "active-pane") {
+		if !hasFlags || slices.Contains(strings.Split(flags, ","), "active-pane") {
 			return nil, usage("cannot identify independent active-pane client focus; use -d or --append")
 		}
 		clientPane, hasPane := client.Formats().PaneID()
@@ -131,7 +132,7 @@ func (h *loadHandoff) attach(ctx context.Context, session tmux.Session) error {
 	if !h.client.Equal(live) || !hasPID || pid != oldPID ||
 		!hasCreated || !created.Equal(oldCreated) || !hasTTY || tty != oldTTY ||
 		!hasSession || currentSession != oldSession || !hasWindow || window != oldWindow ||
-		!hasPane || pane != oldPane || !hasFlags || contains(strings.Split(flags, ","), "active-pane") {
+		!hasPane || pane != oldPane || !hasFlags || slices.Contains(strings.Split(flags, ","), "active-pane") {
 		return &failure{"client_changed", "the invoking client changed before handoff", 1}
 	}
 	// tmux targets the client name; the incarnation check is observational.

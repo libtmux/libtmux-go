@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -74,7 +75,7 @@ func directoryFiles(dir string) []string {
 		return result
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") && contains(extensions, strings.ToLower(filepath.Ext(entry.Name()))) {
+		if !entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") && slices.Contains(extensions, strings.ToLower(filepath.Ext(entry.Name()))) {
 			path := filepath.Join(dir, entry.Name())
 			if isFile(path) {
 				result = append(result, path)
@@ -301,7 +302,7 @@ func (r *invocation) confirm(label string, yes bool) error {
 }
 
 func validateFormat(format string) error {
-	if format != "" && !contains([]string{"yaml", "json"}, format) {
+	if format != "" && !slices.Contains([]string{"yaml", "json"}, format) {
 		return usage("invalid workspace format %q", format)
 	}
 	return nil
