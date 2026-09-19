@@ -199,10 +199,11 @@ environment names remain open dictionaries. Command mappings accept `cmd`,
 `pane_readiness`. Generic conversion preserves source fields. Imported `config`
 and `socket_name` fields are not native load settings; select the endpoint and
 tmux configuration with CLI flags. A window naming no `layout` tiles as panes
-are added; the reference stacks halving splits instead. With no pane naming
-`focus`, the first pane stays active; the reference leaves the last. Both are
-deliberate differences from the reference, not omissions. Python-delegated documents retain extension
-fields, with the existing checks on recognized common values.
+are added; the reference stacks halving splits instead. This is a deliberate
+difference, not an omission. With no pane naming `focus`, the last pane
+created stays active, matching the reference. Python-delegated documents
+retain extension fields, with the existing checks on recognized common
+values.
 Layout names, checksums, unsigned 32-bit fields, tree structure and required
 pane capacity are checked for every native input before scripts or tmux
 mutations. Names accept abbreviations that are unique on the selected daemon;
