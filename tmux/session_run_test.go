@@ -428,6 +428,66 @@ func (r *finishingRunner) Run(
 	return tmuxcmd.Result{}, nil
 }
 
+// unreadableOutcomeRunner fails every list-panes lookup, the way a loaded
+// server answering finish's own listing might, and tracks pipe-pane and
+// kill-window calls separately.
+type unreadableOutcomeRunner struct {
+	version   Version
+	pipeStops atomic.Int32
+	kills     atomic.Int32
+}
+
+func (r *unreadableOutcomeRunner) Run(
+	_ context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
+	case slices.Contains(request.Arguments, "display-message"):
+		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
+		)}, nil
+	case slices.Contains(request.Arguments, "list-panes"):
+		return tmuxcmd.Result{ExitCode: -1}, errors.New("pane listing unreachable")
+	case slices.Contains(request.Arguments, "pipe-pane"):
+		r.pipeStops.Add(1)
+	case slices.Contains(request.Arguments, "kill-window"):
+		r.kills.Add(1)
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+// TestFinishStopsAKeptPipeEvenWhenTheOutcomeIsUnreadable pins that a Keep'd
+// Running's Start-installed compatibility pipe is stopped on every path out of
+// finish, not only the one that reads the outcome cleanly: Keep never kills
+// the window, so nothing else ever stops that pipe, and a pane listing that
+// fails while reading the outcome must not leave a "cat" process piping the
+// kept pane forever.
+func TestFinishStopsAKeptPipeEvenWhenTheOutcomeIsUnreadable(t *testing.T) {
+	t.Parallel()
+
+	runner := &unreadableOutcomeRunner{version: mustParseVersion(t, "3.6")}
+	server := serverWithRunner(runner)
+	running := &Running{
+		session:       Session{server: server, sessionID: "$1"},
+		window:        Window{server: server, sessionID: "$1", windowID: "@1"},
+		pane:          Pane{server: server, sessionID: "$1", windowID: "@1", paneID: "%1"},
+		keep:          true,
+		installedPipe: true,
+	}
+
+	if _, err := running.finish(context.Background()); err == nil {
+		t.Fatal("finish() error = nil, want the pane listing failure")
+	}
+	if got := runner.pipeStops.Load(); got != 1 {
+		t.Errorf("pipe-pane stop calls = %d, want 1", got)
+	}
+	if got := runner.kills.Load(); got != 0 {
+		t.Errorf("kill-window calls = %d, want 0 for Keep", got)
+	}
+}
+
 // Once the command has ended its outcome belongs to every caller, so no one
 // caller's deadline may decide it: a Wait whose context ends while the outcome
 // is being read reports only its own context, a concurrent Wait answers within

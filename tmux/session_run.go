@@ -480,6 +480,14 @@ func (r *Running) askForAReap(ctx context.Context) {
 func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	defer func() {
 		if r.keep {
+			// Nothing else ever stops a compatibility pipe on a kept window,
+			// so it runs on every path out of this function, not only the one
+			// that reads the outcome cleanly.
+			if r.installedPipe {
+				stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+				defer cancel()
+				_ = r.pane.Pipe(stopCtx, PipePaneRequest{})
+			}
 			return
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
@@ -502,9 +510,6 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 		return RunResult{}, fmt.Errorf("read screen: %w", err)
 	}
 	result.Lines = trimScreen(lines, r.fixedNotice)
-	if r.installedPipe && r.keep {
-		_ = finished.Pipe(ctx, PipePaneRequest{})
-	}
 	return result, nil
 }
 
