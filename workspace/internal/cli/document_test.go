@@ -217,8 +217,8 @@ func TestUnknownBuilderOptionWarnsRatherThanRefusing(t *testing.T) {
 	if plan.Readiness != "always" {
 		t.Fatalf("readiness = %q, want the recognised setting honoured", plan.Readiness)
 	}
-	if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], "pane_readines") {
-		t.Fatalf("warnings = %q, want the unknown setting named", plan.Warnings)
+	if len(plan.Warnings) != 1 || plan.Warnings[0].Code != "unsupported_key" || !strings.Contains(plan.Warnings[0].Message, "pane_readines") {
+		t.Fatalf("warnings = %+v, want the unknown setting named under its own code", plan.Warnings)
 	}
 }
 
@@ -239,15 +239,15 @@ func TestStartDirectoryWarningsAndNullHandling(t *testing.T) {
 		if plan.Directory != missing {
 			t.Fatalf("directory = %q, want %q", plan.Directory, missing)
 		}
-		if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], missing) || !strings.Contains(plan.Warnings[0], "$HOME") {
-			t.Fatalf("warnings = %q, want the path named and the fallback explained", plan.Warnings)
+		if len(plan.Warnings) != 1 || plan.Warnings[0].Code != "start_directory_missing" || !strings.Contains(plan.Warnings[0].Message, missing) || !strings.Contains(plan.Warnings[0].Message, "$HOME") {
+			t.Fatalf("warnings = %+v, want the path named under a code of its own", plan.Warnings)
 		}
 	})
 	t.Run("null", func(t *testing.T) {
 		doc := document{"session_name": "example", "start_directory": nil, "windows": []any{document{"panes": []any{nil}}}}
 		plan, err := normalize(doc, base)
 		if err != nil || plan.Directory != "" || len(plan.Warnings) != 0 {
-			t.Fatalf("an explicit null start_directory must read as absent: %v %q %q", err, plan.Directory, plan.Warnings)
+			t.Fatalf("an explicit null start_directory must read as absent: %v %q %+v", err, plan.Directory, plan.Warnings)
 		}
 	})
 }
