@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -231,6 +232,10 @@ func (r *invocation) result(value map[string]any) error {
 
 func (r *invocation) style(role, value string) string { return r.styleFor(r.out, role, value) }
 
+// styleCodes is fixed at compile time, so every call to styleFor shares it
+// rather than allocating its own copy.
+var styleCodes = map[string]string{"heading": "1;96", "subject": "1;35", "info": "36", "success": "32", "warning": "33", "error": "31", "secondary": "2"}
+
 func (r *invocation) styleFor(writer io.Writer, role, value string) string {
 	if r.machine() || os.Getenv("NO_COLOR") != "" || r.color == "never" {
 		return value
@@ -239,8 +244,7 @@ func (r *invocation) styleFor(writer io.Writer, role, value string) string {
 	if !force && (os.Getenv("CLICOLOR") == "0" || !terminal(writer)) {
 		return value
 	}
-	codes := map[string]string{"heading": "1;96", "subject": "1;35", "info": "36", "success": "32", "warning": "33", "error": "31", "secondary": "2"}
-	return "\x1b[" + codes[role] + "m" + value + "\x1b[0m"
+	return "\x1b[" + styleCodes[role] + "m" + value + "\x1b[0m"
 }
 
 func terminal(w any) bool {
@@ -284,10 +288,10 @@ func (r *invocation) tree() *cobra.Command {
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		r.dispatched = true
 		r.command = strings.TrimPrefix(cmd.CommandPath(), "tmux-workspace ")
-		if !contains([]string{"auto", "always", "never"}, r.color) {
+		if !slices.Contains([]string{"auto", "always", "never"}, r.color) {
 			return usage("invalid color policy %q", r.color)
 		}
-		if !contains([]string{"debug", "info", "warning", "error", "critical"}, r.logLevel) {
+		if !slices.Contains([]string{"debug", "info", "warning", "error", "critical"}, r.logLevel) {
 			return usage("invalid log level %q", r.logLevel)
 		}
 		return nil
@@ -507,15 +511,6 @@ func maximum(value int) string {
 		return "many"
 	}
 	return strconv.Itoa(value)
-}
-
-func contains(values []string, value string) bool {
-	for _, v := range values {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }
 
 func sockets(cmd *cobra.Command, o *options) {
