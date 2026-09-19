@@ -928,7 +928,7 @@ func TestHumanExistingSessionPromptAsksOnce(t *testing.T) {
 	}
 }
 
-// TestHumanLoadSwitchesTheSessionsOtherClientWhenThePaneHasNone: D2's client
+// TestHumanLoadSwitchesTheSessionsOtherClientWhenThePaneHasNone: the client
 // requirement is read against the invoking pane's session, not the pane
 // itself. switch-client needs a client to move, not a witness to the exact
 // pane a script or send-keys targeted while the user looks at another
@@ -967,12 +967,12 @@ func TestHumanLoadSwitchesTheSessionsOtherClientWhenThePaneHasNone(t *testing.T)
 	}
 }
 
-// TestDeclinedAttachStillBuildsAnEarlierInput: SPEC-5 D12a. "<name> is
-// already running. Attach?" is asked about the load's last input only, so a
-// decline must leave every earlier input alone -- a control-flow return out
-// of the whole load, rather than a disposition scoped to that one input,
-// would silently skip building "first" too. "second" mismatches the
-// document so a mistaken comparison would report session_mismatch.
+// TestDeclinedAttachStillBuildsAnEarlierInput: "<name> is already running.
+// Attach?" is asked about the load's last input only, so a decline must
+// leave every earlier input alone -- a control-flow return out of the whole
+// load, rather than a disposition scoped to that one input, would silently
+// skip building "first" too. "second" mismatches the document so a mistaken
+// comparison would report session_mismatch.
 func TestDeclinedAttachStillBuildsAnEarlierInput(t *testing.T) {
 	ctx, server, pane := handoffServer(t)
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "second"}); err != nil {

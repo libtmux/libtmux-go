@@ -607,9 +607,9 @@ func TestLoadRefusalReportsEveryWindow(t *testing.T) {
 	}
 }
 
-// TestPromptDefaultShowsTheDisplayHintNotTheBareFallback: SPEC-5 D12's
-// binary choices show the default's case, "[Y/n]", naming both options,
-// rather than a plain prompt's bracket repeating the bare default alone.
+// TestPromptDefaultShowsTheDisplayHintNotTheBareFallback: a binary choice
+// shows the default's case, "[Y/n]", naming both options, rather than a
+// plain prompt's bracket repeating the bare default alone.
 func TestPromptDefaultShowsTheDisplayHintNotTheBareFallback(t *testing.T) {
 	var errOut bytes.Buffer
 	r := &invocation{ctx: t.Context(), in: strings.NewReader("\n"), err: &errOut}
