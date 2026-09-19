@@ -550,7 +550,10 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		// than a generic one, keeping the full summary under "result".
 		code, _ := failures[0]["code"].(string)
 		if code == "" {
-			code = "load_failed"
+			// Every failure entry is classified when it is appended, so this
+			// never fires; if it ever did, the retired generic load_failed
+			// is not the answer either.
+			code = "tmux_failed"
 		}
 		// Retained effects take priority: a completed input, or a failure
 		// whose session was never this load's to remove, leaves something

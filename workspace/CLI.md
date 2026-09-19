@@ -279,12 +279,34 @@ the sink and attempts one optional warning after work finishes. Workspace
 results, cancellation and child exit statuses remain unchanged by logging
 failures, including failure to write that secondary warning.
 
-## Machine codes outside the shared set
+## Reference tables
 
-`--json`/`--ndjson` terminal error records normally carry one of the codes
-shared across every workspace-cli port. A few conditions describe this
-binary's own machinery rather than the workspace or tmux, and keep a code of
-their own instead of borrowing one of the shared ones dishonestly:
+The prose above states every rule exactly; these tables exist to be scanned
+instead of searched.
+
+### Exit codes
+
+| Exit | Means |
+| --- | --- |
+| 0 | Succeeded, or a prompt was declined -- answering a question asked is not a failure. |
+| 1 | Refused or failed: an `error` code from the shared or machine-code sets below, unless the command spawned a child and passes its exit status through directly (`shell`, `edit`, the Python bridge). |
+| 2 | `usage`: the invocation itself was wrong -- bad flags, a required terminal that is not there, a prompt with no way to answer it. |
+| 130 | `interrupted`: stopped by a signal, not a refusal or a failure. |
+
+### The shared machine codes
+
+Every `--json`/`--ndjson` terminal error record's `code` is one of these ten,
+unless it names this binary's own machinery (next table):
+
+`workspace_not_found`, `invalid_workspace`, `unsupported_key`,
+`session_not_found`, `session_mismatch`, `tmux_unavailable`, `tmux_failed`,
+`script_failed`, `destination_exists`, `usage`.
+
+### Machine codes outside the shared set
+
+A few conditions describe this binary's own machinery rather than the
+workspace or tmux, and keep a code of their own instead of borrowing one of
+the shared ones dishonestly:
 
 | Code | Means |
 | --- | --- |
@@ -298,6 +320,39 @@ their own instead of borrowing one of the shared ones dishonestly:
 
 `interrupted` (exit 130) is a signal outcome, not a refusal or a failure, and
 stands beside the shared set for the same reason.
+
+### NDJSON event vocabulary
+
+`--ndjson` emits one JSON object per line, each carrying `schema_version`,
+`command`, `event` and an increasing `sequence`. `load`'s events, in the
+order one input can produce them:
+
+| Event | When |
+| --- | --- |
+| `started` | Once, before the first input is touched. |
+| `workspace-started` | Before an input's session is resolved. |
+| `session-created` | A session was created for an input (not on reuse or append). |
+| `window-created` | A window finished building. |
+| `pane-created` | A pane finished building. |
+| `pane-completed` | A pane's commands were sent. |
+| `window-completed` | Every pane in a window is complete. |
+| `script-started` / `script-output` / `script-completed` | A `before_script` or Python bridge child ran; `script-output` streams its stdout/stderr. |
+| `workspace-completed` | An input finished, success or failure. |
+| `warning` | A non-fatal problem: an unrecognised `workspace_builder_options` key, a missing `start_directory`, a declined prompt, or a per-input load failure that leaves the command's other inputs unaffected. |
+| `completed` / `failed` | Once, the whole command's outcome. |
+
+### Environment variables
+
+| Variable | Effect |
+| --- | --- |
+| `TMUX`, `TMUX_PANE` | Identify the attached daemon and invoking pane for an attached `load` and for `--append`. |
+| `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `FORCE_COLOR` | The usual precedence for disabling or forcing ANSI styling; `--color` overrides all of them explicitly. |
+| `TERM` | Must be set and not `dumb` for human load progress to render. |
+| `TMUXP_PROGRESS`, `TMUXP_PROGRESS_FORMAT`, `TMUXP_PROGRESS_LINES` | Defaults for `--no-progress`, `--progress-format` and `--progress-lines` while the presenter is active. |
+| `TMUXP_DETECT_TERMINAL_SIZE` | Set to anything but `1` to skip live terminal-size detection in progress rendering. |
+| `TMUX_WORKSPACE_PYTHON` | The Python interpreter used for `shell`, plugins and Python-backed search, overriding auto-detection. |
+| `EDITOR` | The editor `edit` launches. |
+| `TMUXP_CONFIGDIR`, `XDG_CONFIG_HOME`, `TMUXINATOR_CONFIG` | Extra workspace-file search directories, matching tmuxp and tmuxinator's own conventions. |
 
 ## Search and Python compatibility
 
