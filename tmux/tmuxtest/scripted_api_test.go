@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -95,4 +96,40 @@ func ExampleScriptedTmux() {
 	}
 	fmt.Println(version)
 	// Output: 3.7
+}
+
+// Matching is per argument, so a needle cannot match across a boundary, and
+// text a shell would otherwise treat specially is carried verbatim.
+func TestScriptedTmuxMatchesWholeArgumentsAndQuotesOutput(t *testing.T) {
+	t.Parallel()
+
+	binary := tmuxtest.ScriptedTmux(t,
+		tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+		tmuxtest.ScriptedCommand{
+			Contains: []string{"display-message"},
+			Stdout:   "it's a $HOME * [quoted] value\n",
+		},
+	)
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	// "display" alone must not match "display-message", and a target holding
+	// a space must not let a needle match across two arguments.
+	result, err := server.Cmd(context.Background(), "has-session", "-t", "display message")
+	if err != nil {
+		t.Fatalf("Cmd() error = %v", err)
+	}
+	if result.ExitCode == 0 {
+		t.Errorf("a needle matched across an argument boundary: %#v", result)
+	}
+
+	result, err = server.Cmd(context.Background(), "display-message", "-p", "#{pane_id}")
+	if err != nil {
+		t.Fatalf("Cmd() error = %v", err)
+	}
+	if want := []string{"it's a $HOME * [quoted] value"}; !slices.Equal(result.Stdout, want) {
+		t.Errorf("Stdout = %#v, want %#v", result.Stdout, want)
+	}
 }

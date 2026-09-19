@@ -80,3 +80,36 @@ func TestCommandTraceCarriesNoArgumentsOrOutput(t *testing.T) {
 		t.Fatalf("trace rendered the caller's argument: %s", rendered)
 	}
 }
+
+// The observer's contract is every tmux command, which includes the version
+// probe this package runs on its own behalf and anything sent over a control
+// client rather than a process.
+func TestCommandObserverSeesProbesAndControlCommands(t *testing.T) {
+	t.Parallel()
+
+	var mutex sync.Mutex
+	traces := []CommandTrace{}
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}},
+	}}
+	server := serverWithOptionsAndRunner(ServerOptions{
+		CommandObserver: func(trace CommandTrace) {
+			mutex.Lock()
+			defer mutex.Unlock()
+			traces = append(traces, trace)
+		},
+	}, runner)
+
+	if _, err := server.Version(context.Background()); err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+	if len(traces) != 1 {
+		t.Fatalf("traces = %#v, want the version probe", traces)
+	}
+	if traces[0].Subcommand != "-V" || traces[0].Transport != CommandTransportProcess {
+		t.Errorf("traces[0] = %v, want the -V probe over a process", traces[0])
+	}
+}

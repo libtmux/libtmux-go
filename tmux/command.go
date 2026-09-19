@@ -159,7 +159,12 @@ func (e *CommandError) Is(target error) bool {
 
 // withoutAbsenceClaim returns err with any claim that tmux's target was
 // missing removed, for a caller that has disproved the absence the claim
-// would otherwise assert. Anything else is returned unchanged.
+// would otherwise assert.
+//
+// err has to be the [CommandError] itself rather than one wrapping it, because
+// clearing a claim inside a chain would mean rebuilding the chain. Its callers
+// hold what snapshotListing returned, which is unwrapped. Anything else is
+// returned unchanged.
 func withoutAbsenceClaim(err error) error {
 	commandError, ok := err.(*CommandError)
 	if !ok || !commandError.targetNotFound {

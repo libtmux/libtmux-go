@@ -75,25 +75,26 @@ func (t CommandTrace) String() string {
 // command finishes and before its result is returned, so a slow observer slows
 // every command. Operations may invoke it concurrently; synchronize shared
 // state. A nil observer costs nothing, not even the clock reads.
+//
+// It sees the version probes this package runs on its own behalf, and the
+// identity probe a daemon guard runs to decide whether a failure was a
+// replaced daemon, so one call can produce more than one trace.
 type CommandObserver func(CommandTrace)
 
 // observeCommand reports one finished command. subcommand is read from the
 // arguments the caller asked for rather than the ones sent, so a daemon guard
 // wrapping them does not become the reported command.
-func (s Server) observeCommand(
+func observeCommand(
 	observer CommandObserver,
 	args []string,
 	started time.Time,
+	transport CommandTransport,
 	exitCode int,
 	err error,
 ) {
 	subcommand := ""
 	if len(args) > 0 {
 		subcommand = args[0]
-	}
-	transport := CommandTransportProcess
-	if s.connection != nil {
-		transport = CommandTransportConnection
 	}
 	observer(CommandTrace{
 		Subcommand: subcommand,
@@ -102,4 +103,20 @@ func (s Server) observeCommand(
 		ExitCode:   exitCode,
 		Err:        err,
 	})
+}
+
+// commandObserver returns the observer this server reports to, or nil.
+func (s Server) commandObserver() CommandObserver {
+	if s.state == nil {
+		return nil
+	}
+	return s.state.config.commandObserver
+}
+
+// commandTransport names how this server's own commands reach tmux.
+func (s Server) commandTransport() CommandTransport {
+	if s.connection != nil {
+		return CommandTransportConnection
+	}
+	return CommandTransportProcess
 }

@@ -52,21 +52,28 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	body.WriteString("#!/bin/sh\n")
 	// Written by ScriptedTmux; matching is on the whole argument list so a
 	// caller names a subcommand without restating the flags around it.
-	body.WriteString("arguments=\" $* \"\n")
+	// Each argument is matched whole. Joining them into one string would let
+	// a needle match across a boundary, and a tmux target may hold a space.
+	body.WriteString("match() {\n")
+	body.WriteString("  for argument in \"$@\"; do\n")
+	body.WriteString("    [ \"$argument\" = \"$needle\" ] && return 0\n")
+	body.WriteString("  done\n")
+	body.WriteString("  return 1\n")
+	body.WriteString("}\n")
 	for index, command := range script {
 		for _, needle := range command.Contains {
 			if needle == "" {
 				t.Fatalf("ScriptedTmux: entry %d matches on an empty string", index)
 			}
-			if strings.ContainsAny(needle, "'\n") {
+			if strings.ContainsAny(needle, "\n") {
 				t.Fatalf("ScriptedTmux: entry %d matches on %q, which the script "+
-					"cannot quote", index, needle)
+					"cannot carry", index, needle)
 			}
 		}
 		condition := "true"
 		for _, needle := range command.Contains {
 			condition += fmt.Sprintf(
-				" && case $arguments in *' %s '*) true ;; *) false ;; esac", needle)
+				" && { needle=%s; match \"$@\"; }", shellQuote(needle))
 		}
 		fmt.Fprintf(&body, "if %s; then\n", condition)
 		if command.Stdout != "" {
@@ -78,7 +85,7 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 		fmt.Fprintf(&body, "  exit %d\nfi\n", command.ExitCode)
 	}
 	body.WriteString(
-		"printf 'scripted tmux has no answer for:%s\\n' \"$arguments\" >&2\nexit 1\n")
+		"printf 'scripted tmux has no answer for: %s\\n' \"$*\" >&2\nexit 1\n")
 
 	// Written without the executable bit and marked afterwards. A file still
 	// open for writing anywhere in this process cannot be executed, and a

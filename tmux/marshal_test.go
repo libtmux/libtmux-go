@@ -73,6 +73,23 @@ func TestSnapshotEncodesOnlyTheKindsItListed(t *testing.T) {
 	if strings.Contains(string(encoded), `"panes"`) {
 		t.Errorf("an unlisted pane kind encoded: %s", encoded)
 	}
+
+	// The case the distinction exists for, and the one omitempty could not
+	// spell: a server tmux listed and found empty is not a server nobody
+	// asked about.
+	emptyServer := Snapshot{state: &snapshotState{listed: listedEverything}}
+	encodedEmpty, err := json.Marshal(emptyServer)
+	if err != nil {
+		t.Fatalf("Marshal(Snapshot) error = %v", err)
+	}
+	for _, kind := range []string{"sessions", "windows", "panes", "clients"} {
+		if !strings.Contains(string(encodedEmpty), `"`+kind+`":[]`) {
+			t.Errorf("a listed but empty %s encoded as absent: %s", kind, encodedEmpty)
+		}
+	}
+	if string(encodedEmpty) == string(encoded) {
+		t.Error("a listed-but-empty snapshot encodes like one that listed nothing")
+	}
 }
 
 func TestFormatValuesEncodeVerbatim(t *testing.T) {

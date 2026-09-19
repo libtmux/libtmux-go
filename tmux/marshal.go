@@ -5,17 +5,6 @@ import (
 	"maps"
 )
 
-// Records encode to JSON so a program can log, export, or answer with one
-// without restating the model as a struct of its own. What a record holds is
-// what tmux said when it was materialized, so that is what it encodes: its
-// stable identity, its place in the hierarchy, and the format expansions
-// verbatim under "formats".
-//
-// Nothing decodes. A record carries the server handle its follow-up commands
-// run through, and a decoded one would have none, so it could name a pane it
-// could never act on. Decode into a shape of your own where that is what you
-// want.
-
 // marshalFormats renders format expansions as tmux returned them. A record
 // materialized with no fields encodes an empty object rather than null, so a
 // consumer can index it without a nil check.
@@ -26,12 +15,17 @@ func marshalFormats(values formatValues) map[string]string {
 	return maps.Clone(values.values)
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON encodes the format expansions as tmux returned them. Nothing
+// decodes: [json.Unmarshal] into this type reports no error and changes
+// nothing, because every field is unexported.
 func (v FormatValues) MarshalJSON() ([]byte, error) {
 	return json.Marshal(marshalFormats(v.values))
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON encodes the session's identity and the format expansions tmux
+// returned for it, under "formats". Nothing decodes: a decoded record would
+// carry no [Server], so it could name a session it could never act on, and
+// [json.Unmarshal] into this type reports no error and changes nothing.
 func (s Session) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ID      SessionID         `json:"id"`
@@ -39,7 +33,9 @@ func (s Session) MarshalJSON() ([]byte, error) {
 	}{ID: s.sessionID, Formats: marshalFormats(s.formats)})
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON encodes the window's identity, its place in the hierarchy, and
+// the format expansions tmux returned for it. Nothing decodes; see
+// [Session.MarshalJSON].
 func (w Window) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ID          WindowID          `json:"id"`
@@ -54,7 +50,9 @@ func (w Window) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON encodes the pane's identity, its place in the hierarchy, and the
+// format expansions tmux returned for it. Nothing decodes; see
+// [Session.MarshalJSON].
 func (p Pane) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ID          PaneID            `json:"id"`
@@ -73,7 +71,8 @@ func (p Pane) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// MarshalJSON implements json.Marshaler.
+// MarshalJSON encodes the client's name and the format expansions tmux
+// returned for it. Nothing decodes; see [Session.MarshalJSON].
 func (c Client) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Name    ClientName        `json:"name"`
@@ -81,31 +80,37 @@ func (c Client) MarshalJSON() ([]byte, error) {
 	}{Name: c.clientName, Formats: marshalFormats(c.formats)})
 }
 
-// MarshalJSON implements json.Marshaler. A snapshot encodes only the kinds it
-// listed, because a kind it never listed and a kind it listed and found empty
-// are different answers, and an empty array would spell them the same.
+// MarshalJSON encodes the snapshot's tmux version and the records it holds. A
+// kind it listed encodes as an array, empty when tmux reported none; a kind it
+// never listed is absent. Those are different answers, and one field cannot
+// spell both, which is why the arrays are pointers here. Nothing decodes; see
+// [Session.MarshalJSON].
 func (s Snapshot) MarshalJSON() ([]byte, error) {
 	encoded := struct {
-		Version  string    `json:"version"`
-		Sessions []Session `json:"sessions,omitempty"`
-		Windows  []Window  `json:"windows,omitempty"`
-		Panes    []Pane    `json:"panes,omitempty"`
-		Clients  []Client  `json:"clients,omitempty"`
+		Version  string     `json:"version"`
+		Sessions *[]Session `json:"sessions,omitempty"`
+		Windows  *[]Window  `json:"windows,omitempty"`
+		Panes    *[]Pane    `json:"panes,omitempty"`
+		Clients  *[]Client  `json:"clients,omitempty"`
 	}{Version: s.Version().String()}
 	if s.state == nil {
 		return json.Marshal(encoded)
 	}
 	if s.state.listed.holds(listedSessions) {
-		encoded.Sessions = s.Sessions()
+		listed := s.Sessions()
+		encoded.Sessions = &listed
 	}
 	if s.state.listed.holds(listedWindows) {
-		encoded.Windows = s.Windows()
+		listed := s.Windows()
+		encoded.Windows = &listed
 	}
 	if s.state.listed.holds(listedPanes) {
-		encoded.Panes = s.Panes()
+		listed := s.Panes()
+		encoded.Panes = &listed
 	}
 	if s.state.listed.holds(listedClients) {
-		encoded.Clients = s.Clients()
+		listed := s.Clients()
+		encoded.Clients = &listed
 	}
 	return json.Marshal(encoded)
 }

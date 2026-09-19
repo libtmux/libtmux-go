@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -127,7 +128,14 @@ func (c *ControlClient) cmd(
 	ctx context.Context,
 	commandList bool,
 	args ...string,
-) ([]ControlCommandResult, error) {
+) (results []ControlCommandResult, err error) {
+	if observer := c.server.commandObserver(); observer != nil {
+		started := time.Now()
+		defer func() {
+			observeCommand(observer, args, started, CommandTransportConnection,
+				controlExitCode(results, err), err)
+		}()
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -306,4 +314,20 @@ func (c *ControlClient) calibrateReplyFence(ctx context.Context) error {
 	}
 	c.replyFence = fence
 	return nil
+}
+
+// controlExitCode renders a control-mode outcome as the exit code a trace
+// carries. tmux reports a failed command over control mode by closing its
+// frame with %error rather than with a status, so a failed frame reads as 1
+// and a local failure as the -1 that means no tmux command ran.
+func controlExitCode(results []ControlCommandResult, err error) int {
+	if err != nil {
+		return -1
+	}
+	for _, result := range results {
+		if result.Failed {
+			return 1
+		}
+	}
+	return 0
 }

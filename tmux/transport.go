@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
@@ -60,7 +61,7 @@ func (s Server) runCommand(
 	}
 
 	// Read once: a nil observer must not even cost a clock read.
-	observer := state.config.commandObserver
+	observer := s.commandObserver()
 	var started time.Time
 	if observer != nil {
 		started = time.Now()
@@ -89,19 +90,22 @@ func (s Server) runCommand(
 			Stdio:       stdio,
 		})
 	}
+	// Observed after the guard has had its say, so a caller reading a trace
+	// and a caller reading the error are told the same thing.
+	if guard != nil {
+		result.Command = s.originalCommand(kind, args, s.connection != nil)
+		switch {
+		case err == nil && guard.rejected(result.ExitCode, result.Stderr):
+			result = tmuxcmd.Result{Command: result.Command, ExitCode: -1}
+			err = ErrDaemonReplaced
+		case err == nil && stdio != nil && result.ExitCode != 0 &&
+			s.daemonNoLongerAtSocket(ctx):
+			result = tmuxcmd.Result{Command: result.Command, ExitCode: -1}
+			err = ErrDaemonReplaced
+		}
+	}
 	if observer != nil {
-		s.observeCommand(observer, args, started, result.ExitCode, err)
-	}
-	if guard == nil {
-		return result, err
-	}
-	result.Command = s.originalCommand(kind, args, s.connection != nil)
-	if err == nil && guard.rejected(result.ExitCode, result.Stderr) {
-		return tmuxcmd.Result{Command: result.Command, ExitCode: -1}, ErrDaemonReplaced
-	}
-	if err == nil && stdio != nil && result.ExitCode != 0 &&
-		s.daemonNoLongerAtSocket(ctx) {
-		return tmuxcmd.Result{Command: result.Command, ExitCode: -1}, ErrDaemonReplaced
+		observeCommand(observer, args, started, s.commandTransport(), result.ExitCode, err)
 	}
 	return result, err
 }
@@ -161,10 +165,33 @@ func (s Server) runExactArgv(
 		return tmuxcmd.Result{ExitCode: -1},
 			s.connection.routeError(ctx, commandProcess)
 	}
-	return state.executor.Run(ctx, tmuxcmd.Request{
+	observer := s.commandObserver()
+	var started time.Time
+	if observer != nil {
+		started = time.Now()
+	}
+	result, err := state.executor.Run(ctx, tmuxcmd.Request{
 		Binary:      state.config.executable,
 		Arguments:   arguments,
 		Environment: slices.Clone(state.config.processEnvironment),
 		Directory:   state.config.directory,
 	})
+	if observer != nil {
+		// These carry their own client globals, so the subcommand is whatever
+		// follows them rather than the first argument.
+		observeCommand(observer, exactArgvSubcommand(arguments), started,
+			s.commandTransport(), result.ExitCode, err)
+	}
+	return result, err
+}
+
+// exactArgvSubcommand names the command in an argv that carries its own client
+// globals, which are the flag-shaped arguments before it.
+func exactArgvSubcommand(arguments []string) []string {
+	for index, argument := range arguments {
+		if !strings.HasPrefix(argument, "-") {
+			return arguments[index:]
+		}
+	}
+	return arguments
 }
