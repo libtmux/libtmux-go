@@ -300,11 +300,18 @@ func normalize(doc document, base string) (loadPlan, error) {
 // a refusal names the line its key is written on.
 func normalizeSource(doc document, base string, lines sourceLines) (loadPlan, error) {
 	plan, err := normalizeDocument(doc, base, lines)
-	var specific *failure
-	if err == nil || errors.As(err, &specific) {
-		return plan, err
+	if err == nil {
+		return plan, nil
 	}
-	return plan, &failure{"invalid_workspace", err.Error(), 1}
+	// Several problems are reported together, so the classification has to be
+	// one flat failure: a caller that reaches into a joined error for a
+	// *failure finds the first and drops everything reported beside it.
+	code, exit := "invalid_workspace", 1
+	var specific *failure
+	if errors.As(err, &specific) {
+		code, exit = specific.Code, specific.Exit
+	}
+	return plan, &failure{code, err.Error(), exit}
 }
 
 func normalizeDocument(doc document, base string, lines sourceLines) (loadPlan, error) {
@@ -395,138 +402,21 @@ func normalizeDocument(doc document, base string, lines sourceLines) (loadPlan, 
 	if !ok || len(windows) == 0 {
 		return plan, lines.at("windows", errors.New("windows must be a nonempty sequence"))
 	}
-	seen := map[int]bool{}
-	for wi, raw := range windows {
-		windowPath := "windows." + strconv.Itoa(wi)
-		w := mapping(raw)
-		if w == nil {
-			return plan, lines.at(windowPath, fmt.Errorf("window %d must be a mapping", wi))
-		}
-		if !plan.Bridge {
-			if err := checkFieldsAt(w, fmt.Sprintf("window %d", wi), lines, windowPath,
-				"window_name", "description", "window_index", "layout", "start_directory", "window_shell",
-				"focus", "suppress_history", "options", "options_after", "environment", "shell_command_before", "panes",
-			); err != nil {
-				return plan, err
-			}
-		}
-		wp := windowPlan{Name: expand(textValue(w["window_name"])), Layout: expand(textValue(w["layout"]))}
-		// The validator's own text describes a library call and the tmux
-		// release the check exists for; what the user wrote is a name.
-		if (tmux.SelectLayoutRequest{Layout: wp.Layout}).Validate() != nil {
-			return plan, lines.at(windowPath+".layout", fmt.Errorf("window %d: layout %q is not a tmux layout name or a saved layout string", wi, wp.Layout))
-		}
-		if strings.ContainsRune(wp.Name, 0) {
-			return plan, lines.at(windowPath+".window_name", errors.New("NUL in window name"))
-		}
-		wp.Directory, err = directory(w["start_directory"], base, plan.Directory)
+	// Every window is checked, so one mistake does not hide the next: fix
+	// one, rerun, find the next is the loop a config file otherwise puts a
+	// user in.
+	scope := windowScope{doc, base, lines, plan.Bridge, plan.Directory, suppress, map[int]bool{}, directories}
+	var problems []error
+	for position, raw := range windows {
+		wp, err := normalizeWindow(raw, position, scope)
 		if err != nil {
-			return plan, lines.at(windowPath+".start_directory", err)
-		}
-		directories[wp.Directory] = true
-		wp.Focus, err = boolean(w["focus"], false)
-		if err != nil {
-			return plan, lines.at(windowPath+".focus", err)
-		}
-		if index, exists := w["window_index"]; exists {
-			n, e := strconv.Atoi(textValue(index))
-			if e != nil || n < 0 {
-				return plan, lines.at(windowPath+".window_index", errors.New("window_index must be nonnegative"))
-			}
-			if seen[n] {
-				return plan, lines.at(windowPath+".window_index", fmt.Errorf("duplicate window_index %d", n))
-			}
-			seen[n] = true
-			wp.Index = &n
-		}
-		wp.Options, err = optionValues(w["options"])
-		if err != nil {
-			return plan, lines.at(windowPath+".options", err)
-		}
-		wp.OptionsAfter, err = optionValues(w["options_after"])
-		if err != nil {
-			return plan, lines.at(windowPath+".options_after", err)
-		}
-		windowEnv, err := environment(w["environment"])
-		if err != nil {
-			return plan, lines.at(windowPath+".environment", err)
-		}
-		windowSuppress, err := boolean(w["suppress_history"], suppress)
-		if err != nil {
-			return plan, lines.at(windowPath+".suppress_history", err)
-		}
-		panes, ok := w["panes"].([]any)
-		// An omitted panes key and an explicit empty sequence both mean one
-		// pane with no command -- tmuxp raises IndexError on the empty form,
-		// but nothing here asked for that.
-		if _, exists := w["panes"]; !exists || (ok && len(panes) == 0) {
-			panes, ok = []any{nil}, true
-		}
-		if !ok || len(panes) == 0 {
-			return plan, lines.at(windowPath+".panes", fmt.Errorf("window %d panes must be a nonempty sequence", wi))
-		}
-		for pi, rawPane := range panes {
-			panePath := windowPath + ".panes." + strconv.Itoa(pi)
-			p := mapping(rawPane)
-			if p == nil {
-				p = document{}
-				switch v := rawPane.(type) {
-				case nil:
-				case string:
-					if v != "pane" && v != "blank" && v != "" {
-						p["shell_command"] = v
-					}
-				case []any:
-					p["shell_command"] = v
-				default:
-					return plan, lines.at(panePath, fmt.Errorf("window %d pane %d has invalid shorthand", wi, pi))
-				}
-			}
-			if !plan.Bridge {
-				if err := checkFieldsAt(p, fmt.Sprintf("window %d pane %d", wi, pi), lines, panePath,
-					"shell_command", "shell_command_before", "description", "start_directory", "shell",
-					"focus", "suppress_history", "environment", "enter", "sleep_before", "sleep_after",
-				); err != nil {
-					return plan, err
-				}
-			}
-			pp := panePlan{Shell: expand(textValue(w["window_shell"])), Environment: windowEnv}
-			if shell, exists := p["shell"]; exists {
-				pp.Shell = expand(textValue(shell))
-			}
-			pp.Directory, err = directory(p["start_directory"], base, wp.Directory)
-			if err != nil {
-				return plan, lines.at(panePath+".start_directory", err)
-			}
-			directories[pp.Directory] = true
-			pp.Focus, err = boolean(p["focus"], false)
-			if err != nil {
-				return plan, lines.at(panePath+".focus", err)
-			}
-			pp.SuppressHistory, err = boolean(p["suppress_history"], windowSuppress)
-			if err != nil {
-				return plan, lines.at(panePath+".suppress_history", err)
-			}
-			if env, exists := p["environment"]; exists {
-				pp.Environment, err = environment(env)
-				if err != nil {
-					return plan, lines.at(panePath+".environment", err)
-				}
-			}
-			state := commandPlan{Enter: true}
-			if err := commandSettings(&state, p); err != nil {
-				return plan, lines.at(panePath, err)
-			}
-			for _, commands := range []any{doc["shell_command_before"], w["shell_command_before"], p["shell_command_before"], p["shell_command"]} {
-				parsed, e := commandsWithState(commands, &state, !plan.Bridge)
-				if e != nil {
-					return plan, lines.at(panePath, fmt.Errorf("window %d pane %d: %w", wi, pi, e))
-				}
-				pp.Commands = append(pp.Commands, parsed...)
-			}
-			wp.Panes = append(wp.Panes, pp)
+			problems = append(problems, err)
+			continue
 		}
 		plan.Windows = append(plan.Windows, wp)
+	}
+	if len(problems) > 0 {
+		return plan, errors.Join(problems...)
 	}
 	// tmux starts a pane in $HOME when the directory it was given does not
 	// exist, so a typo is invisible: the panes come up elsewhere and the load
@@ -541,6 +431,153 @@ func normalizeDocument(doc document, base string, lines sourceLines) (loadPlan, 
 		plan.Warnings = append(plan.Warnings, planWarning{"start_directory_missing", "start_directory is not a directory, tmux will fall back to $HOME: " + path})
 	}
 	return plan, nil
+}
+
+// windowScope is what a window's fields resolve against: the values the
+// document level already settled, and the two maps that span every window.
+type windowScope struct {
+	doc         document
+	base        string
+	lines       sourceLines
+	bridge      bool
+	directory   string
+	suppress    bool
+	indexes     map[int]bool
+	directories map[string]bool
+}
+
+func normalizeWindow(raw any, position int, scope windowScope) (windowPlan, error) {
+	windowPath := "windows." + strconv.Itoa(position)
+	w := mapping(raw)
+	if w == nil {
+		return windowPlan{}, scope.lines.at(windowPath, fmt.Errorf("window %d must be a mapping", position))
+	}
+	if !scope.bridge {
+		if err := checkFieldsAt(w, fmt.Sprintf("window %d", position), scope.lines, windowPath,
+			"window_name", "description", "window_index", "layout", "start_directory", "window_shell",
+			"focus", "suppress_history", "options", "options_after", "environment", "shell_command_before", "panes",
+		); err != nil {
+			return windowPlan{}, err
+		}
+	}
+	wp := windowPlan{Name: expand(textValue(w["window_name"])), Layout: expand(textValue(w["layout"]))}
+	// The validator's own text describes a library call and the tmux
+	// release the check exists for; what the user wrote is a name.
+	if (tmux.SelectLayoutRequest{Layout: wp.Layout}).Validate() != nil {
+		return wp, scope.lines.at(windowPath+".layout", fmt.Errorf("window %d: layout %q is not a tmux layout name or a saved layout string", position, wp.Layout))
+	}
+	if strings.ContainsRune(wp.Name, 0) {
+		return wp, scope.lines.at(windowPath+".window_name", errors.New("NUL in window name"))
+	}
+	var err error
+	wp.Directory, err = directory(w["start_directory"], scope.base, scope.directory)
+	if err != nil {
+		return wp, scope.lines.at(windowPath+".start_directory", err)
+	}
+	scope.directories[wp.Directory] = true
+	wp.Focus, err = boolean(w["focus"], false)
+	if err != nil {
+		return wp, scope.lines.at(windowPath+".focus", err)
+	}
+	if index, exists := w["window_index"]; exists {
+		n, e := strconv.Atoi(textValue(index))
+		if e != nil || n < 0 {
+			return wp, scope.lines.at(windowPath+".window_index", errors.New("window_index must be nonnegative"))
+		}
+		if scope.indexes[n] {
+			return wp, scope.lines.at(windowPath+".window_index", fmt.Errorf("duplicate window_index %d", n))
+		}
+		scope.indexes[n] = true
+		wp.Index = &n
+	}
+	wp.Options, err = optionValues(w["options"])
+	if err != nil {
+		return wp, scope.lines.at(windowPath+".options", err)
+	}
+	wp.OptionsAfter, err = optionValues(w["options_after"])
+	if err != nil {
+		return wp, scope.lines.at(windowPath+".options_after", err)
+	}
+	windowEnv, err := environment(w["environment"])
+	if err != nil {
+		return wp, scope.lines.at(windowPath+".environment", err)
+	}
+	windowSuppress, err := boolean(w["suppress_history"], scope.suppress)
+	if err != nil {
+		return wp, scope.lines.at(windowPath+".suppress_history", err)
+	}
+	panes, ok := w["panes"].([]any)
+	// An omitted panes key and an explicit empty sequence both mean one
+	// pane with no command -- tmuxp raises IndexError on the empty form,
+	// but nothing here asked for that.
+	if _, exists := w["panes"]; !exists || (ok && len(panes) == 0) {
+		panes, ok = []any{nil}, true
+	}
+	if !ok || len(panes) == 0 {
+		return wp, scope.lines.at(windowPath+".panes", fmt.Errorf("window %d panes must be a nonempty sequence", position))
+	}
+	for pi, rawPane := range panes {
+		panePath := windowPath + ".panes." + strconv.Itoa(pi)
+		p := mapping(rawPane)
+		if p == nil {
+			p = document{}
+			switch v := rawPane.(type) {
+			case nil:
+			case string:
+				if v != "pane" && v != "blank" && v != "" {
+					p["shell_command"] = v
+				}
+			case []any:
+				p["shell_command"] = v
+			default:
+				return wp, scope.lines.at(panePath, fmt.Errorf("window %d pane %d has invalid shorthand", position, pi))
+			}
+		}
+		if !scope.bridge {
+			if err := checkFieldsAt(p, fmt.Sprintf("window %d pane %d", position, pi), scope.lines, panePath,
+				"shell_command", "shell_command_before", "description", "start_directory", "shell",
+				"focus", "suppress_history", "environment", "enter", "sleep_before", "sleep_after",
+			); err != nil {
+				return wp, err
+			}
+		}
+		pp := panePlan{Shell: expand(textValue(w["window_shell"])), Environment: windowEnv}
+		if shell, exists := p["shell"]; exists {
+			pp.Shell = expand(textValue(shell))
+		}
+		pp.Directory, err = directory(p["start_directory"], scope.base, wp.Directory)
+		if err != nil {
+			return wp, scope.lines.at(panePath+".start_directory", err)
+		}
+		scope.directories[pp.Directory] = true
+		pp.Focus, err = boolean(p["focus"], false)
+		if err != nil {
+			return wp, scope.lines.at(panePath+".focus", err)
+		}
+		pp.SuppressHistory, err = boolean(p["suppress_history"], windowSuppress)
+		if err != nil {
+			return wp, scope.lines.at(panePath+".suppress_history", err)
+		}
+		if env, exists := p["environment"]; exists {
+			pp.Environment, err = environment(env)
+			if err != nil {
+				return wp, scope.lines.at(panePath+".environment", err)
+			}
+		}
+		state := commandPlan{Enter: true}
+		if err := commandSettings(&state, p); err != nil {
+			return wp, scope.lines.at(panePath, err)
+		}
+		for _, commands := range []any{scope.doc["shell_command_before"], w["shell_command_before"], p["shell_command_before"], p["shell_command"]} {
+			parsed, e := commandsWithState(commands, &state, !scope.bridge)
+			if e != nil {
+				return wp, scope.lines.at(panePath, fmt.Errorf("window %d pane %d: %w", position, pi, e))
+			}
+			pp.Commands = append(pp.Commands, parsed...)
+		}
+		wp.Panes = append(wp.Panes, pp)
+	}
+	return wp, nil
 }
 
 func checkFields(doc document, scope string, allowed ...string) error {

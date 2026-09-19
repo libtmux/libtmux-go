@@ -312,3 +312,30 @@ func TestRefusalsNameTheLineTheyAreOn(t *testing.T) {
 		})
 	}
 }
+
+// TestEveryWindowsProblemIsReportedAtOnce: reporting the first problem puts
+// the user in a loop of fix one, rerun, find the next. Every window is
+// checked, and each problem is reported with the line it is on.
+func TestEveryWindowsProblemIsReportedAtOnce(t *testing.T) {
+	text := "session_name: example\n" +
+		"windows:\n" +
+		"  - window_name: one\n" +
+		"    layout: definitely-not-a-layout\n" +
+		"    panes: [blank]\n" +
+		"  - window_name: two\n" +
+		"    shell_command_befor: oops\n" +
+		"    panes: [blank]\n"
+	doc, lines, err := decodeDocument([]byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = normalizeSource(doc, t.TempDir(), lines)
+	if err == nil {
+		t.Fatal("this document must be refused")
+	}
+	for _, want := range []string{"line 4:", "line 7:"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("refusal = %q, want it to carry %q", err, want)
+		}
+	}
+}
