@@ -217,7 +217,7 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 			return nil, err
 		}
 	}
-	arguments = append(arguments, request.Command)
+	arguments = append(arguments, "--", request.Command)
 	if len(extraArguments) != 0 {
 		if current.AtLeast(serverExecVersion37) {
 			arguments = append(arguments, extraArguments...)
@@ -272,7 +272,7 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 			"is unsupported",
 		)
 	}
-	arguments = append(arguments, request.Channel)
+	arguments = append(arguments, "--", request.Channel)
 	result, err := s.literalCmd(ctx, arguments...)
 	return requireRedactedServerCommandNoStderr("wait-for", result, err)
 }
@@ -305,7 +305,7 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if targetPane != "" {
 		arguments = append(arguments, "-t", targetPane)
 	}
-	arguments = append(arguments, request.ShellCommand, request.ThenCommand)
+	arguments = append(arguments, "--", request.ShellCommand, request.ThenCommand)
 	if request.ElseCommand != nil {
 		arguments = append(arguments, *request.ElseCommand)
 	}
