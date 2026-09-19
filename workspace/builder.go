@@ -273,9 +273,9 @@ func buildPanes(
 			return nil, fmt.Errorf("split pane %d: %w", index, err)
 		}
 		panes = append(panes, pane)
-		// Halving each pane in turn runs out of room before the fifth at
-		// 80x24; rebalancing after every split reclaims it. described.Layout,
-		// applied once every pane exists, still has the final say.
+		// Keep the window rebalanced while it grows so a split never starves
+		// for room. described.Layout, applied once every pane exists, still
+		// has the final say.
 		if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{
 			Layout: "tiled",
 		}); err != nil {
