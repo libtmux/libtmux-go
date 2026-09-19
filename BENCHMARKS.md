@@ -228,6 +228,28 @@ so it does not. The write costs about a millisecond more per call on this
 scrollback, which is the price of the pipe, and it stops growing where the
 returned slice keeps going.
 
+## What waiting for a pane costs
+
+Waiting for a pane to print something, both ways, against the same output:
+`tmux.Poll` re-reading the screen every 10ms, and `PaneObservation.WaitFor`
+woken by tmux. Ten waits each, for output 150ms away, on tmux 3.7d and the
+machine named above. `go -C benchmarks run .` prints this table too, and
+`TestWaitingEventDrivenCostsFewerProcesses` gates the comparison.
+
+```
+path                       wall   processes  clients  measurement
+----------------------------------------------------------------------------------------
+polled capture            161ms          18        0  10 waits for output 150ms away
+event-driven              163ms           2        1  10 waits for output 150ms away
+```
+
+The wall clock is the same because the output is what both are waiting for:
+150ms of it, which no way of asking makes shorter. What differs is the asking.
+Polling spends a tmux process per read, so the count tracks how long the wait
+lasts and how often it looks; being woken spends the two the keystroke itself
+costs, however long the wait runs. The price is the attached client the
+observation holds, which `list-clients` shows and `session_attached` counts.
+
 ## What waiting and watching cost
 
 The claims this server makes about not spending a caller's turn, measured

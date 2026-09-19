@@ -344,9 +344,11 @@ fetches it once instead of making every caller write the same follow-up query.
 
 That convenience is not free, and the rule is a judgement rather than a
 necessity. tmux prints nothing on a successful mutation, so a returned model is
-always an extra materialization: measured against tmux 3.7b, a point lookup
-costs three tmux invocations, `Window.SelectLayout` adds one more, while
-`Window.Rename` adds four and `Pane.Select` adds seven. A caller who wanted the
+always an extra materialization: measured against tmux 3.7d with
+`ServerOptions.CommandObserver`, a point lookup costs three tmux commands on a
+server whose identity has not been read yet and one after, and `Window.Rename`
+and `Pane.Select` each add one listing of the scope they changed.
+`Window.SelectLayout` adds none, because it returns `error`. A caller who wanted the
 fresh record would pay the same to call `Refresh`, and a caller who did not
 pays anyway. Nothing in tmux forces the choice either way: a stale view still
 resolves, because a record addresses its window as `@window`, and its pane as
