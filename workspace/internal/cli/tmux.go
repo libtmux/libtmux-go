@@ -1031,6 +1031,13 @@ func (r *invocation) freeze(_ *cobra.Command, o *options, args []string) error {
 	if err != nil {
 		return err
 	}
+	// freeze must never write a document load would refuse. tmux runs a
+	// session whose name it cannot address by name; the workspace file
+	// naming it would be unloadable.
+	name, _ := session.Name()
+	if strings.ContainsAny(name, ".:\x00\r\n") {
+		return &failure{"invalid_workspace", fmt.Sprintf("session %s cannot be captured: a session_name containing a period, colon, NUL or newline is refused on load, because tmux reads a period and a colon as separators inside a target", strconv.Quote(name)), 1}
+	}
 	doc, err := capture(r.ctx, session)
 	if err != nil {
 		return err
