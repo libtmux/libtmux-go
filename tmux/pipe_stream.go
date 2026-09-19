@@ -157,7 +157,24 @@ func (s Server) runPipeStreamCommand(
 	}, arguments...)
 
 	_ = stderrWrite.Close()
-	result.Stderr = tmuxcmd.SplitStderr(<-collected)
+	var stderr []byte
+	select {
+	case stderr = <-collected:
+	default:
+		select {
+		case stderr = <-collected:
+		case <-ctx.Done():
+			// A process tmux left behind can hold stderr open after tmux
+			// exits. Closing this end ends the read; what it had is kept,
+			// and the cancellation says the rest may be missing.
+			_ = stderrRead.Close()
+			stderr = <-collected
+			if runErr == nil {
+				runErr = fmt.Errorf("%s: read stderr: %w", arguments[0], context.Cause(ctx))
+			}
+		}
+	}
 	_ = stderrRead.Close()
+	result.Stderr = tmuxcmd.SplitStderr(stderr)
 	return result, runErr
 }

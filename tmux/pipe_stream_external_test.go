@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"math/rand/v2"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -280,4 +282,34 @@ func BenchmarkCaptureScrollback(b *testing.B) {
 			}
 		}
 	})
+}
+
+// A process tmux leaves behind can hold its stderr open after tmux exits. The
+// call must end with its context rather than wait for that process.
+func TestStreamingCommandEndsWithItsContextWhileStderrIsHeld(t *testing.T) {
+	t.Parallel()
+
+	binary := filepath.Join(t.TempDir(), "tmux")
+	// Written by a child process, so no fork in this test binary can hold it
+	// open for writing when it runs.
+	write := exec.Command("/bin/sh", "-c", `cat >"$1" && chmod 700 "$1"`, "sh", binary)
+	write.Stdin = strings.NewReader("#!/bin/sh\ncat >/dev/null\nsleep 3 &\nexit 0\n")
+	if output, err := write.CombinedOutput(); err != nil {
+		t.Fatalf("write %s: %v: %s", binary, err, output)
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	err = server.LoadBufferFrom(ctx, strings.NewReader("payload"), tmux.LoadBufferFromOptions{})
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("LoadBufferFrom() held %v by a process keeping stderr open", elapsed)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("LoadBufferFrom() error = %v, want its context's deadline", err)
+	}
 }
