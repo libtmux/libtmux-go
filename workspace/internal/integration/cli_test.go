@@ -232,8 +232,7 @@ func TestFreezeMissingSessionReportsSessionNotFound(t *testing.T) {
 // TestFreezeMissingSessionReportsSessionNotFound's other case: a server
 // that is running but owns zero sessions fails its underlying "list
 // windows" query outright ("no current target") rather than reporting an
-// empty session list, which must not surface as the generic
-// operation_failed.
+// empty session list, which must not surface as a generic code.
 func TestFreezeOnEmptyServerReportsSessionNotFound(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		Config: []byte("set -g exit-empty off\n"),

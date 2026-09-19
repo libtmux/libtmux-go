@@ -502,8 +502,8 @@ func TestErrorEnvelopeCarriesSchemaVersion(t *testing.T) {
 }
 
 // TestLoadReportsTmuxUnavailableWhenExecutableMissing: a missing tmux
-// executable must report tmux_unavailable, not the generic operation_failed
-// serverFor's raw "resolve tmux executable" error fell through to.
+// executable must report tmux_unavailable, not the generic code serverFor's
+// raw "resolve tmux executable" error fell through to.
 func TestLoadReportsTmuxUnavailableWhenExecutableMissing(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	dir := t.TempDir()
@@ -532,5 +532,25 @@ func TestPromptClassifiesUnansweredInputAsConfirmationRequired(t *testing.T) {
 	var specific *failure
 	if !errors.As(err, &specific) || specific.Code != "confirmation_required" {
 		t.Fatalf("prompt without input = %v, want confirmation_required", err)
+	}
+}
+
+// TestLoadInvalidLayoutReportsInvalidWorkspace: an unusable layout name is a
+// defect in the document, caught before any tmux call, so machine output
+// classifies it with the rest of the document refusals rather than under a
+// code of its own.
+func TestLoadInvalidLayoutReportsInvalidWorkspace(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "layout.yaml")
+	if err := os.WriteFile(path, []byte("session_name: layout\nwindows:\n- panes: [blank]\n- layout: definitely-not-a-layout\n  panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "load", "-d", "--yes", "--json", path)
+	if code != 1 || out != "" {
+		t.Fatalf("%d %q %q", code, out, diagnostic)
+	}
+	if got := errorCode(t, diagnostic); got != "invalid_workspace" {
+		t.Fatalf("code = %q, want invalid_workspace (%s)", got, diagnostic)
 	}
 }

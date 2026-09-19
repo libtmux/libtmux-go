@@ -58,10 +58,10 @@ func TestTerminalFailureKeepsPrimaryStatus(t *testing.T) {
 		code            string
 		exit            int
 	}{
-		{"restore only", nil, nil, "operation_failed", 1},
+		{"restore only", nil, nil, "tmux_failed", 1},
 		{"child", &failure{"child_failed", "child failed", 9}, nil, "child_failed", 9},
 		{"interrupted", &failure{"interrupted", "operation interrupted", 130}, nil, "interrupted", 130},
-		{"output", nil, io.ErrClosedPipe, "operation_failed", 1},
+		{"output", nil, io.ErrClosedPipe, "tmux_failed", 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
