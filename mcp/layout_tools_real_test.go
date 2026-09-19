@@ -56,9 +56,9 @@ func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 	if err != nil || len(window) != 1 {
 		t.Fatalf("Windows() = (%v, %v), want one window", window, err)
 	}
-	pane, ok, err := window[0].ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%v, %v, %v), want one pane", pane, ok, err)
+	pane, err := window[0].ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v, want one pane", err)
 	}
 	for range 3 {
 		pane, err = pane.Split(ctx, tmux.SplitPaneRequest{})
@@ -134,9 +134,9 @@ func TestSelectLayoutToolAcceptsAUniquePresetPrefix(t *testing.T) {
 	if err != nil || len(window) != 1 {
 		t.Fatalf("Windows() = (%v, %v), want one window", window, err)
 	}
-	pane, ok, err := window[0].ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%v, %v, %v), want one pane", pane, ok, err)
+	pane, err := window[0].ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v, want one pane", err)
 	}
 	if _, err := pane.Split(ctx, tmux.SplitPaneRequest{}); err != nil {
 		t.Fatal(err)

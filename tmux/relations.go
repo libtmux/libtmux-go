@@ -89,18 +89,18 @@ func (s Session) ResolveActiveWindow(ctx context.Context) (Window, error) {
 }
 
 // ResolveActivePane snapshots live tmux state and returns the active pane in
-// this session's exact active window. A missing active pane returns ok false.
-func (s Session) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
+// this session's exact active window. It returns [SnapshotLookupError]
+// cardinality errors, which match [ErrNotFound] when nothing was found.
+func (s Session) ResolveActivePane(ctx context.Context) (Pane, error) {
 	live, err := s.resolveLive(ctx)
 	if err != nil {
-		return Pane{}, false, err
+		return Pane{}, err
 	}
 	window, err := requiredActiveWindow(live)
 	if err != nil {
-		return Pane{}, false, err
+		return Pane{}, err
 	}
-	pane, ok := window.ActivePane()
-	return pane, ok, nil
+	return requiredActivePane(window)
 }
 
 // ResolveSession snapshots live tmux state and returns this exact winlink's
@@ -119,14 +119,14 @@ func (w Window) ResolveSession(ctx context.Context) (Session, error) {
 }
 
 // ResolveActivePane snapshots live tmux state and returns the first active pane
-// in this exact winlink view. A missing active pane returns ok false.
-func (w Window) ResolveActivePane(ctx context.Context) (Pane, bool, error) {
+// in this exact winlink view. It returns [SnapshotLookupError] cardinality
+// errors, which match [ErrNotFound] when nothing was found.
+func (w Window) ResolveActivePane(ctx context.Context) (Pane, error) {
 	live, err := w.resolveLive(ctx)
 	if err != nil {
-		return Pane{}, false, err
+		return Pane{}, err
 	}
-	pane, ok := live.ActivePane()
-	return pane, ok, nil
+	return requiredActivePane(live)
 }
 
 // ResolveWindow snapshots live tmux state and returns the exact winlink
@@ -229,6 +229,21 @@ func (p Pane) resolveSnapshotWindow() (Window, error) {
 		"window",
 		identifier,
 	)
+}
+
+// requiredActivePane reports the window's active pane, or why it has none.
+// tmux destroys a window with its last pane, so a window without one is a
+// racing or malformed listing rather than an ordinary answer.
+func requiredActivePane(window Window) (Pane, error) {
+	pane, ok := window.ActivePane()
+	if !ok {
+		return Pane{}, &SnapshotLookupError{
+			Object:     "active pane",
+			Identifier: window.windowID.String(),
+			Matches:    0,
+		}
+	}
+	return pane, nil
 }
 
 func requiredActiveWindow(session Session) (Window, error) {

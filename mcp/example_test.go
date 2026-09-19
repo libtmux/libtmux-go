@@ -340,8 +340,8 @@ func connectedExampleClient(
 	if err != nil {
 		panic(err)
 	}
-	pane, ok, err := created.ResolveActivePane(ctx)
-	if err != nil || !ok {
+	pane, err := created.ResolveActivePane(ctx)
+	if err != nil {
 		killExampleServer(target)
 		if err != nil {
 			panic(err)

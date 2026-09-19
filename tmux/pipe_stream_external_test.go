@@ -185,9 +185,9 @@ func TestBufferStreamUnderConnection(t *testing.T) {
 		t.Fatalf("SaveBufferTo() error = %v, want ErrConnectionRequiresProcess", saveErr)
 	}
 
-	pane, ok, err := connection.Session().ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%#v, %t, %v), want a pane", pane, ok, err)
+	pane, err := connection.Session().ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v, want a pane", err)
 	}
 	var captured bytes.Buffer
 	captureErr := pane.CaptureTo(ctx, &captured, tmux.CapturePaneRequest{})

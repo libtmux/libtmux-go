@@ -117,12 +117,12 @@ func TestLiveRelationshipResolversAgainstRealTmux(t *testing.T) {
 	if activeWindow.SessionID() != wantWindow.SessionID() || activeWindow.ID() != wantWindow.ID() || activeWindow.Index() != wantWindow.Index() {
 		t.Fatalf("Session.ResolveActiveWindow() = %#v, want %#v", activeWindow, wantWindow)
 	}
-	activePane, found, err := pointSession.ResolveActivePane(ctx)
+	activePane, err := pointSession.ResolveActivePane(ctx)
 	if err != nil {
 		t.Fatalf("Session.ResolveActivePane() error = %v", err)
 	}
-	if !found || activePane.ID() != wantPane.ID() || activePane.WindowIndex() != wantPane.WindowIndex() {
-		t.Fatalf("Session.ResolveActivePane() = (%#v, %t), want %#v", activePane, found, wantPane)
+	if activePane.ID() != wantPane.ID() || activePane.WindowIndex() != wantPane.WindowIndex() {
+		t.Fatalf("Session.ResolveActivePane() = %#v, want %#v", activePane, wantPane)
 	}
 
 	pointWindow, err := server.Window(ctx, wantWindow.ID())
@@ -136,12 +136,12 @@ func TestLiveRelationshipResolversAgainstRealTmux(t *testing.T) {
 	if parentSession.ID() != pointWindow.SessionID() {
 		t.Fatalf("Window.ResolveSession() = %#v, want %s", parentSession, pointWindow.SessionID())
 	}
-	windowPane, found, err := pointWindow.ResolveActivePane(ctx)
+	windowPane, err := pointWindow.ResolveActivePane(ctx)
 	if err != nil {
 		t.Fatalf("Window.ResolveActivePane() error = %v", err)
 	}
-	if !found || windowPane.ID() != wantPane.ID() || windowPane.WindowIndex() != pointWindow.Index() {
-		t.Fatalf("Window.ResolveActivePane() = (%#v, %t), want pane %s in index %d", windowPane, found, wantPane.ID(), pointWindow.Index())
+	if windowPane.ID() != wantPane.ID() || windowPane.WindowIndex() != pointWindow.Index() {
+		t.Fatalf("Window.ResolveActivePane() = %#v, want pane %s in index %d", windowPane, wantPane.ID(), pointWindow.Index())
 	}
 
 	pointPane, err := server.Pane(ctx, wantPane.ID())

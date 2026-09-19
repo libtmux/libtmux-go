@@ -56,12 +56,9 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	pane, ok, err := session.ResolveActivePane(ctx)
+	pane, err := session.ResolveActivePane(ctx)
 	if err != nil {
 		return fmt.Errorf("find pane: %w", err)
-	}
-	if !ok {
-		return errors.New("session reported no pane")
 	}
 
 	// A payload with the characters a shell would fight over, from anything

@@ -76,14 +76,7 @@ func (t *tools) resolvePane(ctx context.Context, id, sessionName string) (tmux.P
 	if err != nil {
 		return tmux.Pane{}, err
 	}
-	pane, ok, err := window.ResolveActivePane(ctx)
-	if err != nil {
-		return tmux.Pane{}, err
-	}
-	if !ok {
-		return tmux.Pane{}, fmt.Errorf("window %s has no active pane", window.ID())
-	}
-	return pane, nil
+	return window.ResolveActivePane(ctx)
 }
 
 // processPane re-resolves a command-lane pane on the exact daemon's process

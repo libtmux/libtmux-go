@@ -127,9 +127,9 @@ func TestWaitForShellReadyPrecedesTheFirstCommand(t *testing.T) {
 
 	server := tmuxtest.NewServer(ctx, t)
 	session := tmuxtest.NewSession(ctx, t, server, tmux.NewSessionRequest{})
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%t, %v), want a pane", ok, err)
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v, want a pane", err)
 	}
 
 	tmuxtest.WaitForShellReady(ctx, t, pane)

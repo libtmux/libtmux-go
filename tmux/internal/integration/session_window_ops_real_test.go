@@ -889,9 +889,9 @@ func TestRecordsSurviveWindowRenumberAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindow(moved) error = %v", err)
 	}
-	pane, ok, err := moved.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%v, %v)", ok, err)
+	pane, err := moved.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
 	}
 	for _, args := range [][]string{
 		{"kill-window", "-t", gone.ID().String()},

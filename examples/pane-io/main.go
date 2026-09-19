@@ -46,8 +46,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
-	pane, ok, err := session.ResolveActivePane(ctx)
-	if err != nil || !ok {
+	pane, err := session.ResolveActivePane(ctx)
+	if err != nil {
 		return fmt.Errorf("resolve pane: %w", err)
 	}
 

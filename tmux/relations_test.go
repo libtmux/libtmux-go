@@ -118,12 +118,12 @@ func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 
 	t.Run("session active pane", func(t *testing.T) {
 		session, _, _, _ := newSubjects(t)
-		pane, ok, err := session.ResolveActivePane(context.Background())
+		pane, err := session.ResolveActivePane(context.Background())
 		if err != nil {
 			t.Fatalf("ResolveActivePane() error = %v", err)
 		}
-		if !ok || pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
-			t.Fatalf("ResolveActivePane() = (%#v, %t), want exact $2:7:%%2 view", pane, ok)
+		if pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
+			t.Fatalf("ResolveActivePane() = %#v, want exact $2:7:%%2 view", pane)
 		}
 	})
 
@@ -140,12 +140,12 @@ func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 
 	t.Run("window active pane", func(t *testing.T) {
 		_, window, _, _ := newSubjects(t)
-		pane, ok, err := window.ResolveActivePane(context.Background())
+		pane, err := window.ResolveActivePane(context.Background())
 		if err != nil {
 			t.Fatalf("ResolveActivePane() error = %v", err)
 		}
-		if !ok || pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
-			t.Fatalf("ResolveActivePane() = (%#v, %t), want exact $2:7:%%2 view", pane, ok)
+		if pane.sessionID != SessionID("$2") || pane.windowIndex != 7 || pane.paneID != PaneID("%2") {
+			t.Fatalf("ResolveActivePane() = %#v, want exact $2:7:%%2 view", pane)
 		}
 	})
 
@@ -260,18 +260,18 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 			server: serverWithRunner(runner), sessionID: SessionID("$2"),
 			windowID: WindowID("@8"), windowIndex: 7,
 		}
-		pane, ok, err := window.ResolveActivePane(context.Background())
-		if err != nil || !ok || pane.paneID != PaneID("%2") {
-			t.Fatalf("ResolveActivePane() = (%#v, %t, %v), want first active %%2", pane, ok, err)
+		pane, err := window.ResolveActivePane(context.Background())
+		if err != nil || pane.paneID != PaneID("%2") {
+			t.Fatalf("ResolveActivePane() = (%#v, %v), want first active %%2", pane, err)
 		}
 
 		runner = attachmentSnapshotRunner(t, version, snapshotRecords{
 			sessions: []formatValues{sessionRow}, windows: []formatValues{activeWindow},
 		})
 		window.server = serverWithRunner(runner)
-		pane, ok, err = window.ResolveActivePane(context.Background())
-		if err != nil || ok {
-			t.Fatalf("ResolveActivePane() = (%#v, %t, %v), want zero, false, nil", pane, ok, err)
+		pane, err = window.ResolveActivePane(context.Background())
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("ResolveActivePane() = (%#v, %v), want ErrNotFound", pane, err)
 		}
 	})
 
@@ -288,7 +288,7 @@ func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing
 		{
 			name: "session receiver missing",
 			resolve: func(server Server) error {
-				_, _, err := (Session{server: server, sessionID: SessionID("$2")}).ResolveActivePane(context.Background())
+				_, err := (Session{server: server, sessionID: SessionID("$2")}).ResolveActivePane(context.Background())
 				return err
 			},
 			want: ErrNotFound,

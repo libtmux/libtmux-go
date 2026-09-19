@@ -127,12 +127,9 @@ func (s Session) Start(
 		defer cancel()
 		_ = window.Kill(cleanupCtx)
 	}()
-	pane, ok, err := window.ResolveActivePane(ctx)
+	pane, err := window.ResolveActivePane(ctx)
 	if err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, errors.New("tmux: new window reported no pane")
 	}
 	if err := pane.SetRemainOnExit(ctx, RemainOnExitOn); err != nil {
 		return nil, err

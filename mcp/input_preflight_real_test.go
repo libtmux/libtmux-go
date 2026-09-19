@@ -390,9 +390,9 @@ func threePaneInputFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, ok, err := window.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%v, %t, %v)", source, ok, err)
+	source, err := window.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
 	}
 	second, err := source.Split(ctx, tmux.SplitPaneRequest{})
 	if err != nil {

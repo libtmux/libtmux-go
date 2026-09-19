@@ -187,9 +187,9 @@ func TestListingsLeaveOutEveryOwnObservationClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pane, ok, err := window.ResolveActivePane(ctx)
-	if err != nil || !ok {
-		t.Fatalf("ResolveActivePane() = (%v, %t, %v)", pane, ok, err)
+	pane, err := window.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatalf("ResolveActivePane() error = %v", err)
 	}
 
 	waitDone := make(chan struct{})

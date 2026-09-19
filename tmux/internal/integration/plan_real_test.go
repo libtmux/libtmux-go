@@ -724,9 +724,9 @@ func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewWindow() error = %v", err)
 		}
-		existing, ok, err := window.ResolveActivePane(ctx)
-		if err != nil || !ok {
-			t.Fatalf("ResolveActivePane() = (%v, %v)", ok, err)
+		existing, err := window.ResolveActivePane(ctx)
+		if err != nil {
+			t.Fatalf("ResolveActivePane() error = %v", err)
 		}
 		if _, err := existing.SetTitle(ctx, "alpha"); err != nil {
 			t.Fatalf("SetTitle() error = %v", err)
