@@ -235,13 +235,21 @@ func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 	finished := r.finishedSignal()
 	if !r.exited.Load() {
 		if err := r.waitForExit(ctx); err != nil {
-			// Another Wait may have observed the command's end while this one
-			// was waiting, and its cleanup leaves this one looking at a pane
-			// that is already gone. That completion is the answer both share.
-			select {
-			case <-finished:
-				return r.outcome()
-			default:
+			// Another Wait may have claimed the command's end while this one
+			// was waiting: exited is stored before that claim's own tmux
+			// round trips run, so seeing it true here means this call's
+			// failure is that claim's cleanup making the pane look gone,
+			// not a real outcome of its own. That completion is the answer
+			// every caller shares once claimed, however long finishing it
+			// takes, so this waits for it rather than reporting the
+			// cleanup's side effect as this call's own failure.
+			if r.exited.Load() {
+				select {
+				case <-finished:
+					return r.outcome()
+				case <-ctx.Done():
+					return RunResult{}, fmt.Errorf("wait for command: %w", context.Cause(ctx))
+				}
 			}
 			return RunResult{}, fmt.Errorf("wait for command: %w", err)
 		}
