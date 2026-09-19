@@ -343,8 +343,10 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 			}
 		}
 		wp := windowPlan{Name: expand(textValue(w["window_name"])), Layout: expand(textValue(w["layout"]))}
-		if err := (tmux.SelectLayoutRequest{Layout: wp.Layout}).Validate(); err != nil {
-			return plan, fmt.Errorf("window %d has an invalid layout: %w", wi, err)
+		// The validator's own text describes a library call and the tmux
+		// release the check exists for; what the user wrote is a name.
+		if (tmux.SelectLayoutRequest{Layout: wp.Layout}).Validate() != nil {
+			return plan, fmt.Errorf("window %d: layout %q is not a tmux layout name or a saved layout string", wi, wp.Layout)
 		}
 		if strings.ContainsRune(wp.Name, 0) {
 			return plan, errors.New("NUL in window name")

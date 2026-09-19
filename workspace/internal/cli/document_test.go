@@ -251,3 +251,22 @@ func TestStartDirectoryWarningsAndNullHandling(t *testing.T) {
 		}
 	})
 }
+
+// TestInvalidLayoutMessageDescribesTheDocument: the layout validator's own
+// text describes a library call and the tmux release that made the check
+// necessary. What the user wrote is a layout name in a window.
+func TestInvalidLayoutMessageDescribesTheDocument(t *testing.T) {
+	doc := document{"session_name": "example", "windows": []any{document{"layout": "definitely-not-a-layout", "panes": []any{nil}}}}
+	_, err := normalize(doc, t.TempDir())
+	if err == nil {
+		t.Fatal("an unusable layout must be refused")
+	}
+	if !strings.Contains(err.Error(), `"definitely-not-a-layout"`) {
+		t.Fatalf("message does not name the layout: %v", err)
+	}
+	for _, leaked := range []string{"invalid server command request", "select-layout", "3.3a", "socket"} {
+		if strings.Contains(err.Error(), leaked) {
+			t.Fatalf("message carries implementation wording %q: %v", leaked, err)
+		}
+	}
+}

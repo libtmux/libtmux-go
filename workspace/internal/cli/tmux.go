@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -30,7 +31,11 @@ func serverFor(o *options) (tmux.Server, error) {
 	}
 	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: o.socketName, SocketPath: socketPath, ConfigFile: o.tmuxConfig, Colors: colors})
 	if err != nil {
-		return server, &failure{"tmux_unavailable", err.Error(), 1}
+		message := err.Error()
+		if errors.Is(err, exec.ErrNotFound) {
+			message = "tmux is not installed, or not on PATH"
+		}
+		return server, &failure{"tmux_unavailable", message, 1}
 	}
 	return server, nil
 }
