@@ -227,7 +227,7 @@ func (t *tools) waitForText(
 	case cursor != nil && (len(patterns) > 0 || len(stops) > 0):
 		since, err := t.readSince(waitCtx, processPane, cursor)
 		if err != nil {
-			return nil, output, err
+			return finishTimeout(err)
 		}
 		shown := strings.Join(since.lines, "\n")
 		if stopName, isReal, _ := pendingAwareMatch(stops, shown, pendingNow()); isReal {
