@@ -30,7 +30,7 @@ type pendingInput struct {
 // cursor, and killLineKeyNames those that discard the line. Both are modelled
 // because correcting a typo is ordinary, and leaving either unmodelled puts
 // the mask out of step with the line.
-var eraseKeyNames = map[string]bool{"BSpace": true, "C-h": true, "DC": true}
+var eraseKeyNames = map[string]bool{"BSpace": true, "C-h": true}
 
 var killLineKeyNames = map[string]bool{"C-u": true, "C-c": true}
 
@@ -175,6 +175,11 @@ func willType(keys []string, literal bool) (text, afterEnd string, endsLine bool
 				continue
 			}
 			dropLastRune(&typed)
+			continue
+		case key == "DC":
+			// Tracked text only ever grows at the cursor, so the cursor is
+			// always at its end; forward-delete there has nothing after it
+			// to remove.
 			continue
 		case key == "Space":
 			key = " "
