@@ -80,9 +80,17 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	body.WriteString(
 		"printf 'scripted tmux has no answer for:%s\\n' \"$arguments\" >&2\nexit 1\n")
 
+	// Written without the executable bit and marked afterwards. A file still
+	// open for writing anywhere in this process cannot be executed, and a
+	// suite running tests in parallel forks often enough to hit that window,
+	// which surfaces as "text file busy" rather than as anything to do with
+	// the script.
 	path := filepath.Join(t.TempDir(), "tmux")
-	if err := os.WriteFile(path, []byte(body.String()), 0o700); err != nil {
+	if err := os.WriteFile(path, []byte(body.String()), 0o600); err != nil {
 		t.Fatalf("ScriptedTmux: write %s: %v", path, err)
+	}
+	if err := os.Chmod(path, 0o700); err != nil {
+		t.Fatalf("ScriptedTmux: make %s executable: %v", path, err)
 	}
 	absolute, err := filepath.Abs(path)
 	if err != nil {

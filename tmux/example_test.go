@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -2258,4 +2259,74 @@ func ExampleRunning_StreamTo() {
 	}
 	fmt.Println(strings.TrimSpace(printed.String()), result.Status)
 	// Output: streaming 0
+}
+
+func ExampleErrNotFound() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-notfound",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "project"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{})
+	if err != nil {
+		fmt.Println("create window:", err)
+		return
+	}
+	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{})
+	if err != nil {
+		fmt.Println("split pane:", err)
+		return
+	}
+	if err := pane.Kill(ctx); err != nil {
+		fmt.Println("kill pane:", err)
+		return
+	}
+
+	// A lookup that found nothing and a command tmux refused for a target
+	// that is gone are the same condition, so one check covers both.
+	_, lookupErr := server.Pane(ctx, tmux.PaneID("%999999"))
+	commandErr := pane.Kill(ctx)
+	fmt.Println(errors.Is(lookupErr, tmux.ErrNotFound), errors.Is(commandErr, tmux.ErrNotFound))
+	// Output: true true
+}
+
+func ExampleCommandObserver() {
+	var commands []string
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		CommandObserver: func(trace tmux.CommandTrace) {
+			commands = append(commands, trace.Subcommand+" over "+trace.Transport.String())
+		},
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	// The observer sees the command whether or not tmux liked it.
+	_, _ = server.Cmd(context.Background(), "list-sessions")
+	fmt.Println(commands[0])
+	// Output: list-sessions over process
+}
+
+func ExamplePane_MarshalJSON() {
+	// A record encodes its identity and what tmux said when it was
+	// materialized. The zero record has neither, which is what makes the
+	// shape readable here without a tmux.
+	encoded, err := json.Marshal(tmux.Pane{})
+	if err != nil {
+		fmt.Println("marshal:", err)
+		return
+	}
+	fmt.Println(string(encoded))
+	// Output: {"id":"","sessionId":"","windowId":"","windowIndex":0,"index":0,"formats":{}}
 }

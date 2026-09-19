@@ -3,6 +3,7 @@ package tmuxtest_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -71,4 +72,27 @@ func TestScriptedTmuxRefusesWhatItWasNotGiven(t *testing.T) {
 	if !errors.Is(err, tmux.ErrCommand) {
 		t.Fatalf("CheckAlive() error = %v, want ErrCommand", err)
 	}
+}
+
+func ExampleScriptedTmux() {
+	// A real test passes its own *testing.T. This example asserts rather than
+	// only compiling, so it needs one that works outside a test: a bare T
+	// records the helper's cleanup without ever running it, which costs the
+	// one temporary directory the scripted executable is written into.
+	t := &testing.T{}
+	binary := tmuxtest.ScriptedTmux(t,
+		tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+	)
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	version, err := server.Version(context.Background())
+	if err != nil {
+		fmt.Println("version:", err)
+		return
+	}
+	fmt.Println(version)
+	// Output: 3.7
 }
