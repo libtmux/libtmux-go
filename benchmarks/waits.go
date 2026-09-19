@@ -16,8 +16,8 @@ import (
 const waitPollInterval = 10 * time.Millisecond
 
 // waitSettleDelay is how long the command waited for takes to arrive. It is
-// long enough that neither lane answers by accident and short enough that ten
-// rounds stay inside the matrix's budget.
+// long enough that neither lane answers by accident and short enough that
+// waitRounds of them stay inside the matrix's budget.
 const waitSettleDelay = 150 * time.Millisecond
 
 // waitRounds is how many times each lane waits. One round is dominated by

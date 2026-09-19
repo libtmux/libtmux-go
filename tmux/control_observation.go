@@ -158,13 +158,12 @@ func (o *PaneObservation) read(
 	// %window-close for the observed window is ambiguous rather than a direct
 	// signal: tmux emits it to every client whose own attached session still
 	// lists the window, regardless of which session the unlink actually
-	// happened on (verified live on 3.7c and next-3.9 with a raw tmux -C
-	// probe) - so it fires both when the attached session itself just lost
-	// the window (only reported as %unlinked-window-close before tmux 3.8;
-	// tmux's events rewrite now fires this notification while the winlink
-	// removal it should reflect is still pending, so it reports the state
-	// from just before the unlink) and, unhelpfully, whenever some other,
-	// unrelated session drops a window this one still holds. A live
+	// happened on - so it fires both when the attached session itself just
+	// lost the window (before tmux 3.8 that case reported
+	// %unlinked-window-close instead; the events rewrite since fires this
+	// notification while the winlink removal it reflects is still pending,
+	// so it reports the state from just before the unlink) and whenever some
+	// other, unrelated session drops a window this one still holds. A live
 	// membership check resolves which case this is.
 	if notification.Kind() == ControlNotificationWindowClose &&
 		len(arguments) != 0 && WindowID(arguments[0]) == o.windowID {
