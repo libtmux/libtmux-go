@@ -1,6 +1,27 @@
 // Package workspace loads and builds the supported subset of tmuxp YAML.
 // Unknown fields are rejected. Python-dependent plugins and before_script are
 // unsupported.
+//
+// # Two implementations
+//
+// This package and the tmux-workspace command are separate implementations,
+// and they read different document languages: a file one accepts is not
+// always a file the other accepts.
+//
+// The command is the tmuxp-compatible one. It expands $VAR inside
+// start_directory, accepts description metadata and keys beginning with x- at
+// every level, runs before_script, loads plugins and a custom
+// workspace_builder through tmuxp, reads workspace_builder_options, waits for
+// each pane's prompt before typing into it, and applies options in name
+// order. This package does none of those.
+//
+// In exchange, this package reports every problem in a document at once, each
+// with the line it is on, where the command reports the first and no
+// position. It also leaves a missing start_directory to the caller through
+// [Workspace.MissingDirectories], where the command warns during a load.
+//
+// Automation that has to follow tmuxp belongs on the command and its JSON
+// output. This package builds the subset documented here from Go.
 package workspace
 
 import (

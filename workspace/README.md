@@ -8,8 +8,25 @@ settled. Pin an exact version.
 Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
 The [`tmux-workspace` CLI](CLI.md) provides native workspace management,
-structured output, and optional Python compatibility. The library API below
-retains its own supported-field contract.
+structured output, and optional Python compatibility.
+
+The CLI and this library are separate implementations, and they read different
+document languages: a file one accepts is not always a file the other accepts.
+The CLI is the tmuxp-compatible one — build automation on it and parse its
+`--json` or `--ndjson` output. Where they differ today:
+
+| Behaviour | This library | `tmux-workspace` |
+| --- | --- | --- |
+| `$VAR` in `start_directory` | left alone | expanded |
+| `description:` metadata | refused | accepted at every level |
+| Keys beginning with `x-` | refused | accepted at every level |
+| `before_script` | refused | run |
+| `plugins`, `workspace_builder` | refused | run through tmuxp |
+| `workspace_builder_options` | refused | read |
+| Waiting for a pane's prompt | never | before the pane's first command |
+| Option application order | map order | sorted by name |
+| A missing `start_directory` | `MissingDirectories` | warned on load |
+| Problems reported | every one, with its line | the first, with no position |
 
 This is a consumer of the tmux module, not part of it. The tmux module takes no
 runtime dependency; parsing YAML needs one, so this lives in its own module and
