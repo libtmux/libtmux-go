@@ -349,8 +349,17 @@ costs three tmux invocations, `Window.SelectLayout` adds one more, while
 `Window.Rename` adds four and `Pane.Select` adds seven. A caller who wanted the
 fresh record would pay the same to call `Refresh`, and a caller who did not
 pays anyway. Nothing in tmux forces the choice either way: a stale view still
-resolves, because tmux matches a `%pane` or `@window` identifier ahead of the
-session and index that precede it.
+resolves, because a record addresses its window as `@window`, and its pane as
+`$session:.%pane`, which a renumber or a move does not change. A window linked
+into several sessions adds its session, and one its session links twice falls
+back to `$session:index`, the one case an id cannot settle. The session is left
+out otherwise because tmux resolves a missing `@window` inside a named session
+to that session's current window for the commands that tolerate a failed
+target, `set-option` among them. Options and hooks belong to the window, so
+they name it alone, except where tmux expands a format in the session the view
+belongs to: `ExpandFormat`, `RunHook` and `DisplayMessage` keep the session,
+and on a window linked into several sessions that has since gone they can
+still reach that session's current window.
 
 Everything else returns `error`, including the materialized fields that
 describe what a record is *doing*: `pane_in_mode` and `pane_mode`, `pane_pipe`

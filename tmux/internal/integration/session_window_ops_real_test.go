@@ -871,6 +871,68 @@ func TestWindowUnlinkTargetsDuplicateWinlinkByIndexAgainstRealTmux(t *testing.T)
 	}
 }
 
+// A record held across a renumber must reach its own window or report it
+// gone; the index it was read at now names a different window.
+//
+//libtmux:real-tmux
+func TestRecordsSurviveWindowRenumberAgainstRealTmux(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	session := mustRealSnapshot(t, server).Sessions()[0]
+	gone, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("gone")})
+	if err != nil {
+		t.Fatalf("NewWindow(gone) error = %v", err)
+	}
+	moved, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("moved")})
+	if err != nil {
+		t.Fatalf("NewWindow(moved) error = %v", err)
+	}
+	pane, ok, err := moved.ResolveActivePane(ctx)
+	if err != nil || !ok {
+		t.Fatalf("ResolveActivePane() = (%v, %v)", ok, err)
+	}
+	for _, args := range [][]string{
+		{"kill-window", "-t", gone.ID().String()},
+		{"move-window", "-r", "-t", session.ID().String()},
+	} {
+		if _, err := server.Cmd(ctx, args...); err != nil {
+			t.Fatalf("Cmd(%v) error = %v", args, err)
+		}
+	}
+
+	if _, err := gone.Rename(ctx, "stale"); !errors.Is(err, tmux.ErrNotFound) {
+		t.Errorf("Rename(killed window) error = %v, want ErrNotFound", err)
+	}
+	neighbour, err := server.Window(ctx, moved.ID())
+	if err != nil {
+		t.Fatalf("Window(moved) error = %v", err)
+	}
+	if name, _ := neighbour.Name(); name != "moved" {
+		t.Fatalf("killed window's Rename renamed %s to %q", moved.ID(), name)
+	}
+	renamed, err := moved.Rename(ctx, "renamed")
+	if err != nil {
+		t.Fatalf("Rename(renumbered window) error = %v", err)
+	}
+	if name, _ := renamed.Name(); renamed.ID() != moved.ID() || name != "renamed" ||
+		renamed.Index() != gone.Index() {
+		t.Errorf("Rename() = %s %q at %d, want %s %q at %d",
+			renamed.ID(), name, renamed.Index(), moved.ID(), "renamed", gone.Index())
+	}
+	rotated, err := moved.Rotate(ctx, tmux.RotateWindowRequest{})
+	if err != nil || rotated.ID() != moved.ID() || rotated.Index() != gone.Index() {
+		t.Errorf("Rotate(renumbered window) = (%s at %d, %v), want %s at %d",
+			rotated.ID(), rotated.Index(), err, moved.ID(), gone.Index())
+	}
+	selected, err := pane.Select(ctx, tmux.PaneSelectRequest{})
+	if err != nil || selected.ID() != pane.ID() || selected.WindowIndex() != gone.Index() {
+		t.Errorf("Select(pane in renumbered window) = (%s at %d, %v), want %s at %d",
+			selected.ID(), selected.WindowIndex(), err, pane.ID(), gone.Index())
+	}
+}
+
 //libtmux:real-tmux
 func TestSessionLastWindowErrorAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)

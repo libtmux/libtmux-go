@@ -54,7 +54,7 @@ func TestWindowRespawnBuildsExactArgumentsAndRedactsCompletedErrors(t *testing.T
 		t.Fatalf("Respawn() CommandError result = %#v, want exit-only redaction", commandError.Result)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"respawn-window", "-t", "$7:0", "-k", "-c.",
+		"respawn-window", "-t", "$7:@8", "-k", "-c.",
 		"-eALPHA=first", "-eZED=last", `printf done\;`,
 	})
 }
@@ -70,12 +70,12 @@ func TestWindowRespawnPreservesNilAndEmptyCommand(t *testing.T) {
 	}{
 		{
 			name: "nil reuses stored command",
-			want: []string{"respawn-window", "-t", "$7:0", "-k"},
+			want: []string{"respawn-window", "-t", "$7:@8", "-k"},
 		},
 		{
 			name:    "empty remains an operand",
 			command: &empty,
-			want:    []string{"respawn-window", "-t", "$7:0", "-k", ""},
+			want:    []string{"respawn-window", "-t", "$7:@8", "-k", ""},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -113,7 +113,7 @@ func TestWindowRespawnExpandsCurrentUserStartDirectory(t *testing.T) {
 		t.Fatalf("Respawn() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"respawn-window", "-t", "$7:0", "-c" + filepath.Join(home, "respawn-work"),
+		"respawn-window", "-t", "$7:@8", "-c" + filepath.Join(home, "respawn-work"),
 	})
 }
 

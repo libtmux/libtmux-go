@@ -58,7 +58,7 @@ func TestCapturePaneWarningsAreConcreteAndOrdered(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("runner requests = %#v, want version and capture", requests)
 	}
-	wantArguments := []string{"capture-pane", "-t", "$5:0.%7", "-p"}
+	wantArguments := []string{"capture-pane", "-t", "$5:.%7", "-p"}
 	if !slices.Equal(requests[1].Arguments, wantArguments) {
 		t.Fatalf("capture arguments = %#v, want %#v", requests[1].Arguments, wantArguments)
 	}
@@ -122,7 +122,7 @@ func TestCapturePaneVersionGateBoundaries(t *testing.T) {
 			}
 			requests := runner.recordedRequests()
 			wantArguments := append(
-				[]string{"capture-pane", "-t", "$5:0.%7", "-p"},
+				[]string{"capture-pane", "-t", "$5:.%7", "-p"},
 				test.wantFlags...,
 			)
 			if !slices.Equal(requests[1].Arguments, wantArguments) {

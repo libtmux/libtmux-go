@@ -31,72 +31,72 @@ func TestResizePaneBuildsOneModeOfLiteralArguments(t *testing.T) {
 		{
 			name:     "zero adjustment is unset",
 			request:  ResizePaneRequest{Adjustment: 0},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7"},
 		},
 		{
 			name: "up",
 			request: ResizePaneRequest{
 				Direction: PaneResizeDirectionUp, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-U", "2"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-U", "2"},
 		},
 		{
 			name: "down",
 			request: ResizePaneRequest{
 				Direction: PaneResizeDirectionDown, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-D", "2"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-D", "2"},
 		},
 		{
 			name: "left",
 			request: ResizePaneRequest{
 				Direction: PaneResizeDirectionLeft, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-L", "2"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-L", "2"},
 		},
 		{
 			name: "right",
 			request: ResizePaneRequest{
 				Direction: PaneResizeDirectionRight, Adjustment: 2,
 			},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-R", "2"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-R", "2"},
 		},
 		{
 			name:     "height in cells",
 			request:  ResizePaneRequest{Height: PaneCells(10)},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-y10"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-y10"},
 		},
 		{
 			name:     "width by percentage",
 			request:  ResizePaneRequest{Width: PanePercent(25)},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-x25%"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-x25%"},
 		},
 		{
 			name: "height then width",
 			request: ResizePaneRequest{
 				Height: PanePercent(40), Width: PaneCells(80),
 			},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-y40%", "-x80"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-y40%", "-x80"},
 		},
 		{
 			name:     "zero cells are explicit",
 			request:  ResizePaneRequest{Width: PaneCells(0)},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-x0"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-x0"},
 		},
 		{
 			name:     "zoom",
 			request:  ResizePaneRequest{Zoom: true},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-Z"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-Z"},
 		},
 		{
 			name:     "mouse",
 			request:  ResizePaneRequest{Mouse: true},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-M"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-M"},
 		},
 		{
 			name:     "trim below",
 			request:  ResizePaneRequest{TrimBelow: true},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-T"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-T"},
 		},
 	}
 
@@ -272,14 +272,14 @@ func TestPaneSetWidthAndHeightDelegateToCellResize(t *testing.T) {
 			run: func(pane Pane) (Pane, error) {
 				return pane.SetWidth(context.Background(), 80)
 			},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-x80"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-x80"},
 		},
 		{
 			name: "height",
 			run: func(pane Pane) (Pane, error) {
 				return pane.SetHeight(context.Background(), 24)
 			},
-			wantArgs: []string{"resize-pane", "-t", "$5:0.%7", "-y24"},
+			wantArgs: []string{"resize-pane", "-t", "$5:.%7", "-y24"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -327,7 +327,7 @@ func TestSetTitleUsesLiteralTitleAndRefreshes(t *testing.T) {
 	assertRequestArguments(
 		t,
 		requests[0],
-		[]string{"select-pane", "-t", "$5:0.%7", "-T", `build\;`},
+		[]string{"select-pane", "-t", "$5:.%7", "-T", `build\;`},
 	)
 }
 

@@ -172,14 +172,14 @@ func TestWindowLayoutCommandsBuildLiteralArguments(t *testing.T) {
 	}{
 		{
 			name:     "reapply last preset",
-			wantArgs: []string{"select-layout", "-t", "$7:0"},
+			wantArgs: []string{"select-layout", "-t", "$7:@8"},
 			invoke: func(window Window) error {
 				return window.SelectLayout(context.Background(), SelectLayoutRequest{})
 			},
 		},
 		{
 			name:     "named layout",
-			wantArgs: []string{"select-layout", "-t", "$7:0", "even-horizontal"},
+			wantArgs: []string{"select-layout", "-t", "$7:@8", "even-horizontal"},
 			invoke: func(window Window) error {
 				return window.SelectLayout(context.Background(), SelectLayoutRequest{
 					Layout: "even-horizontal",
@@ -188,35 +188,35 @@ func TestWindowLayoutCommandsBuildLiteralArguments(t *testing.T) {
 		},
 		{
 			name:     "spread",
-			wantArgs: []string{"select-layout", "-t", "$7:0", "-E"},
+			wantArgs: []string{"select-layout", "-t", "$7:@8", "-E"},
 			invoke: func(window Window) error {
 				return window.SelectLayout(context.Background(), SelectLayoutRequest{Spread: true})
 			},
 		},
 		{
 			name:     "next flag",
-			wantArgs: []string{"select-layout", "-t", "$7:0", "-n"},
+			wantArgs: []string{"select-layout", "-t", "$7:@8", "-n"},
 			invoke: func(window Window) error {
 				return window.SelectLayout(context.Background(), SelectLayoutRequest{Next: true})
 			},
 		},
 		{
 			name:     "previous flag",
-			wantArgs: []string{"select-layout", "-t", "$7:0", "-p"},
+			wantArgs: []string{"select-layout", "-t", "$7:@8", "-p"},
 			invoke: func(window Window) error {
 				return window.SelectLayout(context.Background(), SelectLayoutRequest{Previous: true})
 			},
 		},
 		{
 			name:     "next command",
-			wantArgs: []string{"next-layout", "-t", "$7:0"},
+			wantArgs: []string{"next-layout", "-t", "$7:@8"},
 			invoke: func(window Window) error {
 				return window.NextLayout(context.Background())
 			},
 		},
 		{
 			name:     "previous command",
-			wantArgs: []string{"previous-layout", "-t", "$7:0"},
+			wantArgs: []string{"previous-layout", "-t", "$7:@8"},
 			invoke: func(window Window) error {
 				return window.PreviousLayout(context.Background())
 			},
@@ -301,7 +301,7 @@ func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
 			t.Fatalf("request count = %d, want 2 (version probe, then select-layout)", len(requests))
 		}
 		assertRequestArguments(t, requests[1], []string{
-			"select-layout", "-t", "$7:0", jsonLayout,
+			"select-layout", "-t", "$7:@8", jsonLayout,
 		})
 	})
 

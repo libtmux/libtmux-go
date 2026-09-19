@@ -528,7 +528,7 @@ func TestSplitPaneBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 		t.Fatalf("SplitPane() = %#v, want live %%9 model", pane)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"split-window", "-t", "$1:4", "-h", "-b", "-l10", "-P",
+		"split-window", "-t", "$1:@8", "-h", "-b", "-l10", "-P",
 		"-F#{pane_id}", "-c/work", "-d", "sleep 1m",
 	})
 }
@@ -606,7 +606,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 		{
 			name:     "rename window",
 			command:  "rename-window",
-			wantArgs: []string{"rename-window", "-t", "$7:0", "renamed"},
+			wantArgs: []string{"rename-window", "-t", "$7:@8", "renamed"},
 			listing:  "list-windows",
 			row: map[string]string{
 				"session_id": "$7", "window_id": "@8", "window_index": "2", "window_name": "renamed",
@@ -624,7 +624,7 @@ func TestRenameAndSelectReturnRefreshedModels(t *testing.T) {
 		{
 			name:     "select window",
 			command:  "select-window",
-			wantArgs: []string{"select-window", "-t", "$7:0"},
+			wantArgs: []string{"select-window", "-t", "$7:@8"},
 			listing:  "list-windows",
 			row: map[string]string{
 				"session_id": "$7", "window_id": "@8", "window_index": "2", "window_active": "1",
@@ -1125,7 +1125,7 @@ func TestLifecycleCreationExpandsCurrentUserStartDirectory(t *testing.T) {
 				return err
 			},
 			wantArgs: []string{
-				"split-window", "-t", "$1:0", "-v", "-P", "-F#{pane_id}",
+				"split-window", "-t", "$1:@2", "-v", "-P", "-F#{pane_id}",
 				"-c" + wantDirectory, "-d",
 			},
 		},
@@ -1221,7 +1221,7 @@ func TestWindowRenameAllowsEmptyName(t *testing.T) {
 		t.Fatalf("Window.Rename() name = %q, want empty", name)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"rename-window", "-t", "$7:0", "",
+		"rename-window", "-t", "$7:@8", "",
 	})
 }
 

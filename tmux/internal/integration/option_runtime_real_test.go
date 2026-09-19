@@ -689,6 +689,30 @@ func TestOptionTargetSentinelSeparatesAMissingWindowFromABadName(t *testing.T) {
 		t.Errorf("a missing target must not report an unknown option: %v", err)
 	}
 
+	// Linked into two sessions, the window's target once carried a session,
+	// and tmux sets a missing window's option on that session's current one.
+	shared, err := session.NewWindow(ctx, tmux.NewWindowRequest{})
+	if err != nil {
+		t.Fatalf("create shared window: %v", err)
+	}
+	other, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "targets-other"})
+	if err != nil {
+		t.Fatalf("create other session: %v", err)
+	}
+	if err := shared.Link(ctx, tmux.LinkWindowRequest{TargetSession: other.ID(), Detach: true}); err != nil {
+		t.Fatalf("link shared window: %v", err)
+	}
+	if shared, err = server.Window(ctx, shared.ID()); err != nil {
+		t.Fatalf("read linked window: %v", err)
+	}
+	if err := shared.Kill(ctx); err != nil {
+		t.Fatalf("kill shared window: %v", err)
+	}
+	err = shared.SetOption(ctx, "remain-on-exit", "on", tmux.SetOptionOptions{})
+	if !errors.Is(err, tmux.ErrOptionTarget) {
+		t.Errorf("setting an option on a killed linked window gave %v, want ErrOptionTarget", err)
+	}
+
 	live, err := session.NewWindow(ctx, tmux.NewWindowRequest{})
 	if err != nil {
 		t.Fatalf("create second window: %v", err)

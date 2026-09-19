@@ -30,8 +30,8 @@ func TestSendKeysBuildsExactArgumentsAndSeparateEnter(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("runner requests = %#v, want send and enter", requests)
 	}
-	assertRequestArguments(t, requests[0], []string{"send-keys", "-t", "$5:0.%7", "--", "printf ok"})
-	assertRequestArguments(t, requests[1], []string{"send-keys", "-t", "$5:0.%7", "--", "Enter"})
+	assertRequestArguments(t, requests[0], []string{"send-keys", "-t", "$5:.%7", "--", "printf ok"})
+	assertRequestArguments(t, requests[1], []string{"send-keys", "-t", "$5:.%7", "--", "Enter"})
 }
 
 func TestSendKeySequenceBuildsOneOrderedInvocation(t *testing.T) {
@@ -50,7 +50,7 @@ func TestSendKeySequenceBuildsOneOrderedInvocation(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one ordered send", requests)
 	}
 	assertRequestArguments(t, requests[0], []string{
-		"send-keys", "-t", "$5:0.%7", "--", "e", "Space", "K",
+		"send-keys", "-t", "$5:.%7", "--", "e", "Space", "K",
 	})
 }
 
@@ -66,7 +66,7 @@ func TestSendKeySequenceAppliesLiteralToEveryOperand(t *testing.T) {
 		t.Fatalf("SendKeySequence() error = %v", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"send-keys", "-t", "$5:0.%7", "-l", "--", "Space", "Enter",
+		"send-keys", "-t", "$5:.%7", "-l", "--", "Space", "Enter",
 	})
 }
 
@@ -92,7 +92,7 @@ func TestSendKeySequenceCopiesKeysBeforeIO(t *testing.T) {
 		t.Fatalf("SendKeySequence() error = %v", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"send-keys", "-t", "$5:0.%7", "--", "original", "Enter",
+		"send-keys", "-t", "$5:.%7", "--", "original", "Enter",
 	})
 }
 
@@ -140,8 +140,8 @@ func TestSendKeysPreservesEmptyCommandAsAnOperand(t *testing.T) {
 		t.Fatalf("SendKeys() error = %v", err)
 	}
 	requests := runner.recordedRequests()
-	assertRequestArguments(t, requests[0], []string{"send-keys", "-t", "$5:0.%7", "--", ""})
-	assertRequestArguments(t, requests[1], []string{"send-keys", "-t", "$5:0.%7", "--", "Enter"})
+	assertRequestArguments(t, requests[0], []string{"send-keys", "-t", "$5:.%7", "--", ""})
+	assertRequestArguments(t, requests[1], []string{"send-keys", "-t", "$5:.%7", "--", "Enter"})
 }
 
 func TestSendKeysTerminatesOptionsBeforeOperands(t *testing.T) {
@@ -156,12 +156,12 @@ func TestSendKeysTerminatesOptionsBeforeOperands(t *testing.T) {
 		{
 			name: "normal",
 			req:  SendKeysRequest{Command: &command, Literal: true, SkipEnter: true},
-			want: []string{"send-keys", "-t", "$5:0.%7", "-l", "--", "-N"},
+			want: []string{"send-keys", "-t", "$5:.%7", "-l", "--", "-N"},
 		},
 		{
 			name: "copy mode",
 			req:  SendKeysRequest{CopyModeCommand: &command},
-			want: []string{"send-keys", "-t", "$5:0.%7", "-X", "--", "-N"},
+			want: []string{"send-keys", "-t", "$5:.%7", "-X", "--", "-N"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -225,7 +225,7 @@ func TestSendKeysBuildsFlagsInPythonOrder(t *testing.T) {
 	}
 	assertRequestArguments(t, requests[0], []string{"-V"})
 	assertRequestArguments(t, requests[1], []string{
-		"send-keys", "-t", "$5:0.%7", "-R", "-F", "-H", "-K", "-l", "-N", "3",
+		"send-keys", "-t", "$5:.%7", "-R", "-F", "-H", "-K", "-l", "-N", "3",
 		"-c", "/dev/pts/7", "--", " 41",
 	})
 }
@@ -250,7 +250,7 @@ func TestSendKeysCopyModeOverridesCommandAndEnter(t *testing.T) {
 	assertRequestArguments(
 		t,
 		requests[0],
-		[]string{"send-keys", "-t", "$5:0.%7", "-X", "--", `cursor-down\;`},
+		[]string{"send-keys", "-t", "$5:.%7", "-X", "--", `cursor-down\;`},
 	)
 }
 
@@ -265,12 +265,12 @@ func TestSendKeysFlagOnlyDoesNotEnter(t *testing.T) {
 		{
 			name:     "reset with zero repeat",
 			request:  SendKeysRequest{Reset: true, Repeat: 0},
-			wantArgs: []string{"send-keys", "-t", "$5:0.%7", "-R"},
+			wantArgs: []string{"send-keys", "-t", "$5:.%7", "-R"},
 		},
 		{
 			name:     "repeat",
 			request:  SendKeysRequest{Repeat: 2},
-			wantArgs: []string{"send-keys", "-t", "$5:0.%7", "-N", "2"},
+			wantArgs: []string{"send-keys", "-t", "$5:.%7", "-N", "2"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -340,12 +340,12 @@ func TestSendKeysVersionGatesClientAndKeyName(t *testing.T) {
 	}{
 		{
 			version:      "3.3a",
-			wantArgs:     []string{"send-keys", "-t", "$5:0.%7", "-R"},
+			wantArgs:     []string{"send-keys", "-t", "$5:.%7", "-R"},
 			wantFeatures: []string{"key_name", "target_client"},
 		},
 		{
 			version:  "3.4",
-			wantArgs: []string{"send-keys", "-t", "$5:0.%7", "-R", "-K", "-c", "client-a"},
+			wantArgs: []string{"send-keys", "-t", "$5:.%7", "-R", "-K", "-c", "client-a"},
 		},
 	} {
 		t.Run(test.version, func(t *testing.T) {
@@ -421,7 +421,7 @@ func TestSendKeysCapturesPointerInputsBeforeVersionProbe(t *testing.T) {
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[0], []string{"-V"})
 	assertRequestArguments(t, requests[1], []string{
-		"send-keys", "-t", "$5:0.%7", "-K", "-N", "2", "-c", "client-original", "--", `original\;`,
+		"send-keys", "-t", "$5:.%7", "-K", "-N", "2", "-c", "client-original", "--", `original\;`,
 	})
 }
 
@@ -525,7 +525,7 @@ func TestEnterAndClearUseSendKeysRawSemantics(t *testing.T) {
 			t.Fatalf("Enter() error = %v, want a CommandError naming the target", err)
 		}
 		assertRequestArguments(
-			t, runner.recordedRequests()[0], []string{"send-keys", "-t", "$5:0.%7", "--", "Enter"},
+			t, runner.recordedRequests()[0], []string{"send-keys", "-t", "$5:.%7", "--", "Enter"},
 		)
 	})
 
@@ -546,7 +546,7 @@ func TestEnterAndClearUseSendKeysRawSemantics(t *testing.T) {
 			t.Fatalf("runner calls = %d, want 1: enter must not run after reset fails", len(requests))
 		}
 		assertRequestArguments(
-			t, requests[0], []string{"send-keys", "-t", "$5:0.%7", "--", "reset"},
+			t, requests[0], []string{"send-keys", "-t", "$5:.%7", "--", "reset"},
 		)
 	})
 }
@@ -561,8 +561,8 @@ func TestSendPrefixBuildsExactArgumentsAndRejectsUnknownKey(t *testing.T) {
 		key      PrefixKey
 		wantArgs []string
 	}{
-		{name: "primary", key: PrefixPrimary, wantArgs: []string{"send-prefix", "-t", "$5:0.%7"}},
-		{name: "secondary", key: PrefixSecondary, wantArgs: []string{"send-prefix", "-t", "$5:0.%7", "-2"}},
+		{name: "primary", key: PrefixPrimary, wantArgs: []string{"send-prefix", "-t", "$5:.%7"}},
+		{name: "secondary", key: PrefixSecondary, wantArgs: []string{"send-prefix", "-t", "$5:.%7", "-2"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -668,8 +668,8 @@ func TestClearHistoryVersionGatesHyperlinkReset(t *testing.T) {
 		wantArgs    []string
 		wantWarning bool
 	}{
-		{version: "3.3a", wantArgs: []string{"clear-history", "-t", "$5:0.%7"}, wantWarning: true},
-		{version: "3.4", wantArgs: []string{"clear-history", "-t", "$5:0.%7", "-H"}},
+		{version: "3.3a", wantArgs: []string{"clear-history", "-t", "$5:.%7"}, wantWarning: true},
+		{version: "3.4", wantArgs: []string{"clear-history", "-t", "$5:.%7", "-H"}},
 	} {
 		t.Run(test.version, func(t *testing.T) {
 			t.Parallel()
@@ -729,12 +729,12 @@ func TestResetUsesOneTrustedTwoTargetCommandList(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one command list", requests)
 	}
 	assertRequestArguments(t, requests[0], []string{
-		"send-keys", "-t", "$5:0.%7", "-R", ";",
-		"clear-history", "-t", "$5:0.%7",
+		"send-keys", "-t", "$5:.%7", "-R", ";",
+		"clear-history", "-t", "$5:.%7",
 	})
 
-	// Resetting a pane that has gone answered nil, the same silent success
-	// SendKeys and Capture stopped answering.
+	// Reset must not answer nil for a pane that has gone, the same silent
+	// success SendKeys and Capture guard against.
 	failing := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
 		Stderr: []string{"can't find pane: %7"}, ExitCode: 1,
 	}}}}

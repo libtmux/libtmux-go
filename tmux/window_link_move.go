@@ -222,13 +222,6 @@ func (w Window) Move(ctx context.Context, request MoveWindowRequest) (Window, er
 	return refreshed, nil
 }
 
-func exactWindowTarget(window Window) (string, error) {
-	if _, err := validateWindowView(window); err != nil {
-		return "", err
-	}
-	return window.sessionID.String() + ":" + strconv.Itoa(window.windowIndex), nil
-}
-
 func invalidWindowIndex(subcommand string, index int) error {
 	return invalidServerCommandRequest(
 		subcommand,

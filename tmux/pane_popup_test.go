@@ -70,7 +70,7 @@ func TestDisplayPopupBuildsPythonFlagOrderAndExactTarget(t *testing.T) {
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[0], []string{"-V"})
 	assertRequestArguments(t, requests[1], []string{
-		"display-popup", "-t", "$1:0.%3", "-C", "-c", "client-a", "-E", "-E",
+		"display-popup", "-t", "$1:.%3", "-C", "-c", "client-a", "-E", "-E",
 		"-w", "40", "-h", "50%", "-x", "C", "-y", "P", "-d", "/tmp",
 		"-T", "title", "-b", "single", "-s", "bg=blue", "-S", "fg=red",
 		"-eALPHA=first", "-eZED=last", "-B", "-k", "-N", `printf secret\;`,
@@ -121,7 +121,7 @@ func TestDisplayPopupWarnsAndOmitsUnsupportedFields(t *testing.T) {
 		t.Fatalf("DisplayPopup() error = %v", err)
 	}
 	requests := runner.recordedRequests()
-	assertRequestArguments(t, requests[1], []string{"display-popup", "-t", "$1:0.%3"})
+	assertRequestArguments(t, requests[1], []string{"display-popup", "-t", "$1:.%3"})
 	wantFeatures := []string{
 		"title", "border_lines", "style", "border_style", "environment", "no_border",
 		"close_on_any_key", "no_keys",
@@ -204,7 +204,7 @@ func TestDisplayPopupRejectsAControlModeTargetOnlyOnCapableVersions(t *testing.T
 			t.Fatalf("request count = %d, want %d", len(requests), len(responses))
 		}
 		assertRequestArguments(t, requests[len(requests)-1], []string{
-			"display-popup", "-t", "$1:0.%3", "-c", "control-a",
+			"display-popup", "-t", "$1:.%3", "-c", "control-a",
 		})
 	})
 
@@ -280,7 +280,7 @@ func TestDisplayPopupZeroRequestSkipsVersionProbe(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("runner requests = %#v, want one", requests)
 	}
-	assertRequestArguments(t, requests[0], []string{"display-popup", "-t", "$1:0.%3"})
+	assertRequestArguments(t, requests[0], []string{"display-popup", "-t", "$1:.%3"})
 }
 
 func TestDisplayPopupCapturesPointerAndMapValuesBeforeVersionProbe(t *testing.T) {
@@ -314,7 +314,7 @@ func TestDisplayPopupCapturesPointerAndMapValuesBeforeVersionProbe(t *testing.T)
 	}
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[1], []string{
-		"display-popup", "-t", "$1:0.%3", "-c", "before-client",
+		"display-popup", "-t", "$1:.%3", "-c", "before-client",
 		"-d", "/before-directory", "-T", "before-title", "-eKEY=before-value",
 		"before-command",
 	})

@@ -137,7 +137,7 @@ func TestRawSearchMethodsPassFiltersAtEachScope(t *testing.T) {
 		{
 			name:    "window panes",
 			command: "list-panes",
-			extra:   []string{"-t", "$1:0"},
+			extra:   []string{"-t", "$1:@2"},
 			row: map[string]string{
 				"session_id": "$1", "window_id": "@2", "window_index": "3",
 				"pane_id": "%4", "pane_index": "0",
@@ -422,7 +422,7 @@ func TestWindowSearchPanesDiscardsRowsOutsideExactWinlink(t *testing.T) {
 	}
 	requests := runner.recordedRequests()
 	assertSnapshotRequest(t, requests[1], []string{
-		"list-panes", "-t", "$1:0", "-F" + formatTemplate(fields),
+		"list-panes", "-t", "$1:@7", "-F" + formatTemplate(fields),
 	})
 }
 

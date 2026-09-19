@@ -99,7 +99,7 @@ func TestDisplayMessageBuildsExactArgumentsByScope(t *testing.T) {
 				)
 			},
 			want: []string{
-				"display-message", "-t", "$1:0", "-p", "-a", "-v", "-l", "-N",
+				"display-message", "-t", "$1:@2", "-p", "-a", "-v", "-l", "-N",
 				"-c", "/dev/pts/9", "-d", "250", "-F", "#{window_id}:#{pane_id}",
 				"#{version}",
 			},
@@ -169,7 +169,7 @@ func TestPaneDisplayMessageAddsUpdateFlagInPythonOrder(t *testing.T) {
 	}
 	assertRequestArguments(t, requests[0], []string{"-V"})
 	assertRequestArguments(t, requests[1], []string{
-		"display-message", "-t", "$1:0.%3", "-p", "-a", "-v", "-l", "-N", "-C",
+		"display-message", "-t", "$1:.%3", "-p", "-a", "-v", "-l", "-N", "-C",
 		"-c", "client", "-d", "0", "-F", "#{pane_id}", "value",
 	})
 }
@@ -196,7 +196,7 @@ func TestDisplayMessageZeroRequestUsesScopeAndReturnsNil(t *testing.T) {
 					context.Background(), DisplayMessageRequest{},
 				)
 			},
-			want: []string{"display-message", "-t", "$1:0"},
+			want: []string{"display-message", "-t", "$1:@2"},
 		},
 		{
 			name: "pane",
@@ -207,7 +207,7 @@ func TestDisplayMessageZeroRequestUsesScopeAndReturnsNil(t *testing.T) {
 					context.Background(), PaneDisplayMessageRequest{},
 				)
 			},
-			want: []string{"display-message", "-t", "$1:0.%3"},
+			want: []string{"display-message", "-t", "$1:.%3"},
 		},
 	}
 
@@ -371,7 +371,7 @@ func TestDisplayMessageVersionBoundariesWarnAndOmitUnsupportedFlags(t *testing.T
 			name:         "pane before both",
 			version:      "3.3",
 			pane:         true,
-			wantArgs:     []string{"display-message", "-t", "$1:0.%3", "value"},
+			wantArgs:     []string{"display-message", "-t", "$1:.%3", "value"},
 			wantFeatures: []string{"no_expand", "update_pane"},
 			wantMinimums: []string{"3.4", "3.6"},
 		},
@@ -379,7 +379,7 @@ func TestDisplayMessageVersionBoundariesWarnAndOmitUnsupportedFlags(t *testing.T
 			name:         "pane at no-expand boundary",
 			version:      "3.4",
 			pane:         true,
-			wantArgs:     []string{"display-message", "-t", "$1:0.%3", "-l", "value"},
+			wantArgs:     []string{"display-message", "-t", "$1:.%3", "-l", "value"},
 			wantFeatures: []string{"update_pane"},
 			wantMinimums: []string{"3.6"},
 		},
@@ -387,7 +387,7 @@ func TestDisplayMessageVersionBoundariesWarnAndOmitUnsupportedFlags(t *testing.T
 			name:     "pane at update boundary",
 			version:  "3.6",
 			pane:     true,
-			wantArgs: []string{"display-message", "-t", "$1:0.%3", "-l", "-C", "value"},
+			wantArgs: []string{"display-message", "-t", "$1:.%3", "-l", "-C", "value"},
 		},
 	}
 

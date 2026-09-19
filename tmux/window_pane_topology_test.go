@@ -96,7 +96,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 	}{
 		{
 			name: "window select pane",
-			want: []string{"select-pane", "-t", "$1:0", "-l", "-Z"},
+			want: []string{"select-pane", "-t", "$1:@2", "-l", "-Z"},
 			run: func(server Server) error {
 				_, err := (Window{server: server, sessionID: "$1", windowID: "@2"}).SelectPane(
 					context.Background(),
@@ -107,7 +107,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		},
 		{
 			name: "pane select",
-			want: []string{"select-pane", "-t", "$1:0.%3", "-R", "-Z"},
+			want: []string{"select-pane", "-t", "$1:.%3", "-R", "-Z"},
 			run: func(server Server) error {
 				_, err := (Pane{
 					server: server, sessionID: "$1", windowID: "@2", paneID: "%3",
@@ -120,7 +120,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		},
 		{
 			name: "pane mark",
-			want: []string{"select-pane", "-t", "$1:3.%3", "-M"},
+			want: []string{"select-pane", "-t", "$1:.%3", "-M"},
 			run: func(server Server) error {
 				_, err := exactTestPane(server).Select(
 					context.Background(), PaneSelectRequest{Mark: PaneMarkClear},
@@ -130,7 +130,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		},
 		{
 			name: "pane input",
-			want: []string{"select-pane", "-t", "$1:3.%3", "-e"},
+			want: []string{"select-pane", "-t", "$1:.%3", "-e"},
 			run: func(server Server) error {
 				_, err := exactTestPane(server).Select(
 					context.Background(), PaneSelectRequest{Input: PaneInputEnable},
@@ -140,7 +140,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		},
 		{
 			name: "last pane",
-			want: []string{"last-pane", "-t", "$1:0", "-d"},
+			want: []string{"last-pane", "-t", "$1:@2", "-d"},
 			run: func(server Server) error {
 				_, err := (Window{server: server, sessionID: "$1", windowID: "@2"}).LastPane(
 					context.Background(),
@@ -151,7 +151,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		},
 		{
 			name: "last pane keep zoom",
-			want: []string{"last-pane", "-t", "$1:3", "-Z"},
+			want: []string{"last-pane", "-t", "$1:@2", "-Z"},
 			run: func(server Server) error {
 				_, err := exactTestWindow(server).LastPane(
 					context.Background(), LastPaneRequest{KeepZoom: true},
@@ -161,7 +161,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		},
 		{
 			name: "rotate window",
-			want: []string{"rotate-window", "-t", "$1:0", "-D", "-Z"},
+			want: []string{"rotate-window", "-t", "$1:@2", "-D", "-Z"},
 			run: func(server Server) error {
 				_, err := (Window{server: server, sessionID: "$1", windowID: "@2"}).Rotate(
 					context.Background(),
@@ -172,7 +172,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		},
 		{
 			name: "swap window",
-			want: []string{"swap-window", "-t", "$1:0", "-d", "-s", "$4:0"},
+			want: []string{"swap-window", "-t", "$1:@2", "-d", "-s", "$4:@5"},
 			run: func(server Server) error {
 				_, err := (Window{server: server, sessionID: "$1", windowID: "@2"}).Swap(
 					context.Background(),
@@ -187,7 +187,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 			name: "move pane",
 			want: []string{
 				"move-pane", "-h", "-d", "-f", "-p40", "-b",
-				"-s", "$1:0.%3", "-t", "$4:0.%6",
+				"-s", "$1:.%3", "-t", "$4:.%6",
 			},
 			run: func(server Server) error {
 				percentage := 40
@@ -205,7 +205,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		{
 			name: "join pane",
 			want: []string{
-				"join-pane", "-v", "-l12", "-s", "$1:0.%3", "-t", "$4:0",
+				"join-pane", "-v", "-l12", "-s", "$1:.%3", "-t", "$4:@5",
 			},
 			run: func(server Server) error {
 				size := 12
@@ -222,7 +222,7 @@ func TestTopologyCommandsPreservePythonArgumentOrder(t *testing.T) {
 		{
 			name: "swap pane",
 			want: []string{
-				"swap-pane", "-t", "$1:0.%3", "-d", "-Z", "-s", "$4:0.%6",
+				"swap-pane", "-t", "$1:.%3", "-d", "-Z", "-s", "$4:.%6",
 			},
 			run: func(server Server) error {
 				_, err := (Pane{
@@ -532,7 +532,7 @@ func TestBreakPaneUsesLiteral37Workaround(t *testing.T) {
 	requests := runner.recordedRequests()
 	assertRequestArguments(t, requests[1], []string{
 		"break-pane", "-P", "-F#{window_id}", "-d", "-n", "named\\;",
-		"-s", "$1:3.%3", "-t", "$1:",
+		"-s", "$1:.%3", "-t", "$1:",
 	})
 	assertRequestArguments(t, requests[2], []string{
 		"rename-window", "-t", "$1:@9", "named\\;",
@@ -558,14 +558,14 @@ func TestBreakPaneLimitsPlaceholderToLiteral37(t *testing.T) {
 			version: "3.7",
 			want: []string{
 				"break-pane", "-P", "-F#{window_id}", "-d", "-n", "libtmux",
-				"-s", "$1:3.%3", "-t", "$1:",
+				"-s", "$1:.%3", "-t", "$1:",
 			},
 		},
 		{
 			version: "3.7a",
 			want: []string{
 				"break-pane", "-P", "-F#{window_id}", "-d",
-				"-s", "$1:3.%3", "-t", "$1:",
+				"-s", "$1:.%3", "-t", "$1:",
 			},
 		},
 		{
@@ -573,7 +573,7 @@ func TestBreakPaneLimitsPlaceholderToLiteral37(t *testing.T) {
 			name:    "named;",
 			want: []string{
 				"break-pane", "-P", "-F#{window_id}", "-d", "-n", "named\\;",
-				"-s", "$1:3.%3", "-t", "$1:",
+				"-s", "$1:.%3", "-t", "$1:",
 			},
 		},
 	} {
@@ -702,6 +702,6 @@ func TestTopologyAcceptsSeparateHandlesWithSameExplicitSocketPath(t *testing.T) 
 		t.Fatalf("Window.Swap() error = %v, want refresh context cancellation", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[0], []string{
-		"-S/tmp/shared.sock", "swap-window", "-t", "$1:0", "-s", "$3:0",
+		"-S/tmp/shared.sock", "swap-window", "-t", "$1:@2", "-s", "$3:@4",
 	})
 }

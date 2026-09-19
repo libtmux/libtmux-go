@@ -7,26 +7,45 @@ import (
 	"testing"
 )
 
-func TestExactTargetsIncludeWindowIndex(t *testing.T) {
+// A target names the record's one winlink as briefly as tmux allows: an index
+// names whatever window holds it now, and a session lets set-option land on
+// that session's current window once the id is gone.
+func TestExactTargetsNameOneWinlinkAsBrieflyAsPossible(t *testing.T) {
 	t.Parallel()
 
-	window := Window{sessionID: "$2", windowID: "@7", windowIndex: 3}
-	windowTarget, err := exactWindowTarget(window)
-	if err != nil {
-		t.Fatalf("exactWindowTarget() error = %v", err)
+	linked := func(list string) formatValues {
+		return formatValues{values: map[string]string{
+			"session_name": "work", "window_linked_sessions_list": list,
+		}}
 	}
-	if windowTarget != "$2:3" {
-		t.Fatalf("exactWindowTarget() = %q, want %q", windowTarget, "$2:3")
+	tests := []struct {
+		name    string
+		formats formatValues
+		window  string
+		pane    string
+	}{
+		{name: "unmaterialized", window: "$2:@7", pane: "$2:.%11"},
+		{name: "linked once", formats: linked("work"), window: "@7", pane: "$2:.%11"},
+		{name: "linked elsewhere too", formats: linked("work,other"), window: "$2:@7", pane: "$2:.%11"},
+		{name: "linked twice", formats: linked("other,work,work"), window: "$2:3", pane: "$2:3.%11"},
 	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	paneTarget, err := exactPaneTarget(Pane{
-		sessionID: "$2", windowID: "@7", windowIndex: 3, paneID: "%11",
-	})
-	if err != nil {
-		t.Fatalf("exactPaneTarget() error = %v", err)
-	}
-	if paneTarget != "$2:3.%11" {
-		t.Fatalf("exactPaneTarget() = %q, want %q", paneTarget, "$2:3.%11")
+			window, err := exactWindowTarget(Window{
+				formats: test.formats, sessionID: "$2", windowID: "@7", windowIndex: 3,
+			})
+			if err != nil || window != test.window {
+				t.Errorf("exactWindowTarget() = (%q, %v), want %q", window, err, test.window)
+			}
+			pane, err := exactPaneTarget(Pane{
+				formats: test.formats, sessionID: "$2", windowID: "@7", windowIndex: 3, paneID: "%11",
+			})
+			if err != nil || pane != test.pane {
+				t.Errorf("exactPaneTarget() = (%q, %v), want %q", pane, err, test.pane)
+			}
+		})
 	}
 }
 

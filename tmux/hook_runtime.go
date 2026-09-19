@@ -386,7 +386,7 @@ func (s Session) RunHook(ctx context.Context, name string) error {
 // racy preflight is issued. Completed failures are secret-safe option errors;
 // cancellation does not prove execution did not occur.
 func (w Window) RunHook(ctx context.Context, name string) error {
-	server, scope, err := windowOptionRuntimeScope(w)
+	server, scope, err := windowFormatScope(w)
 	if err != nil {
 		return err
 	}

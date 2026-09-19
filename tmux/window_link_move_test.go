@@ -36,7 +36,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 		{
 			name:       "link",
 			subcommand: "link-window",
-			wantArgs:   []string{"link-window", "-s", "$7:3", "-t", "$9"},
+			wantArgs:   []string{"link-window", "-s", "$7:@8", "-t", "$9"},
 			invoke: func(window Window) error {
 				return window.Link(context.Background(), LinkWindowRequest{TargetSession: "$9"})
 			},
@@ -45,7 +45,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 			name:       "link flags and index",
 			subcommand: "link-window",
 			wantArgs: []string{
-				"link-window", "-k", "-a", "-d", "-s", "$7:3", "-t", "$9:3",
+				"link-window", "-k", "-a", "-d", "-s", "$7:@8", "-t", "$9:3",
 			},
 			invoke: func(window Window) error {
 				return window.Link(context.Background(), LinkWindowRequest{
@@ -60,7 +60,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 		{
 			name:       "link before",
 			subcommand: "link-window",
-			wantArgs:   []string{"link-window", "-b", "-s", "$7:3", "-t", "$9"},
+			wantArgs:   []string{"link-window", "-b", "-s", "$7:@8", "-t", "$9"},
 			invoke: func(window Window) error {
 				return window.Link(context.Background(), LinkWindowRequest{
 					TargetSession: "$9",
@@ -71,7 +71,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 		{
 			name:       "unlink",
 			subcommand: "unlink-window",
-			wantArgs:   []string{"unlink-window", "-t", "$7:3"},
+			wantArgs:   []string{"unlink-window", "-t", "$7:@8"},
 			invoke: func(window Window) error {
 				return window.Unlink(context.Background(), UnlinkWindowRequest{})
 			},
@@ -79,7 +79,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 		{
 			name:       "unlink and kill last",
 			subcommand: "unlink-window",
-			wantArgs:   []string{"unlink-window", "-k", "-t", "$7:3"},
+			wantArgs:   []string{"unlink-window", "-k", "-t", "$7:@8"},
 			invoke: func(window Window) error {
 				return window.Unlink(
 					context.Background(),
@@ -90,7 +90,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 		{
 			name:       "move default",
 			subcommand: "move-window",
-			wantArgs:   []string{"move-window", "-s", "$7:3", "-t", "$7:"},
+			wantArgs:   []string{"move-window", "-s", "$7:@8", "-t", "$7:"},
 			invoke: func(window Window) error {
 				_, err := window.Move(context.Background(), MoveWindowRequest{})
 				return err
@@ -100,7 +100,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 			name:       "move flags and index",
 			subcommand: "move-window",
 			wantArgs: []string{
-				"move-window", "-a", "-d", "-k", "-s", "$7:3", "-t", "$9:3",
+				"move-window", "-a", "-d", "-k", "-s", "$7:@8", "-t", "$9:3",
 			},
 			invoke: func(window Window) error {
 				_, err := window.Move(context.Background(), MoveWindowRequest{
@@ -116,7 +116,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 		{
 			name:       "move before",
 			subcommand: "move-window",
-			wantArgs:   []string{"move-window", "-b", "-s", "$7:3", "-t", "$9:"},
+			wantArgs:   []string{"move-window", "-b", "-s", "$7:@8", "-t", "$9:"},
 			invoke: func(window Window) error {
 				_, err := window.Move(context.Background(), MoveWindowRequest{
 					TargetSession: "$9",
@@ -128,7 +128,7 @@ func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 		{
 			name:       "renumber",
 			subcommand: "move-window",
-			wantArgs:   []string{"move-window", "-r", "-s", "$7:3", "-t", "$9"},
+			wantArgs:   []string{"move-window", "-r", "-s", "$7:@8", "-t", "$9"},
 			invoke: func(window Window) error {
 				_, err := window.Move(context.Background(), MoveWindowRequest{
 					TargetSession: "$9",

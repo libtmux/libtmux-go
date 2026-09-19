@@ -92,7 +92,7 @@ func TestCapturePaneBuildsExactArguments(t *testing.T) {
 		t.Fatalf("version arguments = %#v, want -V", requests[0].Arguments)
 	}
 	want := []string{
-		"capture-pane", "-t", "$5:0.%7", "-p",
+		"capture-pane", "-t", "$5:.%7", "-p",
 		"-S", "-2", "-E", "-",
 		"-e", "-C", "-J", "-N", "-T", "-a", "-q", "-M", "-P", "-H", "-L", "-F",
 	}
@@ -132,7 +132,7 @@ func TestCapturePaneSkipsVersionProbeWithoutGatedFeatures(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one capture", requests)
 	}
 	want := []string{
-		"capture-pane", "-t", "$5:0.%7", "-p", "-S", "0", "-E", "1",
+		"capture-pane", "-t", "$5:.%7", "-p", "-S", "0", "-E", "1",
 		"-e", "-C", "-J", "-N", "-a", "-q", "-P",
 	}
 	if !slices.Equal(requests[0].Arguments, want) {
@@ -171,7 +171,7 @@ func TestCaptureBytesReturnsExactOwnedOutput(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one capture", requests)
 	}
 	wantArguments := []string{
-		"capture-pane", "-t", "$5:0.%7", "-p", "-S", "0", "-E", "1",
+		"capture-pane", "-t", "$5:.%7", "-p", "-S", "0", "-E", "1",
 	}
 	if !slices.Equal(requests[0].Arguments, wantArguments) {
 		t.Fatalf("capture arguments = %#v, want %#v", requests[0].Arguments, wantArguments)
@@ -323,7 +323,7 @@ func TestCapturePaneToBufferUsesStaticResultShape(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one capture", requests)
 	}
 	want := []string{
-		"capture-pane", "-t", "$5:0.%7", "-b", "saved-capture", "-S", "-", "-E", "4",
+		"capture-pane", "-t", "$5:.%7", "-b", "saved-capture", "-S", "-", "-E", "4",
 	}
 	if !slices.Equal(requests[0].Arguments, want) {
 		t.Fatalf("capture arguments = %#v, want %#v", requests[0].Arguments, want)
@@ -367,7 +367,7 @@ func TestCaptureToFileUsesOnlyCommandsThatPrintNothing(t *testing.T) {
 		t.Fatalf("capture buffer = %q, want a name owned by this package", buffer)
 	}
 	for index, want := range [][]string{
-		{"capture-pane", "-t", "$5:0.%7", "-b", buffer, "-S", "-"},
+		{"capture-pane", "-t", "$5:.%7", "-b", buffer, "-S", "-"},
 		{"save-buffer", "-b", buffer, "--", path},
 		{"delete-buffer", "-b", buffer},
 	} {

@@ -198,7 +198,7 @@ func TestSplitPaneCapturesPointersBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("SplitPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-v", "-l10", "-P", "-F#{pane_id}",
+		"split-window", "-t", "$7:@8", "-v", "-l10", "-P", "-F#{pane_id}",
 		"-d", "-eKEY=before", "-s", "before-style", "-S", "before-active",
 		"-R", "before-inactive", "-m", "before-message",
 	})
@@ -229,7 +229,7 @@ func TestSplitPaneCapturesPercentageBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("SplitPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-v", "-l35%", "-P", "-F#{pane_id}",
+		"split-window", "-t", "$7:@8", "-v", "-l35%", "-P", "-F#{pane_id}",
 		"-d", "-E",
 	})
 }
@@ -274,7 +274,7 @@ func TestNewPaneCapturesPointersBeforeVersionProbe(t *testing.T) {
 		t.Fatalf("NewPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"new-pane", "-t", "$7:0", "-x40", "-y10", "-X-2", "-Y3",
+		"new-pane", "-t", "$7:@8", "-x40", "-y10", "-X-2", "-Y3",
 		"-s", "before-style", "-S", "before-active", "-R", "before-inactive",
 		"-m", "before-message", "-P", "-F#{pane_id}", "-d", "-eKEY=before",
 	})
@@ -363,7 +363,7 @@ func TestWindowNewWindowUsesExactLinkedTargetAndRejectsIndex(t *testing.T) {
 			t.Fatalf("Window.NewWindow() error = %v, want ErrCommand", err)
 		}
 		assertLifecycleArguments(t, runner, []string{
-			"new-window", "-t", "$9:0", "-d", "-P", "-F#{window_id}", "-b",
+			"new-window", "-t", "$9:@3", "-d", "-P", "-F#{window_id}", "-b",
 		})
 	})
 
@@ -417,7 +417,7 @@ func TestNewWindowSelectExistingDoesNotRecoverForExplicitPlacement(t *testing.T)
 				})
 			},
 			want: []string{
-				"new-window", "-t", "$9:0", "-d", "-P", "-F#{window_id}",
+				"new-window", "-t", "$9:@3", "-d", "-P", "-F#{window_id}",
 				"-n", name, "-a", "-S",
 			},
 		},
@@ -543,7 +543,7 @@ func TestNewWindowSelectExistingResolvesNoOutputForExactTarget(t *testing.T) {
 		t.Fatal("no requests recorded")
 	}
 	assertRequestArguments(t, requests[0], []string{
-		"new-window", "-t", "$9:0", "-d", "-P", "-F#{window_id}",
+		"new-window", "-t", "$9:@3", "-d", "-P", "-F#{window_id}",
 		"-n", name, "-a", "-S",
 	})
 }
@@ -771,7 +771,7 @@ func TestSplitPaneBuildsExtendedPythonOptionOrder(t *testing.T) {
 		t.Fatalf("SplitPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-h", "-b", "-l10", "-f", "-Z",
+		"split-window", "-t", "$7:@8", "-h", "-b", "-l10", "-f", "-Z",
 		"-P", "-F#{pane_id}", "-c/work", "-d", "-eALPHA=first", "-eZED=last",
 		"-E", "-s", style, "-S", active, "-R", inactive, "-m", message, "-k",
 	})
@@ -790,7 +790,7 @@ func TestPaneSplitUsesExactPaneTarget(t *testing.T) {
 		t.Fatalf("Pane.Split() error = %v, want ErrCommand", err)
 	}
 	assertLifecycleArguments(t, runner, []string{
-		"split-window", "-t", "$7:0.%9", "-h", "-P", "-F#{pane_id}", "-d",
+		"split-window", "-t", "$7:.%9", "-h", "-P", "-F#{pane_id}", "-d",
 	})
 }
 
@@ -826,7 +826,7 @@ func TestSplitPaneWarnsAndOmitsTmux37FieldsOnOlderTmux(t *testing.T) {
 		t.Fatalf("SplitPane() warnings = %#v, want empty then styling group", warnings)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"split-window", "-t", "$7:0", "-v", "-P", "-F#{pane_id}", "-d", "sleep 1m",
+		"split-window", "-t", "$7:@8", "-v", "-P", "-F#{pane_id}", "-d", "sleep 1m",
 	})
 }
 
@@ -898,7 +898,7 @@ func TestNewPaneBuildsPythonOptionOrderAndExactTarget(t *testing.T) {
 		t.Fatalf("Pane.NewPane() error = %v, want ErrCommand", err)
 	}
 	assertRequestArguments(t, runner.recordedRequests()[1], []string{
-		"new-pane", "-t", "$7:0.%9", "-x40", "-y10", "-X-2", "-Y3", "-Z",
+		"new-pane", "-t", "$7:.%9", "-x40", "-y10", "-X-2", "-Y3", "-Z",
 		"-s", style, "-S", active, "-R", inactive, "-m", message, "-k",
 		"-P", "-F#{pane_id}", "-c/work", "-d", "-eALPHA=first", "-eZED=last", "-E",
 	})

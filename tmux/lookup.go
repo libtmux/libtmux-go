@@ -3,7 +3,6 @@ package tmux
 import (
 	"context"
 	"errors"
-	"strconv"
 )
 
 // Session performs a canonical live lookup of id and returns a newly
@@ -329,7 +328,10 @@ func refreshExactPane(ctx context.Context, pane Pane) (Pane, error) {
 	if _, err := validatePaneView(pane); err != nil {
 		return Pane{}, err
 	}
-	target := pane.sessionID.String() + ":" + strconv.Itoa(pane.windowIndex)
+	target, err := exactPaneTarget(pane)
+	if err != nil {
+		return Pane{}, err
+	}
 	snapshot, err := pane.server.searchSnapshot(
 		ctx,
 		"list-panes",
@@ -337,7 +339,6 @@ func refreshExactPane(ctx context.Context, pane Pane) (Pane, error) {
 		nil,
 		searchPanes,
 		searchRowMatch{field: "session_id", value: pane.sessionID.String()},
-		searchRowMatch{field: "window_id", value: pane.windowID.String()},
 	)
 	if err != nil {
 		return Pane{}, err
@@ -384,12 +385,12 @@ func exactWindowFromSnapshot(snapshot Snapshot, window Window) (Window, error) {
 		windowID:  window.windowID,
 		index:     window.windowIndex,
 	}
-	return lookupSnapshotValue(
-		snapshot.state.windows,
-		snapshot.state.windowsByWinlink[key],
-		"window",
-		identifier,
-	)
+	indexes := snapshot.state.windowsByWinlink[key]
+	if len(indexes) == 0 {
+		indexes = inSession(snapshot.state.windows, snapshot.state.windowsByID[window.windowID],
+			window.sessionID, func(w Window) SessionID { return w.sessionID })
+	}
+	return lookupSnapshotValue(snapshot.state.windows, indexes, "window", identifier)
 }
 
 func exactPaneFromSnapshot(snapshot Snapshot, pane Pane) (Pane, error) {
@@ -405,12 +406,25 @@ func exactPaneFromSnapshot(snapshot Snapshot, pane Pane) (Pane, error) {
 		},
 		paneID: pane.paneID,
 	}
-	return lookupSnapshotValue(
-		snapshot.state.panes,
-		snapshot.state.panesByView[key],
-		"pane",
-		identifier,
-	)
+	indexes := snapshot.state.panesByView[key]
+	if len(indexes) == 0 {
+		indexes = inSession(snapshot.state.panes, snapshot.state.panesByID[pane.paneID],
+			pane.sessionID, func(p Pane) SessionID { return p.sessionID })
+	}
+	return lookupSnapshotValue(snapshot.state.panes, indexes, "pane", identifier)
+}
+
+// inSession narrows indexes to the views in session, for a record whose index
+// or window moved after it was read: it is still the one view of that id in
+// its session, unless the session links the window twice.
+func inSession[T any](values []T, indexes []int, session SessionID, sessionOf func(T) SessionID) []int {
+	var matches []int
+	for _, index := range indexes {
+		if sessionOf(values[index]) == session {
+			matches = append(matches, index)
+		}
+	}
+	return matches
 }
 
 func createdWindowFromSnapshot(
