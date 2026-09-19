@@ -927,3 +927,42 @@ func TestHumanExistingSessionPromptAsksOnce(t *testing.T) {
 		})
 	}
 }
+
+// TestHumanLoadSwitchesTheSessionsOtherClientWhenThePaneHasNone: D2's client
+// requirement is read against the invoking pane's session, not the pane
+// itself. switch-client needs a client to move, not a witness to the exact
+// pane a script or send-keys targeted while the user looks at another
+// window of the same session -- that is a fallback target, not a refusal.
+func TestHumanLoadSwitchesTheSessionsOtherClientWhenThePaneHasNone(t *testing.T) {
+	ctx, server, pane := handoffServer(t)
+	if result, err := server.Cmd(ctx, "new-window", "-t", "original"); err != nil || result.ExitCode != 0 {
+		t.Fatalf("open a second window: %+v %v", result, err)
+	}
+	// attach-session lands on the session's current window, which new-window
+	// just made the second one -- so this client's active pane differs from
+	// the pane the load below targets.
+	client := handoffClient(ctx, t, server, false)
+	input := handoffInput(t, pane)
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", pane.ID().String())
+	path := write(t, t.TempDir(), "fallback.yaml", "session_name: fallback-target\nwindows:\n- panes: [blank]\n")
+	var out, diagnostic bytes.Buffer
+	args := []string{"load", path, "-y", "--no-progress", "-S", server.SocketPath()}
+	code := cli.Run(ctx, args, input, &out, &diagnostic)
+	if code != 0 || diagnostic.String() != "" {
+		t.Fatalf("load from a background pane: %d %q %q", code, out.String(), diagnostic.String())
+	}
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	live, err := snapshot.ClientByName(client.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	attached, ok := live.AttachedSession()
+	name, _ := attached.Name()
+	if !ok || name != "fallback-target" {
+		t.Fatalf("the session's other client did not switch: ok=%v name=%q", ok, name)
+	}
+}

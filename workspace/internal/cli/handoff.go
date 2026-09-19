@@ -49,12 +49,29 @@ func (r *invocation) prepareHandoff(server tmux.Server) (*loadHandoff, error) {
 	if paneErr != nil || inputErr != nil || !os.SameFile(paneInfo, inputInfo) {
 		return nil, usage("TMUX_PANE does not identify terminal stdin; use -d")
 	}
-	var selected tmux.Client
+	// What switch-client needs is a client it can move, not one parked on
+	// the exact pane the command was typed into: a load sent to a background
+	// pane by a script or send-keys while the user looks at another window
+	// of the same session is not a reason to refuse. The client whose active
+	// pane is the invoking pane is preferred; any other client attached to
+	// that session is the fallback, and the session having no attached
+	// client at all is the only case this refuses.
+	var selected, fallback tmux.Client
 	for _, client := range snapshot.Clients() {
 		control, queried := client.ControlMode()
 		clientTTY, hasTTY := client.TTY()
+		if !queried || control || !hasTTY || clientTTY == "" {
+			continue
+		}
+		sessionID, hasSession := client.Formats().SessionID()
+		if !hasSession || sessionID != pane.SessionID() {
+			continue
+		}
 		window, hasWindow := client.Formats().WindowID()
-		if !queried || control || !hasTTY || clientTTY == "" || !hasWindow || window != pane.WindowID() {
+		if !hasWindow || window != pane.WindowID() {
+			if fallback.Name() == "" {
+				fallback = client
+			}
 			continue
 		}
 		flags, hasFlags := client.Flags()
@@ -70,10 +87,13 @@ func (r *invocation) prepareHandoff(server tmux.Server) (*loadHandoff, error) {
 		}
 		selected = client
 	}
+	if selected.Name() == "" {
+		selected = fallback
+	}
 	pid, hasPID := selected.ProcessPID()
 	_, hasCreated := selected.Created()
 	if selected.Name() == "" || !hasPID || pid <= 0 || !hasCreated {
-		return nil, usage("no identifiable terminal client views this pane; use -d or --append")
+		return nil, usage("no client is attached to this session; use -d or --append")
 	}
 	return &loadHandoff{client: selected}, nil
 }
