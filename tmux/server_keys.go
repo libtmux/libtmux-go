@@ -93,7 +93,7 @@ func (s Server) BindKey(ctx context.Context, request BindKeyRequest) error {
 	if hasKeyTable {
 		arguments = append(arguments, "-T", keyTable)
 	}
-	arguments = append(arguments, request.Key, request.Command)
+	arguments = append(arguments, "--", request.Key, request.Command)
 	return runServerKeyCommand(ctx, s, "bind-key", arguments)
 }
 
@@ -133,7 +133,7 @@ func (s Server) UnbindKey(ctx context.Context, request UnbindKeyRequest) error {
 		arguments = append(arguments, "-T", keyTable)
 	}
 	if hasKey {
-		arguments = append(arguments, key)
+		arguments = append(arguments, "--", key)
 	}
 	return runServerKeyCommand(ctx, s, "unbind-key", arguments)
 }
@@ -199,7 +199,7 @@ func (s Server) ListCommands(
 	}
 	arguments := []string{"list-commands"}
 	if hasCommandName {
-		arguments = append(arguments, commandName)
+		arguments = append(arguments, "--", commandName)
 	}
 	return runServerListCommand(ctx, s, arguments)
 }
