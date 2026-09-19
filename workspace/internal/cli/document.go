@@ -287,10 +287,12 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 		return plan, errors.New("session_name must be nonempty and contain no colon, period, NUL or newline")
 	}
 	var err error
+	directories := map[string]bool{}
 	plan.Directory, err = directory(doc["start_directory"], base, "")
 	if err != nil {
 		return plan, err
 	}
+	directories[plan.Directory] = true
 	if doc["start_directory"] != nil {
 		plan.ScriptDirectory = plan.Directory
 	}
@@ -351,6 +353,7 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 		if err != nil {
 			return plan, err
 		}
+		directories[wp.Directory] = true
 		wp.Focus, err = boolean(w["focus"], false)
 		if err != nil {
 			return plan, err
@@ -424,6 +427,7 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 			if err != nil {
 				return plan, err
 			}
+			directories[pp.Directory] = true
 			pp.Focus, err = boolean(p["focus"], false)
 			if err != nil {
 				return plan, err
@@ -452,6 +456,18 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 			wp.Panes = append(wp.Panes, pp)
 		}
 		plan.Windows = append(plan.Windows, wp)
+	}
+	// tmux starts a pane in $HOME when the directory it was given does not
+	// exist, so a typo is invisible: the panes come up elsewhere and the load
+	// reports success. It is not a refusal -- the workspace still builds.
+	for _, path := range slices.Sorted(maps.Keys(directories)) {
+		if path == "" {
+			continue
+		}
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			continue
+		}
+		plan.Warnings = append(plan.Warnings, "start_directory is not a directory, tmux will fall back to $HOME: "+path)
 	}
 	return plan, nil
 }
