@@ -1558,7 +1558,7 @@ Changes tmux state.
 
 | Argument | Type | |
 | --- | --- | --- |
-| `keys` **required** | array | key names or literal strings to send; do not put "Enter" here when literal is true, it types the six letters - set enter instead |
+| `keys` **required** | array | key names or literal strings to send; do not put "Enter" here when literal is true, it types the five letters - set enter instead |
 | `pane_id` **required** | string | the pane id, such as %1 |
 | `enter` | boolean | press Enter after keys, as a real key press, to submit them |
 | `literal` | boolean | send strings literally instead of as key names |
