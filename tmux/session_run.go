@@ -303,6 +303,10 @@ func (r *Running) waitForExit(ctx context.Context) error {
 		signaled <- r.session.server.WaitFor(waitCtx, WaitForRequest{Channel: r.channel})
 	}()
 
+	// Read once. Recomputing it each pass would compare a limit shrinking with
+	// the deadline against a total growing toward it, and the two would meet
+	// at half the time the caller allowed.
+	limit := settleLimit(ctx)
 	delay := initialLivenessDelay
 	var settling time.Duration
 	var asked bool
@@ -325,7 +329,7 @@ func (r *Running) waitForExit(ctx context.Context) error {
 			if outcomeRecorded(pane) {
 				return awaitDeathSignal(ctx, signaled)
 			}
-			if settling >= settleLimit(ctx) {
+			if settling >= limit {
 				return fmt.Errorf("%w: pane %s is dead and its command unreaped",
 					ErrOutcomeUnrecorded, pane.ID())
 			}

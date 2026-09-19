@@ -2071,3 +2071,45 @@ func TestPasteTextStagesPayloadsBeyondTmuxCommandLimit(t *testing.T) {
 		t.Fatalf("staged buffer holds %d bytes, want the %d pasted", got.Len(), len(text))
 	}
 }
+
+// A failed dispatch must leave pending as it was. Recording a submit before
+// tmux has the keys, and not putting it back, would let wait_for_text read a
+// line that is still unsubmitted as output the pane produced.
+func TestPendingInputSurvivesAFailedDispatch(t *testing.T) {
+	t.Parallel()
+
+	var pending pendingInput
+	panes := []string{"%7", "%8"}
+
+	text, submits := willType([]string{"rm -rf build"}, true)
+	if submits {
+		t.Fatal("literal text must not read as a submit")
+	}
+	pending.record(panes, text)()
+	if got := pending.snapshot(tmux.PaneID("%7")); got != "" {
+		t.Errorf("pending = %q after a failed dispatch, want nothing typed", got)
+	}
+
+	// Typed for real this time, on both panes synchronize-panes links.
+	pending.record(panes, text)
+	for _, pane := range panes {
+		if got := pending.snapshot(tmux.PaneID(pane)); got != "rm -rf build" {
+			t.Errorf("pending on %s = %q, want the typed text", pane, got)
+		}
+	}
+
+	// A submit whose dispatch fails must not clear the line.
+	_, submits = willType([]string{"Enter"}, false)
+	if !submits {
+		t.Fatal("Enter must read as a submit")
+	}
+	if got := pending.snapshot(tmux.PaneID("%7")); got != "rm -rf build" {
+		t.Errorf("pending = %q before the submit is dispatched, want it held", got)
+	}
+	pending.clearAll(panes)
+	for _, pane := range panes {
+		if got := pending.snapshot(tmux.PaneID(pane)); got != "" {
+			t.Errorf("pending on %s = %q after submitting, want nothing", pane, got)
+		}
+	}
+}

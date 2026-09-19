@@ -125,3 +125,34 @@ func TestSettleLimitTakesTheLongerOfTheFloorAndTheDeadline(t *testing.T) {
 		t.Errorf("settleLimit(minute deadline) = %v, want more than %v", got, outcomeSettleLimit)
 	}
 }
+
+// The limit is read once. Reading it each pass would shrink it by the same
+// step the settled total grows by, and the wait would end at half the time
+// the caller allowed rather than at the deadline.
+func TestSettleLimitIsReadOnceRatherThanEachPass(t *testing.T) {
+	t.Parallel()
+
+	deadline := time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+
+	once := settleLimit(ctx)
+	var settledOnce, settledEachPass time.Duration
+	for settledOnce < once {
+		settledOnce += outcomeSettleDelay
+	}
+	// Replay the loop as it would run if the limit moved with the clock.
+	for remaining := deadline; settledEachPass < max(outcomeSettleLimit, remaining); {
+		settledEachPass += outcomeSettleDelay
+		remaining -= outcomeSettleDelay
+	}
+	if settledEachPass >= settledOnce {
+		t.Fatalf("recomputing each pass settled for %v, reading once %v: the "+
+			"replay does not reproduce the halving it guards against",
+			settledEachPass, settledOnce)
+	}
+	if settledOnce < deadline-time.Second {
+		t.Errorf("settled for %v of a %v deadline, want nearly all of it",
+			settledOnce, deadline)
+	}
+}

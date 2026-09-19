@@ -777,17 +777,24 @@ func (t *tools) sendKeysBatch(
 			"%s refused: its pane input reservation changed before dispatch", tool,
 		)
 	}
-	paneID := preflight.Source.ID()
-	// Recorded before dispatch, because a wait already watching this pane sees
-	// the terminal's echo of these keys the moment tmux takes them. Recording
-	// afterwards leaves a window where that echo reads as output the pane
-	// produced. Keys that never reached tmux leave pending text that was never
-	// typed, which is the direction this tracking is allowed to be wrong in.
-	t.pending.observeKeys(paneID, input.Keys, input.Literal)
+	// Every pane the keys reach, which under synchronize-panes is the whole
+	// linked set rather than the one named: a wait on a sibling sees the same
+	// echo and needs the same masking.
+	typed := preflight.ConfiguredIDs
+	text, submits := willType(input.Keys, input.Literal)
+	restore := t.pending.record(typed, text)
 	if err := t.runtime.deps.sendKeySequence(ctx, preflight.Source, tmux.SendKeySequenceRequest{
 		Keys: input.Keys, Literal: input.Literal,
 	}); err != nil {
+		// Nothing was typed, so pending must not claim it was.
+		restore()
 		return nil, output, fmt.Errorf("sending keys: %w", err)
+	}
+	// Submitting is recorded only now: until tmux has the keys, the line is
+	// still unsubmitted, and clearing early would let a wait read it as
+	// output the pane produced.
+	if submits {
+		t.pending.clearAll(typed)
 	}
 	output.Sent = len(input.Keys)
 	if input.Enter {
@@ -802,7 +809,7 @@ func (t *tools) sendKeysBatch(
 			)
 		}
 		output.Sent++
-		t.pending.clear(paneID)
+		t.pending.clearAll(typed)
 	}
 	return nil, output, nil
 }
@@ -909,21 +916,22 @@ func (t *tools) pasteText(
 	// Deleted with the paste rather than left behind: tmux keeps buffers until
 	// something drops them, and a client pasting repeatedly would fill a
 	// person's buffer list with text they never copied.
-	if !input.Enter {
-		// Recorded before the paste for the reason sendKeys gives: the echo of
-		// this text can reach a waiting client before this line runs.
-		t.pending.append(pane.ID(), input.Text)
-	}
+	// Recorded before the paste for the reason sendKeys gives: the echo of
+	// this text can reach a waiting client before the paste returns. tmux does
+	// not broadcast a paste through synchronize-panes, so only this pane.
+	pasted := []string{pane.ID().String()}
+	restore := t.pending.record(pasted, input.Text)
 	if err := t.runtime.deps.pasteBuffer(ctx, pane, tmux.PasteBufferRequest{
 		BufferName:  &name,
 		DeleteAfter: true,
 		Bracket:     bracket,
 	}); err != nil {
+		restore()
 		cleanupErr := t.deletePasteBuffer(server, name)
 		return nil, output, errors.Join(err, cleanupErr)
 	}
 	if input.Enter {
-		t.pending.clear(pane.ID())
+		t.pending.clearAll(pasted)
 	}
 	output.Bytes = len(input.Text)
 	return nil, output, nil
