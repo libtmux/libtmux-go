@@ -529,7 +529,9 @@ func (r *Running) StreamTo(
 	// lets the copy return at all, because a pane's output stream has no end of
 	// its own.
 	stopStreaming()
-	copyErr := <-copied
+	// A destination that blocks regardless of cancellation must not hold this
+	// call: ending the read does not end a stuck Write.
+	copyErr := awaitCopy(ctx, copied)
 	switch {
 	case waitErr != nil:
 		return result, waitErr
