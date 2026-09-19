@@ -135,7 +135,7 @@ Modules are tagged per directory, so each carries its own version: the core as
   first. (#16)
 - `send_keys` and `send_keys_batch` gain an `enter` field that presses
   Enter after `keys` regardless of `literal`. Before this, `literal:true`
-  sent `"Enter"` as six literal letters and reported success. (#16)
+  sent `"Enter"` as five literal letters and reported success. (#16)
 - `list_sessions`, `get_session_info`, and `get_server_info` now leave
   out every control client this process owns, not only its long-lived
   command connection, so a detached session no longer reads as

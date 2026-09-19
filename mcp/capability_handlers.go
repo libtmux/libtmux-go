@@ -215,7 +215,7 @@ type runShellCommandCapabilityOutput struct {
 
 type sendKeysCapabilityInput struct {
 	PaneID  string   `json:"pane_id" jsonschema:"the pane id, such as %1"`
-	Keys    []string `json:"keys" jsonschema:"key names or literal strings to send; do not put \"Enter\" here when literal is true, it types the six letters - set enter instead"`
+	Keys    []string `json:"keys" jsonschema:"key names or literal strings to send; do not put \"Enter\" here when literal is true, it types the five letters - set enter instead"`
 	Literal bool     `json:"literal,omitempty" jsonschema:"send strings literally instead of as key names"`
 	Enter   bool     `json:"enter,omitempty" jsonschema:"press Enter after keys, as a real key press, to submit them"`
 }

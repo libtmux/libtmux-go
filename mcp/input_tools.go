@@ -689,7 +689,7 @@ type sendKeysBatchInput struct {
 	// Keys are tmux key names sent in order, such as ["C-c", "q", "Escape"].
 	// Nothing is appended; set Enter to submit, or add a key name such as
 	// "Enter" here when Literal is false.
-	Keys []string `json:"keys" jsonschema:"tmux key names to send in order, such as [\"C-c\", \"q\"]; do not put \"Enter\" here when literal is true, it types the six letters - set enter instead"`
+	Keys []string `json:"keys" jsonschema:"tmux key names to send in order, such as [\"C-c\", \"q\"]; do not put \"Enter\" here when literal is true, it types the five letters - set enter instead"`
 	// Literal sends the keys as characters rather than looking their names up,
 	// so "Escape" is those six letters. It never changes Enter below, which
 	// is always a real key press sent after Keys, not appended to them.
