@@ -966,3 +966,63 @@ func TestHumanLoadSwitchesTheSessionsOtherClientWhenThePaneHasNone(t *testing.T)
 		t.Fatalf("the session's other client did not switch: ok=%v name=%q", ok, name)
 	}
 }
+
+// TestDeclinedAttachStillBuildsAnEarlierInput: SPEC-5 D12a. "<name> is
+// already running. Attach?" is asked about the load's last input only, so a
+// decline must leave every earlier input alone -- a control-flow return out
+// of the whole load, rather than a disposition scoped to that one input,
+// would silently skip building "first" too. "second" mismatches the
+// document so a mistaken comparison would report session_mismatch.
+func TestDeclinedAttachStillBuildsAnEarlierInput(t *testing.T) {
+	ctx, server, pane := handoffServer(t)
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "second"}); err != nil {
+		t.Fatal(err)
+	}
+	// Replace the pane's interactive shell with a command that never reads
+	// its own stdin, so the keystroke below has exactly one reader: the load
+	// process waiting on the prompt. respawn-pane allocates a new tty, so
+	// the pane is refreshed before anything opens it.
+	if result, err := server.Cmd(ctx, "respawn-pane", "-k", "-t", pane.ID().String(), "sleep", "300"); err != nil || result.ExitCode != 0 {
+		t.Fatalf("silence pane shell: %+v %v", result, err)
+	}
+	var err error
+	pane, err = pane.Refresh(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoffClient(ctx, t, server, false)
+	input := handoffInput(t, pane)
+	t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
+	t.Setenv("TMUX_PANE", pane.ID().String())
+	dir := t.TempDir()
+	first := write(t, dir, "first.yaml", "session_name: first\nwindows:\n- panes: [blank]\n")
+	second := write(t, dir, "second.yaml", "session_name: second\nwindows:\n- window_name: extra\n  panes: [blank]\n")
+	var out, diagnostic bytes.Buffer
+	done := make(chan int, 1)
+	go func() {
+		done <- cli.Run(ctx, []string{"load", first, second, "-S", server.SocketPath()}, input, &out, &diagnostic)
+	}()
+	if result, err := server.Cmd(ctx, "send-keys", "-t", pane.ID().String(), "n", "Enter"); err != nil || result.ExitCode != 0 {
+		t.Fatalf("decline the prompt: %+v %v", result, err)
+	}
+	var code int
+	select {
+	case code = <-done:
+	case <-ctx.Done():
+		t.Fatal("load did not return after the prompt was answered")
+	}
+	if code != 0 || strings.Contains(diagnostic.String(), "session_mismatch") {
+		t.Fatalf("declined attach = %d %q, want 0 and no session_mismatch", code, diagnostic.String())
+	}
+	if !strings.Contains(out.String(), "Loaded first") || !strings.Contains(out.String(), "Not attached to second.") {
+		t.Fatalf("declined attach transcript = %q, want first loaded and second named as not attached", out.String())
+	}
+	exists, err := server.HasSession(ctx, tmux.HasSessionRequest{Target: "first"})
+	if err != nil || !exists {
+		t.Fatalf("first was not built: exists=%v err=%v out=%q", exists, err, out.String())
+	}
+	windows, err := server.Cmd(ctx, "list-windows", "-t", "second", "-F", "#{window_name}")
+	if err != nil || strings.Contains(string(windows.RawStdout), "extra") {
+		t.Fatalf("second was touched despite being declined: %+v %v", windows, err)
+	}
+}

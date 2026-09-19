@@ -256,10 +256,17 @@ func (r *promptInput) Read(data []byte) (int, error) {
 }
 
 func (r *invocation) prompt(label, fallback string) (string, error) {
+	return r.promptDefault(label, fallback, fallback)
+}
+
+// promptDefault is prompt with the bracketed hint spelled out separately
+// from the value an empty answer falls back to. A binary choice shows the
+// default's case, "[Y/n]", rather than repeating the bare default alone.
+func (r *invocation) promptDefault(label, display, fallback string) (string, error) {
 	if r.machine() {
 		return "", usage("%s must be supplied in machine mode", label)
 	}
-	if _, err := fmt.Fprintf(r.err, "%s [%s]: ", label, fallback); err != nil {
+	if _, err := fmt.Fprintf(r.err, "%s [%s]: ", label, display); err != nil {
 		return "", err
 	}
 	if err := flushOutput(r.err); err != nil {
