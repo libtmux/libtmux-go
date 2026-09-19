@@ -466,6 +466,26 @@ func TestSomething(t *testing.T) {
 }
 ```
 
+Where the behavior under test is your own code rather than tmux's, script a
+tmux instead of starting one. `tmuxtest.ScriptedTmux` writes an executable that
+answers the invocations you name, so the test needs no tmux installed:
+
+```go
+server, err := tmux.NewServer(tmux.ServerOptions{
+	Binary: tmuxtest.ScriptedTmux(t,
+		tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+		tmuxtest.ScriptedCommand{
+			Contains: []string{"kill-pane"},
+			Stderr:   "can't find pane: %7\n",
+			ExitCode: 1,
+		},
+	),
+})
+```
+
+It answers commands only. Control connections and notification streams speak
+tmux's own protocol, so code that opens one needs `NewServer` and a real tmux.
+
 `NewServer` snapshots its effective environment and working directory, resolves
 one absolute executable, and returns an error before starting tmux when
 configuration or resolution fails. Later environment and directory changes do
