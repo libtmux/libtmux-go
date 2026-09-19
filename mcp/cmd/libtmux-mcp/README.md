@@ -77,9 +77,8 @@ handling the SIGTERM it gets when a client tears the transport down, including
 when a client's connect timeout fires.
 
 **Give it the environment a client would.** A client starts its servers with a
-curated environment, not your shell's. Without a UTF-8 locale tmux rewrites
-control characters in format output, which has broken the server's own
-client-registration poll.
+curated environment, not your shell's. Running it from an inherited shell
+environment hides the bugs that only appear under a curated one.
 
 ## See also
 

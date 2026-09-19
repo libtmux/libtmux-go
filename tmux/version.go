@@ -16,7 +16,8 @@ const (
 	// lifecycle guarantees without changing this floor.
 	MinimumConnectionVersion = MinimumSupportedVersion
 	// MaximumTestedVersion is the newest numbered tmux feature level covered by
-	// this package's tests. That feature level is tested against tmux 3.7c.
+	// this package's tests. The matrix also runs 3.8-rc, which is a release
+	// candidate rather than a numbered feature level, so it does not raise this.
 	MaximumTestedVersion = "3.7"
 
 	latestTestedMajor = 3
