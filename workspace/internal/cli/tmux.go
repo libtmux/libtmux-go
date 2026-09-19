@@ -255,6 +255,10 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 	askable := !r.machine() && !o.detached && !o.append && !o.yes && terminal(r.in)
 	var server tmux.Server
 	var err error
+	// Set only by declining "already running. Attach?" below -- the prompt
+	// names the load's last input, so this scopes the decline to that one
+	// input's comparison rather than the whole load.
+	declinedSession := ""
 	if askable {
 		server, err = serverFor(o)
 		if err != nil {
@@ -273,14 +277,20 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		switch {
 		case exists:
-			answer, err := r.prompt(name+" is already running. Attach?", "y")
+			answer, err := r.promptDefault(name+" is already running. Attach?", "Y/n", "y")
 			if err != nil {
 				return err
 			}
 			switch strings.ToLower(answer) {
 			case "y", "yes":
 			case "n", "no":
-				return nil
+				// The prompt names this one session only -- the load's last
+				// input, since that is the only session it ever asks about.
+				// Leave it exactly as found: no comparison, no build, and
+				// nothing to attach to at the end. Every input before it
+				// still builds normally.
+				declinedSession = name
+				o.detached = true
 			default:
 				return usage("attach choice must be y or n")
 			}
@@ -391,6 +401,24 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			if err := r.event("warning", map[string]any{"input_index": index, "code": warning.Code, "message": warning.Message}); err != nil {
 				return err
 			}
+		}
+		if declinedSession != "" && input.plan.Name == declinedSession {
+			// No reuse was attempted, so there is nothing to compare: a
+			// mismatch check here would report a comparison nobody asked
+			// for. This is not a failure -- declining a question is a
+			// completed answer, not an error -- so it never touches
+			// failures or retainedEffects.
+			results = append(results, map[string]any{"input_index": index, "input": privatePath(input.path), "session_name": input.plan.Name, "session_id": "", "reused": false, "created_windows": []string{}, "stage": "declined"})
+			summary["results"] = results
+			if err := r.event("warning", map[string]any{"input_index": index, "code": "declined", "message": input.plan.Name + " is already running; nothing was loaded for this input"}); err != nil {
+				return err
+			}
+			if !r.machine() {
+				if _, err := fmt.Fprintf(r.out, "%s %s.\n", r.style("warning", "Not attached to"), r.style("subject", input.plan.Name)); err != nil {
+					return err
+				}
+			}
+			continue
 		}
 		var session tmux.Session
 		var buildErr error

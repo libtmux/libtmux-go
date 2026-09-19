@@ -606,3 +606,15 @@ func TestLoadRefusalReportsEveryWindow(t *testing.T) {
 		}
 	}
 }
+
+// TestPromptDefaultShowsTheDisplayHintNotTheBareFallback: SPEC-5 D12's
+// binary choices show the default's case, "[Y/n]", naming both options,
+// rather than a plain prompt's bracket repeating the bare default alone.
+func TestPromptDefaultShowsTheDisplayHintNotTheBareFallback(t *testing.T) {
+	var errOut bytes.Buffer
+	r := &invocation{ctx: t.Context(), in: strings.NewReader("\n"), err: &errOut}
+	answer, err := r.promptDefault("Attach?", "Y/n", "y")
+	if err != nil || answer != "y" || !strings.Contains(errOut.String(), "[Y/n]") {
+		t.Fatalf("promptDefault = %q, %v, prompt %q, want y and [Y/n] shown", answer, err, errOut.String())
+	}
+}
