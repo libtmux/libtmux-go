@@ -39,7 +39,7 @@ func TestImportPreservesCommandGroupsAndSavedContext(t *testing.T) {
 			if code != 0 || diagnostic != "" {
 				t.Fatalf("import: %d %q %q", code, out, diagnostic)
 			}
-			doc, err := readDocument(destination)
+			doc, _, err := readDocument(destination)
 			if err != nil {
 				t.Fatal(err)
 			}

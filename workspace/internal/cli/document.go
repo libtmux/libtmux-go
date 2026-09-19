@@ -23,42 +23,99 @@ import (
 
 type document = map[string]any
 
-func decodeDocument(data []byte) (document, error) {
-	var value document
+// sourceLines maps a document path -- "session_name", "windows.1",
+// "windows.1.panes.0.focus" -- to the line its key is written on. A document
+// that did not come from YAML text, a JSON file or a converted one, has none,
+// and every lookup then adds nothing.
+type sourceLines map[string]int
+
+// at prefixes err with the line path is written on, keeping a *failure's code
+// and exit status. An unknown path returns err unchanged.
+func (l sourceLines) at(path string, err error) error {
+	line, known := l[path]
+	if err == nil || !known {
+		return err
+	}
+	var specific *failure
+	if errors.As(err, &specific) {
+		return &failure{specific.Code, fmt.Sprintf("line %d: %s", line, specific.Message), specific.Exit}
+	}
+	return fmt.Errorf("line %d: %w", line, err)
+}
+
+func (l sourceLines) record(node *yaml.Node, prefix string) {
+	switch node.Kind {
+	case yaml.DocumentNode:
+		for _, child := range node.Content {
+			l.record(child, prefix)
+		}
+	case yaml.MappingNode:
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			key, value := node.Content[index], node.Content[index+1]
+			if key.Kind != yaml.ScalarNode {
+				continue
+			}
+			path := key.Value
+			if prefix != "" {
+				path = prefix + "." + key.Value
+			}
+			l[path] = key.Line
+			l.record(value, path)
+		}
+	case yaml.SequenceNode:
+		for index, child := range node.Content {
+			path := prefix + "." + strconv.Itoa(index)
+			l[path] = child.Line
+			l.record(child, path)
+		}
+	case yaml.ScalarNode, yaml.AliasNode:
+		// A scalar holds no keys, and an alias names a node written where its
+		// anchor is, not here.
+	}
+}
+
+func decodeDocument(data []byte) (document, sourceLines, error) {
+	var root yaml.Node
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&value); err != nil {
-		return nil, &failure{"invalid_workspace", fmt.Sprintf("decode workspace: %v", err), 1}
+	if err := decoder.Decode(&root); err != nil {
+		return nil, nil, &failure{"invalid_workspace", fmt.Sprintf("decode workspace: %v", err), 1}
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return nil, &failure{"invalid_workspace", "multiple YAML documents are not supported", 1}
+			return nil, nil, &failure{"invalid_workspace", "multiple YAML documents are not supported", 1}
 		}
-		return nil, &failure{"invalid_workspace", fmt.Sprintf("decode trailing document: %v", err), 1}
+		return nil, nil, &failure{"invalid_workspace", fmt.Sprintf("decode trailing document: %v", err), 1}
+	}
+	var value document
+	if err := root.Decode(&value); err != nil {
+		return nil, nil, &failure{"invalid_workspace", fmt.Sprintf("decode workspace: %v", err), 1}
 	}
 	if value == nil {
-		return nil, &failure{"invalid_workspace", "workspace must be a mapping", 1}
+		return nil, nil, &failure{"invalid_workspace", "workspace must be a mapping", 1}
 	}
 	if _, err := json.Marshal(value); err != nil {
-		return nil, &failure{"invalid_workspace", fmt.Sprintf("workspace requires JSON-compatible string keys: %v", err), 1}
+		return nil, nil, &failure{"invalid_workspace", fmt.Sprintf("workspace requires JSON-compatible string keys: %v", err), 1}
 	}
-	return value, nil
+	lines := sourceLines{}
+	lines.record(&root, "")
+	return value, lines, nil
 }
 
-func readDocument(path string) (document, error) {
+func readDocument(path string) (document, sourceLines, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if strings.EqualFold(filepath.Ext(path), ".json") {
 		var value document
 		if err := json.Unmarshal(data, &value); err != nil {
-			return nil, &failure{"invalid_workspace", fmt.Sprintf("decode JSON workspace: %v", err), 1}
+			return nil, nil, &failure{"invalid_workspace", fmt.Sprintf("decode JSON workspace: %v", err), 1}
 		}
 		if value == nil {
-			return nil, &failure{"invalid_workspace", "workspace must be a mapping", 1}
+			return nil, nil, &failure{"invalid_workspace", "workspace must be a mapping", 1}
 		}
-		return value, nil
+		return value, nil, nil
 	}
 	return decodeDocument(data)
 }
@@ -236,7 +293,13 @@ type commandPlan struct {
 // in the document, so machine output classifies it as such unless a more
 // specific classification was already made.
 func normalize(doc document, base string) (loadPlan, error) {
-	plan, err := normalizeDocument(doc, base)
+	return normalizeSource(doc, base, nil)
+}
+
+// normalizeSource is normalize with the positions decodeDocument recorded, so
+// a refusal names the line its key is written on.
+func normalizeSource(doc document, base string, lines sourceLines) (loadPlan, error) {
+	plan, err := normalizeDocument(doc, base, lines)
 	var specific *failure
 	if err == nil || errors.As(err, &specific) {
 		return plan, err
@@ -244,14 +307,14 @@ func normalize(doc document, base string) (loadPlan, error) {
 	return plan, &failure{"invalid_workspace", err.Error(), 1}
 }
 
-func normalizeDocument(doc document, base string) (loadPlan, error) {
+func normalizeDocument(doc document, base string, lines sourceLines) (loadPlan, error) {
 	plugins := doc["plugins"]
 	if items, ok := plugins.([]any); ok && len(items) == 0 {
 		plugins = nil
 	}
 	plan := loadPlan{Name: expand(textValue(doc["session_name"])), Readiness: "auto", Bridge: plugins != nil || doc["workspace_builder"] != nil}
 	if !plan.Bridge {
-		if err := checkFields(doc, "workspace",
+		if err := checkFieldsAt(doc, "workspace", lines, "",
 			"session_name", "description", "start_directory", "environment", "options",
 			"global_options", "shell_command_before", "suppress_history", "windows",
 			"before_script", "plugins", "workspace_builder", "workspace_builder_paths", "workspace_builder_options",
@@ -262,7 +325,7 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 	if raw, exists := doc["workspace_builder_options"]; exists && raw != nil {
 		catalog := mapping(raw)
 		if catalog == nil {
-			return plan, errors.New("workspace_builder_options must be a mapping")
+			return plan, lines.at("workspace_builder_options", errors.New("workspace_builder_options must be a mapping"))
 		}
 		if !plan.Bridge {
 			// The key is shared across ports whose settings are not the same
@@ -283,18 +346,18 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 			case "never", "false", "off", "no", "0":
 				plan.Readiness = "never"
 			default:
-				return plan, errors.New("pane_readiness must be auto, always or never")
+				return plan, lines.at("workspace_builder_options.pane_readiness", errors.New("pane_readiness must be auto, always or never"))
 			}
 		}
 	}
 	if plan.Name == "" || strings.ContainsAny(plan.Name, ".:\x00\r\n") {
-		return plan, errors.New("session_name must be nonempty and contain no colon, period, NUL or newline")
+		return plan, lines.at("session_name", errors.New("session_name must be nonempty and contain no colon, period, NUL or newline"))
 	}
 	var err error
 	directories := map[string]bool{}
 	plan.Directory, err = directory(doc["start_directory"], base, "")
 	if err != nil {
-		return plan, err
+		return plan, lines.at("start_directory", err)
 	}
 	directories[plan.Directory] = true
 	if doc["start_directory"] != nil {
@@ -303,10 +366,10 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 	if script := expand(textValue(doc["before_script"])); script != "" && !plan.Bridge {
 		plan.BeforeScript, err = shellwords.Parse(script)
 		if err != nil {
-			return plan, fmt.Errorf("before_script: %w", err)
+			return plan, lines.at("before_script", fmt.Errorf("before_script: %w", err))
 		}
 		if len(plan.BeforeScript) == 0 {
-			return plan, errors.New("before_script must contain a command")
+			return plan, lines.at("before_script", errors.New("before_script must contain a command"))
 		}
 		if strings.HasPrefix(plan.BeforeScript[0], ".") {
 			plan.BeforeScript[0] = filepath.Join(base, plan.BeforeScript[0])
@@ -314,32 +377,33 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 	}
 	plan.Environment, err = environment(doc["environment"])
 	if err != nil {
-		return plan, err
+		return plan, lines.at("environment", err)
 	}
 	plan.Options, err = optionValues(doc["options"])
 	if err != nil {
-		return plan, err
+		return plan, lines.at("options", err)
 	}
 	plan.GlobalOptions, err = optionValues(doc["global_options"])
 	if err != nil {
-		return plan, err
+		return plan, lines.at("global_options", err)
 	}
 	suppress, err := boolean(doc["suppress_history"], true)
 	if err != nil {
-		return plan, err
+		return plan, lines.at("suppress_history", err)
 	}
 	windows, ok := doc["windows"].([]any)
 	if !ok || len(windows) == 0 {
-		return plan, errors.New("windows must be a nonempty sequence")
+		return plan, lines.at("windows", errors.New("windows must be a nonempty sequence"))
 	}
 	seen := map[int]bool{}
 	for wi, raw := range windows {
+		windowPath := "windows." + strconv.Itoa(wi)
 		w := mapping(raw)
 		if w == nil {
-			return plan, fmt.Errorf("window %d must be a mapping", wi)
+			return plan, lines.at(windowPath, fmt.Errorf("window %d must be a mapping", wi))
 		}
 		if !plan.Bridge {
-			if err := checkFields(w, fmt.Sprintf("window %d", wi),
+			if err := checkFieldsAt(w, fmt.Sprintf("window %d", wi), lines, windowPath,
 				"window_name", "description", "window_index", "layout", "start_directory", "window_shell",
 				"focus", "suppress_history", "options", "options_after", "environment", "shell_command_before", "panes",
 			); err != nil {
@@ -350,46 +414,46 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 		// The validator's own text describes a library call and the tmux
 		// release the check exists for; what the user wrote is a name.
 		if (tmux.SelectLayoutRequest{Layout: wp.Layout}).Validate() != nil {
-			return plan, fmt.Errorf("window %d: layout %q is not a tmux layout name or a saved layout string", wi, wp.Layout)
+			return plan, lines.at(windowPath+".layout", fmt.Errorf("window %d: layout %q is not a tmux layout name or a saved layout string", wi, wp.Layout))
 		}
 		if strings.ContainsRune(wp.Name, 0) {
-			return plan, errors.New("NUL in window name")
+			return plan, lines.at(windowPath+".window_name", errors.New("NUL in window name"))
 		}
 		wp.Directory, err = directory(w["start_directory"], base, plan.Directory)
 		if err != nil {
-			return plan, err
+			return plan, lines.at(windowPath+".start_directory", err)
 		}
 		directories[wp.Directory] = true
 		wp.Focus, err = boolean(w["focus"], false)
 		if err != nil {
-			return plan, err
+			return plan, lines.at(windowPath+".focus", err)
 		}
 		if index, exists := w["window_index"]; exists {
 			n, e := strconv.Atoi(textValue(index))
 			if e != nil || n < 0 {
-				return plan, errors.New("window_index must be nonnegative")
+				return plan, lines.at(windowPath+".window_index", errors.New("window_index must be nonnegative"))
 			}
 			if seen[n] {
-				return plan, fmt.Errorf("duplicate window_index %d", n)
+				return plan, lines.at(windowPath+".window_index", fmt.Errorf("duplicate window_index %d", n))
 			}
 			seen[n] = true
 			wp.Index = &n
 		}
 		wp.Options, err = optionValues(w["options"])
 		if err != nil {
-			return plan, err
+			return plan, lines.at(windowPath+".options", err)
 		}
 		wp.OptionsAfter, err = optionValues(w["options_after"])
 		if err != nil {
-			return plan, err
+			return plan, lines.at(windowPath+".options_after", err)
 		}
 		windowEnv, err := environment(w["environment"])
 		if err != nil {
-			return plan, err
+			return plan, lines.at(windowPath+".environment", err)
 		}
 		windowSuppress, err := boolean(w["suppress_history"], suppress)
 		if err != nil {
-			return plan, err
+			return plan, lines.at(windowPath+".suppress_history", err)
 		}
 		panes, ok := w["panes"].([]any)
 		// An omitted panes key and an explicit empty sequence both mean one
@@ -399,9 +463,10 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 			panes, ok = []any{nil}, true
 		}
 		if !ok || len(panes) == 0 {
-			return plan, fmt.Errorf("window %d panes must be a nonempty sequence", wi)
+			return plan, lines.at(windowPath+".panes", fmt.Errorf("window %d panes must be a nonempty sequence", wi))
 		}
 		for pi, rawPane := range panes {
+			panePath := windowPath + ".panes." + strconv.Itoa(pi)
 			p := mapping(rawPane)
 			if p == nil {
 				p = document{}
@@ -414,11 +479,11 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 				case []any:
 					p["shell_command"] = v
 				default:
-					return plan, fmt.Errorf("window %d pane %d has invalid shorthand", wi, pi)
+					return plan, lines.at(panePath, fmt.Errorf("window %d pane %d has invalid shorthand", wi, pi))
 				}
 			}
 			if !plan.Bridge {
-				if err := checkFields(p, fmt.Sprintf("window %d pane %d", wi, pi),
+				if err := checkFieldsAt(p, fmt.Sprintf("window %d pane %d", wi, pi), lines, panePath,
 					"shell_command", "shell_command_before", "description", "start_directory", "shell",
 					"focus", "suppress_history", "environment", "enter", "sleep_before", "sleep_after",
 				); err != nil {
@@ -431,31 +496,31 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 			}
 			pp.Directory, err = directory(p["start_directory"], base, wp.Directory)
 			if err != nil {
-				return plan, err
+				return plan, lines.at(panePath+".start_directory", err)
 			}
 			directories[pp.Directory] = true
 			pp.Focus, err = boolean(p["focus"], false)
 			if err != nil {
-				return plan, err
+				return plan, lines.at(panePath+".focus", err)
 			}
 			pp.SuppressHistory, err = boolean(p["suppress_history"], windowSuppress)
 			if err != nil {
-				return plan, err
+				return plan, lines.at(panePath+".suppress_history", err)
 			}
 			if env, exists := p["environment"]; exists {
 				pp.Environment, err = environment(env)
 				if err != nil {
-					return plan, err
+					return plan, lines.at(panePath+".environment", err)
 				}
 			}
 			state := commandPlan{Enter: true}
 			if err := commandSettings(&state, p); err != nil {
-				return plan, err
+				return plan, lines.at(panePath, err)
 			}
 			for _, commands := range []any{doc["shell_command_before"], w["shell_command_before"], p["shell_command_before"], p["shell_command"]} {
 				parsed, e := commandsWithState(commands, &state, !plan.Bridge)
 				if e != nil {
-					return plan, fmt.Errorf("window %d pane %d: %w", wi, pi, e)
+					return plan, lines.at(panePath, fmt.Errorf("window %d pane %d: %w", wi, pi, e))
 				}
 				pp.Commands = append(pp.Commands, parsed...)
 			}
@@ -479,6 +544,10 @@ func normalizeDocument(doc document, base string) (loadPlan, error) {
 }
 
 func checkFields(doc document, scope string, allowed ...string) error {
+	return checkFieldsAt(doc, scope, nil, "", allowed...)
+}
+
+func checkFieldsAt(doc document, scope string, lines sourceLines, prefix string, allowed ...string) error {
 	for _, key := range slices.Sorted(maps.Keys(doc)) {
 		// A key starting with "x-", at any level, is inert: accepted here,
 		// ignored by every field lookup below, and left untouched by convert.
@@ -486,7 +555,11 @@ func checkFields(doc document, scope string, allowed ...string) error {
 			continue
 		}
 		if !slices.Contains(allowed, key) {
-			return &failure{"unsupported_key", fmt.Sprintf("%s: unknown field %q (custom fields use an \"x-\" prefix)", scope, key), 1}
+			path := key
+			if prefix != "" {
+				path = prefix + "." + key
+			}
+			return lines.at(path, &failure{"unsupported_key", fmt.Sprintf("%s: unknown field %q (custom fields use an \"x-\" prefix)", scope, key), 1})
 		}
 	}
 	return nil

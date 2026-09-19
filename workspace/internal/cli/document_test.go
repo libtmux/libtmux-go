@@ -270,3 +270,45 @@ func TestInvalidLayoutMessageDescribesTheDocument(t *testing.T) {
 		}
 	}
 }
+
+// TestRefusalsNameTheLineTheyAreOn: fixing one mistake and rerunning against
+// a sixty-line YAML file is the most common thing a user does with a config
+// tool, and a refusal that names no position makes it a search.
+func TestRefusalsNameTheLineTheyAreOn(t *testing.T) {
+	for _, test := range []struct{ name, text, want string }{
+		{
+			"window layout",
+			"session_name: example\nwindows:\n  - window_name: one\n    panes: [blank]\n  - window_name: two\n    layout: definitely-not-a-layout\n    panes: [blank]\n",
+			"line 6:",
+		},
+		{
+			"unknown window key",
+			"session_name: example\nwindows:\n  - window_name: one\n    panes: [blank]\n  - window_name: two\n    shell_command_befor: oops\n    panes: [blank]\n",
+			"line 6:",
+		},
+		{
+			"pane boolean",
+			"session_name: example\nwindows:\n  - window_name: one\n    panes:\n      - shell_command: echo hi\n        focus: maybe\n",
+			"line 6:",
+		},
+		{
+			"session name",
+			"session_name: my.proj\nwindows:\n  - panes: [blank]\n",
+			"line 1:",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			doc, lines, err := decodeDocument([]byte(test.text))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = normalizeSource(doc, t.TempDir(), lines)
+			if err == nil {
+				t.Fatal("this document must be refused")
+			}
+			if !strings.HasPrefix(err.Error(), test.want) {
+				t.Fatalf("refusal = %q, want it to start with %q", err, test.want)
+			}
+		})
+	}
+}
