@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -58,6 +59,13 @@ func (s Server) runCommand(
 		routeKind = commandProcess
 	}
 
+	// Read once: a nil observer must not even cost a clock read.
+	observer := state.config.commandObserver
+	var started time.Time
+	if observer != nil {
+		started = time.Now()
+	}
+
 	var result tmuxcmd.Result
 	if s.connection != nil {
 		connectedResult, connectionErr := s.connection.run(
@@ -80,6 +88,9 @@ func (s Server) runCommand(
 			Directory:   state.config.directory,
 			Stdio:       stdio,
 		})
+	}
+	if observer != nil {
+		s.observeCommand(observer, args, started, result.ExitCode, err)
 	}
 	if guard == nil {
 		return result, err
