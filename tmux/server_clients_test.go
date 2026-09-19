@@ -708,7 +708,7 @@ func TestClientAdministrationBuildsExactPythonArguments(t *testing.T) {
 			operation: func(server Server) error {
 				return server.SwitchClient(context.Background(), "work $(not-a-shell)")
 			},
-			want: []string{"switch-client", "-t", "work $(not-a-shell)"},
+			want: []string{"switch-client", "-t", "=work $(not-a-shell)"},
 		},
 		{
 			name: "switch session client",
