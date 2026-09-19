@@ -2099,7 +2099,8 @@ func TestFailedLoadRemovesTheSessionItCreated(t *testing.T) {
 // TestReusedSessionNamesTheWindowsItIsMissing: reuse is keyed on the session
 // name, so a session that exists satisfies it whatever state it is in. A load
 // that reuses compares the document's windows against what is there and names
-// what is absent, rather than blessing a workspace it never looked at.
+// the first one absent, rather than blessing a workspace it never looked at.
+// It builds nothing and changes nothing, so the status says nothing survived.
 func TestReusedSessionNamesTheWindowsItIsMissing(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	dir := t.TempDir()
@@ -2116,8 +2117,15 @@ func TestReusedSessionNamesTheWindowsItIsMissing(t *testing.T) {
 	errs, _ := summary["errors"].([]any)
 	entry, _ := first(errs).(map[string]any)
 	message, _ := entry["message"].(string)
-	if code != 1 || summary["status"] != "partial" || !strings.Contains(message, `"two"`) {
-		t.Fatalf("reuse of a session missing a window = %d status %v message %q, want 1, partial and the window named: %s", code, summary["status"], message, out)
+	if code != 1 || summary["status"] != "error" || entry["code"] != "session_mismatch" || !strings.Contains(message, `"two"`) {
+		t.Fatalf("reuse of a session missing a window = %d status %v code %v message %q, want 1, error, session_mismatch and the window named: %s", code, summary["status"], entry["code"], message, out)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid error envelope %q: %v", diagnostic, err)
+	}
+	if envelope["code"] != "session_mismatch" || !strings.Contains(textOf(envelope["message"]), `"two"`) {
+		t.Fatalf("stderr record = %v, want session_mismatch naming the window: %s", envelope["code"], diagnostic)
 	}
 	windows, err := server.Cmd(t.Context(), "list-windows", "-t", "reuse", "-F", "#{window_name}")
 	if err != nil || strings.TrimSpace(string(windows.RawStdout)) != "one" {
@@ -2282,4 +2290,9 @@ func TestDefaultActivePaneIsTheLastOneCreated(t *testing.T) {
 	if got := strings.TrimSpace(string(result.RawStdout)); got != "2" {
 		t.Fatalf("active pane index = %q, want the last pane created", got)
 	}
+}
+
+func textOf(value any) string {
+	text, _ := value.(string)
+	return text
 }
