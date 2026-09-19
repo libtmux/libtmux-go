@@ -9,6 +9,21 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### Development
+
+- The tmux matrix runs 3.8-rc alongside the released versions it already
+  covered. (#16)
+- A CI job reports each module's exported API difference against that
+  module's last tag. (#16)
+- A check fails when a tracked file is binary. Running a generator directly
+  drops a build artifact in the repository root that the generated-file
+  freshness gate cannot see, because an untracked file never appears in a
+  diff. (#16)
+- Every published Markdown code region compiles on its own, in a module of
+  its own, so a region cannot depend on a binding an earlier region in the
+  same source file created. A `given:` marker on the source comment declares
+  what the region assumes and renders as the block's first line. (#16)
+
 ### tmux
 
 - Add `Server.SessionByName` to look up a session without listing and
