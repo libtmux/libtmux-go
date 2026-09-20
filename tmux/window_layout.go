@@ -30,10 +30,11 @@ type SelectLayoutRequest struct {
 }
 
 // Validate checks mode exclusivity, NUL bytes, candidate preset names and
-// checksummed custom-layout syntax without running tmux. Its zero value is valid.
+// classic checksummed syntax and JSON envelopes without running tmux. Its zero
+// value is valid.
 // Invalid requests match [ErrInvalidServerCommandRequest]. Names and abbreviations
 // valid on any supported tmux are accepted here; execution checks daemon support.
-// tmux validates geometry and live pane counts when applying the layout.
+// tmux validates JSON contents, geometry and live pane counts when applying it.
 func (request SelectLayoutRequest) Validate() error {
 	if err := validateServerCommandArgument("select-layout", "Layout", request.Layout, true); err != nil {
 		return err

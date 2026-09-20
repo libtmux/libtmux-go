@@ -11,7 +11,8 @@ import (
 // ValidateLayouts checks every layout and its required pane count before any
 // mutation. Nil and empty sequences succeed without I/O unless ctx is canceled.
 // Empty layout strings are ignored. Other entries require at least one pane;
-// custom trees must contain enough leaves. Geometry remains tmux's responsibility.
+// classic trees must contain enough leaves. tmux validates JSON contents and
+// geometry when applying the layout.
 //
 // Names accept unique abbreviations. Version-sensitive names query the selected
 // daemon through this server's transport; only a cold endpoint without a captured

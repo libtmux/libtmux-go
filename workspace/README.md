@@ -70,12 +70,13 @@ command error and is classified with the tmux package's own sentinels. `Build`
 uses strict errors regardless of the server it is handed, because a workspace
 that half exists is never what the caller wanted.
 
-Custom layouts are checked for their checksum, unsigned 32-bit fields and
+Classic custom layouts are checked for their checksum, unsigned 32-bit fields and
 nonempty tree structure before building. `Build` and `BuildInto` check every
 layout's desired pane capacity and name availability before making changes.
 Names accept abbreviations unique on the selected daemon; only an unbound
 cold endpoint uses the configured client version. Trees may nest up to 256
-parents; tmux adjusts and validates the resulting geometry.
+parents; tmux adjusts and validates the resulting geometry. JSON layouts require
+tmux 3.8 or newer; their contents are validated by tmux.
 
 `Build` creates the session and a temporary control connection in one process,
 then uses that connection for the rest of the build.
