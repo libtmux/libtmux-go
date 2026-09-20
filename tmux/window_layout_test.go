@@ -187,6 +187,13 @@ func TestWindowLayoutCommandsBuildLiteralArguments(t *testing.T) {
 			},
 		},
 		{
+			name:     "uppercase custom checksum",
+			wantArgs: []string{"select-layout", "-t", "$7:@8", "B25D,80x24,0,0,0"},
+			invoke: func(window Window) error {
+				return window.SelectLayout(context.Background(), SelectLayoutRequest{Layout: "B25D,80x24,0,0,0"})
+			},
+		},
+		{
 			name:     "spread",
 			wantArgs: []string{"select-layout", "-t", "$7:@8", "-E"},
 			invoke: func(window Window) error {
@@ -431,6 +438,7 @@ func TestSelectLayoutRequestValidateWithoutTmux(t *testing.T) {
 		{Layout: "tiled"},
 		{Layout: "main-horizontal-mirrored"},
 		{Layout: "b25d,80x24,0,0,0"},
+		{Layout: "B25D,80x24,0,0,0"},
 		{Next: true},
 		{Previous: true},
 		{Spread: true},
@@ -442,6 +450,7 @@ func TestSelectLayoutRequestValidateWithoutTmux(t *testing.T) {
 	for _, request := range []SelectLayoutRequest{
 		{Layout: "tiled\x00"},
 		{Layout: "no-such-layout"},
+		{Layout: "even-"},
 		{Layout: "32d2,80x24,0,0{}"},
 		{Layout: "ffff,80x24,0,0,0"},
 		{Layout: "tiled", Next: true},

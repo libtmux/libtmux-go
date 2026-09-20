@@ -95,6 +95,11 @@ func TestLayoutPreflightValidatesCompleteSequenceBeforeIO(t *testing.T) {
 			t.Errorf("static validation required a server: %v", err)
 		}
 	}
+	for _, value := range []string{"even-", "main-"} {
+		if err := (Server{}).ValidateLayouts(t.Context(), oneLayout(value, 1)); !errors.Is(err, ErrInvalidServerCommandRequest) {
+			t.Errorf("ambiguous prefix %q accepted before mutation: %v", value, err)
+		}
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if err := (Server{}).ValidateLayouts(ctx, nil); !errors.Is(err, context.Canceled) {
