@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -661,9 +662,13 @@ func TestHumanLoadFlushBeforeHandoff(t *testing.T) {
 }
 
 func TestHumanLoadClientProjection(t *testing.T) {
-	for _, independent := range []bool{false, true} {
+	removed, err := tmux.ParseVersion("3.8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, requestIndependent := range []bool{false, true} {
 		name := "ordinary"
-		if independent {
+		if requestIndependent {
 			name = "independent-pane"
 		}
 		t.Run(name, func(t *testing.T) {
@@ -677,6 +682,8 @@ func TestHumanLoadClientProjection(t *testing.T) {
 			if err != nil || len(before.Panes()) != 1 {
 				t.Fatalf("initial snapshot: %v %v", before.Panes(), err)
 			}
+			// tmux 3.8 ignores the removed active-pane client flag.
+			independent := requestIndependent && !before.Version().AtLeast(removed)
 			first := before.Panes()[0]
 			result, err := server.Cmd(ctx, "split-window", "-d", "-P", "-F", "#{pane_id}", "-t", first.ID().String())
 			if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
@@ -687,7 +694,7 @@ func TestHumanLoadClientProjection(t *testing.T) {
 				t.Fatal(err)
 			}
 			args := []string{"-S", server.SocketPath(), "-f", server.ConfigFile(), "attach-session", "-t", "original"}
-			if independent {
+			if requestIndependent {
 				args = append(args, "-f", "active-pane")
 			}
 			environment := []string{}
@@ -728,6 +735,10 @@ func TestHumanLoadClientProjection(t *testing.T) {
 				t.Fatalf("attached snapshot: %v %v", snapshot.Clients(), err)
 			}
 			selected := snapshot.Clients()[0]
+			flags, hasFlags := selected.Flags()
+			if !hasFlags || slices.Contains(strings.Split(flags, ","), "active-pane") != independent {
+				t.Fatalf("client flags = %q, want independent focus %v", flags, independent)
+			}
 			projected, ok := selected.Formats().PaneID()
 			wantProjection := second.ID()
 			if independent {
