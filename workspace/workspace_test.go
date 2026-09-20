@@ -1081,7 +1081,7 @@ func TestAValidationFailureNamesItsLine(t *testing.T) {
 // Window.SelectLayout is the version-aware authority that resolves or
 // refuses it for real against the connection building the workspace.
 func TestValidateAcceptsAUniquePresetPrefixForLayout(t *testing.T) {
-	for _, layout := range []string{"tile", "even-h", "main-v", "main-vertical", "a1b2,80x24,0,0,0"} {
+	for _, layout := range []string{"tile", "even-h", "main-v", "main-vertical", "b25d,80x24,0,0,0"} {
 		t.Run(layout, func(t *testing.T) {
 			built := workspace.Workspace{
 				SessionName: "prefix-layout",
