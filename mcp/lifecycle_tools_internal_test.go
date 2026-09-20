@@ -40,7 +40,7 @@ func TestKillSessionAddressesADottedName(t *testing.T) {
 		t.Skipf("this tmux did not keep the dotted name verbatim: %q", rows.Stdout)
 	}
 
-	registry := &tools{runtime: newRuntime(ctx, target, nil)}
+	registry := &tools{runtime: newRuntime(ctx, target)}
 	_, output, err := registry.killSession(ctx, nil, killSessionInput{
 		SessionName: "victim.name", ConfirmSelf: true,
 	})

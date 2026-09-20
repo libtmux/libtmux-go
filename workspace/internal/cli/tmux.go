@@ -898,12 +898,9 @@ func (r *invocation) buildInto(server tmux.Server, session tmux.Session, plan lo
 				return session, windows, err
 			}
 		}
-		pane, ok, err := window.ResolveActivePane(r.ctx)
+		pane, err := window.ResolveActivePane(r.ctx)
 		if err != nil {
 			return session, windows, err
-		}
-		if !ok {
-			return session, windows, errors.New("new window has no active pane")
 		}
 		// Every pane is created and the layout is final before any shell is
 		// typed into: a pane resized after its command redraws the prompt at

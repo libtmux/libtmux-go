@@ -18,7 +18,7 @@ import (
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/mattn/go-shellwords"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 type document = map[string]any
