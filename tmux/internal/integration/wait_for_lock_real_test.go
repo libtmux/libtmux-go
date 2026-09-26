@@ -10,10 +10,12 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// tmux hands a wait-for mutex to the next queued client whether or not it is
-// still there, so abandoning a queued lock wait costs the channel one unlock.
-// It does not lose the channel, which is what this pins: unlocking again hands
-// the mutex to the next real locker.
+// Before tmux 3.8, tmux hands a wait-for mutex to the next queued client
+// whether or not it is still there, so abandoning a queued lock wait costs the
+// channel one unlock. It does not lose the channel, which is what this pins:
+// unlocking again hands the mutex to the next real locker. tmux 3.8 drops the
+// wait of a client that has gone (tmux issue 5614), so there the first release
+// frees the channel and nothing is owed.
 //
 //libtmux:real-tmux
 func TestAnAbandonedLockWaitLeavesTheChannelUsable(t *testing.T) {
@@ -39,13 +41,23 @@ func TestAnAbandonedLockWaitLeavesTheChannelUsable(t *testing.T) {
 		t.Fatalf("abandoned lock = %v, want the deadline", err)
 	}
 
-	// The first release is consumed by the client that has gone. The second
-	// reaches a locker that is still there.
+	// Before tmux 3.8 the first release is consumed by the client that has
+	// gone and a second reaches the channel; from 3.8 the first frees it.
 	if err := server.WaitFor(ctx, unlock); err != nil {
-		t.Fatalf("release consumed by the abandoned locker: %v", err)
+		t.Fatalf("first release: %v", err)
 	}
-	if err := server.WaitFor(ctx, unlock); err != nil {
-		t.Fatalf("release reaching a real locker: %v", err)
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	freesAbandoned, err := tmux.ParseVersion("3.8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !version.AtLeast(freesAbandoned) {
+		if err := server.WaitFor(ctx, unlock); err != nil {
+			t.Fatalf("release reaching a real locker: %v", err)
+		}
 	}
 
 	// The whole point: a later locker still gets the channel.
