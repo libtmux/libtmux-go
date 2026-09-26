@@ -214,11 +214,7 @@ func (s Server) commandArguments(args []string) []string {
 	if !s.inheritsLocale {
 		command = append(command, "-u")
 	}
-	switch config.colors {
-	case ColorDefault:
-	case Color88:
-		command = append(command, "-8")
-	case Color256:
+	if config.colors == Color256 {
 		command = append(command, "-2")
 	}
 	// Global arguments are consumed before tmux's command-list parser. Their
@@ -268,7 +264,7 @@ func effectiveSocketSelectorValues(socketPath, socketName string) (flag string, 
 
 func validateColorMode(mode ColorMode) error {
 	switch mode {
-	case ColorDefault, Color88, Color256:
+	case ColorDefault, Color256:
 		return nil
 	default:
 		return &ColorError{Mode: mode}

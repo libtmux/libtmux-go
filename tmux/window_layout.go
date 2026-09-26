@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/layout"
 )
 
 // SelectLayoutRequest selects one layout operation. Its zero value reapplies
@@ -27,6 +29,48 @@ type SelectLayoutRequest struct {
 	Previous bool
 }
 
+// Validate checks mode exclusivity, NUL bytes, candidate preset names and
+// classic checksummed syntax and JSON envelopes without running tmux. Its zero
+// value is valid.
+// Invalid requests match [ErrInvalidServerCommandRequest]. Names and abbreviations
+// valid on any supported tmux are accepted here; execution checks daemon support.
+// tmux validates JSON contents, geometry and live pane counts when applying it.
+func (request SelectLayoutRequest) Validate() error {
+	if err := validateServerCommandArgument("select-layout", "Layout", request.Layout, true); err != nil {
+		return err
+	}
+	modes := 0
+	if request.Layout != "" {
+		modes++
+	}
+	if request.Spread {
+		modes++
+	}
+	if request.Next {
+		modes++
+	}
+	if request.Previous {
+		modes++
+	}
+	if modes > 1 {
+		return invalidServerCommandRequest(
+			"select-layout",
+			"Mode",
+			"",
+			"Layout, Spread, Next, and Previous are mutually exclusive",
+		)
+	}
+
+	if request.Layout == "" || layoutLooksLikeJSON(request.Layout) {
+		return nil
+	}
+	if _, err := validateLayout(request.Layout, Version{}); err == nil {
+		return nil
+	}
+	_, err := validateLayout(request.Layout, layoutMirroredVersion)
+	return err
+}
+
 // SelectLayout applies one layout operation to the receiver's exact winlink.
 // It changes pane geometry without selecting the window or promising client
 // focus. The materialized receiver is not refreshed, so callers that need
@@ -34,19 +78,18 @@ type SelectLayoutRequest struct {
 // A transport or context error can be delivery-ambiguous; the void result
 // cannot carry partial state and no rollback is attempted.
 func (w Window) SelectLayout(ctx context.Context, request SelectLayoutRequest) error {
+	if err := request.Validate(); err != nil {
+		return err
+	}
 	target, err := exactWindowTarget(w)
 	if err != nil {
 		return err
 	}
-	// The version is only needed for a name tmux learned partway through the
-	// supported range, a layout shape tmux learned at 3.8, or to resolve a
-	// prefix of either against the presets that exist on this connection, so
-	// it is not asked for otherwise.
-	var version Version
-	if layoutNeedsVersion(request.Layout) {
-		if version, err = w.server.Version(ctx); err != nil {
-			return err
-		}
+	version, err := w.server.validateLayouts(ctx, func(yield func(string, int) bool) {
+		yield(request.Layout, 1)
+	})
+	if err != nil {
+		return err
 	}
 	arguments, err := selectLayoutArguments(target, request, version)
 	if err != nil {
@@ -97,15 +140,15 @@ func presetSet(names []string) map[string]bool {
 // exact base preset name, a classic checksum-prefixed layout string, a
 // prefix that can only ever match a base preset name, and garbage that
 // prefixes nothing all skip the round trip.
-func layoutNeedsVersion(layout string) bool {
-	if layout == "" || layoutStringPattern.MatchString(layout) || layoutPresets[layout] {
+func layoutNeedsVersion(value string) bool {
+	if value == "" || isClassicLayout(value) || layoutPresets[value] {
 		return false
 	}
-	if layoutLooksLikeJSON(layout) || layoutMirroredPresets[layout] {
+	if layoutLooksLikeJSON(value) || layoutMirroredPresets[value] {
 		return true
 	}
 	for _, preset := range layoutMirroredPresetNames {
-		if strings.HasPrefix(preset, layout) {
+		if strings.HasPrefix(preset, value) {
 			return true
 		}
 	}
@@ -121,12 +164,10 @@ var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 // which includes floating panes. The old format is still accepted."
 var layoutJSONVersion = Version{raw: "3.8", major: 3, minor: 8}
 
-// layoutStringPattern matches tmux's classic description of an arrangement,
-// which #{window_layout} reports (and select-layout accepts back) on every
-// supported version up to and including tmux 3.7c, and which newer tmux still
-// accepts alongside the JSON shape below. It begins with a checksum, which is
-// what makes it distinguishable from a name.
-var layoutStringPattern = regexp.MustCompile(`^[0-9a-f]{4},[0-9x,\[\]{}]+$`)
+func isClassicLayout(value string) bool {
+	_, valid := layout.Cells(value)
+	return valid
+}
 
 // layoutLooksLikeJSON reports whether layout is shaped like the JSON layout
 // tmux 3.8+ reports from #{window_layout} and accepts back from
@@ -186,22 +227,22 @@ func layoutListsPane(layout string, pane PaneID) bool {
 //
 // tmux 3.3a exited the server for an unknown layout instead of returning an
 // error, so an unrecognised name is refused on every version, not only 3.3a.
-func validateLayout(layout string, version Version) (string, error) {
-	if layout == "" || layoutStringPattern.MatchString(layout) {
-		return layout, nil
+func validateLayout(value string, version Version) (string, error) {
+	if value == "" || isClassicLayout(value) {
+		return value, nil
 	}
-	if layoutPresets[layout] {
-		return layout, nil
+	if layoutPresets[value] {
+		return value, nil
 	}
-	if layoutMirroredPresets[layout] {
+	if layoutMirroredPresets[value] {
 		if version.AtLeast(layoutMirroredVersion) {
-			return layout, nil
+			return value, nil
 		}
 		return "", &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
 	}
-	if layoutLooksLikeJSON(layout) {
+	if layoutLooksLikeJSON(value) {
 		if version.AtLeast(layoutJSONVersion) {
-			return layout, nil
+			return value, nil
 		}
 		return "", &VersionTooLowError{Current: version, Minimum: layoutJSONVersion}
 	}
@@ -211,7 +252,7 @@ func validateLayout(layout string, version Version) (string, error) {
 	}
 	var matches []string
 	for _, candidate := range candidates {
-		if strings.HasPrefix(candidate, layout) {
+		if strings.HasPrefix(candidate, value) {
 			matches = append(matches, candidate)
 		}
 	}
@@ -219,10 +260,17 @@ func validateLayout(layout string, version Version) (string, error) {
 	case 1:
 		return matches[0], nil
 	case 0:
+		if !version.AtLeast(layoutMirroredVersion) {
+			for _, candidate := range layoutMirroredPresetNames {
+				if strings.HasPrefix(candidate, value) {
+					return "", &VersionTooLowError{Current: version, Minimum: layoutMirroredVersion}
+				}
+			}
+		}
 		return "", invalidServerCommandRequest(
 			"select-layout",
 			"Layout",
-			layout,
+			value,
 			"is neither a layout preset nor a tmux layout string; refused on "+
 				"every version, since tmux 3.3a once exited the server and "+
 				"destroyed every session on the socket for exactly this",
@@ -231,7 +279,7 @@ func validateLayout(layout string, version Version) (string, error) {
 		return "", invalidServerCommandRequest(
 			"select-layout",
 			"Layout",
-			layout,
+			value,
 			"is ambiguous among "+strings.Join(matches, ", ")+"; use one of those exact spellings",
 		)
 	}
@@ -244,38 +292,15 @@ func selectLayoutArguments(
 	request SelectLayoutRequest,
 	version Version,
 ) ([]string, error) {
-	if err := validateServerCommandArguments(
-		"select-layout",
-		serverCommandArgument{field: "Target", value: target},
-		serverCommandArgument{field: "Layout", value: request.Layout},
-	); err != nil {
+	if err := validateServerCommandArgument("select-layout", "Target", target, true); err != nil {
+		return nil, err
+	}
+	if err := request.Validate(); err != nil {
 		return nil, err
 	}
 	resolvedLayout, err := validateLayout(request.Layout, version)
 	if err != nil {
 		return nil, err
-	}
-
-	modes := 0
-	if request.Layout != "" {
-		modes++
-	}
-	if request.Spread {
-		modes++
-	}
-	if request.Next {
-		modes++
-	}
-	if request.Previous {
-		modes++
-	}
-	if modes > 1 {
-		return nil, invalidServerCommandRequest(
-			"select-layout",
-			"Mode",
-			"",
-			"Layout, Spread, Next, and Previous are mutually exclusive",
-		)
 	}
 
 	arguments := []string{"select-layout", "-t", target}

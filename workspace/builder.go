@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -29,6 +31,8 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 //
 // Build is not atomic. A failure after session creation returns that session;
 // completed mutations remain in tmux. Command failures are not normalized.
+// Every layout is checked against the selected daemon and desired pane count
+// before session creation. tmux validates geometry when applying each layout.
 //
 // Build creates the session and an attached control connection in one process,
 // uses that connection for the build, and closes it before returning. The
@@ -41,6 +45,9 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.Session, error) {
 	request, err := workspace.InitialSessionRequest()
 	if err != nil {
+		return tmux.Session{}, err
+	}
+	if err := workspace.validateLayouts(ctx, server); err != nil {
 		return tmux.Session{}, err
 	}
 	created, connection, err := server.NewSessionConnection(
@@ -76,6 +83,7 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 // creates a session nor opens or owns a connection.
 //
 // BuildInto is not atomic. A failure leaves completed mutations in tmux.
+// Every layout is checked before changing the initial session.
 func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) error {
 	if session.ID() == "" {
 		return tmux.ErrMissingTarget
@@ -84,24 +92,27 @@ func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) e
 		return err
 	}
 	server := session.Server()
+	if err := workspace.validateLayouts(ctx, server); err != nil {
+		return err
+	}
 
 	// The initial window is created with the session before these values are set;
 	// later windows can inherit them at creation.
-	for name, value := range workspace.GlobalOptions {
-		if err := setGlobalOption(ctx, server, name, value); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(workspace.GlobalOptions)) {
+		if err := setGlobalOption(ctx, server, name, workspace.GlobalOptions[name]); err != nil {
 			return fmt.Errorf("set global option %q: %w", name, err)
 		}
 	}
 
-	for name, value := range workspace.Environment {
+	for _, name := range slices.Sorted(maps.Keys(workspace.Environment)) {
 		if err := session.SetEnvironment(
-			ctx, name, value, tmux.SetEnvironmentOptions{},
+			ctx, name, workspace.Environment[name], tmux.SetEnvironmentOptions{},
 		); err != nil {
 			return fmt.Errorf("set environment %q: %w", name, err)
 		}
 	}
-	for name, value := range workspace.Options {
-		if err := setSessionOption(ctx, session, name, value); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(workspace.Options)) {
+		if err := setSessionOption(ctx, session, name, workspace.Options[name]); err != nil {
 			return fmt.Errorf("set session option %q: %w", name, err)
 		}
 	}
@@ -124,6 +135,16 @@ func BuildInto(ctx context.Context, session tmux.Session, workspace Workspace) e
 		}
 	}
 	return nil
+}
+
+func (w Workspace) validateLayouts(ctx context.Context, server tmux.Server) error {
+	return server.ValidateLayouts(ctx, func(yield func(string, int) bool) {
+		for _, window := range w.Windows {
+			if !yield(window.Layout, max(1, len(window.Panes))) {
+				return
+			}
+		}
+	})
 }
 
 // buildWindow resolves the session's initial window or creates a later one,
@@ -175,15 +196,15 @@ func buildWindow(
 		}
 	}
 
-	for name, value := range described.Environment {
+	for _, name := range slices.Sorted(maps.Keys(described.Environment)) {
 		if err := session.SetEnvironment(
-			ctx, name, value, tmux.SetEnvironmentOptions{},
+			ctx, name, described.Environment[name], tmux.SetEnvironmentOptions{},
 		); err != nil {
 			return window, fmt.Errorf("set window environment %q: %w", name, err)
 		}
 	}
-	for name, value := range described.Options {
-		if err := window.SetOption(ctx, name, value, tmux.SetOptionOptions{}); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(described.Options)) {
+		if err := window.SetOption(ctx, name, described.Options[name], tmux.SetOptionOptions{}); err != nil {
 			return window, fmt.Errorf("set window option %q: %w", name, err)
 		}
 	}
@@ -193,8 +214,8 @@ func buildWindow(
 		return window, err
 	}
 
-	for name, value := range described.OptionsAfter {
-		if err := window.SetOption(ctx, name, value, tmux.SetOptionOptions{}); err != nil {
+	for _, name := range slices.Sorted(maps.Keys(described.OptionsAfter)) {
+		if err := window.SetOption(ctx, name, described.OptionsAfter[name], tmux.SetOptionOptions{}); err != nil {
 			return window, fmt.Errorf("set window option %q after panes: %w", name, err)
 		}
 	}
@@ -206,11 +227,17 @@ func buildWindow(
 			return window, fmt.Errorf("apply layout %q: %w", described.Layout, err)
 		}
 	}
-	for index, pane := range panes {
+	// With no pane declaring focus, tmuxp leaves the last pane it created
+	// active; splitting detached leaves the first.
+	focused := len(panes) - 1
+	for index := range panes {
 		if index < len(described.Panes) && bool(described.Panes[index].Focus) {
-			if _, err := pane.Select(ctx, tmux.PaneSelectRequest{}); err != nil {
-				return window, fmt.Errorf("focus pane %d: %w", index, err)
-			}
+			focused = index
+		}
+	}
+	if focused >= 0 {
+		if _, err := panes[focused].Select(ctx, tmux.PaneSelectRequest{}); err != nil {
+			return window, fmt.Errorf("focus pane %d: %w", focused, err)
 		}
 	}
 	return window, nil
@@ -248,6 +275,14 @@ func buildPanes(
 			return nil, fmt.Errorf("split pane %d: %w", index, err)
 		}
 		panes = append(panes, pane)
+		// Keep the window rebalanced while it grows so a split never starves
+		// for room. described.Layout, applied once every pane exists, still
+		// has the final say.
+		if err := window.SelectLayout(ctx, tmux.SelectLayoutRequest{
+			Layout: "tiled",
+		}); err != nil {
+			return nil, fmt.Errorf("rebalance after pane %d: %w", index, err)
+		}
 	}
 
 	for index, pane := range panes {
@@ -255,9 +290,9 @@ func buildPanes(
 			continue
 		}
 		describedPane := described.Panes[index]
-		for name, value := range describedPane.Environment {
+		for _, name := range slices.Sorted(maps.Keys(describedPane.Environment)) {
 			if err := session.SetEnvironment(
-				ctx, name, value, tmux.SetEnvironmentOptions{},
+				ctx, name, describedPane.Environment[name], tmux.SetEnvironmentOptions{},
 			); err != nil {
 				return nil, fmt.Errorf("set pane environment %q: %w", name, err)
 			}
@@ -279,6 +314,9 @@ func buildPanes(
 					Command:         &text,
 					SuppressHistory: suppress,
 					SkipEnter:       !command.sends(),
+					// A command that is also a tmux key name -- Space, Up,
+					// Escape -- is that key without this.
+					Literal: true,
 				}); err != nil {
 					return nil, fmt.Errorf("run %q in pane %d: %w", command.Command, index, err)
 				}
@@ -316,7 +354,7 @@ func paneSuppressHistory(workspace Workspace, window Window, pane Pane) bool {
 	if window.SuppressHistory != nil {
 		return bool(*window.SuppressHistory)
 	}
-	return bool(workspace.SuppressHistory)
+	return workspace.SuppressHistory == nil || bool(*workspace.SuppressHistory)
 }
 
 func sleep(ctx context.Context, duration time.Duration) error {

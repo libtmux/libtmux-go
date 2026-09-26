@@ -9,6 +9,97 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- Add `SelectLayoutRequest.Validate` to check layout requests without tmux I/O.
+  Workspace parsing uses the same validation as core layout operations. (#15)
+- Add `Server.ValidateLayouts` to check every layout and required pane count
+  before mutation. Version-sensitive names use the selected daemon; only an
+  unbound cold endpoint falls back to the configured client version. (#15)
+- `Window.SelectLayout` and `Plan.SelectLayout` reject invalid classic layout
+  checksums, integer overflow and malformed trees before dispatch. Custom
+  layouts support up to 256 nested parents; tmux validates their geometry. (#15)
+- `Plan.SelectLayout` accepts unique named-layout abbreviations for the running
+  tmux version. Plans check every recorded layout before dispatching any
+  operation, including forward references. (#15)
+- Remove `Color88`. tmux 3.2a and later reject `-8`, so `ServerOptions.Colors`
+  rejects the numeric mode 88 before looking up the executable rather than
+  deferring the failure to the first command. Use `Color256` or the default.
+  (#15)
+- `Server.SwitchClient` now anchors its target with tmux's exact-match `=`
+  prefix. An unanchored target resolves by prefix, so a session name that
+  matched no session exactly but started a different one's name switched
+  to that other session silently instead of failing. (#15)
+- `Server.AttachSession` and `Session.Attach` now send the attached tmux
+  client `SIGTERM` on Unix cancellation, requesting a graceful disconnect
+  before the runner's existing bounded forced cleanup takes over, instead of
+  killing it outright; other platforms are unchanged. A daemon that cannot
+  respond in time may still leave the caller's terminal to restore. (#15)
+- `Version.AtLeast` now ranks a `next-X.Y` development build below the
+  release it names instead of treating it as already reached, so a feature
+  gated on that version no longer reports present on a snapshot that has
+  not shipped it yet. (#15)
+
+### workspace
+
+- Add the `tmux-workspace` command: `load`, `ls`, `search`, `edit`, `freeze`,
+  `convert`, `import`, `shell` and `debug-info`, with human, JSON and NDJSON
+  output and generated shell completion. [`workspace/CLI.md`](workspace/CLI.md)
+  documents its exit codes, machine `code` values, NDJSON event vocabulary
+  and environment variables. (#15)
+- `load` creates a session per input, or reuses one whose name matches after
+  comparing it against the document; a mismatch reports `session_mismatch`
+  and exit 1 without building or changing anything. A build that fails
+  partway removes the session it created. `--append` adds a document's
+  windows to the invoking tmux session instead of creating one, and inside
+  tmux `load` asks before attaching to a session that already exists. (#15)
+- `freeze` requires `--save-to` unless an output flag returns the document
+  instead. It refuses a session name that cannot stand alone as a workspace
+  file name, naming `--save-to` as the way around it, and unconditionally
+  refuses one holding a period, colon, NUL or newline, since `load` could
+  never address that session again. (#15)
+- `import tmuxinator` refuses unexpanded ERB markup before writing a file;
+  `import teamocil` takes the session name from the source file, since
+  teamocil documents carry none, and accepts a pane written as a plain
+  command string. (#15)
+- Interactive prompts and `tmux-workspace` itself cancel on SIGINT or
+  SIGTERM while input or a setup script is active, reporting the final
+  result with status 130. (#15)
+- `Parse` validates a custom layout's checksum, unsigned 32-bit fields and
+  tree structure before building. `Build` and `BuildInto` check every layout's
+  name availability and pane capacity against the selected daemon before
+  mutation. (#15)
+- With no pane declaring `focus`, the pane left active after a build is the
+  last one created in its window, which is where tmuxp leaves it. Splitting
+  detached left the first pane active instead. An explicit `focus: true` is
+  unchanged. (#15)
+- `workspace.Build` applies environment variables and options in name order.
+  It ranged over the maps directly, so Go's randomised map iteration gave two
+  runs of the same document two different orders, and options that depend on
+  each other landed differently each time. (#15)
+- `workspace.Build` rebalances a window between splits, so a window with more
+  than four panes builds at 80x24 instead of failing with tmux's "no space for
+  a new pane" on the fifth. (#15)
+- `workspace.Build` sends a pane's commands literally, so a command that is
+  also a tmux key name -- `Space`, `Up`, `Escape` -- is typed rather than
+  pressed. (#15)
+- `Workspace.SuppressHistory` is now `*Bool`, and nil suppresses history,
+  matching tmuxp and the CLI. Its zero value did the opposite of the
+  reference. This is a breaking change for anything setting the field. (#15)
+- `Workspace.Validate` reports an invalid `layout` through the same check
+  `Window.SelectLayout` uses, so a bad checksum or malformed tree is refused
+  before any tmux call; the error names the window and the layout. (#15)
+
+### mcp
+
+- `select_layout` accepts unique named-layout abbreviations for the running
+  tmux version and uppercase saved-layout checksums. It uses core validation
+  before window lookup; tool discovery describes named and saved inputs. (#15)
+- `kill_session` now resolves its target session by exact name instead of
+  tmux's `=name` prefix match, which misreads a period or colon in the name
+  as a target separator; a session named with either can now actually be
+  killed instead of surviving the call. (#15)
+
 ## v0.0.1-alpha.8, workspace/v0.0.1-alpha.8, mcp/v0.0.1-alpha.11
 
 ### Development

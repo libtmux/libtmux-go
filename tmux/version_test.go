@@ -115,6 +115,8 @@ func TestVersionCompareUsesNumericCoreAndDevelopmentOrder(t *testing.T) {
 		{name: "older", left: "3.2a", right: "3.3", want: -1},
 		{name: "master follows tested release", left: "master", right: "3.7", want: 1},
 		{name: "master precedes next numeric release", left: "master", right: "next-3.8", want: -1},
+		{name: "next release precedes the release it names", left: "next-3.8", right: "3.8", want: -1},
+		{name: "next release follows the release before it", left: "next-3.8", right: "3.7", want: 1},
 		{name: "versioned master follows its core", left: "3.6a-master", right: "3.6", want: 1},
 		{name: "versioned master precedes next core", left: "3.6a-master", right: "3.7", want: -1},
 		{name: "non-master qualifier shares feature level", left: "3.3-rc2", right: "3.3", want: 0},

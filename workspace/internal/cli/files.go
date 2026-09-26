@@ -1,0 +1,477 @@
+package cli
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/spf13/cobra"
+	"go.yaml.in/yaml/v3"
+)
+
+var extensions = []string{".yaml", ".yml", ".json"}
+
+func privatePath(path string) string {
+	home, _ := os.UserHomeDir()
+	if path == home {
+		return "~"
+	}
+	if home != "" && strings.HasPrefix(path, home+string(os.PathSeparator)) {
+		return "~" + strings.TrimPrefix(path, home)
+	}
+	return path
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
+func globalDirectories() ([]map[string]any, string) {
+	type candidate struct{ path, source string }
+	candidates := []candidate{}
+	if path, ok := os.LookupEnv("TMUXP_CONFIGDIR"); ok {
+		candidates = append(candidates, candidate{expand(path), "$TMUXP_CONFIGDIR"})
+	}
+	if xdg, ok := os.LookupEnv("XDG_CONFIG_HOME"); ok {
+		candidates = append(candidates, candidate{filepath.Join(expand(xdg), "tmuxp"), "$XDG_CONFIG_HOME/tmuxp"})
+	} else {
+		candidates = append(candidates, candidate{expand("~/.config/tmuxp"), "XDG default"})
+	}
+	candidates = append(candidates, candidate{expand("~/.tmuxp"), "Legacy"})
+	active := ""
+	result := []map[string]any{}
+	for _, c := range candidates {
+		info, err := os.Stat(c.path)
+		exists := err == nil && info.IsDir()
+		if active == "" && exists {
+			active = c.path
+		}
+		count := len(directoryFiles(c.path))
+		result = append(result, map[string]any{"path": privatePath(c.path), "source": c.source, "exists": exists, "workspace_count": count})
+	}
+	if active == "" {
+		active = candidates[len(candidates)-1].path
+	}
+	for i, c := range candidates {
+		result[i]["active"] = c.path == active
+	}
+	return result, active
+}
+
+func directoryFiles(dir string) []string {
+	result := []string{}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return result
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") && slices.Contains(extensions, strings.ToLower(filepath.Ext(entry.Name()))) {
+			path := filepath.Join(dir, entry.Name())
+			if isFile(path) {
+				result = append(result, path)
+			}
+		}
+	}
+	return result
+}
+
+func resolveFile(input, global string) (string, error) {
+	input = expand(input)
+	if global == "" {
+		_, global = globalDirectories()
+	}
+	pure := input != "" && input != "." && !strings.ContainsAny(input, "/\\") && filepath.Ext(input) == ""
+	if pure {
+		for _, ext := range extensions {
+			candidate := filepath.Join(global, input+ext)
+			if isFile(candidate) {
+				return filepath.Abs(candidate)
+			}
+		}
+		return "", &failure{"workspace_not_found", fmt.Sprintf("workspace %q not found in %s", input, privatePath(global)), 1}
+	}
+	path, err := filepath.Abs(input)
+	if err != nil {
+		return "", err
+	}
+	if info, e := os.Stat(path); e == nil && info.IsDir() {
+		for _, ext := range extensions {
+			candidate := filepath.Join(path, ".tmuxp"+ext)
+			if isFile(candidate) {
+				return candidate, nil
+			}
+		}
+		return "", &failure{"workspace_not_found", fmt.Sprintf("no .tmuxp workspace in %s", privatePath(path)), 1}
+	}
+	if !isFile(path) {
+		return "", &failure{"workspace_not_found", fmt.Sprintf("workspace file %s not found", privatePath(path)), 1}
+	}
+	return path, nil
+}
+
+func discover(full bool) ([]map[string]any, []map[string]any, error) {
+	dirs, active := globalDirectories()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, dirs, err
+	}
+	home, _ := os.UserHomeDir()
+	records := []map[string]any{}
+	seen := map[string]bool{}
+	add := func(path, source string) {
+		absolute, e := filepath.Abs(path)
+		if e != nil || seen[absolute] {
+			return
+		}
+		seen[absolute] = true
+		stat, e := os.Stat(absolute)
+		if e != nil {
+			return
+		}
+		doc, _, _ := readDocument(absolute)
+		format := "yaml"
+		if strings.ToLower(filepath.Ext(path)) == ".json" {
+			format = "json"
+		}
+		record := map[string]any{"name": strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), "path": privatePath(absolute), "format": format, "size": stat.Size(), "mtime": stat.ModTime().UTC().Format(time.RFC3339Nano), "session_name": nil, "source": source}
+		if doc != nil {
+			record["session_name"] = doc["session_name"]
+		}
+		if full {
+			record["config"] = doc
+		}
+		records = append(records, record)
+	}
+	for current := cwd; ; current = filepath.Dir(current) {
+		for _, ext := range extensions {
+			path := filepath.Join(current, ".tmuxp"+ext)
+			if isFile(path) {
+				add(path, "local")
+				break
+			}
+		}
+		if current == home || filepath.Dir(current) == current {
+			break
+		}
+	}
+	for _, path := range directoryFiles(active) {
+		add(path, "global")
+	}
+	return records, dirs, nil
+}
+
+func (r *invocation) list(_ *cobra.Command, o *options, _ []string) error {
+	records, dirs, err := discover(o.full)
+	if err != nil {
+		return err
+	}
+	if r.ndjson {
+		for _, record := range records {
+			if err := r.encode(record); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if r.json {
+		return r.encode(map[string]any{"workspaces": records, "global_workspace_dirs": dirs})
+	}
+	for index, record := range records {
+		prefix, continuation := "", ""
+		if o.tree {
+			directory := filepath.Dir(textValue(record["path"]))
+			if index == 0 || filepath.Dir(textValue(records[index-1]["path"])) != directory {
+				if _, err := fmt.Fprintln(r.out, r.style("heading", safeTerminal(directory))); err != nil {
+					return err
+				}
+			}
+			prefix = "  ├─ "
+			continuation = "  │  "
+			if index+1 == len(records) || filepath.Dir(textValue(records[index+1]["path"])) != directory {
+				prefix = "  └─ "
+				continuation = "     "
+			}
+		}
+		if _, err := fmt.Fprintf(r.out, "%s%s  %s  %s\n", prefix, r.style("subject", safeTerminal(textValue(record["name"]))), r.style("info", safeTerminal(textValue(record["path"]))), r.style("secondary", safeTerminal(textValue(record["source"])))); err != nil {
+			return err
+		}
+		if o.full {
+			data, e := yaml.Marshal(record["config"])
+			if e != nil {
+				return e
+			}
+			if o.tree {
+				_, e = fmt.Fprintln(r.out, continuation+strings.ReplaceAll(strings.TrimSuffix(string(data), "\n"), "\n", "\n"+continuation))
+			} else {
+				_, e = r.out.Write(data)
+			}
+			if e != nil {
+				return e
+			}
+		}
+	}
+	if len(records) == 0 {
+		_, err = fmt.Fprintln(r.out, "No workspaces found.")
+	}
+	return err
+}
+
+func flushOutput(writer io.Writer) error {
+	if flusher, ok := writer.(interface{ Flush() error }); ok {
+		return flusher.Flush()
+	}
+	return nil
+}
+
+func promptLine(ctx context.Context, input io.Reader) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if file, ok := input.(*os.File); ok {
+		return promptFileLine(ctx, file)
+	}
+	return bufio.NewReader(&promptInput{ctx: ctx, input: input}).ReadString('\n')
+}
+
+type promptInput struct {
+	ctx   context.Context
+	input io.Reader
+}
+
+func (r *promptInput) Read(data []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	// Leave bytes after this answer available to the next consumer of input.
+	return r.input.Read(data[:min(1, len(data))])
+}
+
+func (r *invocation) prompt(label, fallback string) (string, error) {
+	return r.promptDefault(label, fallback, fallback)
+}
+
+// promptDefault is prompt with the bracketed hint spelled out separately
+// from the value an empty answer falls back to. A binary choice shows the
+// default's case, "[Y/n]", rather than repeating the bare default alone.
+func (r *invocation) promptDefault(label, display, fallback string) (string, error) {
+	if r.machine() {
+		return "", usage("%s must be supplied in machine mode", label)
+	}
+	if _, err := fmt.Fprintf(r.err, "%s [%s]: ", label, display); err != nil {
+		return "", err
+	}
+	if err := flushOutput(r.err); err != nil {
+		return "", err
+	}
+	line, err := promptLine(r.ctx, r.in)
+	if r.ctx.Err() != nil {
+		return "", r.ctx.Err()
+	}
+	if err != nil && strings.TrimSpace(line) == "" {
+		return "", usage("input required; use explicit noninteractive options")
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		line = fallback
+	}
+	return line, nil
+}
+
+func (r *invocation) confirm(label string, yes bool) error {
+	if yes {
+		return nil
+	}
+	answer, err := r.prompt(label+" (y/n)", "n")
+	if err != nil {
+		return err
+	}
+	if strings.ToLower(answer) != "y" && strings.ToLower(answer) != "yes" {
+		return errors.New("operation declined")
+	}
+	return nil
+}
+
+func validateFormat(format string) error {
+	if format != "" && !slices.Contains([]string{"yaml", "json"}, format) {
+		return usage("invalid workspace format %q", format)
+	}
+	return nil
+}
+
+func atomicWrite(path string, data []byte, force bool) error {
+	// A replacement keeps the mode it replaces; anything else publishes under
+	// the process mask, which the temporary file's own 0600 would narrow.
+	mode := os.FileMode(0o666) &^ processUmask()
+	if info, err := os.Lstat(path); err == nil {
+		if !force {
+			return &failure{"destination_exists", fmt.Sprintf("destination exists: %s; use --force to replace", privatePath(path)), 1}
+		}
+		if info.Mode().IsRegular() {
+			mode = info.Mode().Perm()
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".tmux-workspace-*")
+	if err != nil {
+		return err
+	}
+	name := file.Name()
+	defer func() { _ = os.Remove(name) }()
+	if err = file.Chmod(mode); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if _, err = file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err = file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err = file.Close(); err != nil {
+		return err
+	}
+	if force {
+		return os.Rename(name, path)
+	}
+	// Linking provides no-replace publication even if another writer races us.
+	if err = os.Link(name, path); err != nil {
+		return fmt.Errorf("publish destination without replacement: %w", err)
+	}
+	return nil
+}
+
+// workspaceFileName reports whether name stands alone as a file name in the
+// default workspace directory. tmux accepts separators, traversal and control
+// bytes in a session name, and a capture derived from one would be published
+// outside that directory or echoed to the terminal unescaped.
+func workspaceFileName(name string) bool {
+	return name != "" && name != "." && name != ".." &&
+		!strings.ContainsAny(name, `/\`) &&
+		!strings.ContainsFunc(name, unicode.IsControl)
+}
+
+func (r *invocation) documentResult(o *options, doc document, source, format string, warnings []string) error {
+	if o.format != "" {
+		format = o.format
+	}
+	if o.saveTo == "" && r.machine() {
+		if r.ndjson {
+			return r.result(map[string]any{"status": "ok", "document": doc, "format": format, "warnings": warnings})
+		}
+		return r.encode(doc)
+	}
+	destination := expand(o.saveTo)
+	usingDefault := destination == ""
+	if usingDefault {
+		base := strings.TrimSuffix(source, filepath.Ext(source))
+		if base == "" {
+			name := textValue(doc["session_name"])
+			if !workspaceFileName(name) {
+				return usage("session name %q cannot name a workspace file; use --save-to", safeTerminal(name))
+			}
+			base = filepath.Join(expand("~/.tmuxp"), name)
+		}
+		destination = base + "." + format
+		if !o.yes {
+			answer, err := r.prompt("Save workspace", destination)
+			if err != nil {
+				return err
+			}
+			destination = expand(answer)
+		}
+	}
+	var data []byte
+	var err error
+	if format == "json" {
+		data, err = json.MarshalIndent(doc, "", "  ")
+		data = append(data, '\n')
+	} else {
+		data, err = yaml.Marshal(doc)
+	}
+	if err != nil {
+		return err
+	}
+	if usingDefault {
+		// tmuxp creates the default workspace directory (~/.tmuxp, or the
+		// convert/import source's own directory) before writing; an
+		// explicit --save-to into a missing directory is left refused.
+		if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+			return err
+		}
+	}
+	if err = atomicWrite(destination, data, o.force); err != nil {
+		return err
+	}
+	if r.machine() {
+		return r.result(map[string]any{"status": "ok", "destination": privatePath(destination), "format": format, "warnings": warnings})
+	}
+	if !o.quiet {
+		_, err = fmt.Fprintf(r.out, "%s %s\n", r.style("success", "Saved"), r.style("info", privatePath(destination)))
+	}
+	return err
+}
+
+func (r *invocation) convert(_ *cobra.Command, o *options, args []string) error {
+	if err := validateFormat(o.format); err != nil {
+		return err
+	}
+	path, err := resolveFile(args[0], "")
+	if err != nil {
+		return err
+	}
+	doc, _, err := readDocument(path)
+	if err != nil {
+		return err
+	}
+	format := "json"
+	if strings.ToLower(filepath.Ext(path)) == ".json" {
+		format = "yaml"
+	}
+	if !r.machine() && o.saveTo == "" {
+		if err := r.confirm("Convert workspace", o.yes); err != nil {
+			return err
+		}
+	}
+	return r.documentResult(o, doc, path, format, nil)
+}
+
+func (r *invocation) importDocument(_ *cobra.Command, o *options, args []string, kind string) error {
+	if err := validateFormat(o.format); err != nil {
+		return err
+	}
+	global := expand("~/." + kind)
+	if kind == "tmuxinator" {
+		if configured, exists := os.LookupEnv("TMUXINATOR_CONFIG"); exists {
+			global = expand(configured)
+		}
+	}
+	path, err := resolveFile(args[0], global)
+	if err != nil {
+		return err
+	}
+	doc, _, err := readDocument(path)
+	if err != nil {
+		return err
+	}
+	converted, err := importWorkspace(doc, kind, path)
+	if err != nil {
+		return err
+	}
+	if _, err := normalize(converted, filepath.Dir(path)); err != nil {
+		return fmt.Errorf("imported workspace: %w", err)
+	}
+	return r.documentResult(o, converted, path, "yaml", nil)
+}

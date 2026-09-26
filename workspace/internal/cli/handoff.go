@@ -1,0 +1,157 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"os"
+	"slices"
+	"strings"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+type loadHandoff struct {
+	client    tmux.Client
+	terminal  *os.File
+	input     *os.File
+	anyClient bool
+}
+
+func (r *invocation) prepareHandoff(server tmux.Server) (*loadHandoff, error) {
+	if os.Getenv("TMUX") == "" {
+		if r.terminalInput == nil || !terminal(r.terminalInput) {
+			return nil, usage("attach requires terminal stdin; use -d")
+		}
+		file, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if err != nil {
+			return nil, usage("attach requires a controlling terminal; use -d")
+		}
+		return &loadHandoff{terminal: file, input: r.terminalInput}, nil
+	}
+	if os.Getenv("TMUX_PANE") == "" {
+		// A run-shell key binding sets TMUX but not TMUX_PANE: switching
+		// needs no terminal and no pane to verify, so tmux picks its own
+		// most recently active client.
+		if err := currentEndpoint(server); err != nil {
+			return nil, err
+		}
+		return &loadHandoff{anyClient: true}, nil
+	}
+	snapshot, pane, err := currentView(r.ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	tty, ok := pane.TTY()
+	if !ok {
+		return nil, usage("current pane has no terminal; use -d")
+	}
+	paneInfo, paneErr := os.Stat(tty)
+	inputInfo, inputErr := r.terminalInput.Stat()
+	if paneErr != nil || inputErr != nil || !os.SameFile(paneInfo, inputInfo) {
+		return nil, usage("TMUX_PANE does not identify terminal stdin; use -d")
+	}
+	// What switch-client needs is a client it can move, not one parked on
+	// the exact pane the command was typed into: a load sent to a background
+	// pane by a script or send-keys while the user looks at another window
+	// of the same session is not a reason to refuse. The client whose active
+	// pane is the invoking pane is preferred; any other client attached to
+	// that session is the fallback, and the session having no attached
+	// client at all is the only case this refuses.
+	var selected, fallback tmux.Client
+	for _, client := range snapshot.Clients() {
+		control, queried := client.ControlMode()
+		clientTTY, hasTTY := client.TTY()
+		if !queried || control || !hasTTY || clientTTY == "" {
+			continue
+		}
+		sessionID, hasSession := client.Formats().SessionID()
+		if !hasSession || sessionID != pane.SessionID() {
+			continue
+		}
+		window, hasWindow := client.Formats().WindowID()
+		if !hasWindow || window != pane.WindowID() {
+			if fallback.Name() == "" {
+				fallback = client
+			}
+			continue
+		}
+		flags, hasFlags := client.Flags()
+		if !hasFlags || slices.Contains(strings.Split(flags, ","), "active-pane") {
+			return nil, usage("cannot identify independent active-pane client focus; use -d or --append")
+		}
+		clientPane, hasPane := client.Formats().PaneID()
+		if !hasPane || clientPane != pane.ID() {
+			continue
+		}
+		if selected.Name() != "" {
+			return nil, usage("multiple terminal clients view this pane; use -d or --append")
+		}
+		selected = client
+	}
+	if selected.Name() == "" {
+		selected = fallback
+	}
+	pid, hasPID := selected.ProcessPID()
+	_, hasCreated := selected.Created()
+	if selected.Name() == "" || !hasPID || pid <= 0 || !hasCreated {
+		return nil, usage("no client is attached to this session; use -d or --append")
+	}
+	return &loadHandoff{client: selected}, nil
+}
+
+func (h *loadHandoff) close() {
+	if h.terminal != nil {
+		_ = h.terminal.Close()
+	}
+}
+
+func (h *loadHandoff) attach(ctx context.Context, session tmux.Session) error {
+	if h.terminal != nil {
+		return session.Attach(ctx, tmux.AttachSessionOptions{Stdin: h.input, Stdout: h.terminal, Stderr: h.terminal})
+	}
+	if h.anyClient {
+		return session.SwitchClient(ctx)
+	}
+	live, err := h.client.Refresh(ctx)
+	if err != nil {
+		return errors.Join(&failure{"client_changed", "the invoking client changed before handoff", 1}, err)
+	}
+	oldPID, _ := h.client.ProcessPID()
+	pid, hasPID := live.ProcessPID()
+	oldCreated, _ := h.client.Created()
+	created, hasCreated := live.Created()
+	oldTTY, _ := h.client.TTY()
+	tty, hasTTY := live.TTY()
+	oldSession, _ := h.client.Formats().SessionID()
+	currentSession, hasSession := live.Formats().SessionID()
+	oldWindow, _ := h.client.Formats().WindowID()
+	window, hasWindow := live.Formats().WindowID()
+	oldPane, _ := h.client.Formats().PaneID()
+	pane, hasPane := live.Formats().PaneID()
+	flags, hasFlags := live.Flags()
+	if !h.client.Equal(live) || !hasPID || pid != oldPID ||
+		!hasCreated || !created.Equal(oldCreated) || !hasTTY || tty != oldTTY ||
+		!hasSession || currentSession != oldSession || !hasWindow || window != oldWindow ||
+		!hasPane || pane != oldPane || !hasFlags || slices.Contains(strings.Split(flags, ","), "active-pane") {
+		return &failure{"client_changed", "the invoking client changed before handoff", 1}
+	}
+	// tmux targets the client name; the incarnation check is observational.
+	plan := tmux.NewPlan()
+	plan.SwitchClient(session.Ref(), h.client.Name())
+	result, err := plan.Run(ctx, h.client.Server())
+	if err != nil {
+		return err
+	}
+	return result.Err()
+}
+
+func (r *invocation) finishHandoff(h *loadHandoff, session tmux.Session) error {
+	if h.terminal != nil {
+		restore, err := prepareTerminalRestore(h.input)
+		if err != nil {
+			return err
+		}
+		defer func() { r.terminalRestoreErr = restore() }()
+	}
+	return h.attach(r.ctx, session)
+}

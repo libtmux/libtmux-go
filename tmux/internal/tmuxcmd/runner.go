@@ -44,9 +44,10 @@ type Request struct {
 
 // Stdio supplies concrete files for a streaming subprocess invocation.
 type Stdio struct {
-	Stdin  *os.File
-	Stdout *os.File
-	Stderr *os.File
+	Stdin         *os.File
+	Stdout        *os.File
+	Stderr        *os.File
+	AttachSession bool
 }
 
 // Result contains a completed subprocess invocation.
@@ -90,11 +91,17 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 		result.Command[0] = resolved
 	}
 
+	attached := request.Stdio != nil && request.Stdio.AttachSession
 	cmd := exec.CommandContext(ctx, resolved, arguments...)
 	var interrupted atomic.Bool
 	cancelProcess := cmd.Cancel
 	cmd.Cancel = func() error {
-		err := cancelProcess()
+		var err error
+		if attached {
+			err = cancelAttachedProcess(cmd.Process)
+		} else {
+			err = cancelProcess()
+		}
 		if err == nil {
 			interrupted.Store(true)
 		}
@@ -137,6 +144,9 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 	}
 
 	outcome := processExitOutcome(cmd.ProcessState, interrupted.Load())
+	if attached && interrupted.Load() && ctx.Err() != nil {
+		outcome = processOutcomeCanceled
+	}
 	result.ExitCode = processResultExitCode(cmd.ProcessState, outcome)
 	if err := classifyRunError(runErr, ctx.Err(), outcome); err != nil {
 		return result, err

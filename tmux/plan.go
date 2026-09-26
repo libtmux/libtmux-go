@@ -103,6 +103,7 @@ type Op struct {
 	untargets bool
 	// needsVersion requests the otherwise-avoided version probe.
 	needsVersion bool
+	layout       *SelectLayoutRequest
 }
 
 // Chainable reports whether the operation may share a tmux invocation with
@@ -131,6 +132,7 @@ type Plan struct {
 // rendered. Passing it by value keeps one run's policy out of the recorded plan.
 type planRenderContext struct {
 	version        Version
+	layoutVersion  Version
 	unsupported    UnsupportedPolicy
 	warningHandler WarningHandler
 }
@@ -342,7 +344,7 @@ func (p *Plan) ExplainWith(planner Planner) []Dispatch {
 // Other render failures return the entries completed before the error. Preview
 // catches them before a non-atomic run can partially mutate tmux.
 func (p *Plan) Preview(version Version) ([][]string, error) {
-	render := planRenderContext{version: version}
+	render := planRenderContext{version: version, layoutVersion: version}
 	rendered := make([][]string, len(p.ops))
 	for index := range p.ops {
 		if p.awaitsEarlierStep(index) {
@@ -480,6 +482,10 @@ func (p *Plan) RunWith(
 	if expected != nil {
 		server = server.withDaemon(*expected)
 	}
+	layoutVersion, err := p.validateLayouts(ctx, server)
+	if err != nil {
+		return PlanResult{Ops: results}, err
+	}
 
 	var version Version
 	if p.needsVersion() {
@@ -491,6 +497,7 @@ func (p *Plan) RunWith(
 	}
 	render := planRenderContext{
 		version:        version,
+		layoutVersion:  layoutVersion,
 		unsupported:    state.config.unsupported,
 		warningHandler: state.config.warningHandler,
 	}
@@ -521,6 +528,30 @@ func (p *Plan) RunWith(
 		}
 	}
 	return PlanResult{Ops: results}, nil
+}
+
+func (p *Plan) validateLayouts(ctx context.Context, server Server) (Version, error) {
+	for index, op := range p.ops {
+		if err := ctx.Err(); err != nil {
+			return Version{}, err
+		}
+		if op.layout == nil {
+			continue
+		}
+		if err := op.layout.Validate(); err != nil {
+			return Version{}, fmt.Errorf("step %d: select-layout: %w", index, err)
+		}
+		if err := validateServerCommandArgument("select-layout", "Target", op.target.target, true); err != nil {
+			return Version{}, fmt.Errorf("step %d: select-layout: %w", index, err)
+		}
+	}
+	return server.validateLayouts(ctx, func(yield func(string, int) bool) {
+		for _, op := range p.ops {
+			if op.layout != nil && !yield(op.layout.Layout, 1) {
+				return
+			}
+		}
+	})
 }
 
 func (p *Plan) expectedDaemon() (*snapshotServerIdentity, error) {

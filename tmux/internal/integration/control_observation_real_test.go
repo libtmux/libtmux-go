@@ -254,7 +254,7 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 	}
 	waitForPaneCapture(ctx, t, second, "other-pane")
 	// Queue both lines before either prints; each newline must submit Enter.
-	if _, err := fmt.Fprint(first.Writer(ctx), "tmux wait-for writer-ready; printf 'alpha\\n'\nprintf 'omega\\n'\n"); err != nil {
+	if _, err := fmt.Fprint(first.Writer(ctx), "tmux wait-for writer-ready; printf '\\nalpha\\n'\nprintf '\\nomega\\n'\n"); err != nil {
 		t.Fatal(err)
 	}
 	if err := server.WaitFor(ctx, tmux.WaitForRequest{
@@ -266,8 +266,10 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 
 	scanner := bufio.NewScanner(observation.Reader(ctx))
 	var heard []string
+	var observed []string
 	for scanner.Scan() {
 		line := scanner.Text()
+		observed = append(observed, line)
 		if line == "other-pane" {
 			t.Fatal("Reader() delivered another pane's output")
 		}
@@ -279,6 +281,11 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
+		t.Logf("Reader() raw lines = %q; matched = %q", observed, heard)
+		proofCtx, proofCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer proofCancel()
+		capture, captureErr := first.Capture(proofCtx, tmux.CapturePaneRequest{})
+		t.Logf("first pane capture = %q; error = %v", capture, captureErr)
 		t.Fatal(err)
 	}
 	if want := []string{"alpha", "omega"}; !slices.Equal(heard, want) {
