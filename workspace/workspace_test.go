@@ -255,6 +255,7 @@ func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 		globalOptions map[string]string
 		options       map[string]string
 		wantErr       error
+		serverExits   bool
 	}{
 		{
 			name:    "destroy-unattached",
@@ -265,6 +266,7 @@ func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 			name:          "exit-unattached",
 			globalOptions: map[string]string{"exit-unattached": "on"},
 			wantErr:       tmux.ErrNoServer,
+			serverExits:   true,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -284,12 +286,27 @@ func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 				}},
 			}
 
+			// tmux releases wait-for waiters when it decides to exit.
+			exited := make(chan error, 1)
+			if test.serverExits {
+				go func() { exited <- server.WaitFor(ctx, tmux.WaitForRequest{Channel: test.name}) }()
+			}
+
 			session, err := workspace.Build(ctx, server, described)
 			if session.ID() == "" {
 				t.Fatal("Build() returned a zero session after creating it")
 			}
 			if name, ok := session.Name(); !ok || name != described.SessionName {
 				t.Fatalf("Build() session name = (%q, %t), want (%q, true)", name, ok, described.SessionName)
+			}
+			if test.serverExits {
+				if waitErr := <-exited; waitErr != nil && !errors.Is(waitErr, tmux.ErrNoServer) {
+					t.Fatalf("wait for the server to exit: %v", waitErr)
+				}
+				// Build's refresh is a client, which keeps the server up until it answers.
+				if err == nil {
+					return
+				}
 			}
 			if err == nil {
 				t.Fatal("Build() error = nil, want destroyed-session lifecycle error")
