@@ -125,16 +125,16 @@ chained                    48ms          10        0  7 panes on the server [0 0
 chained + connection        8ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
-## tmux 3.8-rc
+## tmux 3.8-rc2
 
 ```
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
-process                   129ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
-connection                 24ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
-concurrent x4              28ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
-chained                    51ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
-chained + connection       14ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+process                    67ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 21ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              21ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    37ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection        7ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
 ## What one MCP call costs

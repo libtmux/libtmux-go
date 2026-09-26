@@ -21,10 +21,10 @@ var workflowTmuxVersions = regexp.MustCompile(`(?m)^\s+tmux-version:\s*\[([^\]]+
 // rather than a space: prose wraps, and a range split across two lines is the
 // same promise as one that fits on one. Hyphens too, because a range read as
 // one adjective is written that way and promises the same thing. A bound may
-// name a release candidate, which the matrix runs because a tag is immutable
-// whether or not it is final.
+// name a release candidate, numbered or not, which the matrix runs like a
+// release.
 var documentedRange = regexp.MustCompile(
-	`tmux\s+\*?\*?(\d+\.\d+[a-z]?(?:-rc)?)[\s-]+through[\s-]+(\d+\.\d+[a-z]?(?:-rc)?)`,
+	`tmux\s+\*?\*?(\d+\.\d+[a-z]?(?:-rc\d*)?)[\s-]+through[\s-]+(\d+\.\d+[a-z]?(?:-rc\d*)?)`,
 )
 
 // documentedFloorOnly matches a lower bound stated without an upper one.
@@ -39,7 +39,7 @@ var documentedNamedFloor = regexp.MustCompile(
 
 // benchmarkSection matches the heading BENCHMARKS.md gives one tmux release's
 // measurements.
-var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?(?:-rc)?)\s*$`)
+var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?(?:-rc\d*)?)\s*$`)
 
 func workflowVersionNames(t *testing.T, root string) []string {
 	t.Helper()

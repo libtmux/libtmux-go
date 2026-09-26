@@ -12,7 +12,7 @@ option and hook as a typed accessor, and errors classified by what tmux actually
 refused.
 
 - **No runtime dependencies.** The core module imports only the standard library.
-- **Go 1.26+**, tmux **3.2a through 3.8-rc** across the core, workspace, and
+- **Go 1.26+**, tmux **3.2a through 3.8-rc2** across the core, workspace, and
   MCP modules. The compatibility matrix checks ten builds spanning that
   range, the 3.8 release candidate included.
   The Go floor tracks upstream's support window, which covers the two most

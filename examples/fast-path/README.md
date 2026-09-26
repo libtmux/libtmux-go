@@ -3,7 +3,7 @@
 The same ten reads run through a plain server and an owned connection. The
 example then shows which exact-capture operations each path supports.
 
-Both paths support tmux 3.2a through 3.8-rc.
+Both paths support tmux 3.2a through 3.8-rc2.
 
 ## Running it
 

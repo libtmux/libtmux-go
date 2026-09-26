@@ -6,7 +6,7 @@ A control-mode connection is a tmux client that stays open. tmux pushes what
 happens down it, so a change is heard once, when it happens, instead of being
 discovered by a poll that has to guess how often to ask.
 
-The notification stream supports the same tmux 3.2a through 3.8-rc range as the
+The notification stream supports the same tmux 3.2a through 3.8-rc2 range as the
 ordinary process API.
 
 ## Running it
