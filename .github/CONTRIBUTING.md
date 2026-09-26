@@ -144,7 +144,7 @@ version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
 tmux is on `PATH`, so run the supported releases before anything ships.
 `scripts/matrix.sh` runs every compatible module suite, given a directory of
 tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
-whole 3.2a-through-3.8-rc range. With no matrix directory, the script skips with
+whole 3.2a-through-3.8-rc2 range. With no matrix directory, the script skips with
 an explanation rather than reporting a pass it did not earn. Set
 `LIBTMUX_MATRIX_REQUIRED=1` for a release gate, where absence must fail. With
 no explicit `LIBTMUX_MATRIX_VERSIONS`, required mode checks all ten supported
