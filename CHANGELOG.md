@@ -53,6 +53,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### workspace
 
+- `go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest`
+  installs `tmux-workspace`, and rerunning it upgrades. (#22)
 - Add the `tmux-workspace` command: `load`, `ls`, `search`, `edit`, `freeze`,
   `convert`, `import`, `shell` and `debug-info`, with human, JSON and NDJSON
   output and generated shell completion. [`workspace/CLI.md`](workspace/CLI.md)
