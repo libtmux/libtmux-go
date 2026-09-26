@@ -9,8 +9,19 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### Development
+
+- The tmux matrix, the documented supported range and the benchmark tables
+  move from 3.8-rc to 3.8-rc2, which replaced it upstream. (#21)
+- The documented-range check reads a numbered release candidate such as
+  `3.8-rc2`. (#21)
+
 ### tmux
 
+- On tmux 3.8, abandoning a `WaitForModeLock` wait no longer costs the
+  channel an unlock: tmux drops the wait of a client that was killed (tmux
+  issue 5614), so a second unlock fails. `WaitForModeLock` and `WaitFor`
+  say the extra unlock applies before 3.8. (#21)
 - Add `SelectLayoutRequest.Validate` to check layout requests without tmux I/O.
   Workspace parsing uses the same validation as core layout operations. (#15)
 - Add `Server.ValidateLayouts` to check every layout and required pane count
