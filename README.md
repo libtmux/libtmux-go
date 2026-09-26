@@ -409,7 +409,7 @@ none of them:
 | Module | Source | Reference | What it is |
 | --- | --- | --- | --- |
 | `mcp` | [`mcp/`](mcp/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp) | **A tmux server for AI agents** over the Model Context Protocol. Install it as a binary. |
-| `workspace` | [`workspace/`](workspace/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace) | Loads tmuxp-style YAML workspaces and builds them. |
+| `workspace` | [`workspace/`](workspace/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace) | Loads tmuxp-style YAML workspaces and builds them. Its CLI installs as a binary too. |
 | `benchmarks` | [`benchmarks/`](benchmarks/) | — | Prints what each way of reaching tmux costs. |
 
 ### For agents
@@ -423,6 +423,18 @@ $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 
 See [`mcp/README.md`](mcp/README.md) for client configuration, and
 [`mcp/TOOLS.md`](mcp/TOOLS.md) for the tool reference.
+
+### For workspace automation
+
+[`workspace/`](workspace/) loads tmuxp-style YAML workspace files and builds
+them; its `tmux-workspace` CLI adds native workspace management, structured
+output, and optional Python compatibility.
+
+```console
+$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+```
+
+See [`workspace/CLI.md`](workspace/CLI.md) for commands and output formats.
 
 ## Testing your own code
 

@@ -5,8 +5,15 @@ services. It requires Go 1.26 to build and tmux 3.2a or later to load or capture
 sessions. Discovery, conversion, import, help and documentation generation do
 not require tmux.
 
-The CLI is available from this checkout; it has no published CLI release yet.
-Install from the repository root:
+```console
+$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+```
+
+That puts `tmux-workspace` in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin`
+when `GOBIN` is unset. The same command upgrades an existing install to the
+newest release.
+
+From a checkout instead, build the working tree:
 
 ```console
 $ go install ./workspace/cmd/tmux-workspace
