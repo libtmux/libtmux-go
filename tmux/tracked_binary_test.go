@@ -3,6 +3,7 @@ package tmux_test
 import (
 	"bytes"
 	"errors"
+	"image/png"
 	"io"
 	"os"
 	"os/exec"
@@ -27,8 +28,8 @@ import (
 // core.autocrlf and diff use, a NUL byte in a file's first 8000 bytes (see
 // git's own buffer_is_binary). Reusing it means this test flags exactly what
 // "git diff" would call a binary file, so the two never disagree about what
-// counts.
-func TestNoTrackedFileIsBinary(t *testing.T) {
+// counts. Reviewed PNG artwork is allowed only at its declared path.
+func TestNoUnexpectedTrackedFileIsBinary(t *testing.T) {
 	t.Parallel()
 
 	root := documentationModuleRoot(t)
@@ -42,6 +43,19 @@ func TestNoTrackedFileIsBinary(t *testing.T) {
 	var binaries []string
 	for path := range strings.SplitSeq(strings.TrimRight(string(output), "\x00"), "\x00") {
 		if path == "" {
+			continue
+		}
+		switch path {
+		case ".github/social-preview.png", "assets/logo.png", "mcp/assets/logo.png",
+			"mcp/cmd/libtmux-mcp/assets/logo.png", "tmux/assets/logo.png",
+			"tmux/tmuxtest/assets/logo.png", "tmuxq/assets/logo.png", "workspace/assets/logo.png":
+			data, err := os.ReadFile(filepath.Join(root, path))
+			if err != nil {
+				t.Fatalf("read artwork %s: %v", path, err)
+			}
+			if _, err := png.Decode(bytes.NewReader(data)); err != nil {
+				t.Fatalf("invalid PNG artwork %s: %v", path, err)
+			}
 			continue
 		}
 		looksBinary, err := fileLooksBinary(filepath.Join(root, path))

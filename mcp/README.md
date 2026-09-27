@@ -1,3 +1,12 @@
+<!-- libtmux-logo -->
+<p align="center">
+  <picture>
+    <source srcset="assets/logo.svg" type="image/svg+xml">
+    <img src="assets/logo.png" width="128" height="128" alt="libtmux for Go MCP">
+  </picture>
+</p>
+<!-- /libtmux-logo -->
+
 <!-- mcp-name: io.github.libtmux/tmux-mcp-go -->
 
 # mcp
