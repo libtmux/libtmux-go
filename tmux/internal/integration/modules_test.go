@@ -293,9 +293,21 @@ replace github.com/libtmux/libtmux-go => %q
 // checkout's go.mod. Current source compilation is covered separately because
 // its sibling versions may not have been released in dependency order yet.
 func TestLatestPublishedServerInstalls(t *testing.T) {
-	install := exec.Command(
-		"go", "install", "github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest",
-	)
+	installLatest(t, "github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp")
+}
+
+// TestLatestPublishedWorkspaceCLIInstalls gates the command workspace/CLI.md
+// tells a user to type, the same way.
+func TestLatestPublishedWorkspaceCLIInstalls(t *testing.T) {
+	installLatest(t, "github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace")
+}
+
+// installLatest runs go install for pkg at @latest with the workspace off and
+// a throwaway GOBIN, so nothing lands on the caller's PATH.
+func installLatest(t *testing.T, pkg string) {
+	t.Helper()
+
+	install := exec.Command("go", "install", pkg+"@latest")
 	install.Env = append(
 		os.Environ(),
 		"GOWORK=off",

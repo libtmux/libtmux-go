@@ -68,12 +68,12 @@ $ go test \
     ./tmux/internal/integration/
 ```
 
-The install gate runs the documented version-suffixed command, so it tests the
-latest published MCP artifact rather than compiling current source against old
-sibling releases:
+The install gates run the documented version-suffixed commands, so they test
+the latest published MCP server and workspace CLI rather than compiling current
+source against old sibling releases:
 
 ```console
-$ go test ./tmux/internal/integration/ -run TestLatestPublishedServerInstalls
+$ go test ./tmux/internal/integration/ -run TestLatestPublished
 ```
 
 A `require` naming a module of this repository is a copy of a tag, so it is
