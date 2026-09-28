@@ -7,12 +7,16 @@
 </p>
 <!-- /libtmux-logo -->
 
-# tmuxq
+<div align="center">
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmuxq.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq)
+# tmuxq
 
 Generic helpers for filtering and collecting tmux records. It imports no tmux
 types, so it works on any slice or `iter.Seq`.
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmuxq.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq)
+
+</div>
 
 ```go
 import "github.com/libtmux/libtmux-go/tmuxq"

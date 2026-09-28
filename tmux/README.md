@@ -7,14 +7,18 @@
 </p>
 <!-- /libtmux-logo -->
 
+<div align="center">
+
 # tmux
+
+The library. A typed, context-aware tmux API with no runtime dependencies.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 
+</div>
+
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
-
-The library. A typed, context-aware tmux API with no runtime dependencies.
 
 ```console
 $ go get github.com/libtmux/libtmux-go/tmux

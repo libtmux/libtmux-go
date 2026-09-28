@@ -7,11 +7,15 @@
 </p>
 <!-- /libtmux-logo -->
 
+<div align="center">
+
 # tmuxtest
+
+Run your program inside a real tmux and assert on what it drew.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux/tmuxtest.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
 
-Run your program inside a real tmux and assert on what it drew.
+</div>
 
 ```go
 import "github.com/libtmux/libtmux-go/tmux/tmuxtest"

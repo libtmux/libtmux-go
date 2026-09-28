@@ -7,10 +7,14 @@
 </p>
 <!-- /libtmux-logo -->
 
+<div align="center">
+
 # libtmux-mcp
 
 The binary an MCP client launches. It serves **one** tmux server over stdin and
 stdout.
+
+</div>
 
 Which tmux server it serves is chosen by flags at startup and cannot be changed
 by a client, so a client reaches only the socket the operator selected.
