@@ -7,17 +7,21 @@
 </p>
 <!-- /libtmux-logo -->
 
-<!-- mcp-name: io.github.libtmux/tmux-mcp-go -->
+<div align="center">
 
 # mcp
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/mcp.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
-
-Alpha software. Releases carry an -alpha prerelease tag and the API is not
-settled. Pin an exact version.
+<!-- mcp-name: io.github.libtmux/tmux-mcp-go -->
 
 Serve one tmux server to Model Context Protocol clients, built on the
 [tmux module] and the [Go MCP SDK].
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/mcp.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
+
+</div>
+
+Alpha software. Releases carry an -alpha prerelease tag and the API is not
+settled. Pin an exact version.
 
 This is a consumer of the tmux module, not part of it. The tmux module takes no
 runtime dependency; speaking MCP needs one, so this lives in its own module and

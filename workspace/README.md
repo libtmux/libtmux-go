@@ -7,14 +7,18 @@
 </p>
 <!-- /libtmux-logo -->
 
+<div align="center">
+
 # workspace
+
+Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/workspace.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace)
 
+</div>
+
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
-
-Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
 The [`tmux-workspace` CLI](CLI.md) provides native workspace management,
 structured output, and optional Python compatibility.
