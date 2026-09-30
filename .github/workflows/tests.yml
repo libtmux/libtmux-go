@@ -397,6 +397,7 @@ jobs:
         env:
           TMUX_VERSION: ${{ matrix.tmux-version }}
         run: |
+          sudo apt-get update
           sudo apt-get install --yes libevent-2.1-7
           export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
           actual_version=$(tmux -V)
