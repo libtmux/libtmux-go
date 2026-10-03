@@ -546,6 +546,19 @@ command usually leads to its method without a lookup.
 | [`AGENTS.md`](AGENTS.md) | Which of the above applies to what you are changing |
 | [`examples/`](examples/) | Runnable programs for each of the above |
 
+## Attribution
+
+Please use the following BibTeX template to cite libtmux-go in scientific discourse:
+
+```bibtex
+@misc{libtmux-go,
+   author = {Tony Narlock},
+   year = {2026},
+   note = {https://libtmux.org/en/go/},
+   title = {libtmux-go: Go wrapper for tmux}
+}
+```
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
