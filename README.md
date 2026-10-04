@@ -509,7 +509,10 @@ answers the invocations you name, so the test needs no tmux installed:
 ```go
 server, err := tmux.NewServer(tmux.ServerOptions{
 	Binary: tmuxtest.ScriptedTmux(t,
-		tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+		tmuxtest.ScriptedCommand{
+			Contains: []string{"-V"},
+			Stdout:   "tmux 3.7\n",
+		},
 		tmuxtest.ScriptedCommand{
 			Contains: []string{"kill-pane"},
 			Stderr:   "can't find pane: %7\n",
