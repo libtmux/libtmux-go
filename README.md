@@ -497,7 +497,8 @@ func TestSomething(t *testing.T) {
 	ctx := context.Background()
 	server := tmuxtest.NewServer(ctx, t)
 
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+	request := tmux.NewSessionRequest{Name: "under-test"}
+	session, err := server.NewSession(ctx, request)
 	// ...
 }
 ```
