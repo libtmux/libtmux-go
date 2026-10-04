@@ -26,7 +26,8 @@ func TestRunToCompletion(t *testing.T) {
 	if want := "exited 3"; !strings.Contains(printed, want) {
 		t.Errorf("printed %q, want it to contain %q", printed, want)
 	}
-	// tty prints the pane's terminal, so the command saw a tty rather than a pipe.
+	// tty prints the pane's terminal, so the command saw a tty rather than a
+	// pipe.
 	if want := "screen: /dev/"; !strings.Contains(printed, want) {
 		t.Errorf("printed %q, want the command's terminal on screen", printed)
 	}
