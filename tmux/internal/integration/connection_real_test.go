@@ -15,6 +15,50 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
+// darwinSocketBudget is the longest socket path tmux binds on Darwin, whose
+// sun_path holds 104 bytes including the terminating NUL.
+const darwinSocketBudget = 103
+
+// darwinSocketBytes is the length of path once the system temporary directory
+// is spelled the way the kernel does: /tmp and /var are links into /private.
+func darwinSocketBytes(path string) int {
+	if strings.HasPrefix(path, "/tmp/") || strings.HasPrefix(path, "/var/") {
+		return len("/private") + len(path)
+	}
+	return len(path)
+}
+
+// shortSocketPath returns a socket path that fits Darwin's limit. t.TempDir
+// names its directory after the test and a long test name overflows it:
+// tmux then cannot bind and the control client reports itself closed.
+func shortSocketPath(t *testing.T) string {
+	t.Helper()
+	//nolint:usetesting // t.TempDir names the directory after the test, which is the overflow.
+	directory, err := os.MkdirTemp("", "s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	path := filepath.Join(directory, "tmux.sock")
+	if got := darwinSocketBytes(path); got > darwinSocketBudget {
+		t.Fatalf("socket path %q is %d bytes on Darwin, want at most %d", path, got, darwinSocketBudget)
+	}
+	return path
+}
+
+func TestDarwinSocketBytesCountsTheCanonicalBase(t *testing.T) {
+	t.Parallel()
+
+	const root = "/tmp/ltg-1234567890/"
+	named := root + "TestNewSessionConnectionSurvivesCreatedSessionDestruction1234567890/001/tmux.sock"
+	if got := darwinSocketBytes(named); got <= darwinSocketBudget {
+		t.Errorf("t.TempDir-style socket = %d bytes, want over %d", got, darwinSocketBudget)
+	}
+	if got := darwinSocketBytes(root + "s123456789/tmux.sock"); got > darwinSocketBudget {
+		t.Errorf("short socket = %d bytes, want at most %d", got, darwinSocketBudget)
+	}
+}
+
 func requireNoDetachOnDestroy(t *testing.T, server tmux.Server) {
 	t.Helper()
 	version, err := server.Version(t.Context())
@@ -54,7 +98,7 @@ exec "$LIBTMUX_CONNECTION_REAL_TMUX" "$@"
 	}
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		Binary:     proxy,
-		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		SocketPath: shortSocketPath(t),
 		ProcessEnvironment: append(
 			os.Environ(),
 			"LIBTMUX_CONNECTION_INVOCATIONS="+invocations,
@@ -243,7 +287,7 @@ func TestNewSessionConnectionSurvivesCreatedSessionDestruction(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+		SocketPath: shortSocketPath(t),
 	})
 	if err != nil {
 		t.Fatal(err)
