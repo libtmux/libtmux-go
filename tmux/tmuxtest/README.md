@@ -153,7 +153,9 @@ Sibling checkouts running their own suites on the same machine will fight over
 tmux sockets. Give yours a namespace:
 
 ```console
-$ export TMUX_TMPDIR=/tmp/my-project-test && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
+$ export TMUX_TMPDIR=/tmp/my-project-test && \
+    mkdir -p "$TMUX_TMPDIR" && \
+    unset TMUX TMUX_PANE
 ```
 
 Some real-tmux tests are load-sensitive. Three signs a failure is the machine
