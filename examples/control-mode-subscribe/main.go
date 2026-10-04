@@ -89,8 +89,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		if err != nil {
 			return fmt.Errorf("read notification: %w", err)
 		}
-		if change, ok := notification.Subscription(); ok &&
-			change.Value == "2" {
+		change, ok := notification.Subscription()
+		if ok && change.Value == "2" {
 			fmt.Println("session has", change.Value, "windows")
 			return nil
 		}
