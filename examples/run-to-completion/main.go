@@ -33,12 +33,18 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-run"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-run"},
+	)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
@@ -59,7 +65,11 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	// followed and it can be stopped from another goroutine. The stream begins
 	// where StreamTo opens it, so this command waits before its first line;
 	// result.Lines holds the screen either way.
-	running, err := session.Start(ctx, "sleep 1; seq 1 3; sleep 30", tmux.RunOptions{})
+	running, err := session.Start(
+		ctx,
+		"sleep 1; seq 1 3; sleep 30",
+		tmux.RunOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("start command: %w", err)
 	}

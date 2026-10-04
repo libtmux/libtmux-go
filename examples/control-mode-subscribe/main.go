@@ -32,12 +32,18 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-control"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-control"},
+	)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
@@ -83,7 +89,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		if err != nil {
 			return fmt.Errorf("read notification: %w", err)
 		}
-		if change, ok := notification.Subscription(); ok && change.Value == "2" {
+		if change, ok := notification.Subscription(); ok &&
+			change.Value == "2" {
 			fmt.Println("session has", change.Value, "windows")
 			return nil
 		}

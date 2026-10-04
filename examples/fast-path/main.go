@@ -27,7 +27,10 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	return run(ctx, tmux.ServerOptions{SocketName: "libtmux-go-example-fast-path"})
+	return run(
+		ctx,
+		tmux.ServerOptions{SocketName: "libtmux-go-example-fast-path"},
+	)
 }
 
 // run accepts options so tests can isolate the server.
@@ -37,7 +40,10 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
 	defer func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(
+			context.Background(),
+			5*time.Second,
+		)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	}()
@@ -77,12 +83,17 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	if err != nil {
 		return fmt.Errorf("resolve connected pane: %w", err)
 	}
-	if _, err := connectedPane.Capture(ctx, tmux.CapturePaneRequest{}); !errors.Is(
+	if _, err := connectedPane.Capture(
+		ctx,
+		tmux.CapturePaneRequest{},
+	); !errors.Is(
 		err,
 		tmux.ErrConnectionRequiresProcess,
 	) {
 		if err == nil {
-			return errors.New("connected printed capture unexpectedly succeeded")
+			return errors.New(
+				"connected printed capture unexpectedly succeeded",
+			)
 		}
 		return fmt.Errorf("refuse connected printed capture: %w", err)
 	}
@@ -92,7 +103,10 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	}
 	defer func() { _ = os.RemoveAll(directory) }()
 
-	if _, err := processPane.Capture(ctx, tmux.CapturePaneRequest{}); err != nil {
+	if _, err := processPane.Capture(
+		ctx,
+		tmux.CapturePaneRequest{},
+	); err != nil {
 		return fmt.Errorf("capture: %w", err)
 	}
 
