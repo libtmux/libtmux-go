@@ -73,8 +73,9 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	}
 	fmt.Printf("connection path: %d searches\n", searchesPerPath)
 
-	// Arbitrary pane output can end a control frame. Exact printed capture needs
-	// the original subprocess handle; file staging stays on the connection.
+	// Arbitrary pane output can end a control frame. Exact printed capture
+	// needs the original subprocess handle; file staging stays on the
+	// connection.
 	processPane, err := session.ResolveActivePane(ctx)
 	if err != nil {
 		return fmt.Errorf("resolve process pane: %w", err)
@@ -83,17 +84,12 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	if err != nil {
 		return fmt.Errorf("resolve connected pane: %w", err)
 	}
-	if _, err := connectedPane.Capture(
-		ctx,
-		tmux.CapturePaneRequest{},
-	); !errors.Is(
-		err,
-		tmux.ErrConnectionRequiresProcess,
-	) {
+	request := tmux.CapturePaneRequest{}
+	_, err = connectedPane.Capture(ctx, request)
+	if !errors.Is(err, tmux.ErrConnectionRequiresProcess) {
 		if err == nil {
-			return errors.New(
-				"connected printed capture unexpectedly succeeded",
-			)
+			const message = "connected printed capture unexpectedly succeeded"
+			return errors.New(message)
 		}
 		return fmt.Errorf("refuse connected printed capture: %w", err)
 	}
@@ -103,15 +99,12 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 	}
 	defer func() { _ = os.RemoveAll(directory) }()
 
-	if _, err := processPane.Capture(
-		ctx,
-		tmux.CapturePaneRequest{},
-	); err != nil {
+	if _, err := processPane.Capture(ctx, request); err != nil {
 		return fmt.Errorf("capture: %w", err)
 	}
 
 	if _, err := connectedPane.CaptureToFile(
-		ctx, filepath.Join(directory, "pane.txt"), tmux.CapturePaneRequest{},
+		ctx, filepath.Join(directory, "pane.txt"), request,
 	); err != nil {
 		return fmt.Errorf("capture to file: %w", err)
 	}
