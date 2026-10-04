@@ -137,7 +137,7 @@ func TestSnapshotOnZeroSessionServerIsEmptyNotAnError(t *testing.T) {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})
@@ -209,7 +209,7 @@ func snapshotWithAttachedClient(
 	client *tmuxtest.ControlMode,
 ) tmux.Snapshot {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	for {
 		snapshot, err := server.Snapshot(ctx)

@@ -937,7 +937,7 @@ func TestRecordsSurviveWindowRenumberAgainstRealTmux(t *testing.T) {
 //libtmux:real-tmux
 func TestSessionLastWindowErrorAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	session := mustRealSnapshot(t, server).Sessions()[0]
 

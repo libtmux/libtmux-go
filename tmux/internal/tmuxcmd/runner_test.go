@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestRunnerReturnsNonzeroExitAndSplitOutputAsData(t *testing.T) {
@@ -138,7 +140,7 @@ func TestRunnerMarksCancellationAfterStartAsOutcomeUnknown(t *testing.T) {
 		completed <- runErr
 	}()
 
-	if err := ready.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+	if err := ready.SetReadDeadline(time.Now().Add(hangguard.Wait)); err != nil {
 		cancel()
 		t.Fatalf("set readiness deadline: %v", err)
 	}
@@ -184,7 +186,7 @@ func TestRunnerNaturalExitWinsCancellationRace(t *testing.T) {
 					completed <- outcome{result: result, err: runErr}
 				}()
 
-				if err := ready.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+				if err := ready.SetReadDeadline(time.Now().Add(hangguard.Wait)); err != nil {
 					cancel()
 					t.Fatalf("set readiness deadline: %v", err)
 				}

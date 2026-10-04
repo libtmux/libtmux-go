@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
@@ -30,7 +29,7 @@ func ExampleServer_Windows_complete() {
 		}
 		defer func() {
 			// Cleanup has its own deadline because the operation may have timed out.
-			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cleanup, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 			defer cancel()
 			if err := server.Kill(cleanup); err != nil && !errors.Is(err, tmux.ErrNoServer) {
 				runErr = errors.Join(runErr, fmt.Errorf("stop server at %s: %w", directory, err))
@@ -38,7 +37,7 @@ func ExampleServer_Windows_complete() {
 			}
 			runErr = errors.Join(runErr, os.RemoveAll(directory))
 		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 		defer cancel()
 		for _, name := range []string{"work", "docs"} {
 			if _, err = server.NewSession(ctx, tmux.NewSessionRequest{

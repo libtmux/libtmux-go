@@ -30,7 +30,7 @@ const exampleWaitBudget = 60 * time.Second
 // is when cleanup matters most, and the socket it names is fixed: a server left
 // running fails every later run with a session that already exists.
 func killExampleServer(server tmux.Server) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
 	_ = server.Kill(ctx)
 }
@@ -368,7 +368,7 @@ func ExampleServer_OpenControl() {
 		return
 	}
 	defer func() {
-		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 		defer closeCancel()
 		_ = client.CloseContext(closeCtx)
 	}()

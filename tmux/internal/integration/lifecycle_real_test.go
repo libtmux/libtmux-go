@@ -344,7 +344,7 @@ func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 
 	session, err := ambient.NewSession(ctx, tmux.NewSessionRequest{
@@ -379,7 +379,7 @@ func TestNewSessionKeepsTheSocketSelectedByTMUX(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cleanupCancel()
 		_ = distractor.Kill(cleanupCtx)
 	})
@@ -518,7 +518,7 @@ func TestStartKeepsAnEmptyServerOnlyThroughTheConfigFile(t *testing.T) {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})

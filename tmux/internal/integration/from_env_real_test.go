@@ -6,9 +6,9 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -37,7 +37,7 @@ func TestFromEnvDiscoversRealPaneAndContainingHierarchy(t *testing.T) {
 		t.Fatalf("NewServerFromEnv().SocketPath() = %q, want %q", discoveredServer.SocketPath(), server.SocketPath())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	pane, err := tmux.PaneFromEnv(ctx, env)
 	if err != nil {
@@ -75,7 +75,7 @@ func TestPaneFromEnvReportsMissingPaneOnLiveServer(t *testing.T) {
 	}
 	mustRealCommand(t, server, "kill-pane", "-t", result.Stdout[0])
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	_, err := tmux.PaneFromEnv(ctx, env)
 	if !errors.Is(err, tmux.ErrNotFound) {

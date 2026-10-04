@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
@@ -577,7 +578,7 @@ func TestWaitDoesNotBlameAConcurrentClaimsCleanupOnItself(t *testing.T) {
 		if got.result.Status != 42 {
 			t.Errorf("Wait() result.Status = %d, want 42", got.result.Status)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Wait() did not return after the claimed outcome was released")
 	}
 	if got := runner.kills.Load(); got != 0 {
@@ -634,7 +635,7 @@ func TestWaitOutcomeOutlivesTheCallerThatReadIt(t *testing.T) {
 				if !errors.Is(err, context.DeadlineExceeded) {
 					t.Errorf("concurrent Wait() error = %v, want its own deadline", err)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Error("concurrent Wait() held past its own deadline by another caller's read")
 			}
 			cancelFirst()
