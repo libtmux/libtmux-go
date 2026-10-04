@@ -62,9 +62,8 @@ func ExampleWhereSeq() {
 		{name: "shell", active: true},
 	}
 
-	for pane := range tmuxq.WhereSeq(slices.Values(panes), func(pane *pane) bool {
-		return pane.active
-	}) {
+	isActive := func(pane *pane) bool { return pane.active }
+	for pane := range tmuxq.WhereSeq(slices.Values(panes), isActive) {
 		fmt.Println(pane.name)
 	}
 
