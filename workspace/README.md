@@ -115,7 +115,8 @@ because a directory a `shell_command_before` creates is ordinary.
 
 ```yaml
 session_name: project
-start_directory: ~/src/project    # created beforehand; tmux falls back to $HOME if absent
+# created beforehand; tmux falls back to $HOME if absent
+start_directory: ~/src/project
 environment:
   PROJECT_ENV: development
 windows:
