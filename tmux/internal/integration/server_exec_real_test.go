@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -493,7 +494,7 @@ func TestWaitForTreatsLeadingDashChannelAsPositionalAgainstRealTmux(t *testing.T
 	}
 	// tmux remembers a signal that arrived with no waiter, so a later plain
 	// wait on the same channel returns at once instead of blocking.
-	waitCtx, waitCancel := context.WithTimeout(ctx, 3*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(ctx, hangguard.Wait)
 	defer waitCancel()
 	if err := server.WaitFor(waitCtx, tmux.WaitForRequest{Channel: "-dash-channel"}); err != nil {
 		t.Fatalf("WaitFor(wait) error = %v, want the remembered signal to return at once", err)

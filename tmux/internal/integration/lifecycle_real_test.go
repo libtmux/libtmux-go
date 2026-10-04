@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -422,7 +423,7 @@ func assertRealPaneLaunch(
 	if err != nil {
 		t.Fatalf("Server.Pane(%s) error = %v", paneID, err)
 	}
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, hangguard.Wait)
 	defer cancel()
 	var path, command string
 	var pathOK, commandOK bool

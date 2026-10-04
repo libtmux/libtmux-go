@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -1269,7 +1270,7 @@ func requireRunCommandAvailable(
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	for {
 		_, output, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
-			PaneID: pane.ID().String(), Command: "true", TimeoutSeconds: 1,
+			PaneID: pane.ID().String(), Command: "true", TimeoutSeconds: int(hangguard.Wait.Seconds()),
 		})
 		if err == nil {
 			if output.ExitStatus == nil || *output.ExitStatus != 0 {

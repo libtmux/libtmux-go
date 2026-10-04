@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 )
 
 func TestPairedFlagsLastOccurrence(t *testing.T) {
@@ -199,13 +201,13 @@ type rejectingWriter struct{}
 func (rejectingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
 
 func TestChildDrainFailureCancelsProcess(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), hangguard.Wait)
 	defer cancel()
 	r := &invocation{ctx: ctx, out: rejectingWriter{}, err: io.Discard, ndjson: true}
 	start := time.Now()
 	// Establish the descendant before its parent's output triggers cancellation.
-	result, err := r.process([]string{"/bin/sh", "-c", "sleep 5 & printf output; wait"}, "", nil, true)
-	if err == nil || result.Status == 0 || time.Since(start) > 700*time.Millisecond {
+	result, err := r.process([]string{"/bin/sh", "-c", "sleep 60 & printf output; wait"}, "", nil, true)
+	if err == nil || result.Status == 0 || time.Since(start) > hangguard.Wait {
 		t.Fatalf("child did not stop with a failure status: %+v %v (%s)", result, err, time.Since(start))
 	}
 }
