@@ -13,11 +13,8 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
-
-// waitBudget bounds a pane wait whose context has no deadline. Failures print
-// the last screen read.
-const waitBudget = 30 * time.Second
 
 // Screen returns the pane's visible lines, top to bottom, with tmux's trailing
 // blank lines removed.
@@ -209,7 +206,7 @@ func waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, ok := ctx.Deadline(); ok {
 		return context.WithCancel(ctx)
 	}
-	return context.WithTimeout(ctx, waitBudget)
+	return context.WithTimeout(ctx, hangguard.Wait)
 }
 
 // readScreen removes the blank lines tmux pads to the pane height.

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -208,7 +209,7 @@ func TestControlModeWaitPreservesProtocolOutputUntilEOF(t *testing.T) {
 
 func onlyControlSession(t *testing.T, server tmux.Server) tmux.Session {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil {
@@ -222,7 +223,7 @@ func onlyControlSession(t *testing.T, server tmux.Server) tmux.Session {
 
 func controlCommand(t *testing.T, server tmux.Server, arguments ...string) tmux.CommandResult {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	result, err := server.Cmd(ctx, arguments...)
 	if err != nil {
