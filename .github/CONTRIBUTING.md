@@ -149,6 +149,16 @@ Then confirm that regeneration changed nothing:
 $ git diff --exit-code
 ```
 
+Examples stay within 80 columns, which gofumpt does not enforce.
+`.github/example-width.toml` names the files the check reads and lists the few
+lines allowed to stay wider. The self-test comes first because it proves the
+check can fail:
+
+```console
+$ python3 internal/tools/check_example_width.py --self-test && \
+    python3 internal/tools/check_example_width.py
+```
+
 The race detector is not optional before anything ships:
 
 ```console
