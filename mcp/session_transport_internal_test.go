@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -170,7 +171,7 @@ func TestNotificationTimeoutRetiresQueuedResponses(t *testing.T) {
 			}()
 			select {
 			case <-inner.started:
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("ordinary response write did not start")
 			}
 
@@ -186,7 +187,7 @@ func TestNotificationTimeoutRetiresQueuedResponses(t *testing.T) {
 				if !errors.Is(err, context.DeadlineExceeded) {
 					t.Fatalf("notification Write() error = %v, want deadline exceeded", err)
 				}
-			case <-time.After(250 * time.Millisecond):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("notification budget did not include write serialization")
 			}
 			select {
@@ -194,7 +195,7 @@ func TestNotificationTimeoutRetiresQueuedResponses(t *testing.T) {
 				if !errors.Is(err, ErrInstanceClosed) {
 					t.Fatalf("queued response Write() error = %v, want ErrInstanceClosed", err)
 				}
-			case <-time.After(250 * time.Millisecond):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("queued response did not retire with the logical connection")
 			}
 			if calls := inner.calls.Load(); calls != 1 {
@@ -318,7 +319,7 @@ func TestClosePublishesInactiveBeforeCancelingWrites(t *testing.T) {
 			go func() { closed <- connection.Close() }()
 			select {
 			case <-cancelStarted:
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("Close did not reach lifetime cancellation")
 			}
 
@@ -356,7 +357,7 @@ func TestCloseWaitsForAnAdmittedNotification(t *testing.T) {
 	}()
 	select {
 	case <-inner.started:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("notification write did not start")
 	}
 
@@ -367,7 +368,7 @@ func TestCloseWaitsForAnAdmittedNotification(t *testing.T) {
 		if !errors.Is(err, ErrInstanceClosed) {
 			t.Fatalf("notification Write() error = %v, want ErrInstanceClosed", err)
 		}
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("notification caller did not return after Close cancellation")
 	}
 	select {
@@ -381,7 +382,7 @@ func TestCloseWaitsForAnAdmittedNotification(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Close() error = %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Close() did not join the admitted notification")
 	}
 }
@@ -405,7 +406,7 @@ func TestCanceledNotificationReturnsBeforePhysicalWrite(t *testing.T) {
 	}()
 	select {
 	case <-inner.started:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("notification write did not start")
 	}
 	cancelWrite()
@@ -414,7 +415,7 @@ func TestCanceledNotificationReturnsBeforePhysicalWrite(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("notification Write() error = %v, want context canceled", err)
 		}
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("notification Write waited for the blocked physical write")
 	}
 	select {
@@ -441,18 +442,18 @@ func TestCanceledNotificationReturnsBeforePhysicalWrite(t *testing.T) {
 	inner.releaseWrite()
 	select {
 	case <-inner.returned:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("physical write did not return after release")
 	}
 	select {
 	case <-writeDone:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("physical write fence did not close after return")
 	}
 	select {
 	case connection.writeSlot <- struct{}{}:
 		connection.releaseWriteSlot()
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("physical writer did not release the shared write slot")
 	}
 }
@@ -500,7 +501,7 @@ func TestCanceledNotificationRetiresBeforeQueuedResponse(t *testing.T) {
 			}()
 			select {
 			case <-inner.started:
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("notification write did not start")
 			}
 			cancelWrite()
@@ -514,7 +515,7 @@ func TestCanceledNotificationRetiresBeforeQueuedResponse(t *testing.T) {
 				inner.releaseWrite()
 				select {
 				case <-classification.started:
-				case <-time.After(time.Second):
+				case <-time.After(hangguard.Wait):
 					t.Fatal("monitor did not classify the independent write failure")
 				}
 				assertQueuedResponseHeld(t, inner, queued)
@@ -531,7 +532,7 @@ func TestCanceledNotificationRetiresBeforeQueuedResponse(t *testing.T) {
 				if !test.physicalFail && !errors.Is(err, context.DeadlineExceeded) {
 					t.Fatalf("terminal error = %v, want deadline exceeded", err)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("quarantined notification did not retire the connection")
 			}
 			if !test.physicalFail {
@@ -542,7 +543,7 @@ func TestCanceledNotificationRetiresBeforeQueuedResponse(t *testing.T) {
 				if !errors.Is(err, ErrInstanceClosed) {
 					t.Fatalf("queued response Write() error = %v, want ErrInstanceClosed", err)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("queued response did not retire with the connection")
 			}
 			if calls := inner.calls.Load(); calls != 1 {
@@ -651,7 +652,7 @@ func TestNotificationFenceRecordsPhysicalCompletion(t *testing.T) {
 	}
 	select {
 	case <-writeDone:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("notification write fence did not close")
 	}
 	connection.stateMutex.Lock()
@@ -694,7 +695,7 @@ func TestFatalOrdinaryWriteClosesSDKReaderAndTransport(t *testing.T) {
 
 	select {
 	case <-inner.writeFailed:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("SDK did not attempt the ping response")
 	}
 	select {
@@ -702,12 +703,12 @@ func TestFatalOrdinaryWriteClosesSDKReaderAndTransport(t *testing.T) {
 		if !errors.Is(err, io.ErrClosedPipe) {
 			t.Fatalf("terminal error = %v, want closed pipe", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("fatal response write did not mark the wrapper terminal")
 	}
 	select {
 	case <-inner.physicalClose:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("SDK did not physically close after the fatal response write")
 	}
 	select {
@@ -715,7 +716,7 @@ func TestFatalOrdinaryWriteClosesSDKReaderAndTransport(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("reader error = %v, want context canceled", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("fatal response write left the SDK reader blocked")
 	}
 	waited := make(chan error, 1)
@@ -725,7 +726,7 @@ func TestFatalOrdinaryWriteClosesSDKReaderAndTransport(t *testing.T) {
 		if !errors.Is(err, io.ErrClosedPipe) {
 			t.Fatalf("ServerSession.Wait() error = %v, want closed pipe", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("SDK session did not finish after fatal response write")
 	}
 }
@@ -766,7 +767,7 @@ func TestConnectionClosePreservesDeadlineTimeout(t *testing.T) {
 	close(inner.release)
 	select {
 	case <-inner.returned:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("physical transport Close did not return")
 	}
 

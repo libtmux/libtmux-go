@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -47,7 +48,7 @@ func TestSessionReadWaitsForScopeAdmission(t *testing.T) {
 	close(ready)
 	select {
 	case <-inner.started:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("admitted read did not reach the inner transport")
 	}
 	cancel()
@@ -183,7 +184,7 @@ func TestInstanceCloseCancelsAConnectingTransport(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Connect() error = %v, want context canceled", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Connect() remained blocked after instance shutdown")
 	}
 }
@@ -233,7 +234,7 @@ func TestSessionCloseCancelsAHandlerBeforeJoiningIt(t *testing.T) {
 
 	select {
 	case <-stopped:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("session Close did not cancel the active handler")
 	}
 	select {
@@ -241,7 +242,7 @@ func TestSessionCloseCancelsAHandlerBeforeJoiningIt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("session Close() error = %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("session Close did not join the canceled handler")
 	}
 	<-called

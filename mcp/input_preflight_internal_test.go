@@ -487,7 +487,7 @@ func TestRetainedRunRequiresAuthenticatedCompletion(t *testing.T) {
 	if err := os.WriteFile(statusAt, []byte("0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(2 * time.Second)
+	deadline = time.Now().Add(hangguard.Wait)
 	for {
 		available, acquireErr := processPaneInputs.acquire(
 			[]paneInputIdentity{identity}, paneInputReservationInput, "send_keys",
