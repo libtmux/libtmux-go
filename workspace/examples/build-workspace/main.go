@@ -55,7 +55,10 @@ func run() error {
 		return fmt.Errorf("construct tmux server: %w", err)
 	}
 	defer func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(
+			context.Background(),
+			5*time.Second,
+		)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	}()
@@ -73,7 +76,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("search windows: %w", err)
 	}
-	fmt.Printf("built %q with %d windows\n", described.SessionName, len(windows))
+	fmt.Printf(
+		"built %q with %d windows\n",
+		described.SessionName,
+		len(windows),
+	)
 	for _, window := range windows {
 		name, _ := window.Formats().WindowName()
 		index, _ := window.Formats().WindowIndex()
