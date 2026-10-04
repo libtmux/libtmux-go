@@ -6,7 +6,8 @@
 # suites LIBTMUX_STRESS_REPEAT times and counts failures per test. It writes
 # stress-failures.csv (one row per test that failed at least once),
 # stress-runs.csv (one row per repetition, with the pseudo-terminal and tmux
-# server counts after it), and a Markdown table on stdout. A suite that fails
+# server counts after it), stress-durations.csv (the slowest tests, as the
+# longest each took in any repetition), and a Markdown table on stdout. A suite that fails
 # to build or crashes is counted under its package name.
 #
 # Modules are those whose tests drive a real tmux server. Output goes to
@@ -35,6 +36,7 @@ mkdir -p "$TMUX_TMPDIR"
 events="$out/stress-events.jsonl"
 runs="$out/stress-runs.csv"
 failures="$out/stress-failures.csv"
+durations="$out/stress-durations.csv"
 : > "$events"
 echo 'label,repetition,seconds,ptys_in_use,peak_ptys,peak_tmux_servers,tmux_servers,ptmx_max' > "$runs"
 
@@ -88,6 +90,16 @@ jq -r -s --arg label "$label" --argjson repeat "$repeat" '
     (.[] | [$label, .key, .failed, $repeat] | @csv)
 ' "$events" > "$failures"
 
+jq -r -s --arg label "$label" '
+    [ .[] | select((.Action == "pass" or .Action == "fail") and .Test != null) |
+      {key: (.Package + " " + .Test), elapsed: .Elapsed} ] |
+    group_by(.key) |
+    map({key: .[0].key, longest: (map(.elapsed) | max)}) |
+    sort_by(-.longest) | .[:25] |
+    (["label", "test", "longest_seconds"] | @csv),
+    (.[] | [$label, .key, .longest] | @csv)
+' "$events" > "$durations"
+
 echo "### Real-tmux suites on $label, $repeat repetitions"
 echo
 if [ "$(wc -l < "$failures")" -le 1 ]; then
@@ -101,3 +113,7 @@ echo
 echo '| Repetition | Seconds | Peak ptys | Peak tmux servers | Ptys left | Servers left |'
 echo '| ---: | ---: | ---: | ---: | ---: | ---: |'
 tail -n +2 "$runs" | awk -F, '{ printf "| %s | %s | %s | %s | %s | %s |\n", $2, $3, $5, $6, $4, $7 }'
+echo
+echo '| Slowest test | Longest seconds |'
+echo '| --- | ---: |'
+tail -n +2 "$durations" | tr -d '"' | head -n 10 | awk -F, '{ printf "| %s | %s |\n", $2, $3 }'
