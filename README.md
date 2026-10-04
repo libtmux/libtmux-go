@@ -68,7 +68,7 @@ if err != nil {
 	return fmt.Errorf("create session: %w", err)
 }
 defer func() {
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cleanupCancel()
 	err = errors.Join(err, session.Kill(cleanupCtx))
 }()
