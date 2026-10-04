@@ -17,6 +17,9 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### Development
 
+- `scripts/stress.sh` and the `stress` workflow repeat the real-tmux suites on
+  macOS and Ubuntu and count each test's failures. `.github/MACOS_CI.md` lists
+  what a test needs to pass on macOS.
 - The install gate also runs `go install` for `tmux-workspace`, the command
   `workspace/CLI.md` documents, against the latest published workspace module.
   (#24)

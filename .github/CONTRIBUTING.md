@@ -212,6 +212,8 @@ the machine and not the code — the failing test moves between runs, the failur
 reads as `no server running` or `WaitDelay expired` rather than a wrong value,
 and the file it is in is not one the change touched.
 
+macOS: see [MACOS_CI.md](MACOS_CI.md).
+
 ## Done means
 
 Every gate above passes, in every module rather than only the one that changed,
