@@ -1,4 +1,5 @@
-// Command environment demonstrates session environment access and pane discovery.
+// Command environment demonstrates session environment access and pane
+// discovery.
 package main
 
 import (
