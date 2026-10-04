@@ -19,7 +19,7 @@ Each table below contains the same workload on a different tmux.
 
 ## tmux 3.2a
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   105ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -31,7 +31,7 @@ chained + connection        7ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.3a
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   105ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -43,7 +43,7 @@ chained + connection        8ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.4
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   116ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -55,7 +55,7 @@ chained + connection       19ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.5
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   143ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -67,7 +67,7 @@ chained + connection        9ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.6
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   108ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -79,7 +79,7 @@ chained + connection       18ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.7
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   113ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -91,7 +91,7 @@ chained + connection        9ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.7a
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   187ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -103,7 +103,7 @@ chained + connection       10ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.7b
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                    92ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -115,7 +115,7 @@ chained + connection        7ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.7c
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                   102ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -127,7 +127,7 @@ chained + connection        8ms           0        1  7 panes on the server [0 0
 
 ## tmux 3.8-rc2
 
-```
+```text
 path                       wall   processes  clients  query answer
 ----------------------------------------------------------------------------------------
 process                    67ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
@@ -236,7 +236,7 @@ woken by tmux. Ten waits each, for output 150ms away, on tmux 3.7d and the
 machine named above. `go -C benchmarks run .` prints this table too, and
 `TestWaitingEventDrivenCostsFewerProcesses` gates the comparison.
 
-```
+```text
 path                       wall   processes  clients  measurement
 ----------------------------------------------------------------------------------------
 polled capture            161ms          18        0  10 waits for output 150ms away
