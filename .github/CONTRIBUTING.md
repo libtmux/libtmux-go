@@ -48,7 +48,14 @@ $ gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...
 Then each of the others, from its own directory:
 
 ```console
-$ for module in examples workspace mcp benchmarks internal/tools; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
+$ for module in examples workspace mcp benchmarks internal/tools; do
+    (cd "$module" \
+      && gofumpt -w . \
+      && golangci-lint run ./... \
+      && go vet ./... \
+      && go test ./...) \
+      || break
+  done
 ```
 
 Run them with the workspace on, which is the only way they see the working
