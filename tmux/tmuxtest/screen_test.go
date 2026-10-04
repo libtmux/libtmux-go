@@ -106,6 +106,28 @@ func TestWaitFailureReportsTheScreen(t *testing.T) {
 	}
 }
 
+// A wait whose deadline passes before its first read still reports the screen,
+// not an empty pane.
+func TestWaitFailureReadsTheScreenWhenTheDeadlinePassedFirst(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pane := tmuxtest.RunInPane(ctx, t, "printf 'what the pane really shows\\n'")
+	tmuxtest.WaitForText(ctx, t, pane, "what the pane really shows")
+
+	expired, cancelExpired := context.WithCancel(ctx)
+	cancelExpired()
+	message, failed := captureFatal(t, func(stand testing.TB) {
+		tmuxtest.WaitForText(expired, stand, pane, "text the pane never shows")
+	})
+	if !failed {
+		t.Fatal("WaitForText() on an expired context did not fail the test")
+	}
+	if !strings.Contains(message, "what the pane really shows") {
+		t.Fatalf("failure message = %q, want the screen the pane shows", message)
+	}
+}
+
 // TestWaitForScreenRejectsANilCondition keeps a caller's mistake a reported one
 // rather than a wait that can never hold.
 func TestWaitForScreenRejectsANilCondition(t *testing.T) {
