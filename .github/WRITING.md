@@ -185,6 +185,96 @@ Go blocks between `docs:` markers are generated. Edit their source program,
 not the Markdown block; [the examples README](../examples/README.md) identifies
 them. Unmarked blocks are handwritten.
 
+## Examples
+
+<!-- shared:examples -->
+
+An example is code written for a reader: a program under `examples/`, code in
+a doc comment or docstring, and every fenced block in a README or docs page.
+Shell blocks also follow [Code blocks](#code-blocks).
+
+The text between the shared markers is the same in every libtmux port.
+Change it in all of them together.
+
+### Width
+
+- **Examples stay within 80 columns.** They render in fixed-width boxes that
+  scroll sideways, and 80 columns fits a libtmux.org code block in a
+  laptop-width window. Comments inside examples wrap at 80 too.
+- **The width check enforces it.** It reads the tracked files that
+  `.github/example-width.toml` names and fails on a wider line. It measures
+  the whole source line, so code in a doc comment counts its indent and
+  comment marker. It skips output (a fence tagged `text`, and what a
+  `console` block prints), hidden setup lines, and a line that is only a URL;
+  an untagged fence counts as code.
+- **A line that must stay wider is listed there with its reason.** An entry
+  that no longer matches a line fails the check, so no stale entry stays.
+- **The formatter's width is the hard limit for all other source.** Example
+  directories set their formatter to 80 where the formatter takes a width.
+
+### Reaching 80
+
+- **Change the code, not the line breaks.** A formatter rejoins any line that
+  fits its width. Name a sub-expression, use a short example name, hide setup
+  the reader does not need, or print less.
+- **Break at the outermost level when a break is still needed:** after an
+  opening parenthesis with one argument per line, one call per line in a
+  chain, one field per line in a literal.
+- **Put a comment on its own line above the code it explains.** Never trail
+  one after code in an example, unless the repository's example runner reads
+  it there, as with an assertion marker.
+- **Break a long string at a word boundary,** never inside a tmux format
+  (`#{...}`) or an escape sequence; the joined text stays the same.
+- **Continue a long command in a `console` block the way its shell does:**
+  `\` after a `$ ` prompt, a backtick after `PS> `, one flag per continuation
+  line.
+
+### What never breaks
+
+- **Output a test compares.** Wrapping it changes what the test expects.
+- **A block copied from a source file.** Fix the width in the source and run
+  the sync command; never edit the copy.
+- **Marker lines and URLs,** which tools and readers take whole.
+
+<!-- /shared:examples -->
+
+### In this repository
+
+- **Hard limit:** `golines` in `examples/.golangci.yml` (`max-len` and
+  `tab-len`), enabled beside gofumpt for the example directories; the width
+  check counts a tab as 4 columns, as `tab-len` does. `golangci-lint run`
+  fails a file either formatter would change.
+  The width check is `python3 internal/tools/check_example_width.py`.
+- **Not formatted:** every other module keeps gofumpt alone, so its
+  `example_test.go` files, the Markdown code blocks, the tab-indented code in
+  Go doc comments, and tables of program output are held to the limit by hand
+  and by the width check; an output table takes a `text` fence.
+- **Runs, compiles, exempt:** an `Example` runs only when it ends in
+  `// Output:`. One without output compiles only, and `examplesWithoutOutput`
+  in `tmux/documentation_test.go` lists it with a reason. A Markdown block
+  between `docs:` markers is quoted from a program that compiles and runs. An
+  unmarked block is handwritten and is neither.
+- **Compared output and copied blocks:** `// Output:` text and `// docs:<name>`
+  marker lines stay whole. After editing a quoted program, run
+  `go generate ./...` in `tmux/` and in `mcp/`; CI fails on any diff.
+
+Bad, over 80:
+
+```go
+	if _, err := connectedPane.Capture(ctx, tmux.CapturePaneRequest{}); !errors.Is(
+		err,
+		tmux.ErrConnectionRequiresProcess,
+	) {
+```
+
+Good, a named request and one statement per step:
+
+```go
+	request := tmux.CapturePaneRequest{}
+	_, err = connectedPane.Capture(ctx, request)
+	if !errors.Is(err, tmux.ErrConnectionRequiresProcess) {
+```
+
 ## Commits
 
 ```text
