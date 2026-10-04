@@ -325,7 +325,12 @@ func TestHumanLoadProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(config.Result, data, 0o600); err != nil {
+	// A visible result must already contain the complete JSON document.
+	resultPath := config.Result + ".tmp"
+	if err := os.WriteFile(resultPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(resultPath, config.Result); err != nil {
 		t.Fatal(err)
 	}
 	if config.Observe != "" {
