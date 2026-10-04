@@ -193,7 +193,7 @@ named above against tmux 3.7c, 20 iterations per size:
 ```console
 $ go test ./tmux/ \
     -run '^$' \
-    -bench 'BenchmarkLoadBufferFrom|BenchmarkSaveBufferTo|BenchmarkCaptureScrollback' \
+    -bench 'Benchmark(LoadBufferFrom|SaveBufferTo|CaptureScrollback)' \
     -benchtime 20x \
     -benchmem
 ```
@@ -323,7 +323,10 @@ No tmux and no disk: decoding YAML into the document map and normalizing it
 into a build plan, on a fixed six-window, three-pane-each document.
 
 ```console
-$ go test ./workspace/internal/cli/ -run '^$' -bench 'BenchmarkDecodeDocument|BenchmarkNormalize' -benchmem
+$ go test ./workspace/internal/cli/ \
+    -run '^$' \
+    -bench 'Benchmark(DecodeDocument|Normalize)' \
+    -benchmem
 ```
 
 | Call | Cost |
