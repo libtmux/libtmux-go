@@ -53,7 +53,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	for _, session := range snapshot.Sessions() {
 		name, _ := session.Name()
 		fmt.Printf("session %s %q\n", session.ID(), name)
-		// Snapshot records carry relations; point lookups report them unavailable.
+		// Snapshot records carry relations; point lookups report them
+		// unavailable.
 		windows, _ := session.Windows()
 		for _, window := range windows {
 			fmt.Printf("  window %s:%d\n", window.ID(), window.Index())
