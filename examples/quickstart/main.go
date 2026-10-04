@@ -1,4 +1,5 @@
-// Command quickstart demonstrates a complete session, window, and pane lifecycle.
+// Command quickstart demonstrates a complete session, window, and pane
+// lifecycle.
 package main
 
 import (
