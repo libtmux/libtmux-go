@@ -9,6 +9,12 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- A tmux command that exits normally no longer fails with `exec: WaitDelay
+  expired before I/O complete` when its output reaches the reader late on a
+  loaded machine. A cancelled command is still released quickly.
+
 ### Development
 
 - The install gate also runs `go install` for `tmux-workspace`, the command
