@@ -63,7 +63,11 @@ func Output(t *testing.T, work func() error) string {
 	}
 
 	if workErr != nil {
-		t.Fatalf("run() error = %v; printed so far:\n%s", workErr, printed.String())
+		t.Fatalf(
+			"run() error = %v; printed so far:\n%s",
+			workErr,
+			printed.String(),
+		)
 	}
 	return printed.String()
 }

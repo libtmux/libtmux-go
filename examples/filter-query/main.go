@@ -32,12 +32,18 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-filter"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-filter"},
+	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()

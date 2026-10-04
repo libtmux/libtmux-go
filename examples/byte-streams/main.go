@@ -51,7 +51,10 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
@@ -64,7 +67,9 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 	// A payload with the characters a shell would fight over, from anything
 	// that reads: a file, a socket, an HTTP body, or this strings.Reader.
 	const marker = "'quoted'"
-	payload := strings.NewReader("$HOME 'quoted' \"double\" `backtick` \\ done\n")
+	payload := strings.NewReader(
+		"$HOME 'quoted' \"double\" `backtick` \\ done\n",
+	)
 
 	// docs:byte-streams given:ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader; archive string; marker string
 	// Pasting hands the bytes to the pane's pty; the program reading it echoes

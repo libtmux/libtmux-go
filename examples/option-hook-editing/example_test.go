@@ -23,7 +23,10 @@ func TestOptionHookEditing(t *testing.T) {
 		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
-	if want := "client-attached hook present: true"; !strings.Contains(printed, want) {
+	if want := "client-attached hook present: true"; !strings.Contains(
+		printed,
+		want,
+	) {
 		t.Errorf("printed %q, want it to contain %q", printed, want)
 	}
 }

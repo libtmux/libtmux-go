@@ -40,12 +40,18 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
+	window, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowRequest{Name: new("work")},
+	)
 	if err != nil {
 		return fmt.Errorf("create window: %w", err)
 	}
@@ -60,7 +66,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("watch pane: %w", err)
 	}
 	defer func() { err = errors.Join(err, output.Close()) }()
-	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
+	if _, err := fmt.Fprintln(
+		pane.Writer(ctx),
+		"printf 'libtmux ready\\n'",
+	); err != nil {
 		return fmt.Errorf("send command: %w", err)
 	}
 	// docs:end

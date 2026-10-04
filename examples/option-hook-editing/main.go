@@ -31,12 +31,18 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-options"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-options"},
+	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
@@ -45,8 +51,14 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return err
 	}
 	status, err := tmux.NewSparseArray(
-		tmux.SparseEntry[string]{Index: 0, Value: "#[align=left]#{session_name}"},
-		tmux.SparseEntry[string]{Index: 2, Value: "#[align=right]#{window_name}"},
+		tmux.SparseEntry[string]{
+			Index: 0,
+			Value: "#[align=left]#{session_name}",
+		},
+		tmux.SparseEntry[string]{
+			Index: 2,
+			Value: "#[align=right]#{window_name}",
+		},
 	)
 	if err != nil {
 		return err
@@ -59,7 +71,11 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err := global.SetStatus(ctx, tmux.StatusOn); err != nil {
 		return err
 	}
-	if err := global.SetHook(ctx, "client-attached", "display-message 'client attached'"); err != nil {
+	if err := global.SetHook(
+		ctx,
+		"client-attached",
+		"display-message 'client attached'",
+	); err != nil {
 		return err
 	}
 	hooks, err := global.Hooks(ctx)

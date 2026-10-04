@@ -23,10 +23,16 @@ func TestPlannedBuild(t *testing.T) {
 		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
-	if want := "rendered when the split has reported its pane"; !strings.Contains(printed, want) {
+	if want := "rendered when the split has reported its pane"; !strings.Contains(
+		printed,
+		want,
+	) {
 		t.Errorf("printed %q, want it to contain %q", printed, want)
 	}
-	if want := "tmux invocation carrying steps"; !strings.Contains(printed, want) {
+	if want := "tmux invocation carrying steps"; !strings.Contains(
+		printed,
+		want,
+	) {
 		t.Errorf("printed %q, want it to contain %q", printed, want)
 	}
 	if want := `stdout ["editor"]`; !strings.Contains(printed, want) {

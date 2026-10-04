@@ -30,6 +30,10 @@ func TestSnapshotBrowser(t *testing.T) {
 		}
 	}
 	if want := "libtmux-snapshot"; !strings.Contains(printed, want) {
-		t.Errorf("printed %q, want it to contain the session it made, %q", printed, want)
+		t.Errorf(
+			"printed %q, want it to contain the session it made, %q",
+			printed,
+			want,
+		)
 	}
 }
