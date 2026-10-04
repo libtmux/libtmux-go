@@ -23,6 +23,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	"github.com/libtmux/libtmux-go/workspace/internal/cli"
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
@@ -281,7 +282,7 @@ func TestHumanLoadProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = term.Restore(0, before) }()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), hangguard.Wait)
 	joined := make(chan struct{})
 	var cancelAt time.Time
 	go func() {
@@ -334,7 +335,7 @@ func TestHumanLoadProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	if config.Observe != "" {
-		observeCtx, stopObserve := context.WithTimeout(t.Context(), 3*time.Second)
+		observeCtx, stopObserve := context.WithTimeout(t.Context(), hangguard.Wait)
 		defer stopObserve()
 		handoffWait(observeCtx, t, func() bool { _, err := os.Stat(config.Observe); return err == nil })
 		state, err := term.GetState(0)

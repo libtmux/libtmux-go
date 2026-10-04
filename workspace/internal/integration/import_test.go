@@ -10,6 +10,7 @@ import (
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 )
 
 func importAndLoad(t *testing.T, server tmux.Server, dir, kind string, source map[string]any) tmux.Session {
@@ -43,7 +44,7 @@ func importAndLoad(t *testing.T, server tmux.Server, dir, kind string, source ma
 
 func importMarker(t *testing.T, path, wanted string) {
 	t.Helper()
-	deadline := time.Now().Add(4 * time.Second)
+	deadline := time.Now().Add(hangguard.Wait)
 	var data []byte
 	var err error
 	for {

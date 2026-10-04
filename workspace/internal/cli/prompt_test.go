@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 )
 
 func TestPromptCancellationPreservesInput(t *testing.T) {
@@ -36,7 +38,7 @@ func TestPromptCancellationPreservesInput(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancelled prompt: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		_ = writer.Close()
 		<-done
 		t.Fatal("prompt ignored cancellation while input remained open")

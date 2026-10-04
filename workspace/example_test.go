@@ -7,6 +7,7 @@ import (
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/workspace"
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 )
 
 // Load a tmuxp-style document and build the session it describes.
@@ -116,7 +117,7 @@ func ExampleParse_unknownField() {
 // killExampleServer stops an example's server on a context of its own, since an
 // example's own context may already be spent by the time it returns.
 func killExampleServer(server tmux.Server) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	_ = server.Kill(ctx)
 }

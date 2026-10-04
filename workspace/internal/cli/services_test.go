@@ -359,7 +359,7 @@ func TestLogDestinationsPrecedeBackend(t *testing.T) {
 		var code int
 		select {
 		case code = <-done:
-		case <-time.After(200 * time.Millisecond):
+		case <-time.After(hangguard.Wait):
 			t.Error("log destination remained blocked after cancellation")
 			reader, err := os.OpenFile(fifo, os.O_RDWR, 0)
 			if err != nil {
@@ -367,7 +367,7 @@ func TestLogDestinationsPrecedeBackend(t *testing.T) {
 			}
 			select {
 			case code = <-done:
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("owned FIFO opener did not join after reader release")
 			}
 			_ = reader.Close()
