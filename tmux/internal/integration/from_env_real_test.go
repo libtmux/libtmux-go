@@ -25,7 +25,7 @@ func TestFromEnvDiscoversRealPaneAndContainingHierarchy(t *testing.T) {
 	snapshot := mustRealSnapshot(t, server)
 	wantPane := snapshot.Panes()[0]
 	env := map[string]string{
-		"TMUX":      server.SocketPath() + ",stale-pid,999",
+		"TMUX":      server.SocketPath() + ",1,999",
 		"TMUX_PANE": wantPane.ID().String(),
 	}
 

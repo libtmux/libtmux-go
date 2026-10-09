@@ -9,6 +9,53 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- `Owned` adds explicit adoption and deferred cleanup for servers, sessions,
+  windows and panes. Cleanup retains daemon identity and stable IDs, survives
+  body cancellation, joins errors with `CloseInto`, and permits retry after a
+  failure. Server cleanup rejects replacements and waits for process exit.
+- `Adopt` and owned creation reserve `@libtmux_owner_generation` as server
+  metadata. Absent values receive 32 hexadecimal characters, valid values are
+  reused, and empty or malformed values fail. Cleanup refuses a different
+  generation even when PID and start time match. Do not change or shadow it.
+- `OwnSession`, `OwnWindow` and `OwnPane` roll back known creation IDs after
+  refresh or cancellation failures. `AcquisitionError` preserves unknown initial
+  results and both creation and rollback failures, with failed cleanup available
+  for inspection and retry.
+- `FindOrCreate`, `FindOrCreateSession`, `FindOrCreateWindow` and
+  `FindOrCreatePane` distinguish owned creation from borrowed reuse. Calls on one
+  server serialize; independent clients can race. Window and pane matches can
+  return ambiguity errors. Server startup proof preserves tmux config loading.
+- `Discover` scans explicit or captured socket directories with entry, probe and
+  time bounds. It returns per-path failures, duplicates and truncation using
+  probes that cannot start a daemon.
+- `NewServer` now selects ordinary defaults from `LIBTMUX_SOCKET_PATH`,
+  `LIBTMUX_SOCKET_NAME`, `TMUX`, then the default socket. Empty environment
+  selectors are absent. Explicit paths must be absolute; explicit path and name
+  selectors are mutually exclusive. Supply one selector when upgrading.
+- `NewServer` and `NewServerFromEnv` now reject malformed selected `TMUX`
+  contexts, including invalid PID and session fields, and preserve commas in
+  socket paths. Child launches omit `TMUX` and `TMUX_PANE` without changing the
+  host environment.
+- Named/default launches now use their captured socket path for subprocess and
+  control clients. Fresh roots create only the per-UID directory; missing roots
+  and unsafe per-UID directories return errors without falling back to `/tmp`.
+- `WithSocketPath` now requires a nonempty absolute path. Construct a new server
+  to select defaults again. `WithProcessEnvironmentValue` retains the endpoint
+  and its named-directory preparation across child environment updates.
+
+### Examples
+
+- `quickstart` now uses `OwnSession` and deferred `CloseInto`; its external
+  harness continues to run the same program under child environment defaults.
+  `lifecycle` demonstrates adoption, bounded discovery and find-or-create on a
+  disposable endpoint, including body-error inspection.
+- `quickstart` now constructs its ordinary server inside the runnable example
+  region and cleans up partial session creation. Its external harness redirects
+  the unchanged program through child environment defaults and verifies body
+  failure cleanup and joined teardown errors.
+
 ### Development
 
 - The install gate also runs `go install` for `tmux-workspace`, the command

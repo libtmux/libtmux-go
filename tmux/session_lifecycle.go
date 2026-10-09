@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -317,42 +316,8 @@ func captureNewSessionRequest(request NewSessionRequest) NewSessionRequest {
 }
 
 func newSessionCommandServer(server Server) (Server, error) {
-	state, err := server.stateForUse()
-	if err != nil {
+	if _, err := server.stateForUse(); err != nil {
 		return Server{}, err
 	}
-	config := state.config
-	if config.socketPath == "" && config.socketName == "" {
-		if _, selectedByEnvironment := tmuxEnvironmentSocketPath(config); selectedByEnvironment {
-			config.socketPath = config.socketSelection.Path
-		}
-	}
-	environment := slices.Clone(config.processEnvironment)
-	filtered := make([]string, 0, len(environment))
-	for _, entry := range environment {
-		name, _, _ := strings.Cut(entry, "=")
-		if processEnvironmentKey(name) != processEnvironmentKey("TMUX") {
-			filtered = append(filtered, entry)
-		}
-	}
-	config.processEnvironment = filtered
-	configured := slices.Clone(config.configuredProcessEnvironment)
-	configured = slices.DeleteFunc(configured, func(entry string) bool {
-		name, _, _ := strings.Cut(entry, "=")
-		return processEnvironmentKey(name) == processEnvironmentKey("TMUX")
-	})
-	config.configuredProcessEnvironment = configured
-	return Server{
-		state: &serverState{
-			config:   config,
-			executor: state.executor,
-			// Different options, the same tmux: the version it reports and the
-			// pools open on it are properties of the server, not of whether
-			// TMUX was removed from the environment reaching it.
-			shared: state.shared,
-		},
-		connection:      server.connection,
-		daemon:          server.daemon,
-		requiresProcess: server.requiresProcess,
-	}, nil
+	return server, nil
 }

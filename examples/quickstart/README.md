@@ -18,8 +18,12 @@ $ go -C examples run ./quickstart
 libtmux ready
 ```
 
-`libtmux ready` is the pane's own output, captured back out of it. The session
-is killed on the way out, so nothing is left behind.
+`libtmux ready` is the pane's own output, captured back out of it. The example
+constructs `tmux.NewServer(tmux.ServerOptions{})`, creates an `Owned` session and
+defers `CloseInto(&err)`. Cleanup uses the captured daemon and session ID with an
+independent deadline, including after body cancellation. The returned error
+retains body and cleanup failures; known creation IDs roll back after a failed
+acquisition.
 
 ## What to look at
 
@@ -46,8 +50,12 @@ update the value in hand.
 
 ## Testing your own version
 
-[`example_test.go`](example_test.go) runs this against a real tmux on a socket
-the test harness owns and removes:
+[`example_test.go`](example_test.go) compiles and executes the unchanged program.
+Its child environment supplies `LIBTMUX_SOCKET_PATH` or `LIBTMUX_SOCKET_NAME` to
+select a private endpoint. The harness checks the session exists during the
+body, the pane prints its reply, and the session is removed after success or an
+injected body failure. A separate failure checks that cleanup errors reach the
+caller. The harness removes its own daemon and reports teardown failures.
 
 ```console
 $ go -C examples test ./quickstart

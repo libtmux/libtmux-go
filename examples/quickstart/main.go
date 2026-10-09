@@ -23,27 +23,23 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	return run(ctx)
+}
+
+func run(ctx context.Context) (err error) {
+	// docs:quickstart given:ctx context.Context
 	server, err := tmux.NewServer(tmux.ServerOptions{})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
-	return run(ctx, server)
-}
-
-// run accepts injected server state so tests can isolate the example.
-func run(ctx context.Context, server tmux.Server) (err error) {
-	// docs:quickstart given:ctx context.Context; server tmux.Server
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+	owned, err := server.OwnSession(ctx, tmux.NewSessionRequest{
 		Name: "libtmux-go-quickstart", WindowName: "start",
-	})
+	}, tmux.OwnershipOptions{})
+	defer owned.CloseInto(&err)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
-	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-		defer cleanupCancel()
-		err = errors.Join(err, session.Kill(cleanupCtx))
-	}()
+	session := owned.Value()
 
 	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 	if err != nil {
