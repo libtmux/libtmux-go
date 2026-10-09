@@ -109,10 +109,11 @@ $ for module in . examples workspace mcp benchmarks internal/tools; do (cd "$mod
 ```
 
 It reports the standard library as well as dependencies, so it fails on a
-toolchain behind the latest patch even when nothing here has changed. CI sets
-up `stable` and does not see it. `mcp` is where it lands first, because the MCP
-SDK's transports are what reach `crypto/tls` and `net/url`. Upgrade the
-toolchain rather than suppressing the finding.
+toolchain behind the latest patch even when nothing here has changed. The lint
+job requests a patched toolchain because the `stable` alias can lag behind a
+Go security release. `mcp` is where it lands first, because the MCP SDK's
+transports reach `crypto/tls` and `net/url`. Upgrade the toolchain rather than
+suppressing the finding.
 
 Generated code is checked in, so regenerate it and confirm the tree is
 unchanged rather than trusting that it is. The Go in the Markdown is generated
