@@ -90,7 +90,11 @@ func (s Server) Discover(ctx context.Context, options DiscoveryOptions) (Discove
 	}
 	roots := append([]string(nil), options.Roots...)
 	if options.Roots == nil || options.IncludeConfigured {
-		roots = append(roots, state.config.socketSelection.NamedDirectory, filepath.Dir(s.SocketPath()))
+		parent, _ := filepath.Split(s.SocketPath())
+		if len(parent) > 1 {
+			parent = parent[:len(parent)-1]
+		}
+		roots = append(roots, state.config.socketSelection.NamedDirectory, parent)
 	}
 	for _, root := range roots {
 		if !filepath.IsAbs(root) {
@@ -157,7 +161,7 @@ func (s Server) discoverDirectory(ctx context.Context, directory *os.File, root 
 			//nolint:nilerr // Per-root errors remain in Diagnostics while the scan continues.
 			return nil
 		}
-		path := root + string(os.PathSeparator) + entries[0].Name()
+		path := appendSocketComponent(root, entries[0].Name())
 		if result.Entries >= options.MaxEntries {
 			result.Truncated = true
 			result.Diagnostics = append(result.Diagnostics, DiscoveryDiagnostic{Path: path, Kind: "limit"})

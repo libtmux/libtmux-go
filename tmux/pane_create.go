@@ -296,9 +296,9 @@ func captureNewPaneRequest(request NewPaneRequest) NewPaneRequest {
 // [Pane.Split] is the equivalent operation relative to an existing pane
 // rather than its window.
 //
-// If tmux reports a [PaneID] before a transport or refresh failure, the partial
-// result also contains the receiver SessionID and WindowID. Other failures
-// return zero; creation is not rolled back.
+// If tmux reports a [PaneID] before a command, transport or refresh failure,
+// the partial result also contains the receiver SessionID and WindowID.
+// Other failures return zero; creation is not rolled back.
 func (w Window) SplitPane(ctx context.Context, request SplitPaneRequest) (Pane, error) {
 	request = captureSplitPaneRequest(request)
 	target, err := exactWindowTarget(w)
@@ -315,9 +315,9 @@ func (w Window) SplitPane(ctx context.Context, request SplitPaneRequest) (Pane, 
 // avoid repeating Pane; [Window.SplitPane] is the equivalent operation
 // relative to a window.
 //
-// If tmux reports a [PaneID] before a transport or refresh failure, the partial
-// result also contains the receiver SessionID and WindowID. Other failures
-// return zero; creation is not rolled back.
+// If tmux reports a [PaneID] before a command, transport or refresh failure,
+// the partial result also contains the receiver SessionID and WindowID.
+// Other failures return zero; creation is not rolled back.
 func (p Pane) Split(ctx context.Context, request SplitPaneRequest) (Pane, error) {
 	request = captureSplitPaneRequest(request)
 	target, err := exactPaneTarget(p)
@@ -491,6 +491,7 @@ func splitPaneResult(
 	result CommandResult,
 	err error,
 ) (Pane, error) {
+	result, err = requireRedactedLifecycleSuccess("split-window", result, err)
 	if err != nil {
 		if identity, identityErr := lifecycleStableIdentity("pane", result.Stdout); identityErr == nil {
 			return Pane{
@@ -498,10 +499,6 @@ func splitPaneResult(
 				windowID: windowID, windowIndex: windowIndex, paneID: PaneID(identity),
 			}, err
 		}
-		return Pane{}, err
-	}
-	result, err = requireRedactedLifecycleSuccess("split-window", result, nil)
-	if err != nil {
 		return Pane{}, err
 	}
 	identity, err := lifecycleStableIdentity("pane", result.Stdout)

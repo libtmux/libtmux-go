@@ -60,37 +60,75 @@ back through an `io.Reader`:
 <!-- docs:quickstart -->
 
 ```go
-// Given: ctx context.Context
-server, err := tmux.NewServer(tmux.ServerOptions{})
-if err != nil {
-	return fmt.Errorf("configure tmux server: %w", err)
-}
-owned, err := server.OwnSession(ctx, tmux.NewSessionRequest{
-	Name: "libtmux-go-quickstart", WindowName: "start",
-}, tmux.OwnershipOptions{})
-defer owned.CloseInto(&err)
-if err != nil {
-	return fmt.Errorf("create session: %w", err)
-}
-session := owned.Value()
+// Command quickstart demonstrates a complete session, window, and pane lifecycle.
+package main
 
-window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
-if err != nil {
-	return fmt.Errorf("create window: %w", err)
+import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := start(); err != nil {
+		log.Fatal(err)
+	}
 }
-pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-	Direction: tmux.PaneDirectionRight, Command: "sh",
-})
-if err != nil {
-	return fmt.Errorf("split window: %w", err)
+
+// start owns cleanup because log.Fatal skips deferred calls in main.
+func start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return run(ctx)
 }
-output, err := pane.OpenObservation(ctx)
-if err != nil {
-	return fmt.Errorf("watch pane: %w", err)
-}
-defer func() { err = errors.Join(err, output.Close()) }()
-if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
-	return fmt.Errorf("send command: %w", err)
+
+func run(ctx context.Context) (err error) {
+	server, err := tmux.NewServer(tmux.ServerOptions{})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
+	owned, err := server.OwnSession(ctx, tmux.NewSessionRequest{
+		Name: "libtmux-go-quickstart", WindowName: "start",
+	}, tmux.OwnershipOptions{})
+	defer owned.CloseInto(&err)
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	session := owned.Value()
+
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
+	if err != nil {
+		return fmt.Errorf("create window: %w", err)
+	}
+	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
+		Direction: tmux.PaneDirectionRight, Command: "sh",
+	})
+	if err != nil {
+		return fmt.Errorf("split window: %w", err)
+	}
+	output, err := pane.OpenObservation(ctx)
+	if err != nil {
+		return fmt.Errorf("watch pane: %w", err)
+	}
+	defer func() { err = errors.Join(err, output.Close()) }()
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
+		return fmt.Errorf("send command: %w", err)
+	}
+
+	scanner := bufio.NewScanner(output.Reader(ctx))
+	for scanner.Scan() {
+		if scanner.Text() == "libtmux ready" {
+			fmt.Println("libtmux ready")
+			return nil
+		}
+	}
+	return fmt.Errorf("read pane: %w", scanner.Err())
 }
 ```
 
@@ -147,10 +185,11 @@ rejects empty or malformed metadata. Do not change, remove or shadow this option
 Cleanup checks the captured generation inside the destructive tmux dispatch.
 
 Find-or-create returns `Created` and an owner only for a new resource. Reuse is
-borrowed. Calls sharing one server's coordination serialize; other clients can
-change resources between commands. Session names match exactly, window names
-match within a session, and pane identity uses an application-selected user
-option. Multiple window or pane matches return an ambiguity error.
+borrowed. Calls sharing one server's coordination serialize with cancelable
+waits; other clients can change resources between commands. Session names match
+exactly, window names match within a session, and pane identity uses an
+application-selected user option. Multiple window or pane matches return an
+ambiguity error.
 
 `Discover` searches explicit socket directories or captured configured roots
 with entry, probe and time bounds. It returns diagnostics and truncation beside

@@ -26,22 +26,63 @@ func TestMain(m *testing.M) {
 func TestQuickstartProgram(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
-	binary := filepath.Join(t.TempDir(), "quickstart")
-	build := exec.CommandContext(ctx, "go", "build", "-o", binary, ".")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build ordinary program: %v\n%s", err, output)
-	}
 	realTmux, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Fatal(err)
 	}
 	parent := os.Environ()
-	for _, selector := range []string{"path", "name"} {
-		for _, failure := range []string{"none", "body", "body-and-cleanup"} {
-			t.Run(selector+"/"+failure, func(t *testing.T) {
-				runQuickstartProgram(t, binary, realTmux, selector, failure)
-			})
-		}
+	for _, source := range []string{"source", "readme"} {
+		t.Run(source, func(t *testing.T) {
+			dir := t.TempDir()
+			target := "."
+			var displayed string
+			if source == "readme" {
+				readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, block, ok := strings.Cut(string(readme), "<!-- docs:quickstart -->")
+				if !ok {
+					t.Fatal("README has no quickstart source marker")
+				}
+				_, block, ok = strings.Cut(block, "```go\n")
+				if !ok {
+					t.Fatal("README quickstart has no Go code fence")
+				}
+				displayed, _, ok = strings.Cut(block, "\n```")
+				if !ok {
+					t.Fatal("README quickstart has no closing code fence")
+				}
+				target = filepath.Join(dir, "main.go")
+				if err := os.WriteFile(target, []byte(displayed+"\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			binary := filepath.Join(dir, "quickstart")
+			build := exec.CommandContext(ctx, "go", "build", "-o", binary, target)
+			if output, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build %s program without scaffolding: %v\n%s", source, err, output)
+			}
+			if source == "readme" {
+				program, err := os.ReadFile("main.go")
+				if err != nil {
+					t.Fatal(err)
+				}
+				lines := slices.DeleteFunc(strings.Split(string(program), "\n"), func(line string) bool {
+					return strings.HasPrefix(strings.TrimSpace(line), "// docs:")
+				})
+				if strings.TrimSpace(displayed) != strings.TrimSpace(strings.Join(lines, "\n")) {
+					t.Fatal("README quickstart differs from the complete ordinary program")
+				}
+			}
+			for _, selector := range []string{"path", "name"} {
+				for _, failure := range []string{"none", "body", "cleanup", "body-and-cleanup"} {
+					t.Run(selector+"/"+failure, func(t *testing.T) {
+						runQuickstartProgram(t, binary, realTmux, selector, failure)
+					})
+				}
+			}
+		})
 	}
 	if !slices.Equal(os.Environ(), parent) {
 		t.Fatal("example harness mutated the host environment")
@@ -136,10 +177,14 @@ func runQuickstartProgram(t *testing.T, binary, realTmux, selector, failure stri
 		if runErr != nil || string(output) != "libtmux ready\n" {
 			t.Fatalf("ordinary example: %v, output %q", runErr, output)
 		}
+	} else if failure == "cleanup" {
+		if runErr == nil || !strings.Contains(string(output), "libtmux ready") {
+			t.Fatalf("successful body with cleanup failure: %v, output %q", runErr, output)
+		}
 	} else if runErr == nil || !strings.Contains(string(output), "create window") {
 		t.Fatalf("body failure was lost: %v, output %q", runErr, output)
 	}
-	if failure == "body-and-cleanup" && !strings.Contains(string(output), "kill-session") {
+	if (failure == "cleanup" || failure == "body-and-cleanup") && !strings.Contains(string(output), "kill-session") {
 		t.Fatalf("cleanup failure was lost: %q", output)
 	}
 	observed, err := os.ReadFile(trace)
@@ -147,7 +192,7 @@ func runQuickstartProgram(t *testing.T, binary, realTmux, selector, failure stri
 		t.Fatalf("real operation trace = %q, error %v", observed, err)
 	}
 	found, err := server.HasSession(ctx, tmux.HasSessionRequest{Target: "libtmux-go-quickstart"})
-	if err != nil || found != (failure == "body-and-cleanup") {
+	if err != nil || found != (failure == "cleanup" || failure == "body-and-cleanup") {
 		t.Fatalf("example session after return: found=%t, error=%v", found, err)
 	}
 	if found, err := server.HasSession(ctx, tmux.HasSessionRequest{Target: "keeper"}); err != nil || !found {
@@ -165,14 +210,14 @@ for argument do
     *new-window*)
       "$EXAMPLE_REAL_TMUX" -S "$EXAMPLE_SOCKET" has-session -t '=libtmux-go-quickstart' || exit 91
       printf 'session-created\n' >> "$EXAMPLE_TRACE"
-      if [ "$EXAMPLE_FAILURE" != none ]; then
+      if [ "$EXAMPLE_FAILURE" = body ] || [ "$EXAMPLE_FAILURE" = body-and-cleanup ]; then
         echo 'deliberate example body failure' >&2
         exit 92
       fi
       ;;
     *kill-session*)
       printf 'session-cleanup\n' >> "$EXAMPLE_TRACE"
-      if [ "$EXAMPLE_FAILURE" = body-and-cleanup ]; then
+      if [ "$EXAMPLE_FAILURE" = cleanup ] || [ "$EXAMPLE_FAILURE" = body-and-cleanup ]; then
         echo 'deliberate example cleanup failure' >&2
         exit 93
       fi

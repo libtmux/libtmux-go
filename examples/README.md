@@ -77,11 +77,17 @@ What to know about the format:
   The generator prints that list as the block's first line, so a reader can
   see what the snippet expects to already have.
   `TestPublishedRegionsCompileAlone` compiles every published region as the
-  only code in a throwaway module, with
-  the declarations as its local variables, so the list has to be exactly right:
+  only code in a throwaway module. Complete programs keep their imports and
+  scope. Fragments use the declarations as local variables, so the list has to
+  be exactly right:
   a binding the region uses and the marker omits fails as `undefined`, and one
   the marker names and the region never touches fails as `declared and not
   used`. Bindings the region creates itself need no declaration.
+
+The README quick start displays the complete program. Its external harness
+compiles that displayed source without added imports or scope, then runs it
+with child environment selectors. The harness checks successful execution,
+body failure, cleanup failure and joined errors without changing the program.
 
 The loop runs one way. Edit the program, then bring the quote across:
 

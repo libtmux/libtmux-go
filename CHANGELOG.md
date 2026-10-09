@@ -20,16 +20,18 @@ Modules are tagged per directory, so each carries its own version: the core as
   reused, and empty or malformed values fail. Cleanup refuses a different
   generation even when PID and start time match. Do not change or shadow it.
 - `OwnSession`, `OwnWindow` and `OwnPane` roll back known creation IDs after
-  refresh or cancellation failures. `AcquisitionError` preserves unknown initial
-  results and both creation and rollback failures, with failed cleanup available
-  for inspection and retry.
+  command, refresh or cancellation failures. `AcquisitionError` preserves
+  unknown initial results and both creation and rollback failures, with failed
+  cleanup available for inspection and retry.
 - `FindOrCreate`, `FindOrCreateSession`, `FindOrCreateWindow` and
   `FindOrCreatePane` distinguish owned creation from borrowed reuse. Calls on one
-  server serialize; independent clients can race. Window and pane matches can
-  return ambiguity errors. Server startup proof preserves tmux config loading.
+  server serialize with cancelable waits; independent clients can race. Window
+  and pane matches can return ambiguity errors. Server startup proof preserves
+  tmux config loading.
 - `Discover` scans explicit or captured socket directories with entry, probe and
   time bounds. It returns per-path failures, duplicates and truncation using
-  probes that cannot start a daemon.
+  probes that cannot start a daemon. Configured roots preserve socket path
+  components through filesystem resolution, including symlinks followed by `..`.
 - `NewServer` now selects ordinary defaults from `LIBTMUX_SOCKET_PATH`,
   `LIBTMUX_SOCKET_NAME`, `TMUX`, then the default socket. Empty environment
   selectors are absent. Explicit paths must be absolute; explicit path and name
@@ -51,10 +53,10 @@ Modules are tagged per directory, so each carries its own version: the core as
   harness continues to run the same program under child environment defaults.
   `lifecycle` demonstrates adoption, bounded discovery and find-or-create on a
   disposable endpoint, including body-error inspection.
-- `quickstart` now constructs its ordinary server inside the runnable example
-  region and cleans up partial session creation. Its external harness redirects
-  the unchanged program through child environment defaults and verifies body
-  failure cleanup and joined teardown errors.
+- `quickstart` now displays a complete program in the README, including imports
+  and the named return error used by deferred cleanup. Its external harness runs
+  the displayed program unchanged under child environment defaults and verifies
+  body failure, cleanup failure and joined errors.
 
 ### Development
 

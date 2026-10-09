@@ -1,3 +1,4 @@
+// docs:quickstart
 // Command quickstart demonstrates a complete session, window, and pane lifecycle.
 package main
 
@@ -27,7 +28,6 @@ func start() error {
 }
 
 func run(ctx context.Context) (err error) {
-	// docs:quickstart given:ctx context.Context
 	server, err := tmux.NewServer(tmux.ServerOptions{})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
@@ -59,7 +59,6 @@ func run(ctx context.Context) (err error) {
 	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
 		return fmt.Errorf("send command: %w", err)
 	}
-	// docs:end
 
 	scanner := bufio.NewScanner(output.Reader(ctx))
 	for scanner.Scan() {
@@ -70,3 +69,5 @@ func run(ctx context.Context) (err error) {
 	}
 	return fmt.Errorf("read pane: %w", scanner.Err())
 }
+
+// docs:end

@@ -27,8 +27,29 @@ func foundOwned[T any](owner *Owned[T]) Found[T] {
 	return Found[T]{Value: owner.Value(), Created: true, Owner: owner}
 }
 
+func (shared *serverShared) acquireLifecycle(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case shared.lifecycle <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			shared.releaseLifecycle()
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (shared *serverShared) releaseLifecycle() {
+	<-shared.lifecycle
+}
+
 // FindOrCreateSession matches an exact nonempty session name. Reuse is borrowed.
 // Calls on copies of this Server and its environment-derived handles serialize.
+// Waiting for another call respects context cancellation.
 // Independently constructed handles and unrelated tmux clients do not share that
 // lock: tmux rejects duplicate session names, and concurrent external mutations
 // can make a call fail. This operation is not a transaction with other clients.
@@ -43,11 +64,10 @@ func (s Server) FindOrCreateSession(ctx context.Context, request NewSessionReque
 	if err != nil {
 		return Found[Session]{}, err
 	}
-	state.shared.lifecycle.Lock()
-	defer state.shared.lifecycle.Unlock()
-	if err := ctx.Err(); err != nil {
+	if err := state.shared.acquireLifecycle(ctx); err != nil {
 		return Found[Session]{}, err
 	}
+	defer state.shared.releaseLifecycle()
 	value, err := s.SessionByName(ctx, request.Name)
 	if err == nil {
 		return Found[Session]{Value: value}, nil
@@ -62,8 +82,9 @@ func (s Server) FindOrCreateSession(ctx context.Context, request NewSessionReque
 // FindOrCreateWindow matches an exact window name within this session.
 // Multiple matching winlinks return ErrSnapshotAmbiguous. Names containing '#',
 // backslashes, or control bytes are rejected to avoid tmux's name expansion.
-// Calls sharing the Server's coordination serialize. Independent handles and
-// other tmux clients can create duplicate names; a later lookup reports ambiguity.
+// Calls sharing the Server's coordination serialize; waiting respects ctx.
+// Independent handles and other tmux clients can create duplicate names;
+// a later lookup reports ambiguity.
 func (s Session) FindOrCreateWindow(ctx context.Context, request NewWindowRequest, options OwnershipOptions) (Found[Window], error) {
 	if request.Name == nil || !literalWindowName(*request.Name) {
 		return Found[Window]{}, invalidLifecycleRequest("find-or-create requires a literal nonempty window name")
@@ -76,11 +97,10 @@ func (s Session) FindOrCreateWindow(ctx context.Context, request NewWindowReques
 	if err != nil {
 		return Found[Window]{}, err
 	}
-	state.shared.lifecycle.Lock()
-	defer state.shared.lifecycle.Unlock()
-	if err := ctx.Err(); err != nil {
+	if err := state.shared.acquireLifecycle(ctx); err != nil {
 		return Found[Window]{}, err
 	}
+	defer state.shared.releaseLifecycle()
 	windows, err := s.SearchWindows(ctx, nil)
 	if err != nil {
 		return Found[Window]{}, err
@@ -130,7 +150,8 @@ type PaneIdentity struct {
 
 // FindOrCreatePane matches PaneIdentity within this stable window.
 // Multiple matches return ErrSnapshotAmbiguous. Calls sharing this Server's
-// coordination serialize; unrelated clients can alter options or add duplicates.
+// coordination serialize; waiting respects ctx. Unrelated clients can alter
+// options or add duplicates.
 // Setting the identity is part of acquisition: failure rolls back the known pane.
 func (w Window) FindOrCreatePane(ctx context.Context, identity PaneIdentity, request SplitPaneRequest, options OwnershipOptions) (Found[Pane], error) {
 	if !strings.HasPrefix(identity.Key, "@") || len(identity.Key) == 1 || identity.Key == ownerGenerationOption || identity.Value == "" ||
@@ -141,11 +162,10 @@ func (w Window) FindOrCreatePane(ctx context.Context, identity PaneIdentity, req
 	if err != nil {
 		return Found[Pane]{}, err
 	}
-	state.shared.lifecycle.Lock()
-	defer state.shared.lifecycle.Unlock()
-	if err := ctx.Err(); err != nil {
+	if err := state.shared.acquireLifecycle(ctx); err != nil {
 		return Found[Pane]{}, err
 	}
+	defer state.shared.releaseLifecycle()
 	parent, err := w.Refresh(ctx)
 	if err != nil {
 		return Found[Pane]{}, err
@@ -189,7 +209,8 @@ func (w Window) FindOrCreatePane(ctx context.Context, identity PaneIdentity, req
 // session described by request until its owner closes. KillExisting is rejected.
 // The daemon's initial global environment proves which client started it, so an
 // unrelated starter that wins the endpoint remains borrowed. Selected tmux config
-// loading is unchanged. Calls sharing this Server's coordination serialize.
+// loading is unchanged. Calls sharing this Server's coordination serialize;
+// waiting respects ctx.
 // Configurations that remove the private startup marker prevent ownership proof
 // and return borrowed after removing only this call's session.
 func (s Server) FindOrCreate(ctx context.Context, request NewSessionRequest, options OwnershipOptions) (Found[Server], error) {
@@ -204,11 +225,10 @@ func (s Server) FindOrCreate(ctx context.Context, request NewSessionRequest, opt
 	if err != nil {
 		return Found[Server]{}, err
 	}
-	state.shared.lifecycle.Lock()
-	defer state.shared.lifecycle.Unlock()
-	if err := ctx.Err(); err != nil {
+	if err := state.shared.acquireLifecycle(ctx); err != nil {
 		return Found[Server]{}, err
 	}
+	defer state.shared.releaseLifecycle()
 	identity, err := s.probeSnapshotIdentity(ctx)
 	if err == nil {
 		bound := s.withDaemon(identity)

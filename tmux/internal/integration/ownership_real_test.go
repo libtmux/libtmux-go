@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -506,6 +507,241 @@ func TestOwnedKnownIDRollback(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOwnedChildCreationReceiptOnCommandFailure(t *testing.T) {
+	for _, kind := range []string{"window", "pane"} {
+		for _, receipt := range []string{"valid", "missing", "malformed"} {
+			for _, status := range []int{0, 77} {
+				for _, failRollback := range []bool{false, true} {
+					if receipt != "valid" && (status == 0 || failRollback) {
+						continue
+					}
+					t.Run(fmt.Sprintf("%s/%s/status-%d/rollback-failure-%t", kind, receipt, status, failRollback), func(t *testing.T) {
+						dir := t.TempDir()
+						flag := filepath.Join(dir, "fail-cleanup")
+						path := filepath.Join(dir, "tmux")
+						command := map[string]string{"window": "new-window", "pane": "split-window"}[kind]
+						output := ""
+						if receipt != "valid" {
+							output = " >/dev/null"
+						}
+						malformed := ""
+						if receipt == "malformed" {
+							malformed = "printf 'untrusted-id\\n'"
+						}
+						script := fmt.Sprintf(`#!/bin/sh
+real=%s
+case "$*" in
+  *%s*)
+    "$real" "$@"%s || exit "$?"
+    %s
+    echo 'injected completed creation failure' >&2
+    exit %d
+    ;;
+  *kill-window*|*kill-pane*)
+    if [ -f '%s' ]; then
+      echo 'injected rollback failure' >&2
+      exit 88
+    fi
+    ;;
+esac
+exec "$real" "$@"
+`, lifecycleTmuxShell(t), command, output, malformed, status, flag)
+						if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+							t.Fatal(err)
+						}
+						server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
+							Binary: path, InitialSession: &tmux.NewSessionRequest{Name: "keeper"},
+						})
+						parent, err := server.SessionByName(t.Context(), "keeper")
+						if err != nil {
+							t.Fatal(err)
+						}
+						window, err := parent.ResolveActiveWindow(t.Context())
+						if err != nil {
+							t.Fatal(err)
+						}
+						if failRollback {
+							if err := os.WriteFile(flag, nil, 0o600); err != nil {
+								t.Fatal(err)
+							}
+						}
+						var retained bool
+						if kind == "window" {
+							owner, createErr := parent.OwnWindow(t.Context(), tmux.NewWindowRequest{Name: new("receipt")}, tmux.OwnershipOptions{})
+							retained, err = owner != nil, createErr
+						} else {
+							owner, createErr := window.OwnPane(t.Context(), tmux.SplitPaneRequest{}, tmux.OwnershipOptions{})
+							retained, err = owner != nil, createErr
+						}
+						failure, ok := errors.AsType[*tmux.AcquisitionError](err)
+						if !ok {
+							t.Fatalf("creation failure = %v", err)
+						}
+						cause, ok := errors.AsType[*tmux.CommandError](failure.Cause)
+						if !ok || cause.Subcommand != command || cause.Result.ExitCode != status {
+							t.Fatalf("original command status lost: %#v, %v", cause, err)
+						}
+						if receipt == "valid" {
+							if failure.Unknown || failure.ResourceID == "" || retained != failRollback || (failure.Cleanup != nil) != failRollback || (failure.Rollback != nil) != failRollback {
+								t.Errorf("valid receipt was not recoverable: %#v, owner retained=%t", failure, retained)
+							}
+						} else if !failure.Unknown || failure.ResourceID != "" || retained || failure.Cleanup != nil || failure.Rollback != nil {
+							t.Errorf("untrusted receipt granted cleanup authority: %#v", failure)
+						}
+						if failRollback {
+							rollback, ok := errors.AsType[*tmux.CommandError](failure.Rollback)
+							if !ok || rollback.Result.ExitCode != 88 {
+								t.Errorf("rollback failure lost its status: %#v", rollback)
+							}
+							pending, err := server.Snapshot(t.Context())
+							if err != nil {
+								t.Fatal(err)
+							}
+							windows := 1
+							if kind == "window" {
+								windows++
+							}
+							if len(pending.Windows()) != windows || len(pending.Panes()) != 2 {
+								t.Errorf("failed rollback lost the inspectable object: windows=%d panes=%d", len(pending.Windows()), len(pending.Panes()))
+							}
+							if err := os.Remove(flag); err != nil {
+								t.Fatal(err)
+							}
+							if failure.Cleanup != nil {
+								if err := failure.Cleanup.Close(); err != nil {
+									t.Fatalf("retry known receipt cleanup: %v", err)
+								}
+							}
+						}
+						snapshot, err := server.Snapshot(t.Context())
+						if err != nil {
+							t.Fatal(err)
+						}
+						windows, panes := 1, 1
+						if receipt != "valid" {
+							panes++
+							if kind == "window" {
+								windows++
+							}
+						}
+						if len(snapshot.Windows()) != windows || len(snapshot.Panes()) != panes || len(snapshot.Sessions()) != 1 {
+							t.Errorf("objects after rollback/retry: sessions=%d windows=%d panes=%d, want 1/%d/%d", len(snapshot.Sessions()), len(snapshot.Windows()), len(snapshot.Panes()), windows, panes)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestFindOrCreateCanceledCoordinationWait(t *testing.T) {
+	fixture := tmuxtest.NewServer(t.Context(), t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: fixture.SocketPath(), ConfigFile: fixture.ConfigFile(),
+		CommandObserver: func(trace tmux.CommandTrace) {
+			if trace.Subcommand == "display-message" && armed.CompareAndSwap(true, false) {
+				close(entered)
+				<-release
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := server.SessionByName(t.Context(), "work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	window, err := parent.ResolveActiveWindow(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	armed.Store(true)
+	firstContext, cancelFirst := context.WithTimeout(context.WithoutCancel(t.Context()), 15*time.Second)
+	t.Cleanup(cancelFirst)
+	first := make(chan error, 1)
+	go func() {
+		_, err := server.FindOrCreate(firstContext, tmux.NewSessionRequest{Name: "first"}, tmux.OwnershipOptions{})
+		first <- err
+	}()
+	var waiters sync.WaitGroup
+	t.Cleanup(func() {
+		close(release)
+		if err := <-first; err != nil {
+			t.Errorf("first find-or-create: %v", err)
+		}
+		waiters.Wait()
+	})
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first operation did not acquire coordination")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	type outcome struct {
+		kind string
+		err  error
+	}
+	results := make(chan outcome, 4)
+	var waiting []<-chan struct{}
+	for _, kind := range []string{"server", "session", "window", "pane"} {
+		observed := &coordinationWaitContext{Context: ctx, waiting: make(chan struct{})}
+		waiting = append(waiting, observed.waiting)
+		waiters.Go(func() {
+			var err error
+			switch kind {
+			case "server":
+				_, err = server.FindOrCreate(observed, tmux.NewSessionRequest{Name: "queued"}, tmux.OwnershipOptions{})
+			case "session":
+				_, err = server.FindOrCreateSession(observed, tmux.NewSessionRequest{Name: "queued"}, tmux.OwnershipOptions{})
+			case "window":
+				_, err = parent.FindOrCreateWindow(observed, tmux.NewWindowRequest{Name: new("queued")}, tmux.OwnershipOptions{})
+			case "pane":
+				_, err = window.FindOrCreatePane(observed, tmux.PaneIdentity{Key: "@queued", Value: "yes"}, tmux.SplitPaneRequest{}, tmux.OwnershipOptions{})
+			}
+			results <- outcome{kind: kind, err: err}
+		})
+	}
+	queuedDeadline := time.After(2 * time.Second)
+	for _, waiter := range waiting {
+		select {
+		case <-waiter:
+		case <-queuedDeadline:
+			t.Fatal("find-or-create did not observe the context while queued")
+		}
+	}
+	cancel()
+	deadline := time.After(2 * time.Second)
+	for range 4 {
+		select {
+		case result := <-results:
+			if !errors.Is(result.err, context.Canceled) {
+				t.Errorf("%s waiter lost cancellation: %v", result.kind, result.err)
+			}
+		case <-deadline:
+			t.Fatal("canceled find-or-create waits for an unrelated operation to release coordination")
+		}
+	}
+	snapshot, err := fixture.Snapshot(t.Context())
+	if err != nil || len(snapshot.Sessions()) != 1 || len(snapshot.Windows()) != 1 || len(snapshot.Panes()) != 1 {
+		t.Fatalf("canceled waiters changed the server: %#v, %v", snapshot, err)
+	}
+}
+
+type coordinationWaitContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (ctx *coordinationWaitContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.waiting) })
+	return ctx.Context.Done()
 }
 
 func TestFindOrCreateAllResourcesAndConcurrentCalls(t *testing.T) {
