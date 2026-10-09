@@ -129,7 +129,7 @@ func (s Server) WithSocketPath(path string) (Server, error) {
 	return Server{state: &serverState{
 		config:   config,
 		executor: state.executor,
-		shared:   &serverShared{},
+		shared:   &serverShared{lifecycle: make(chan struct{}, 1)},
 	}}, nil
 }
 
@@ -251,7 +251,7 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 	return Server{state: &serverState{
 		config:   config,
 		executor: dependencies.executor,
-		shared:   &serverShared{},
+		shared:   &serverShared{lifecycle: make(chan struct{}, 1)},
 	}}, nil
 }
 

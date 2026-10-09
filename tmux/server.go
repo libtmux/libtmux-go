@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"sync"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -33,11 +32,11 @@ type serverState struct {
 	shared   *serverShared
 }
 
-// serverShared coordinates version caching across handles that address the
-// same daemon with different process environments.
+// serverShared coordinates version caching and find-or-create across handles
+// that address the same daemon with different process environments.
 type serverShared struct {
 	version   versionCache
-	lifecycle sync.Mutex
+	lifecycle chan struct{}
 }
 
 // coordination returns the daemon-scoped shared state.
