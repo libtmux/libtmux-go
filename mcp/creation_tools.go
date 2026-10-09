@@ -122,12 +122,12 @@ func (t *tools) createSession(
 			name = input.Name
 		}
 		return toolFailure(fmt.Errorf(
-				"%w; tmux created session %q (%s) before setup failed; use the "+
-					"returned ID to inspect or remove it before retrying",
-				err, name, session.ID(),
-			)), createSessionOutput{
-				SessionID: session.ID().String(), SessionName: name,
-			}, nil
+			"%w; tmux created session %q (%s) before setup failed; use the "+
+				"returned ID to inspect or remove it before retrying",
+			err, name, session.ID(),
+		)), createSessionOutput{
+			SessionID: session.ID().String(), SessionName: name,
+		}, nil
 	}
 	name, _ := session.Name()
 	return nil, createSessionOutput{

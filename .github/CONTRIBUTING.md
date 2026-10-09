@@ -36,7 +36,7 @@ packages as typecheck failures, and a newer one reports lints an older one has
 no analyzer for. Run the pinned release before believing a clean local one:
 
 ```console
-$ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1 run ./...
+$ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
 ```
 
 Format, lint, vet, and test the tmux module:
