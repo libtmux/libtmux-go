@@ -3,12 +3,17 @@
 //
 //	import "github.com/libtmux/libtmux-go/tmux"
 //
-//	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
+//	server, err := tmux.NewServer(tmux.ServerOptions{})
 //	if err != nil {
 //		log.Fatal(err)
 //	}
 //
 // [NewServer] validates and snapshots configuration without starting tmux.
+// Explicit SocketPath or SocketName selects the endpoint; otherwise the captured
+// process environment supplies LIBTMUX_SOCKET_PATH, LIBTMUX_SOCKET_NAME, TMUX,
+// then the default socket, in that order. Empty environment selectors are absent.
+// Commands and cleanup retain that endpoint after environment changes. TMUX and
+// TMUX_PANE are removed from child launches without changing the host environment.
 // The zero [Server] is invalid and operations on it return [ErrInvalidServer].
 //
 // # Where to start
@@ -65,6 +70,21 @@
 // hook, format, and command methods cover names outside the generated catalog.
 //
 // # Records, identity, and snapshots
+//
+// [Owned] holds remote destruction responsibility. Adopt accepts an existing
+// resource; OwnSession, OwnWindow and OwnPane acquire new resources and roll back
+// known IDs after failure. Close uses an independent cleanup deadline, and
+// deferred CloseInto joins teardown and body errors. Borrowed handles and client
+// connections hold no remote destruction responsibility.
+// Acquisition reserves the server option @libtmux_owner_generation. An absent
+// value receives 16 random bytes encoded as 32 hexadecimal characters; a valid
+// value is reused and empty or malformed metadata fails. Callers must not change,
+// remove or shadow this option. Destruction checks the captured generation in tmux.
+//
+// FindOrCreate methods distinguish newly owned and reused borrowed resources.
+// Calls derived from one Server share serialization; independent constructors
+// and other clients can race. [Server.Discover] searches bounded socket roots
+// and retains per-candidate failures and truncation beside borrowed results.
 //
 // [Session], [Window], [Pane], and [Client] are materialized records, not live
 // handles. Reading their fields and relationships performs no I/O. Search and

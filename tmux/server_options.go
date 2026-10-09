@@ -27,9 +27,11 @@ type ServerOptions struct {
 	// constructor's working directory. The resolved absolute path is shared by
 	// subprocess and control-mode transports.
 	Binary string
-	// SocketName selects tmux's named socket. SocketPath takes precedence.
+	// SocketName selects a named socket; empty means no explicit name. A name
+	// must be a leaf other than . or .., without separators or NUL. It is
+	// mutually exclusive with SocketPath.
 	SocketName string
-	// SocketPath selects an explicit tmux socket path.
+	// SocketPath selects an absolute socket path; empty means no explicit path.
 	SocketPath string
 	// ConfigFile selects an exact tmux configuration file. Empty lets tmux read
 	// its default configuration, so a program inherits whatever the user
@@ -46,7 +48,8 @@ type ServerOptions struct {
 	// target platform and a canonical TMUX_TMPDIR that freezes named or default
 	// socket selection. Duplicate names retain their last value. Entries
 	// containing NUL are rejected except on Plan 9, where NUL separates path-list
-	// elements. NewServer clones the slice.
+	// elements. NewServer clones the slice and resolves endpoint defaults from
+	// it before removing TMUX and TMUX_PANE from child launches.
 	ProcessEnvironment []string
 	// Unsupported selects what happens when a request needs an optional tmux
 	// capability the running server does not have. The zero value refuses the
@@ -92,15 +95,16 @@ func defaultServerDependencies() serverDependencies {
 }
 
 // NewServer validates and snapshots one tmux configuration without starting
-// tmux. Empty socket selectors use the endpoint selected by the frozen
-// environment.
+// tmux. Empty socket selectors use LIBTMUX_SOCKET_PATH, LIBTMUX_SOCKET_NAME,
+// TMUX, then tmux's default socket, in that order. Empty environment values
+// are absent; malformed selected values are errors.
 func NewServer(options ServerOptions) (Server, error) {
 	return newServer(options, defaultServerDependencies())
 }
 
 // WithSocketPath returns a server using path and the receiver's frozen
-// executable, environment, working directory, and server-option policy. Empty
-// clears explicit socket selectors and leaves endpoint selection to tmux. The
+// executable, environment, working directory, and server-option policy. The
+// path must be nonempty and absolute. Its parent directory is not created. The
 // result has fresh daemon-scoped coordination. A connection-bound receiver is
 // rejected because its transport belongs to the original daemon.
 func (s Server) WithSocketPath(path string) (Server, error) {
@@ -110,6 +114,9 @@ func (s Server) WithSocketPath(path string) (Server, error) {
 	}
 	if err := validateServerCommandArgument("tmux", "SocketPath", path, true); err != nil {
 		return Server{}, invalidServerOptions(err)
+	}
+	if !filepath.IsAbs(path) {
+		return Server{}, fmt.Errorf("%w: SocketPath must be absolute and nonempty", ErrInvalidServerOptions)
 	}
 	if s.connection != nil {
 		return Server{}, s.connection.terminalError(commandProcess)
@@ -128,8 +135,9 @@ func (s Server) WithSocketPath(path string) (Server, error) {
 
 // WithProcessEnvironmentValue returns a server whose tmux subprocesses receive
 // name=value while preserving the receiver's frozen executable, configuration,
-// and exact socket endpoint. It does not expose an inherited environment
-// snapshot through [Server.ProcessEnvironment]. The result shares daemon-scoped
+// and exact socket endpoint. TMUX and TMUX_PANE remain absent from launches,
+// including when the update supplies either name. It does not expose an inherited
+// environment snapshot through [Server.ProcessEnvironment]. The result shares daemon-scoped
 // coordination with the receiver. A connection-bound receiver is rejected.
 func (s Server) WithProcessEnvironmentValue(name, value string) (Server, error) {
 	state, err := s.stateForUse()
@@ -158,10 +166,7 @@ func (s Server) WithProcessEnvironmentValue(name, value string) (Server, error) 
 			value,
 		)
 	}
-	// Environment values such as TMUX_TMPDIR must not retarget the derived
-	// handle. Pin the already-resolved endpoint as an explicit socket path.
-	config.socketName = ""
-	config.socketPath = state.config.socketSelection.Path
+	config.processEnvironment = withoutTmuxContext(config.processEnvironment)
 	return Server{
 		state: &serverState{
 			config:   config,
@@ -203,6 +208,9 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 	if err != nil {
 		return Server{}, err
 	}
+	if err := captureSocketDefaults(&options, environment); err != nil {
+		return Server{}, err
+	}
 	cwd, err := dependencies.getwd()
 	if err != nil {
 		return Server{}, fmt.Errorf("snapshot working directory: %w", err)
@@ -239,6 +247,7 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 	}
 	config.socketSelection = resolveSocketSelection(config)
 	freezeNamedSocketEnvironment(&config)
+	config.processEnvironment = withoutTmuxContext(config.processEnvironment)
 	return Server{state: &serverState{
 		config:   config,
 		executor: dependencies.executor,

@@ -13,6 +13,7 @@ $ go -C examples run ./quickstart
 | Example | Shows | Read it for |
 | --- | --- | --- |
 | [`quickstart/`](quickstart/) | Session, window, split, send keys, capture | The shortest path from nothing to a pane running your command |
+| [`lifecycle/`](lifecycle/) | Adoption, discovery, find-or-create, cleanup errors | Owning remote resources on a disposable endpoint |
 | [`filter-query/`](filter-query/) | Snapshot predicates and live tmux filters | The two ways to ask tmux a question, and what each costs |
 | [`snapshot-browser/`](snapshot-browser/) | One read, whole hierarchy | Walking sessions, windows and panes without re-querying |
 | [`option-hook-editing/`](option-hook-editing/) | Typed options and hooks | Reading and writing tmux settings by their Go names |

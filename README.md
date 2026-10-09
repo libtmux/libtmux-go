@@ -60,18 +60,19 @@ back through an `io.Reader`:
 <!-- docs:quickstart -->
 
 ```go
-// Given: ctx context.Context; server tmux.Server
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+// Given: ctx context.Context
+server, err := tmux.NewServer(tmux.ServerOptions{})
+if err != nil {
+	return fmt.Errorf("configure tmux server: %w", err)
+}
+owned, err := server.OwnSession(ctx, tmux.NewSessionRequest{
 	Name: "libtmux-go-quickstart", WindowName: "start",
-})
+}, tmux.OwnershipOptions{})
+defer owned.CloseInto(&err)
 if err != nil {
 	return fmt.Errorf("create session: %w", err)
 }
-defer func() {
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-	defer cleanupCancel()
-	err = errors.Join(err, session.Kill(cleanupCtx))
-}()
+session := owned.Value()
 
 window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
 if err != nil {
@@ -101,6 +102,61 @@ swept across every supported release — so none of it can drift from code that
 works.
 
 Runnable: [`examples/quickstart`](examples/quickstart) — `go -C examples run ./quickstart`.
+
+`NewServer(tmux.ServerOptions{})` captures one endpoint from the effective
+process environment. Selection follows this order:
+
+1. An explicit `SocketPath` or `SocketName`; supplying both is an error.
+2. Nonempty `LIBTMUX_SOCKET_PATH`.
+3. Nonempty `LIBTMUX_SOCKET_NAME`.
+4. Nonempty `TMUX`, parsed from its last two commas.
+5. The named `default` socket.
+
+Paths must be absolute. Names must be leaf names other than `.` or `..`, without
+path separators or NUL. Empty environment selectors are absent; an invalid
+selected value fails without trying another endpoint. `TMUX` requires an
+absolute socket path, a positive decimal PID, and a nonnegative decimal session
+ID (an optional `$` prefix is accepted) or `-1`. Commas and spaces in the socket
+path survive parsing.
+
+Named sockets use the captured absolute `TMUX_TMPDIR`, or `/tmp`, under
+`tmux-<uid>`. The selected root must exist when a command runs. The library
+creates only the per-UID directory, with mode 0700, and accepts an existing real
+directory owned by the current UID with no other-user permissions. Group access
+is allowed. Both subprocess and control clients use the captured path; an
+unusable root fails instead of selecting `/tmp`. Explicit paths do not create
+parent directories. `WithSocketPath` requires a nonempty absolute path.
+
+`ServerOptions.ProcessEnvironment` replaces the child process environment; nil
+captures the host environment. Endpoint defaults come from that snapshot.
+`WithProcessEnvironmentValue` returns a copy with one child variable changed and
+the same endpoint. Neither API changes the host environment. Child launches
+omit `TMUX` and `TMUX_PANE`. These options are separate from tmux's own
+server/session environment, which `NewSessionRequest.Environment` and the
+environment methods change. There is no `LIBTMUX_SOCKET_ENV` variable.
+
+`OwnSession`, `OwnWindow` and `OwnPane` return an `Owned` resource. Defer
+`owner.CloseInto(&err)` with a named return error to retain body and cleanup
+failures. Cleanup has an independent five-second deadline by default and remains
+retryable after failure. `Adopt` accepts destruction responsibility for an
+existing resource; lookups and client connection closure leave it alive.
+Ownership follows the accepted daemon and stable ID through renames and moves.
+Acquisition initializes the reserved server option `@libtmux_owner_generation`
+when absent. It reuses a valid value of 32 ASCII hexadecimal characters and
+rejects empty or malformed metadata. Do not change, remove or shadow this option.
+Cleanup checks the captured generation inside the destructive tmux dispatch.
+
+Find-or-create returns `Created` and an owner only for a new resource. Reuse is
+borrowed. Calls sharing one server's coordination serialize; other clients can
+change resources between commands. Session names match exactly, window names
+match within a session, and pane identity uses an application-selected user
+option. Multiple window or pane matches return an ambiguity error.
+
+`Discover` searches explicit socket directories or captured configured roots
+with entry, probe and time bounds. It returns diagnostics and truncation beside
+borrowed server handles. See the complete [lifecycle program](examples/lifecycle/)
+for adoption, discovery, failed-body cleanup and whole-server ownership on a
+disposable endpoint.
 
 ## Running a command to completion
 

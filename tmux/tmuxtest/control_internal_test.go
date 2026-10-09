@@ -106,7 +106,7 @@ printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"
 		"-u",
 		"-2",
 		"-frelative.conf",
-		"-Lnamed",
+		"-S" + server.SocketPath(),
 		"display-message",
 		"-p",
 		"#{pid}",

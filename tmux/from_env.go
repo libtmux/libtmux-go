@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -224,6 +225,10 @@ func socketPathFromEnvironment(environment map[string]string) (string, error) {
 	if !ok || value == "" {
 		return "", fromEnvError(tmuxEnvironmentVariable, "unset or empty")
 	}
+	return socketPathFromTmuxContext(value)
+}
+
+func socketPathFromTmuxContext(value string) (string, error) {
 	lastComma := strings.LastIndexByte(value, ',')
 	if lastComma < 0 {
 		return "", fromEnvError(tmuxEnvironmentVariable, "not a socket, pid, session triple")
@@ -232,7 +237,25 @@ func socketPathFromEnvironment(environment map[string]string) (string, error) {
 	if secondComma < 1 {
 		return "", fromEnvError(tmuxEnvironmentVariable, "not a socket, pid, session triple")
 	}
-	return value[:secondComma], nil
+	path, pid, session := value[:secondComma], value[secondComma+1:lastComma], value[lastComma+1:]
+	if !filepath.IsAbs(path) || strings.ContainsRune(path, '\x00') ||
+		!asciiDecimal(pid) || strings.Trim(pid, "0") == "" ||
+		(session != "-1" && !asciiDecimal(strings.TrimPrefix(session, "$"))) {
+		return "", fromEnvError(tmuxEnvironmentVariable, "not an absolute socket, positive pid, session triple")
+	}
+	return path, nil
+}
+
+func asciiDecimal(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index := range len(value) {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func paneIDFromEnvironment(environment map[string]string) (PaneID, error) {

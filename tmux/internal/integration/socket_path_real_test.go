@@ -6,11 +6,13 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -54,181 +56,212 @@ func TestLayoutPreflightPreservesLiveSocketPermissionFailure(t *testing.T) {
 	}
 }
 
-// tmux keeps its sockets in TMUX_TMPDIR/tmux-<uid> and refuses that directory
-// if others can reach it. tmux 3.2a reports "error creating"; 3.3a and newer use
-// three other diagnostics, so the test exercises the installed version.
-//
 //libtmux:real-tmux
-func TestADirectoryTmuxRefusesReadsAsNoServer(t *testing.T) {
-	t.Parallel()
-
-	// Group permission is allowed and would not provoke the refusal at all.
-	for name, mode := range map[string]os.FileMode{
-		"other can read and execute": 0o755,
-		"other can read":             0o705,
-		"other can execute":          0o701,
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-
-			root := t.TempDir()
-			sockets := filepath.Join(root, "tmux-"+strconv.Itoa(os.Getuid()))
-			if err := os.Mkdir(sockets, mode); err != nil {
-				t.Fatalf("Mkdir(%q) = %v", sockets, err)
-			}
-			// Mkdir applies the umask, so the mode has to be set outright for
-			// the test to be asking what it means to ask.
-			if err := os.Chmod(sockets, mode); err != nil {
-				t.Fatalf("Chmod(%q) = %v", sockets, err)
-			}
-
-			server, err := tmux.NewServer(tmux.ServerOptions{
-				SocketName:         "refused",
-				ProcessEnvironment: []string{"TMUX_TMPDIR=" + root, "PATH=" + os.Getenv("PATH")},
+func TestNamedSocketLaunchesUseCapturedPath(t *testing.T) {
+	for _, control := range []bool{false, true} {
+		for _, mode := range []os.FileMode{0, 0o700, 0o770} {
+			t.Run(fmt.Sprintf("control=%t/mode=%o", control, mode), func(t *testing.T) {
+				root := endpointTestRoot(t)
+				directory := filepath.Join(root, "tmux-"+strconv.Itoa(os.Getuid()))
+				if mode != 0 {
+					if err := os.Mkdir(directory, mode); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Chmod(directory, mode); err != nil {
+						t.Fatal(err)
+					}
+				}
+				server, err := tmux.NewServer(tmux.ServerOptions{
+					ConfigFile:         "/dev/null",
+					ProcessEnvironment: []string{"TMUX_TMPDIR=" + root, "LIBTMUX_SOCKET_NAME=named", "PATH=" + os.Getenv("PATH"), "TMUX=ignored", "TMUX_PANE=%9"},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				// An environment edit must retain named-directory preparation as
+				// well as the endpoint, even before the first command.
+				server, err = server.WithProcessEnvironmentValue("TMUX_TMPDIR", filepath.Join(root, "ignored"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				cleanupEndpoint(t, server)
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+				if control {
+					_, connection, err := server.NewSessionConnection(ctx, tmux.NewSessionRequest{Command: "cat"}, tmux.ConnectionOptions{})
+					if err != nil {
+						t.Fatal(err)
+					}
+					t.Cleanup(func() {
+						if err := connection.Close(); err != nil {
+							t.Errorf("close connection: %v", err)
+						}
+					})
+				} else if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Command: "cat"}); err != nil {
+					t.Fatal(err)
+				}
+				wantPath := filepath.Join(directory, "named")
+				result := mustRealCommand(t, server, "display-message", "-p", "#{socket_path}")
+				if len(result.Stdout) != 1 || result.Stdout[0] != wantPath {
+					t.Fatalf("daemon socket = %q, want %q", result.Stdout, wantPath)
+				}
+				info, err := os.Lstat(directory)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mode == 0 {
+					mode = 0o700
+				}
+				if !info.IsDir() || info.Mode().Perm() != mode {
+					t.Fatalf("socket directory mode = %v, want %o", info.Mode(), mode)
+				}
 			})
-			if err != nil {
-				t.Fatalf("NewServer() error = %v", err)
-			}
-
-			alive, err := server.IsAlive(ctx)
-			if err != nil {
-				t.Fatalf("IsAlive() = (%t, %v), want no error: tmux refused the "+
-					"directory and the refusal was not recognised", alive, err)
-			}
-			if alive {
-				t.Fatalf("IsAlive() = true for a directory tmux will not use")
-			}
-
-			_, err = server.Sessions(ctx)
-			if !errors.Is(err, tmux.ErrNoServer) {
-				t.Fatalf("Sessions() = %v, want ErrNoServer", err)
-			}
-			// The reason survives classification, because a caller who cannot
-			// read it has to guess between a socket that is absent and a
-			// directory they need to chmod.
-			if got := err.Error(); got == "" {
-				t.Fatal("Sessions() error has no text")
-			}
-		})
-	}
-}
-
-// TestAnAbsentSocketDirectoryStillReadsAsNoServer keeps the ordinary case
-// beside the refused one: nothing there at all is the same answer.
-//
-//libtmux:real-tmux
-func TestAnAbsentSocketDirectoryStillReadsAsNoServer(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "absent",
-		ProcessEnvironment: []string{
-			"TMUX_TMPDIR=" + filepath.Join(t.TempDir(), "nothing-here"),
-			"PATH=" + os.Getenv("PATH"),
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
-
-	alive, err := server.IsAlive(ctx)
-	if err != nil || alive {
-		t.Fatalf("IsAlive() = (%t, %v), want (false, nil)", alive, err)
+		}
 	}
 }
 
 //libtmux:real-tmux
-func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
-	t.Parallel()
+func TestNamedSocketInvalidRootsNeverLaunchElsewhere(t *testing.T) {
+	for _, control := range []bool{false, true} {
+		for _, condition := range []string{"missing", "removed", "other permissions", "symlink", "file", "wrong owner"} {
+			t.Run(fmt.Sprintf("control=%t/%s", control, condition), func(t *testing.T) {
+				root := endpointTestRoot(t)
+				selected := filepath.Join(root, "selected")
+				if condition != "missing" {
+					if err := os.Mkdir(selected, 0o700); err != nil {
+						t.Fatal(err)
+					}
+				}
+				directory := filepath.Join(selected, "tmux-"+strconv.Itoa(os.Getuid()))
+				switch condition {
+				case "other permissions", "wrong owner":
+					if err := os.Mkdir(directory, 0o700); err != nil {
+						t.Fatal(err)
+					}
+					if condition == "wrong owner" {
+						if os.Getuid() != 0 {
+							t.Skip("changing directory ownership requires root")
+						}
+						if err := os.Chown(directory, 1, -1); err != nil {
+							t.Fatal(err)
+						}
+					} else if err := os.Chmod(directory, 0o701); err != nil {
+						t.Fatal(err)
+					}
+				case "symlink":
+					if err := os.Symlink(root, directory); err != nil {
+						t.Fatal(err)
+					}
+				case "file":
+					if err := os.WriteFile(directory, nil, 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				name := "refused-" + rand.Text()
+				server, err := tmux.NewServer(tmux.ServerOptions{
+					ConfigFile: "/dev/null", SocketName: name,
+					ProcessEnvironment: []string{"TMUX_TMPDIR=" + selected, "PATH=" + os.Getenv("PATH")},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if condition == "removed" {
+					if err := os.Remove(selected); err != nil {
+						t.Fatal(err)
+					}
+				}
+				want := filepath.Join(directory, name)
+				if server.SocketPath() != want {
+					t.Fatalf("endpoint = %q, want %q", server.SocketPath(), want)
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+				if control {
+					_, connection, startErr := server.NewSessionConnection(ctx, tmux.NewSessionRequest{Command: "cat"}, tmux.ConnectionOptions{})
+					if connection != nil {
+						if err := connection.Close(); err != nil {
+							t.Error(err)
+						}
+					}
+					err = startErr
+				} else {
+					_, err = server.NewSession(ctx, tmux.NewSessionRequest{Command: "cat"})
+				}
+				if err == nil {
+					t.Fatal("invalid root launched a session")
+				}
+				if !strings.Contains(err.Error(), "socket directory") {
+					t.Fatalf("lost directory failure: %v", err)
+				}
+				if _, err := os.Lstat(want); !errors.Is(err, os.ErrNotExist) && condition != "file" {
+					t.Fatalf("unexpected endpoint after refused launch: %v", err)
+				}
+				fallback := filepath.Join("/tmp", "tmux-"+strconv.Itoa(os.Getuid()), name)
+				if _, err := os.Lstat(fallback); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("fallback socket exists: %v", err)
+				}
+			})
+		}
+	}
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	missingRoot := filepath.Join(t.TempDir(), "appears-later")
-	// t.TempDir()'s own basename is not fit for this: within one test it
-	// increments from a fixed start, so a test's Nth call names the same
-	// directory on every run and every machine (this call, the second in
-	// this test, is always "002"). That makes the socket name machine-wide
-	// constant, which collides with any server a previous run leaked under
-	// the same name. rand.Text() is unique per call instead.
-	name := "frozen-" + rand.Text()
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: name,
-		ProcessEnvironment: []string{
-			"TMUX_TMPDIR=" + missingRoot,
-			"PATH=" + os.Getenv("PATH"),
-		},
-	})
+//libtmux:real-tmux
+func TestExplicitSocketDoesNotCreateParent(t *testing.T) {
+	root := endpointTestRoot(t)
+	parent := filepath.Join(root, "missing")
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketPath: filepath.Join(parent, "socket"), ConfigFile: "/dev/null"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	selection, err := server.SocketSelection()
+	if _, err := server.NewSession(t.Context(), tmux.NewSessionRequest{Command: "cat"}); err == nil {
+		t.Fatal("created session below missing parent")
+	}
+	if _, err := os.Stat(parent); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("parent was created: %v", err)
+	}
+}
+
+func endpointTestRoot(t *testing.T) string {
+	t.Helper()
+	const base = "/tmp/libtmux-go-test"
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	//nolint:usetesting // Unix sockets need a short path in the private test namespace.
+	root, err := os.MkdirTemp(base, "endpoint-")
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(missingRoot, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "frozen-root"}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cleanupCancel()
-		_ = server.Kill(cleanupCtx)
-	})
-	result, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
-	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
-		t.Fatalf("display-message = %#v, %v", result, err)
-	}
-	if result.Stdout[0] != selection.Path {
-		t.Fatalf(
-			"tmux socket path = %q, want frozen selection %q",
-			result.Stdout[0],
-			selection.Path,
-		)
-	}
-}
-
-// t.TempDir()'s own basename is deterministic per call within a test - the
-// Nth call in a given test always ends the same way, on every run and every
-// machine - so a socket name derived from it (the bug this replaces) was
-// machine-wide constant, not unique. This confirms that premise directly,
-// then pins the replacement's actual property: two calls in the same
-// process, the case that would be identical either way, differ.
-func TestFrozenSocketNameIsNotAFixedConstant(t *testing.T) {
-	t.Parallel()
-
-	// Not pinned to Go's exact counter format, which this project does not
-	// control: two independent *testing.T instances taking the same second
-	// call reproduce the same basename as each other, which is the
-	// replaced scheme's actual premise (deterministic, not unique) without
-	// depending on what that basename literally is.
-	outer := secondTempDirCallBasename(t)
-	t.Run("reproduced independently", func(t *testing.T) {
-		if got := secondTempDirCallBasename(t); got != outer {
-			t.Fatalf(
-				"second call's basename = %q here, %q in the sibling instance above, "+
-					"want them identical - that repetition is what made the replaced scheme collide",
-				got, outer,
-			)
+		if err := os.RemoveAll(root); err != nil {
+			t.Errorf("remove private root: %v", err)
 		}
 	})
-
-	first := "frozen-" + rand.Text()
-	second := "frozen-" + rand.Text()
-	if first == second {
-		t.Fatalf("two successive frozen socket names are both %q, want distinct", first)
-	}
+	return root
 }
 
-func secondTempDirCallBasename(t *testing.T) string {
+func cleanupEndpoint(t *testing.T, server tmux.Server) {
 	t.Helper()
-	_ = t.TempDir()
-	return filepath.Base(t.TempDir())
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		pid, _ := server.Cmd(ctx, "display-message", "-p", "#{pid}")
+		var daemonPID int
+		if pid.ExitCode == 0 && len(pid.Stdout) == 1 {
+			daemonPID, _ = strconv.Atoi(pid.Stdout[0])
+		}
+		if err := server.Kill(ctx); err != nil && !errors.Is(err, tmux.ErrNoServer) {
+			t.Errorf("kill private daemon: %v", err)
+		}
+		if daemonPID > 0 {
+			if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(context.Context) (bool, error) {
+				return errors.Is(syscall.Kill(daemonPID, 0), syscall.ESRCH), nil
+			}); err != nil {
+				t.Errorf("private daemon process survived cleanup: %v", err)
+			}
+		}
+		if alive, err := server.IsAlive(ctx); err != nil || alive {
+			t.Errorf("daemon remains after cleanup: alive=%t, error=%v", alive, err)
+		}
+	})
 }
