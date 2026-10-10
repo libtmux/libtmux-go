@@ -4,14 +4,14 @@ go 1.26.0
 
 require (
 	github.com/libtmux/libtmux-go v0.0.1-alpha.9
-	github.com/mattn/go-isatty v0.0.20
-	github.com/mattn/go-runewidth v0.0.19
-	github.com/mattn/go-shellwords v1.0.12
+	github.com/mattn/go-isatty v0.0.24
+	github.com/mattn/go-runewidth v0.0.30
+	github.com/mattn/go-shellwords v1.0.16
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.9
+	github.com/spf13/pflag v1.0.10
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/sys v0.30.0
-	golang.org/x/term v0.29.0
+	golang.org/x/sys v0.48.0
+	golang.org/x/term v0.46.0
 )
 
 require (
