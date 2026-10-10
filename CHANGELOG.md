@@ -11,6 +11,13 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux
 
+- `Server.Ensure` returns an ordinary running server without cleanup ownership.
+  New startup sets `exit-empty` off and removes its temporary session. Reuse
+  preserves existing objects and configuration; failed startup retains any
+  failed rollback in `AcquisitionError.Cleanup`. If configuration removes the
+  startup marker, Ensure keeps its detached session when needed to keep that
+  unclassified daemon available, without changing its server options.
+
 - `Owned` adds explicit adoption and deferred cleanup for servers, sessions,
   windows and panes. Cleanup retains daemon identity and stable IDs, survives
   body cancellation, joins errors with `CloseInto`, and permits retry after a
@@ -49,14 +56,15 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### Examples
 
-- `quickstart` now uses `OwnSession` and deferred `CloseInto`; its external
-  harness continues to run the same program under child environment defaults.
-  `lifecycle` demonstrates adoption, bounded discovery and find-or-create on a
+- `quickstart` ensures a daemon and reuses its named session and window. It leaves
+  the workspace available. The complete README program includes imports, and
+  the external runner tests both initial daemon states through environment
+  defaults while detecting source drift.
+- `session-cleanup` preserves the previous complete pane-I/O program and its
+  named return error for deferred `CloseInto`. Its harness checks body failure,
+  cleanup failure and joined errors against the displayed program.
+- `lifecycle` demonstrates adoption, bounded discovery and find-or-create on a
   disposable endpoint, including body-error inspection.
-- `quickstart` now displays a complete program in the README, including imports
-  and the named return error used by deferred cleanup. Its external harness runs
-  the displayed program unchanged under child environment defaults and verifies
-  body failure, cleanup failure and joined errors.
 
 ### Development
 

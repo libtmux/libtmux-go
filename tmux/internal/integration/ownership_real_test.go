@@ -687,14 +687,16 @@ func TestFindOrCreateCanceledCoordinationWait(t *testing.T) {
 		kind string
 		err  error
 	}
-	results := make(chan outcome, 4)
+	results := make(chan outcome, 5)
 	var waiting []<-chan struct{}
-	for _, kind := range []string{"server", "session", "window", "pane"} {
+	for _, kind := range []string{"ensure", "server", "session", "window", "pane"} {
 		observed := &coordinationWaitContext{Context: ctx, waiting: make(chan struct{})}
 		waiting = append(waiting, observed.waiting)
 		waiters.Go(func() {
 			var err error
 			switch kind {
+			case "ensure":
+				_, err = server.Ensure(observed)
 			case "server":
 				_, err = server.FindOrCreate(observed, tmux.NewSessionRequest{Name: "queued"}, tmux.OwnershipOptions{})
 			case "session":
@@ -717,7 +719,7 @@ func TestFindOrCreateCanceledCoordinationWait(t *testing.T) {
 	}
 	cancel()
 	deadline := time.After(2 * time.Second)
-	for range 4 {
+	for range 5 {
 		select {
 		case result := <-results:
 			if !errors.Is(result.err, context.Canceled) {

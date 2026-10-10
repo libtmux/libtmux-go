@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -229,46 +230,54 @@ func (s Server) FindOrCreate(ctx context.Context, request NewSessionRequest, opt
 		return Found[Server]{}, err
 	}
 	defer state.shared.releaseLifecycle()
+	found, session, err := s.findOrCreateLocked(ctx, request, options, timeout)
+	if err != nil || found.Created || session == nil {
+		return found, err
+	}
+	if err := session.Close(); err != nil {
+		return found, &AcquisitionError{
+			Operation: "remove startup session on borrowed server", ResourceID: session.Value().ID().String(), Rollback: err, Cleanup: session,
+		}
+	}
+	return found, ctx.Err()
+}
+
+func (s Server) findOrCreateLocked(ctx context.Context, request NewSessionRequest, options OwnershipOptions, timeout time.Duration) (Found[Server], *Owned[Session], error) {
 	identity, err := s.probeSnapshotIdentity(ctx)
 	if err == nil {
 		bound := s.withDaemon(identity)
 		if err := bound.CheckAlive(ctx); err != nil {
-			return Found[Server]{}, err
+			return Found[Server]{}, nil, err
 		}
-		return Found[Server]{Value: bound}, nil
+		return Found[Server]{Value: bound}, nil, nil
 	}
 	if !errors.Is(err, ErrNoServer) {
-		return Found[Server]{}, err
+		return Found[Server]{}, nil, err
 	}
 	marker := "LIBTMUX_START_" + rand.Text()
 	launcher, err := s.WithProcessEnvironmentValue(marker, marker)
 	if err != nil {
-		return Found[Server]{}, err
+		return Found[Server]{}, nil, err
 	}
 	// Classification must finish even when cancellation arrives after creation.
 	acquire, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 	session, createErr := launcher.ownSession(acquire, request, options, false)
 	if session == nil {
-		return Found[Server]{}, &AcquisitionError{Operation: "start server", Cause: createErr, Unknown: true}
+		return Found[Server]{}, nil, &AcquisitionError{Operation: "start server", Cause: createErr, Unknown: true}
 	}
 	bound := s.withDaemon(*session.state.server.daemon)
 	value, ok, err := bound.GetEnvironment(acquire, marker)
 	if err != nil {
 		_, rollbackErr := rollbackAcquisition(session, "identify server startup", errors.Join(createErr, err))
-		return Found[Server]{}, rollbackErr
+		return Found[Server]{}, nil, rollbackErr
 	}
 	if !ok || value.Removed || value.Value != marker {
 		if createErr != nil {
 			_, err := rollbackAcquisition(session, "create startup session on borrowed server", createErr)
-			return Found[Server]{Value: bound}, err
+			return Found[Server]{Value: bound}, nil, err
 		}
-		if err := session.Close(); err != nil {
-			return Found[Server]{Value: bound}, &AcquisitionError{
-				Operation: "remove startup session on borrowed server", ResourceID: session.Value().ID().String(), Rollback: err, Cleanup: session,
-			}
-		}
-		return Found[Server]{Value: bound}, ctx.Err()
+		return Found[Server]{Value: bound}, session, nil
 	}
 	owner := newOwned(bound, bound, "server", "", timeout)
 	err = errors.Join(createErr, bound.UnsetEnvironment(acquire, marker))
@@ -278,5 +287,83 @@ func (s Server) FindOrCreate(ctx context.Context, request NewSessionRequest, opt
 	if err != nil {
 		owner, err = rollbackAcquisition(owner, "start server", err)
 	}
-	return foundOwned(owner), err
+	return foundOwned(owner), session, err
+}
+
+// Ensure returns an ordinary handle to the selected running daemon, starting it
+// when absent. Reuse preserves the daemon's sessions, options and environment.
+// The returned handle carries no destruction responsibility.
+//
+// Startup loads the selected tmux configuration, creates a temporary detached
+// session running cat, sets exit-empty to off, and removes that session. This
+// leaves a new daemon usable with no sessions. Configuration-created resources
+// remain, and session hooks can observe the temporary session. Startup also
+// initializes the ownership metadata described by [Server.Adopt] for rollback.
+// A daemon started by another client remains borrowed.
+// If configuration removes the startup marker, the daemon also remains borrowed.
+// Ensure keeps its own detached session when removing it would leave that daemon
+// empty with exit-empty enabled; it does not change an unproven daemon's options.
+//
+// Calls sharing this Server serialize startup; waiting respects ctx. Independent
+// clients can race. A failed acquisition can be delivery-ambiguous; inspect
+// [AcquisitionError]. Its Cleanup retains any failed rollback for retry.
+// Use [Server.FindOrCreate] when a newly created daemon should have an owner.
+func (s Server) Ensure(ctx context.Context) (Server, error) {
+	state, err := s.stateForUse()
+	if err != nil {
+		return Server{}, err
+	}
+	if err := state.shared.acquireLifecycle(ctx); err != nil {
+		return Server{}, err
+	}
+	defer state.shared.releaseLifecycle()
+	name := "libtmux-start-" + rand.Text()
+	options := OwnershipOptions{}
+	timeout, _ := ownershipTimeout(options)
+	found, session, err := s.findOrCreateLocked(ctx, NewSessionRequest{Name: name, Command: "cat"}, options, timeout)
+	if err != nil {
+		return Server{}, err
+	}
+	if session == nil {
+		return found.Value, nil
+	}
+	remove := true
+	if found.Created {
+		err = found.Value.SetOption(ctx, "exit-empty", "off", SetOptionOptions{})
+	} else {
+		remove, err = ensureCanRemoveSession(ctx, found.Value, session.Value().ID())
+	}
+	if err == nil && remove {
+		result, commandErr := session.Value().server.literalCmd(ctx, "kill-session", "-t", session.Value().ID().String())
+		_, err = requireRedactedLifecycleSuccess("kill-session", result, commandErr)
+	}
+	if err == nil {
+		err = found.Value.CheckAlive(ctx)
+	}
+	if err != nil {
+		if found.Created {
+			_, err = rollbackAcquisition(found.Owner, "ensure server", err)
+		} else {
+			_, err = rollbackAcquisition(session, "ensure server", err)
+		}
+		return Server{}, err
+	}
+	return found.Value, nil
+}
+
+func ensureCanRemoveSession(ctx context.Context, server Server, id SessionID) (bool, error) {
+	value, ok, err := server.RawOption(ctx, "exit-empty")
+	if err != nil || ok && value == "off" {
+		return err == nil, err
+	}
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, session := range sessions {
+		if session.ID() != id {
+			return true, nil
+		}
+	}
+	return false, nil
 }

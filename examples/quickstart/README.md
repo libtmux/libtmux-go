@@ -1,12 +1,8 @@
-# quickstart
+# Quick start
 
-A whole session, window, and pane lifecycle: make a session, add a window, split
-it, type a command into the new pane, and read the pane's output back until the
-command's line arrives.
-
-Start here. It is the shortest program that touches every level of the
-hierarchy — server, session, window, pane — and the only one that both writes to
-a pane and reads from it.
+This complete program imports libtmux, opens the normal tmux endpoint, and finds
+or creates the `libtmux-go-quickstart` session and its `logs` window. It leaves
+them available after it exits. Running it again reuses both objects.
 
 ## Running it
 
@@ -14,49 +10,40 @@ a pane and reads from it.
 $ go -C examples run ./quickstart
 ```
 
+```text
+workspace ready: logs
 ```
-libtmux ready
-```
 
-`libtmux ready` is the pane's own output, captured back out of it. The example
-constructs `tmux.NewServer(tmux.ServerOptions{})`, creates an `Owned` session and
-defers `CloseInto(&err)`. Cleanup uses the captured daemon and session ID with an
-independent deadline, including after body cancellation. The returned error
-retains body and cleanup failures; known creation IDs roll back after a failed
-acquisition.
+`Server.Ensure` starts tmux only when the selected endpoint has no daemon. New
+startup loads your tmux configuration, uses a temporary detached session running
+`cat`, sets `exit-empty` off, and removes the temporary session. Session hooks can
+observe that startup session. A running daemon keeps its configuration and
+existing objects. Ensuring availability does not give the caller a cleanup owner.
 
-## What to look at
+If configuration removes the private startup marker, `Ensure` leaves the
+unclassified daemon's options unchanged. It retains its detached startup session
+when that is the only session and `exit-empty` is enabled. Otherwise it removes
+the startup session by its stable ID, including when a hook renamed it.
 
-**Writing and reading are the standard interfaces.** `pane.Writer(ctx)` is an
-`io.Writer` whose newline is the Enter key, so `fmt.Fprintln` submits a line
-the way a person would. `output.Reader(ctx)` is an `io.Reader` over what the
-pane prints after the observation opened, so `bufio.Scanner` reads it back a
-line at a time and the program returns the moment the line arrives — no loop
-that captures and sleeps.
+`FindOrCreateSession` and `FindOrCreateWindow` return ordinary handles in `Value`.
+The example leaves newly created objects alive. Their optional `Owner` is useful
+when cleanup is the purpose of your program; the [session cleanup
+example](../session-cleanup/) demonstrates that separate behavior and pane I/O.
 
-**Open the reader before typing.** An observation starts when it is opened;
-typing afterwards means the reply cannot be missed.
+## Testing the displayed program
 
-**The split runs `sh`.** A pane's default shell is your login shell, and what
-that does at startup is yours. A plain POSIX shell keeps the example about tmux.
-
-**`new("work")`** is Go 1.26's way to take the address of a literal. Request
-fields are pointers only where tmux distinguishes an empty value from an
-omitted one; the rest are plain values.
-
-**The pane never refreshes.** The `pane` value is what tmux said when the split
-happened. Reading through the observation asks tmux for more; it does not
-update the value in hand.
-
-## Testing your own version
-
-[`example_test.go`](example_test.go) compiles and executes the unchanged program.
-Its child environment supplies `LIBTMUX_SOCKET_PATH` or `LIBTMUX_SOCKET_NAME` to
-select a private endpoint. The harness checks the session exists during the
-body, the pane prints its reply, and the session is removed after success or an
-injected body failure. A separate failure checks that cleanup errors reach the
-caller. The harness removes its own daemon and reports teardown failures.
+The root README includes this source with all imports. `example_test.go` checks
+that the displayed block matches the program. The external runner builds each
+source unchanged, supplies child-only socket defaults, and executes both twice
+against absent and seeded running daemons. It owns final cleanup.
 
 ```console
-$ go -C examples test ./quickstart
+$ python3 scripts/test_ordinary_examples.py \
+    --runner /path/to/libtmux-docs/scripts/example_environment.py \
+    --output /tmp/go-ordinary-results
 ```
+
+Run that command from the repository root. `--tmux` selects a cached tmux build.
+The runner requires Linux with pidfd support and a Go toolchain on `PATH`; it
+performs no dependency installation. The example itself contains no test socket,
+fixture, temporary directory or cleanup scope.

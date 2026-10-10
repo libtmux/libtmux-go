@@ -71,3 +71,16 @@ func ExampleOwned() {
 	// adopted session removed: true
 	// servers: 1 truncated: false
 }
+
+func ExampleServer_Ensure_canceled() {
+	server, err := tmux.NewServer(tmux.ServerOptions{})
+	if err != nil {
+		panic(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = server.Ensure(ctx)
+	fmt.Println("startup canceled:", errors.Is(err, context.Canceled))
+	// Output:
+	// startup canceled: true
+}

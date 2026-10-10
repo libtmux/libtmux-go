@@ -54,92 +54,76 @@ exact ones you want in your own go.mod; the commands here fetch the newest.
 
 ## Quick start
 
-Make a window, split it, type a command into the new pane, and read the reply
-back through an `io.Reader`:
+Open a named workspace on the normal tmux endpoint. The same program works
+when no daemon is running and when your server already has sessions:
 
 <!-- docs:quickstart -->
 
 ```go
-// Command quickstart demonstrates a complete session, window, and pane lifecycle.
+// Command quickstart opens a workspace on the selected tmux server.
 package main
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
 func main() {
-	if err := start(); err != nil {
+	if err := run(context.Background()); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// start owns cleanup because log.Fatal skips deferred calls in main.
-func start() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	return run(ctx)
-}
-
-func run(ctx context.Context) (err error) {
+func run(ctx context.Context) error {
 	server, err := tmux.NewServer(tmux.ServerOptions{})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
-	owned, err := server.OwnSession(ctx, tmux.NewSessionRequest{
-		Name: "libtmux-go-quickstart", WindowName: "start",
+	server, err = server.Ensure(ctx)
+	if err != nil {
+		return fmt.Errorf("ensure tmux server: %w", err)
+	}
+	session, err := server.FindOrCreateSession(ctx, tmux.NewSessionRequest{
+		Name: "libtmux-go-quickstart", WindowName: "work",
 	}, tmux.OwnershipOptions{})
-	defer owned.CloseInto(&err)
 	if err != nil {
-		return fmt.Errorf("create session: %w", err)
+		return fmt.Errorf("find or create session: %w", err)
 	}
-	session := owned.Value()
-
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
+	window, err := session.Value.FindOrCreateWindow(ctx,
+		tmux.NewWindowRequest{Name: new("logs")}, tmux.OwnershipOptions{})
 	if err != nil {
-		return fmt.Errorf("create window: %w", err)
+		return fmt.Errorf("find or create window: %w", err)
 	}
-	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-		Direction: tmux.PaneDirectionRight, Command: "sh",
-	})
-	if err != nil {
-		return fmt.Errorf("split window: %w", err)
-	}
-	output, err := pane.OpenObservation(ctx)
-	if err != nil {
-		return fmt.Errorf("watch pane: %w", err)
-	}
-	defer func() { err = errors.Join(err, output.Close()) }()
-	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
-		return fmt.Errorf("send command: %w", err)
-	}
-
-	scanner := bufio.NewScanner(output.Reader(ctx))
-	for scanner.Scan() {
-		if scanner.Text() == "libtmux ready" {
-			fmt.Println("libtmux ready")
-			return nil
-		}
-	}
-	return fmt.Errorf("read pane: %w", scanner.Err())
+	name, _ := window.Value.Name()
+	fmt.Println("workspace ready:", name)
+	return nil
 }
 ```
 
 <!-- docs:end -->
 
-Every Go block below marked this way is generated from a program in
-[`examples/`](examples/) that is compiled, linted, run against a real tmux, and
-swept across every supported release — so none of it can drift from code that
-works.
+`Ensure` starts a missing daemon and returns an ordinary `Server`. It leaves a
+new daemon running with `exit-empty` off, after removing its temporary startup
+session. Reuse preserves existing sessions, options and environment. The example
+finds or creates its named session and window, then leaves them available for
+`tmux attach -t libtmux-go-quickstart`. Repeating it reuses that workspace.
+
+If configuration removes the private startup marker, `Ensure` cannot prove that
+it started the daemon. It leaves that daemon's options unchanged and retains its
+detached startup session when needed to keep the daemon available. Other sessions
+or an existing `exit-empty off` setting allow that startup session to be removed.
 
 Runnable: [`examples/quickstart`](examples/quickstart) — `go -C examples run ./quickstart`.
+The [session cleanup example](examples/session-cleanup/) preserves the previous
+program, including its pane I/O and joined body/cleanup errors.
+
+Go blocks marked this way come from programs in [`examples/`](examples/).
+The source check detects drift, and the external ordinary-example runner tests
+this complete block with absent and running daemons under path and name defaults.
+The broader supported-version gates remain separate from that focused runner.
 
 `NewServer(tmux.ServerOptions{})` captures one endpoint from the effective
 process environment. Selection follows this order:
