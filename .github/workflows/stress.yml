@@ -1,0 +1,76 @@
+name: stress
+
+# One green run says little about a test that depends on timing. This repeats
+# the suites that drive a real tmux server and counts failures per test, so a
+# flake shows up as a rate and a fix can be measured. macOS is the lane under
+# test; Ubuntu runs the same loop as a control, so a failure on both is a bug
+# and a failure only on macOS is the platform.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: Repetitions of the real-tmux suites
+        required: true
+        default: '10'
+
+permissions:
+  contents: read
+
+# The macOS pool is shared and small, so a second dispatch on the same ref
+# supersedes the first rather than queueing behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TMUX_TMPDIR: /tmp/libtmux-go-stress
+
+jobs:
+  stress:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    env:
+      LIBTMUX_STRESS_REPEAT: ${{ inputs.repeat || '10' }}
+      LIBTMUX_STRESS_LABEL: ${{ matrix.os }}
+      LIBTMUX_STRESS_OUT: ${{ github.workspace }}/stress-out
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.mod
+            workspace/go.mod
+            mcp/go.mod
+
+      - name: Install tmux
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            brew install tmux
+          else
+            sudo apt-get update && sudo apt-get install --yes tmux
+          fi
+
+      - name: Repeat the real-tmux suites
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          tmux -V
+          bash scripts/stress.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: stress-${{ matrix.os }}
+          path: |
+            stress-out/stress-failures.csv
+            stress-out/stress-runs.csv
+            stress-out/stress-durations.csv

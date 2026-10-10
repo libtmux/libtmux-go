@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 // PTYProcess is a test subprocess that owns an isolated controlling terminal
@@ -176,7 +178,7 @@ func (p *PTYProcess) Output() []byte { return p.output.snapshot() }
 // to call concurrently and more than once.
 func (p *PTYProcess) Close() error {
 	ctx, cancel := context.WithTimeout(
-		context.Background(), 2*cleanupTimeout+2*controlStopGrace,
+		context.Background(), 2*hangguard.Wait+2*controlStopGrace,
 	)
 	defer cancel()
 	return p.CloseContext(ctx)
@@ -211,7 +213,7 @@ func (p *PTYProcess) close() {
 		p.closeErr = errors.Join(p.closeErr, killErr)
 		select {
 		case <-p.done:
-		case <-time.After(cleanupTimeout):
+		case <-time.After(hangguard.Wait):
 			p.closeErr = errors.Join(
 				p.closeErr, errors.New("PTY process did not exit after kill"),
 			)
@@ -220,7 +222,7 @@ func (p *PTYProcess) close() {
 	p.closeErr = errors.Join(p.closeErr, p.master.Close())
 	select {
 	case <-p.drained:
-	case <-time.After(cleanupTimeout):
+	case <-time.After(hangguard.Wait):
 		p.closeErr = errors.Join(
 			p.closeErr, errors.New("PTY output did not drain after close"),
 		)

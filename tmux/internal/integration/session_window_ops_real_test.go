@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -936,7 +937,7 @@ func TestRecordsSurviveWindowRenumberAgainstRealTmux(t *testing.T) {
 //libtmux:real-tmux
 func TestSessionLastWindowErrorAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	session := mustRealSnapshot(t, server).Sessions()[0]
 
@@ -1035,7 +1036,7 @@ func TestSessionRunReportsStatusAndScreen(t *testing.T) {
 	if want := []string{"one", "two"}; !slices.Equal(result.Lines, want) {
 		t.Errorf("Run() lines = %q, want %q", result.Lines, want)
 	}
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
+	if elapsed := time.Since(started); elapsed > hangguard.Wait {
 		t.Errorf("Run() took %s, want a push-driven wait", elapsed)
 	}
 	windows, err := session.Refresh(ctx)

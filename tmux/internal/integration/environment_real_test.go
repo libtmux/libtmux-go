@@ -5,9 +5,9 @@ package integration
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -21,7 +21,7 @@ func TestEnvironmentOperationsPreserveScopesAndStates(t *testing.T) {
 	}
 	session := sessions[0]
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	if err := server.SetEnvironment(ctx, "LIBTMUX_SCOPE", "global", tmux.SetEnvironmentOptions{}); err != nil {
 		t.Fatalf("Server.SetEnvironment() error = %v", err)

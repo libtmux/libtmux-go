@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestUnixProcessExitOutcome(t *testing.T) {
@@ -107,7 +109,7 @@ func TestRunnerClassifiesConcurrentCancelAndSelfSIGTERM(t *testing.T) {
 			completed <- completedRun{result: result, err: runErr}
 		}()
 
-		if err := ready.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		if err := ready.SetReadDeadline(time.Now().Add(hangguard.Wait)); err != nil {
 			cancel()
 			t.Fatalf("set readiness deadline: %v", err)
 		}
@@ -120,7 +122,7 @@ func TestRunnerClassifiesConcurrentCancelAndSelfSIGTERM(t *testing.T) {
 		var got completedRun
 		select {
 		case got = <-completed:
-		case <-time.After(2 * time.Second):
+		case <-time.After(hangguard.Wait):
 			t.Fatalf("attempt %d: canceled helper did not finish", attempt)
 		}
 

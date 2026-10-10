@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 const (
-	controlStartTimeout = 3 * time.Second
-	controlStopGrace    = 250 * time.Millisecond
+	controlStopGrace = 250 * time.Millisecond
 )
 
 // ControlMode is an attached tmux control client for real-tmux tests. It owns
@@ -53,7 +53,7 @@ func NewControlMode(
 	session tmux.Session,
 ) *ControlMode {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(ctx, controlStartTimeout)
+	ctx, cancel := context.WithTimeout(ctx, hangguard.Wait)
 	defer cancel()
 	control, err := startControlMode(ctx, server, session)
 	if err != nil {
@@ -122,7 +122,7 @@ func (c *ControlMode) Wait(ctx context.Context) error {
 // call concurrently and more than once.
 func (c *ControlMode) Close() error {
 	ctx, cancel := context.WithTimeout(
-		context.Background(), cleanupTimeout+2*controlStopGrace,
+		context.Background(), hangguard.Wait+2*controlStopGrace,
 	)
 	defer cancel()
 	return c.CloseContext(ctx)
@@ -155,7 +155,7 @@ func (c *ControlMode) close() {
 	select {
 	case <-c.done:
 		c.closeErr = errors.Join(stdinErr, killErr)
-	case <-time.After(cleanupTimeout):
+	case <-time.After(hangguard.Wait):
 		c.closeErr = errors.Join(
 			stdinErr, killErr, errors.New("control client did not exit after kill"),
 		)

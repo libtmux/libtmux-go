@@ -5,8 +5,8 @@ package integration
 import (
 	"context"
 	"testing"
-	"time"
 
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -22,7 +22,7 @@ func TestServerHierarchyListsMaterializeRealTmux(t *testing.T) {
 	controlClient := startRealControlClient(t, server, "beta")
 	_ = snapshotWithAttachedClient(t, server, controlClient)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil {

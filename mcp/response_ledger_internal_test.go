@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -270,7 +271,7 @@ func TestTerminalFreezesItsResponseDrainSet(t *testing.T) {
 	instance.responseSettled(scope, &jsonrpc.Response{ID: first})
 	select {
 	case <-instance.closeDone:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("frozen response drain did not finish")
 	}
 }
@@ -291,7 +292,7 @@ func TestTerminalResponseDrainHasABoundedFallback(t *testing.T) {
 	instance.terminal(tmux.ErrDaemonReplaced)
 	select {
 	case <-instance.closeDone:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("terminal response drain had no bounded fallback")
 	}
 }
@@ -436,7 +437,7 @@ func TestSDKRequestAdmissionClosesOnlyTheOffendingSession(t *testing.T) {
 			for range 2 {
 				select {
 				case <-started:
-				case <-time.After(time.Second):
+				case <-time.After(hangguard.Wait):
 					t.Fatal("admitted handler did not start")
 				}
 			}
@@ -450,7 +451,7 @@ func TestSDKRequestAdmissionClosesOnlyTheOffendingSession(t *testing.T) {
 				if !errors.Is(err, ErrRequestCapacity) {
 					t.Fatalf("offending session error = %v, want ErrRequestCapacity", err)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("overflow did not close the offending session")
 			}
 			// Ping needs one slot. At the instance limit it proves termination
@@ -462,7 +463,7 @@ func TestSDKRequestAdmissionClosesOnlyTheOffendingSession(t *testing.T) {
 			for range 3 {
 				select {
 				case <-callDone:
-				case <-time.After(time.Second):
+				case <-time.After(hangguard.Wait):
 					t.Fatal("call did not retire")
 				}
 			}

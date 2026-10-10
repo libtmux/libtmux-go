@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -34,7 +34,7 @@ func TestNewSessionGeneratesNameAndCleansRenamedStableID(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	var sessionID tmux.SessionID
 	t.Run("temporary lifetime", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cancel()
 		session := tmuxtest.NewSession(ctx, t, server, tmux.NewSessionRequest{})
 		sessionID = session.ID()
@@ -62,7 +62,7 @@ func TestNewSessionGeneratesNameAndCleansRenamedStableID(t *testing.T) {
 //libtmux:real-tmux
 func TestNewWindowGeneratesNameAndCleansMovedStableID(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	work := onlyControlSession(t, server)
 	other := tmuxtest.NewSession(ctx, t, server, tmux.NewSessionRequest{Name: "other"})
@@ -91,7 +91,7 @@ func TestNewWindowGeneratesNameAndCleansMovedStableID(t *testing.T) {
 //libtmux:real-tmux
 func TestTemporaryResourceCleanupToleratesAlreadyMissingObjects(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	work := onlyControlSession(t, server)
 
@@ -117,7 +117,7 @@ func TestTemporaryResourceCleanupToleratesAlreadyMissingObjects(t *testing.T) {
 //libtmux:real-tmux
 func TestTemporaryResourceHelpersPreserveExplicitNames(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	work := onlyControlSession(t, server)
 
@@ -134,7 +134,7 @@ func TestTemporaryResourceHelpersPreserveExplicitNames(t *testing.T) {
 
 func sessionIDs(t *testing.T, server tmux.Server) map[tmux.SessionID]bool {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil {
@@ -149,7 +149,7 @@ func sessionIDs(t *testing.T, server tmux.Server) map[tmux.SessionID]bool {
 
 func windowIDs(t *testing.T, server tmux.Server) []tmux.WindowID {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	windows, err := server.Windows(ctx)
 	if err != nil {

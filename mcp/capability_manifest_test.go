@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -822,7 +823,7 @@ func TestCapabilityManifestDefaultSocketProvenanceControlsTeardownDefault(t *tes
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cancel()
 		_ = target.Kill(ctx)
 	})
@@ -921,7 +922,7 @@ func TestPinDefaultMinimalCreatesItsOwnSocketDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cancel()
 		_ = target.Kill(ctx)
 	})

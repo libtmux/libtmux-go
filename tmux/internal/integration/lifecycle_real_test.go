@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -268,7 +270,8 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 			Command:    "sleep 30",
 		})
 		if err != nil {
-			t.Fatalf("SplitPane(Percentage) error = %v", err)
+			t.Fatalf("SplitPane(Percentage) error = %v\n%s", err,
+				diagnoseRefusedSplit(ctx, server, percentageWindow.ID()))
 		}
 		if active, _ := percentagePane.Active(); !active {
 			t.Fatal("attached percentage pane active = false, want true")
@@ -341,7 +344,7 @@ func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 
 	session, err := ambient.NewSession(ctx, tmux.NewSessionRequest{
@@ -376,7 +379,7 @@ func TestNewSessionKeepsTheSocketSelectedByTMUX(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cleanupCancel()
 		_ = distractor.Kill(cleanupCtx)
 	})
@@ -420,7 +423,7 @@ func assertRealPaneLaunch(
 	if err != nil {
 		t.Fatalf("Server.Pane(%s) error = %v", paneID, err)
 	}
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, hangguard.Wait)
 	defer cancel()
 	var path, command string
 	var pathOK, commandOK bool
@@ -515,7 +518,7 @@ func TestStartKeepsAnEmptyServerOnlyThroughTheConfigFile(t *testing.T) {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})
@@ -530,4 +533,22 @@ func TestStartKeepsAnEmptyServerOnlyThroughTheConfigFile(t *testing.T) {
 	if !alive {
 		t.Fatal("an empty server with exit-empty off in its config did not survive Start")
 	}
+}
+
+// diagnoseRefusedSplit reports what tmux says about a refused percentage
+// split. The library's own error for a request that carries a command keeps
+// only the exit code, so the reason is otherwise lost. It repeats the split
+// against the window, which is harmless in a test that is already failing.
+func diagnoseRefusedSplit(ctx context.Context, server tmux.Server, window tmux.WindowID) string {
+	target := window.String()
+	var report strings.Builder
+	for _, arguments := range [][]string{
+		{"display-message", "-p", "-t", target, "window #{window_width}x#{window_height} panes #{window_panes} clients #{session_attached}"},
+		{"split-window", "-d", "-v", "-p", "25", "-t", target, "sleep 30"},
+	} {
+		result, err := server.Cmd(ctx, arguments...)
+		fmt.Fprintf(&report, "tmux %v: err=%v exit=%d stdout=%q stderr=%q\n",
+			arguments, err, result.ExitCode, result.Stdout, result.Stderr)
+	}
+	return report.String()
 }

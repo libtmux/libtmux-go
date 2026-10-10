@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -277,7 +278,7 @@ func TestControlClientCanceledCallDrainsBeforeReuseAgainstRealTmux(t *testing.T)
 		t.Fatalf("set blocking command alias = (%#v, %v)", setAlias, err)
 	}
 	defer func() {
-		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), time.Second)
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer releaseCancel()
 		_, _ = server.Cmd(releaseCtx, "wait-for", "-S", releaseToken)
 	}()
@@ -320,7 +321,7 @@ func TestControlClientCanceledCallDrainsBeforeReuseAgainstRealTmux(t *testing.T)
 		if !errors.Is(err, context.Canceled) || !errors.Is(err, tmux.ErrOutcomeUnknown) {
 			t.Fatalf("Call(go-block) error = %v, want canceled unknown outcome", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("canceled Call(go-block) did not return")
 	}
 
@@ -355,7 +356,7 @@ func TestControlClientCanceledCallDrainsBeforeReuseAgainstRealTmux(t *testing.T)
 			string(result.results[0].RawStdout) != "aligned\n" {
 			t.Fatalf("next Call() = (%#v, %v), want aligned reply", result.results, result.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("next Call did not finish after canceled command drained")
 	}
 }

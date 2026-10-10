@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -24,7 +24,7 @@ func TestNewServerWithOptionsStartsOnlyWhenRequested(t *testing.T) {
 		server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{})
 		socketPath = server.SocketPath()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cancel()
 		alive, err := server.IsAlive(ctx)
 		if err != nil {

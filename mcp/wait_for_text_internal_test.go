@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
@@ -178,7 +179,7 @@ func TestInstanceCloseJoinsTimedOutPaneObservations(t *testing.T) {
 
 func waitForWaitTextLaneBlock(ctx context.Context, t *testing.T, command tmux.Server) {
 	t.Helper()
-	deadline := time.NewTimer(time.Second)
+	deadline := time.NewTimer(hangguard.Wait)
 	defer deadline.Stop()
 	for {
 		probeCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)

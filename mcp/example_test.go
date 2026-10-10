@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -425,7 +426,7 @@ func exampleToolError(result *sdk.CallToolResult) error {
 }
 
 func killExampleServer(server tmux.Server) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	_ = server.Kill(ctx)
 }

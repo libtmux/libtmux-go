@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 // A malformed notification belongs to whatever else shares the connection, so
@@ -123,7 +125,7 @@ func TestPaneObservationVerifiesAmbiguousWindowCloseBeforeDeclaringLoss(t *testi
 				if got.notification.Kind() != ControlNotificationWindowClose {
 					t.Fatalf("NextNotification() = %#v, want the window-close notification", got.notification)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("NextNotification() did not return")
 			}
 		})

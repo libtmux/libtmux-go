@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -126,7 +127,7 @@ func TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon(t *testing.T) {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer killCancel()
 		_ = target.Kill(killCtx)
 	})
@@ -234,7 +235,7 @@ func TestListingsLeaveOutEveryOwnObservationClient(t *testing.T) {
 			Attached int    `json:"attached"`
 		} `json:"sessions"`
 	}
-	listDeadline := time.Now().Add(2 * time.Second)
+	listDeadline := time.Now().Add(hangguard.Wait)
 	for {
 		call(ctx, t, session, "list_sessions", nil, &listed)
 		if len(listed.Sessions) != 1 {

@@ -115,19 +115,12 @@ func TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching(t *testing.T
 		waitDone <- result
 	}()
 
-	// Give the observation time to attach before typing, so the kernel echo
-	// arrives as genuinely new output on a wait already watching. This first
-	// tool call also lazily binds this session's own command connection, so
-	// two clients - not one - confirm the observation itself is attached.
-	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(context.Context) (bool, error) {
-		raw, cmdErr := target.Cmd(ctx, "list-clients")
-		if cmdErr != nil {
-			return false, cmdErr
-		}
-		return len(raw.Stdout) >= 2, nil
-	}); err != nil {
-		t.Fatalf("observation client never attached: %v", err)
-	}
+	// Type only once the observation holds its entry baseline. tmux lists
+	// the control client as soon as it attaches, but the baseline is read a
+	// few round trips later; text typed in between is already on the screen
+	// when the baseline is read, and the wait then ends at entry as
+	// alreadyOnScreen instead of watching the echo arrive.
+	waitForObservationBaseline(ctx, t, target, session)
 
 	var sent struct {
 		Sent int `json:"sent"`
@@ -143,7 +136,8 @@ func TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching(t *testing.T
 
 	select {
 	case result := <-waitDone:
-		t.Fatalf("wait_for_text matched its own unsubmitted input: %s", surfaceResultText(result))
+		t.Fatalf("wait_for_text matched its own unsubmitted input: %s %s",
+			surfaceResultText(result), result.StructuredContent)
 	case <-time.After(300 * time.Millisecond):
 	}
 
@@ -318,5 +312,48 @@ func TestWaitForTextResumesFromARealCursor(t *testing.T) {
 	}, &waited)
 	if waited.Outcome != "matched" || !waited.Found {
 		t.Fatalf("wait_for_text with a real cursor = %+v, want matched/found immediately", waited)
+	}
+}
+
+// waitForObservationBaseline returns once a wait_for_text already running on
+// session has attached its observation client and read its entry baseline.
+//
+// Two raw clients prove only that tmux sees the observation attached: the
+// baseline is read after that. The runtime registers the observation as its
+// own when it returns from opening, which is after the baseline, and from then
+// on list_sessions leaves it out of the attached count. So a second client
+// followed by an attached count of zero is the first moment typing cannot
+// land inside the baseline.
+func waitForObservationBaseline(
+	ctx context.Context,
+	t *testing.T,
+	target tmux.Server,
+	session *sdk.ClientSession,
+) {
+	t.Helper()
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(context.Context) (bool, error) {
+		raw, err := target.Cmd(ctx, "list-clients")
+		if err != nil {
+			return false, err
+		}
+		return len(raw.Stdout) >= 2, nil
+	}); err != nil {
+		t.Fatalf("observation client never attached: %v", err)
+	}
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(context.Context) (bool, error) {
+		var listed struct {
+			Sessions []struct {
+				Attached int `json:"attached"`
+			} `json:"sessions"`
+		}
+		call(ctx, t, session, "list_sessions", nil, &listed)
+		for _, listing := range listed.Sessions {
+			if listing.Attached != 0 {
+				return false, nil
+			}
+		}
+		return len(listed.Sessions) > 0, nil
+	}); err != nil {
+		t.Fatalf("observation never registered as the runtime's own: %v", err)
 	}
 }

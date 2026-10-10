@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestRunnerReturnsNonzeroExitAndSplitOutputAsData(t *testing.T) {
@@ -138,7 +140,7 @@ func TestRunnerMarksCancellationAfterStartAsOutcomeUnknown(t *testing.T) {
 		completed <- runErr
 	}()
 
-	if err := ready.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+	if err := ready.SetReadDeadline(time.Now().Add(hangguard.Wait)); err != nil {
 		cancel()
 		t.Fatalf("set readiness deadline: %v", err)
 	}
@@ -184,7 +186,7 @@ func TestRunnerNaturalExitWinsCancellationRace(t *testing.T) {
 					completed <- outcome{result: result, err: runErr}
 				}()
 
-				if err := ready.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+				if err := ready.SetReadDeadline(time.Now().Add(hangguard.Wait)); err != nil {
 					cancel()
 					t.Fatalf("set readiness deadline: %v", err)
 				}
@@ -281,6 +283,21 @@ func TestRunnerReportsWaitDelayWhenDescendantHoldsOutputPipeAfterExit(t *testing
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("Run() exit code = %d, want the parent process's successful exit", result.ExitCode)
+	}
+}
+
+// A process that has exited and whose pipe closes later is a loaded machine,
+// not a failure: the descendant here holds the pipe past the cancellation
+// bound and then lets go.
+func TestRunnerAllowsOutputPipeToCloseLongAfterExit(t *testing.T) {
+	t.Parallel()
+
+	result, err := (Runner{}).Run(context.Background(), helperRequest("exit-before-pipe-closes"))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want the output once the pipe closes", err)
+	}
+	if want := []string{"done"}; !slices.Equal(result.Stdout, want) {
+		t.Fatalf("Run() stdout = %q, want %q", result.Stdout, want)
 	}
 }
 
@@ -458,6 +475,23 @@ func TestRunnerHelperProcess(t *testing.T) {
 		}
 		_, _ = fmt.Fprintln(os.Stdout, child.Process.Pid)
 		time.Sleep(time.Minute)
+		os.Exit(0)
+	case "exit-before-pipe-closes":
+		child := exec.Command(
+			os.Args[0],
+			"-test.run=^TestRunnerHelperProcess$",
+			"--",
+			"hold-output-pipe-briefly",
+		)
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Start(); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = fmt.Fprintln(os.Stdout, "done")
+		os.Exit(0)
+	case "hold-output-pipe-briefly":
+		time.Sleep(500 * time.Millisecond)
 		os.Exit(0)
 	case "hold-output-pipe":
 		time.Sleep(2 * time.Second)

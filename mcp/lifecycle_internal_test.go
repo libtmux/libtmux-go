@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -107,7 +108,7 @@ func TestInstanceCloseContextStartsShutdownWithCanceledContext(t *testing.T) {
 	}
 	select {
 	case <-gate.started:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("CloseContext() returned without starting shutdown")
 	}
 	close(gate.release)
@@ -152,7 +153,7 @@ func terminalFailureInstance(t testing.TB, socketName string) *Instance {
 // stops it normally, proving Run is live throughout rather than merely
 // never having noticed.
 func TestTerminalToolFailureReachesCallerWithoutStoppingRun(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	instance := terminalFailureInstance(t, "terminal-run-unused")
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
@@ -229,7 +230,7 @@ func TestTerminalToolFailureReachesCallerWithoutStoppingRun(t *testing.T) {
 		if !errors.Is(runErr, context.Canceled) {
 			t.Fatalf("Run() error after cancellation = %v, want context.Canceled", runErr)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Run() did not stop after its own context was canceled")
 	}
 }
@@ -255,7 +256,7 @@ func terminalFailureInstanceAlreadyMarked(t testing.TB, socketName string) *Inst
 }
 
 func TestTerminalResponseWriteFailureClosesTheSession(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	writeErr := errors.New("response write failed")
 	instance := terminalFailureInstanceAlreadyMarked(t, "terminal-write-unused")
@@ -308,7 +309,7 @@ func TestTerminalResponseWriteFailureClosesTheSession(t *testing.T) {
 }
 
 func TestTerminalResponseDrainTimeoutClosesAStuckWrite(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	instance := terminalFailureInstanceAlreadyMarked(t, "terminal-stuck-write-unused")
 	instance.drainWait = 10 * time.Millisecond
@@ -348,7 +349,7 @@ func TestTerminalResponseDrainTimeoutClosesAStuckWrite(t *testing.T) {
 			!errors.Is(runErr, errResponseGateClosed) {
 			t.Fatalf("Run() error = %v, want terminal and forced-close failures", runErr)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("response drain timeout did not close the stuck write")
 	}
 	if closes := gate.closes.Load(); closes != 1 {
@@ -359,7 +360,7 @@ func TestTerminalResponseDrainTimeoutClosesAStuckWrite(t *testing.T) {
 		if callErr == nil {
 			t.Fatal("CallTool() succeeded after its response write was force-closed")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("CallTool() remained blocked after the response write was force-closed")
 	}
 }
@@ -394,7 +395,7 @@ func TestTerminalShutdownWaitsForEveryReadCallResponse(t *testing.T) {
 	instance.responseSettled(scope, &jsonrpc.Response{ID: firstID})
 	select {
 	case <-instance.closeDone:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("the final response did not release terminal shutdown")
 	}
 }

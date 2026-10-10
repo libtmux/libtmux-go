@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestScrubTmuxEnvironmentRemovesTargetingVariables(t *testing.T) {
@@ -84,6 +85,7 @@ func TestOnlyALiveDaemonKeepsTheSuiteRoot(t *testing.T) {
 }
 
 func TestFailedCleanupPreservesSocketForSuiteRetry(t *testing.T) {
+	shortenDaemonDeathWait(t)
 	realBinary, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Fatal(err)
@@ -163,6 +165,7 @@ func TestCleanupDiscoversMissingRecordedPID(t *testing.T) {
 }
 
 func TestCleanupTracksReplacementDaemonOnOwnedSocket(t *testing.T) {
+	shortenDaemonDeathWait(t)
 	realBinary, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +193,7 @@ func TestCleanupTracksReplacementDaemonOnOwnedSocket(t *testing.T) {
 	if result := runCommand(context.Background(), realServer, "kill-server"); result.ExitCode != 0 {
 		t.Fatalf("kill first daemon: %#v", result)
 	}
-	if !waitForProcessDeath(firstPID, time.Now().Add(cleanupTimeout)) {
+	if !waitForProcessDeath(firstPID, time.Now().Add(hangguard.Wait)) {
 		t.Fatalf("first tmux server pid %d remained alive", firstPID)
 	}
 	if result := runCommand(context.Background(), realServer, "new-session", "-d", "-s", "replacement"); result.ExitCode != 0 {
@@ -328,6 +331,7 @@ func TestRetryCleanupReportsEveryFailureWhenNoneSucceed(t *testing.T) {
 }
 
 func TestCleanupRetriesTransientKillFailure(t *testing.T) {
+	shortenDaemonDeathWait(t)
 	realBinary, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Fatal(err)
@@ -398,4 +402,13 @@ func TestExplicitConfigSuppressesUserConfiguration(t *testing.T) {
 	if result := runCommand(context.Background(), isolated, "show-option", "-gv", "@libtmux_user_config"); slices.Contains(result.Stdout, "loaded") {
 		t.Fatalf("isolated server loaded user config: %#v", result)
 	}
+}
+
+// shortenDaemonDeathWait restores the default when the test ends. A test that
+// makes kill-server fail waits out this bound, so it must not be the hang guard.
+func shortenDaemonDeathWait(t *testing.T) {
+	t.Helper()
+	previous := daemonDeathWait
+	daemonDeathWait = 3 * time.Second
+	t.Cleanup(func() { daemonDeathWait = previous })
 }
