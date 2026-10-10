@@ -1,0 +1,73 @@
+// docs:session-cleanup
+// Command session-cleanup demonstrates a complete session, window, and pane lifecycle.
+package main
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := start(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// start owns cleanup because log.Fatal skips deferred calls in main.
+func start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return run(ctx)
+}
+
+func run(ctx context.Context) (err error) {
+	server, err := tmux.NewServer(tmux.ServerOptions{})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
+	owned, err := server.OwnSession(ctx, tmux.NewSessionRequest{
+		Name: "libtmux-go-quickstart", WindowName: "start",
+	}, tmux.OwnershipOptions{})
+	defer owned.CloseInto(&err)
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	session := owned.Value()
+
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
+	if err != nil {
+		return fmt.Errorf("create window: %w", err)
+	}
+	pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
+		Direction: tmux.PaneDirectionRight, Command: "sh",
+	})
+	if err != nil {
+		return fmt.Errorf("split window: %w", err)
+	}
+	output, err := pane.OpenObservation(ctx)
+	if err != nil {
+		return fmt.Errorf("watch pane: %w", err)
+	}
+	defer func() { err = errors.Join(err, output.Close()) }()
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
+		return fmt.Errorf("send command: %w", err)
+	}
+
+	scanner := bufio.NewScanner(output.Reader(ctx))
+	for scanner.Scan() {
+		if scanner.Text() == "libtmux ready" {
+			fmt.Println("libtmux ready")
+			return nil
+		}
+	}
+	return fmt.Errorf("read pane: %w", scanner.Err())
+}
+
+// docs:end

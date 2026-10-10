@@ -22,9 +22,9 @@ import (
 // opening example that could not run as printed for exactly that reason,
 // with green example suites throughout.
 //
-// So each published region is compiled here on its own, in a module that
-// contains nothing else. Bindings it does not create must be declared by its
-// marker:
+// Each published region is compiled in a module that contains nothing else.
+// Complete programs retain their own imports and scope. A fragment declares
+// bindings it does not create on its marker:
 //
 //	// docs:watching given:ctx context.Context; session tmux.Session
 //
@@ -113,27 +113,31 @@ func compileAlone(t *testing.T, absRoot string, source region) (string, error) {
 	t.Helper()
 	dir := t.TempDir()
 
-	imports, err := importsFor(source)
-	if err != nil {
-		return "", err
-	}
-
 	var b strings.Builder
-	b.WriteString("package main\n\n")
-	if imports != "" {
-		b.WriteString("import (\n" + imports + ")\n\n")
+	body := strings.Join(source.lines, "\n") + "\n"
+	if _, err := parser.ParseFile(token.NewFileSet(), "main.go", body, parser.PackageClauseOnly); err == nil {
+		b.WriteString(body)
+	} else {
+		imports, err := importsFor(source)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString("package main\n\n")
+		if imports != "" {
+			b.WriteString("import (\n" + imports + ")\n\n")
+		}
+		b.WriteString("func region() error {\n")
+		for _, declaration := range givenDeclarations(source.given) {
+			b.WriteString("\tvar " + declaration + "\n")
+		}
+		for _, line := range source.lines {
+			b.WriteString("\t" + line + "\n")
+		}
+		for _, name := range regionDeclares(source.lines) {
+			b.WriteString("\t_ = " + name + "\n")
+		}
+		b.WriteString("\treturn nil\n}\n\nfunc main() { _ = region() }\n")
 	}
-	b.WriteString("func region() error {\n")
-	for _, declaration := range givenDeclarations(source.given) {
-		b.WriteString("\tvar " + declaration + "\n")
-	}
-	for _, line := range source.lines {
-		b.WriteString("\t" + line + "\n")
-	}
-	for _, name := range regionDeclares(source.lines) {
-		b.WriteString("\t_ = " + name + "\n")
-	}
-	b.WriteString("\treturn nil\n}\n\nfunc main() { _ = region() }\n")
 
 	write := func(name, body string) error {
 		return os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
@@ -353,6 +357,33 @@ func TestIsolationCheckFailsForTheIntendedReasons(t *testing.T) {
 			if !strings.Contains(out, testCase.want) {
 				t.Errorf("failed for the wrong reason\nwant substring: %s\ngot:\n%s",
 					testCase.want, out)
+			}
+		})
+	}
+}
+
+func TestCompleteProgramIsolationRetainsImportsAndScope(t *testing.T) {
+	absRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "complete", body: "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"ready\") }\n"},
+		{name: "missing import", body: "package main\nfunc main() { fmt.Println(\"ready\") }\n", want: "undefined: fmt"},
+		{name: "unused local", body: "package main\nfunc main() { unused := 1 }\n", want: "declared and not used: unused"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			out, err := compileAlone(t, absRoot, region{lines: strings.Split(test.body, "\n")})
+			if test.want == "" {
+				if err != nil {
+					t.Fatalf("complete program failed: %v\n%s", err, out)
+				}
+			} else if err == nil || !strings.Contains(out, test.want) {
+				t.Fatalf("expected unmodified program failure %q: %v\n%s", test.want, err, out)
 			}
 		})
 	}

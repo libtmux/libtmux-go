@@ -54,53 +54,132 @@ exact ones you want in your own go.mod; the commands here fetch the newest.
 
 ## Quick start
 
-Make a window, split it, type a command into the new pane, and read the reply
-back through an `io.Reader`:
+Open a named workspace on the normal tmux endpoint. The same program works
+when no daemon is running and when your server already has sessions:
 
 <!-- docs:quickstart -->
 
 ```go
-// Given: ctx context.Context; server tmux.Server
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{
-	Name: "libtmux-go-quickstart", WindowName: "start",
-})
-if err != nil {
-	return fmt.Errorf("create session: %w", err)
-}
-defer func() {
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-	defer cleanupCancel()
-	err = errors.Join(err, session.Kill(cleanupCtx))
-}()
+// Command quickstart opens a workspace on the selected tmux server.
+package main
 
-window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
-if err != nil {
-	return fmt.Errorf("create window: %w", err)
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }
-pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-	Direction: tmux.PaneDirectionRight, Command: "sh",
-})
-if err != nil {
-	return fmt.Errorf("split window: %w", err)
-}
-output, err := pane.OpenObservation(ctx)
-if err != nil {
-	return fmt.Errorf("watch pane: %w", err)
-}
-defer func() { err = errors.Join(err, output.Close()) }()
-if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
-	return fmt.Errorf("send command: %w", err)
+
+func run(ctx context.Context) error {
+	server, err := tmux.NewServer(tmux.ServerOptions{})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
+	server, err = server.Ensure(ctx)
+	if err != nil {
+		return fmt.Errorf("ensure tmux server: %w", err)
+	}
+	session, err := server.FindOrCreateSession(ctx, tmux.NewSessionRequest{
+		Name: "libtmux-go-quickstart", WindowName: "work",
+	}, tmux.OwnershipOptions{})
+	if err != nil {
+		return fmt.Errorf("find or create session: %w", err)
+	}
+	window, err := session.Value.FindOrCreateWindow(ctx,
+		tmux.NewWindowRequest{Name: new("logs")}, tmux.OwnershipOptions{})
+	if err != nil {
+		return fmt.Errorf("find or create window: %w", err)
+	}
+	name, _ := window.Value.Name()
+	fmt.Println("workspace ready:", name)
+	return nil
 }
 ```
 
 <!-- docs:end -->
 
-Every Go block below marked this way is generated from a program in
-[`examples/`](examples/) that is compiled, linted, run against a real tmux, and
-swept across every supported release — so none of it can drift from code that
-works.
+`Ensure` starts a missing daemon and returns an ordinary `Server`. It leaves a
+new daemon running with `exit-empty` off, after removing its temporary startup
+session. Reuse preserves existing sessions, options and environment. The example
+finds or creates its named session and window, then leaves them available for
+`tmux attach -t libtmux-go-quickstart`. Repeating it reuses that workspace.
+
+If configuration removes the private startup marker, `Ensure` cannot prove that
+it started the daemon. It leaves that daemon's options unchanged and retains its
+detached startup session when needed to keep the daemon available. Other sessions
+or an existing `exit-empty off` setting allow that startup session to be removed.
 
 Runnable: [`examples/quickstart`](examples/quickstart) — `go -C examples run ./quickstart`.
+The [session cleanup example](examples/session-cleanup/) preserves the previous
+program, including its pane I/O and joined body/cleanup errors.
+
+Go blocks marked this way come from programs in [`examples/`](examples/).
+The source check detects drift, and the external ordinary-example runner tests
+this complete block with absent and running daemons under path and name defaults.
+The broader supported-version gates remain separate from that focused runner.
+
+`NewServer(tmux.ServerOptions{})` captures one endpoint from the effective
+process environment. Selection follows this order:
+
+1. An explicit `SocketPath` or `SocketName`; supplying both is an error.
+2. Nonempty `LIBTMUX_SOCKET_PATH`.
+3. Nonempty `LIBTMUX_SOCKET_NAME`.
+4. Nonempty `TMUX`, parsed from its last two commas.
+5. The named `default` socket.
+
+Paths must be absolute. Names must be leaf names other than `.` or `..`, without
+path separators or NUL. Empty environment selectors are absent; an invalid
+selected value fails without trying another endpoint. `TMUX` requires an
+absolute socket path, a positive decimal PID, and a nonnegative decimal session
+ID (an optional `$` prefix is accepted) or `-1`. Commas and spaces in the socket
+path survive parsing.
+
+Named sockets use the captured absolute `TMUX_TMPDIR`, or `/tmp`, under
+`tmux-<uid>`. The selected root must exist when a command runs. The library
+creates only the per-UID directory, with mode 0700, and accepts an existing real
+directory owned by the current UID with no other-user permissions. Group access
+is allowed. Both subprocess and control clients use the captured path; an
+unusable root fails instead of selecting `/tmp`. Explicit paths do not create
+parent directories. `WithSocketPath` requires a nonempty absolute path.
+
+`ServerOptions.ProcessEnvironment` replaces the child process environment; nil
+captures the host environment. Endpoint defaults come from that snapshot.
+`WithProcessEnvironmentValue` returns a copy with one child variable changed and
+the same endpoint. Neither API changes the host environment. Child launches
+omit `TMUX` and `TMUX_PANE`. These options are separate from tmux's own
+server/session environment, which `NewSessionRequest.Environment` and the
+environment methods change. There is no `LIBTMUX_SOCKET_ENV` variable.
+
+`OwnSession`, `OwnWindow` and `OwnPane` return an `Owned` resource. Defer
+`owner.CloseInto(&err)` with a named return error to retain body and cleanup
+failures. Cleanup has an independent five-second deadline by default and remains
+retryable after failure. `Adopt` accepts destruction responsibility for an
+existing resource; lookups and client connection closure leave it alive.
+Ownership follows the accepted daemon and stable ID through renames and moves.
+Acquisition initializes the reserved server option `@libtmux_owner_generation`
+when absent. It reuses a valid value of 32 ASCII hexadecimal characters and
+rejects empty or malformed metadata. Do not change, remove or shadow this option.
+Cleanup checks the captured generation inside the destructive tmux dispatch.
+
+Find-or-create returns `Created` and an owner only for a new resource. Reuse is
+borrowed. Calls sharing one server's coordination serialize with cancelable
+waits; other clients can change resources between commands. Session names match
+exactly, window names match within a session, and pane identity uses an
+application-selected user option. Multiple window or pane matches return an
+ambiguity error.
+
+`Discover` searches explicit socket directories or captured configured roots
+with entry, probe and time bounds. It returns diagnostics and truncation beside
+borrowed server handles. See the complete [lifecycle program](examples/lifecycle/)
+for adoption, discovery, failed-body cleanup and whole-server ownership on a
+disposable endpoint.
 
 ## Running a command to completion
 

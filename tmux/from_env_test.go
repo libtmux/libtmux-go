@@ -20,7 +20,7 @@ func TestNewServerFromEnvRightSplitsCommaSocketWithoutExecution(t *testing.T) {
 	server, err := newServerFromEnvironmentForTest(
 		t,
 		map[string]string{
-			"TMUX": "/tmp/with,comma/socket,not-a-pid,stale-session",
+			"TMUX": "/tmp/with,comma/socket,123,999",
 		},
 		func() []string { return []string{"SYSTEMROOT=frozen"} },
 	)
@@ -32,19 +32,13 @@ func TestNewServerFromEnvRightSplitsCommaSocketWithoutExecution(t *testing.T) {
 	}
 }
 
-func TestNewServerFromEnvDoesNotValidateStalePIDOrSessionComponents(t *testing.T) {
+func TestNewServerFromEnvRejectsMalformedPIDOrSessionComponents(t *testing.T) {
 	t.Parallel()
-
-	server, err := newServerFromEnvironmentForTest(
-		t,
-		map[string]string{"TMUX": "/sock,,"},
-		func() []string { return []string{"SYSTEMROOT=frozen"} },
-	)
-	if err != nil {
-		t.Fatalf("newServerFromEnvironmentForTest() error = %v", err)
-	}
-	if got := server.SocketPath(); got != "/sock" {
-		t.Fatalf("NewServerFromEnv().SocketPath() = %q, want /sock", got)
+	for _, value := range []string{"/sock,,", "/sock,0,1", "/sock,not-a-pid,0", "/sock,1,stale-session"} {
+		_, err := newServerFromEnvironmentForTest(t, map[string]string{"TMUX": value}, func() []string { return nil })
+		if !errors.Is(err, ErrNotInsideTmux) {
+			t.Fatalf("NewServerFromEnv(%q) = %v, want ErrNotInsideTmux", value, err)
+		}
 	}
 }
 
@@ -108,11 +102,13 @@ func TestNewServerFromEnvOverridesOneProcessSnapshot(t *testing.T) {
 		t.Fatalf("server.SocketPath() = %q, want override socket", got)
 	}
 	environment := server.state.config.processEnvironment
+	if _, present := processEnvironmentValue(environment, "TMUX"); present {
+		t.Fatal("child environment contains TMUX")
+	}
 	for name, want := range map[string]string{
 		"ADDED":  "provided",
 		"CHOICE": "override",
 		"KEEP":   "parent",
-		"TMUX":   "/tmp/override.sock,2,1",
 	} {
 		if got, ok := processEnvironmentValue(environment, name); !ok || got != want {
 			t.Errorf("effective %s = (%q, %t), want (%q, true)", name, got, ok, want)

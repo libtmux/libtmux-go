@@ -14,10 +14,10 @@ func TestRequireTopologyServerUsesFrozenSocketPath(t *testing.T) {
 	t.Parallel()
 
 	left := serverWithSocketSelection(t, t.TempDir(), ServerOptions{
-		SocketPath: "relative.sock",
+		SocketPath: filepath.Join(t.TempDir(), "endpoint.sock"),
 	})
 	right := serverWithSocketSelection(t, t.TempDir(), ServerOptions{
-		SocketPath: "relative.sock",
+		SocketPath: filepath.Join(t.TempDir(), "endpoint.sock"),
 	})
 	if err := requireTopologyServer(left, right); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("different effective paths error = %v, want ErrInvalidRequest", err)

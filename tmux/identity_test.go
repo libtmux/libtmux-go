@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"testing"
@@ -187,21 +188,21 @@ func TestServerIdentityUsesSelectedSocketPath(t *testing.T) {
 	}
 }
 
-func TestServerIdentityAnchorsRelativePathsToFrozenWorkingDirectory(t *testing.T) {
+func TestServerIdentityDistinguishesAbsolutePaths(t *testing.T) {
 	t.Parallel()
 
 	left := serverWithSocketSelection(
 		t,
 		t.TempDir(),
-		ServerOptions{SocketPath: "relative.sock"},
+		ServerOptions{SocketPath: filepath.Join(t.TempDir(), "endpoint.sock")},
 	)
 	right := serverWithSocketSelection(
 		t,
 		t.TempDir(),
-		ServerOptions{SocketPath: "relative.sock"},
+		ServerOptions{SocketPath: filepath.Join(t.TempDir(), "endpoint.sock")},
 	)
 	if left.Equal(right) {
-		t.Fatal("relative socket paths under different frozen directories compare equal")
+		t.Fatal("different absolute socket paths compare equal")
 	}
 }
 
@@ -214,11 +215,11 @@ func TestServerIdentityUsesEffectiveSocketPathSelector(t *testing.T) {
 	t.Parallel()
 
 	left := serverWithOptionsAndRunner(
-		ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "left"},
+		ServerOptions{SocketPath: "/tmp/shared.sock"},
 		&versionQueueRunner{},
 	)
 	right := serverWithOptionsAndRunner(
-		ServerOptions{SocketPath: "/tmp/shared.sock", SocketName: "right"},
+		ServerOptions{SocketPath: "/tmp/shared.sock"},
 		&versionQueueRunner{},
 	)
 	named := serverWithOptionsAndRunner(
@@ -233,7 +234,7 @@ func TestServerIdentityUsesEffectiveSocketPathSelector(t *testing.T) {
 		t.Fatal("explicit socket path compares equal to shadowed socket name")
 	}
 	if got := left.String(); got != "Server(socket_path=/tmp/shared.sock)" {
-		t.Fatalf("mixed-selector String() = %q, want socket path", got)
+		t.Fatalf("path-selector String() = %q, want socket path", got)
 	}
 }
 

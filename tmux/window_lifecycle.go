@@ -76,8 +76,9 @@ const (
 // SelectExisting no-output recovery is available only when Index is nil. It
 // expands Name with tmux's version-specific rules and requires exactly one
 // matching window name in the receiver session. An explicit Index has no such
-// recovery. If tmux reports a WindowID before a transport or refresh failure,
-// the partial result contains that ID and the receiver SessionID with Index -1.
+// recovery. If tmux reports a WindowID before a command, transport or refresh
+// failure, the partial result contains that ID and the receiver SessionID
+// with Index -1.
 // Other failures return zero; creation is not rolled back.
 func (s Session) NewWindow(ctx context.Context, request NewWindowRequest) (Window, error) {
 	request = captureNewWindowRequest(request)
@@ -102,9 +103,9 @@ func (s Session) NewWindow(ctx context.Context, request NewWindowRequest) (Windo
 // always printed a created WindowID because the exact-target form never
 // carries a bare name to match against.
 //
-// If tmux reports an ID before a transport or refresh failure, the partial result
-// contains it and the receiver SessionID with Index -1. Other failures return
-// zero; creation is not rolled back.
+// If tmux reports an ID before a command, transport or refresh failure,
+// the partial result contains it and the receiver SessionID with Index -1.
+// Other failures return zero; creation is not rolled back.
 func (w Window) NewWindow(ctx context.Context, request NewWindowRequest) (Window, error) {
 	request = captureNewWindowRequest(request)
 	if request.Index != nil {
@@ -222,6 +223,7 @@ func newWindow(
 		}
 	}
 	result, err := server.literalCmd(ctx, arguments...)
+	result, err = requireRedactedLifecycleSuccess("new-window", result, err)
 	if err != nil {
 		if identity, identityErr := lifecycleStableIdentity("window", result.Stdout); identityErr == nil {
 			return Window{
@@ -229,10 +231,6 @@ func newWindow(
 				windowID: WindowID(identity), windowIndex: -1,
 			}, err
 		}
-		return Window{}, err
-	}
-	result, err = requireRedactedLifecycleSuccess("new-window", result, nil)
-	if err != nil {
 		return Window{}, err
 	}
 	if len(result.Stdout) == 0 && request.SelectExisting {
