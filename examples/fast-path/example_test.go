@@ -22,7 +22,9 @@ func TestFastPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	options := tmux.ServerOptions{SocketPath: filepath.Join(t.TempDir(), "tmux.sock")}
+	options := tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "tmux.sock"),
+	}
 	printed := exampletest.Output(t, func() error { return run(ctx, options) })
 
 	for _, want := range []string{

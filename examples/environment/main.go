@@ -1,4 +1,5 @@
-// Command environment demonstrates session environment access and pane discovery.
+// Command environment demonstrates session environment access and pane
+// discovery.
 package main
 
 import (
@@ -31,17 +32,26 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-environment"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-environment"},
+	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("discovery")})
+	window, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowRequest{Name: new("discovery")},
+	)
 	if err != nil {
 		return err
 	}
@@ -49,15 +59,30 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := session.SetEnvironment(ctx, "LIBTMUX_EXAMPLE", "ready", tmux.SetEnvironmentOptions{}); err != nil {
+	if err := session.SetEnvironment(
+		ctx,
+		"LIBTMUX_EXAMPLE",
+		"ready",
+		tmux.SetEnvironmentOptions{},
+	); err != nil {
 		return err
 	}
 	value, present, err := session.GetEnvironment(ctx, "LIBTMUX_EXAMPLE")
 	if err != nil || !present {
-		return errors.Join(err, errors.New("session environment value is absent"))
+		return errors.Join(
+			err,
+			errors.New("session environment value is absent"),
+		)
 	}
 
-	result, err := server.Cmd(ctx, "display-message", "-p", "-t", pane.ID().String(), "#{socket_path}")
+	result, err := server.Cmd(
+		ctx,
+		"display-message",
+		"-p",
+		"-t",
+		pane.ID().String(),
+		"#{socket_path}",
+	)
 	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
 		return errors.Join(err, errors.New("resolve tmux socket path"))
 	}

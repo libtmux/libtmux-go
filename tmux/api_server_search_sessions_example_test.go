@@ -29,11 +29,17 @@ func ExampleServer_SearchSessions_complete() {
 			return errors.Join(err, os.RemoveAll(directory))
 		}
 		defer func() {
-			// Cleanup has its own deadline because the operation may have timed out.
-			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			// Cleanup has its own deadline because the operation may have
+			// timed out.
+			cleanup, cancel := context.WithTimeout(
+				context.Background(),
+				5*time.Second,
+			)
 			defer cancel()
-			if err := server.Kill(cleanup); err != nil && !errors.Is(err, tmux.ErrNoServer) {
-				runErr = errors.Join(runErr, fmt.Errorf("stop server at %s: %w", directory, err))
+			err := server.Kill(cleanup)
+			if err != nil && !errors.Is(err, tmux.ErrNoServer) {
+				stopErr := fmt.Errorf("stop server at %s: %w", directory, err)
+				runErr = errors.Join(runErr, stopErr)
 				return
 			}
 			runErr = errors.Join(runErr, os.RemoveAll(directory))
@@ -59,7 +65,7 @@ func ExampleServer_SearchSessions_complete() {
 				return errors.New("matched session has no name")
 			}
 			if _, loaded := session.Windows(); loaded {
-				return errors.New("live session search unexpectedly loaded windows")
+				return errors.New("live search unexpectedly loaded windows")
 			}
 			names = append(names, name)
 		}

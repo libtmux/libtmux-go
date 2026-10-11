@@ -28,11 +28,17 @@ func ExampleSession_NewWindow_complete() {
 			return errors.Join(err, os.RemoveAll(directory))
 		}
 		defer func() {
-			// Cleanup has its own deadline because the operation may have timed out.
-			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			// Cleanup has its own deadline because the operation may have
+			// timed out.
+			cleanup, cancel := context.WithTimeout(
+				context.Background(),
+				5*time.Second,
+			)
 			defer cancel()
-			if err := server.Kill(cleanup); err != nil && !errors.Is(err, tmux.ErrNoServer) {
-				runErr = errors.Join(runErr, fmt.Errorf("stop server at %s: %w", directory, err))
+			err := server.Kill(cleanup)
+			if err != nil && !errors.Is(err, tmux.ErrNoServer) {
+				stopErr := fmt.Errorf("stop server at %s: %w", directory, err)
+				runErr = errors.Join(runErr, stopErr)
 				return
 			}
 			runErr = errors.Join(runErr, os.RemoveAll(directory))
@@ -40,7 +46,11 @@ func ExampleSession_NewWindow_complete() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		session, err := server.NewSession(ctx, tmux.NewSessionRequest{
-			Name: "work", WindowName: "editor", Command: "cat", Width: 100, Height: 30,
+			Name:       "work",
+			WindowName: "editor",
+			Command:    "cat",
+			Width:      100,
+			Height:     30,
 		})
 		if err != nil {
 			return fmt.Errorf("create session: %w", err)

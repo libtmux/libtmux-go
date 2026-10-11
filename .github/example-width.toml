@@ -1,0 +1,38 @@
+width = 80
+tab_width = 4
+shared_digest = "872d3f4cb1eb2b5cd9c5b7adc9cd140a153e4bbed3cb5bd0b7400a905e6dae4d"
+checker_digest = "1b520b621b3a3d6a0dda3d5a2f56df8efa0d0b333031048fe162eea63415eedd"
+allow_ceiling = 4
+markdown = ["**/*.md"]
+sources = [
+  "**/examples/**/*.go",
+  "**/example_test.go",
+  "**/*_example_test.go",
+  "**/examples/go.mod",
+  "**/examples/.golangci.yml",
+]
+doc_comments = ["**/*.go"]
+
+[[exclude]]
+glob = "examples/LICENSE"
+reason = "license text; nobody reads it for code"
+
+[[allow]]
+path = "examples/byte-streams/main.go"
+line = "\t// docs:byte-streams given:ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader; archive string; marker string"
+reason = "docs marker line; the generator reads it whole"
+
+[[allow]]
+path = "examples/control-mode-subscribe/main.go"
+line = "\t// docs:subscribing given:ctx context.Context; session tmux.Session; stream *tmux.NotificationStream"
+reason = "docs marker line; the generator reads it whole"
+
+[[allow]]
+path = "tmux/example_test.go"
+line = "\t// Output: {\"id\":\"\",\"sessionId\":\"\",\"windowId\":\"\",\"windowIndex\":0,\"index\":0,\"formats\":{}}"
+reason = "output the test compares"
+
+[[allow]]
+path = ".github/WRITING.md"
+line = "\tif _, err := connectedPane.Capture(ctx, tmux.CapturePaneRequest{}); !errors.Is("
+reason = "the Bad example in the port block; it shows the width problem the Good example fixes"

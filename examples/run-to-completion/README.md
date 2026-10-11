@@ -70,7 +70,11 @@ is still going, so its output can be followed and it can be stopped.
 // followed and it can be stopped from another goroutine. The stream begins
 // where StreamTo opens it, so this command waits before its first line;
 // result.Lines holds the screen either way.
-running, err := session.Start(ctx, "sleep 1; seq 1 3; sleep 30", tmux.RunOptions{})
+running, err := session.Start(
+	ctx,
+	"sleep 1; seq 1 3; sleep 30",
+	tmux.RunOptions{},
+)
 if err != nil {
 	return fmt.Errorf("start command: %w", err)
 }

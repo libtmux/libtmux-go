@@ -29,8 +29,10 @@ subprocess transport, the checked-in generators, and `internal/integration`.
 ## Which policy applies
 
 - Documentation, user-facing text, `CHANGELOG.md`, release notes, commit
-  messages, doc comments, and source comments:
-  [.github/WRITING.md](.github/WRITING.md)
+  messages, doc comments, source comments, and any code example (example
+  programs, Example functions, Markdown code blocks):
+  [.github/WRITING.md](.github/WRITING.md), and its
+  [Examples](.github/WRITING.md#examples) section for code a reader sees
 - Building, testing, linting, the Go floor, the tmux matrix, and pull requests:
   [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)
 - Anything under `mcp/`: [mcp/AGENTS.md](mcp/AGENTS.md)
