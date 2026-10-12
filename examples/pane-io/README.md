@@ -31,7 +31,10 @@ if err != nil {
 }
 defer func() { err = errors.Join(err, output.Close()) }()
 
-if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'ready\\n'"); err != nil {
+if _, err := fmt.Fprintln(
+	pane.Writer(ctx),
+	"printf 'ready\\n'",
+); err != nil {
 	return fmt.Errorf("type command: %w", err)
 }
 scanner := bufio.NewScanner(output.Reader(ctx))

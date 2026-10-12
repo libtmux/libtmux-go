@@ -53,7 +53,9 @@ Give the whole run its own root so a sibling checkout's suite cannot end a
 server this one is using:
 
 ```console
-$ export TMUX_TMPDIR=/tmp/libtmux-go-probe && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
+$ export TMUX_TMPDIR=/tmp/libtmux-go-probe \
+    && mkdir -p "$TMUX_TMPDIR" \
+    && unset TMUX TMUX_PANE
 ```
 
 ## Climb only as high as the question needs
@@ -68,8 +70,10 @@ stdin open, matches replies by id, declines any question the server asks, and
 reads a plan of JSON-RPC calls from stdin.
 
 ```console
-$ ./references/drive.py "$(command -v libtmux-mcp)" TMUX_TMPDIR=/tmp/libtmux-go-probe \
-    <<< '[{"method":"tools/call","params":{"name":"list_panes","arguments":{}}}]'
+$ ./references/drive.py "$(command -v libtmux-mcp)" \
+    TMUX_TMPDIR=/tmp/libtmux-go-probe <<'EOF'
+[{"method":"tools/call","params":{"name":"list_panes","arguments":{}}}]
+EOF
 ```
 
 It reports which advertised tools a plan never called, so a sweep can be grown

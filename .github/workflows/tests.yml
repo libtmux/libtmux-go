@@ -129,6 +129,14 @@ jobs:
             exit 1
           fi
 
+      # Examples render in fixed-width boxes, and gofumpt never wraps a line,
+      # so the width has its own check. The self-test runs first: a check that
+      # cannot fail is not evidence.
+      - name: Check example width
+        run: |
+          python3 internal/tools/check_example_width.py --self-test
+          python3 internal/tools/check_example_width.py
+
   # An exported identifier can change or vanish without anything saying so: the
   # changelog is written by hand, and nothing compares what a release exports
   # against what the last one did. This reports that difference into the run

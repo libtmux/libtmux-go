@@ -42,7 +42,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
@@ -59,7 +62,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	defer func() { err = errors.Join(err, output.Close()) }()
 
-	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'ready\\n'"); err != nil {
+	if _, err := fmt.Fprintln(
+		pane.Writer(ctx),
+		"printf 'ready\\n'",
+	); err != nil {
 		return fmt.Errorf("type command: %w", err)
 	}
 	scanner := bufio.NewScanner(output.Reader(ctx))

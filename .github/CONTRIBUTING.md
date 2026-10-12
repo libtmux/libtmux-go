@@ -21,7 +21,9 @@ which surfaces as a version-specific failure that has nothing to do with the
 version:
 
 ```console
-$ export TMUX_TMPDIR=/tmp/libtmux-go-test && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
+$ export TMUX_TMPDIR=/tmp/libtmux-go-test \
+    && mkdir -p "$TMUX_TMPDIR" \
+    && unset TMUX TMUX_PANE
 ```
 
 ## The gates
@@ -36,7 +38,9 @@ packages as typecheck failures, and a newer one reports lints an older one has
 no analyzer for. Run the pinned release before believing a clean local one:
 
 ```console
-$ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+$ go run \
+    github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 \
+    run ./...
 ```
 
 Format, lint, vet, and test the tmux module:
@@ -48,7 +52,14 @@ $ gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...
 Then each of the others, from its own directory:
 
 ```console
-$ for module in examples workspace mcp benchmarks internal/tools; do (cd "$module" && gofumpt -w . && golangci-lint run ./... && go vet ./... && go test ./...) || break; done
+$ for module in examples workspace mcp benchmarks internal/tools; do
+    (cd "$module" \
+      && gofumpt -w . \
+      && golangci-lint run ./... \
+      && go vet ./... \
+      && go test ./...) \
+      || break
+  done
 ```
 
 Run them with the workspace on, which is the only way they see the working
@@ -82,7 +93,8 @@ agreeing on one stale version is the failure that check exists for, and it is
 the failure that happened:
 
 ```console
-$ go test ./tmux/internal/integration/ -run TestEveryRequirementNamesTheNewestRelease
+$ go test ./tmux/internal/integration/ \
+    -run TestEveryRequirementNamesTheNewestRelease
 ```
 
 Release sibling modules in dependency order: core, workspace, then MCP. After
@@ -105,7 +117,11 @@ Known vulnerabilities are checked per module, because each resolves its own
 dependencies:
 
 ```console
-$ for module in . examples workspace mcp benchmarks internal/tools; do (cd "$module" && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...) || break; done
+$ for module in . examples workspace mcp benchmarks internal/tools; do
+    (cd "$module" \
+      && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...) \
+      || break
+  done
 ```
 
 It reports the standard library as well as dependencies, so it fails on a
@@ -131,6 +147,16 @@ Then confirm that regeneration changed nothing:
 
 ```console
 $ git diff --exit-code
+```
+
+Examples stay within 80 columns, which gofumpt does not enforce.
+`.github/example-width.toml` names the files the check reads and lists the few
+lines allowed to stay wider. The self-test comes first because it proves the
+check can fail:
+
+```console
+$ python3 internal/tools/check_example_width.py --self-test && \
+    python3 internal/tools/check_example_width.py
 ```
 
 The race detector is not optional before anything ships:

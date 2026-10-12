@@ -34,10 +34,17 @@ type paneSummary struct {
 }
 
 func main() {
-	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default")
+	socketName := flag.String(
+		"socket-name",
+		"",
+		"tmux socket name; empty uses tmux's default",
+	)
 	flag.Parse()
 	if _, set := os.LookupEnv(tmuxmcp.ToolsetsEnvironmentVariable); !set {
-		if err := os.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "inspect,manage,execute"); err != nil {
+		if err := os.Setenv(
+			tmuxmcp.ToolsetsEnvironmentVariable,
+			"inspect,manage,execute",
+		); err != nil {
 			fmt.Fprintln(os.Stderr, "agent-workflow:", err)
 			os.Exit(1)
 		}
@@ -77,7 +84,8 @@ func run(socketName string) error {
 	}
 
 	// A socket nobody has started yet is an ordinary arrival. Creation accepts
-	// no command or environment payload; tmux starts only the configured process.
+	// no command or environment payload; tmux starts only the configured
+	// process.
 	if !server.Alive {
 		fmt.Println("no tmux server on that socket yet; starting one")
 		if err := call(ctx, session, "create_session", map[string]any{
@@ -85,7 +93,13 @@ func run(socketName string) error {
 		}, nil); err != nil {
 			return err
 		}
-		if err := call(ctx, session, "get_server_info", nil, &server); err != nil {
+		if err := call(
+			ctx,
+			session,
+			"get_server_info",
+			nil,
+			&server,
+		); err != nil {
 			return err
 		}
 	}
@@ -103,14 +117,17 @@ func run(socketName string) error {
 		fmt.Printf("running in pane %s; leaving it untouched\n", origin)
 	} else {
 		origin = activePane(before.Panes)
-		fmt.Printf("not running inside this tmux server; using active pane %s\n", origin)
+		fmt.Printf(
+			"not running inside this tmux server; using active pane %s\n",
+			origin,
+		)
 	}
 	if origin == "" {
 		return fmt.Errorf("selected server has no active pane")
 	}
 
-	// Make room beside the origin. split_window starts the new pane's configured
-	// process and deliberately has no command field.
+	// Make room beside the origin. split_window starts the new pane's
+	// configured process and deliberately has no command field.
 	var split struct {
 		PaneID string `json:"paneId"`
 	}
@@ -146,7 +163,8 @@ func run(socketName string) error {
 	// the shell's echoed command cannot satisfy wait_for_text prematurely.
 	if err := call(ctx, session, "paste_text", map[string]any{
 		"pane_id": split.PaneID,
-		"text": "sleep 2; if tmux -V; then printf 'agent-workflow-%s\\n' ready; " +
+		"text": "sleep 2; if tmux -V; then " +
+			"printf 'agent-workflow-%s\\n' ready; " +
 			"else printf 'agent-workflow-%s\\n' failed; fi",
 		"enter": true,
 	}, nil); err != nil {
@@ -189,7 +207,11 @@ func run(socketName string) error {
 		return err
 	}
 	if !waited.Found {
-		return fmt.Errorf("visible work ended with %s (%q)", waited.Outcome, waited.Matched)
+		return fmt.Errorf(
+			"visible work ended with %s (%q)",
+			waited.Outcome,
+			waited.Matched,
+		)
 	}
 
 	// Collect only output written after the baseline. linesMissed would mean
@@ -228,14 +250,19 @@ func run(socketName string) error {
 	if ran.TimedOut {
 		fmt.Println("the command did not finish in time")
 	} else if ran.ExitStatus != nil {
-		fmt.Printf("exit %d, %d lines of output\n", *ran.ExitStatus, len(ran.Output))
+		fmt.Printf(
+			"exit %d, %d lines of output\n",
+			*ran.ExitStatus,
+			len(ran.Output),
+		)
 		for _, line := range ran.Output {
 			fmt.Println("  |", line)
 		}
 	}
 
 	// Report what was built. The layout string is tmux's own, and
-	// select_layout takes it back, so this is also how a useful layout is saved.
+	// select_layout takes it back, so this is also how a useful layout is
+	// saved.
 	var after struct {
 		Panes []paneSummary `json:"panes"`
 		Total int           `json:"total"`
@@ -264,13 +291,22 @@ func run(socketName string) error {
 	}, &window); err != nil {
 		return err
 	}
-	fmt.Printf("window %dx%d, layout %s\n", window.Width, window.Height, window.Layout)
+	fmt.Printf(
+		"window %dx%d, layout %s\n",
+		window.Width,
+		window.Height,
+		window.Layout,
+	)
 	return nil
 }
 
 // window reports which window a pane is in, so later listings can be narrowed
 // to it. One call is better than a guess: a pane id carries no window relation.
-func window(ctx context.Context, session *sdk.ClientSession, paneID string) (string, error) {
+func window(
+	ctx context.Context,
+	session *sdk.ClientSession,
+	paneID string,
+) (string, error) {
 	var info struct {
 		Pane struct {
 			WindowID string `json:"windowId"`
@@ -308,7 +344,10 @@ func panesInWindow(panes []paneSummary, windowID string) []paneSummary {
 // Over stdio this is the client's job and the server is a subprocess. Tool
 // names, arguments, metadata, and result shapes on either side are identical,
 // which lets this example run the same protocol without installing a client.
-func connect(ctx context.Context, target tmux.Server) (*sdk.ClientSession, func(), error) {
+func connect(
+	ctx context.Context,
+	target tmux.Server,
+) (*sdk.ClientSession, func(), error) {
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
 	instance, err := tmuxmcp.NewServer(target)
 	if err != nil {
@@ -321,7 +360,10 @@ func connect(ctx context.Context, target tmux.Server) (*sdk.ClientSession, func(
 		_ = instance.Close()
 		return nil, nil, fmt.Errorf("start the server: %w", err)
 	}
-	client := sdk.NewClient(&sdk.Implementation{Name: "agent-workflow", Version: "1"}, nil)
+	client := sdk.NewClient(
+		&sdk.Implementation{Name: "agent-workflow", Version: "1"},
+		nil,
+	)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		_ = serverSession.Close()
@@ -347,7 +389,10 @@ func call(
 	arguments any,
 	into any,
 ) error {
-	result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: name, Arguments: arguments})
+	result, err := session.CallTool(
+		ctx,
+		&sdk.CallToolParams{Name: name, Arguments: arguments},
+	)
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}

@@ -21,7 +21,9 @@ import (
 // CLI launches. [tmuxmcp.Run] holds the process until the client goes away.
 func ExampleRun() {
 	ctx := context.Background()
-	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-application"})
+	target, err := tmux.NewServer(
+		tmux.ServerOptions{SocketName: "my-application"},
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,7 +65,10 @@ func whichPaneAmIIn(ctx context.Context) error {
 		return err
 	}
 	defer killExampleServer(target)
-	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work"}); err != nil {
+	if _, err := target.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "work"},
+	); err != nil {
 		return err
 	}
 
@@ -76,7 +81,10 @@ func whichPaneAmIIn(ctx context.Context) error {
 	// A matching pane and socket identify the terminal carrying this process.
 	// A program outside the selected tmux server is told so rather than left to
 	// guess from a pane id alone.
-	result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "get_server_info"})
+	result, err := session.CallTool(
+		ctx,
+		&sdk.CallToolParams{Name: "get_server_info"},
+	)
 	if err != nil {
 		return err
 	}
@@ -114,7 +122,9 @@ func Example_watchingAPane() {
 	if _, err := session.CallTool(ctx, &sdk.CallToolParams{
 		Name: "run_shell_command",
 		Arguments: map[string]any{
-			"pane_id": paneID, "command": "printf 'deploy finished\\n'", "timeout": 30,
+			"pane_id": paneID,
+			"command": "printf 'deploy finished\\n'",
+			"timeout": 30,
 		},
 	}); err != nil {
 		fmt.Println("run the command:", err)
@@ -336,7 +346,10 @@ func connectedExampleClient(
 	// A plain POSIX shell, as byte-streams uses: a login shell's prompt can
 	// be long enough to wrap a typed command, and a line editor's redraw can
 	// then leave a row ending in the very word an example waits for.
-	created, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "work", Command: "sh"})
+	created, err := target.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "work", Command: "sh"},
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -383,7 +396,10 @@ func connectExampleClient(
 		_ = instance.Close()
 		return nil, nil, err
 	}
-	client := sdk.NewClient(&sdk.Implementation{Name: "example", Version: "1"}, nil)
+	client := sdk.NewClient(
+		&sdk.Implementation{Name: "example", Version: "1"},
+		nil,
+	)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		_ = serverSession.Close()
@@ -432,12 +448,17 @@ func killExampleServer(server tmux.Server) {
 
 // waitForExampleShell blocks until the pane reports a shell as its foreground
 // command, which is when it starts reading keys.
-func waitForExampleShell(ctx context.Context, target tmux.Server, paneID string) error {
+func waitForExampleShell(
+	ctx context.Context,
+	target tmux.Server,
+	paneID string,
+) error {
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		pane, found, err := examplePane(ctx, target, paneID)
 		if err == nil && found {
-			if command, ok := pane.CurrentCommand(); ok && exampleShell(command) {
+			command, ok := pane.CurrentCommand()
+			if ok && exampleShell(command) {
 				return waitForExampleShellReadingInput(ctx, pane, deadline)
 			}
 		}
@@ -462,7 +483,10 @@ func waitForExampleShellReadingInput(
 	const marker = "libtmux-go-example-ready"
 	command := "printf '" + marker + "\n'"
 	for {
-		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
+		if err := pane.SendKeys(
+			ctx,
+			tmux.SendKeysRequest{Command: &command},
+		); err != nil {
 			return err
 		}
 		for attempt := 0; attempt < 20; attempt++ {

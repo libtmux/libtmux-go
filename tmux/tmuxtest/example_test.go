@@ -12,10 +12,14 @@ import (
 
 func ExampleWaitFor() {
 	attempts := 0
-	err := tmuxtest.WaitFor(context.Background(), time.Millisecond, func(context.Context) (bool, error) {
-		attempts++
-		return attempts == 3, nil
-	})
+	err := tmuxtest.WaitFor(
+		context.Background(),
+		time.Millisecond,
+		func(context.Context) (bool, error) {
+			attempts++
+			return attempts == 3, nil
+		},
+	)
 	fmt.Println(err)
 	fmt.Println(attempts)
 	// Output:
@@ -47,12 +51,18 @@ func ExampleWaitForScreen() {
 	ctx := context.Background()
 	pane := tmuxtest.RunInPane(ctx, t, "printf 'host: up\nqueue: 0\n'")
 
-	tmuxtest.WaitForScreen(ctx, t, pane, "a settled status block", func(screen []string) bool {
-		var host, queue bool
-		for _, line := range screen {
-			host = host || strings.Contains(line, "host: up")
-			queue = queue || strings.Contains(line, "queue: 0")
-		}
-		return host && queue
-	})
+	tmuxtest.WaitForScreen(
+		ctx,
+		t,
+		pane,
+		"a settled status block",
+		func(screen []string) bool {
+			var host, queue bool
+			for _, line := range screen {
+				host = host || strings.Contains(line, "host: up")
+				queue = queue || strings.Contains(line, "queue: 0")
+			}
+			return host && queue
+		},
+	)
 }

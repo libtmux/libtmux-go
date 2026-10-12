@@ -33,17 +33,26 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-planned"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-planned"},
+	)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("planned")})
+	window, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowRequest{Name: new("planned")},
+	)
 	if err != nil {
 		return fmt.Errorf("create window: %w", err)
 	}
@@ -66,7 +75,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	for index, argv := range preview {
 		if argv == nil {
-			fmt.Printf("step %d: rendered when the split has reported its pane\n", index)
+			fmt.Printf(
+				"step %d: rendered when the split has reported its pane\n",
+				index,
+			)
 			continue
 		}
 		fmt.Printf("step %d: tmux %s\n", index, strings.Join(argv, " "))
@@ -80,10 +92,17 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 			dispatch.Ops, dispatch.Reason)
 	}
 	if len(dispatches) >= plan.Len() {
-		return fmt.Errorf("%d operations took %d tmux invocations, want fewer than one each",
-			plan.Len(), len(dispatches))
+		return fmt.Errorf(
+			"%d operations took %d tmux invocations, want fewer than one each",
+			plan.Len(),
+			len(dispatches),
+		)
 	}
-	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
+	fmt.Printf(
+		"operations: %d, tmux invocations: %d\n",
+		plan.Len(),
+		len(dispatches),
+	)
 
 	result, err := plan.Run(ctx, server)
 	if err != nil {
@@ -103,7 +122,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	read := result.Ops[len(result.Ops)-1]
 	if got := read.Stdout; len(got) != 1 || got[0] != "editor" {
-		return fmt.Errorf("the read reported %q, want the title the plan set", got)
+		return fmt.Errorf(
+			"the read reported %q, want the title the plan set",
+			got,
+		)
 	}
 	return nil
 }

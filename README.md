@@ -68,12 +68,18 @@ if err != nil {
 	return fmt.Errorf("create session: %w", err)
 }
 defer func() {
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	cleanupCtx, cleanupCancel := context.WithTimeout(
+		context.WithoutCancel(ctx),
+		time.Second,
+	)
 	defer cleanupCancel()
 	err = errors.Join(err, session.Kill(cleanupCtx))
 }()
 
-window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
+window, err := session.NewWindow(
+	ctx,
+	tmux.NewWindowRequest{Name: new("work")},
+)
 if err != nil {
 	return fmt.Errorf("create window: %w", err)
 }
@@ -88,7 +94,10 @@ if err != nil {
 	return fmt.Errorf("watch pane: %w", err)
 }
 defer func() { err = errors.Join(err, output.Close()) }()
-if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
+if _, err := fmt.Fprintln(
+	pane.Writer(ctx),
+	"printf 'libtmux ready\\n'",
+); err != nil {
 	return fmt.Errorf("send command: %w", err)
 }
 ```
@@ -321,7 +330,8 @@ for {
 	if err != nil {
 		return fmt.Errorf("read notification: %w", err)
 	}
-	if change, ok := notification.Subscription(); ok && change.Value == "2" {
+	change, ok := notification.Subscription()
+	if ok && change.Value == "2" {
 		fmt.Println("session has", change.Value, "windows")
 		return nil
 	}
@@ -487,7 +497,8 @@ func TestSomething(t *testing.T) {
 	ctx := context.Background()
 	server := tmuxtest.NewServer(ctx, t)
 
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+	request := tmux.NewSessionRequest{Name: "under-test"}
+	session, err := server.NewSession(ctx, request)
 	// ...
 }
 ```
@@ -499,7 +510,10 @@ answers the invocations you name, so the test needs no tmux installed:
 ```go
 server, err := tmux.NewServer(tmux.ServerOptions{
 	Binary: tmuxtest.ScriptedTmux(t,
-		tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+		tmuxtest.ScriptedCommand{
+			Contains: []string{"-V"},
+			Stdout:   "tmux 3.7\n",
+		},
 		tmuxtest.ScriptedCommand{
 			Contains: []string{"kill-pane"},
 			Stderr:   "can't find pane: %7\n",

@@ -46,7 +46,10 @@ A region is named where it is written:
 ```go
 	// docs:quickstart
 	windowName := "work"
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
+	window, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowRequest{Name: &windowName},
+	)
 	// docs:end
 ```
 
@@ -111,7 +114,9 @@ A tmux on `PATH`, version 3.2a or newer. To keep these off a tmux server you are
 using:
 
 ```console
-$ export TMUX_TMPDIR=/tmp/libtmux-go-examples && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
+$ export TMUX_TMPDIR=/tmp/libtmux-go-examples && \
+    mkdir -p "$TMUX_TMPDIR" && \
+    unset TMUX TMUX_PANE
 ```
 
 ## See also
