@@ -121,7 +121,7 @@ what a config entry that will not start actually needs:
 $ libtmux-mcp -doctor -socket-name my-application
 ```
 
-```
+```text
 libtmux-mcp doctor
   tmux:    3.7b
   socket:  /tmp/tmux-1000/my-application (from -socket-name)
@@ -425,7 +425,7 @@ $ go run ./examples/agent-workflow -socket-name my-application
 
 Run from inside the tmux server it drives, it finds its own pane:
 
-```
+```text
 tmux 3.7b on /tmp/tmux-1000/my-application
 running in pane %1
 split into %2

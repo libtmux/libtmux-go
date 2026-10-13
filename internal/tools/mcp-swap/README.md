@@ -16,7 +16,7 @@ it does not get done.
 $ go run ./internal/tools/mcp-swap status
 ```
 
-```
+```text
 [claude:user] tmux = uvx --no-config libtmux-mcp==0.1.0a19 (other)
 [cursor] tmux = uvx --no-config libtmux-mcp==0.1.0a19 (other)
 [codex] tmux = uvx --no-config libtmux-mcp==0.1.0a19 (other)

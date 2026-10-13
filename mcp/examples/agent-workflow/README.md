@@ -25,7 +25,7 @@ $ tmux -L demo new-session -d -s demo
 $ go -C mcp run ./examples/agent-workflow -socket-name demo
 ```
 
-```
+```text
 tmux 3.7b on /tmp/tmux-1000/demo
 not running inside this tmux server; using active pane %0
 split into %1

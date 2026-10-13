@@ -43,7 +43,7 @@ client that is failing to start it. These three flags answer without one:
 $ libtmux-mcp -version
 ```
 
-```
+```text
 libtmux-mcp v0.0.1-alpha.12
 ```
 
