@@ -19,9 +19,84 @@ $ go -C examples run ./control-mode-subscribe
 notification: %session-changed
 notification: %session-renamed
 heard the rename
+session has 2 windows
 ```
 
-The example renames its own session and waits to hear about it.
+The example renames its own session and waits to hear about it, then asks tmux
+to report the session's window count and opens a window.
+
+## Hearing what tmux does
+
+`Session.OpenNotifications` and `Server.OpenNotifications` return owned
+streams. Zero options keep tmux's changes and leave pane output out; set
+`IncludePaneOutput` when watching what a pane prints. Before tmux 3.6,
+destroying the attached session follows its `detach-on-destroy` policy and may
+end the stream.
+
+<!-- docs:watching -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+if err != nil {
+	return fmt.Errorf("open notification stream: %w", err)
+}
+defer func() { err = errors.Join(err, stream.Close()) }()
+
+// Rename after subscribing; notifications do not include earlier changes.
+if _, err := session.Rename(ctx, "control-example"); err != nil {
+	return fmt.Errorf("rename session: %w", err)
+}
+
+for {
+	notification, err := stream.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("read notification: %w", err)
+	}
+	fmt.Printf("notification: %s\n", notification.Kind())
+	if notification.Kind() == tmux.ControlNotificationSessionRenamed {
+		fmt.Println("heard the rename")
+		break
+	}
+}
+```
+
+<!-- docs:end -->
+
+## Asking tmux to watch a value
+
+A subscription asks tmux to evaluate a format and report it when its value
+changes, so a program hears about a state it cares about, such as a window
+count or a pane's current command, without asking again:
+
+<!-- docs:subscribing -->
+
+```go
+// Given: ctx context.Context; session tmux.Session;
+// stream *tmux.NotificationStream
+// A subscription is a format tmux evaluates for you: it reports the value
+// when it first looks, about a second later, and then each time it changes.
+if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+	Name: "windows", Format: "#{session_windows}",
+}); err != nil {
+	return fmt.Errorf("subscribe: %w", err)
+}
+if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+	return fmt.Errorf("open window: %w", err)
+}
+for {
+	notification, err := stream.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("read notification: %w", err)
+	}
+	if change, ok := notification.Subscription(); ok && change.Value == "2" {
+		fmt.Println("session has", change.Value, "windows")
+		return nil
+	}
+}
+```
+
+<!-- docs:end -->
 
 ## What to look at
 

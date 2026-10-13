@@ -105,6 +105,35 @@ func TestPublishedMarkdownIsCurrent(t *testing.T) {
 	}
 }
 
+// TestEveryRegionIsQuoted fails when a region no document quotes is left in
+// the source. Renaming or removing a block on the Markdown side otherwise
+// leaves its region compiling and unread, and the code it showed is published
+// nowhere.
+func TestEveryRegionIsQuoted(t *testing.T) {
+	root, _ := repositoryRoot(t)
+	regions, err := collectRegions(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quoted, err := publishedRegions(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The generator's own tests hold regions inside string fixtures.
+	fixtures := filepath.Join(root, "tmux", "internal", "generate", "docs") + string(filepath.Separator)
+	for _, name := range slices.Sorted(maps.Keys(regions)) {
+		if slices.Contains(quoted, name) || strings.HasPrefix(regions[name].origin, fixtures) {
+			continue
+		}
+		origin, err := filepath.Rel(root, regions[name].origin)
+		if err != nil {
+			origin = regions[name].origin
+		}
+		t.Errorf("region %q in %s is quoted by no document; quote it or remove its markers",
+			name, filepath.ToSlash(origin))
+	}
+}
+
 // hostileConfig is a tmux configuration unlike the one these programs were
 // written against. A pasted program runs with it as the user's own, so output
 // that depends on what the reader has configured fails here rather than on

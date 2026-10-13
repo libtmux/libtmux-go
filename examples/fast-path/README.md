@@ -18,6 +18,36 @@ printed capture: process path
 file capture: connection path
 ```
 
+## Opening a connection
+
+A connection carries commands without starting a process for each. It appears
+in `list-clients` and counts toward `session_attached`, which is why opening
+one is explicit:
+
+<!-- docs:control-pool -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
+if err != nil {
+	return fmt.Errorf("open control connection: %w", err)
+}
+defer func() { _ = connection.Close() }()
+connected := connection.Session()
+```
+
+<!-- docs:end -->
+
+Once established, `connection.Server()` and `connection.Session()` are bound
+to that exact daemon, and values derived from them keep that owner. The
+binding is terminal: closing the connection makes later operations return
+`ErrControlClosed`, and an operation that needs a separate process returns
+`ErrConnectionRequiresProcess`. It never falls back or rebinds. The session
+the connection was opened from stays on its process path.
+
+`Server.NewSessionConnection` creates a session and keeps its creating control
+process as the first lane, for when no session exists yet.
+
 ## What to look at
 
 **The plain server keeps its process path.** Each read uses the executable,
