@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -36,6 +37,18 @@ func RequireTmux(
 func Output(t *testing.T, work func() error) string {
 	t.Helper()
 
+	printed, err := OutputAndError(t, work)
+	if err != nil {
+		t.Fatalf("run() error = %v; printed so far:\n%s", err, printed)
+	}
+	return printed
+}
+
+// OutputAndError returns work's stdout together with its error, for a test
+// whose subject is how an example fails.
+func OutputAndError(t *testing.T, work func() error) (string, error) {
+	t.Helper()
+
 	original := os.Stdout
 	reader, writer, err := os.Pipe()
 	if err != nil {
@@ -61,9 +74,48 @@ func Output(t *testing.T, work func() error) string {
 	if err := reader.Close(); err != nil {
 		t.Fatalf("exampletest: close reader: %v", err)
 	}
+	return printed.String(), workErr
+}
 
-	if workErr != nil {
-		t.Fatalf("run() error = %v; printed so far:\n%s", workErr, printed.String())
+// SlowShell returns tmux configuration under which every pane's shell takes a
+// moment to start, as a login shell with a heavy profile does. The shell then
+// prints its first prompt after an example has typed, so the reply shares the
+// prompt's line. A machine whose shell starts at once never produces that
+// order, and an example that only works in the other one passes there.
+func SlowShell(t *testing.T) []byte {
+	t.Helper()
+	// The delay is the condition under test, not a wait for one.
+	return shellConfig(t, "sleep 0.2\nexec /bin/sh \"$@\"\n")
+}
+
+// MuteShell returns tmux configuration under which a pane's shell reads what
+// is typed and never answers. The terminal still echoes the typing, so an
+// example that finishes here took its own echo for a reply.
+func MuteShell(t *testing.T) []byte {
+	t.Helper()
+	return shellConfig(t, "exec cat >/dev/null\n")
+}
+
+func shellConfig(t *testing.T, body string) []byte {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "shell")
+	//nolint:gosec // tmux runs the fixture, so it has to be executable.
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n"+body), 0o700); err != nil {
+		t.Fatalf("exampletest: write shell fixture: %v", err)
 	}
-	return printed.String()
+	return []byte("set -g default-shell \"" + script + "\"\n")
+}
+
+// MatchesFile fails unless printed equals the file at path. The README quotes
+// that file as what the program prints, so this comparison is what keeps the
+// quoted output true.
+func MatchesFile(t *testing.T, printed, path string) {
+	t.Helper()
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("exampletest: read expected output: %v", err)
+	}
+	if printed != string(want) {
+		t.Errorf("printed:\n%s\nwant the contents of %s:\n%s", printed, path, want)
+	}
 }
