@@ -3,6 +3,8 @@ package tmuxtest_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -12,17 +14,18 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// This test is the generated README quickstart and must remain runnable.
+// The program's answer differs from what is typed, so the terminal's echo of
+// the typing cannot satisfy the wait.
 func TestRunInPaneReachesAnAssertionInFourLines(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// docs:tmuxtest-quickstart given:ctx context.Context; t *testing.T
-	pane := tmuxtest.RunInPane(ctx, t, "printf 'ready\\n'; cat")
+	pane := tmuxtest.RunInPane(ctx, t, "printf 'ready %s\\n' now; tr a-z A-Z")
 
-	tmuxtest.WaitForText(ctx, t, pane, "ready")
+	tmuxtest.WaitForText(ctx, t, pane, "ready now")
 	tmuxtest.Type(ctx, t, pane, "a line for the program")
-	tmuxtest.WaitForLine(ctx, t, pane, "a line for the program")
+	tmuxtest.WaitForLine(ctx, t, pane, "A LINE FOR THE PROGRAM")
 	// docs:end
 }
 
@@ -76,33 +79,31 @@ func TestWaitForScreenTakesAConditionOfItsOwn(t *testing.T) {
 	})
 }
 
-// Timeout diagnostics must include the pane, wanted condition, and captured
-// screen.
+// The failure a reader sees is the one the READMEs publish: the pane, what was
+// wanted, and the screen the pane last held.
 func TestWaitFailureReportsTheScreen(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pane := tmuxtest.RunInPane(ctx, t, "printf 'what the pane really shows\\n'")
-	tmuxtest.WaitForText(ctx, t, pane, "what the pane really shows")
+	pane := tmuxtest.RunInPane(ctx, t, "printf 'loading widgets\\nconnecting\\n'; cat")
+	tmuxtest.WaitForLine(ctx, t, pane, "connecting")
 
 	deadline, cancelDeadline := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancelDeadline()
 	message, failed := captureFatal(t, func(stand testing.TB) {
-		tmuxtest.WaitForText(deadline, stand, pane, "text the pane never shows")
+		tmuxtest.WaitForText(deadline, stand, pane, "ready")
 	})
 
 	if !failed {
 		t.Fatal("WaitForText() on absent text did not fail the test")
 	}
-	for _, want := range []string{
-		"never showed",
-		`"text the pane never shows"`,
-		pane.ID().String(),
-		"what the pane really shows",
-	} {
-		if !strings.Contains(message, want) {
-			t.Fatalf("failure message = %q, want it to contain %q", message, want)
-		}
+	want, err := os.ReadFile(filepath.Join("testdata", "wait-failure.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message+"\n" != string(want) {
+		t.Errorf("failure message:\n%s\nwant the contents of testdata/wait-failure.txt:\n%s",
+			message, want)
 	}
 }
 
