@@ -54,53 +54,93 @@ exact ones you want in your own go.mod; the commands here fetch the newest.
 
 ## Quick start
 
-Make a window, split it, type a command into the new pane, and read the reply
-back through an `io.Reader`:
+Run a command in tmux and print what its terminal showed. This is the whole
+program:
 
-<!-- docs:quickstart -->
+<!-- docs:file examples/quickstart/main.go -->
 
 ```go
-// Given: ctx context.Context; server tmux.Server
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{
-	Name: "libtmux-go-quickstart", WindowName: "start",
-})
-if err != nil {
-	return fmt.Errorf("create session: %w", err)
-}
-defer func() {
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-	defer cleanupCancel()
-	err = errors.Join(err, session.Kill(cleanupCtx))
-}()
+// Command quickstart runs a command in tmux and prints what it showed.
+package main
 
-window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("work")})
-if err != nil {
-	return fmt.Errorf("create window: %w", err)
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }
-pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
-	Direction: tmux.PaneDirectionRight, Command: "sh",
-})
-if err != nil {
-	return fmt.Errorf("split window: %w", err)
-}
-output, err := pane.OpenObservation(ctx)
-if err != nil {
-	return fmt.Errorf("watch pane: %w", err)
-}
-defer func() { err = errors.Join(err, output.Close()) }()
-if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'libtmux ready\\n'"); err != nil {
-	return fmt.Errorf("send command: %w", err)
+
+func run(ctx context.Context) (err error) {
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-quickstart",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux: %w", err)
+	}
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "demo"})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
+	}()
+
+	// The command runs in a window of its own, with a terminal.
+	result, err := session.Run(ctx, "echo hello from tmux", tmux.RunOptions{})
+	if err != nil {
+		return fmt.Errorf("run command: %w", err)
+	}
+	for _, line := range result.Lines {
+		fmt.Println(line)
+	}
+	fmt.Println("exit status:", result.Status)
+	return nil
 }
 ```
 
 <!-- docs:end -->
 
-Every Go block below marked this way is generated from a program in
-[`examples/`](examples/) that is compiled, linted, run against a real tmux, and
-swept across every supported release — so none of it can drift from code that
-works.
+It prints:
 
-Runnable: [`examples/quickstart`](examples/quickstart) — `go -C examples run ./quickstart`.
+<!-- docs:output examples/quickstart/output.txt -->
+
+```text
+hello from tmux
+exit status: 0
+```
+
+<!-- docs:end -->
+
+To run it, save it as `main.go` in an empty directory, with tmux on `PATH`:
+
+```console
+$ go mod init hello && \
+    go get github.com/libtmux/libtmux-go/tmux@latest && \
+    go run .
+```
+
+The program starts a tmux server on a socket and config of its own and kills it
+on the way out, so it leaves nothing behind and never touches a tmux you have
+open. Drop `ServerOptions` to its zero value and it drives the same server
+your `tmux` command does.
+
+`Session.Run` is `os/exec` for a program that needs a terminal: the command
+runs in a window of its own with a tty, and what comes back is its exit status
+and the screen tmux rendered. A nonzero status is a result, not an error.
+[`examples/run-to-completion`](examples/run-to-completion) shows one.
 
 ## Running a command to completion
 

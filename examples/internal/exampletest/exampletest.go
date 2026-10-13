@@ -6,8 +6,10 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
@@ -31,6 +33,47 @@ func RequireTmux(
 	if !got.AtLeast(want) {
 		t.Skipf("example requires tmux %s or newer; installed %s", want, got)
 	}
+}
+
+// Program runs a self-contained example the way its reader does and holds what
+// it prints to output.txt, the file its page publishes as the program's
+// output. The comparison is exact, so the page cannot say more or less than
+// the program does.
+func Program(t *testing.T, run func(context.Context) error) {
+	t.Helper()
+	PrivateSockets(t)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	printed := Output(t, func() error { return run(ctx) })
+	MatchesFile(t, printed, "output.txt")
+}
+
+// PrivateSockets gives the rest of the test a tmux socket directory of its
+// own. A program that builds its server itself, rather than taking one from
+// the harness, then reaches neither the developer's tmux nor another test's.
+// Whatever server the program left running is killed before the directory is
+// removed.
+func PrivateSockets(t *testing.T) {
+	t.Helper()
+
+	// t.TempDir names the test, and a socket path may hold only 103 bytes.
+	directory, err := os.MkdirTemp("", "ex") //nolint:usetesting // see above
+	if err != nil {
+		t.Fatalf("exampletest: create socket directory: %v", err)
+	}
+	t.Setenv("TMUX_TMPDIR", directory)
+	t.Cleanup(func() {
+		sockets, _ := filepath.Glob(filepath.Join(directory, "tmux-*", "*"))
+		for _, socket := range sockets {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = exec.CommandContext(ctx, "tmux", "-S", socket, "kill-server").Run()
+			cancel()
+		}
+		if err := os.RemoveAll(directory); err != nil {
+			t.Errorf("exampletest: remove socket directory: %v", err)
+		}
+	})
 }
 
 // Output returns work's stdout and fails with partial output when work fails.
