@@ -181,9 +181,9 @@ $ git log \
     --oneline
 ```
 
-Go blocks between `docs:` markers are generated. Edit their source program,
-not the Markdown block; [the examples README](../examples/README.md) identifies
-them. Unmarked blocks are handwritten.
+Go blocks between `docs:` markers are generated. Edit their source, not the
+Markdown block; [CONTRIBUTING.md](CONTRIBUTING.md#generated-documentation) has
+the markers and the tests behind them. A README holds no Go outside them.
 
 ## Commits
 
