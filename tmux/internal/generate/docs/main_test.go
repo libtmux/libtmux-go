@@ -156,6 +156,97 @@ func TestRunLeavesUnmarkedMarkdownAlone(t *testing.T) {
 	}
 }
 
+const wholeProgram = `// Command hello prints a greeting.
+package main
+
+import "fmt"
+
+func main() {
+	// docs:greeting
+	fmt.Println("hello")
+	// docs:end
+}
+`
+
+func TestRunQuotesAWholeFileWithoutItsRegionMarkers(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "example/main.go", wholeProgram)
+	readme := write(t, root, "README.md",
+		"<!-- docs:file example/main.go -->\n<!-- docs:end -->\n")
+
+	if err := run(root); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	got, err := os.ReadFile(readme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "<!-- docs:file example/main.go -->\n\n```go\n" +
+		"// Command hello prints a greeting.\npackage main\n\nimport \"fmt\"\n\n" +
+		"func main() {\n\tfmt.Println(\"hello\")\n}\n" +
+		"```\n\n<!-- docs:end -->\n"
+	if string(got) != want {
+		t.Errorf("README =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestRunQuotesAnOutputFileAsText(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "example/output.txt", "hello\nexit status: 0\n")
+	readme := write(t, root, "README.md",
+		"It prints:\n\n<!-- docs:output example/output.txt -->\nstale\n<!-- docs:end -->\n")
+
+	if err := run(root); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	got, err := os.ReadFile(readme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "It prints:\n\n<!-- docs:output example/output.txt -->\n\n```text\n" +
+		"hello\nexit status: 0\n```\n\n<!-- docs:end -->\n"
+	if string(got) != want {
+		t.Errorf("README =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestRunRejectsAWholeFileItCannotQuote(t *testing.T) {
+	for _, test := range []struct {
+		name, path, want string
+	}{
+		{"a parent directory", "../outside.go", "must stay inside"},
+		{"an absolute path", "/etc/hostname", "must stay inside"},
+		{"a file that does not exist", "example/absent.go", "absent.go"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			write(t, root, "README.md", "<!-- docs:file "+test.path+" -->\n<!-- docs:end -->\n")
+
+			err := run(root)
+			if err == nil {
+				t.Fatal("run() error = nil, want the path refused")
+			}
+			if !strings.Contains(err.Error(), test.want) ||
+				!strings.Contains(err.Error(), "README.md:1") {
+				t.Errorf("run() error = %v, want it to name README.md:1 and %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestRunRejectsAWholeFileBlockThatNeverCloses(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "example/main.go", wholeProgram)
+	write(t, root, "README.md", "<!-- docs:file example/main.go -->\n")
+
+	err := run(root)
+	if err == nil || !strings.Contains(err.Error(), "never closed") {
+		t.Fatalf("run() error = %v, want the open block reported", err)
+	}
+}
+
 func TestDedentRemovesSharedIndentationOnly(t *testing.T) {
 	got := dedent([]string{"\t\tfirst", "", "\t\t\tnested", "\t\tlast"})
 	want := []string{"first", "", "\tnested", "last"}

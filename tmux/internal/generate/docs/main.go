@@ -1,5 +1,9 @@
-// Command docs replaces marked Markdown blocks with matching Go source regions.
-// Text outside marker pairs is unchanged.
+// Command docs replaces marked Markdown blocks with matching Go source.
+// A "<!-- docs:name -->" marker quotes a named region; "<!-- docs:file PATH -->"
+// quotes a whole Go file, and "<!-- docs:output PATH -->" quotes a text file an
+// example's test compares against what the program printed. PATH is slash
+// separated and relative to the scanned root. Text outside marker pairs is
+// unchanged.
 package main
 
 import (
@@ -21,6 +25,9 @@ var (
 	sourceRegionEnd   = regexp.MustCompile(`^\s*// docs:end\s*$`)
 	markdownStart     = regexp.MustCompile(`^<!-- docs:([a-z0-9-]+) -->$`)
 	markdownEnd       = regexp.MustCompile(`^<!-- docs:end -->$`)
+	// markdownWhole starts a block quoting a whole file: kind is "file" for Go
+	// source and "output" for the text a program printed.
+	markdownWhole = regexp.MustCompile(`^<!-- docs:(file|output) (\S+) -->$`)
 )
 
 // skipDirectories excludes generated fixtures and dependency caches.
@@ -51,7 +58,7 @@ func run(root string) error {
 
 	rewritten := 0
 	for _, document := range documents {
-		changed, err := applyRegions(document, regions)
+		changed, err := applyRegions(root, document, regions)
 		if err != nil {
 			return err
 		}
@@ -210,22 +217,38 @@ func findMarkdown(root string) ([]string, error) {
 	return documents, err
 }
 
-func applyRegions(path string, regions map[string]region) (bool, error) {
+func applyRegions(root, path string, regions map[string]region) (bool, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
-	lines := strings.Split(string(content), "\n")
+	updated, err := renderMarkdown(root, path, string(content), regions)
+	if err != nil {
+		return false, err
+	}
+	if updated == string(content) {
+		return false, nil
+	}
+	return true, os.WriteFile(path, []byte(updated), 0o644)
+}
+
+// renderMarkdown returns content with every marked block regenerated. It
+// writes nothing, so a test can ask whether a document is current.
+func renderMarkdown(root, path, content string, regions map[string]region) (string, error) {
+	lines := strings.Split(content, "\n")
 
 	var (
 		out     []string
 		name    string
+		whole   []string // kind and path of an open whole-file block
 		started int
 	)
 	for index, line := range lines {
-		if name == "" {
+		if name == "" && whole == nil {
 			out = append(out, line)
-			if match := markdownStart.FindStringSubmatch(line); match != nil &&
+			if match := markdownWhole.FindStringSubmatch(line); match != nil {
+				whole, started = match[1:], index+1
+			} else if match := markdownStart.FindStringSubmatch(line); match != nil &&
 				!markdownEnd.MatchString(line) {
 				name, started = match[1], index+1
 			}
@@ -234,30 +257,40 @@ func applyRegions(path string, regions map[string]region) (bool, error) {
 		if !markdownEnd.MatchString(line) {
 			continue
 		}
-		source, ok := regions[name]
-		if !ok {
-			return false, fmt.Errorf("%s:%d: no region named %q in any Go file", path, started, name)
+		var block []string
+		if whole != nil {
+			quoted, err := quoteWhole(root, whole[0], whole[1])
+			if err != nil {
+				return "", fmt.Errorf("%s:%d: %w", path, started, err)
+			}
+			block = quoted
+			whole = nil
+		} else {
+			source, ok := regions[name]
+			if !ok {
+				return "", fmt.Errorf("%s:%d: no region named %q in any Go file", path, started, name)
+			}
+			block = append(block, "```go")
+			if source.given != "" {
+				block = append(block, givenComment(source.given)...)
+			}
+			block = append(block, source.lines...)
+			block = append(block, "```")
+			name = ""
 		}
 		out = append(out, "")
-		out = append(out, "```go")
-		if source.given != "" {
-			out = append(out, givenComment(source.given)...)
-		}
-		out = append(out, source.lines...)
-		out = append(out, "```")
+		out = append(out, block...)
 		out = append(out, "")
 		out = append(out, line)
-		name = ""
 	}
 	if name != "" {
-		return false, fmt.Errorf("%s:%d: block %q is never closed", path, started, name)
+		return "", fmt.Errorf("%s:%d: block %q is never closed", path, started, name)
+	}
+	if whole != nil {
+		return "", fmt.Errorf("%s:%d: block %q is never closed", path, started, whole[1])
 	}
 
-	updated := strings.Join(out, "\n")
-	if updated == string(content) {
-		return false, nil
-	}
-	return true, os.WriteFile(path, []byte(updated), 0o644)
+	return strings.Join(out, "\n"), nil
 }
 
 // givenLineWidth is the repository's Markdown wrap column, applied here so a
@@ -280,4 +313,31 @@ func givenComment(given string) []string {
 		lines[len(lines)-1] += " " + word
 	}
 	return lines
+}
+
+// quoteWhole returns the fenced block for a whole-file marker. A Go file is
+// quoted byte for byte except that its own region markers are dropped, so what
+// a reader pastes is what compiles; an output file is quoted as plain text.
+func quoteWhole(root, kind, relative string) ([]string, error) {
+	if filepath.IsAbs(relative) || !filepath.IsLocal(filepath.FromSlash(relative)) {
+		return nil, fmt.Errorf("path %q must stay inside the repository", relative)
+	}
+	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+	if err != nil {
+		return nil, fmt.Errorf("docs:%s: %w", kind, err)
+	}
+	lines := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
+	fence := "```text"
+	if kind == "file" {
+		fence = "```go"
+		kept := lines[:0:0]
+		for _, line := range lines {
+			if sourceRegionEnd.MatchString(line) || sourceRegionStart.MatchString(line) {
+				continue
+			}
+			kept = append(kept, line)
+		}
+		lines = kept
+	}
+	return append(append([]string{fence}, lines...), "```"), nil
 }
