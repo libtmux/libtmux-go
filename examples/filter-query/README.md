@@ -12,14 +12,20 @@ about how many answers you want from one read.
 $ go -C examples run ./filter-query
 ```
 
-```
+On a tmux server with nothing else on it, it prints:
+
+<!-- docs:output examples/filter-query/output.txt -->
+
+```text
 session: libtmux-filter
 active panes: 1
 typed panes: 1
 live matches: 1
 ```
 
-On a server that already holds sessions, the first lines name those too.
+<!-- docs:end -->
+
+On a server that already holds sessions, the first lines name those as well.
 
 ## What to look at
 

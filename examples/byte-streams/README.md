@@ -20,10 +20,19 @@ and no temporary file to clean up.
 $ go -C examples run ./byte-streams
 ```
 
+On a tmux server with nothing else on it, it prints:
+
+<!-- docs:output examples/byte-streams/output.txt -->
+
+```text
+pasted 42 bytes
+archived the pane's scrollback as gzip
 ```
-pasted 42 bytes, compressed the screen into 70
-archive: /tmp/libtmux-byte-streams-12345.gz
-```
+
+<!-- docs:end -->
+
+It also names the archive it wrote on standard error, a path that differs on
+every run.
 
 ## What to look at
 

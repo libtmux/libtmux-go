@@ -1,0 +1,4 @@
+process path: 10 searches
+connection path: 10 searches
+printed capture: process path
+file capture: connection path

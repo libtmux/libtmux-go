@@ -1,11 +1,8 @@
 package main
 
 import (
-	"context"
 	"os"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/examples/internal/exampletest"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
@@ -16,16 +13,5 @@ func TestMain(m *testing.M) {
 }
 
 func TestOptionHookEditing(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t))
-	})
-
-	for _, want := range []string{"mouse: true", "client-attached hook present: true"} {
-		if !strings.Contains(printed, want) {
-			t.Errorf("printed %q, want it to contain %q", printed, want)
-		}
-	}
+	exampletest.Server(t, run)
 }

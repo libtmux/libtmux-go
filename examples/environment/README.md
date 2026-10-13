@@ -11,9 +11,15 @@ tells a process about where it is.
 $ go -C examples run ./environment
 ```
 
-```
+On a tmux server with nothing else on it, it prints:
+
+<!-- docs:output examples/environment/output.txt -->
+
+```text
 ready true
 ```
+
+<!-- docs:end -->
 
 `ready` is the value set and read back. `true` is the pane rediscovered from a
 `TMUX` environment matching the pane the example split.

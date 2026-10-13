@@ -56,8 +56,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 			fmt.Printf("  window %s:%d\n", window.ID(), window.Index())
 			panes, _ := window.Panes()
 			for _, pane := range panes {
-				command, _ := pane.CurrentCommand()
-				fmt.Printf("    pane %s %q\n", pane.ID(), command)
+				fmt.Printf("    pane %s index %d\n", pane.ID(), pane.Index())
 			}
 		}
 	}

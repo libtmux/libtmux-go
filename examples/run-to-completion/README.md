@@ -13,8 +13,12 @@ is the screen tmux rendered rather than the bytes the program wrote.
 $ go -C examples run ./run-to-completion
 ```
 
-```
-screen: /dev/pts/3
+On a tmux server with nothing else on it, it prints:
+
+<!-- docs:output examples/run-to-completion/output.txt -->
+
+```text
+screen: stdout is a terminal
 exited 3
 1
 2
@@ -22,8 +26,11 @@ exited 3
 stopped by signal 9
 ```
 
-`tty` printed the pane's terminal, which a command run through a pipe could not
-have done. The window the command ran in is removed once the result is read,
+<!-- docs:end -->
+
+`test -t 1` held, so the command had a terminal, which one run through a pipe
+does not. tmux before 3.3 does not say which signal ended a pane, so the last
+line reads `stopped` there. The window the command ran in is removed once the result is read,
 and the session is killed on the way out.
 
 ## What to look at
@@ -32,7 +39,9 @@ and the session is killed on the way out.
 
 ```go
 // Given: ctx context.Context; session tmux.Session
-result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
+// The command runs with a terminal, so test -t holds where a pipe fails.
+command := "test -t 1 && echo stdout is a terminal; exit 3"
+result, err := session.Run(ctx, command, tmux.RunOptions{})
 if err != nil {
 	return fmt.Errorf("run command: %w", err)
 }
@@ -86,7 +95,12 @@ if err != nil {
 if err := <-stopped; err != nil {
 	return fmt.Errorf("stop command: %w", err)
 }
-fmt.Println("stopped by signal", streamed.Signal)
+if streamed.Signal == "" {
+	// tmux before 3.3 does not say which signal ended a pane.
+	fmt.Println("stopped")
+} else {
+	fmt.Println("stopped by signal", streamed.Signal)
+}
 ```
 
 <!-- docs:end -->

@@ -1,0 +1,17 @@
+step 0: tmux select-layout -t @1 tiled
+step 1: tmux split-window -t @1 -v -P -F#{pane_id}
+step 2: rendered when the split has reported its pane
+step 3: rendered when the split has reported its pane
+step 4: rendered when the split has reported its pane
+step 5: rendered when the split has reported its pane
+tmux invocation carrying steps [0], ends because it alone
+tmux invocation carrying steps [1], ends because it creates
+tmux invocation carrying steps [2 3 4], ends because it chained
+tmux invocation carrying steps [5], ends because it captures
+operations: 6, tmux invocations: 4
+step 0 select-layout    complete created "" stdout []
+step 1 split-window     complete created "%2" stdout []
+step 2 select-pane      complete created "" stdout []
+step 3 send-keys        complete created "" stdout []
+step 4 send-keys        complete created "" stdout []
+step 5 display-message  complete created "" stdout ["editor"]

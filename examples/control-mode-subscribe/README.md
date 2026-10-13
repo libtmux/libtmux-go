@@ -15,12 +15,18 @@ ordinary process API.
 $ go -C examples run ./control-mode-subscribe
 ```
 
-```
+On a tmux server with nothing else on it, it prints:
+
+<!-- docs:output examples/control-mode-subscribe/output.txt -->
+
+```text
 notification: %session-changed
 notification: %session-renamed
 heard the rename
 session has 2 windows
 ```
+
+<!-- docs:end -->
 
 The example renames its own session and waits to hear about it, then asks tmux
 to report the session's window count and opens a window.

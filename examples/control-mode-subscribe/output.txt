@@ -1,0 +1,4 @@
+notification: %session-changed
+notification: %session-renamed
+heard the rename
+session has 2 windows

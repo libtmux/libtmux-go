@@ -122,12 +122,10 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 	}
 	// docs:end
 
-	written, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("measure archive: %w", err)
-	}
-	fmt.Printf("pasted %d bytes, compressed the screen into %d\n",
-		payload.Size(), written.Size())
-	fmt.Println("archive:", archive)
+	fmt.Printf("pasted %d bytes\n", payload.Size())
+	fmt.Println("archived the pane's scrollback as gzip")
+	// The path differs on every run, so it goes to standard error and what
+	// the program prints stays the same.
+	fmt.Fprintln(os.Stderr, "archive:", archive)
 	return nil
 }

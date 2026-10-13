@@ -12,10 +12,16 @@ complaint from tmux.
 $ go -C examples run ./option-hook-editing
 ```
 
-```
+On a tmux server with nothing else on it, it prints:
+
+<!-- docs:output examples/option-hook-editing/output.txt -->
+
+```text
 mouse: true
 client-attached hook present: true
 ```
+
+<!-- docs:end -->
 
 ## What to look at
 

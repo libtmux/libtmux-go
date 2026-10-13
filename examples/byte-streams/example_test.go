@@ -27,9 +27,7 @@ func TestByteStreams(t *testing.T) {
 		return run(ctx, tmuxtest.NewServer(ctx, t), archive)
 	})
 
-	if want := "pasted 42 bytes"; !strings.Contains(printed, want) {
-		t.Errorf("printed %q, want it to contain %q", printed, want)
-	}
+	exampletest.MatchesFile(t, printed, "output.txt")
 
 	// The archive proves both directions: the payload reached the pane without
 	// a shell quoting it, and the screen came back out compressed.

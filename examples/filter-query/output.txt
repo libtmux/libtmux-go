@@ -1,0 +1,4 @@
+session: libtmux-filter
+active panes: 1
+typed panes: 1
+live matches: 1

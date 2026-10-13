@@ -11,11 +11,17 @@ one tmux command, and everything you ask of it afterwards is free.
 $ go -C examples run ./snapshot-browser
 ```
 
-```
+On a tmux server with nothing else on it, it prints:
+
+<!-- docs:output examples/snapshot-browser/output.txt -->
+
+```text
 session $0 "libtmux-snapshot"
-  window @0:1
-    pane %0 "zsh"
+  window @0:0
+    pane %0 index 0
 ```
+
+<!-- docs:end -->
 
 ## What to look at
 
@@ -31,8 +37,8 @@ which a sequence of separate reads can.
 Nothing in it changes underneath you, which is what makes it safe to walk twice
 and get the same answer.
 
-**Values, not handles.** A pane's name and current command are already there.
-Reading them starts nothing.
+**Values, not handles.** A pane's index, title, and current command are already
+there. Reading them starts nothing.
 
 ## Testing your own version
 

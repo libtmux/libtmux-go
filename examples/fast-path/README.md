@@ -11,12 +11,18 @@ Both paths support tmux 3.2a through 3.8-rc2.
 $ go -C examples run ./fast-path
 ```
 
-```
+It prints:
+
+<!-- docs:output examples/fast-path/output.txt -->
+
+```text
 process path: 10 searches
 connection path: 10 searches
 printed capture: process path
 file capture: connection path
 ```
+
+<!-- docs:end -->
 
 ## Opening a connection
 

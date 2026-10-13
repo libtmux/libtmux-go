@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -25,14 +24,5 @@ func TestFastPath(t *testing.T) {
 	options := tmux.ServerOptions{SocketPath: filepath.Join(t.TempDir(), "tmux.sock")}
 	printed := exampletest.Output(t, func() error { return run(ctx, options) })
 
-	for _, want := range []string{
-		"process path: 10 searches",
-		"connection path: 10 searches",
-		"printed capture: process path",
-		"file capture: connection path",
-	} {
-		if !strings.Contains(printed, want) {
-			t.Errorf("printed %q, want it to contain %q", printed, want)
-		}
-	}
+	exampletest.MatchesFile(t, printed, "output.txt")
 }

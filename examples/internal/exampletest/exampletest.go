@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
 // RequireTmux skips a real-tmux example below its stated feature floor.
@@ -46,6 +47,21 @@ func Program(t *testing.T, run func(context.Context) error) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	printed := Output(t, func() error { return run(ctx) })
+	MatchesFile(t, printed, "output.txt")
+}
+
+// Server runs an example that takes its tmux server from its caller, on a
+// harness-owned server holding nothing else, and holds what it prints to
+// output.txt. A reader running the program reaches their own server, which
+// may hold more, so the page publishes what a server with nothing else on it
+// prints.
+func Server(t *testing.T, run func(context.Context, tmux.Server) error) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	printed := Output(t, func() error { return run(ctx, server) })
 	MatchesFile(t, printed, "output.txt")
 }
 

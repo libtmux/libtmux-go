@@ -292,10 +292,37 @@ func TestPublishedOutputIsComparedByATest(t *testing.T) {
 	}
 }
 
+// TestEveryExamplePagePublishesItsOutput holds each program under examples/ to
+// showing, on its own page, the output its test compares. A page that states
+// the output in a block of its own has nothing keeping the two alike.
+func TestEveryExamplePagePublishesItsOutput(t *testing.T) {
+	root, _ := repositoryRoot(t)
+	programs, err := filepath.Glob(filepath.Join(root, "examples", "*", "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(programs) < 10 {
+		t.Fatalf("found %d example programs, want at least 10; the scan is broken", len(programs))
+	}
+	for _, program := range programs {
+		name := filepath.Base(filepath.Dir(program))
+		page, err := os.ReadFile(filepath.Join(filepath.Dir(program), "README.md"))
+		if err != nil {
+			t.Errorf("examples/%s has no page: %v", name, err)
+			continue
+		}
+		marker := "<!-- docs:output examples/" + name + "/output.txt -->"
+		if !strings.Contains(string(page), marker) {
+			t.Errorf("examples/%s/README.md does not publish the program's output; add\n\t%s",
+				name, marker)
+		}
+	}
+}
+
 // comparedByATest reports whether a test file beside output names it. A file
 // under testdata belongs to the tests one directory up. An example's
-// output.txt is also compared by exampletest.Program, which names the file
-// itself.
+// output.txt is also compared by exampletest.Program and exampletest.Server,
+// which name the file themselves.
 func comparedByATest(t *testing.T, root, output string) bool {
 	t.Helper()
 	directory, base := path.Dir(output), path.Base(output)
@@ -304,7 +331,7 @@ func comparedByATest(t *testing.T, root, output string) bool {
 		mentions = []string{`"testdata/` + base + `"`, `"testdata", "` + base + `"`}
 		directory = path.Dir(directory)
 	} else if base == "output.txt" {
-		mentions = append(mentions, "exampletest.Program(")
+		mentions = append(mentions, "exampletest.Program(", "exampletest.Server(")
 	}
 	tests, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(directory), "*_test.go"))
 	if err != nil {
