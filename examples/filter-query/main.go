@@ -42,6 +42,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
+	if err := list(ctx, server); err != nil {
+		return err
+	}
+
 	// docs:query-in-go given:ctx context.Context; server tmux.Server
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
@@ -74,5 +78,21 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	// docs:end
 	fmt.Println("live matches:", len(sessions))
+	return nil
+}
+
+// list prints what the server holds now. It is a function of its own so the
+// region can use the names a reader would.
+func list(ctx context.Context, server tmux.Server) error {
+	// docs:list-sessions given:ctx context.Context; server tmux.Server
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		return fmt.Errorf("list sessions: %w", err)
+	}
+	for _, session := range sessions {
+		name, _ := session.Name()
+		fmt.Println("session:", name)
+	}
+	// docs:end
 	return nil
 }

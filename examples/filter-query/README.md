@@ -13,10 +13,13 @@ $ go -C examples run ./filter-query
 ```
 
 ```
+session: libtmux-filter
 active panes: 1
 typed panes: 1
 live matches: 1
 ```
+
+On a server that already holds sessions, the first lines name those too.
 
 ## What to look at
 

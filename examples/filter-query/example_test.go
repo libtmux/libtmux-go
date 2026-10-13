@@ -23,6 +23,9 @@ func TestFilterQuery(t *testing.T) {
 		return run(ctx, tmuxtest.NewServer(ctx, t))
 	})
 
+	if want := "session: libtmux-filter\n"; !strings.Contains(printed, want) {
+		t.Errorf("printed %q, want it to contain %q", printed, want)
+	}
 	// Require output from both snapshot and live filter paths.
 	if want := "live matches: 1"; !strings.Contains(printed, want) {
 		t.Errorf("printed %q, want it to contain %q", printed, want)
