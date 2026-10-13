@@ -41,9 +41,17 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
+	// docs:options given:ctx context.Context; session tmux.Session
 	if err := session.SetMouse(ctx, true); err != nil {
 		return err
 	}
+	options, err := session.Options(ctx)
+	if err != nil {
+		return err
+	}
+	mouse, _ := options.Mouse().Get()
+	fmt.Println("mouse:", mouse)
+	// docs:end
 	status, err := tmux.NewSparseArray(
 		tmux.SparseEntry[string]{Index: 0, Value: "#[align=left]#{session_name}"},
 		tmux.SparseEntry[string]{Index: 2, Value: "#[align=right]#{window_name}"},

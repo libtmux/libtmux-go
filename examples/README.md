@@ -17,6 +17,7 @@ $ go -C examples run ./quickstart
 | [`any-slice/`](any-slice/) | `tmuxq` with no tmux | The same helpers on a slice of your own |
 | [`filter-query/`](filter-query/) | Snapshot predicates and live tmux filters | The two ways to ask tmux a question, and what each costs |
 | [`snapshot-browser/`](snapshot-browser/) | One read, whole hierarchy | Walking sessions, windows and panes without re-querying |
+| [`object-model/`](object-model/) | Records, not live handles | What a rename returns, and a lookup that finds nothing |
 | [`option-hook-editing/`](option-hook-editing/) | Typed options and hooks | Reading and writing tmux settings by their Go names |
 | [`environment/`](environment/) | Session and global environment | What tmux passes to the processes it starts |
 | [`fast-path/`](fast-path/) | Owned connection | Plain and connected reads, plus their exact-capture boundary |

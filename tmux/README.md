@@ -17,16 +17,124 @@ The library. A typed, context-aware tmux API with no runtime dependencies.
 
 </div>
 
-Alpha software. Releases carry an -alpha prerelease tag and the API is not
-settled. Pin an exact version.
-
 ```console
-$ go get github.com/libtmux/libtmux-go/tmux
+$ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
+
+**Contents** — [Records, not live handles](#records-not-live-handles) ·
+[Guessing a method](#guessing-a-method) ·
+[Options and hooks](#options-and-hooks) · [Errors](#errors) ·
+[Waiting for a pane](#waiting-for-a-pane) ·
+[Reading further](#reading-further)
+
+New here? The [top-level README](../README.md) opens with a program that runs
+a command in tmux and prints what it showed. This page is about how the
+library is shaped.
+
+## Records, not live handles
+
+A `Server` reaches one tmux server. It holds `Session` values, each holding
+`Window` values, each holding `Pane` values, and every one of them is a record:
+what tmux said when you asked. This is the whole program:
+
+<!-- docs:file examples/object-model/main.go -->
 
 ```go
-import "github.com/libtmux/libtmux-go/tmux"
+// Command object-model shows that the values tmux hands back are records.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context) (err error) {
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-object-model",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux: %w", err)
+	}
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
+	}()
+
+	// Rename hands back the session as tmux now reports it. The record
+	// already in hand keeps the name it had when tmux handed it over.
+	renamed, err := session.Rename(ctx, "new")
+	if err != nil {
+		return fmt.Errorf("rename session: %w", err)
+	}
+	held, _ := session.Name()
+	current, _ := renamed.Name()
+	fmt.Println("held record:", held)
+	fmt.Println("returned record:", current)
+
+	// A lookup that finds nothing is an error a caller can test for.
+	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
+	if errors.Is(lookupErr, tmux.ErrNotFound) {
+		fmt.Println("session $999: not found")
+	}
+	return nil
+}
 ```
+
+<!-- docs:end -->
+
+It prints:
+
+<!-- docs:output examples/object-model/output.txt -->
+
+```text
+held record: old
+returned record: new
+session $999: not found
+```
+
+<!-- docs:end -->
+
+To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
+on `PATH`:
+
+```console
+$ go mod init demo && \
+    go get github.com/libtmux/libtmux-go/tmux@latest && \
+    go run .
+```
+
+The program starts a tmux server on a socket and config of its own and kills it
+on the way out, so it never touches a tmux you have open.
+
+Nothing refreshes a record behind you. A method that changes which object you
+hold, or what it looks like, hands back a new record, as `Session.Rename` does
+here; `Session.Refresh` and its counterparts ask tmux again when you want one.
+The name says which kind of read you are making: `session.Windows()` returns
+what the record already holds and never queries, while
+`session.SearchWindows(ctx, nil)` asks tmux.
+
+`NewServer` validates its configuration and starts nothing. With no
+`SocketName` or `SocketPath` it reaches the server your own `tmux` command
+does, and with no `ConfigFile` tmux reads your configuration, so a program
+that should behave the same everywhere names both, as the one above does.
 
 ## Guessing a method
 
@@ -54,48 +162,29 @@ optional (`Pane.Capture`).
 record when the command changes which object you are holding or what it looks
 like. Everything else returns only an error.
 
-## The object model
-
-`Server` is an immutable configuration handle. `NewServer` validates its
-configuration but does not start tmux. `Session` holds `Window` views, each
-holding `Pane` views.
-
-Returned values are **records, not live handles**. A `Session` you hold is what
-tmux said when you asked. Nothing refreshes behind you; `Session.Refresh` and
-its counterparts get you a new one.
-
-```go
-server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "my-app"})
-if err != nil {
-	return err
-}
-
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "work"})
-if err != nil {
-	return err
-}
-
-name, ok := session.Name()      // from the record, no tmux call
-windows, err := session.SearchWindows(ctx, nil)   // asks tmux
-```
-
-`session.Windows()` returns what the record already holds and never queries;
-`session.SearchWindows(ctx, nil)` asks tmux. The naming is the difference.
-
 ## Options and hooks
 
 Every tmux option and hook has a typed accessor, and the tmux name maps to the
-Go name by one rule (see "Naming and call shapes" in the package docs):
+Go name by one rule, given under "Naming and call shapes" in the package
+documentation. A setter returns only an error, because an option is not part
+of the record you hold; read it back through `Options`:
+
+<!-- docs:options -->
 
 ```go
+// Given: ctx context.Context; session tmux.Session
+if err := session.SetMouse(ctx, true); err != nil {
+	return err
+}
 options, err := session.Options(ctx)
 if err != nil {
 	return err
 }
-base, ok := options.BaseIndex()
-
-session, err = session.SetMouse(ctx, true)
+mouse, _ := options.Mouse().Get()
+fmt.Println("mouse:", mouse)
 ```
+
+<!-- docs:end -->
 
 For a name outside the catalog, `RawOption` and `SetOption` take strings.
 
@@ -106,11 +195,18 @@ Runnable: [`../examples/option-hook-editing`](../examples/option-hook-editing).
 Failures are classified by what tmux refused, so a missing target and a
 misspelled option are different checks:
 
+<!-- docs:not-found -->
+
 ```go
-if _, err := server.Session(ctx, id); errors.Is(err, tmux.ErrNotFound) {
-	// tmux has no such session
+// Given: ctx context.Context; server tmux.Server
+// A lookup that finds nothing is an error a caller can test for.
+_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
+if errors.Is(lookupErr, tmux.ErrNotFound) {
+	fmt.Println("session $999: not found")
 }
 ```
+
+<!-- docs:end -->
 
 A completed tmux command that failed is data, not an error, when you use
 `Server.Cmd`: `CommandResult.ExitCode` carries it. Transport and validation
@@ -118,9 +214,12 @@ failures are Go errors.
 
 ## Waiting for a pane
 
-Worth reading before writing a poll loop: a shell echoes the command you sent,
-so searching the screen for what you are waiting for finds your own request.
-"Execution modes" in the package documentation covers the ways to wait, in the
+Worth reading before writing a poll loop: a terminal echoes the command you
+typed, so searching the screen for what you are waiting for finds your own
+request. Wait for text the command prints and the typed line does not contain.
+[`../examples/pane-io`](../examples/pane-io) does that with
+`PaneObservation.WaitFor`, which tmux wakes as the pane writes, and "Execution
+modes" in the package documentation covers the other ways to wait, in the
 order worth reaching for them.
 
 ## Reading further
@@ -133,9 +232,13 @@ The package documentation is the reference and is written to be read start to
 finish. It covers the task index, method-naming rules, snapshots and identity,
 execution bindings, plans, filters, and the compatibility window.
 
+Alpha software. Releases carry an -alpha prerelease tag and the API is not
+settled. Pin an exact version.
+
 | | |
 | --- | --- |
 | [`tmuxtest/`](tmuxtest/) | A real tmux server for your tests |
+| [`../tmuxq/`](../tmuxq/) | Filtering helpers for the records this package returns |
 | [`../examples/`](../examples/) | Runnable programs |
 | [`../DESIGN.md`](../DESIGN.md) | Why the surface looks like this |
 | [`../BENCHMARKS.md`](../BENCHMARKS.md) | What each transport costs |

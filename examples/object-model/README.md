@@ -1,0 +1,110 @@
+# object-model
+
+The values tmux hands back are records: what tmux said when you asked, not live
+handles that change underneath you.
+
+## Running it
+
+```console
+$ go -C examples run ./object-model
+```
+
+It prints:
+
+<!-- docs:output examples/object-model/output.txt -->
+
+```text
+held record: old
+returned record: new
+session $999: not found
+```
+
+<!-- docs:end -->
+
+## The program
+
+<!-- docs:file examples/object-model/main.go -->
+
+```go
+// Command object-model shows that the values tmux hands back are records.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context) (err error) {
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-object-model",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux: %w", err)
+	}
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
+	}()
+
+	// Rename hands back the session as tmux now reports it. The record
+	// already in hand keeps the name it had when tmux handed it over.
+	renamed, err := session.Rename(ctx, "new")
+	if err != nil {
+		return fmt.Errorf("rename session: %w", err)
+	}
+	held, _ := session.Name()
+	current, _ := renamed.Name()
+	fmt.Println("held record:", held)
+	fmt.Println("returned record:", current)
+
+	// A lookup that finds nothing is an error a caller can test for.
+	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
+	if errors.Is(lookupErr, tmux.ErrNotFound) {
+		fmt.Println("session $999: not found")
+	}
+	return nil
+}
+```
+
+<!-- docs:end -->
+
+## What to look at
+
+**A mutation returns the record it changed.** `Session.Rename` hands back the
+session as tmux now reports it. The `session` value already in hand still says
+`old`, because nothing refreshes a record behind you. `Session.Refresh` asks
+again when you want a new one.
+
+**Identity survives a rename.** Both records carry the same `SessionID`, which
+tmux never reuses for the life of the server, so a command sent through either
+one reaches the same session.
+
+**A missing target is an error you can test for.** `server.Session` with an ID
+no session holds returns an error matching `tmux.ErrNotFound`, so "it is gone"
+and "tmux could not be asked" are different checks.
+
+## Testing your own version
+
+```console
+$ go -C examples test ./object-model
+```
+
+The test compares what the program prints with [`output.txt`](output.txt).

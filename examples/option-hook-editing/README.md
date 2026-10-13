@@ -13,6 +13,7 @@ $ go -C examples run ./option-hook-editing
 ```
 
 ```
+mouse: true
 client-attached hook present: true
 ```
 
