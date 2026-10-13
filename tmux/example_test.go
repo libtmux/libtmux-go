@@ -1904,15 +1904,18 @@ func ExamplePane_Writer() {
 	// shares a line with that output: the echo has no newline of its own yet.
 	writer := pane.Writer(ctx)
 	scanner := bufio.NewScanner(observation.Reader(ctx))
-	// Each newline is the Enter key, so each of these types one command.
-	for _, command := range []string{"printf 'one\\n'", "printf 'two\\n'"} {
-		if _, err := fmt.Fprintln(writer, command); err != nil {
+	// Each newline is the Enter key, so each pass types one command.
+	for _, word := range []string{"one", "two"} {
+		if _, err := fmt.Fprintln(writer, "printf '"+word+"\\n'"); err != nil {
 			fmt.Println("write:", err)
 			return
 		}
+		// These are the terminal's bytes: the echo comes first, and a shell
+		// still starting prints its prompt on the reply's line. The typed
+		// line ends in a quote, so only the reply ends in the word.
 		for scanner.Scan() {
-			if line := scanner.Text(); line == "one" || line == "two" {
-				fmt.Println(line)
+			if strings.HasSuffix(scanner.Text(), word) {
+				fmt.Println(word)
 				break
 			}
 		}
@@ -2003,8 +2006,10 @@ func ExamplePaneObservation_Reader() {
 		return
 	}
 	// The reader is a byte stream, so any consumer of an io.Reader works on
-	// it. The typed command echoes first; the exact line is the reply.
-	matched, err := regexp.MatchReader(`(?m)^ready\r?$`, bufio.NewReader(observation.Reader(ctx)))
+	// it. The typed command echoes first and ends in a quote; the reply is
+	// the line that ends in the word, whether or not a prompt precedes it.
+	reader := bufio.NewReader(observation.Reader(ctx))
+	matched, err := regexp.MatchReader(`(?m)\bready\r?$`, reader)
 	fmt.Println(matched, err)
 	// Output: true <nil>
 }
