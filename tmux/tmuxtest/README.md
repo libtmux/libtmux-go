@@ -17,10 +17,6 @@ Run your program inside a real tmux and assert on what it drew.
 
 </div>
 
-```go
-import "github.com/libtmux/libtmux-go/tmux/tmuxtest"
-```
-
 **Contents** — [Testing a program](#testing-a-program) ·
 [When a wait fails](#when-a-wait-fails) · [The waits](#the-waits) ·
 [Testing without a tmux](#testing-without-a-tmux) ·
@@ -29,38 +25,78 @@ import "github.com/libtmux/libtmux-go/tmux/tmuxtest"
 
 ## Testing a program
 
-Run it, wait for what it draws, type at it. The server, its session, and its
-pane end with the test:
+Run your program in a pane, type at it, and wait for what it draws. The file
+below is a whole test. The server, its session, and its pane end with the
+test.
 
-<!-- docs:tmuxtest-quickstart -->
+<!-- docs:file examples/testing-a-program/greeter_test.go -->
 
 ```go
-// Given: ctx context.Context; t *testing.T
-pane := tmuxtest.RunInPane(ctx, t, "printf 'ready %s\\n' now; tr a-z A-Z")
+package greeter_test
 
-tmuxtest.WaitForText(ctx, t, pane, "ready now")
-tmuxtest.Type(ctx, t, pane, "a line for the program")
-tmuxtest.WaitForLine(ctx, t, pane, "A LINE FOR THE PROGRAM")
+import (
+	"context"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
+)
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
+
+func TestGreeterAnswersALine(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// A stand-in for your program: it greets each name it reads.
+	greeter := `while read name; do echo "hello, $name"; done`
+	pane := tmuxtest.RunInPane(ctx, t, greeter)
+
+	tmuxtest.Type(ctx, t, pane, "world")
+	tmuxtest.WaitForLine(ctx, t, pane, "hello, world")
+}
 ```
 
 <!-- docs:end -->
 
-No sleeps: `WaitForText` polls, so a quick program costs milliseconds and a slow
-one is still waited for. That block is generated from a test in this package, so
-it cannot describe something the package does not do.
+To run it, save it as `greeter_test.go` in an empty directory, with tmux 3.2a
+or newer on `PATH`:
+
+```console
+$ go mod init demo && \
+    go get github.com/libtmux/libtmux-go/tmux/tmuxtest@latest && \
+    go test
+```
+
+The pane echoes what `Type` sends, so the wait names the greeter's answer,
+`hello, world`, which the typed `world` does not contain. Waiting for the text
+you typed would pass without the program running.
+
+`TestMain` is required: `tmuxtest.Main` cleans up before returning the exit
+code, and verifies each server's process died before removing its socket. No
+sleeps: the waits poll the screen, so a quick program costs milliseconds and a
+slow one is still waited for.
 
 ## When a wait fails
 
-The failure carries the screen, which is what you would have added a print
-statement to see:
+The failure carries the screen the pane last held, which is what you would
+have added a print statement to see. This is a real one, from a test waiting
+for `ready` on a program that never got that far:
 
-```
+<!-- docs:output tmux/tmuxtest/testdata/wait-failure.txt -->
+
+```text
 tmuxtest: pane %1 never showed a line containing "ready"
 the pane showed 3 line(s):
-    | tmuxtest$ ./mytui --watch
+    | tmuxtest$ printf 'loading widgets\nconnecting\n'; cat
     | loading widgets
     | connecting
 ```
+
+<!-- docs:end -->
 
 ## The waits
 
@@ -87,7 +123,10 @@ Where the subject is your own code rather than tmux's behaviour,
 name and returns its path for `ServerOptions.Binary`. The test then needs no
 tmux installed:
 
+<!-- docs:scripted-tmux -->
+
 ```go
+// Given: ctx context.Context; t *testing.T
 binary := tmuxtest.ScriptedTmux(t,
 	tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
 	tmuxtest.ScriptedCommand{
@@ -95,9 +134,25 @@ binary := tmuxtest.ScriptedTmux(t,
 		Stderr:   "can't find pane: %7\n",
 		ExitCode: 1,
 	},
+	tmuxtest.ScriptedCommand{Contains: []string{"list-sessions"}, Stdout: "$5\n"},
 )
 server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+if err != nil {
+	t.Fatal(err)
+}
+
+// The point of scripting a failure is that a caller can assert on how
+// their own code classifies it.
+result, err := server.Cmd(ctx, "kill-pane", "-t", "%7")
+if err != nil {
+	t.Fatalf("Cmd() error = %v, want a completed failure", err)
+}
+if result.ExitCode != 1 {
+	t.Errorf("ExitCode = %d, want 1", result.ExitCode)
+}
 ```
+
+<!-- docs:end -->
 
 `Contains` matches whole arguments, so `kill-pane` answers that subcommand
 whatever flags surround it. It answers commands only: a control connection or
@@ -113,26 +168,25 @@ reports construction and startup failures through `t.Fatal`.
 
 ### One server per test
 
+<!-- docs:new-server -->
+
 ```go
-func TestMain(m *testing.M) {
-	os.Exit(tmuxtest.Main(m))
+// Given: ctx context.Context; t *testing.T
+server := tmuxtest.NewServer(ctx, t)
+
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+if err != nil {
+	t.Fatal(err)
 }
-
-func TestPaneReceivesKeys(t *testing.T) {
-	ctx := context.Background()
-	server := tmuxtest.NewServer(ctx, t)
-
-	sessions, err := server.Sessions(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// ... drive tmux; the server dies with the test
+if name, _ := session.Name(); name != "under-test" {
+	t.Errorf("session name = %q, want under-test", name)
 }
 ```
 
-`TestMain` is required: `tmuxtest.Main` performs cleanup and restoration before
-returning the exit code, and verifies each server's process actually died before
-removing its socket.
+<!-- docs:end -->
+
+The server dies with the test. `TestMain` with `tmuxtest.Main`, as in the test
+above, is required here too.
 
 ## What it guarantees
 
@@ -153,7 +207,9 @@ Sibling checkouts running their own suites on the same machine will fight over
 tmux sockets. Give yours a namespace:
 
 ```console
-$ export TMUX_TMPDIR=/tmp/my-project-test && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
+$ export TMUX_TMPDIR=/tmp/my-project-test && \
+    mkdir -p "$TMUX_TMPDIR" && \
+    unset TMUX TMUX_PANE
 ```
 
 Some real-tmux tests are load-sensitive. Three signs a failure is the machine

@@ -447,3 +447,21 @@ func processExists(pid int) bool {
 	err := syscall.Kill(pid, 0)
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
+
+// A test whose subject is tmux itself gets a server on a socket of its own.
+func TestNewServerGivesATestAServerOfItsOwn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// docs:new-server given:ctx context.Context; t *testing.T
+	server := tmuxtest.NewServer(ctx, t)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name, _ := session.Name(); name != "under-test" {
+		t.Errorf("session name = %q, want under-test", name)
+	}
+	// docs:end
+}

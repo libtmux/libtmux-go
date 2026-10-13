@@ -20,13 +20,11 @@ func TestRunInPaneReachesAnAssertionInFourLines(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// docs:tmuxtest-quickstart given:ctx context.Context; t *testing.T
 	pane := tmuxtest.RunInPane(ctx, t, "printf 'ready %s\\n' now; tr a-z A-Z")
 
 	tmuxtest.WaitForText(ctx, t, pane, "ready now")
 	tmuxtest.Type(ctx, t, pane, "a line for the program")
 	tmuxtest.WaitForLine(ctx, t, pane, "A LINE FOR THE PROGRAM")
-	// docs:end
 }
 
 // tmux pads captures to pane height; Screen removes that padding.
