@@ -135,19 +135,10 @@ func compileAlone(t *testing.T, absRoot string, source region) (string, error) {
 	}
 	b.WriteString("\treturn nil\n}\n\nfunc main() { _ = region() }\n")
 
-	write := func(name, body string) error {
-		return os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
-	}
-	if err := write("main.go", b.String()); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(b.String()), 0o644); err != nil {
 		return "", err
 	}
-	language, err := languageVersion(absRoot)
-	if err != nil {
-		return "", err
-	}
-	if err := write("go.mod", "module isolationcheck\n\ngo "+language+"\n\n"+
-		"require github.com/libtmux/libtmux-go v0.0.0\n\n"+
-		"replace github.com/libtmux/libtmux-go => "+absRoot+"\n"); err != nil {
+	if err := writeModule(dir, absRoot); err != nil {
 		return "", err
 	}
 
@@ -356,4 +347,17 @@ func TestIsolationCheckFailsForTheIntendedReasons(t *testing.T) {
 			}
 		})
 	}
+}
+
+// writeModule writes a go.mod into dir that resolves the library to the
+// checkout under test and nothing else.
+func writeModule(dir, absRoot string) error {
+	language, err := languageVersion(absRoot)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "go.mod"),
+		[]byte("module isolationcheck\n\ngo "+language+"\n\n"+
+			"require github.com/libtmux/libtmux-go v0.0.0\n\n"+
+			"replace github.com/libtmux/libtmux-go => "+absRoot+"\n"), 0o644)
 }
