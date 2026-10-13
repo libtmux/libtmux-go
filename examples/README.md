@@ -26,6 +26,7 @@ $ go -C examples run ./quickstart
 | [`run-to-completion/`](run-to-completion/) | A command run in a pane to its exit status | `os/exec` for a program that needs a terminal |
 | [`pane-io/`](pane-io/) | A pane as `io.Writer` and `io.Reader` | Typing a line and scanning the reply with the standard interfaces |
 | [`byte-streams/`](byte-streams/) | Buffers and captures as streams | Moving a payload in and a scrollback out with no quoting and no temporary file |
+| [`testing-a-program/`](testing-a-program/) | A whole `go test` file for a program in a pane | Running a program in a real tmux, typing at it, and waiting for its answer |
 
 Each directory has a page of its own explaining what to look at, and each has a
 test that runs the example against a real tmux and reads what it printed. The
