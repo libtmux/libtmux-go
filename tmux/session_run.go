@@ -45,8 +45,11 @@ type RunResult struct {
 	// Signal names the signal that ended the command, when one did. It is
 	// empty before tmux 3.3, which reports no signal for a dead pane.
 	Signal string
-	// Lines is what the terminal showed when the command finished, without
-	// the blank lines tmux pads a screen with.
+	// Lines is what the terminal showed when the command finished, its
+	// history included, without the blank lines tmux pads a screen with. A
+	// line the window's width wrapped is joined back into one. tmux keeps
+	// at most the session's history-limit lines above the screen, 2000 by
+	// default, so the start of a longer output is gone.
 	Lines []string
 	// Pane is the pane the command ran in. It is live only when the run kept
 	// its window.
@@ -64,7 +67,9 @@ func (result RunResult) clone() RunResult {
 // and reports its exit status and what its terminal showed. It is [os/exec]
 // for a program that needs a terminal: the command runs with a tty, so it
 // sees isatty, colour, and a width, and what comes back is the screen tmux
-// rendered rather than the bytes the program wrote.
+// rendered rather than the bytes the program wrote. That screen holds a
+// bounded history; see [RunResult.Lines]. For a large output, have the
+// command write it to a file, or follow it with [Running.StreamTo].
 //
 // A nonzero status is a result, not an error; the error reports what tmux
 // could not do. The wait is tmux's own signal, backed by a liveness check that
@@ -539,7 +544,9 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 // capture safely, so a bound pane stages it through a tmux buffer and a
 // scratch file, which tmux writes and this process reads.
 func captureFinishedScreen(ctx context.Context, pane Pane) ([]string, error) {
-	request := CapturePaneRequest{Start: CaptureBoundary, End: CaptureBoundary}
+	request := CapturePaneRequest{
+		Start: CaptureBoundary, End: CaptureBoundary, JoinWrapped: true,
+	}
 	if !pane.server.ConnectionBound() {
 		return pane.Capture(ctx, request)
 	}
@@ -649,6 +656,11 @@ const deadPaneNotice = "Pane is dead ("
 // when tmux wrote its fixed dead-pane notice, that notice, so lines hold only
 // what the command showed.
 func trimScreen(lines []string, fixedNotice bool) []string {
+	// Joining wrapped lines keeps the spaces that pad each row out to the
+	// window's width, which some tmux versions then leave in place.
+	for index, line := range lines {
+		lines[index] = strings.TrimRight(line, " ")
+	}
 	end := len(lines)
 	for end > 0 && strings.TrimSpace(lines[end-1]) == "" {
 		end--
