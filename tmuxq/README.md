@@ -57,6 +57,10 @@ fmt.Println(len(panes), "panes,", len(active), "active")
 
 <!-- docs:end -->
 
+<!-- docs:checked examples/queries/output.txt -->
+On the server described below, this prints `3 panes, 2 active`.
+<!-- docs:end -->
+
 [`tmuxq.Matching`][tmuxq-matching] returns a fresh slice, so changing it
 cannot change the snapshot. A filter that matches nothing returns an empty
 slice, not an error. The error is for a filter that cannot be one, such as a
@@ -65,7 +69,8 @@ pattern that does not compile.
 Each filter below runs in [`examples/queries`](../examples/queries), against a
 server with one session, `work`, and two windows: `editor` holds one pane, and
 `logs` holds two, the second of them active. A result names each pane by its
-window and its index there.
+window and its index there, so `logs.1` is the pane with index 1 in the window
+named `logs`.
 
 <!-- docs:checked examples/queries/main.go examples/queries/output.txt -->
 
@@ -112,8 +117,8 @@ The same shape, for the slice
 
 #### [`tmux.WindowFilter{NameRegex: "^log"}`][tmux-windowfilter-nameregex]: a pattern
 
-Text fields take a pattern, and a pattern that does not compile is the error
-`Matching` reports. This selects the window named `logs`.
+`NameRegex` takes a regular expression, and one that does not compile is the
+error `Matching` reports. This selects the window named `logs`.
 
 #### [`tmux.WindowFilter{Active: new(true)}`][tmux-windowfilter-active]: the current window
 

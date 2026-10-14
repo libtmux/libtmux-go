@@ -28,7 +28,8 @@ settled. Pin an exact version.
 [The waits](#the-waits) · [Testing without a tmux](#testing-without-a-tmux) ·
 [Testing tmux itself](#testing-tmux-itself) ·
 [What it guarantees](#what-it-guarantees) ·
-[Keeping your suite to itself](#keeping-your-suite-to-itself)
+[Keeping your suite to itself](#keeping-your-suite-to-itself) ·
+[See also](#see-also)
 
 ## Testing a program
 
@@ -236,11 +237,6 @@ temporary directory of its own and points `TMPDIR`, `GOTMPDIR`, and
 suites on one machine share no socket, and neither shares one with a tmux you
 are using. The directory's path is kept short, because a socket path may hold
 only about a hundred bytes.
-
-Some real-tmux tests are load-sensitive. Three signs a failure is the machine
-rather than the code: the failing test moves between runs, the failure reads as
-`no server running` or `WaitDelay expired` rather than a wrong value, and the
-file it is in is not one your change touched.
 
 ## See also
 

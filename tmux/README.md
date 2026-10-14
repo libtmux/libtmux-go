@@ -145,6 +145,31 @@ kill-window exit status: 1
 
 <!-- docs:end -->
 
+### [`tmux.NewServer`][tmux-newserver]: choose which tmux to reach
+
+<!-- docs:private-server -->
+
+```go
+// A private server: a socket and an empty config of its own, so this
+// neither touches nor is changed by a tmux you already use.
+server, err := tmux.NewServer(tmux.ServerOptions{
+	SocketName: "libtmux-object-model",
+	ConfigFile: os.DevNull,
+})
+if err != nil {
+	return fmt.Errorf("configure tmux: %w", err)
+}
+```
+
+<!-- docs:end -->
+
+`NewServer` checks its configuration and starts nothing. With no
+[`SocketName`][tmux-serveroptions-socketname] or
+[`SocketPath`][tmux-serveroptions-socketpath] it reaches the server your own
+`tmux` command does, and with no
+[`ConfigFile`][tmux-serveroptions-configfile] tmux reads your configuration.
+A program that should behave the same everywhere names both, as this one does.
+
 ## Records
 
 A [`Server`][tmux-server] reaches one tmux server. It holds
@@ -186,7 +211,8 @@ a pane ask tmux again when you want one.
 
 The name says which kind of read you are making. `Windows` takes no context,
 because it reads the record and never asks tmux. Its second result reports
-whether the record holds any windows at all.
+whether the record holds any windows at all, and a session handed back by
+`Rename` holds none.
 [`Session.SearchWindows`][tmux-session-searchwindows] asks tmux:
 
 <!-- docs:record-reads -->
@@ -214,31 +240,6 @@ This prints `the record holds no windows`, then `tmux reports windows: 1`.
 
 A record holds its windows when it came from a read of everything, which is
 what [`Server.Snapshot`][tmux-server-snapshot] returns.
-
-### [`tmux.NewServer`][tmux-newserver]: choose which tmux to reach
-
-<!-- docs:private-server -->
-
-```go
-// A private server: a socket and an empty config of its own, so this
-// neither touches nor is changed by a tmux you already use.
-server, err := tmux.NewServer(tmux.ServerOptions{
-	SocketName: "libtmux-object-model",
-	ConfigFile: os.DevNull,
-})
-if err != nil {
-	return fmt.Errorf("configure tmux: %w", err)
-}
-```
-
-<!-- docs:end -->
-
-`NewServer` checks its configuration and starts nothing. With no
-[`SocketName`][tmux-serveroptions-socketname] or
-[`SocketPath`][tmux-serveroptions-socketpath] it reaches the server your own
-`tmux` command does, and with no
-[`ConfigFile`][tmux-serveroptions-configfile] tmux reads your configuration.
-A program that should behave the same everywhere names both, as this one does.
 
 ## Method names
 
