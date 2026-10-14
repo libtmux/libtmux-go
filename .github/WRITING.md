@@ -39,6 +39,24 @@ Commands must run literally on a clean machine. Claims must be falsifiable. A
 performance claim includes a number and its reproduction command. Do not
 duplicate package documentation or list features already clear from the API.
 
+A package page keeps one order: the install command, the release status,
+Contents, the sections, and See also, whose first row is the reference. It
+has one example a reader can paste and run, with the command that runs it and
+what it prints.
+
+A section about a call is headed by that call in a code span, linked to its
+reference page, then a colon and a short title:
+
+```text
+### [`Session.Rename`][tmux-session-rename]: a change returns a new record
+```
+
+A function or a type carries its package (`tmux.NewServer`), and a method or
+a field carries its type (`Session.Rename`). A page about expressions may
+head a section with the expression itself (`tmux.PaneActiveIs(true)`). Under
+the heading come the code and then what it prints. Link an API name in prose
+the first time a section uses it.
+
 ## Doc comments
 
 Every exported declaration has a comment. Begin with its name, make the first
