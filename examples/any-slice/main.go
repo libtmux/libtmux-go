@@ -14,10 +14,10 @@ type task struct {
 
 func main() {
 	tasks := []task{{"build", true}, {"test", false}, {"deploy", false}}
-	open := func(task *task) bool { return !task.done }
+	open := func(t *task) bool { return !t.done }
 
-	for _, task := range tmuxq.Where(tasks, open) {
-		fmt.Println("open:", task.name)
+	for _, t := range tmuxq.Where(tasks, open) {
+		fmt.Println("open:", t.name)
 	}
 	first, _ := tmuxq.First(tasks, open)
 	fmt.Println("first open:", first.name)

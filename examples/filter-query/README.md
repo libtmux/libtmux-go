@@ -12,7 +12,8 @@ about how many answers you want from one read.
 $ go -C examples run ./filter-query
 ```
 
-On a tmux server with nothing else on it, it prints:
+It starts a tmux server of its own, on a private socket with an empty
+config, and prints:
 
 <!-- docs:output examples/filter-query/output.txt -->
 
@@ -24,8 +25,6 @@ live matches: 1
 ```
 
 <!-- docs:end -->
-
-On a server that already holds sessions, the first lines name those as well.
 
 ## What to look at
 
@@ -67,7 +66,8 @@ fmt.Println("active panes:", len(active))
 
 <!-- docs:end -->
 
-Typed filters combine fields and captured relations without another tmux command:
+Typed filters combine fields and captured relations without another tmux
+command:
 
 <!-- docs:query-typed-in-go -->
 

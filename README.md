@@ -25,6 +25,8 @@ what a tmux server holds, type into a pane and wait for its answer, and hear
 about changes as tmux makes them. It suits tools that drive a terminal
 program, test suites that need a real tmux, and agents that share a terminal.
 
+Add it to your module:
+
 ```console
 $ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
@@ -168,8 +170,8 @@ Each block on this page is the body of a function that returns an error, with
 the values its first line names already in hand.
 
 [`examples/filter-query`](examples/filter-query) runs this and the two blocks
-below. It reaches the tmux server your own `tmux` command does, so the output
-below is what it prints when that server holds nothing else.
+below on a tmux server of its own. Like every example, it runs from a clone
+of the repository, with `go -C examples run ./filter-query`.
 
 <!-- docs:checked examples/filter-query/output.txt -->
 This one prints `session: libtmux-filter`.

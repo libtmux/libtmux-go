@@ -59,7 +59,8 @@ dependencies:
 
 ## Which tmux they reach
 
-`quickstart`, `object-model`, and `queries` start a tmux server of their own,
+`quickstart`, `object-model`, `queries`, and `filter-query` start a tmux
+server of their own,
 on a private socket with an empty config, and kill it when they finish. They
 print the same thing on every machine and never touch a tmux you have open.
 `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a

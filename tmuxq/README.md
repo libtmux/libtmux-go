@@ -11,12 +11,14 @@
 
 # tmuxq
 
-Generic helpers for filtering and collecting tmux records. It imports no tmux
-types, so it works on any slice or `iter.Seq`.
+Generic helpers for filtering tmux records. It imports no tmux types, so it
+works on any slice or `iter.Seq`.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmuxq.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq)
 
 </div>
+
+Add it to your module:
 
 ```console
 $ go get github.com/libtmux/libtmux-go/tmuxq@latest
@@ -77,9 +79,10 @@ named `logs`.
 ### [`tmux.PaneFilter`][tmux-panefilter]: panes, by any of their fields
 
 A struct with one optional field per thing a pane can be asked. Set the fields
-you care about and leave the rest: a field left unset matches every pane.
-Each field is a pointer so that unset differs from zero, and `new(1)` is how
-Go 1.26 writes a pointer to `1`.
+you care about and leave the rest: a field left unset matches every pane. A
+field that compares a value is a pointer, so that unset differs from zero,
+and `new(1)` is how Go 1.26 writes a pointer to `1`. A `Regex` field is a
+string, and a field ending in `In` is a slice; each is unset when empty.
 
 #### [`tmux.PaneFilter{WindowIndexGTE: new(1)}`][tmux-panefilter-windowindexgte]: a comparison
 
@@ -259,10 +262,10 @@ type task struct {
 
 func main() {
 	tasks := []task{{"build", true}, {"test", false}, {"deploy", false}}
-	open := func(task *task) bool { return !task.done }
+	open := func(t *task) bool { return !t.done }
 
-	for _, task := range tmuxq.Where(tasks, open) {
-		fmt.Println("open:", task.name)
+	for _, t := range tmuxq.Where(tasks, open) {
+		fmt.Println("open:", t.name)
 	}
 	first, _ := tmuxq.First(tasks, open)
 	fmt.Println("first open:", first.name)
