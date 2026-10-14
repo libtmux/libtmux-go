@@ -11,5 +11,5 @@ tmux.WindowFilter{Active: new(true)}: editor
 tmux.WindowNameIs("editor"): editor
 tmux.SessionFilter{NameContains: new("or")}: work
 tmux.SessionNameIs("work"): work
+the only active pane of window 1: logs.1
 the first pane with index 1: logs.1
-the only pane with index 1: logs.1

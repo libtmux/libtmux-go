@@ -107,16 +107,27 @@ func run(ctx context.Context) (err error) {
 		return err
 	}
 
-	// The helpers that take a function of your own work on the same slices.
+	// docs:queries-one given:panes []tmux.Pane
+	// First and ExactlyOne take a function rather than a filter, and
+	// Predicate hands over the function a filter stands for.
+	activeInLogs, err := tmux.PaneFilter{
+		Active: new(true), WindowIndex: new(1),
+	}.Predicate()
+	if err != nil {
+		return fmt.Errorf("compile filter: %w", err)
+	}
+	only, err := tmuxq.ExactlyOne(panes, activeInLogs)
+	if err != nil {
+		return fmt.Errorf("find the active pane of window 1: %w", err)
+	}
+	// docs:end
+	fmt.Println("the only active pane of window 1:", where([]tmux.Pane{only}))
+
+	// A function of your own goes in the same place.
 	second := func(pane *tmux.Pane) bool { return pane.Index() == 1 }
 	if pane, ok := tmuxq.First(panes, second); ok {
 		fmt.Println("the first pane with index 1:", where([]tmux.Pane{pane}))
 	}
-	only, err := tmuxq.ExactlyOne(panes, second)
-	if err != nil {
-		return fmt.Errorf("find the only pane with index 1: %w", err)
-	}
-	fmt.Println("the only pane with index 1:", where([]tmux.Pane{only}))
 	return nil
 }
 
