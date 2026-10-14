@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -104,5 +105,63 @@ func TestWaitForKeepsTheLatestTextWithinItsBound(t *testing.T) {
 	if got.DroppedLines == 0 || got.DroppedLines+strings.Count(got.Text, "\n") != 1100 {
 		t.Errorf("dropped %d lines, kept %d, want 1100 in all",
 			got.DroppedLines, strings.Count(got.Text, "\n"))
+	}
+}
+
+// match is handed a view of text that grows in place, so a string it keeps must
+// not change later, including across the trims and compactions a long
+// write-heavy wait goes through.
+func TestWaitForStringsHandedToMatchStayValid(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(defaultControlNotificationLimit)
+	t.Cleanup(func() { _ = queue.Close() })
+	observation := newTestPaneObservation(queue)
+
+	const writes = 200
+	chunk := func(index int) string {
+		return fmt.Sprintf("%04d:", index) + strings.Repeat(string(rune('a'+index%26)), 16379)
+	}
+	var sequence uint64
+	push := func(index int) {
+		sequence++
+		if err := queue.append(sequence, []byte("%output %1 "+chunk(index))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	push(0)
+	var kept []string
+	next := 1
+	result, err := observation.WaitFor(context.Background(), func(text string) bool {
+		kept = append(kept, text)
+		if next == writes {
+			return true
+		}
+		push(next)
+		next++
+		return false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var want strings.Builder
+	dropped := 0
+	for index, got := range kept {
+		want.WriteString(chunk(index))
+		if excess := want.Len() - paneTextLimit; excess > 0 {
+			dropped += excess
+			trimmed := want.String()[excess:]
+			want.Reset()
+			want.WriteString(trimmed)
+		}
+		if got != want.String() {
+			t.Fatalf("string handed to match at write %d changed or was wrong: len %d, want %d",
+				index, len(got), want.Len())
+		}
+	}
+	if result.Text != want.String() || result.DroppedBytes != dropped {
+		t.Fatalf("result = (len %d, dropped %d), want (len %d, dropped %d)",
+			len(result.Text), result.DroppedBytes, want.Len(), dropped)
 	}
 }

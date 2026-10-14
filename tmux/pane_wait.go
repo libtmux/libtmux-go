@@ -1,9 +1,9 @@
 package tmux
 
 import (
-	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/termtext"
@@ -55,9 +55,17 @@ func (o *PaneObservation) WaitFor(
 
 	var result PaneText
 	var normalizer termtext.Normalizer
-	text := make([]byte, 0, 4096)
+	// text only ever grows, so the string it reports is immutable and match
+	// is handed a view of it rather than a fresh copy of up to a mebibyte on
+	// every batch. start is where the retained text begins; trimming moves it,
+	// and compaction moves what is kept into a new builder, so no string
+	// already handed out is ever written to.
+	text := new(strings.Builder)
+	start := 0
+	batch := make([]byte, 0, 4096)
 	for {
 		written := false
+		batch = batch[:0]
 		// Block for one write, then take whatever else is already queued, so
 		// a pane writing faster than match returns is read in batches. An
 		// error behind that batch waits until match has seen it.
@@ -78,29 +86,41 @@ func (o *PaneObservation) WaitFor(
 			if !isOutput || pane != o.paneID || len(output) == 0 {
 				continue
 			}
-			text = normalizer.AppendChunk(text, output)
+			batch = normalizer.AppendChunk(batch, output)
 			written = true
 		}
 		if !written {
 			if ended != nil {
-				result.Text = string(text)
+				result.Text = strings.Clone(text.String()[start:])
 				return result, ended
 			}
 			continue
 		}
-		if excess := len(text) - paneTextLimit; excess > 0 {
-			for excess < len(text) && !utf8.RuneStart(text[excess]) {
+		text.Write(batch)
+		view := text.String()[start:]
+		if excess := len(view) - paneTextLimit; excess > 0 {
+			for excess < len(view) && !utf8.RuneStart(view[excess]) {
 				excess++
 			}
 			result.DroppedBytes += excess
-			result.DroppedLines += bytes.Count(text[:excess], []byte{'\n'})
-			text = append(text[:0], text[excess:]...)
+			result.DroppedLines += strings.Count(view[:excess], "\n")
+			start += excess
+			view = view[excess:]
+			if start >= paneTextLimit {
+				// A copy once per mebibyte dropped, instead of one per batch.
+				kept := new(strings.Builder)
+				kept.Grow(len(view) + paneTextLimit)
+				kept.WriteString(view)
+				text, start = kept, 0
+				view = text.String()
+			}
 		}
-		result.Text = string(text)
-		if match(result.Text) {
+		if match(view) {
+			result.Text = strings.Clone(view)
 			return result, nil
 		}
 		if ended != nil {
+			result.Text = strings.Clone(view)
 			return result, ended
 		}
 	}
