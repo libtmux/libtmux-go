@@ -289,6 +289,21 @@ func TestRunnerSucceedsWhileAnotherProcessHoldsItsOutput(t *testing.T) {
 	}
 }
 
+// Output goes to temporary files when it can. A temporary directory that
+// does not exist must not make every tmux command fail.
+func TestRunnerCapturesWithoutATemporaryDirectory(t *testing.T) {
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
+
+	result, err := (Runner{}).Run(context.Background(), helperRequest("lines"))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want the helper's output through pipes", err)
+	}
+	if !slices.Equal(result.Stdout, []string{"one", "", "three"}) ||
+		!slices.Equal(result.Stderr, []string{"warning", "second"}) || result.ExitCode != 7 {
+		t.Fatalf("Run() = (stdout %q, stderr %q, exit %d)", result.Stdout, result.Stderr, result.ExitCode)
+	}
+}
+
 func TestClassifyRunErrorPreservesUnattributedSignalAfterCancellation(t *testing.T) {
 	t.Parallel()
 

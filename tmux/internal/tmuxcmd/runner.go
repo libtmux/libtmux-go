@@ -2,6 +2,7 @@
 package tmuxcmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -113,18 +114,11 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = defaultWaitDelay
 	}
-	var stdout, stderr *os.File
+	var captured *capture
 	if request.Stdio == nil {
-		if stdout, err = captureFile(); err != nil {
-			return result, fmt.Errorf("capture tmux output: %w", err)
-		}
-		defer releaseCaptureFile(stdout)
-		if stderr, err = captureFile(); err != nil {
-			return result, fmt.Errorf("capture tmux output: %w", err)
-		}
-		defer releaseCaptureFile(stderr)
-		cmd.Stdout = stdout
-		cmd.Stderr = stderr
+		captured = newCapture()
+		defer captured.release()
+		cmd.Stdout, cmd.Stderr = captured.writers()
 	} else {
 		if request.Stdio.Stdin == nil {
 			cmd.Stdin = os.Stdin
@@ -145,17 +139,13 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 
 	runErr := cmd.Run()
 	if request.Stdio == nil {
-		printed, readErr := readCaptureFile(stdout)
-		if readErr == nil {
-			var warned []byte
-			warned, readErr = readCaptureFile(stderr)
-			result.Stderr = SplitStderr(warned)
-		}
+		printed, warned, readErr := captured.read()
 		if readErr != nil {
 			return result, fmt.Errorf("read tmux output: %w", readErr)
 		}
 		result.RawStdout = printed
 		result.Stdout = SplitStdout(printed)
+		result.Stderr = SplitStderr(warned)
 	}
 
 	outcome := processExitOutcome(cmd.ProcessState, interrupted.Load())
@@ -169,22 +159,63 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 	return result, nil
 }
 
-// captureFile returns an empty file for a process to write into.
-func captureFile() (*os.File, error) {
-	return os.CreateTemp("", "libtmux-go-tmux-*")
+// capture collects what one tmux process prints. It uses two temporary
+// files when the temporary directory takes them, so that nothing waits on the
+// copy of standard output the server holds (see defaultWaitDelay), and pipes
+// otherwise: a read-only or missing TMPDIR still works, with the delay's
+// failure back in play on a loaded machine.
+type capture struct {
+	files   [2]*os.File
+	buffers [2]bytes.Buffer
 }
 
-// readCaptureFile reads everything written to file since it was created.
-func readCaptureFile(file *os.File) ([]byte, error) {
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return nil, err
+func newCapture() *capture {
+	c := &capture{}
+	for index := range c.files {
+		file, err := os.CreateTemp("", "libtmux-go-tmux-*")
+		if err != nil {
+			c.release()
+			c.files = [2]*os.File{}
+			return c
+		}
+		c.files[index] = file
 	}
-	return io.ReadAll(file)
+	return c
 }
 
-func releaseCaptureFile(file *os.File) {
-	_ = file.Close()
-	_ = os.Remove(file.Name())
+// writers returns standard output's destination, then standard error's.
+func (c *capture) writers() (io.Writer, io.Writer) {
+	if c.files[0] == nil {
+		return &c.buffers[0], &c.buffers[1]
+	}
+	return c.files[0], c.files[1]
+}
+
+// read returns what the process printed to standard output and standard
+// error, in that order.
+func (c *capture) read() (stdout, stderr []byte, err error) {
+	if c.files[0] == nil {
+		return bytes.Clone(c.buffers[0].Bytes()), c.buffers[1].Bytes(), nil
+	}
+	var printed [2][]byte
+	for index, file := range c.files {
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return nil, nil, err
+		}
+		if printed[index], err = io.ReadAll(file); err != nil {
+			return nil, nil, err
+		}
+	}
+	return printed[0], printed[1], nil
+}
+
+func (c *capture) release() {
+	for _, file := range c.files {
+		if file != nil {
+			_ = file.Close()
+			_ = os.Remove(file.Name())
+		}
+	}
 }
 
 func classifyRunError(runErr, contextErr error, outcome processOutcome) error {
