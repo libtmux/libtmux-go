@@ -193,6 +193,14 @@ func (p *controlLanePool) call(
 	// Unobserved: both callers report their own, Server.runCommand for the
 	// commands it sends down this lane and Connection.Call for its own.
 	results, err := client.cmdUnobserved(ctx, commandList, arguments...)
+	if errors.Is(err, ErrOutcomeUnknown) && connectionSurvives(err) {
+		// The caller stopped waiting on a command tmux is still running.
+		// The lane answers nothing else until tmux finishes it, so it
+		// rejoins the pool only once a reply fence has crossed it, and a
+		// caller meanwhile takes a lane that is free.
+		go func() { p.release(client, client.crossReplyFence(context.Background())) }()
+		return results, err
+	}
 	p.release(client, err)
 	return results, err
 }
