@@ -151,6 +151,10 @@ type SourceFileRequest struct {
 // Unsupported optional flags follow [UnsupportedPolicy]. A completed stderr
 // result is an error; context cancellation can be observed with [errors.Is] but
 // does not establish that tmux did not start the job.
+//
+// On a [Connection]-bound server a foreground request runs on a control client
+// opened for that call and closed when it ends, as [Server.WaitFor] does, so a
+// slow or canceled command leaves every lane free.
 func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string, error) {
 	request.Delay = copyOptionalString(request.Delay)
 	request.StartDirectory = copyOptionalString(request.StartDirectory)
@@ -232,7 +236,7 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 		}
 	}
 
-	result, err := s.literalCmd(ctx, arguments...)
+	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background), arguments...)
 	if err := requireRedactedServerCommandNoStderr("run-shell", result, err); err != nil {
 		return nil, err
 	}
@@ -279,9 +283,6 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 		)
 	}
 	arguments = append(arguments, "--", request.Channel)
-	if err := validateLiteralCommandArguments(arguments); err != nil {
-		return err
-	}
 	// A wait or lock can hold its client until another client acts, and tmux
 	// cannot cancel a command already sent, so a connection runs it on a
 	// client of its own rather than on a shared lane.
@@ -289,13 +290,16 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 	if request.Mode == WaitForModeWait || request.Mode == WaitForModeLock {
 		kind = commandBlocking
 	}
-	result, _, err := s.dispatchAs(ctx, kind, false, arguments...)
+	result, err := s.literalCmdAs(ctx, kind, arguments...)
 	return requireRedactedServerCommandNoStderr("wait-for", result, err)
 }
 
 // IfShell executes ThenCommand when ShellCommand succeeds and ElseCommand, if
 // present, when it fails. A completed stderr result is an error; cancellation
 // can interrupt delivery without proving that tmux did not execute a branch.
+//
+// On a [Connection]-bound server a foreground request runs on a control client
+// of its own, as [Server.RunShell] does.
 func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if err := validateIfShellArguments(request); err != nil {
 		return err
@@ -325,8 +329,19 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if request.ElseCommand != nil {
 		arguments = append(arguments, *request.ElseCommand)
 	}
-	result, err := s.literalCmd(ctx, arguments...)
+	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background), arguments...)
 	return requireRedactedServerCommandNoStderr("if-shell", result, err)
+}
+
+// shellCommandKind says how run-shell and if-shell occupy a client. tmux
+// answers a foreground one only when its shell command has finished, so it can
+// hold a client as long as that command runs; a background one is answered at
+// once.
+func shellCommandKind(background bool) commandKind {
+	if background {
+		return commandServer
+	}
+	return commandBlocking
 }
 
 // SourceFile loads or parses one tmux configuration file. The path expands ~

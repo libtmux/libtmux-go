@@ -454,6 +454,60 @@ func TestConnectionServesCommandsAfterACanceledWaitFor(t *testing.T) {
 	}
 }
 
+// A foreground run-shell or if-shell holds its client until the shell command
+// finishes, and tmux cannot cancel it once sent. Canceling one must leave the
+// connection's only lane free for the next command.
+//
+//libtmux:real-tmux
+func TestConnectionServesCommandsAfterACanceledShellCommand(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		run  func(context.Context, tmux.Server, string) error
+	}{
+		{"RunShell", func(ctx context.Context, server tmux.Server, command string) error {
+			_, err := server.RunShell(ctx, tmux.RunShellRequest{Command: command})
+			return err
+		}},
+		{"IfShell", func(ctx context.Context, server tmux.Server, command string) error {
+			return server.IfShell(ctx, tmux.IfShellRequest{
+				ShellCommand: command, ThenCommand: "display-message done",
+			})
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			server := tmuxtest.NewServer(ctx, t)
+			connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+			// The shell command runs for as long as a file exists. tmux keeps
+			// running it after the call is canceled and will not exit while it
+			// runs, so the file sits in the test's own directory: removing
+			// that directory, which happens before the harness cleans up, is
+			// what lets the command go.
+			held := filepath.Join(t.TempDir(), "held")
+			if err := os.WriteFile(held, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			command := "while [ -e '" + held + "' ]; do sleep 0.05; done"
+
+			shellCtx, stopShell := context.WithTimeout(ctx, 200*time.Millisecond)
+			defer stopShell()
+			err := test.run(shellCtx, connection.Server(), command)
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("%s() error = %v, want deadline exceeded", test.name, err)
+			}
+
+			nextCtx, stopNext := context.WithTimeout(ctx, 3*time.Second)
+			defer stopNext()
+			if _, err := connection.Server().Sessions(nextCtx); err != nil {
+				t.Fatalf("Sessions() after a canceled %s error = %v, want the lane usable",
+					test.name, err)
+			}
+		})
+	}
+}
+
 //libtmux:real-tmux
 func TestConnectionCloseEndsAParkedWaitFor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

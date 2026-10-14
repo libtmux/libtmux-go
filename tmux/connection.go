@@ -54,6 +54,9 @@ func (dialect controlDialect) clientFlags(profile controlClientProfile) []string
 type ConnectionOptions struct {
 	// Lanes is the number of concurrent command lanes. Zero opens one. Each
 	// lane is an attached tmux client and carries one command at a time.
+	// Waits and foreground shell commands sent through Server.WaitFor,
+	// Server.RunShell, and Server.IfShell take a client of their own rather
+	// than a lane; a raw command that blocks holds its lane until it ends.
 	Lanes int
 }
 
