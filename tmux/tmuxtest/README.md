@@ -21,6 +21,9 @@ Run your program inside a real tmux and assert on what it drew.
 $ go get github.com/libtmux/libtmux-go/tmux/tmuxtest@latest
 ```
 
+Alpha software. Releases carry an -alpha prerelease tag and the API is not
+settled. Pin an exact version.
+
 **Contents** — [Testing a program](#testing-a-program) ·
 [The waits](#the-waits) · [Testing without a tmux](#testing-without-a-tmux) ·
 [Testing tmux itself](#testing-tmux-itself) ·
