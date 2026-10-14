@@ -195,7 +195,10 @@ The tests in `tmux/internal/generate/docs` hold a page to its source:
 - `TestPastedProgramsBuildAndRun` takes each `docs:file` block back out of the
   Markdown, builds it alone in an empty module, runs it with a hostile
   `~/.tmux.conf` as its own, and compares what it prints with the
-  `docs:output` block beside it. It needs a tmux and fails without one.
+  `docs:output` block beside it. It needs a tmux and fails without one. A
+  program under `mcp/` or `workspace/` cannot be built that way without the
+  network, so a test beside it runs it and compares its output, and this
+  check holds it to being a single file.
 - `TestPublishedRegionsCompileAlone` compiles each region alone with its
   `given:` list as its only bindings. A region under `mcp/` or `workspace/`
   is left to that module's suite instead, because compiling it alone would
@@ -216,6 +219,12 @@ The tests in `tmux/internal/generate/docs` hold a page to its source:
   `libtmux.org/en/go/latest/reference/` to an identifier this module exports.
   The site names a page for the package, then the identifier, then a method
   or field of it, lowercased and joined by hyphens: `tmux-panefilter-active`.
+
+The index of tools in `mcp/README.md` is generated too, by
+`go -C mcp generate ./...`, between `<!-- toolsindex -->` and
+`<!-- toolsindex:end -->`. `TestREADMEToolLinksNameAdvertisedTools` in the
+`mcp` module holds every tool page that README links to a tool the server
+advertises.
 
 An example program takes one of two shapes. One a README quotes whole builds
 its own server, with a private `SocketName` and `ConfigFile: os.DevNull`, and
