@@ -77,7 +77,8 @@
 //
 // The static tmux://capabilities resource and each tool's metadata expose the
 // startup-frozen public capability report. TOOLS.md is generated from the same
-// manifest and documents arguments, results, workflows, and retired names.
+// manifest and documents arguments, results, workflows, and retired names;
+// the index of tools in README.md is generated from it too.
 package mcp
 
-//go:generate go run ./internal/generate/toolsref -output TOOLS.md
+//go:generate go run ./internal/generate/toolsref -output TOOLS.md -index README.md

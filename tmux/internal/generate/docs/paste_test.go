@@ -437,8 +437,8 @@ func TestReferenceLinksNameExportedAPI(t *testing.T) {
 }
 
 var (
-	linkLabelUse        = regexp.MustCompile(`\]\[([a-z0-9-]+)\]`)
-	linkLabelDefinition = regexp.MustCompile(`(?m)^\[([a-z0-9-]+)\]: `)
+	linkLabelUse        = regexp.MustCompile(`\]\[([a-z0-9_-]+)\]`)
+	linkLabelDefinition = regexp.MustCompile(`(?m)^\[([a-z0-9_-]+)\]: `)
 )
 
 // TestEveryLinkLabelIsDefined holds a README's reference-style links to their
