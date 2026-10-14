@@ -191,6 +191,24 @@ func (t *tools) startCommand(
 			processPaneInputs.release(lease)
 		}
 	}()
+	if shell := incompatibleRunCommandShell(initial.Source); shell != "" && !runsAShell(shell) {
+		// No shell yet is what a pane still starting looks like, so give
+		// one time to appear before deciding there is none.
+		_, settled, err := t.settlePaneInput(
+			ctx, initial, initial, paneInputConfigured, "run_shell_command", paneRunsAShell,
+		)
+		if err != nil {
+			return started, err
+		}
+		if !samePaneInputExceptForeground(initial, settled) {
+			return started, fmt.Errorf(
+				"run_shell_command refused for pane %s: its state or placement changed before dispatch",
+				initial.Source.ID(),
+			)
+		}
+		initial = settled
+		started.pane = initial.Source
+	}
 	if shell := incompatibleRunCommandShell(initial.Source); shell != "" {
 		return started, fmt.Errorf(
 			"run_shell_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
@@ -277,6 +295,13 @@ func (t *tools) startCommand(
 		_ = os.RemoveAll(directory)
 		return started, err
 	}
+	settledFrom, second, err := t.settlePaneInput(
+		ctx, initial, second, paneInputConfigured, "run_shell_command", paneRunsAShell,
+	)
+	if err != nil {
+		_ = os.RemoveAll(directory)
+		return started, err
+	}
 	started.configuredIDs = append([]string{}, second.ConfiguredIDs...)
 	if len(second.ConfiguredIDs) != 1 {
 		_ = os.RemoveAll(directory)
@@ -306,8 +331,8 @@ func (t *tools) startCommand(
 			second.Source.ID(),
 		)
 	}
-	if !samePaneInputMemberSignature(initial.Signature.Source, second.Signature.Source) ||
-		!samePaneInputMemberSignatures(initial.Signature.Members, second.Signature.Members) {
+	if !samePaneInputMemberSignature(settledFrom.Signature.Source, second.Signature.Source) ||
+		!samePaneInputMemberSignatures(settledFrom.Signature.Members, second.Signature.Members) {
 		_ = os.RemoveAll(directory)
 		return started, fmt.Errorf(
 			"run_shell_command refused for pane %s: its state or placement changed before dispatch",
@@ -447,6 +472,14 @@ var (
 // dropping the login shell's leading hyphen.
 func shellName(command string) string {
 	return strings.ToLower(strings.TrimPrefix(filepath.Base(command), "-"))
+}
+
+// paneRunsAShell accepts a settled pane once a shell of either kind has the
+// foreground. One that is not POSIX will not become one, so there is nothing
+// more to wait for and the caller's own check refuses it by name.
+func paneRunsAShell(preflight paneInputPreflight) bool {
+	shell := incompatibleRunCommandShell(preflight.Source)
+	return shell == "" || runsAShell(shell)
 }
 
 // runsAShell reports whether a pane's current command reads typed keys once it

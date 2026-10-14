@@ -135,6 +135,86 @@ func samePaneInputMemberSignatures(left, right []paneInputMemberSignature) bool 
 	return true
 }
 
+// samePaneInputExceptForeground reports whether two readings agree on
+// everything but the command each pane has in the foreground.
+func samePaneInputExceptForeground(initial, final paneInputPreflight) bool {
+	withoutForeground := func(signature paneInputMemberSignature) paneInputMemberSignature {
+		signature.CurrentCommand = rawPaneFormat{}
+		return signature
+	}
+	return initial.Identity == final.Identity && initial.Caller == final.Caller &&
+		slices.Equal(initial.ConfiguredIDs, final.ConfiguredIDs) &&
+		samePaneInputMemberSignature(
+			withoutForeground(initial.Signature.Source),
+			withoutForeground(final.Signature.Source),
+		) &&
+		slices.EqualFunc(initial.Signature.Members, final.Signature.Members,
+			func(left, right paneInputMemberSignature) bool {
+				return samePaneInputMemberSignature(
+					withoutForeground(left), withoutForeground(right))
+			})
+}
+
+// A pane that has just been created has no settled foreground command. tmux
+// reports its own name until the pane's shell is running, then each program
+// the shell's start-up files run, and only then the shell. Input checked
+// against one of those and dispatched against the next was refused for a
+// change nobody made, which is what the first call after split_window met.
+const (
+	paneInputSettleGrace = 2 * time.Second
+	paneInputSettleStep  = 10 * time.Millisecond
+)
+
+// anyPaneInput accepts a settled pane whatever it is running.
+func anyPaneInput(paneInputPreflight) bool { return true }
+
+// settlePaneInput re-reads a pane until two readings in a row agree and ready
+// accepts the later one, and returns those two. It stops without an error
+// when the grace or ctx ends, or when anything other than a foreground command
+// differs from initial; what it returns then still differs, and the caller's
+// own comparison names the refusal. Only a failed read is an error.
+func (t *tools) settlePaneInput(
+	ctx context.Context,
+	initial, latest paneInputPreflight,
+	kind paneInputMembershipKind,
+	tool string,
+	ready func(paneInputPreflight) bool,
+) (previous, final paneInputPreflight, err error) {
+	previous = initial
+	deadline := time.Now().Add(t.runtime.deps.inputSettleGrace)
+	for step := paneInputSettleStep; ; step *= 2 {
+		if !samePaneInputExceptForeground(initial, latest) {
+			return initial, latest, nil
+		}
+		if samePaneInputPreflight(previous, latest) && ready(latest) {
+			return previous, latest, nil
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return previous, latest, nil
+		}
+		timer := time.NewTimer(min(step, remaining))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return previous, latest, nil
+		case <-timer.C:
+		}
+		next, err := t.preflightPaneInput(ctx, initial.Source.ID().String(), "", kind, tool)
+		select {
+		case <-ctx.Done():
+			// The caller's time ran out mid-read. What was read before it
+			// still stands, and still differs.
+			return previous, latest, nil
+		default:
+		}
+		if err != nil {
+			return previous, latest, err
+		}
+		previous, latest = latest, next
+	}
+}
+
 func parseStrictPaneFlag(name string, raw rawPaneFormat) (bool, error) {
 	if raw.Present {
 		switch raw.Value {
@@ -759,6 +839,12 @@ func (t *tools) sendKeysBatch(
 	if err != nil {
 		return nil, output, err
 	}
+	initial, preflight, err = t.settlePaneInput(
+		ctx, initial, preflight, paneInputConfigured, tool, anyPaneInput,
+	)
+	if err != nil {
+		return nil, output, err
+	}
 	output.ResolvedPaneIDs = append([]string{}, preflight.ConfiguredIDs...)
 	if !slices.Equal(preflight.ConfiguredIDs, confirmedIDs) {
 		return nil, output, fmt.Errorf(
@@ -899,6 +985,12 @@ func (t *tools) pasteText(
 	}
 	final, err := t.preflightPaneInput(
 		ctx, output.PaneID, "", paneInputTargetOnly, "paste_text",
+	)
+	if err != nil {
+		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
+	}
+	initial, final, err = t.settlePaneInput(
+		ctx, initial, final, paneInputTargetOnly, "paste_text", anyPaneInput,
 	)
 	if err != nil {
 		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))

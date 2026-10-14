@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
@@ -18,6 +19,9 @@ type mcpDependencies struct {
 	setBuffer            func(context.Context, tmux.Server, tmux.SetBufferRequest) error
 	pasteBuffer          func(context.Context, tmux.Pane, tmux.PasteBufferRequest) error
 	beforeRunDispatch    func(context.Context) error
+	// inputSettleGrace is how long input waits for a starting pane's
+	// foreground command to stop moving.
+	inputSettleGrace time.Duration
 }
 
 func defaultMCPDependencies() mcpDependencies {
@@ -86,6 +90,7 @@ func defaultMCPDependencies() mcpDependencies {
 			return pane.PasteBuffer(ctx, request)
 		},
 		beforeRunDispatch: func(context.Context) error { return nil },
+		inputSettleGrace:  paneInputSettleGrace,
 	}
 }
 
