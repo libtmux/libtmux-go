@@ -66,19 +66,18 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 	const marker = "'quoted'"
 	payload := strings.NewReader("$HOME 'quoted' \"double\" `backtick` \\ done\n")
 
-	// docs:byte-streams given:ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader; archive string; marker string
 	// Pasting hands the bytes to the pane's pty; the program reading it echoes
 	// them back on its own schedule. Watch before pasting, so the wait cannot
-	// start after the bytes it is waiting for already arrived, and capture only
-	// once they are on the screen -- a capture taken straight after the paste
-	// archives whatever the pane happened to be showing, which on a loaded
-	// machine is still an empty screen.
+	// start after the bytes it is waiting for already arrived.
 	observation, err := pane.OpenObservation(ctx)
 	if err != nil {
 		return fmt.Errorf("observe pane: %w", err)
 	}
 	defer func() { err = errors.Join(err, observation.Close()) }()
 
+	// docs:byte-streams-in given:ctx context.Context; server tmux.Server; pane tmux.Pane; payload *strings.Reader
+	// tmux reads the buffer from the reader as a stream, so no quoting rule
+	// applies to the payload and no command line has to hold it.
 	name := "payload"
 	if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
 		Name: &name,
@@ -90,8 +89,13 @@ func run(ctx context.Context, server tmux.Server, archive string) (err error) {
 	}); err != nil {
 		return fmt.Errorf("paste payload: %w", err)
 	}
-	// The pane announces the bytes as it echoes them, so nothing here has to
-	// guess how long that takes or re-capture on a timer.
+	// docs:end
+
+	// docs:byte-streams-out given:ctx context.Context; pane tmux.Pane; observation *tmux.PaneObservation; archive string; marker string
+	// Capture only once the bytes are on the screen. A capture taken straight
+	// after the paste archives whatever the pane happened to be showing, which
+	// on a loaded machine is still an empty screen. The pane announces the
+	// bytes as it echoes them, so nothing here guesses how long that takes.
 	seen := strings.Builder{}
 	for _, line := range observation.Baseline() {
 		seen.WriteString(line)
