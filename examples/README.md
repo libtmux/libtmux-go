@@ -1,7 +1,9 @@
 # Examples
 
-Runnable programs, one per topic. Each starts what it needs and removes it on
-the way out, so running one leaves nothing behind.
+Runnable programs, one per topic. Each starts what it needs in tmux and
+removes it on the way out, so running one leaves nothing behind there.
+`byte-streams` also writes an archive to your temporary directory, and names
+it.
 
 ```console
 $ go -C examples run ./quickstart
@@ -44,6 +46,16 @@ what the program prints, on every supported tmux.
 | [`planned-build/`](planned-build/) | Record commands, read the plan, then send it in fewer tmux invocations |
 | [`fast-path/`](fast-path/) | A plain server beside an owned connection |
 | [`control-mode-subscribe/`](control-mode-subscribe/) | Hear what tmux does as it happens, and subscribe to a value |
+
+## In the other modules
+
+Two more live beside the modules they show, because each needs that module's
+dependencies:
+
+| Example | Shows |
+| --- | --- |
+| [`workspace/examples/build-workspace`](../workspace/examples/build-workspace) | Build a tmuxp-style workspace and print what tmux made of it |
+| [`mcp/examples/agent-workflow`](../mcp/examples/agent-workflow) | Drive the tmux MCP server the way an agent does |
 
 ## Which tmux they reach
 
