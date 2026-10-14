@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -469,14 +470,19 @@ func (t *tools) socketPath(_ context.Context) string {
 // an id looks like when one was malformed.
 func (t *tools) namedArguments(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, request mcp.Request) (mcp.Result, error) {
-		result, err := next(ctx, method, request)
 		if method != "tools/call" {
-			return result, err
+			return next(ctx, method, request)
 		}
 		params, ok := request.GetParams().(*mcp.CallToolParamsRaw)
 		if !ok {
-			return result, err
+			return next(ctx, method, request)
 		}
+		if refusal := t.blankRequiredID(params.Name, params.Arguments); refusal != "" {
+			return &mcp.CallToolResult{
+				IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: refusal}},
+			}, nil
+		}
+		result, err := next(ctx, method, request)
 		if err != nil {
 			return result, t.withUngrantedTool(params.Name, err)
 		}
@@ -508,6 +514,40 @@ func (t *tools) namedArguments(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 		return result, err
 	}
+}
+
+// idShapes is an example of each kind of id a tool can require, and the tool
+// that lists real ones.
+var idShapes = map[string][2]string{
+	"pane_id":       {"%3", "list_panes"},
+	"other_pane_id": {"%3", "list_panes"},
+	"window_id":     {"@3", "list_windows"},
+	"session_id":    {"$3", "list_sessions"},
+}
+
+// blankRequiredID refuses a call whose schema requires an id that the call
+// sends empty. A schema's required check is met by an empty string, and the
+// handlers read an empty id as "the active one", which in a shared terminal
+// can be the person's pane. A blank id is far more likely a value the caller
+// meant to fill in.
+func (t *tools) blankRequiredID(name string, arguments json.RawMessage) string {
+	definition, served := t.surface.byName[name]
+	if !served || definition.inputSchema == nil {
+		return ""
+	}
+	var values map[string]any
+	if json.Unmarshal(arguments, &values) != nil {
+		return ""
+	}
+	for _, field := range definition.inputSchema.Required {
+		shape, isID := idShapes[field]
+		value, isString := values[field].(string)
+		if isID && isString && strings.TrimSpace(value) == "" {
+			return fmt.Sprintf("%s is empty; give an id such as %s, which %s reports",
+				field, shape[0], shape[1])
+		}
+	}
+	return ""
 }
 
 // withUngrantedTool adds, to the SDK's rejection of a tool it does not serve,

@@ -476,6 +476,18 @@ func TestMistakesNameTheirRemedy(t *testing.T) {
 			map[string]any{"pane_id": "1"},
 			[]string{`"1"`, "%3", "list_panes"},
 		},
+		// A required id sent blank used to mean the active pane, which in a
+		// shared terminal can be the person's.
+		{
+			"blank pane id on input", "send_keys",
+			map[string]any{"pane_id": "", "keys": []any{"x"}},
+			[]string{"pane_id is empty", "%3", "list_panes"},
+		},
+		{
+			"whitespace pane id on input", "paste_text",
+			map[string]any{"pane_id": " ", "text": "x"},
+			[]string{"pane_id is empty"},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := session.CallTool(ctx, &sdk.CallToolParams{
