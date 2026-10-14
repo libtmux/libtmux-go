@@ -2,10 +2,10 @@
 package tmuxcmd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"slices"
@@ -15,19 +15,19 @@ import (
 	"unicode/utf8"
 )
 
-// defaultWaitDelay bounds two things with one number, which is all exec.Cmd
-// offers: how long a tmux process gets to finish writing after it exits, and
-// how long a cancelled one gets before its pipes are closed under it.
-// TestRunnerBoundsCancellationWhenDescendantHoldsOutputPipe pins the
-// cancellation half at this value, so widening it to stop a loaded machine
-// reporting exec.ErrWaitDelay for a healthy command would slow every
-// cancellation by the same amount.
+// defaultWaitDelay is how long a cancelled process, or one streaming into a
+// caller's files, gets before exec closes its pipes under it.
+// TestRunnerBoundsCancellationWhenDescendantHoldsOutputPipe pins it.
 //
-// The value is empirical. A daemonized tmux server does not hold the pipe:
-// proc_fork_and_daemon calls daemon(1, 0), which reopens the child's standard
-// descriptors on /dev/null, and 120 fresh-socket runs at this delay produced
-// no expiry. What makes a loaded machine report one is not identified, so
-// treat the number as measured rather than derived.
+// Captured output does not go through a pipe at all, so the delay never
+// decides whether a command that exited succeeded. Every tmux client hands a
+// copy of its standard output to the server (client.c sends it with
+// MSG_IDENTIFY_STDOUT), and the server closes that copy only once it has dealt
+// with the client leaving (server_client_lost). On a loaded machine that came
+// after the delay, so a pipe was still open when tmux had exited, and exec
+// reported ErrWaitDelay for a command that had succeeded: about 2 runs in 100
+// with 20 fresh servers at once on tmux 3.7d. A file has no other end to wait
+// for.
 const defaultWaitDelay = 100 * time.Millisecond
 
 // Request describes one subprocess invocation.
@@ -113,11 +113,18 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = defaultWaitDelay
 	}
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout, stderr *os.File
 	if request.Stdio == nil {
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		if stdout, err = captureFile(); err != nil {
+			return result, fmt.Errorf("capture tmux output: %w", err)
+		}
+		defer releaseCaptureFile(stdout)
+		if stderr, err = captureFile(); err != nil {
+			return result, fmt.Errorf("capture tmux output: %w", err)
+		}
+		defer releaseCaptureFile(stderr)
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
 	} else {
 		if request.Stdio.Stdin == nil {
 			cmd.Stdin = os.Stdin
@@ -138,9 +145,17 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 
 	runErr := cmd.Run()
 	if request.Stdio == nil {
-		result.RawStdout = bytes.Clone(stdout.Bytes())
-		result.Stdout = SplitStdout(stdout.Bytes())
-		result.Stderr = SplitStderr(stderr.Bytes())
+		printed, readErr := readCaptureFile(stdout)
+		if readErr == nil {
+			var warned []byte
+			warned, readErr = readCaptureFile(stderr)
+			result.Stderr = SplitStderr(warned)
+		}
+		if readErr != nil {
+			return result, fmt.Errorf("read tmux output: %w", readErr)
+		}
+		result.RawStdout = printed
+		result.Stdout = SplitStdout(printed)
 	}
 
 	outcome := processExitOutcome(cmd.ProcessState, interrupted.Load())
@@ -152,6 +167,24 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 		return result, err
 	}
 	return result, nil
+}
+
+// captureFile returns an empty file for a process to write into.
+func captureFile() (*os.File, error) {
+	return os.CreateTemp("", "libtmux-go-tmux-*")
+}
+
+// readCaptureFile reads everything written to file since it was created.
+func readCaptureFile(file *os.File) ([]byte, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return io.ReadAll(file)
+}
+
+func releaseCaptureFile(file *os.File) {
+	_ = file.Close()
+	_ = os.Remove(file.Name())
 }
 
 func classifyRunError(runErr, contextErr error, outcome processOutcome) error {

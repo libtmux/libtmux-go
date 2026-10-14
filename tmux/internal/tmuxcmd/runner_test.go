@@ -260,7 +260,11 @@ func TestClassifyRunErrorPreservesWaitDelayFailure(t *testing.T) {
 	}
 }
 
-func TestRunnerReportsWaitDelayWhenDescendantHoldsOutputPipeAfterExit(t *testing.T) {
+// A tmux client hands a copy of its standard output to the server, which can
+// hold it well after the client has exited. That must not fail a command that
+// succeeded, nor lose what it printed. A one-millisecond delay makes the hold
+// decisive: through a pipe, this reports exec.ErrWaitDelay.
+func TestRunnerSucceedsWhileAnotherProcessHoldsItsOutput(t *testing.T) {
 	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
 	request := helperRequest("exit-with-orphan-output-pipe")
 	request.Arguments = append(request.Arguments, pidPath)
@@ -276,11 +280,12 @@ func TestRunnerReportsWaitDelayWhenDescendantHoldsOutputPipeAfterExit(t *testing
 			}
 		}
 	}
-	if !errors.Is(err, exec.ErrWaitDelay) {
-		t.Fatalf("Run() error = %v, want exec.ErrWaitDelay", err)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want the parent process's success", err)
 	}
-	if result.ExitCode != 0 {
-		t.Fatalf("Run() exit code = %d, want the parent process's successful exit", result.ExitCode)
+	if result.ExitCode != 0 || !slices.Equal(result.Stdout, []string{"parent"}) {
+		t.Fatalf("Run() = (exit %d, stdout %q), want exit 0 and what the parent printed",
+			result.ExitCode, result.Stdout)
 	}
 }
 
@@ -443,6 +448,7 @@ func TestRunnerHelperProcess(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		_, _ = fmt.Fprintln(os.Stdout, "parent")
 		os.Exit(0)
 	case "orphan-output-pipe":
 		child := exec.Command(
