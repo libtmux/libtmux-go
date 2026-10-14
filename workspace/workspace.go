@@ -15,8 +15,10 @@
 // for each pane's prompt before typing into it. This package does none of
 // those.
 //
-// In exchange, this package reports every problem in a document at once, each
-// with the line it is on. The command reports one problem per window, also
+// In exchange, this package reports with its line the first field it does not
+// know or the first value it cannot read, and then every problem with what
+// the fields ask for at once: a missing name, two windows claiming one index.
+// The command reports one problem per window, also
 // with its line, but a document-level refusal -- an empty windows list, an
 // unusable session_name -- still stops at the first, because there is
 // nothing to carry on into. It also leaves a missing start_directory to the

@@ -196,10 +196,12 @@ if err != nil {
 <!-- docs:end -->
 
 `Parse` refuses a field it does not recognise rather than dropping it, so a
-workspace that loads is a workspace that was understood. It reports every
-problem it finds at once, each with the line it is on, so a file is fixed in
-one pass rather than one run per mistake. Every such failure matches
-[`ErrInvalidWorkspace`][workspace-errinvalidworkspace] under `errors.Is`.
+workspace that loads is a workspace that was understood. A field it does not
+know, or a value it cannot read, stops it at the first one, with its line.
+Once every field reads, it reports every problem with what they ask for at
+once, such as a missing name or two windows claiming one index. Every such
+failure matches [`ErrInvalidWorkspace`][workspace-errinvalidworkspace] under
+`errors.Is`.
 
 A layout written out by hand, in the form tmux prints for `window_layout`, is
 checked before building: its checksum, its numeric fields, and that its tree
@@ -230,9 +232,11 @@ fmt.Println(name, len(windows))
 
 <!-- docs:end -->
 
+The block comes from the package's own example, in
+[`example_test.go`](example_test.go), which builds a two-window workspace.
+
 <!-- docs:checked workspace/example_test.go -->
-The workspace this ran on names its session `review` and gives it two windows,
-so it prints `review 2`.
+That workspace names its session `review`, so the block prints `review 2`.
 <!-- docs:end -->
 
 A workspace that half exists is never what the caller wanted, so `Build` and
@@ -318,10 +322,9 @@ wherever a boolean is taken. In Go they are the exported
 [`Bool`][workspace-bool] type, so a workspace can be built in code as well as
 read from a file.
 
-Of the 23 workspaces in tmuxp's own `examples/` directory, as of tmuxp 1.74,
-20 parse. The three that do not use `plugins` or `before_script`. Where a
-checkout of tmuxp is present, a test builds the 20 against real tmux, and
-skips one that names a shell or an environment variable the machine lacks.
+The workspaces in tmuxp's own `examples/` directory parse, apart from those
+that use `plugins` or `before_script`, and a test builds them against real
+tmux.
 
 ## Not supported
 
@@ -376,7 +379,7 @@ and parse its `--json` or `--ndjson` output. Where they differ today:
 | `workspace_builder_options` | refused | read |
 | Waiting for a pane's prompt | never | before the pane's first command |
 | A missing `start_directory` | `MissingDirectories` | warned on load |
-| Problems reported | every one, with its line | one per window, with its line; a document-level refusal still stops at the first |
+| Problems reported | the first unreadable field, or every problem with what the fields ask for, with lines | one per window, with its line; a document-level refusal still stops at the first |
 
 ## See also
 
