@@ -65,8 +65,8 @@ func run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("match active panes: %w", err)
 	}
-	// docs:end
 	fmt.Println(len(panes), "panes,", len(active), "active")
+	// docs:end
 
 	// Every other query is that call with a different filter. Each is printed
 	// under its own source text, which the test holds it to.
@@ -120,8 +120,10 @@ func run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("find the active pane of window 1: %w", err)
 	}
+	window, _ := only.Window()
+	name, _ := window.Name()
+	fmt.Printf("the only active pane of window 1: %s.%d\n", name, only.Index())
 	// docs:end
-	fmt.Println("the only active pane of window 1:", where([]tmux.Pane{only}))
 
 	// A function of your own goes in the same place.
 	second := func(pane *tmux.Pane) bool { return pane.Index() == 1 }

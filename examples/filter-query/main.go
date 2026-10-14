@@ -55,8 +55,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	// docs:end
 	fmt.Println("active panes:", len(active))
+	// docs:end
 
 	// docs:query-typed-in-go given:snapshot tmux.Snapshot
 	filter := tmux.PaneFilter{
@@ -67,8 +67,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	// docs:end
 	fmt.Println("typed panes:", len(panes))
+	// docs:end
 
 	// docs:query-in-tmux given:ctx context.Context; server tmux.Server
 	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
@@ -76,8 +76,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	// docs:end
 	fmt.Println("live matches:", len(sessions))
+	// docs:end
 	return nil
 }
 

@@ -85,6 +85,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
 
+	// docs:planning-run given:ctx context.Context; server tmux.Server; plan *tmux.Plan
 	result, err := plan.Run(ctx, server)
 	if err != nil {
 		return fmt.Errorf("run plan: %w", err)
@@ -98,6 +99,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Printf("step %d %-16s %-8s created %q stdout %q\n",
 			index, op.Command, op.Status, op.Created, op.Stdout)
 	}
+	// docs:end
 	if result.Ops[1].Created == "" {
 		return errors.New("the split reported no pane ID")
 	}

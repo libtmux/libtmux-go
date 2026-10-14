@@ -157,7 +157,9 @@ func run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("find the active pane of window 1: %w", err)
 	}
-	fmt.Println("the only active pane of window 1:", where([]tmux.Pane{only}))
+	window, _ := only.Window()
+	name, _ := window.Name()
+	fmt.Printf("the only active pane of window 1: %s.%d\n", name, only.Index())
 
 	// A function of your own goes in the same place.
 	second := func(pane *tmux.Pane) bool { return pane.Index() == 1 }

@@ -41,6 +41,7 @@ sessions, err := server.SearchSessions(ctx, &live)
 if err != nil {
 	return err
 }
+fmt.Println("live matches:", len(sessions))
 ```
 
 <!-- docs:end -->
@@ -61,6 +62,7 @@ active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
 if err != nil {
 	return err
 }
+fmt.Println("active panes:", len(active))
 ```
 
 <!-- docs:end -->
@@ -79,6 +81,7 @@ panes, err := tmuxq.Matching(snapshot.Panes(), filter)
 if err != nil {
 	return err
 }
+fmt.Println("typed panes:", len(panes))
 ```
 
 <!-- docs:end -->

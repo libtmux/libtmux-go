@@ -52,6 +52,7 @@ active, err := tmuxq.Matching(panes, tmux.PaneActiveIs(true))
 if err != nil {
 	return fmt.Errorf("match active panes: %w", err)
 }
+fmt.Println(len(panes), "panes,", len(active), "active")
 ```
 
 <!-- docs:end -->
@@ -214,6 +215,9 @@ only, err := tmuxq.ExactlyOne(panes, activeInLogs)
 if err != nil {
 	return fmt.Errorf("find the active pane of window 1: %w", err)
 }
+window, _ := only.Window()
+name, _ := window.Name()
+fmt.Printf("the only active pane of window 1: %s.%d\n", name, only.Index())
 ```
 
 <!-- docs:end -->
@@ -265,6 +269,14 @@ func main() {
 ```
 
 <!-- docs:end -->
+
+To run it, save it as `main.go` in an empty directory:
+
+```console
+$ go mod init demo && \
+    go get github.com/libtmux/libtmux-go/tmuxq@latest && \
+    go run .
+```
 
 It prints:
 

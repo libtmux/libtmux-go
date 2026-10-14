@@ -29,6 +29,9 @@ program, test suites that need a real tmux, and agents that share a terminal.
 $ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
 
+Alpha software. Releases carry an -alpha prerelease tag and the API is not
+settled. Pin an exact version.
+
 It needs Go 1.26 or newer and tmux 3.2a or newer, on a Unix host. A tmux
 server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
@@ -190,6 +193,7 @@ active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
 if err != nil {
 	return err
 }
+fmt.Println("active panes:", len(active))
 ```
 
 <!-- docs:end -->
@@ -212,6 +216,7 @@ sessions, err := server.SearchSessions(ctx, &live)
 if err != nil {
 	return err
 }
+fmt.Println("live matches:", len(sessions))
 ```
 
 <!-- docs:end -->
@@ -267,6 +272,13 @@ answer rather than the request.
 
 Runnable: [`examples/pane-io`](examples/pane-io), which goes on to read the
 pane as an `io.Reader`.
+
+Typing is the wrong way to move a payload: a shell reads what it is sent, and
+tmux caps a whole command at 16 KiB.
+[`Server.LoadBufferFrom`][tmux-server-loadbufferfrom] fills a tmux buffer from
+an `io.Reader` instead, and [`Pane.CaptureTo`][tmux-pane-captureto] writes a
+scrollback to an `io.Writer`. [`examples/byte-streams`](examples/byte-streams)
+does both.
 
 ## Watch tmux change
 
@@ -358,21 +370,24 @@ is the program both blocks come from.
 
 ## Choosing how to reach tmux
 
-Start with a plain `Server`. The other paths trade a standing tmux client for
-fewer process starts:
+Start with a plain `Server`, which starts one tmux process per command. The
+other paths keep a tmux client attached, or send several commands at once, to
+start fewer:
 
 | Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
-| process | [`NewServer`][tmux-newserver] | a tmux process per command sent | one-shot commands |
-| connection | [`Session.OpenControl`][tmux-session-opencontrol] | one tmux client per lane | repeated commands |
-| concurrent | [`ConnectionOptions{Lanes: N}`][tmux-connectionoptions-lanes] | N tmux clients | parallel readers |
-| chained | [`NewPlan`][tmux-newplan] then [`Run`][tmux-plan-run] | fewer process starts | builds and layouts |
-| streaming | [`Session.OpenNotifications`][tmux-session-opennotifications] | one tmux client | watching what tmux does |
+| a process per command | [`tmux.NewServer`][tmux-newserver] | a tmux process per command sent | one-shot commands |
+| a connection | [`Session.OpenControl`][tmux-session-opencontrol] | one tmux client, kept attached | repeated commands |
+| several connections | [`ConnectionOptions{Lanes: N}`][tmux-connectionoptions-lanes] | N tmux clients, kept attached | readers running in parallel |
+| a plan | [`tmux.NewPlan`][tmux-newplan] then [`Plan.Run`][tmux-plan-run] | fewer process starts | builds and layouts |
+| a stream | [`Session.OpenNotifications`][tmux-session-opennotifications] | one tmux client, kept attached | watching what tmux does |
 
-### [`NewPlan`][tmux-newplan]: write a layout in one pass
+### [`tmux.NewPlan`][tmux-newplan]: write a layout in one pass
 
 A plan records commands instead of running them, sends the ones needing no
-answer together, and hands back a reference to what a step will create:
+answer together, and hands back a reference to what a step will create.
+`new("echo built")` is how Go 1.26 writes a pointer to a value, for a field
+that may be left unset:
 
 <!-- docs:planning -->
 
@@ -388,12 +403,37 @@ plan.DisplayMessage(editor, "#{pane_title}")
 
 <!-- docs:end -->
 
-[`examples/planned-build`](examples/planned-build) runs this plan and reports
-what it cost.
+[`Plan.Run`][tmux-plan-run] sends it, and reports on each step by itself even
+where several shared one tmux process:
+
+<!-- docs:planning-run -->
+
+```go
+// Given: ctx context.Context; server tmux.Server; plan *tmux.Plan
+result, err := plan.Run(ctx, server)
+if err != nil {
+	return fmt.Errorf("run plan: %w", err)
+}
+if !result.OK() {
+	return fmt.Errorf("plan did not complete: %w", result.Err())
+}
+
+// Results remain per operation even when operations share an invocation.
+for index, op := range result.Ops {
+	fmt.Printf("step %d %-16s %-8s created %q stdout %q\n",
+		index, op.Command, op.Status, op.Created, op.Stdout)
+}
+```
+
+<!-- docs:end -->
+
+[`examples/planned-build`](examples/planned-build) is the program both blocks
+come from.
 
 <!-- docs:checked examples/planned-build/output.txt -->
-It prints `operations: 6, tmux invocations: 4`: six tmux commands, in four
-process starts rather than six.
+It prints `operations: 6, tmux invocations: 4` before it runs the plan: six
+tmux commands, in four process starts rather than six. The last step reads
+back the title the plan set, so its line ends `stdout ["editor"]`.
 <!-- docs:end -->
 
 A connection appears in `list-clients` and counts toward `session_attached`,
@@ -402,45 +442,6 @@ documentation has the rules each path follows, and
 [`BENCHMARKS.md`](BENCHMARKS.md) is what each costs, measured on every
 supported tmux. [`examples/fast-path`](examples/fast-path) runs the same reads
 down each path.
-
-### [`Server.LoadBufferFrom`][tmux-server-loadbufferfrom]: move bytes without quoting
-
-Keys and command arguments are the wrong way to move a payload: a shell reads
-what it is sent, and tmux caps a whole command at 16 KiB and cannot carry a NUL
-through one. `LoadBufferFrom` fills a tmux buffer from an `io.Reader`, with
-neither limit:
-
-<!-- docs:byte-streams-in -->
-
-```go
-// Given: ctx context.Context; server tmux.Server; pane tmux.Pane;
-// payload *strings.Reader
-// tmux reads the buffer from the reader as a stream, so no quoting rule
-// applies to the payload and no command line has to hold it.
-name := "payload"
-if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
-	Name: &name,
-}); err != nil {
-	return fmt.Errorf("load payload: %w", err)
-}
-if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
-	BufferName: &name, DeleteAfter: true,
-}); err != nil {
-	return fmt.Errorf("paste payload: %w", err)
-}
-```
-
-<!-- docs:end -->
-
-[`examples/byte-streams`](examples/byte-streams) pastes a line of quotes,
-backticks, and a `$HOME` this way.
-
-<!-- docs:checked examples/byte-streams/output.txt -->
-It prints `pasted 42 bytes`.
-<!-- docs:end -->
-
-It goes on to write the pane's scrollback to an `io.Writer` with
-[`Pane.CaptureTo`][tmux-pane-captureto], which has neither limit either.
 
 ## Testing your own code
 
@@ -501,31 +502,13 @@ the pane showed 3 line(s):
 
 <!-- docs:end -->
 
-### [`tmuxtest.NewServer`][tmuxtest-newserver]: a server for one test
+### More in `tmuxtest`
 
-It gives a test whose subject is tmux itself a server on a socket of its own,
-killed when the test ends:
-
-<!-- docs:new-server -->
-
-```go
-// Given: ctx context.Context; t *testing.T
-server := tmuxtest.NewServer(ctx, t)
-
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
-if err != nil {
-	t.Fatal(err)
-}
-if name, _ := session.Name(); name != "under-test" {
-	t.Errorf("session name = %q, want under-test", name)
-}
-```
-
-<!-- docs:end -->
-
-[`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux] answers the tmux commands
-you name instead, so a test of your own code needs no tmux installed. Both are
-in [`tmux/tmuxtest`](tmux/tmuxtest/).
+[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test whose subject is tmux
+itself a server on a socket of its own, killed when the test ends.
+[`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux] answers the tmux commands you
+name instead, so a test of your own code needs no tmux installed.
+[`tmux/tmuxtest`](tmux/tmuxtest/) shows both.
 
 ## Packages
 
@@ -578,10 +561,10 @@ deprecation period. Pin an exact version. Not recommended for production.
   library.
 - **Go 1.26+**, tmux **3.2a through 3.8-rc2** across the core, workspace, and
   MCP modules. The compatibility matrix checks ten builds spanning that
-  range, the 3.8 release candidate included.
-  The Go floor tracks upstream's support window, which covers the two most
-  recent releases, so it rises whenever a Go release retires the oldest -
-  roughly twice a year, and sooner than a toolchain pinned for longer.
+  range, the 3.8 release candidate included. The Go floor tracks upstream's
+  support window, which covers the two most recent releases, so it rises
+  whenever a Go release retires the oldest: roughly twice a year, and sooner
+  than a toolchain pinned for longer.
 - **Unix.** tmux is a Unix program, so driving one needs a Unix host: Linux and
   macOS run the suites on every change, and the BSDs, illumos and Plan 9 build.
   A Windows build compiles and resolves a tmux executable by Windows PATH and
