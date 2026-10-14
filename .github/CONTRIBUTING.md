@@ -207,6 +207,10 @@ The tests in `tmux/internal/generate/docs` hold a page to its source:
   section that states another result than the one its heading printed.
 - `TestEveryREADMEFenceIsGeneratedOrPermitted` allows a README only
   `console`, `text`, `bibtex`, `json`, and `yaml` blocks by hand.
+- `TestReferenceLinksNameExportedAPI` holds every link to
+  `libtmux.org/en/go/latest/reference/` to an identifier this module exports.
+  The site names a page for the package, then the identifier, then a method
+  or field of it, lowercased and joined by hyphens: `tmux-panefilter-active`.
 
 An example program takes one of two shapes. One a README quotes whole builds
 its own server, with a private `SocketName` and `ConfigFile: os.DevNull`, and

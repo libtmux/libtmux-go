@@ -68,14 +68,9 @@ func run(ctx context.Context) (err error) {
 	// docs:end
 	fmt.Println(len(panes), "panes,", len(active), "active")
 
-	// Every other pane query is that call with a different filter. Each is
-	// printed under its own source text, which the test holds it to.
-	for _, query := range []struct {
-		source string
-		filter tmux.PaneFilter
-	}{
-		{`tmux.PaneActiveIs(true)`, tmux.PaneActiveIs(true)},
-		{`tmux.PaneIndexIs(0)`, tmux.PaneIndexIs(0)},
+	// Every other query is that call with a different filter. Each is printed
+	// under its own source text, which the test holds it to.
+	if err := ask(panes, where, []query[tmux.Pane]{
 		{`tmux.PaneFilter{WindowIndexGTE: new(1)}`, tmux.PaneFilter{WindowIndexGTE: new(1)}},
 		{
 			`tmux.PaneFilter{Active: new(true), WindowIndex: new(1)}`,
@@ -93,30 +88,23 @@ func run(ctx context.Context) (err error) {
 			`tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}`,
 			tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}},
 		},
-	} {
-		matched, err := tmuxq.Matching(panes, query.filter)
-		if err != nil {
-			return fmt.Errorf("match panes with %s: %w", query.source, err)
-		}
-		fmt.Printf("%s: %s\n", query.source, where(matched))
+		{`tmux.PaneActiveIs(true)`, tmux.PaneActiveIs(true)},
+		{`tmux.PaneIndexIs(0)`, tmux.PaneIndexIs(0)},
+	}); err != nil {
+		return err
 	}
-
-	// Windows and sessions have filters of their own.
-	windows, err := tmuxq.Matching(snapshot.Windows(), tmux.WindowFilter{NameRegex: "^log"})
-	if err != nil {
-		return fmt.Errorf("match windows: %w", err)
+	if err := ask(snapshot.Windows(), windowNames, []query[tmux.Window]{
+		{`tmux.WindowFilter{NameRegex: "^log"}`, tmux.WindowFilter{NameRegex: "^log"}},
+		{`tmux.WindowFilter{Active: new(true)}`, tmux.WindowFilter{Active: new(true)}},
+		{`tmux.WindowNameIs("editor")`, tmux.WindowNameIs("editor")},
+	}); err != nil {
+		return err
 	}
-	for _, window := range windows {
-		name, _ := window.Name()
-		fmt.Println(`tmux.WindowFilter{NameRegex: "^log"}:`, name)
-	}
-	sessions, err := tmuxq.Matching(snapshot.Sessions(), tmux.SessionNameIs("work"))
-	if err != nil {
-		return fmt.Errorf("match sessions: %w", err)
-	}
-	for _, session := range sessions {
-		name, _ := session.Name()
-		fmt.Println(`tmux.SessionNameIs("work"):`, name)
+	if err := ask(snapshot.Sessions(), sessionNames, []query[tmux.Session]{
+		{`tmux.SessionFilter{NameContains: new("or")}`, tmux.SessionFilter{NameContains: new("or")}},
+		{`tmux.SessionNameIs("work")`, tmux.SessionNameIs("work")},
+	}); err != nil {
+		return err
 	}
 
 	// The helpers that take a function of your own work on the same slices.
@@ -130,6 +118,42 @@ func run(ctx context.Context) (err error) {
 	}
 	fmt.Println("the only pane with index 1:", where([]tmux.Pane{only}))
 	return nil
+}
+
+// query is a filter beside the source text that built it.
+type query[T any] struct {
+	source string
+	filter tmuxq.Filter[T]
+}
+
+// ask runs each query against records and prints what it selected.
+func ask[T any](records []T, name func([]T) string, queries []query[T]) error {
+	for _, query := range queries {
+		matched, err := tmuxq.Matching(records, query.filter)
+		if err != nil {
+			return fmt.Errorf("match with %s: %w", query.source, err)
+		}
+		fmt.Printf("%s: %s\n", query.source, name(matched))
+	}
+	return nil
+}
+
+func windowNames(windows []tmux.Window) string {
+	names := make([]string, 0, len(windows))
+	for _, window := range windows {
+		name, _ := window.Name()
+		names = append(names, name)
+	}
+	return strings.Join(names, " ")
+}
+
+func sessionNames(sessions []tmux.Session) string {
+	names := make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		name, _ := session.Name()
+		names = append(names, name)
+	}
+	return strings.Join(names, " ")
 }
 
 // where names panes the way a person would: the window each is in, and its

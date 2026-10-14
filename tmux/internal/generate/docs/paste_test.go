@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"maps"
 	"os"
@@ -172,7 +175,8 @@ func afterLabel(line, label string) (string, bool) {
 	return "", false
 }
 
-var headedByCode = regexp.MustCompile("^#+ `([^`]+)`")
+// headedByCode matches a heading that opens with a code span, linked or not.
+var headedByCode = regexp.MustCompile("^#+ \\[?`([^`]+)`")
 
 // uncheckedSpans returns what is wrong with content's docs:checked blocks. A
 // page that leads with expressions has no room for a whole program per
@@ -321,6 +325,111 @@ func TestUncheckedSpansAreFound(t *testing.T) {
 	}
 	if _, _, err := uncheckedSpans(root, "<!-- docs:checked main.go -->\n`x`\n"); err == nil {
 		t.Error("uncheckedSpans() error = nil for a block that never closes")
+	}
+}
+
+var referenceLink = regexp.MustCompile(`https://libtmux\.org/en/go/latest/reference/([a-z0-9-]+)/`)
+
+// referenceSlugs returns the page names the reference site gives this
+// module's exported API: the package, then the identifier, then a method or
+// field of it, lowercased and joined by hyphens.
+func referenceSlugs(t *testing.T, root string) map[string]bool {
+	t.Helper()
+	slugs := map[string]bool{}
+	for _, directory := range []string{"tmux", "tmuxq", filepath.Join("tmux", "tmuxtest")} {
+		sources, err := filepath.Glob(filepath.Join(root, directory, "*.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		fileSet := token.NewFileSet()
+		for _, source := range sources {
+			if strings.HasSuffix(source, "_test.go") {
+				continue
+			}
+			file, err := parser.ParseFile(fileSet, source, nil, parser.SkipObjectResolution)
+			if err != nil {
+				t.Fatal(err)
+			}
+			add := func(parts ...string) {
+				slugs[strings.ToLower(file.Name.Name+"-"+strings.Join(parts, "-"))] = true
+			}
+			for _, declaration := range file.Decls {
+				switch declaration := declaration.(type) {
+				case *ast.FuncDecl:
+					if !declaration.Name.IsExported() {
+						continue
+					}
+					if declaration.Recv == nil {
+						add(declaration.Name.Name)
+						continue
+					}
+					receiver := declaration.Recv.List[0].Type
+					if star, ok := receiver.(*ast.StarExpr); ok {
+						receiver = star.X
+					}
+					if index, ok := receiver.(*ast.IndexExpr); ok {
+						receiver = index.X
+					}
+					if named, ok := receiver.(*ast.Ident); ok && named.IsExported() {
+						add(named.Name, declaration.Name.Name)
+					}
+				case *ast.GenDecl:
+					for _, spec := range declaration.Specs {
+						switch spec := spec.(type) {
+						case *ast.ValueSpec:
+							for _, value := range spec.Names {
+								if value.IsExported() {
+									add(value.Name)
+								}
+							}
+						case *ast.TypeSpec:
+							if !spec.Name.IsExported() {
+								continue
+							}
+							add(spec.Name.Name)
+							structure, ok := spec.Type.(*ast.StructType)
+							if !ok {
+								continue
+							}
+							for _, field := range structure.Fields.List {
+								for _, fieldName := range field.Names {
+									if fieldName.IsExported() {
+										add(spec.Name.Name, fieldName.Name)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return slugs
+}
+
+// TestReferenceLinksNameExportedAPI holds every link to the reference site to
+// an identifier this module exports. A renamed function leaves its old link
+// rendering as a link, and only following it shows the page is gone; this
+// finds it without the network.
+func TestReferenceLinksNameExportedAPI(t *testing.T) {
+	root, _ := repositoryRoot(t)
+	slugs := referenceSlugs(t, root)
+	if !slugs["tmux-server"] || !slugs["tmuxq-matching"] || !slugs["tmux-panefilter-active"] {
+		t.Fatal("the scan of exported API is broken: Server, Matching, or PaneFilter.Active is missing")
+	}
+	checked := 0
+	documents := readDocuments(t, root)
+	for _, name := range slices.Sorted(maps.Keys(documents)) {
+		for _, match := range referenceLink.FindAllStringSubmatch(documents[name], -1) {
+			checked++
+			if !slugs[match[1]] {
+				t.Errorf("%s links to reference/%s/, which names nothing this module exports",
+					name, match[1])
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no reference links found; the scan is broken, not the docs")
 	}
 }
 
