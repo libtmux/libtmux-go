@@ -36,6 +36,7 @@ func run(ctx context.Context) (err error) {
 		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
 	}()
 
+	// docs:records given:ctx context.Context; session tmux.Session
 	// Rename hands back the session as tmux now reports it. The record
 	// already in hand keeps the name it had when tmux handed it over.
 	renamed, err := session.Rename(ctx, "new")
@@ -46,6 +47,7 @@ func run(ctx context.Context) (err error) {
 	current, _ := renamed.Name()
 	fmt.Println("held record:", held)
 	fmt.Println("returned record:", current)
+	// docs:end
 
 	// docs:not-found given:ctx context.Context; server tmux.Server
 	// A lookup that finds nothing is an error a caller can test for.

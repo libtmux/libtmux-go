@@ -35,94 +35,30 @@ library is shaped.
 
 A `Server` reaches one tmux server. It holds `Session` values, each holding
 `Window` values, each holding `Pane` values, and every one of them is a record:
-what tmux said when you asked. This is the whole program:
+what tmux said when you asked.
 
-<!-- docs:file examples/object-model/main.go -->
+<!-- docs:records -->
 
 ```go
-// Command object-model shows that the values tmux hands back are records.
-package main
-
-import (
-	"context"
-	"errors"
-	"fmt"
-	"log"
-	"os"
-
-	"github.com/libtmux/libtmux-go/tmux"
-)
-
-func main() {
-	if err := run(context.Background()); err != nil {
-		log.Fatal(err)
-	}
+// Given: ctx context.Context; session tmux.Session
+// Rename hands back the session as tmux now reports it. The record
+// already in hand keeps the name it had when tmux handed it over.
+renamed, err := session.Rename(ctx, "new")
+if err != nil {
+	return fmt.Errorf("rename session: %w", err)
 }
-
-func run(ctx context.Context) (err error) {
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-object-model",
-		ConfigFile: os.DevNull,
-	})
-	if err != nil {
-		return fmt.Errorf("configure tmux: %w", err)
-	}
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
-	if err != nil {
-		return fmt.Errorf("create session: %w", err)
-	}
-	// Cleanup runs even when ctx is the reason the program is leaving.
-	defer func() {
-		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
-	}()
-
-	// Rename hands back the session as tmux now reports it. The record
-	// already in hand keeps the name it had when tmux handed it over.
-	renamed, err := session.Rename(ctx, "new")
-	if err != nil {
-		return fmt.Errorf("rename session: %w", err)
-	}
-	held, _ := session.Name()
-	current, _ := renamed.Name()
-	fmt.Println("held record:", held)
-	fmt.Println("returned record:", current)
-
-	// A lookup that finds nothing is an error a caller can test for.
-	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
-	if errors.Is(lookupErr, tmux.ErrNotFound) {
-		fmt.Println("session $999: not found")
-	}
-	return nil
-}
+held, _ := session.Name()
+current, _ := renamed.Name()
+fmt.Println("held record:", held)
+fmt.Println("returned record:", current)
 ```
 
 <!-- docs:end -->
 
-It prints:
-
-<!-- docs:output examples/object-model/output.txt -->
-
-```text
-held record: old
-returned record: new
-session $999: not found
-```
-
+<!-- docs:checked examples/object-model/output.txt -->
+The session was created as `old`, so this prints `held record: old` and then
+`returned record: new`.
 <!-- docs:end -->
-
-To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
-on `PATH`:
-
-```console
-$ go mod init demo && \
-    go get github.com/libtmux/libtmux-go/tmux@latest && \
-    go run .
-```
-
-The program starts a tmux server on a socket and config of its own and kills it
-on the way out, so it never touches a tmux you have open.
 
 Nothing refreshes a record behind you. A method that changes which object you
 hold, or what it looks like, hands back a new record, as `Session.Rename` does
@@ -134,7 +70,9 @@ what the record already holds and never queries, while
 `NewServer` validates its configuration and starts nothing. With no
 `SocketName` or `SocketPath` it reaches the server your own `tmux` command
 does, and with no `ConfigFile` tmux reads your configuration, so a program
-that should behave the same everywhere names both, as the one above does.
+that should behave the same everywhere names both.
+[`../examples/object-model`](../examples/object-model) is the whole program
+these blocks come from, and it does.
 
 ## Guessing a method
 
