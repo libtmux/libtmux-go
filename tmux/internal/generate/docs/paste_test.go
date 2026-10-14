@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -131,6 +134,104 @@ func TestEveryRegionIsQuoted(t *testing.T) {
 		}
 		t.Errorf("region %q in %s is quoted by no document; quote it or remove its markers",
 			name, filepath.ToSlash(origin))
+	}
+}
+
+var (
+	markdownChecked = regexp.MustCompile(`^<!-- docs:checked (\S+) -->$`)
+	codeSpan        = regexp.MustCompile("`([^`]+)`")
+)
+
+// squeeze removes what gofmt may put between the tokens of one expression: a
+// long literal is broken over lines in its source and written on one in a
+// table.
+func squeeze(text string) string {
+	text = strings.Join(strings.Fields(text), "")
+	text = strings.ReplaceAll(text, ",}", "}")
+	return strings.ReplaceAll(text, ",)", ")")
+}
+
+// uncheckedSpans returns the code spans in content's docs:checked blocks that
+// are not text from the Go file each block names. A table of expressions has
+// no room for whole programs, so its cells are held to one instead: every
+// span is something that program compiles and runs.
+func uncheckedSpans(root, content string) (spans []string, checked int, err error) {
+	var source string
+	open := false
+	for line := range strings.SplitSeq(content, "\n") {
+		if match := markdownChecked.FindStringSubmatch(line); match != nil && !open {
+			if !filepath.IsLocal(filepath.FromSlash(match[1])) {
+				return nil, 0, fmt.Errorf("path %q must stay inside the repository", match[1])
+			}
+			file, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(match[1])))
+			if readErr != nil {
+				return nil, 0, readErr
+			}
+			source, open = squeeze(string(file)), true
+			continue
+		}
+		if !open {
+			continue
+		}
+		if markdownEnd.MatchString(line) {
+			open = false
+			continue
+		}
+		for _, span := range codeSpan.FindAllStringSubmatch(line, -1) {
+			checked++
+			if !strings.Contains(source, squeeze(span[1])) {
+				spans = append(spans, span[1])
+			}
+		}
+	}
+	if open {
+		return nil, 0, errors.New("a docs:checked block is never closed")
+	}
+	return spans, checked, nil
+}
+
+// TestCheckedSpansAppearInTheirSource holds a docs:checked block to quoting
+// only text from the program it names.
+func TestCheckedSpansAppearInTheirSource(t *testing.T) {
+	root, _ := repositoryRoot(t)
+	total := 0
+	documents := readDocuments(t, root)
+	for _, name := range slices.Sorted(maps.Keys(documents)) {
+		spans, checked, err := uncheckedSpans(root, documents[name])
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		total += checked
+		for _, span := range spans {
+			t.Errorf("%s shows `%s`, which is not in the program its block names",
+				name, span)
+		}
+	}
+	if total == 0 {
+		t.Fatal("no docs:checked spans found; the scan is broken, not the docs")
+	}
+}
+
+func TestUncheckedSpansAreFound(t *testing.T) {
+	root := t.TempDir()
+	source := "package main\n\nvar filter = tmux.PaneFilter{\n\tActive: new(true),\n\tIndex:  new(1),\n}\n"
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	document := "`outside` is not checked.\n\n<!-- docs:checked main.go -->\n" +
+		"| `tmux.PaneFilter{Active: new(true), Index: new(1)}` | `new(2)` |\n" +
+		"<!-- docs:end -->\n\n`after` is not checked.\n"
+
+	spans, checked, err := uncheckedSpans(root, document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checked != 2 || len(spans) != 1 || spans[0] != "new(2)" {
+		t.Errorf("uncheckedSpans() = %q of %d, want only new(2) of 2", spans, checked)
+	}
+	if _, _, err := uncheckedSpans(root, "<!-- docs:checked main.go -->\n`x`\n"); err == nil {
+		t.Error("uncheckedSpans() error = nil for a block that never closes")
 	}
 }
 

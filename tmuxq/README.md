@@ -22,113 +22,87 @@ types, so it works on any slice or `iter.Seq`.
 $ go get github.com/libtmux/libtmux-go/tmuxq@latest
 ```
 
-**Contents** — [Filter one read of tmux](#filter-one-read-of-tmux) ·
-[Which helper](#which-helper) · [On any slice](#on-any-slice) ·
-[Why it is separate](#why-it-is-separate)
+**Contents** — [Asking a snapshot](#asking-a-snapshot) ·
+[Filters](#filters) · [Which helper](#which-helper) ·
+[On any slice](#on-any-slice) · [Why it is separate](#why-it-is-separate)
 
-## Filter one read of tmux
+## Asking a snapshot
 
 A snapshot is one read of a whole tmux server. `tmuxq.Matching` takes a slice
-from it and a filter, and returns the records the filter accepts without
-sending tmux another command. This is the whole program:
+from it and a filter, and returns the records the filter accepts:
 
-<!-- docs:file examples/matching/main.go -->
+<!-- docs:queries-read -->
 
 ```go
-// Command matching reads tmux once and filters that one read.
-package main
-
-import (
-	"context"
-	"errors"
-	"fmt"
-	"log"
-	"os"
-
-	"github.com/libtmux/libtmux-go/tmux"
-	"github.com/libtmux/libtmux-go/tmuxq"
-)
-
-func main() {
-	if err := run(context.Background()); err != nil {
-		log.Fatal(err)
-	}
+// Given: ctx context.Context; server tmux.Server
+// One read of the whole server. Each query filters it in Go, so none of
+// them sends tmux another command.
+snapshot, err := server.Snapshot(ctx)
+if err != nil {
+	return fmt.Errorf("read tmux: %w", err)
 }
+panes := snapshot.Panes()
 
-func run(ctx context.Context) (err error) {
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-matching",
-		ConfigFile: os.DevNull,
-	})
-	if err != nil {
-		return fmt.Errorf("configure tmux: %w", err)
-	}
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "demo"})
-	if err != nil {
-		return fmt.Errorf("create session: %w", err)
-	}
-	// Cleanup runs even when ctx is the reason the program is leaving.
-	defer func() {
-		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
-	}()
-
-	// Split the session's window, so it holds two panes and one is active.
-	window, err := session.ResolveActiveWindow(ctx)
-	if err != nil {
-		return fmt.Errorf("find window: %w", err)
-	}
-	if _, err := window.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
-		return fmt.Errorf("split window: %w", err)
-	}
-
-	// One read of the whole server. Filtering it sends tmux nothing more.
-	snapshot, err := server.Snapshot(ctx)
-	if err != nil {
-		return fmt.Errorf("read tmux: %w", err)
-	}
-	active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
-	if err != nil {
-		return fmt.Errorf("match active panes: %w", err)
-	}
-	fmt.Println(len(snapshot.Panes()), "panes,", len(active), "active")
-	return nil
+active, err := tmuxq.Matching(panes, tmux.PaneActiveIs(true))
+if err != nil {
+	return fmt.Errorf("match active panes: %w", err)
 }
 ```
 
 <!-- docs:end -->
 
-It prints:
+`Matching` returns a fresh slice, so changing it cannot change the snapshot. A
+filter that matches nothing returns an empty slice, not an error; the error is
+for a filter that cannot be one, such as a regular expression that does not
+compile.
 
-<!-- docs:output examples/matching/output.txt -->
+## Filters
+
+Every other question is that call with a different filter. These select panes;
+`tmux.WindowFilter` and `tmux.SessionFilter` work the same way on
+`snapshot.Windows()` and `snapshot.Sessions()`.
+
+<!-- docs:checked examples/queries/main.go -->
+
+| Panes that | Filter |
+| --- | --- |
+| are active in their window | `tmux.PaneActiveIs(true)` |
+| are in the window named `logs` | `tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}` |
+| are in window 1 or later | `tmux.PaneFilter{WindowIndexGTE: new(1)}` |
+| are first in their window | `tmux.PaneIndexIs(0)` |
+| are active and in `logs` | `tmux.PaneFilter{Active: new(true), Window: &tmux.WindowFilter{Name: new("logs")}}` |
+| have index 1, or are in window 0 | `tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}` |
+| are not active | `tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}` |
+| are in a window whose name matches `^log` | `tmux.PaneFilter{Window: &tmux.WindowFilter{NameRegex: "^log"}}` |
+
+<!-- docs:end -->
+
+Fields of one filter combine with AND. A field takes the plain name for an
+exact match and a suffix for the rest: `In` for any of several values,
+`Contains` and `Regex` for text, and `GT`, `GTE`, `LT`, and `LTE` for numbers.
+
+Each cell above is an expression from
+[`examples/queries`](../examples/queries), which runs them all against a
+server holding two windows, `editor` with one pane and `logs` with two. It
+prints, naming each pane by its window and its index there:
+
+<!-- docs:output examples/queries/output.txt -->
 
 ```text
-2 panes, 1 active
+active: editor.0 logs.0
+in the logs window: logs.0 logs.1
+in window 1 or later: logs.0 logs.1
+first in their window: editor.0 logs.0
+active and in logs: logs.0
+index 1, or in window 0: editor.0 logs.1
+not active: logs.1
+window name matches ^log: logs.0 logs.1
+windows named logs: 1
+the first pane with index 1: logs.1
+exactly one pane has index 1
 ```
 
 <!-- docs:end -->
-
-Splitting the session's window leaves it with two panes, and a window has
-exactly one active pane.
-
-To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
-on `PATH`:
-
-```console
-$ go mod init demo && \
-    go get github.com/libtmux/libtmux-go/tmuxq@latest && \
-    go run .
-```
-
-The program starts a tmux server on a socket and config of its own and kills it
-on the way out, so it never touches a tmux you have open.
-
-`tmux.PaneActiveIs(true)` is a filter the `tmux` package declares. A filter
-compiles itself into a predicate, and `Matching` reports the one error that can
-have, so there is no predicate to unpack first. It returns a fresh slice, so
-changing the result cannot change the snapshot, and a filter that matches
-nothing returns an empty slice rather than an error.
 
 ## Which helper
 
@@ -147,7 +121,7 @@ pull only as far as they need to.
 ## On any slice
 
 Nothing here names a tmux type, so the same helpers work on a slice of your
-own. This program needs no tmux:
+own. This is a whole program, and it needs no tmux:
 
 <!-- docs:file examples/any-slice/main.go -->
 
@@ -209,5 +183,5 @@ with the library.
 | | |
 | --- | --- |
 | [`../tmux/`](../tmux/) | The library, and where filters are declared |
-| [`../examples/matching`](../examples/matching) | The program above, with notes |
+| [`../examples/queries`](../examples/queries) | The program behind the table, with notes |
 | [`../examples/filter-query`](../examples/filter-query) | Filtering in Go beside letting tmux filter |

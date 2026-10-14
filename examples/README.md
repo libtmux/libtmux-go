@@ -23,7 +23,7 @@ what the program prints, on every supported tmux.
 | Example | Shows |
 | --- | --- |
 | [`filter-query/`](filter-query/) | List sessions, filter one read in Go, or let tmux filter |
-| [`matching/`](matching/) | `tmuxq.Matching` on a snapshot, as a whole program |
+| [`queries/`](queries/) | One read of the server, asked many things with `tmuxq` |
 | [`any-slice/`](any-slice/) | The `tmuxq` helpers on a slice of your own, with no tmux |
 | [`snapshot-browser/`](snapshot-browser/) | Walk sessions, windows, and panes from one read |
 
@@ -47,7 +47,7 @@ what the program prints, on every supported tmux.
 
 ## Which tmux they reach
 
-`quickstart`, `object-model`, and `matching` start a tmux server of their own,
+`quickstart`, `object-model`, and `queries` start a tmux server of their own,
 on a private socket with an empty config, and kill it when they finish. They
 print the same thing on every machine and never touch a tmux you have open.
 `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
