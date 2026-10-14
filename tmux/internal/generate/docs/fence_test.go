@@ -27,8 +27,7 @@ var fenceLine = regexp.MustCompile("^\\s*(`{3,}|~{3,})\\s*(.*)$")
 // alone by this module's tests without the network, so its page is exempt
 // from the Go rule and from nothing else.
 var handwrittenGoAllowed = map[string]string{
-	"mcp/README.md":       "its blocks import the MCP SDK",
-	"workspace/README.md": "its blocks import the workspace module's YAML parser",
+	"mcp/README.md": "its blocks import the MCP SDK",
 }
 
 // strayFence is a fenced block a README should not hold.

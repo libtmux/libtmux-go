@@ -70,6 +70,9 @@ func TestPublishedRegionsCompileAlone(t *testing.T) {
 			t.Errorf("%s: published but defined in no Go file", name)
 			continue
 		}
+		if compiledByItsOwnModule(root, source) {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			if out, err := compileAlone(t, absRoot, source); err != nil {
@@ -80,6 +83,20 @@ func TestPublishedRegionsCompileAlone(t *testing.T) {
 			}
 		})
 	}
+}
+
+// compiledByItsOwnModule reports whether a region lives in a module that has
+// dependencies of its own. Compiling it alone would need those dependencies
+// from the network, which a gate may not use, so it is left to its module:
+// such a region sits in a test or an Example that module's suite compiles and
+// runs.
+func compiledByItsOwnModule(root string, source region) bool {
+	relative, err := filepath.Rel(root, source.origin)
+	if err != nil {
+		return false
+	}
+	module, _, _ := strings.Cut(filepath.ToSlash(relative), "/")
+	return module == "mcp" || module == "workspace"
 }
 
 // publishedRegions names every region the Markdown quotes, sorted and

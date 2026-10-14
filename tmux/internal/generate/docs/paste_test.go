@@ -328,7 +328,8 @@ func TestUncheckedSpansAreFound(t *testing.T) {
 	}
 }
 
-var referenceLink = regexp.MustCompile(`https://libtmux\.org/en/go/latest/reference/([a-z0-9-]+)/`)
+var referenceLink = regexp.MustCompile(
+	`https://libtmux\.org/en/go/latest/(?:workspace/|mcp/)?reference/([a-z0-9-]+)/`)
 
 // referenceSlugs returns the page names the reference site gives this
 // module's exported API: the package, then the identifier, then a method or
@@ -336,7 +337,9 @@ var referenceLink = regexp.MustCompile(`https://libtmux\.org/en/go/latest/refere
 func referenceSlugs(t *testing.T, root string) map[string]bool {
 	t.Helper()
 	slugs := map[string]bool{}
-	for _, directory := range []string{"tmux", "tmuxq", filepath.Join("tmux", "tmuxtest")} {
+	for _, directory := range []string{
+		"tmux", "tmuxq", filepath.Join("tmux", "tmuxtest"), "workspace", "mcp",
+	} {
 		sources, err := filepath.Glob(filepath.Join(root, directory, "*.go"))
 		if err != nil {
 			t.Fatal(err)

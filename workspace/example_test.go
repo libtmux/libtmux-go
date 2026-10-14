@@ -33,12 +33,15 @@ windows:
       - shell_command: printf 'ready\n'
       - shell_command: printf 'ready\n'
 `)
+	// docs:workspace-parse given:document []byte
 	parsed, err := workspace.Parse(document)
 	if err != nil {
 		fmt.Println("parse:", err)
 		return
 	}
+	// docs:end
 
+	// docs:workspace-build given:ctx context.Context; server tmux.Server; parsed workspace.Workspace
 	session, err := workspace.Build(ctx, server, parsed)
 	if err != nil {
 		fmt.Println("build:", err)
@@ -52,6 +55,8 @@ windows:
 		return
 	}
 	fmt.Println(name, len(windows))
+	// docs:end
+
 	// Output: review 2
 }
 
@@ -76,6 +81,7 @@ func ExampleBuildInto() {
 			{Name: "tests", Panes: []workspace.Pane{{Shell: "sleep 60"}}},
 		},
 	}
+	// docs:workspace-build-into given:ctx context.Context; server tmux.Server; described workspace.Workspace
 	request, err := described.InitialSessionRequest()
 	if err != nil {
 		fmt.Println("request:", err)
@@ -96,6 +102,7 @@ func ExampleBuildInto() {
 		fmt.Println("build:", err)
 		return
 	}
+	// docs:end
 	windows, err := session.SearchWindows(ctx, nil)
 	if err != nil {
 		fmt.Println("search windows:", err)

@@ -48,68 +48,126 @@ runtime dependency; parsing YAML needs one, so this lives in its own module and
 $ go get github.com/libtmux/libtmux-go/workspace
 ```
 
+**Contents** — [Using it](#using-it) · [A workspace](#a-workspace) ·
+[Supported fields](#supported-fields) · [Not supported](#not-supported) ·
+[Reference](https://libtmux.org/en/go/latest/workspace/reference/)
+
 ## Using it
 
-```go
-import (
-    "github.com/libtmux/libtmux-go/tmux"
-    "github.com/libtmux/libtmux-go/workspace"
-)
-```
+### [`workspace.Parse`][workspace-parse]: read a workspace
+
+It takes the bytes of a workspace file, such as [the one below](#a-workspace):
+
+<!-- docs:workspace-parse -->
 
 ```go
-document, err := os.ReadFile("project.yaml")
+// Given: document []byte
+parsed, err := workspace.Parse(document)
 if err != nil {
-    return err
+	fmt.Println("parse:", err)
+	return
 }
-described, err := workspace.Parse(document)
-if err != nil {
-    return err
-}
-server, err := tmux.NewServer(tmux.ServerOptions{})
-if err != nil {
-    return err
-}
-session, err := workspace.Build(ctx, server, described)
 ```
+
+<!-- docs:end -->
 
 `Parse` rejects a field it does not recognise rather than dropping it, so a
 workspace that loads is a workspace that was understood. Validation reports
 every problem it finds at once, each with the line it is on, so a file is fixed
-in one pass rather than one run per mistake. It reports every parse
-and validation failure as `ErrInvalidWorkspace`; a failure tmux raises while
-building, such as incompatible geometry or an unknown option, is a tmux
-command error and is classified with the tmux package's own sentinels. `Build`
-uses strict errors regardless of the server it is handed, because a workspace
-that half exists is never what the caller wanted.
+in one pass rather than one run per mistake. Every parse and validation
+failure matches [`ErrInvalidWorkspace`][workspace-errinvalidworkspace].
 
-Classic custom layouts are checked for their checksum, unsigned 32-bit fields and
-nonempty tree structure before building. `Build` and `BuildInto` check every
-layout's desired pane capacity and name availability before making changes.
-Names accept abbreviations unique on the selected daemon; only an unbound
-cold endpoint uses the configured client version. Trees may nest up to 256
-parents; tmux adjusts and validates the resulting geometry. JSON layouts first
-appear in tmux 3.8, including its release candidates; tmux validates their
-contents.
+Classic custom layouts are checked for their checksum, unsigned 32-bit fields
+and nonempty tree structure before building. Trees may nest up to 256 parents;
+tmux adjusts and validates the resulting geometry. JSON layouts first appear
+in tmux 3.8, including its release candidates; tmux validates their contents.
+
+### [`workspace.Build`][workspace-build]: build it as a new session
+
+<!-- docs:workspace-build -->
+
+```go
+// Given: ctx context.Context; server tmux.Server; parsed workspace.Workspace
+session, err := workspace.Build(ctx, server, parsed)
+if err != nil {
+	fmt.Println("build:", err)
+	return
+}
+
+name, _ := session.Name()
+windows, err := session.SearchWindows(ctx, nil)
+if err != nil {
+	fmt.Println("search windows:", err)
+	return
+}
+fmt.Println(name, len(windows))
+```
+
+<!-- docs:end -->
+
+`Build` uses strict errors regardless of the server it is handed, because a
+workspace that half exists is never what the caller wanted. A failure tmux
+raises while building, such as incompatible geometry or an unknown option, is
+a tmux command error and is classified with the tmux package's own sentinels.
+`Build` and `BuildInto` check every layout's desired pane capacity and name
+availability before making changes. Names accept abbreviations unique on the
+selected daemon; only an unbound cold endpoint uses the configured client
+version.
 
 `Build` creates the session and a temporary control connection in one process,
-then uses that connection for the rest of the build.
-The connection is a tmux client while the build runs: it shows in
-`list-clients`, counts toward `session_attached`, and can trigger client policy.
-`Build` closes it before returning an ordinary session handle.
+then uses that connection for the rest of the build. The connection is a tmux
+client while the build runs: it shows in `list-clients`, counts toward
+`session_attached`, and can trigger client policy. `Build` closes it before
+returning an ordinary session handle.
 
 `Build` is not atomic. tmux has no transaction, so a failure partway through
 leaves what it already created in place; the returned session identifies it, so
 you can kill it. Its relation accessors are empty, because it came from a
-creation call rather than a snapshot — take a `Server.Snapshot` to inspect what
+creation call rather than a snapshot; take a `Server.Snapshot` to inspect what
 was built.
+
+### [`workspace.BuildInto`][workspace-buildinto]: build into a session you made
+
+When the session has to exist first, for example to keep the connection that
+created it, [`Workspace.InitialSessionRequest`][workspace-workspace-initialsessionrequest]
+gives the request that creates it and `BuildInto` fills in the rest:
+
+<!-- docs:workspace-build-into -->
+
+```go
+// Given: ctx context.Context; server tmux.Server; described workspace.Workspace
+request, err := described.InitialSessionRequest()
+if err != nil {
+	fmt.Println("request:", err)
+	return
+}
+_, connection, err := server.NewSessionConnection(
+	ctx,
+	request,
+	tmux.ConnectionOptions{},
+)
+if err != nil {
+	fmt.Println("create:", err)
+	return
+}
+defer func() { _ = connection.Close() }()
+session := connection.Session()
+if err := workspace.BuildInto(ctx, session, described); err != nil {
+	fmt.Println("build:", err)
+	return
+}
+```
+
+<!-- docs:end -->
+
+### [`Workspace.MissingDirectories`][workspace-workspace-missingdirectories]: directories that are not there
 
 A `start_directory` that does not exist is not an error. tmux falls back to the
 user's home directory and reports success, so a workspace naming a directory
 that is absent on a given machine builds and puts every pane somewhere else.
-`Workspace.MissingDirectories` reports those before you build, for a caller who
-would rather say something than let it pass. It is not a validation failure,
-because a directory a `shell_command_before` creates is ordinary.
+`MissingDirectories` reports those before you build, for a caller who would
+rather say something than let it pass. It is not a validation failure, because
+a directory a `shell_command_before` creates is ordinary.
 
 ## A workspace
 
@@ -189,3 +247,9 @@ A window's first pane is created with the window, so `window_shell` and a
 rejected.
 
 [tmux module]: ../tmux/
+[workspace-build]: https://libtmux.org/en/go/latest/workspace/reference/workspace-build/
+[workspace-buildinto]: https://libtmux.org/en/go/latest/workspace/reference/workspace-buildinto/
+[workspace-errinvalidworkspace]: https://libtmux.org/en/go/latest/workspace/reference/workspace-errinvalidworkspace/
+[workspace-parse]: https://libtmux.org/en/go/latest/workspace/reference/workspace-parse/
+[workspace-workspace-initialsessionrequest]: https://libtmux.org/en/go/latest/workspace/reference/workspace-workspace-initialsessionrequest/
+[workspace-workspace-missingdirectories]: https://libtmux.org/en/go/latest/workspace/reference/workspace-workspace-missingdirectories/
