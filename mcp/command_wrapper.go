@@ -7,11 +7,23 @@ import (
 
 const maximumInheritedTrapBytes = 64 * 1024
 
+// wrapperPIDPath is where a wrapper records its own process, beside the
+// record that says it has started. A run that was killed leaves no status,
+// and its process being gone is then the only sign that it ended.
+func wrapperPIDPath(openedPath string) string {
+	return openedPath + ".pid"
+}
+
 // wrapperScript renders the bookkeeping wrapper the pane runs. Bash and zsh
 // trap declarations are carried as opaque code into the command subshell;
 // bookkeeping runs with ERR, DEBUG, errexit, and xtrace disabled. After timeout
 // cleanup removes the directory a trailing stderr redirection would be too
 // late, because shells apply redirections left to right.
+//
+// The wrapper catches SIGINT. An interrupt reaches every process in the pane's
+// foreground, the wrapper among them, and one that died with the command
+// would record no status. A trap is not inherited, so the command still dies
+// of the signal and the wrapper goes on to record that.
 func wrapperScript(
 	mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce string,
 ) string {
@@ -31,6 +43,9 @@ func wrapperScript(
 		"\\set +e\n" +
 		trapStatus + "=0\n" +
 		"\\umask 077\n" +
+		// A child's parent is this subshell, which has no portable name
+		// for its own process.
+		publishRecord(`command sh -c 'command printf %s "$PPID"'`, wrapperPIDPath(openedPath)) +
 		"if : >| " + traps + "; then\n" +
 		"  case \"${BASH_VERSION-}:${ZSH_VERSION-}\" in\n" +
 		"    ?*:*) if \\trap -p ERR DEBUG >| " + traps + "; then :; else " +
@@ -49,6 +64,7 @@ func wrapperScript(
 		"  { command printf '\\n'; command cat " + command + "; } >> " + traps +
 		" || " + trapStatus + "=125\n" +
 		"fi\n" +
+		"\\trap : INT\n" +
 		publishRecord(mark, openedPath) +
 		"if command test \"$" + trapStatus + "\" -ne 0; then\n" +
 		"  " + status + "=125\n" +

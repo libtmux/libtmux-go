@@ -274,6 +274,7 @@ func (t *tools) startCommand(
 	}
 	started.directory = directory
 	started.openedAt = openedPath
+	started.wrapperPIDAt = wrapperPIDPath(openedPath)
 	started.closedAt = closedPath
 	started.statusAt = statusPath
 	sourceScript := ". " + shellQuote(scriptPath)
@@ -507,6 +508,7 @@ type commandRun struct {
 	openedAt      string
 	closedAt      string
 	statusAt      string
+	wrapperPIDAt  string
 	configuredIDs []string
 	lease         paneInputLease
 	dispatched    bool
@@ -517,7 +519,13 @@ func (t *tools) finishCommandRun(run commandRun) {
 	_ = os.RemoveAll(run.directory)
 }
 
+// reapCommandRun follows a run whose call has returned without its status,
+// and frees the pane when the run ends. It ends when the wrapper records a
+// status, when the pane is gone, or when the wrapper's own process is: a
+// wrapper that was killed, or whose pane was respawned, records nothing.
+// Until then the pane takes input and refuses another run.
 func (t *tools) reapCommandRun(run commandRun) {
+	processPaneInputs.detach(run.lease)
 	go func() {
 		defer t.finishCommandRun(run)
 		completion := time.NewTicker(commandCompletionPollInterval)
@@ -538,6 +546,9 @@ func (t *tools) reapCommandRun(run commandRun) {
 				present, probeErr := commandRunPresent(probeCtx, run.pane, run.identity)
 				cancel()
 				if probeErr == nil && !present {
+					return
+				}
+				if commandWrapperGone(run.wrapperPIDAt) {
 					return
 				}
 			}
@@ -575,6 +586,22 @@ func commandRunPresent(
 		return true, errors.Join(err, processErr)
 	}
 	return true, err
+}
+
+// commandWrapperGone reports whether a wrapper recorded its process and that
+// process no longer exists. A wrapper that has not started has recorded
+// nothing, and is not gone.
+func commandWrapperGone(pidPath string) bool {
+	recorded, err := os.ReadFile(pidPath)
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.ParseUint(strings.TrimSpace(string(recorded)), 10, 64)
+	if err != nil {
+		return false
+	}
+	present, err := commandRunProcessPresent(pid)
+	return err == nil && !present
 }
 
 func commandRunDisappeared(err error) bool {

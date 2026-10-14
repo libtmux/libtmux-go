@@ -153,8 +153,12 @@ Commands for `run_shell_command` are staged as private files and sourced by the
 pane's POSIX-compatible shell. They do not cross the interactive line editor.
 A command runs in a subshell, so `cd`, `export`, `exit`, and other shell-state
 changes do not persist in the pane's interactive shell.
-A timeout can leave the pane's program running; inspect it with
-`get_pane_info`, then send `C-c` if interruption is intended.
+A timeout can leave the pane's program running. Until it ends, `send_keys` and
+`paste_text` reach it, and another `run_shell_command` on that pane is
+refused. Inspect it with `get_pane_info`, then send `C-c` if interruption is
+intended. The pane takes a new run once the command ends, is interrupted, or
+the pane is respawned. A command interrupted while a call still waits on it
+reports exit status 130.
 
 ### How large an argument can be
 

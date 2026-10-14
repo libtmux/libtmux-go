@@ -472,10 +472,19 @@ func TestRetainedRunRequiresAuthenticatedCompletion(t *testing.T) {
 		identity: identity, lease: lease,
 	})
 
+	// A retained run lets input through, which is how a caller steers or
+	// interrupts it, and refuses another run until it has ended.
+	input, err := processPaneInputs.acquire(
+		[]paneInputIdentity{identity}, paneInputReservationInput, "send_keys",
+	)
+	if err != nil {
+		t.Fatalf("input to a retained run = %v, want it let through", err)
+	}
+	processPaneInputs.release(input)
 	deadline := time.Now().Add(200 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		unexpected, acquireErr := processPaneInputs.acquire(
-			[]paneInputIdentity{identity}, paneInputReservationInput, "send_keys",
+			[]paneInputIdentity{identity}, paneInputReservationRun, "run_shell_command",
 		)
 		if acquireErr == nil {
 			processPaneInputs.release(unexpected)
@@ -489,7 +498,7 @@ func TestRetainedRunRequiresAuthenticatedCompletion(t *testing.T) {
 	deadline = time.Now().Add(2 * time.Second)
 	for {
 		available, acquireErr := processPaneInputs.acquire(
-			[]paneInputIdentity{identity}, paneInputReservationInput, "send_keys",
+			[]paneInputIdentity{identity}, paneInputReservationRun, "run_shell_command",
 		)
 		if acquireErr == nil {
 			processPaneInputs.release(available)
