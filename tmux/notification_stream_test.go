@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -166,11 +167,6 @@ func TestSubscriptionRequestScopeRendersAnEmptyTargetForSessionScope(t *testing.
 	}{
 		{name: "no scope", request: SubscriptionRequest{}, want: ""},
 		{
-			name:    "session scope",
-			request: SubscriptionRequest{Session: "$0"},
-			want:    "",
-		},
-		{
 			name:    "window scope",
 			request: SubscriptionRequest{Window: "@3"},
 			want:    "@3",
@@ -192,6 +188,27 @@ func TestSubscriptionRequestScopeRendersAnEmptyTargetForSessionScope(t *testing.
 	}
 }
 
+func TestNotificationOptionsBacklog(t *testing.T) {
+	t.Parallel()
+
+	for _, bad := range []int{-1, 1, minNotificationBacklog - 1} {
+		if err := (NotificationOptions{BacklogBytes: bad}).validate(); !errors.Is(err, ErrInvalidServerCommandRequest) {
+			t.Errorf("BacklogBytes %d validate() = %v, want an invalid request", bad, err)
+		}
+	}
+	for _, good := range []int{0, minNotificationBacklog, 1 << 30} {
+		if err := (NotificationOptions{BacklogBytes: good}).validate(); err != nil {
+			t.Errorf("BacklogBytes %d validate() = %v, want accepted", good, err)
+		}
+	}
+	if got := (NotificationOptions{}).backlog(); got != defaultControlNotificationLimit {
+		t.Errorf("zero BacklogBytes selects %d, want the default %d", got, defaultControlNotificationLimit)
+	}
+	if got := (NotificationOptions{BacklogBytes: 1 << 20}).backlog(); got != 1<<20 {
+		t.Errorf("BacklogBytes 1 MiB selects %d", got)
+	}
+}
+
 func TestResumablePaneIDMatchesTmuxsParser(t *testing.T) {
 	t.Parallel()
 
@@ -204,5 +221,145 @@ func TestResumablePaneIDMatchesTmuxsParser(t *testing.T) {
 		if got := resumablePaneID(id); got != want {
 			t.Errorf("resumablePaneID(%q) = %t, want %t", id, got, want)
 		}
+	}
+}
+
+// Two readers share one wake-up signal, and a record queued while both are
+// about to wait wakes only one of them. A single reader leaves no second
+// reader to be missed: the later one waits its turn and finds the record.
+func TestNotificationStreamNextSerializesConcurrentReaders(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(1 << 10)
+	t.Cleanup(func() { _ = queue.Close() })
+	stream := &NotificationStream{client: &ControlClient{notifications: queue}}
+
+	readers := [2]*gatedDoneContext{newGatedDoneContext(), newGatedDoneContext()}
+	results := make(chan error, 2)
+	for _, reader := range readers {
+		go func() {
+			_, err := stream.Next(reader)
+			results <- err
+		}()
+		<-reader.reached
+	}
+	// Each reader is now at the point of waiting, with nothing yet queued.
+	for sequence := uint64(1); sequence <= 2; sequence++ {
+		if err := queue.append(sequence, []byte("%session-renamed $1 renamed")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for index, reader := range readers {
+		close(reader.release)
+		select {
+		case err := <-results:
+			if err != nil {
+				t.Fatalf("reader %d error = %v, want a notification", index, err)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("reader %d still blocked with a record queued", index)
+		}
+	}
+}
+
+// gatedDoneContext holds its first Done call until release closes, so a test
+// can park a reader exactly where it is about to wait.
+type gatedDoneContext struct {
+	context.Context
+	reached chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newGatedDoneContext() *gatedDoneContext {
+	return &gatedDoneContext{
+		Context: context.Background(),
+		reached: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (c *gatedDoneContext) Done() <-chan struct{} {
+	c.once.Do(func() {
+		close(c.reached)
+		<-c.release
+	})
+	return c.Context.Done()
+}
+
+func TestNotificationStreamNextHonorsCancellationWhileWaitingForTheReader(t *testing.T) {
+	t.Parallel()
+
+	queue := newControlNotificationQueue(1 << 10)
+	t.Cleanup(func() { _ = queue.Close() })
+	stream := &NotificationStream{client: &ControlClient{notifications: queue}}
+
+	holder, stopHolder := context.WithCancel(context.Background())
+	held := &doneObservedContext{Context: holder, observed: make(chan struct{})}
+	holderResult := make(chan error, 1)
+	go func() {
+		_, err := stream.Next(held)
+		holderResult <- err
+	}()
+	<-held.observed
+
+	waiter, stopWaiter := context.WithCancel(context.Background())
+	waiting := &doneObservedContext{Context: waiter, observed: make(chan struct{})}
+	waiterResult := make(chan error, 1)
+	go func() {
+		_, err := stream.Next(waiting)
+		waiterResult <- err
+	}()
+	<-waiting.observed
+	stopWaiter()
+	select {
+	case err := <-waiterResult:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("waiting reader error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("waiting reader ignored its context")
+	}
+	stopHolder()
+	if err := <-holderResult; !errors.Is(err, context.Canceled) {
+		t.Fatalf("holding reader error = %v, want context.Canceled", err)
+	}
+}
+
+// A caller writes one errors.Is check for every way a read ends: ErrControlClosed
+// for any end, os.ErrClosed kept for callers that already test it, and
+// ErrControlStreamLost only when the caller did not ask for it.
+func TestNotificationStreamReadsReportOneSentinelAfterEveryEnd(t *testing.T) {
+	t.Parallel()
+
+	t.Run("closed", func(t *testing.T) {
+		t.Parallel()
+		stream := newClosableNotificationStream()
+		if err := stream.Close(); err != nil {
+			t.Fatal(err)
+		}
+		_, err := stream.Next(context.Background())
+		if !errors.Is(err, ErrControlClosed) || !errors.Is(err, os.ErrClosed) ||
+			errors.Is(err, ErrControlStreamLost) {
+			t.Fatalf("Next() after Close() = %v, want ErrControlClosed and os.ErrClosed, no loss", err)
+		}
+	})
+	for _, test := range []struct{ name, wire string }{
+		{"lost naming a reason", "%exit server exited\n"},
+		{"lost without a reason", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			stream := &NotificationStream{client: newQueuedNotificationClient(t, test.wire)}
+			if test.wire != "" {
+				if _, err := stream.Next(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err := stream.Next(context.Background())
+			if !errors.Is(err, ErrControlClosed) || !errors.Is(err, ErrControlStreamLost) {
+				t.Fatalf("Next() after the stream ended = %v, want ErrControlClosed and ErrControlStreamLost", err)
+			}
+		})
 	}
 }

@@ -95,7 +95,7 @@ func (o *PaneObservation) Baseline() []string {
 // Notifications queued before that boundary are discarded.
 // Concurrent calls are serialized. Caller context errors and
 // [ControlNotificationError] affect only one call. Explicit close returns an
-// error matching [os.ErrClosed].
+// error matching [ErrControlClosed] and [os.ErrClosed].
 //
 // Topology loss, natural stream EOF, and terminal reader errors return
 // [ErrPaneObservationLost]. Stream failures preserve their cause. Later calls
@@ -256,7 +256,7 @@ func (s *paneObservationState) classifyReadError(
 		return err
 	}
 	if closeRequested {
-		return os.ErrClosed
+		return errControlNotificationsClosed
 	}
 	if s.exitReason != "" {
 		s.loss = fmt.Errorf("%w: server ended the stream: %s: %w",

@@ -47,6 +47,17 @@ func (s Server) openControl(
 	session Session,
 	profile controlClientProfile,
 ) (*ControlClient, error) {
+	return s.openControlWithBacklog(ctx, session, profile, defaultControlNotificationLimit)
+}
+
+// openControlWithBacklog is openControl with the notification queue bound a
+// retaining profile uses; command profiles retain none and ignore it.
+func (s Server) openControlWithBacklog(
+	ctx context.Context,
+	session Session,
+	profile controlClientProfile,
+	backlog int,
+) (*ControlClient, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -88,10 +99,11 @@ func (s Server) openControl(
 		return nil, err
 	}
 	attach = append([]string{"-C"}, attach...)
-	return s.startControl(
+	return s.startControlWithBacklog(
 		ctx,
 		session,
 		profile,
+		backlog,
 		attach,
 		func(client *ControlClient) error {
 			return client.acceptAttach(ctx, guard)
@@ -109,6 +121,19 @@ func (s Server) startControl(
 	startup []string,
 	accept func(*ControlClient) error,
 ) (*ControlClient, error) {
+	return s.startControlWithBacklog(
+		ctx, session, profile, defaultControlNotificationLimit, startup, accept,
+	)
+}
+
+func (s Server) startControlWithBacklog(
+	ctx context.Context,
+	session Session,
+	profile controlClientProfile,
+	backlog int,
+	startup []string,
+	accept func(*ControlClient) error,
+) (*ControlClient, error) {
 	state, err := s.stateForUse()
 	if err != nil {
 		return nil, err
@@ -116,7 +141,7 @@ func (s Server) startControl(
 
 	var notifications *controlNotificationQueue
 	if profile.retainsNotifications() {
-		notifications = newControlNotificationQueue(defaultControlNotificationLimit)
+		notifications = newControlNotificationQueue(backlog)
 	}
 	arguments := s.commandArguments(startup)
 	command := exec.Command(state.config.executable, arguments...)

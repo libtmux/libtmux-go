@@ -11,34 +11,47 @@ import (
 	"os"
 )
 
-// NextNotification returns the next ordered control-mode notification. Exactly
-// one caller may execute it at a time. Close releases the queue and makes
-// subsequent reads report os.ErrClosed, drained through queued notifications
-// first. Natural process exit before a caller asked to close instead reports
+// NextNotification returns the next ordered control-mode notification.
+// Concurrent calls are serialized, as for [PaneObservation.NextNotification]:
+// each notification goes to exactly one call, in order, and a call waiting its
+// turn returns when ctx ends.
+//
+// Every end of the client matches [ErrControlClosed]. Close releases the queue
+// and makes subsequent reads report an error matching both [ErrControlClosed]
+// and [os.ErrClosed]. Natural process exit before a caller asked to close
+// instead reports an error matching both [ErrControlClosed] and
 // [ErrControlStreamLost] - most often because the server the underlying tmux
 // client was attached to exited - naming the tmux exit reason when one was
 // sent. A terminal reader error follows notifications queued before that
 // failure. A full bounded queue likewise drains before reporting
-// [ControlNotificationOverflowError].
+// [ControlNotificationOverflowError], which does not match [ErrControlClosed]:
+// the process is still running, and the caller decides to close it.
 func (c *ControlClient) NextNotification(
 	ctx context.Context,
 ) (ControlNotification, error) {
+	if err := c.notifications.acquireReader(ctx); err != nil {
+		return ControlNotification{}, err
+	}
+	defer c.notifications.releaseReader()
 	notification, err := c.nextNotificationAfter(ctx, 0)
 	if err == nil || !errors.Is(err, io.EOF) {
 		return notification, err
 	}
 	if c.closeRequested.Load() {
-		return ControlNotification{}, os.ErrClosed
+		return ControlNotification{}, errControlNotificationsClosed
 	}
 	c.stateMu.Lock()
 	reason := c.lastExitReason
 	c.stateMu.Unlock()
 	if reason != "" {
 		return ControlNotification{}, fmt.Errorf(
-			"%w: tmux exited the client: %s: %w", ErrControlStreamLost, reason, err,
+			"%w: %w: tmux exited the client: %s: %w",
+			ErrControlStreamLost, ErrControlClosed, reason, err,
 		)
 	}
-	return ControlNotification{}, fmt.Errorf("%w: %w", ErrControlStreamLost, err)
+	return ControlNotification{}, fmt.Errorf(
+		"%w: %w: %w", ErrControlStreamLost, ErrControlClosed, err,
+	)
 }
 
 func (c *ControlClient) nextNotificationAfter(
@@ -68,8 +81,9 @@ func (c *ControlClient) readyNotificationAfter(
 // Notifications returns an iterator over what tmux says without being asked:
 // pane output, and the events behind [ControlNotification].
 //
-// It is [ControlClient.NextNotification] as a range loop; exactly one iterator
-// or direct notification read may run at a time.
+// It is [ControlClient.NextNotification] as a range loop. Reads from several
+// iterators or direct calls are serialized, so a notification reaches one of
+// them rather than all.
 //
 //	for notification, err := range client.Notifications(ctx) {
 //		if err != nil {
@@ -82,8 +96,8 @@ func (c *ControlClient) readyNotificationAfter(
 //
 // Malformed or unknown notifications yield their error and iteration continues.
 // Every other error ends the stream after being yielded, including the
-// [ErrControlStreamLost] or os.ErrClosed [ControlClient.NextNotification]
-// reports at a natural end.
+// [ErrControlStreamLost] or [os.ErrClosed] error [ControlClient.NextNotification]
+// reports at a natural end, both of which match [ErrControlClosed].
 //
 // Leaving early preserves queued notifications for the next read.
 func (c *ControlClient) Notifications(

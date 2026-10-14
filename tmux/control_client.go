@@ -10,12 +10,15 @@ import (
 )
 
 // ErrControlClosed identifies an operation attempted after a control client
-// began closing or lost its protocol stream.
+// began closing or lost its protocol stream. A notification read after either
+// end matches it, so one errors.Is check covers a stream the caller closed and
+// one tmux ended; [ErrControlStreamLost] tells the second apart.
 var ErrControlClosed = errors.New("tmux: control client is closed")
 
 // ErrControlStreamLost identifies a [ControlClient.NextNotification] stream
 // that ended before the caller asked to close it, distinct from the clean
-// end an explicit Close or CloseContext produces. It is most often the
+// end an explicit Close or CloseContext produces. Such an error also matches
+// [ErrControlClosed]. It is most often the
 // underlying tmux client process exiting because the server it was attached
 // to did.
 var ErrControlStreamLost = errors.New("tmux: control stream lost")
@@ -29,8 +32,8 @@ var ErrOutcomeUnknown = errors.New("tmux: command outcome is unknown")
 var ErrControlReplyCount = errors.New("tmux: control command did not return exactly one reply")
 
 // ControlClient is one attached tmux control-mode process. Create one with
-// [Server.OpenControl]. Concurrent Cmd, Wait, and close calls are supported;
-// exactly one caller may execute NextNotification at a time.
+// [Server.OpenControl]. Concurrent Cmd, Wait, close, and NextNotification calls
+// are supported; concurrent notification reads are serialized.
 //
 // It is the low-level handle: it carries commands and notifications on one
 // client and can [ControlClient.Reconnect], but records do not run through it.

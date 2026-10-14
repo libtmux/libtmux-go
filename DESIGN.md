@@ -761,6 +761,20 @@ protocol in an owned, observation-only `NotificationStream` whose `Next`
 preserves wire order. Before tmux 3.6, destroying the attached session follows
 that session's `detach-on-destroy` policy and may end the stream.
 
+Concurrent notification reads on one client or stream are serialized, as they
+are on a `PaneObservation`: each notification reaches one call, and a waiting
+call leaves when its context ends. Every end of a read matches
+`ErrControlClosed`; `os.ErrClosed` additionally marks a close the caller asked
+for and `ErrControlStreamLost` one tmux caused. A backlog overflow is not an
+end of the process, so it matches none of the three. `NotificationOptions.BacklogBytes` sizes
+that backlog.
+
+A `NotificationStream` has no `Reconnect`, deliberately. A replacement client
+starts with none of the old one's subscriptions or pause hold, so resuming
+would either drop them silently or replay commands, and `Reconnect` does
+neither. Recovery is to close, open another stream, read the state that matters
+from tmux, and subscribe again.
+
 `Pane.OpenObservation` linearizes a visible baseline with its dedicated
 notification stream. Copies of a `PaneObservation` share one serialized reader
 and terminal state. Caller cancellation, an individual

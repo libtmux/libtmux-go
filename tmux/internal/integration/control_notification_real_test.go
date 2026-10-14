@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -212,9 +213,8 @@ func TestNotificationStreamSubscribeReportsAFormatWhenItChanges(t *testing.T) {
 	t.Cleanup(func() { _ = stream.Close() })
 
 	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
-		Name:    "windows",
-		Format:  "#{session_windows}",
-		Session: sessions[0].ID(),
+		Name:   "windows",
+		Format: "#{session_windows}",
 	}); err != nil {
 		t.Fatalf("Subscribe() error = %v", err)
 	}
@@ -272,4 +272,123 @@ func TestNotificationStreamUnsubscribeStopsAName(t *testing.T) {
 	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{Name: "a:b", Format: "x"}); err == nil {
 		t.Fatal("Subscribe() accepted a name containing the scope delimiter")
 	}
+}
+
+// BacklogBytes sizes the bound on what a stream holds while nobody reads: a
+// pane that prints well past it ends reads with the typed overflow error,
+// reporting the limit that was asked for.
+//
+//libtmux:real-tmux
+func TestNotificationStreamBacklogBytesBoundsWhatTheStreamHolds(t *testing.T) {
+	server := tmuxtest.NewServer(context.Background(), t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+	}
+	const limit = 64 << 10
+	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{
+		IncludePaneOutput: true,
+		BacklogBytes:      limit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+
+	// A second, promptly read stream says when the pane has finished writing,
+	// so the first is read only after far more than its bound has arrived.
+	watcher, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{
+		IncludePaneOutput: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watcher.Close() })
+	if _, err := sessions[0].NewWindow(ctx, tmux.NewWindowRequest{
+		Command: "sh -c 'yes xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | head -c 1048576; echo finished-writing; sleep 60'",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var tail []byte
+	for !bytes.Contains(tail, []byte("finished-writing")) {
+		notification, err := watcher.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, output, ok := notification.Output(); ok {
+			tail = append(tail[:0:0], append(tail[max(0, len(tail)-32):], output...)...)
+		}
+	}
+	for {
+		_, err := stream.Next(ctx)
+		if err == nil {
+			continue
+		}
+		overflow, ok := errors.AsType[*tmux.ControlNotificationOverflowError](err)
+		if !ok || !errors.Is(err, tmux.ErrControlNotificationOverflow) {
+			t.Fatalf("Next() error = %v, want the typed backlog overflow", err)
+		}
+		if overflow.LimitBytes != limit {
+			t.Fatalf("overflow LimitBytes = %d, want %d", overflow.LimitBytes, limit)
+		}
+		if errors.Is(err, tmux.ErrControlClosed) {
+			t.Fatalf("overflow %v matches ErrControlClosed; the process is still running", err)
+		}
+		return
+	}
+}
+
+// One errors.Is(err, ErrControlClosed) covers a stream the caller closed and
+// one whose server went away.
+//
+//libtmux:real-tmux
+func TestNotificationStreamEndsMatchErrControlClosed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	t.Run("closed", func(t *testing.T) {
+		server := tmuxtest.NewServer(context.Background(), t)
+		sessions, err := server.Sessions(ctx)
+		if err != nil || len(sessions) != 1 {
+			t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+		}
+		stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := stream.Close(); err != nil {
+			t.Fatal(err)
+		}
+		_, err = stream.Next(ctx)
+		if !errors.Is(err, tmux.ErrControlClosed) || !errors.Is(err, os.ErrClosed) ||
+			errors.Is(err, tmux.ErrControlStreamLost) {
+			t.Fatalf("Next() after Close() = %v, want ErrControlClosed and os.ErrClosed, no loss", err)
+		}
+	})
+	t.Run("server exited", func(t *testing.T) {
+		server := tmuxtest.NewServer(context.Background(), t)
+		sessions, err := server.Sessions(ctx)
+		if err != nil || len(sessions) != 1 {
+			t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
+		}
+		stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = stream.Close() })
+		if err := server.Kill(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			_, err = stream.Next(ctx)
+			if err != nil {
+				break
+			}
+		}
+		if !errors.Is(err, tmux.ErrControlClosed) || !errors.Is(err, tmux.ErrControlStreamLost) {
+			t.Fatalf("Next() after the server exited = %v, want ErrControlClosed and ErrControlStreamLost", err)
+		}
+	})
 }
