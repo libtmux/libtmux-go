@@ -433,6 +433,41 @@ func TestReferenceLinksNameExportedAPI(t *testing.T) {
 	}
 }
 
+var (
+	linkLabelUse        = regexp.MustCompile(`\]\[([a-z0-9-]+)\]`)
+	linkLabelDefinition = regexp.MustCompile(`(?m)^\[([a-z0-9-]+)\]: `)
+)
+
+// TestEveryLinkLabelIsDefined holds a README's reference-style links to their
+// definitions. A label with none renders as its own brackets rather than as a
+// link, and a definition nothing uses is a link that was removed halfway.
+func TestEveryLinkLabelIsDefined(t *testing.T) {
+	root, _ := repositoryRoot(t)
+	documents := readDocuments(t, root)
+	for _, name := range slices.Sorted(maps.Keys(documents)) {
+		if path.Base(name) != "README.md" {
+			continue
+		}
+		used, defined := map[string]bool{}, map[string]bool{}
+		for _, match := range linkLabelUse.FindAllStringSubmatch(documents[name], -1) {
+			used[match[1]] = true
+		}
+		for _, match := range linkLabelDefinition.FindAllStringSubmatch(documents[name], -1) {
+			defined[match[1]] = true
+		}
+		for _, label := range slices.Sorted(maps.Keys(used)) {
+			if !defined[label] {
+				t.Errorf("%s uses the link label [%s] and never defines it", name, label)
+			}
+		}
+		for _, label := range slices.Sorted(maps.Keys(defined)) {
+			if !used[label] && !strings.Contains(documents[name], "["+label+"]") {
+				t.Errorf("%s defines the link label [%s] and never uses it", name, label)
+			}
+		}
+	}
+}
+
 // hostileConfig is a tmux configuration unlike the one these programs were
 // written against. A pasted program runs with it as the user's own, so output
 // that depends on what the reader has configured fails here rather than on

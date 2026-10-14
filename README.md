@@ -140,9 +140,10 @@ run, and what they print is compared with the output shown.
 
 ## Find sessions, windows, and panes
 
-[`Server.Sessions`][tmux-server-sessions] asks tmux what it has now;
-[`Server.Windows`][tmux-server-windows] and
-[`Server.Panes`][tmux-server-panes] are its siblings:
+### [`Server.Sessions`][tmux-server-sessions]: what tmux has now
+
+One call asks tmux for every session. [`Server.Windows`][tmux-server-windows]
+and [`Server.Panes`][tmux-server-panes] are its siblings:
 
 <!-- docs:list-sessions -->
 
@@ -166,9 +167,10 @@ running, a listing returns an error matching [`ErrNoServer`][tmux-errnoserver]
 rather than an empty list, so "nothing there" and "nobody to ask" stay
 different answers.
 
-To answer several questions from one moment, read the server once and filter
-that read in Go. [`tmuxq.Matching`][tmuxq-matching] takes any filter the
-`tmux` package declares:
+### [`tmuxq.Matching`][tmuxq-matching]: several answers from one read
+
+Read the server once with [`Server.Snapshot`][tmux-server-snapshot] and filter
+that read in Go. `Matching` takes any filter the `tmux` package declares:
 
 <!-- docs:query-in-go -->
 
@@ -186,7 +188,9 @@ if err != nil {
 
 <!-- docs:end -->
 
-Or let tmux filter, which sends one command and gets back only the matches:
+### [`Server.SearchSessions`][tmux-server-searchsessions]: let tmux filter
+
+One command goes out and only the matches come back:
 
 <!-- docs:query-in-tmux -->
 
@@ -206,8 +210,12 @@ helpers are in [`tmuxq/`](tmuxq/).
 
 ## Type into a pane and wait
 
-A pane is an `io.Writer`, and a newline is the Enter key. Open an observation
-before typing, then wait for text the command prints:
+### [`PaneObservation.WaitFor`][tmux-paneobservation-waitfor]: wait for what a command prints
+
+A pane is an `io.Writer` through [`Pane.Writer`][tmux-pane-writer], and a
+newline is the Enter key. Open an observation with
+[`Pane.OpenObservation`][tmux-pane-openobservation] before typing, then wait
+for text the command prints:
 
 <!-- docs:pane-wait -->
 
@@ -246,10 +254,11 @@ pane as an `io.Reader`.
 
 ## Watch tmux change
 
-[`Session.OpenNotifications`][tmux-session-opennotifications] returns a
-stream of what tmux does, such as a
-window opening or a session being renamed. tmux pushes each change when it
-happens, so nothing has to guess how often to ask:
+### [`Session.OpenNotifications`][tmux-session-opennotifications]: hear changes as they happen
+
+It returns a stream of what tmux does, such as a window opening or a session
+being renamed. tmux pushes each change when it happens, so nothing has to
+guess how often to ask:
 
 <!-- docs:watching -->
 
@@ -284,6 +293,8 @@ for {
 The first notification a new stream reads is `%session-changed`, tmux telling
 the client which session it joined; the rename follows it.
 
+### [`NotificationStream.Subscribe`][tmux-notificationstream-subscribe]: have tmux watch a value
+
 A subscription goes further: tmux evaluates a format for you and reports it
 each time its value changes, so a program hears about a window count or a
 pane's current command without asking again.
@@ -303,9 +314,10 @@ fewer process starts:
 | chained | [`NewPlan`][tmux-newplan] then [`Run`][tmux-plan-run] | fewer process starts | builds and layouts |
 | streaming | [`Session.OpenNotifications`][tmux-session-opennotifications] | one tmux client | watching what tmux does |
 
+### [`NewPlan`][tmux-newplan]: write a layout in one pass
+
 A plan records commands instead of running them, sends the ones needing no
-answer together, and hands back a reference to what a step will create, so a
-layout is written in one pass:
+answer together, and hands back a reference to what a step will create:
 
 <!-- docs:planning -->
 
@@ -330,17 +342,19 @@ supported tmux.
 Runnable: [`examples/fast-path`](examples/fast-path) and
 [`examples/planned-build`](examples/planned-build).
 
-### Moving bytes
+### [`Server.LoadBufferFrom`][tmux-server-loadbufferfrom]: move bytes without quoting
 
 Keys and command arguments are the wrong way to move a payload: a shell reads
 what it is sent, and tmux caps a whole command at 16 KiB and cannot carry a NUL
-through one. [`Server.LoadBufferFrom`][tmux-server-loadbufferfrom] loads a
-buffer from an `io.Reader` and [`Pane.CaptureTo`][tmux-pane-captureto] writes
-a scrollback to an `io.Writer`, with neither limit.
+through one. `LoadBufferFrom` loads a buffer from an `io.Reader` and
+[`Pane.CaptureTo`][tmux-pane-captureto] writes a scrollback to an `io.Writer`,
+with neither limit.
 
 Runnable: [`examples/byte-streams`](examples/byte-streams).
 
 ## Testing your own code
+
+### [`tmuxtest.RunInPane`][tmuxtest-runinpane]: run your program in a real pane
 
 [`tmux/tmuxtest`](tmux/tmuxtest/) runs your program inside a real tmux and
 lets a test assert on what it drew, without a sleep in it. This is a whole
@@ -379,9 +393,11 @@ func TestGreeterAnswersALine(t *testing.T) {
 
 <!-- docs:end -->
 
+### [`tmuxtest.WaitForText`][tmuxtest-waitfortext]: a failed wait shows the screen
+
 A wait that runs out fails with the screen the pane last held, which is what
-you would have added a print statement to see. This one is
-[`WaitForText`][tmuxtest-waitfortext] waiting for `ready`:
+you would have added a print statement to see. This one was waiting for
+`ready`:
 
 <!-- docs:output tmux/tmuxtest/testdata/wait-failure.txt -->
 
@@ -395,9 +411,11 @@ the pane showed 3 line(s):
 
 <!-- docs:end -->
 
-[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test whose subject is tmux
-itself a server on a socket of its own, killed when the test ends.
-[`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux] answers
+### [`tmuxtest.NewServer`][tmuxtest-newserver]: a server for one test
+
+It gives a test whose subject is tmux itself a server on a socket of its own,
+killed when the test ends. [`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux]
+answers
 the tmux commands you name, so a test of your own code needs no tmux
 installed. Both are in [`tmux/tmuxtest`](tmux/tmuxtest/).
 
@@ -507,15 +525,21 @@ Please use the following BibTeX template to cite libtmux-go in scientific discou
 MIT. See [`LICENSE`](LICENSE).
 
 [tmux]: https://github.com/tmux/tmux
-[tmux-errnoserver]: https://libtmux.org/en/go/latest/reference/tmux-errnoserver/
 [tmux-connectionoptions-lanes]: https://libtmux.org/en/go/latest/reference/tmux-connectionoptions-lanes/
+[tmux-errnoserver]: https://libtmux.org/en/go/latest/reference/tmux-errnoserver/
 [tmux-newplan]: https://libtmux.org/en/go/latest/reference/tmux-newplan/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
+[tmux-notificationstream-subscribe]: https://libtmux.org/en/go/latest/reference/tmux-notificationstream-subscribe/
 [tmux-pane-captureto]: https://libtmux.org/en/go/latest/reference/tmux-pane-captureto/
+[tmux-pane-openobservation]: https://libtmux.org/en/go/latest/reference/tmux-pane-openobservation/
+[tmux-pane-writer]: https://libtmux.org/en/go/latest/reference/tmux-pane-writer/
+[tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
 [tmux-plan-run]: https://libtmux.org/en/go/latest/reference/tmux-plan-run/
 [tmux-server-loadbufferfrom]: https://libtmux.org/en/go/latest/reference/tmux-server-loadbufferfrom/
 [tmux-server-panes]: https://libtmux.org/en/go/latest/reference/tmux-server-panes/
+[tmux-server-searchsessions]: https://libtmux.org/en/go/latest/reference/tmux-server-searchsessions/
 [tmux-server-sessions]: https://libtmux.org/en/go/latest/reference/tmux-server-sessions/
+[tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
 [tmux-server-windows]: https://libtmux.org/en/go/latest/reference/tmux-server-windows/
 [tmux-serveroptions]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions/
 [tmux-session-opencontrol]: https://libtmux.org/en/go/latest/reference/tmux-session-opencontrol/
@@ -523,5 +547,6 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
 [tmuxq-matching]: https://libtmux.org/en/go/latest/reference/tmuxq-matching/
 [tmuxtest-newserver]: https://libtmux.org/en/go/latest/reference/tmuxtest-newserver/
+[tmuxtest-runinpane]: https://libtmux.org/en/go/latest/reference/tmuxtest-runinpane/
 [tmuxtest-scriptedtmux]: https://libtmux.org/en/go/latest/reference/tmuxtest-scriptedtmux/
 [tmuxtest-waitfortext]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitfortext/
