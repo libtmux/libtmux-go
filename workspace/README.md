@@ -318,9 +318,10 @@ wherever a boolean is taken. In Go they are the exported
 [`Bool`][workspace-bool] type, so a workspace can be built in code as well as
 read from a file.
 
-Of the 23 workspaces in tmuxp's own `examples/` directory, 20 parse and all 20
-of those build against real tmux. The three that do not parse use `plugins` or
-`before_script`.
+Of the 23 workspaces in tmuxp's own `examples/` directory, as of tmuxp 1.74,
+20 parse. The three that do not use `plugins` or `before_script`. Where a
+checkout of tmuxp is present, a test builds the 20 against real tmux, and
+skips one that names a shell or an environment variable the machine lacks.
 
 ## Not supported
 
