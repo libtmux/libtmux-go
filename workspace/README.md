@@ -17,6 +17,8 @@ Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
 </div>
 
+Add it to your module:
+
 ```console
 $ go get github.com/libtmux/libtmux-go/workspace@latest
 ```

@@ -17,6 +17,8 @@ Run your program inside a real tmux and assert on what it drew.
 
 </div>
 
+Add it to your module:
+
 ```console
 $ go get github.com/libtmux/libtmux-go/tmux/tmuxtest@latest
 ```
@@ -81,6 +83,9 @@ $ go mod init demo && \
     go test
 ```
 
+It prints `ok` with the time the test took, or a failure that shows the
+screen, as below.
+
 The test holds no sleeps. tmux tells each wait when the pane writes, and the
 wait reads the screen then, so a quick program costs milliseconds and a slow
 one is still waited for.
@@ -135,7 +140,7 @@ failure prints.
 shows the prompt `tmuxtest$ `, so a pane looks the same on every machine
 whatever prompt the person running the tests has configured. Ask for that
 shell on a server you build yourself with
-[`ServerOptions.FixedShell`][tmuxtest-serveroptions-fixedshell].
+[`tmuxtest.ServerOptions.FixedShell`][tmuxtest-serveroptions-fixedshell].
 
 ## Testing without a tmux
 
@@ -143,7 +148,8 @@ shell on a server you build yourself with
 
 Where the subject is your own code rather than tmux's behaviour,
 `ScriptedTmux` writes an executable that answers the invocations you name,
-and returns its path for [`ServerOptions.Binary`][tmux-serveroptions-binary].
+and returns its path for
+[`tmux.ServerOptions.Binary`][tmux-serveroptions-binary].
 The test then needs no tmux installed:
 
 <!-- docs:scripted-tmux -->
@@ -223,8 +229,9 @@ server you already hold, and remove it when the test ends.
 - **A generated minimal config.** Your `~/.tmux.conf` cannot change a result:
   no inherited `base-index`, no prompt in captured pane text, no hooks firing.
 - **Inherited state dropped.** `TMUX`, `TMUX_PANE`, and `TMUX_TMPDIR` are
-  removed from every tmux child, so a suite run from inside a pane stays away
-  from the server hosting it.
+  removed from the environment of each tmux the harness starts, which it
+  points at a socket path instead, so a suite run from inside a pane stays
+  away from the server hosting it.
 - **Verified teardown.** Cleanup asks the server answering on the socket for
   its process and confirms *that* process died, rather than trusting a PID
   recorded at startup, which may have been reused.
@@ -232,11 +239,11 @@ server you already hold, and remove it when the test ends.
 ## Keeping your suite to itself
 
 There is nothing to set up. `tmuxtest.Main` gives each run of a suite a
-temporary directory of its own and points `TMPDIR`, `GOTMPDIR`, and
-`TMUX_TMPDIR` at it until the suite ends, so two checkouts running their
-suites on one machine share no socket, and neither shares one with a tmux you
-are using. The directory's path is kept short, because a socket path may hold
-only about a hundred bytes.
+temporary directory of its own and points the test process's `TMPDIR`,
+`GOTMPDIR`, and `TMUX_TMPDIR` at it until the suite ends. Two checkouts
+running their suites on one machine then share no socket, and neither shares
+one with a tmux you are using. The directory's path is kept short, because a
+socket path may hold only about a hundred bytes.
 
 ## See also
 

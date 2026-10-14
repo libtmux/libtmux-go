@@ -17,6 +17,8 @@ The library. A typed, context-aware tmux API with no runtime dependencies.
 
 </div>
 
+Add it to your module:
+
 ```console
 $ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
