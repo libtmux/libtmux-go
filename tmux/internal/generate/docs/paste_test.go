@@ -481,7 +481,9 @@ const hostileConfig = "set -g base-index 5\n" +
 
 // TestPastedProgramsBuildAndRun takes every quoted program back out of the
 // Markdown, puts it alone in an empty module, builds it, runs it, and holds
-// what it prints to the output block published beside it.
+// what it prints to the output block published beside it. A program in a
+// module with dependencies of its own is run by that module's suite instead,
+// and is held here to being one file.
 func TestPastedProgramsBuildAndRun(t *testing.T) {
 	root, absRoot := repositoryRoot(t)
 	if _, err := exec.LookPath("tmux"); err != nil {
@@ -508,6 +510,19 @@ func TestPastedProgramsBuildAndRun(t *testing.T) {
 					name, program.source)
 				continue
 			}
+			if hasItsOwnDependencies(program.source) {
+				// Pasting it would need that module's dependencies from the
+				// network. Its own suite runs it against the published
+				// output; what is left to hold here is that the quoted file
+				// is the whole program.
+				for _, other := range programFiles(t, root, path.Dir(program.source)) {
+					if other != path.Base(program.source) {
+						t.Errorf("%s quotes %s as a whole program, but %s is part of it too",
+							name, program.source, other)
+					}
+				}
+				continue
+			}
 			if seen[program.source+"\x00"+program.body+"\x00"+printed] {
 				continue
 			}
@@ -521,6 +536,22 @@ func TestPastedProgramsBuildAndRun(t *testing.T) {
 	if len(seen) == 0 {
 		t.Fatal("no docs:file blocks found; the scan is broken, not the docs")
 	}
+}
+
+// programFiles names the Go files a directory compiles into its program.
+func programFiles(t *testing.T, root, directory string) []string {
+	t.Helper()
+	sources, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(directory), "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, source := range sources {
+		if !strings.HasSuffix(source, "_test.go") {
+			names = append(names, filepath.Base(source))
+		}
+	}
+	return names
 }
 
 func pasteAndRun(t *testing.T, absRoot string, program wholeBlock, printed string, isTest bool) {

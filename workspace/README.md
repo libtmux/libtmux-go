@@ -17,46 +17,170 @@ Load tmuxp-style YAML workspace files and build them with the [tmux module].
 
 </div>
 
+```console
+$ go get github.com/libtmux/libtmux-go/workspace@latest
+```
+
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
-The [`tmux-workspace` CLI](CLI.md) provides native workspace management,
-structured output, and optional Python compatibility.
+**Contents** — [Quick start](#quick-start) ·
+[A workspace file](#a-workspace-file) · [Using it](#using-it) ·
+[Supported fields](#supported-fields) · [Not supported](#not-supported) ·
+[The tmux-workspace CLI](#the-tmux-workspace-cli) · [See also](#see-also)
 
-The CLI and this library are separate implementations, and they read different
-document languages: a file one accepts is not always a file the other accepts.
-The CLI is the tmuxp-compatible one — build automation on it and parse its
-`--json` or `--ndjson` output. Where they differ today:
+## Quick start
 
-| Behaviour | This library | `tmux-workspace` |
-| --- | --- | --- |
-| `$VAR` in `start_directory` | left alone | expanded |
-| `description:` metadata | refused | accepted at every level |
-| Keys beginning with `x-` | refused | accepted at every level |
-| `before_script` | refused | run |
-| `plugins`, `workspace_builder` | refused | run through tmuxp |
-| `workspace_builder_options` | refused | read |
-| Waiting for a pane's prompt | never | before the pane's first command |
-| A missing `start_directory` | `MissingDirectories` | warned on load |
-| Problems reported | every one, with its line | one per window, with its line; a document-level refusal still stops at the first |
+A workspace is a YAML file that names a session, its windows, and the panes
+in each. It is the format [tmuxp](https://tmuxp.git-pull.com/) reads. This
+program builds one and prints what tmux made of it:
 
-This is a consumer of the tmux module, not part of it. The tmux module takes no
-runtime dependency; parsing YAML needs one, so this lives in its own module and
-`go get` on the tmux module never pulls it in.
+<!-- docs:file workspace/examples/build-workspace/main.go -->
 
-```console
-$ go get github.com/libtmux/libtmux-go/workspace
+```go
+// Command build-workspace builds a tmuxp-style workspace and prints what tmux
+// made of it.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/workspace"
+)
+
+// document is a workspace file. A program of your own would read one from
+// disk with os.ReadFile.
+const document = `
+session_name: project
+windows:
+  - window_name: editor
+    layout: main-vertical
+    panes:
+      - echo editing
+      - echo testing
+  - window_name: logs
+    panes:
+      - echo api
+      - echo worker
+      - echo database
+`
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context) (err error) {
+	// Parse refuses a field it does not know rather than dropping it, so a
+	// workspace that loads is one that was understood.
+	parsed, err := workspace.Parse([]byte(document))
+	if err != nil {
+		return fmt.Errorf("parse workspace: %w", err)
+	}
+
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-build-workspace",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux: %w", err)
+	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
+	}()
+
+	session, err := workspace.Build(ctx, server, parsed)
+	if err != nil {
+		return fmt.Errorf("build workspace: %w", err)
+	}
+
+	// Ask tmux what exists now, rather than repeating what the file asked for.
+	windows, err := session.SearchWindows(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list windows: %w", err)
+	}
+	name, _ := session.Name()
+	fmt.Printf("session %s: %d windows\n", name, len(windows))
+	for _, window := range windows {
+		panes, err := window.SearchPanes(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("list panes: %w", err)
+		}
+		windowName, _ := window.Name()
+		fmt.Printf("window %s: %d panes\n", windowName, len(panes))
+	}
+	return nil
+}
 ```
 
-**Contents** — [Using it](#using-it) · [A workspace](#a-workspace) ·
-[Supported fields](#supported-fields) · [Not supported](#not-supported) ·
-[Reference](https://libtmux.org/en/go/latest/workspace/reference/)
+<!-- docs:end -->
+
+To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
+on `PATH`:
+
+```console
+$ go mod init demo && \
+    go get github.com/libtmux/libtmux-go/workspace@latest && \
+    go run .
+```
+
+It prints:
+
+<!-- docs:output workspace/examples/build-workspace/output.txt -->
+
+```text
+session project: 2 windows
+window editor: 2 panes
+window logs: 3 panes
+```
+
+<!-- docs:end -->
+
+The program builds on a tmux server of its own and stops that server before
+it exits, so it leaves nothing behind and does not touch a tmux you already
+use.
+
+## A workspace file
+
+A fuller one than the program builds. Each pane is a command to type, or a
+list of them:
+
+```yaml
+session_name: project
+start_directory: ~/src/project    # created beforehand; tmux falls back to $HOME if absent
+environment:
+  PROJECT_ENV: development
+windows:
+  - window_name: editor
+    layout: main-vertical
+    focus: true
+    shell_command_before:
+      - cd ~/src/project
+    panes:
+      - $EDITOR .
+      - shell_command:
+          - git status
+          - cmd: make watch
+            sleep_before: 1
+  - window_name: shell
+    panes:
+      - {}
+```
 
 ## Using it
 
 ### [`workspace.Parse`][workspace-parse]: read a workspace
 
-It takes the bytes of a workspace file, such as [the one below](#a-workspace):
+It takes the bytes of a workspace file:
 
 <!-- docs:workspace-parse -->
 
@@ -71,16 +195,16 @@ if err != nil {
 
 <!-- docs:end -->
 
-`Parse` rejects a field it does not recognise rather than dropping it, so a
-workspace that loads is a workspace that was understood. Validation reports
-every problem it finds at once, each with the line it is on, so a file is fixed
-in one pass rather than one run per mistake. Every parse and validation
-failure matches [`ErrInvalidWorkspace`][workspace-errinvalidworkspace].
+`Parse` refuses a field it does not recognise rather than dropping it, so a
+workspace that loads is a workspace that was understood. It reports every
+problem it finds at once, each with the line it is on, so a file is fixed in
+one pass rather than one run per mistake. Every such failure matches
+[`ErrInvalidWorkspace`][workspace-errinvalidworkspace] under `errors.Is`.
 
-Classic custom layouts are checked for their checksum, unsigned 32-bit fields
-and nonempty tree structure before building. Trees may nest up to 256 parents;
-tmux adjusts and validates the resulting geometry. JSON layouts first appear
-in tmux 3.8, including its release candidates; tmux validates their contents.
+A layout written out by hand, in the form tmux prints for `window_layout`, is
+checked before building: its checksum, its numeric fields, and that its tree
+is not empty. A tree may nest 256 levels deep. Layouts written as JSON need
+tmux 3.8 or newer, and tmux checks what they hold.
 
 ### [`workspace.Build`][workspace-build]: build it as a new session
 
@@ -105,31 +229,38 @@ fmt.Println(name, len(windows))
 
 <!-- docs:end -->
 
-`Build` uses strict errors regardless of the server it is handed, because a
-workspace that half exists is never what the caller wanted. A failure tmux
-raises while building, such as incompatible geometry or an unknown option, is
-a tmux command error and is classified with the tmux package's own sentinels.
-`Build` and `BuildInto` check every layout's desired pane capacity and name
-availability before making changes. Names accept abbreviations unique on the
-selected daemon; only an unbound cold endpoint uses the configured client
-version.
+<!-- docs:checked workspace/example_test.go -->
+The workspace this ran on names its session `review` and gives it two windows,
+so it prints `review 2`.
+<!-- docs:end -->
 
-`Build` creates the session and a temporary control connection in one process,
-then uses that connection for the rest of the build. The connection is a tmux
-client while the build runs: it shows in `list-clients`, counts toward
-`session_attached`, and can trigger client policy. `Build` closes it before
-returning an ordinary session handle.
+A workspace that half exists is never what the caller wanted, so `Build` and
+`BuildInto` check every layout before they change anything: that the tmux
+they were handed knows the layout by that name, and that the layout has room
+for the panes its window asks for. A failure tmux raises while building, such
+as an option it does not know, is a tmux command error, and the tmux
+package's own errors classify it.
 
 `Build` is not atomic. tmux has no transaction, so a failure partway through
-leaves what it already created in place; the returned session identifies it, so
-you can kill it. Its relation accessors are empty, because it came from a
-creation call rather than a snapshot; take a `Server.Snapshot` to inspect what
-was built.
+leaves what was already created in place. The returned session identifies it,
+so you can kill it.
+
+The session `Build` returns came from a creation call, so it carries no
+windows of its own: `session.Windows()` reports none. Ask tmux for them with
+[`Session.SearchWindows`][tmux-session-searchwindows], as the quick start
+does, or read everything at once with
+[`Server.Snapshot`][tmux-server-snapshot].
+
+While it runs, `Build` holds one connection to tmux and sends every command
+over it. tmux counts that connection as a client: it shows in `list-clients`
+and counts toward `session_attached` until `Build` closes it, which it does
+before it returns.
 
 ### [`workspace.BuildInto`][workspace-buildinto]: build into a session you made
 
 When the session has to exist first, for example to keep the connection that
-created it, [`Workspace.InitialSessionRequest`][workspace-workspace-initialsessionrequest]
+created it,
+[`Workspace.InitialSessionRequest`][workspace-workspace-initialsessionrequest]
 gives the request that creates it and `BuildInto` fills in the rest:
 
 <!-- docs:workspace-build-into -->
@@ -162,36 +293,13 @@ if err := workspace.BuildInto(ctx, session, described); err != nil {
 
 ### [`Workspace.MissingDirectories`][workspace-workspace-missingdirectories]: directories that are not there
 
-A `start_directory` that does not exist is not an error. tmux falls back to the
-user's home directory and reports success, so a workspace naming a directory
-that is absent on a given machine builds and puts every pane somewhere else.
-`MissingDirectories` reports those before you build, for a caller who would
-rather say something than let it pass. It is not a validation failure, because
-a directory a `shell_command_before` creates is ordinary.
-
-## A workspace
-
-```yaml
-session_name: project
-start_directory: ~/src/project    # created beforehand; tmux falls back to $HOME if absent
-environment:
-  PROJECT_ENV: development
-windows:
-  - window_name: editor
-    layout: main-vertical
-    focus: true
-    shell_command_before:
-      - cd ~/src/project
-    panes:
-      - $EDITOR .
-      - shell_command:
-          - git status
-          - cmd: make watch
-            sleep_before: 1
-  - window_name: shell
-    panes:
-      - {}
-```
+A `start_directory` that does not exist is not an error. tmux falls back to
+the user's home directory and reports success, so a workspace naming a
+directory that is absent on a given machine builds and puts every pane
+somewhere else. `MissingDirectories` reports those before you build, for a
+caller who would rather say something than let it pass. `Parse` does not
+refuse them, because a directory that a `shell_command_before` creates is
+ordinary.
 
 ## Supported fields
 
@@ -205,18 +313,18 @@ windows:
 A pane may be written as a bare command string, and `shell_command` and
 `shell_command_before` each accept one command or a list. Booleans accept
 tmuxp's quoted spellings, so `focus: "true"` and `focus: true` are the same
-wherever a boolean is taken. In Go they are the exported `Bool` type, so a
-workspace can be built in code as well as read from a file.
+wherever a boolean is taken. In Go they are the exported
+[`Bool`][workspace-bool] type, so a workspace can be built in code as well as
+read from a file.
 
 Of the 23 workspaces in tmuxp's own `examples/` directory, 20 parse and all 20
 of those build against real tmux. The three that do not parse use `plugins` or
-`before_script`, which need a Python runtime and are rejected rather than
-ignored.
+`before_script`.
 
 ## Not supported
 
 `plugins` loads Python classes and `before_script` runs a script through
-tmuxp's own process handling. Both need a Python runtime, so both are rejected
+tmuxp's own process handling. Both need a Python runtime, so both are refused
 rather than ignored.
 
 Values are passed to tmux as written. tmuxp expands `${VAR}` references before
@@ -246,7 +354,46 @@ A window's first pane is created with the window, so `window_shell` and a
 `shell` on that pane name the same command. Either one runs it; setting both is
 rejected.
 
+## The tmux-workspace CLI
+
+The [`tmux-workspace` CLI](CLI.md) loads, builds, and manages workspaces from
+a shell, with structured output and optional Python compatibility.
+
+The CLI and this library are separate implementations, and they read
+different dialects of the format: a file one accepts is not always a file the
+other accepts. The CLI is the tmuxp-compatible one. Build automation on it
+and parse its `--json` or `--ndjson` output. Where they differ today:
+
+| Behaviour | This library | `tmux-workspace` |
+| --- | --- | --- |
+| `$VAR` in `start_directory` | left alone | expanded |
+| `description:` metadata | refused | accepted at every level |
+| Keys beginning with `x-` | refused | accepted at every level |
+| `before_script` | refused | run |
+| `plugins`, `workspace_builder` | refused | run through tmuxp |
+| `workspace_builder_options` | refused | read |
+| Waiting for a pane's prompt | never | before the pane's first command |
+| A missing `start_directory` | `MissingDirectories` | warned on load |
+| Problems reported | every one, with its line | one per window, with its line; a document-level refusal still stops at the first |
+
+## See also
+
+This is a consumer of the [tmux module], not part of it. The tmux module
+takes no runtime dependency and parsing YAML needs one, so this lives in a
+module of its own and `go get` on the tmux module never pulls it in.
+
+| | |
+| --- | --- |
+| [Reference](https://libtmux.org/en/go/latest/workspace/reference/) | Every exported identifier, method, and field, one page each |
+| [`CLI.md`](CLI.md) | The `tmux-workspace` command |
+| [`examples/build-workspace`](examples/build-workspace) | The quick start, as a directory you can run |
+| [`../tmux/`](../tmux/) | The library this builds with |
+| [`../examples/planned-build`](../examples/planned-build) | A layout built in code rather than from a file |
+
 [tmux module]: ../tmux/
+[tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
+[tmux-session-searchwindows]: https://libtmux.org/en/go/latest/reference/tmux-session-searchwindows/
+[workspace-bool]: https://libtmux.org/en/go/latest/workspace/reference/workspace-bool/
 [workspace-build]: https://libtmux.org/en/go/latest/workspace/reference/workspace-build/
 [workspace-buildinto]: https://libtmux.org/en/go/latest/workspace/reference/workspace-buildinto/
 [workspace-errinvalidworkspace]: https://libtmux.org/en/go/latest/workspace/reference/workspace-errinvalidworkspace/

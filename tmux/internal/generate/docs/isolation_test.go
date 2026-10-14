@@ -95,7 +95,13 @@ func compiledByItsOwnModule(root string, source region) bool {
 	if err != nil {
 		return false
 	}
-	module, _, _ := strings.Cut(filepath.ToSlash(relative), "/")
+	return hasItsOwnDependencies(filepath.ToSlash(relative))
+}
+
+// hasItsOwnDependencies reports whether a path from the repository root is in
+// a module that needs more than the library to build.
+func hasItsOwnDependencies(relative string) bool {
+	module, _, _ := strings.Cut(relative, "/")
 	return module == "mcp" || module == "workspace"
 }
 
