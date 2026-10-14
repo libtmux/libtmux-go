@@ -270,6 +270,14 @@ input literalization, native schemas, nested authority, and conservative MCP
 annotations. The manifest's complete input-sink table stays internal and is
 validated against every native schema.
 
+For a client author, the annotations mean every tool, including `list_sessions`
+and `capture_pane`, reports `readOnlyHint=false`, `destructiveHint=true`, and
+`openWorldHint=true`. A client that skips approval for read-only tools prompts
+on all of them; classify by `tmuxEffects` in the capability row instead. The row
+also repeats each tool's `description` and both schemas, about a third of the
+`tools/list` reply, and the sibling servers share that shape, so it is not
+trimmed here.
+
 ## Everything else an operator can set
 
 | Variable | Does |

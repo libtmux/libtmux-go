@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -415,5 +416,60 @@ func surfaceSweep() []surfaceStep {
 		{tool: "kill_session", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"session_id": f.otherSession}
 		}},
+	}
+}
+
+// A mistyped filter or argument name must say what was wrong and what would
+// have been right, because the caller is an agent that cannot see the schema
+// it already read.
+//
+//libtmux:real-tmux
+func TestMistakesNameTheirRemedy(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	request := tmux.NewSessionRequest{Name: "mistakes"}
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &request,
+	})
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+
+	for _, test := range []struct {
+		name      string
+		tool      string
+		arguments map[string]any
+		want      []string
+	}{
+		{
+			"unknown session filter", "list_windows",
+			map[string]any{"session": "nope"},
+			[]string{"nope", "list_sessions"},
+		},
+		{
+			"wrong argument name", "create_session",
+			map[string]any{"name": "x"},
+			[]string{"name", "session_name"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := session.CallTool(ctx, &sdk.CallToolParams{
+				Name: test.tool, Arguments: test.arguments,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := surfaceResultText(result)
+			if !result.IsError {
+				t.Fatalf("%s %v answered %q, want an error", test.tool, test.arguments, text)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(text, want) {
+					t.Errorf("error %q does not mention %q", text, want)
+				}
+			}
+		})
 	}
 }

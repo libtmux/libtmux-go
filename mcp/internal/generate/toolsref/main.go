@@ -198,7 +198,7 @@ func classify(tool *sdk.Tool) string {
 	case slices.Contains(effects, "delete"):
 		return "**Deletes tmux state.** Repeating it can remove more state."
 	case slices.Equal(effects, []string{"observe"}):
-		return "Reads only. Repeating it changes nothing."
+		return "Reads only (effect `observe`). Repeating it changes nothing."
 	default:
 		return "Changes tmux state."
 	}

@@ -424,6 +424,11 @@ func finishWait(
 	output.Lines = kept
 	output.truncation = addTruncation(report, earlier)
 	output.ElapsedSeconds = time.Since(started).Seconds()
+	if len(kept) == 0 {
+		// A client that reads content alone must not mistake an empty block
+		// for a call that returned nothing.
+		return textResult([]string{outcome + ": no lines to report"}), *output, nil
+	}
 	return textResult(kept), *output, nil
 }
 

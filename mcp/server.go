@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -180,6 +183,7 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 		server.AddReceivingMiddleware(audit(writer))
 	}
 	server.AddReceivingMiddleware(instance.scoped)
+	server.AddReceivingMiddleware(tools.namedArguments)
 
 	if err := registerToolManifest(server, tools); err != nil {
 		_ = instance.Close()
@@ -456,6 +460,49 @@ func (t *tools) socketPath(_ context.Context) string {
 		return ""
 	}
 	return selection.Path
+}
+
+// namedArguments completes the SDK's unknown-argument rejection, which names
+// only the rejected argument, with the arguments the tool does accept.
+func (t *tools) namedArguments(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, request mcp.Request) (mcp.Result, error) {
+		result, err := next(ctx, method, request)
+		call, ok := result.(*mcp.CallToolResult)
+		if err != nil || method != "tools/call" || !ok || !call.IsError {
+			return result, err
+		}
+		params, ok := request.GetParams().(*mcp.CallToolParamsRaw)
+		if !ok {
+			return result, err
+		}
+		for _, definition := range t.surface.tools {
+			if definition.name != params.Name {
+				continue
+			}
+			for i, content := range call.Content {
+				if text, ok := content.(*mcp.TextContent); ok {
+					call.Content[i] = &mcp.TextContent{
+						Text: withAcceptedArguments(errors.New(text.Text), definition.inputSchema).Error(),
+					}
+				}
+			}
+			break
+		}
+		return result, err
+	}
+}
+
+// withAcceptedArguments appends the schema's argument names to an
+// unknown-argument rejection and leaves every other error alone.
+func withAcceptedArguments(err error, schema *jsonschema.Schema) error {
+	if !strings.Contains(err.Error(), "unexpected additional properties") || schema == nil {
+		return err
+	}
+	accepted := slices.Sorted(maps.Keys(schema.Properties))
+	if len(accepted) == 0 {
+		return fmt.Errorf("%w; this tool takes no arguments", err)
+	}
+	return fmt.Errorf("%w; this tool takes %s", err, strings.Join(accepted, ", "))
 }
 
 // toolFailure preserves a partial result; returning err makes the SDK discard it.

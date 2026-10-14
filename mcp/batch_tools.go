@@ -302,7 +302,9 @@ func batched[In, Out any](
 	// The SDK validates direct calls only; batches apply the same schema here.
 	if inputSchema != nil {
 		if err := inputSchema.Validate(argumentValue(arguments)); err != nil {
-			return nestedErrorResult(fmt.Errorf("arguments are not what this tool takes: %w", err)), nil
+			return nestedErrorResult(fmt.Errorf(
+				"arguments are not what this tool takes: %w", withAcceptedArguments(err, inputSchema.Schema()),
+			)), nil
 		}
 	}
 	// Strict decoding still rejects unknown fields if schema resolution fails.
