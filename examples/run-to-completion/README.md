@@ -57,10 +57,12 @@ fmt.Println("exited", result.Status)
 not do — start the window, wait, read the screen. What the command did is in
 `result.Status`, the way `exec.ExitError` carries it.
 
-**Nothing polls.** tmux runs a `pane-died` hook inside the server that signals
-a wait-for channel of this call's own, so `Run` returns when the process exits,
-not on the next tick of a loop. Nothing needs a tmux binary on the command's
-`PATH`.
+**tmux signals the exit.** tmux runs a `pane-died` hook inside the server that
+signals a wait-for channel of this call's own, so `Run` returns when the
+process exits, not on the next tick of a loop. A liveness check stands behind
+that signal in case tmux loses it, starting at a quarter second and asking
+less often the longer the command runs. Nothing needs a tmux binary on the
+command's `PATH`.
 
 **`Keep: true` leaves the window in place.** `result.Pane` then names a pane
 you can look at, which is what you want when a build fails and the screen is

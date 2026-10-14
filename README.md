@@ -331,7 +331,8 @@ Runnable: [`examples/byte-streams`](examples/byte-streams).
 ## Testing your own code
 
 [`tmux/tmuxtest`](tmux/tmuxtest/) runs your program inside a real tmux and
-lets a test assert on what it drew, with no sleeps. This is a whole test file:
+lets a test assert on what it drew, without a sleep in it. This is a whole
+test file:
 
 <!-- docs:file examples/testing-a-program/greeter_test.go -->
 
@@ -367,7 +368,8 @@ func TestGreeterAnswersALine(t *testing.T) {
 <!-- docs:end -->
 
 A wait that runs out fails with the screen the pane last held, which is what
-you would have added a print statement to see:
+you would have added a print statement to see. This one is `WaitForText`
+waiting for `ready`:
 
 <!-- docs:output tmux/tmuxtest/testdata/wait-failure.txt -->
 

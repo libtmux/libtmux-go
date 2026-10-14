@@ -76,15 +76,15 @@ The pane echoes what `Type` sends, so the wait names the greeter's answer,
 you typed would pass without the program running.
 
 `TestMain` is required: `tmuxtest.Main` cleans up before returning the exit
-code, and verifies each server's process died before removing its socket. No
-sleeps: the waits poll the screen, so a quick program costs milliseconds and a
-slow one is still waited for.
+code, and verifies each server's process died before removing its socket. The
+test holds no sleeps: each wait polls the screen until it holds, so a quick
+program costs milliseconds and a slow one is still waited for.
 
 ## When a wait fails
 
 The failure carries the screen the pane last held, which is what you would
-have added a print statement to see. This is a real one, from a test waiting
-for `ready` on a program that never got that far:
+have added a print statement to see. This is a real one, from
+`WaitForText(ctx, t, pane, "ready")` on a program that never got that far:
 
 <!-- docs:output tmux/tmuxtest/testdata/wait-failure.txt -->
 
