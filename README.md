@@ -121,22 +121,21 @@ $ go mod init hello && \
     go run .
 ```
 
-The program starts a tmux server on a socket and config of its own and kills it
-on the way out, so it leaves nothing behind and never touches a tmux you have
-open. Drop [`ServerOptions`][tmux-serveroptions] to its zero value and it
-drives the same server
-your `tmux` command does.
+The program starts a tmux server on a socket and config of its own and kills
+it on the way out, so it leaves nothing behind and never touches a tmux you
+have open. Drop [`ServerOptions`][tmux-serveroptions] to its zero value and it
+drives the same server your `tmux` command does.
 
 [`Session.Run`][tmux-session-run] is `os/exec` for a program that needs a
-terminal: the command
-runs in a window of its own with a tty, and what comes back is its exit status
-and the screen tmux rendered. A nonzero status is a result, not an error.
-[`examples/run-to-completion`](examples/run-to-completion) shows one.
+terminal: the command runs in a window of its own with a tty, and what comes
+back is its exit status and the screen tmux rendered. A nonzero status is a
+result, not an error.
+[`examples/run-to-completion`](examples/run-to-completion) shows one, on the
+tmux server you already use.
 
-Every Go block on this page is quoted by `go generate` from a program or test
-that a suite runs against a real tmux on every supported release. The whole
-files are also pasted back out of the page into an empty module, built, and
-run, and what they print is compared with the output shown.
+Every Go block on this page comes from a program or test that runs against a
+real tmux on every supported release, and each output shown is what that run
+printed.
 
 ## Find sessions, windows, and panes
 
@@ -159,6 +158,13 @@ for _, session := range sessions {
 }
 ```
 
+<!-- docs:end -->
+
+[`examples/filter-query`](examples/filter-query) runs this and the two blocks
+below against a server holding one session.
+
+<!-- docs:checked examples/filter-query/output.txt -->
+This one prints `session: libtmux-filter`.
 <!-- docs:end -->
 
 What comes back is a record: a `Session` you hold is what tmux said when you
@@ -188,6 +194,11 @@ if err != nil {
 
 <!-- docs:end -->
 
+<!-- docs:checked examples/filter-query/output.txt -->
+That session has one window with one pane in it, which is the active one, so
+the example goes on to print `active panes: 1`.
+<!-- docs:end -->
+
 ### [`Server.SearchSessions`][tmux-server-searchsessions]: let tmux filter
 
 One command goes out and only the matches come back:
@@ -205,8 +216,13 @@ if err != nil {
 
 <!-- docs:end -->
 
-Runnable: [`examples/filter-query`](examples/filter-query). The filtering
-helpers are in [`tmuxq/`](tmuxq/).
+<!-- docs:checked examples/filter-query/output.txt -->
+One session has that name, so this prints `live matches: 1`.
+<!-- docs:end -->
+
+The filter is a tmux format, written the way the FORMATS section of the tmux
+manual describes, and tmux evaluates it while it lists. [`tmuxq/`](tmuxq/) has
+the filters that run in Go and the helpers that apply them.
 
 ## Type into a pane and wait
 
@@ -290,16 +306,55 @@ for {
 
 <!-- docs:end -->
 
-The first notification a new stream reads is `%session-changed`, tmux telling
-the client which session it joined; the rename follows it.
+The first notification a new stream reads is `%session-changed`, which is
+tmux telling the client which session it joined. The rename follows it.
+
+<!-- docs:checked examples/control-mode-subscribe/output.txt -->
+This prints `notification: %session-changed`, then
+`notification: %session-renamed`, then `heard the rename`.
+<!-- docs:end -->
 
 ### [`NotificationStream.Subscribe`][tmux-notificationstream-subscribe]: have tmux watch a value
 
 A subscription goes further: tmux evaluates a format for you and reports it
 each time its value changes, so a program hears about a window count or a
-pane's current command without asking again.
+pane's current command without asking again:
 
-Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe).
+<!-- docs:subscribing -->
+
+```go
+// Given: ctx context.Context; session tmux.Session;
+// stream *tmux.NotificationStream
+// A subscription is a format tmux evaluates for you: it reports the value
+// when it first looks, about a second later, and then each time it changes.
+if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+	Name: "windows", Format: "#{session_windows}",
+}); err != nil {
+	return fmt.Errorf("subscribe: %w", err)
+}
+if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+	return fmt.Errorf("open window: %w", err)
+}
+for {
+	notification, err := stream.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("read notification: %w", err)
+	}
+	if change, ok := notification.Subscription(); ok && change.Value == "2" {
+		fmt.Println("session has", change.Value, "windows")
+		return nil
+	}
+}
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked examples/control-mode-subscribe/output.txt -->
+The session started with one window, so this prints `session has 2 windows`.
+<!-- docs:end -->
+
+Runnable: [`examples/control-mode-subscribe`](examples/control-mode-subscribe)
+is the program both blocks come from.
 
 ## Choosing how to reach tmux
 
@@ -333,24 +388,59 @@ plan.DisplayMessage(editor, "#{pane_title}")
 
 <!-- docs:end -->
 
+[`examples/planned-build`](examples/planned-build) runs this plan and reports
+what it cost.
+
+<!-- docs:checked examples/planned-build/output.txt -->
+It prints `operations: 6, tmux invocations: 4`: six tmux commands, in four
+process starts rather than six.
+<!-- docs:end -->
+
 A connection appears in `list-clients` and counts toward `session_attached`,
 which is why opening one is explicit. "Execution modes" in the package
 documentation has the rules each path follows, and
 [`BENCHMARKS.md`](BENCHMARKS.md) is what each costs, measured on every
-supported tmux.
-
-Runnable: [`examples/fast-path`](examples/fast-path) and
-[`examples/planned-build`](examples/planned-build).
+supported tmux. [`examples/fast-path`](examples/fast-path) runs the same reads
+down each path.
 
 ### [`Server.LoadBufferFrom`][tmux-server-loadbufferfrom]: move bytes without quoting
 
 Keys and command arguments are the wrong way to move a payload: a shell reads
 what it is sent, and tmux caps a whole command at 16 KiB and cannot carry a NUL
-through one. `LoadBufferFrom` loads a buffer from an `io.Reader` and
-[`Pane.CaptureTo`][tmux-pane-captureto] writes a scrollback to an `io.Writer`,
-with neither limit.
+through one. `LoadBufferFrom` fills a tmux buffer from an `io.Reader`, with
+neither limit:
 
-Runnable: [`examples/byte-streams`](examples/byte-streams).
+<!-- docs:byte-streams-in -->
+
+```go
+// Given: ctx context.Context; server tmux.Server; pane tmux.Pane;
+// payload *strings.Reader
+// tmux reads the buffer from the reader as a stream, so no quoting rule
+// applies to the payload and no command line has to hold it.
+name := "payload"
+if err := server.LoadBufferFrom(ctx, payload, tmux.LoadBufferFromOptions{
+	Name: &name,
+}); err != nil {
+	return fmt.Errorf("load payload: %w", err)
+}
+if err := pane.PasteBuffer(ctx, tmux.PasteBufferRequest{
+	BufferName: &name, DeleteAfter: true,
+}); err != nil {
+	return fmt.Errorf("paste payload: %w", err)
+}
+```
+
+<!-- docs:end -->
+
+[`examples/byte-streams`](examples/byte-streams) pastes a line of quotes,
+backticks, and a `$HOME` this way.
+
+<!-- docs:checked examples/byte-streams/output.txt -->
+It prints `pasted 42 bytes`.
+<!-- docs:end -->
+
+It goes on to write the pane's scrollback to an `io.Writer` with
+[`Pane.CaptureTo`][tmux-pane-captureto], which has neither limit either.
 
 ## Testing your own code
 
@@ -414,10 +504,28 @@ the pane showed 3 line(s):
 ### [`tmuxtest.NewServer`][tmuxtest-newserver]: a server for one test
 
 It gives a test whose subject is tmux itself a server on a socket of its own,
-killed when the test ends. [`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux]
-answers
-the tmux commands you name, so a test of your own code needs no tmux
-installed. Both are in [`tmux/tmuxtest`](tmux/tmuxtest/).
+killed when the test ends:
+
+<!-- docs:new-server -->
+
+```go
+// Given: ctx context.Context; t *testing.T
+server := tmuxtest.NewServer(ctx, t)
+
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+if err != nil {
+	t.Fatal(err)
+}
+if name, _ := session.Name(); name != "under-test" {
+	t.Errorf("session name = %q, want under-test", name)
+}
+```
+
+<!-- docs:end -->
+
+[`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux] answers the tmux commands
+you name instead, so a test of your own code needs no tmux installed. Both are
+in [`tmux/tmuxtest`](tmux/tmuxtest/).
 
 ## Packages
 
@@ -466,7 +574,8 @@ Alpha software. Releases carry an -alpha prerelease tag, the API is not
 settled, and any release may change or remove exported identifiers without a
 deprecation period. Pin an exact version. Not recommended for production.
 
-- **No runtime dependencies.** The core module imports only the standard library.
+- **No runtime dependencies.** The core module imports only the standard
+  library.
 - **Go 1.26+**, tmux **3.2a through 3.8-rc2** across the core, workspace, and
   MCP modules. The compatibility matrix checks ten builds spanning that
   range, the 3.8 release candidate included.
@@ -491,9 +600,10 @@ rather than searched:
 $ go doc github.com/libtmux/libtmux-go/tmux
 ```
 
-It opens with a task index, and carries the rule mapping a tmux command to its
-Go method — `kill-pane` is `Pane.Kill`, `rename-session` is `Session.Rename` — so a
-command usually leads to its method without a lookup.
+It opens with a task index, and carries the rule mapping a tmux command to
+its Go method: `kill-pane` is [`Pane.Kill`][tmux-pane-kill], and
+`rename-session` is [`Session.Rename`][tmux-session-rename]. A command usually
+leads to its method without a lookup.
 
 | | |
 | --- | --- |
@@ -509,7 +619,8 @@ command usually leads to its method without a lookup.
 
 ## Attribution
 
-Please use the following BibTeX template to cite libtmux-go in scientific discourse:
+Please use the following BibTeX template to cite libtmux-go in scientific
+discourse:
 
 ```bibtex
 @misc{libtmux-go,
@@ -524,13 +635,13 @@ Please use the following BibTeX template to cite libtmux-go in scientific discou
 
 MIT. See [`LICENSE`](LICENSE).
 
-[tmux]: https://github.com/tmux/tmux
 [tmux-connectionoptions-lanes]: https://libtmux.org/en/go/latest/reference/tmux-connectionoptions-lanes/
 [tmux-errnoserver]: https://libtmux.org/en/go/latest/reference/tmux-errnoserver/
 [tmux-newplan]: https://libtmux.org/en/go/latest/reference/tmux-newplan/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
 [tmux-notificationstream-subscribe]: https://libtmux.org/en/go/latest/reference/tmux-notificationstream-subscribe/
 [tmux-pane-captureto]: https://libtmux.org/en/go/latest/reference/tmux-pane-captureto/
+[tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
 [tmux-pane-openobservation]: https://libtmux.org/en/go/latest/reference/tmux-pane-openobservation/
 [tmux-pane-writer]: https://libtmux.org/en/go/latest/reference/tmux-pane-writer/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
@@ -544,7 +655,9 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-serveroptions]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions/
 [tmux-session-opencontrol]: https://libtmux.org/en/go/latest/reference/tmux-session-opencontrol/
 [tmux-session-opennotifications]: https://libtmux.org/en/go/latest/reference/tmux-session-opennotifications/
+[tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
+[tmux]: https://github.com/tmux/tmux
 [tmuxq-matching]: https://libtmux.org/en/go/latest/reference/tmuxq-matching/
 [tmuxtest-newserver]: https://libtmux.org/en/go/latest/reference/tmuxtest-newserver/
 [tmuxtest-runinpane]: https://libtmux.org/en/go/latest/reference/tmuxtest-runinpane/
