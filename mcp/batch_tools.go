@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -345,6 +347,53 @@ func batched[In, Out any](
 }
 
 // Absent arguments validate as an empty object rather than null.
+// explainBatchRejection says which operation of a rejected batch is wrong and
+// why. The batch's schema offers one shape per tool it can call, and a member
+// that fits none is reported as fitting none of them, which names neither the
+// operation nor the field. This checks each operation against the one tool it
+// names instead. It answers "" for any other tool, and for a batch whose
+// operations all pass, leaving the original error to stand.
+func (t *tools) explainBatchRejection(name string, arguments json.RawMessage) string {
+	aggregate, served := t.surface.byName[name]
+	if !served || !aggregate.aggregate {
+		return ""
+	}
+	var batch struct {
+		Operations []struct {
+			Tool      *string         `json:"tool"`
+			Arguments json.RawMessage `json:"arguments"`
+		} `json:"operations"`
+	}
+	if json.Unmarshal(arguments, &batch) != nil {
+		return ""
+	}
+	callable := slices.Sorted(slices.Values(aggregate.nestedAuthority))
+	for index, operation := range batch.Operations {
+		if operation.Tool == nil {
+			return fmt.Sprintf("operation %d names no tool; set tool to one of %s",
+				index, strings.Join(callable, ", "))
+		}
+		tool := *operation.Tool
+		definition, served := t.surface.byName[tool]
+		if !served || !slices.Contains(callable, tool) {
+			return fmt.Sprintf("operation %d names %q, which a batch cannot call; it calls %s",
+				index, tool, strings.Join(callable, ", "))
+		}
+		if definition.inputSchema == nil {
+			continue
+		}
+		resolved, err := definition.inputSchema.Resolve(nil)
+		if err != nil {
+			continue
+		}
+		if err := resolved.Validate(argumentValue(operation.Arguments)); err != nil {
+			return fmt.Sprintf("operation %d (%s): %v", index, tool,
+				withAcceptedArguments(err, definition.inputSchema))
+		}
+	}
+	return ""
+}
+
 func argumentValue(arguments json.RawMessage) any {
 	var value any
 	if len(arguments) == 0 || json.Unmarshal(arguments, &value) != nil || value == nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -453,6 +454,28 @@ func TestMistakesNameTheirRemedy(t *testing.T) {
 			map[string]any{"name": "x"},
 			[]string{"name", "session_name"},
 		},
+		// A batch offers one shape per tool it can call. A member that fits
+		// none must still be named, with what is wrong with it.
+		{
+			"batch member calls a tool a batch cannot", "call_read_tools_batch",
+			map[string]any{"operations": []any{
+				map[string]any{"tool": "list_sessions"},
+				map[string]any{"tool": "kill_pane", "arguments": map[string]any{"pane_id": "%0"}},
+			}},
+			[]string{"operation 1", "kill_pane", "capture_pane"},
+		},
+		{
+			"batch member misspells an argument", "call_read_tools_batch",
+			map[string]any{"operations": []any{
+				map[string]any{"tool": "get_pane_info", "arguments": map[string]any{"pane": "%0"}},
+			}},
+			[]string{"operation 0", "get_pane_info", "pane_id"},
+		},
+		{
+			"pane id without its sign", "get_pane_info",
+			map[string]any{"pane_id": "1"},
+			[]string{`"1"`, "%3", "list_panes"},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := session.CallTool(ctx, &sdk.CallToolParams{
@@ -471,5 +494,36 @@ func TestMistakesNameTheirRemedy(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A tool the server was not started with is unknown to the client, which then
+// has no way to learn that a setting would grant it.
+//
+//libtmux:real-tmux
+func TestAnUngrantedToolNamesItsToolset(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	t.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "inspect,manage,execute")
+	request := tmux.NewSessionRequest{Name: "ungranted"}
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &request,
+	})
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+
+	_, err = session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "kill_pane", Arguments: map[string]any{"pane_id": "%0"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "teardown toolset") ||
+		!strings.Contains(err.Error(), tmuxmcp.ToolsetsEnvironmentVariable) {
+		t.Fatalf("kill_pane without teardown = %v, want the toolset that grants it", err)
+	}
+	_, err = session.CallTool(ctx, &sdk.CallToolParams{Name: "kill_everything"})
+	if err == nil || strings.Contains(err.Error(), "toolset") {
+		t.Fatalf("a tool that does not exist = %v, want a plain unknown tool", err)
 	}
 }

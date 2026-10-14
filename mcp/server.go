@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -463,16 +464,33 @@ func (t *tools) socketPath(_ context.Context) string {
 }
 
 // namedArguments completes the SDK's unknown-argument rejection, which names
-// only the rejected argument, with the arguments the tool does accept.
+// only the rejected argument, with the arguments the tool does accept. It also
+// says which toolset grants a tool this server was not started with, and what
+// an id looks like when one was malformed.
 func (t *tools) namedArguments(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, request mcp.Request) (mcp.Result, error) {
 		result, err := next(ctx, method, request)
-		call, ok := result.(*mcp.CallToolResult)
-		if err != nil || method != "tools/call" || !ok || !call.IsError {
+		if method != "tools/call" {
 			return result, err
 		}
 		params, ok := request.GetParams().(*mcp.CallToolParamsRaw)
 		if !ok {
+			return result, err
+		}
+		if err != nil {
+			return result, t.withUngrantedTool(params.Name, err)
+		}
+		call, ok := result.(*mcp.CallToolResult)
+		if !ok || !call.IsError {
+			return result, err
+		}
+		for i, content := range call.Content {
+			if text, ok := content.(*mcp.TextContent); ok {
+				call.Content[i] = &mcp.TextContent{Text: withTargetShape(text.Text)}
+			}
+		}
+		if explained := t.explainBatchRejection(params.Name, params.Arguments); explained != "" {
+			call.Content = []mcp.Content{&mcp.TextContent{Text: explained}}
 			return result, err
 		}
 		for _, definition := range t.surface.tools {
@@ -490,6 +508,51 @@ func (t *tools) namedArguments(next mcp.MethodHandler) mcp.MethodHandler {
 		}
 		return result, err
 	}
+}
+
+// withUngrantedTool adds, to the SDK's rejection of a tool it does not serve,
+// the toolset that would grant it, when the tool exists but this server was
+// not started with that toolset.
+func (t *tools) withUngrantedTool(name string, err error) error {
+	wire, ok := errors.AsType[*jsonrpc.Error](err)
+	if !ok || !strings.HasPrefix(wire.Message, "unknown tool") {
+		return err
+	}
+	if _, served := t.surface.byName[name]; served {
+		return err
+	}
+	for _, definition := range authoritativeToolManifest {
+		if definition.name != name {
+			continue
+		}
+		explained := *wire
+		explained.Message = fmt.Sprintf(
+			"%s: it belongs to the %s toolset, which this server was not started with; "+
+				"%s chooses the toolsets",
+			wire.Message, definition.toolset, ToolsetsEnvironmentVariable,
+		)
+		return &explained
+	}
+	return err
+}
+
+// targetShapes is what each kind of tmux id looks like, and the tool that
+// lists the real ones.
+var targetShapes = map[string]string{
+	"pane":    "a pane id looks like %3, and list_panes reports them",
+	"window":  "a window id looks like @3, and list_windows reports them",
+	"session": "a session id looks like $3, and list_sessions reports them",
+}
+
+// withTargetShape says what an id looks like after a rejection of a malformed
+// one, which otherwise names the value and not what was expected.
+func withTargetShape(text string) string {
+	for object, shape := range targetShapes {
+		if strings.Contains(text, tmux.ErrInvalidTarget.Error()+": "+object+" ") {
+			return text + "; " + shape
+		}
+	}
+	return text
 }
 
 // withAcceptedArguments appends the schema's argument names to an
