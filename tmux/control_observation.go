@@ -298,6 +298,10 @@ func (p Pane) OpenObservation(
 	if err != nil {
 		return nil, err
 	}
+	// The client is this observation's alone, so the rest of the session's
+	// output is nothing it needs to hold.
+	paneID := p.ID().String()
+	client.outputFrom.Store(&paneID)
 	observation, err := client.observePane(ctx, p)
 	if err != nil {
 		return nil, errors.Join(err, client.CloseContext(ctx))

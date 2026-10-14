@@ -75,6 +75,33 @@ type ControlClient struct {
 
 	// dispatching excludes flags-0 frames after the attach reply.
 	dispatching atomic.Bool
+
+	// outputFrom, once set, names the one pane whose output this client
+	// keeps; output from every other pane is dropped as it arrives. A pane
+	// observation sets it on the client it opened for itself. tmux sends a
+	// control client the output of every pane in its session, and a busy
+	// sibling would otherwise fill the observation's queue and end it.
+	outputFrom atomic.Pointer[string]
+}
+
+// outputFromAnotherPane reports whether record is pane output that this
+// client was told to drop.
+func (c *ControlClient) outputFromAnotherPane(record []byte) bool {
+	kept := c.outputFrom.Load()
+	if kept == nil {
+		return false
+	}
+	var rest []byte
+	switch {
+	case bytes.HasPrefix(record, []byte("%output ")):
+		rest = record[len("%output "):]
+	case bytes.HasPrefix(record, []byte("%extended-output ")):
+		rest = record[len("%extended-output "):]
+	default:
+		return false
+	}
+	pane, _, _ := bytes.Cut(rest, []byte(" "))
+	return string(pane) != *kept
 }
 
 // ownReply uses tmux's CMDQ_STATE_CONTROL guard flag. Treating a key-binding

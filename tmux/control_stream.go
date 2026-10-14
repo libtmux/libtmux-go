@@ -171,6 +171,9 @@ func (c *ControlClient) readStream() {
 				c.trackSessionChange(notification)
 				c.trackExitReason(notification)
 				wireSequence++
+				if c.outputFromAnotherPane(notification) {
+					continue
+				}
 				if appendErr := c.notifications.append(
 					wireSequence,
 					notification,
