@@ -37,6 +37,12 @@ func Screen(ctx context.Context, t testing.TB, pane tmux.Pane) []string {
 
 // WaitForText blocks until some line of the pane's screen contains text.
 //
+// The screen includes the command [Type] or [RunInPane] typed, as the
+// terminal echoed it. Wait for text the command prints and the typed line
+// does not contain, or the wait holds before the command has run: after
+// typing "sleep 2; echo READY", wait for a line that is exactly READY with
+// [WaitForLine], not for text containing READY.
+//
 // A pane that never shows text fails the test with the screen it last read.
 func WaitForText(ctx context.Context, t testing.TB, pane tmux.Pane, text string) {
 	t.Helper()
@@ -52,6 +58,7 @@ func WaitForText(ctx context.Context, t testing.TB, pane tmux.Pane, text string)
 }
 
 // WaitForLine blocks until some line of the pane's screen is exactly line.
+// The echo of a typed command is a line too; see [WaitForText].
 //
 // A pane that never shows line fails the test with the screen it last read.
 func WaitForLine(ctx context.Context, t testing.TB, pane tmux.Pane, line string) {
