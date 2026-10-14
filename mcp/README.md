@@ -32,7 +32,8 @@ runtime dependency; speaking MCP needs one, so this lives in its own module and
 [Knowing its own pane](#knowing-its-own-pane) ·
 [Limiting what a client can do](#limiting-what-a-client-can-do) ·
 [The tools](#the-tools) · [Troubleshooting](#troubleshooting) ·
-[Embedding it](#embedding-it) · [Developing on it](#developing-on-it)
+[Embedding it](#embedding-it) · [Developing on it](#developing-on-it) ·
+[Reference](https://libtmux.org/en/go/latest/mcp/reference/)
 
 ## Installing it
 
@@ -222,45 +223,23 @@ or modal peer refuses the operation without prompting or changing tmux.
 
 ## Limiting what a client can do
 
-`LIBTMUX_TOOLSETS` selects an unordered subset of `inspect`, `manage`, `execute`,
-and `teardown`. The inherited default is the first three; an explicitly empty
+### [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable]: choose the toolsets
+
+It selects an unordered subset of `inspect`, `manage`, `execute`, and
+`teardown`. The inherited default is the first three; an explicitly empty
 value selects no toolset. There is no `none` sentinel.
 
-`LIBTMUX_TOOLS` then includes exact names, and `LIBTMUX_EXCLUDE_TOOLS` removes
-exact names after every inclusion. Exclusion also prunes
+### [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] and [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable]: name exact tools
+
+`LIBTMUX_TOOLS` includes exact names after the toolsets expand, and
+`LIBTMUX_EXCLUDE_TOOLS` removes exact names after every inclusion. Exclusion also prunes
 `call_read_tools_batch`'s native operation schema and nested authority. Unknown
 names and leading, trailing, or interior empty list items stop startup before
 tmux opens. A present `LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, or
 `LIBTMUX_MCP_PROMPTS_AS_TOOLS` also stops startup with migration guidance.
 
-### Moving from an earlier alpha
-
-The capability switch changes names and the default socket together. Use this
-mapping when updating an existing client entry:
-
-| Earlier setting | Current setting |
-| --- | --- |
-| `LIBTMUX_SAFETY=readonly` | `LIBTMUX_TOOLSETS=inspect` |
-| `LIBTMUX_SAFETY=mutating` | `LIBTMUX_TOOLSETS=inspect,manage,execute` |
-| `LIBTMUX_SAFETY=destructive` | all four toolsets on a process-created minimal daemon |
-| `LIBTMUX_MCP_CAPABILITIES=` | Start with `LIBTMUX_TOOLSETS=inspect`, then exclude content and configuration readers to retain the earlier metadata-only default |
-| `LIBTMUX_MCP_CAPABILITIES=inspect` | `LIBTMUX_TOOLSETS=inspect` |
-| `LIBTMUX_MCP_CAPABILITIES=operate` | `LIBTMUX_TOOLSETS=inspect,manage,execute` |
-| `LIBTMUX_MCP_CAPABILITIES=all` | all four toolsets |
-| `LIBTMUX_MCP_CAPABILITIES=metadata-read` or `LIBTMUX_MCP_CAPABILITIES=content-read` | `inspect`; use exact exclusions when the earlier metadata/content split matters |
-| `LIBTMUX_MCP_CAPABILITIES=pane-control` | `execute`; arbitrary tmux-format expansion has no replacement |
-| `LIBTMUX_MCP_CAPABILITIES=workspace-create` | `execute`; current creation tools accept no program, so start bounded work with `run_shell_command` |
-| `LIBTMUX_MCP_CAPABILITIES=tmux-layout` | `manage`; use exact inclusions for the earlier narrower group |
-| `LIBTMUX_MCP_CAPABILITIES=tmux-settings` | Use exact constrained setters from `manage` and `execute`; generic buffer, environment, and option mutation is removed |
-| `LIBTMUX_MCP_CAPABILITIES=tmux-destroy` | `teardown`; server-wide teardown has no replacement |
-| `LIBTMUX_MCP_TOOLS=a,b` | `LIBTMUX_TOOLS=a,b`, with exclusions available separately |
-| `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1` | removed; use the [typed workflow mapping](TOOLS.md#retired-prompt-workflow-mapping) |
-| implicit ordinary tmux socket | explicit `LIBTMUX_SOCKET=default` or another chosen name |
-
-An unchanged launch now opens the dedicated `libtmux-mcp` world, so it may look
-empty until the agent creates a session. The startup line prints the exact
-attach command. Retired tool names and their workflow replacements are listed
-in the [generated tool reference](TOOLS.md#retired-mcp-surface).
+Coming from an earlier alpha? [MIGRATING.md](MIGRATING.md) maps each earlier
+setting to its current one.
 
 Tool filtering shapes the interface; it is not an operating-system sandbox.
 All calls run with the tmux user's authority. Every listed tool carries its full
@@ -282,15 +261,15 @@ trimmed here.
 
 | Variable | Does |
 | --- | --- |
-| `LIBTMUX_TOOLSETS` | selects any unordered subset of the four toolsets |
-| `LIBTMUX_TOOLS` | includes exact tool names after toolset expansion |
-| `LIBTMUX_EXCLUDE_TOOLS` | removes exact names after every inclusion |
-| `LIBTMUX_SOCKET_PATH` | selects an absolute socket path; mutually exclusive with `LIBTMUX_SOCKET` |
-| `LIBTMUX_SOCKET` | names the tmux socket when no socket flag selects one |
-| `LIBTMUX_TMUX_CONFIG` | selects a nonempty absolute tmux configuration path |
-| `LIBTMUX_TMUX_BIN` | selects the tmux executable when `-binary` is empty |
-| `LIBTMUX_MCP_WAIT_MAX_SECONDS` | the longest any one wait may run; 300 by default |
-| `LIBTMUX_AUDIT` | `stderr`, or a path, to record every call |
+| [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable] | selects any unordered subset of the four toolsets |
+| [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] | includes exact tool names after toolset expansion |
+| [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] | removes exact names after every inclusion |
+| [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] | selects an absolute socket path; mutually exclusive with `LIBTMUX_SOCKET` |
+| [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] | names the tmux socket when no socket flag selects one |
+| [`LIBTMUX_TMUX_CONFIG`][mcp-tmuxconfigenvironmentvariable] | selects a nonempty absolute tmux configuration path |
+| [`LIBTMUX_TMUX_BIN`][mcp-binaryenvironmentvariable] | selects the tmux executable when `-binary` is empty |
+| [`LIBTMUX_MCP_WAIT_MAX_SECONDS`][mcp-waitceilingenvironmentvariable] | the longest any one wait may run; 300 by default |
+| [`LIBTMUX_AUDIT`][mcp-auditenvironmentvariable] | `stderr`, or a path, to record every call |
 
 The names match the Python server, so an operator running both writes one thing.
 Flags override their corresponding socket variables; every selection is frozen
@@ -302,61 +281,11 @@ the caller rather than the transport: these tools await throughout, so a long
 wait blocks nothing else. What an unbounded one costs is the agent's turn, and
 MCP gives it no way to change its mind mid-call.
 
-`tmux://capabilities` is the only resource. Its static payload reports the
+[`tmux://capabilities`][mcp-capabilitiesresourceuri] is the only resource. Its static payload reports the
 schema version, frozen state, startup-pinned connection and configuration
 provenance, effective tool names, selection, common trust boundaries, and the
 same capability rows carried by tool discovery. There are no dynamic resources,
 templates, prompts, completion routes, or background job handles.
-
-## Publishing it to the MCP registry
-
-`server.json` is this server's entry for the [MCP registry], where clients look
-for servers by name rather than by import path. It carries no `packages` block:
-the registry knows npm, PyPI, NuGet, Cargo, OCI and prebuilt binaries, and `go
-install` is none of them, so the entry points at this repository instead.
-
-The name is `io.github.libtmux/tmux-mcp-go`, which the registry ties to the
-GitHub organisation of the same name, and the `mcp-name:` comment at the top of
-this file is the marker it looks for. The language rather than the project,
-because every server in that namespace drives tmux: `libtmux-mcp` would repeat
-what `io.github.libtmux` already says and leave the one distinguishing thing
-unsaid.
-
-The publisher is a Go program, so the toolchain this repository already needs
-builds it. It installs as `publisher`, though its own help calls it
-`mcp-publisher`:
-
-```console
-$ go install github.com/modelcontextprotocol/registry/cmd/publisher@latest
-```
-
-Homebrew ships it under the second name, as does the release tarball the
-[registry quickstart] links:
-
-```console
-$ brew install mcp-publisher
-```
-
-Checking the entry against the live registry needs no credentials, and is worth
-doing before a release rather than after:
-
-```console
-$ publisher validate
-```
-
-Publishing needs the organisation's:
-
-```console
-$ publisher login github
-```
-
-```console
-$ publisher publish
-```
-
-[registry quickstart]: https://modelcontextprotocol.io/registry/quickstart
-
-[MCP registry]: https://registry.modelcontextprotocol.io/
 
 ## The tools
 
@@ -366,7 +295,8 @@ plus gotchas and what the server logs:
 **[Tool reference →](TOOLS.md)**
 
 That page is reference material, read by search rather than read through, which
-is why it is not here.
+is why it is not here. The documentation site gives each tool
+[a page of its own](https://libtmux.org/en/go/latest/mcp/tools/).
 
 Copy mode stays outside the MCP surface. Captures, snapshots, searches, and
 cursors read pane output without taking over an attached person's modal view;
@@ -451,42 +381,39 @@ over stdin and stdout.
 
 ## Embedding it
 
-```go
-import (
-    tmuxmcp "github.com/libtmux/libtmux-go/mcp"
-    "github.com/libtmux/libtmux-go/tmux"
-    sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-)
-```
+### [`mcp.NewServer`][mcp-newserver]: serve one tmux server from your own program
+
+<!-- docs:mcp-embedding -->
 
 ```go
-target, err := tmux.NewServer(tmux.ServerOptions{SocketName: "app"})
-if err != nil {
-    return err
-}
+// Given: ctx context.Context; target tmux.Server; serverTransport sdk.Transport
 instance, err := tmuxmcp.NewServer(target)
 if err != nil {
-    return err
+	return nil, nil, err
 }
-defer instance.Close()
-session, err := instance.Connect(
-    ctx,
-    tmuxmcp.AssumeResponseCommit(transport),
-    nil,
+serverSession, err := instance.Connect(
+	ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
 )
 ```
 
-`tmuxmcp.NewServer` returns a managed `Instance`; close it after serving. A
-custom transport must commit one response per successful write and use
-`AssumeResponseCommit`, as above. See the [package documentation] for lifecycle,
-capacity, isolation, and transport contracts.
+<!-- docs:end -->
 
 This package is named `mcp` and so is the SDK's, so a file using both has to
-rename one of them.
+rename one of them; the block imports this one as `tmuxmcp` and the SDK as
+`sdk`. `NewServer` returns a managed [`Instance`][mcp-instance];
+[close it][mcp-instance-close] after serving. A custom transport must commit
+one response per successful write and use
+[`AssumeResponseCommit`][mcp-assumeresponsecommit], as above. The
+[reference](https://libtmux.org/en/go/latest/mcp/reference/) has the
+lifecycle, capacity, isolation, and transport contracts.
 
-[package documentation]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp
+[`examples/agent-workflow`](examples/agent-workflow) is a whole program built
+this way.
 
 ## Developing on it
+
+Publishing an entry to the MCP registry has a page of its own:
+[REGISTRY.md](REGISTRY.md).
 
 Run the server by hand to drive it yourself or to point the MCP Inspector at
 it:
@@ -593,3 +520,18 @@ It reads JSON-RPC from stdin, so a pipe that closes immediately ends the server
 before it answers. Hold stdin open while waiting for replies. See
 [`AGENTS.md`](AGENTS.md) for what else is worth knowing before
 testing this by hand.
+
+[mcp-assumeresponsecommit]: https://libtmux.org/en/go/latest/mcp/reference/mcp-assumeresponsecommit/
+[mcp-auditenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-auditenvironmentvariable/
+[mcp-binaryenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-binaryenvironmentvariable/
+[mcp-capabilitiesresourceuri]: https://libtmux.org/en/go/latest/mcp/reference/mcp-capabilitiesresourceuri/
+[mcp-excludetoolsenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-excludetoolsenvironmentvariable/
+[mcp-instance]: https://libtmux.org/en/go/latest/mcp/reference/mcp-instance/
+[mcp-instance-close]: https://libtmux.org/en/go/latest/mcp/reference/mcp-instance-close/
+[mcp-newserver]: https://libtmux.org/en/go/latest/mcp/reference/mcp-newserver/
+[mcp-socketenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketenvironmentvariable/
+[mcp-socketpathenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketpathenvironmentvariable/
+[mcp-tmuxconfigenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-tmuxconfigenvironmentvariable/
+[mcp-toolsenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-toolsenvironmentvariable/
+[mcp-toolsetsenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-toolsetsenvironmentvariable/
+[mcp-waitceilingenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-waitceilingenvironmentvariable/

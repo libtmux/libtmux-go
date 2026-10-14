@@ -22,18 +22,9 @@ var permittedFences = map[string]bool{
 
 var fenceLine = regexp.MustCompile("^\\s*(`{3,}|~{3,})\\s*(.*)$")
 
-// handwrittenGoAllowed names the READMEs that still write Go by hand, and
-// why. A module with dependencies of its own cannot have a block compiled
-// alone by this module's tests without the network, so its page is exempt
-// from the Go rule and from nothing else.
-var handwrittenGoAllowed = map[string]string{
-	"mcp/README.md": "its blocks import the MCP SDK",
-}
-
 // strayFence is a fenced block a README should not hold.
 type strayFence struct {
 	line   int
-	info   string
 	reason string
 }
 
@@ -75,12 +66,12 @@ func strayFences(content string) []strayFence {
 		info, _, _ := strings.Cut(match[2], " ")
 		switch {
 		case strings.HasPrefix(closer, "~"):
-			found = append(found, strayFence{index + 1, info, "uses a ~~~ fence; use backticks"})
+			found = append(found, strayFence{index + 1, "uses a ~~~ fence; use backticks"})
 		case info == "":
-			found = append(found, strayFence{index + 1, info, "has no language; name it, text for output"})
+			found = append(found, strayFence{index + 1, "has no language; name it, text for output"})
 		case !permittedFences[info]:
 			found = append(found, strayFence{
-				index + 1, info,
+				index + 1,
 				"is a handwritten " + info + " block; quote a program or region between docs markers",
 			})
 		}
@@ -100,21 +91,12 @@ func TestEveryREADMEFenceIsGeneratedOrPermitted(t *testing.T) {
 			continue
 		}
 		checked++
-		_, exempt := handwrittenGoAllowed[name]
 		for _, stray := range strayFences(content) {
-			if exempt && stray.info == "go" {
-				continue
-			}
 			t.Errorf("%s:%d: fenced block %s", name, stray.line, stray.reason)
 		}
 	}
 	if checked < 8 {
 		t.Fatalf("checked %d README files, want at least 8; the scan is broken", checked)
-	}
-	for name := range handwrittenGoAllowed {
-		if _, ok := documents[name]; !ok {
-			t.Errorf("%s is exempt from the Go rule but no longer exists", name)
-		}
 	}
 }
 
