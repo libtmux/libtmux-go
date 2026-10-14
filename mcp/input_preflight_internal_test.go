@@ -755,6 +755,19 @@ func waitForPaneReplacement(ctx context.Context, pane tmux.Pane, before int) err
 		})
 }
 
+// waitForForeground waits until accept takes the command tmux reports in the
+// pane's foreground.
+func waitForForeground(ctx context.Context, pane tmux.Pane, accept func(string) bool) error {
+	return tmuxtest.WaitFor(ctx, 5*time.Millisecond, func(waitCtx context.Context) (bool, error) {
+		current, err := pane.Refresh(waitCtx)
+		if err != nil {
+			return false, err
+		}
+		name, _ := current.CurrentCommand()
+		return accept(name), nil
+	})
+}
+
 // Bracketed paste tells a terminal to insert what arrives rather than act on
 // it, so a newline carried in a bracketed buffer is typed and never runs:
 // `tmux paste-buffer -p` of "printf 'x'\n" into bash leaves the command at the
@@ -946,11 +959,17 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The refusal keys off the foreground command's basename, not off any real
-	// shell, so name a binary that exists everywhere `fish` rather than
-	// depending on fish being installed. `cat` also keeps the pane alive and
-	// reading keys, which is the state this case is about.
+	// shell, so name a program that exists everywhere `fish` rather than
+	// depending on fish being installed. It is this test binary, which stays
+	// alive in its fixture mode. A system utility cannot stand in: where the
+	// core utilities are one multi-call program, cat run as fish refuses to
+	// start, and the pane is gone before the case reads it.
 	fishDir := t.TempDir()
-	if err := os.Symlink("/bin/cat", filepath.Join(fishDir, "fish")); err != nil {
+	testBinary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(testBinary, filepath.Join(fishDir, "fish")); err != nil {
 		t.Fatal(err)
 	}
 	// tmux does not name the replacement the same way everywhere: Linux
@@ -966,22 +985,22 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 		fish := "exec " + filepath.Join(fishDir, "fish")
 		if _, respawnErr := panes[0].Respawn(barrierCtx, tmux.RespawnRequest{
 			Command: &fish, Kill: true,
+			Environment: map[string]string{
+				"LIBTMUX_MCP_TEST_EXECUTABLE": fixtureHang,
+				"GOCOVERDIR":                  fishDir,
+			},
 		}); respawnErr != nil {
 			return respawnErr
 		}
 		if err := waitForPaneReplacement(barrierCtx, panes[0], before); err != nil {
 			return err
 		}
-		current, err := panes[0].Refresh(barrierCtx)
-		if err != nil {
-			return err
-		}
-		name, present := current.CurrentCommand()
-		if !present || name == "" {
-			return errors.New("tmux reported no command for the respawned pane")
-		}
-		installedShell = name
-		return nil
+		// Until the replacement is running, tmux reports its own name for
+		// the pane, which is not the name the refusal will carry.
+		return waitForForeground(barrierCtx, panes[0], func(name string) bool {
+			installedShell = name
+			return name != "" && name != "tmux"
+		})
 	}
 	_, ran, err = instance.tools.runCommand(callCtx, nil, runCommandInput{
 		PaneID: panes[0].ID().String(), Command: "true", TimeoutSeconds: 5,

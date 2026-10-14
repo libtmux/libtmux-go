@@ -182,7 +182,7 @@ func TestWrapperRejectsOversizedTrapDeclarations(t *testing.T) {
 				t.Fatal(err)
 			}
 			setup := "readonly __libtmux_errexit=human __libtmux_status=human; " +
-				"trap_action=\": x$(command printf '%070000d' 0)\"; \\trap \"$trap_action\" ERR; " +
+				"trap_action=\": x$(\\printf '%070000d' 0)\"; \\trap \"$trap_action\" ERR; " +
 				"\\unset trap_action; . " + shellQuote(script) + "; " +
 				"[ \"$__libtmux_errexit:$__libtmux_status\" = human:human ]"
 			process := exec.Command(executable, "-f", "-c", setup)
