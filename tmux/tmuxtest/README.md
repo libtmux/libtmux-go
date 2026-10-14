@@ -210,6 +210,10 @@ if name, _ := session.Name(); name != "under-test" {
 The server dies with the test. `TestMain` with `tmuxtest.Main`, as in the test
 above, is required here too.
 
+[`tmuxtest.NewSession`][tmuxtest-newsession] and
+[`tmuxtest.NewWindow`][tmuxtest-newwindow] make a session or a window on a
+server you already hold, and remove it when the test ends.
+
 ## What it guarantees
 
 - **A socket of its own per test.** Each server is reached by an explicit
@@ -226,14 +230,12 @@ above, is required here too.
 
 ## Keeping your suite to itself
 
-Sibling checkouts running their own suites on the same machine will fight over
-tmux sockets. Give yours a namespace:
-
-```console
-$ export TMUX_TMPDIR=/tmp/my-project-test && \
-    mkdir -p "$TMUX_TMPDIR" && \
-    unset TMUX TMUX_PANE
-```
+There is nothing to set up. `tmuxtest.Main` gives each run of a suite a
+temporary directory of its own and points `TMPDIR`, `GOTMPDIR`, and
+`TMUX_TMPDIR` at it until the suite ends, so two checkouts running their
+suites on one machine share no socket, and neither shares one with a tmux you
+are using. The directory's path is kept short, because a socket path may hold
+only about a hundred bytes.
 
 Some real-tmux tests are load-sensitive. Three signs a failure is the machine
 rather than the code: the failing test moves between runs, the failure reads as
@@ -253,6 +255,8 @@ file it is in is not one your change touched.
 [tmux-serveroptions-binary]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-binary/
 [tmuxtest-main]: https://libtmux.org/en/go/latest/reference/tmuxtest-main/
 [tmuxtest-newserver]: https://libtmux.org/en/go/latest/reference/tmuxtest-newserver/
+[tmuxtest-newsession]: https://libtmux.org/en/go/latest/reference/tmuxtest-newsession/
+[tmuxtest-newwindow]: https://libtmux.org/en/go/latest/reference/tmuxtest-newwindow/
 [tmuxtest-runinpane]: https://libtmux.org/en/go/latest/reference/tmuxtest-runinpane/
 [tmuxtest-screen]: https://libtmux.org/en/go/latest/reference/tmuxtest-screen/
 [tmuxtest-scriptedcommand-contains]: https://libtmux.org/en/go/latest/reference/tmuxtest-scriptedcommand-contains/
