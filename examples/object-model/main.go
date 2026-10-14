@@ -18,6 +18,7 @@ func main() {
 }
 
 func run(ctx context.Context) (err error) {
+	// docs:private-server
 	// A private server: a socket and an empty config of its own, so this
 	// neither touches nor is changed by a tmux you already use.
 	server, err := tmux.NewServer(tmux.ServerOptions{
@@ -27,6 +28,7 @@ func run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("configure tmux: %w", err)
 	}
+	// docs:end
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
@@ -49,12 +51,36 @@ func run(ctx context.Context) (err error) {
 	fmt.Println("returned record:", current)
 	// docs:end
 
+	// docs:record-reads given:ctx context.Context; renamed tmux.Session
+	// Windows reads the record and takes no context. A session that came
+	// from a call about the session carries no windows, and says so.
+	if _, held := renamed.Windows(); !held {
+		fmt.Println("the record holds no windows")
+	}
+	// SearchWindows asks tmux.
+	windows, err := renamed.SearchWindows(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list windows: %w", err)
+	}
+	fmt.Println("tmux reports windows:", len(windows))
+	// docs:end
+
 	// docs:not-found given:ctx context.Context; server tmux.Server
 	// A lookup that finds nothing is an error a caller can test for.
 	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
 	if errors.Is(lookupErr, tmux.ErrNotFound) {
 		fmt.Println("session $999: not found")
 	}
+	// docs:end
+
+	// docs:cmd-result given:ctx context.Context; server tmux.Server
+	// Cmd sends arguments you write yourself. A command tmux ran and
+	// refused comes back as a result, with the error left nil.
+	result, err := server.Cmd(ctx, "kill-window", "-t", "@999")
+	if err != nil {
+		return fmt.Errorf("reach tmux: %w", err)
+	}
+	fmt.Println("kill-window exit status:", result.ExitCode)
 	// docs:end
 	return nil
 }

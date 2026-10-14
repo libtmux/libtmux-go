@@ -1,3 +1,6 @@
 held record: old
 returned record: new
+the record holds no windows
+tmux reports windows: 1
 session $999: not found
+kill-window exit status: 1

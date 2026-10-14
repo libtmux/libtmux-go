@@ -52,6 +52,20 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	mouse, _ := options.Mouse().Get()
 	fmt.Println("mouse:", mouse)
 	// docs:end
+
+	// docs:raw-option given:ctx context.Context; session tmux.Session
+	// An option this package has no accessor for, such as one a plugin
+	// defines, goes by its tmux name. tmux keeps user options under "@".
+	settings := tmux.SetOptionOptions{}
+	if err := session.SetOption(ctx, "@project", "libtmux", settings); err != nil {
+		return err
+	}
+	project, _, err := session.RawOption(ctx, "@project")
+	if err != nil {
+		return err
+	}
+	fmt.Println("@project:", project)
+	// docs:end
 	status, err := tmux.NewSparseArray(
 		tmux.SparseEntry[string]{Index: 0, Value: "#[align=left]#{session_name}"},
 		tmux.SparseEntry[string]{Index: 2, Value: "#[align=right]#{window_name}"},

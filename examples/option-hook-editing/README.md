@@ -18,6 +18,7 @@ On a tmux server with nothing else on it, it prints:
 
 ```text
 mouse: true
+@project: libtmux
 client-attached hook present: true
 ```
 

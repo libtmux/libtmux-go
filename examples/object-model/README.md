@@ -16,7 +16,10 @@ It prints:
 ```text
 held record: old
 returned record: new
+the record holds no windows
+tmux reports windows: 1
 session $999: not found
+kill-window exit status: 1
 ```
 
 <!-- docs:end -->
@@ -75,11 +78,31 @@ func run(ctx context.Context) (err error) {
 	fmt.Println("held record:", held)
 	fmt.Println("returned record:", current)
 
+	// Windows reads the record and takes no context. A session that came
+	// from a call about the session carries no windows, and says so.
+	if _, held := renamed.Windows(); !held {
+		fmt.Println("the record holds no windows")
+	}
+	// SearchWindows asks tmux.
+	windows, err := renamed.SearchWindows(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list windows: %w", err)
+	}
+	fmt.Println("tmux reports windows:", len(windows))
+
 	// A lookup that finds nothing is an error a caller can test for.
 	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
 	if errors.Is(lookupErr, tmux.ErrNotFound) {
 		fmt.Println("session $999: not found")
 	}
+
+	// Cmd sends arguments you write yourself. A command tmux ran and
+	// refused comes back as a result, with the error left nil.
+	result, err := server.Cmd(ctx, "kill-window", "-t", "@999")
+	if err != nil {
+		return fmt.Errorf("reach tmux: %w", err)
+	}
+	fmt.Println("kill-window exit status:", result.ExitCode)
 	return nil
 }
 ```
@@ -97,9 +120,18 @@ again when you want a new one.
 tmux never reuses for the life of the server, so a command sent through either
 one reaches the same session.
 
+**The name says which kind of read it is.** `Session.Windows` takes no
+context, because it reads the record. A session handed back by a call about
+the session carries no windows and says so. `Session.SearchWindows` asks tmux.
+
 **A missing target is an error you can test for.** `server.Session` with an ID
 no session holds returns an error matching `tmux.ErrNotFound`, so "it is gone"
 and "tmux could not be asked" are different checks.
+
+**A command tmux refused is a result.** `Server.Cmd` returns an error only
+when tmux could not be reached or the arguments could not be sent. A command
+that ran and failed, here `kill-window` on a window that does not exist, comes
+back with its exit status.
 
 ## Testing your own version
 

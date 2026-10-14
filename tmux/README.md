@@ -24,13 +24,126 @@ $ go get github.com/libtmux/libtmux-go/tmux@latest
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
-**Contents** — [Records](#records) · [Method names](#method-names) ·
-[Options and hooks](#options-and-hooks) · [Errors](#errors) ·
-[Waiting for a pane](#waiting-for-a-pane) · [See also](#see-also)
+**Contents** — [A whole program](#a-whole-program) · [Records](#records) ·
+[Method names](#method-names) · [Options and hooks](#options-and-hooks) ·
+[Errors](#errors) · [See also](#see-also)
 
 New here? The [top-level README](../README.md) opens with a program that runs
 a command in tmux and prints what it showed. This page is about how the
 library is shaped.
+
+## A whole program
+
+Most of the blocks on this page come from this one. It renames a session,
+reads it two ways, looks up one that is not there, and sends a command tmux
+refuses:
+
+<!-- docs:file examples/object-model/main.go -->
+
+```go
+// Command object-model shows that the values tmux hands back are records.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context) (err error) {
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-object-model",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux: %w", err)
+	}
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
+	}()
+
+	// Rename hands back the session as tmux now reports it. The record
+	// already in hand keeps the name it had when tmux handed it over.
+	renamed, err := session.Rename(ctx, "new")
+	if err != nil {
+		return fmt.Errorf("rename session: %w", err)
+	}
+	held, _ := session.Name()
+	current, _ := renamed.Name()
+	fmt.Println("held record:", held)
+	fmt.Println("returned record:", current)
+
+	// Windows reads the record and takes no context. A session that came
+	// from a call about the session carries no windows, and says so.
+	if _, held := renamed.Windows(); !held {
+		fmt.Println("the record holds no windows")
+	}
+	// SearchWindows asks tmux.
+	windows, err := renamed.SearchWindows(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list windows: %w", err)
+	}
+	fmt.Println("tmux reports windows:", len(windows))
+
+	// A lookup that finds nothing is an error a caller can test for.
+	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
+	if errors.Is(lookupErr, tmux.ErrNotFound) {
+		fmt.Println("session $999: not found")
+	}
+
+	// Cmd sends arguments you write yourself. A command tmux ran and
+	// refused comes back as a result, with the error left nil.
+	result, err := server.Cmd(ctx, "kill-window", "-t", "@999")
+	if err != nil {
+		return fmt.Errorf("reach tmux: %w", err)
+	}
+	fmt.Println("kill-window exit status:", result.ExitCode)
+	return nil
+}
+```
+
+<!-- docs:end -->
+
+To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
+on `PATH`:
+
+```console
+$ go mod init demo && \
+    go get github.com/libtmux/libtmux-go/tmux@latest && \
+    go run .
+```
+
+It prints:
+
+<!-- docs:output examples/object-model/output.txt -->
+
+```text
+held record: old
+returned record: new
+the record holds no windows
+tmux reports windows: 1
+session $999: not found
+kill-window exit status: 1
+```
+
+<!-- docs:end -->
 
 ## Records
 
@@ -39,7 +152,7 @@ A [`Server`][tmux-server] reaches one tmux server. It holds
 each holding [`Pane`][tmux-pane] values, and every one of them is a record:
 what tmux said when you asked.
 
-### [`session.Rename(ctx, "new")`][tmux-session-rename]: a change returns a new record
+### [`Session.Rename`][tmux-session-rename]: a change returns a new record
 
 <!-- docs:records -->
 
@@ -69,23 +182,63 @@ hold, or what it looks like, hands back a new record.
 [`Session.Refresh`][tmux-session-refresh] and its counterparts on a window and
 a pane ask tmux again when you want one.
 
-### [`session.Windows()`][tmux-session-windows]: read what the record holds
+### [`Session.Windows`][tmux-session-windows]: read what the record holds
 
-The name says which kind of read you are making. `session.Windows()` returns
-what the record already holds and never asks tmux, which is why it takes no
-context. [`session.SearchWindows(ctx, nil)`][tmux-session-searchwindows] asks
-tmux.
+The name says which kind of read you are making. `Windows` takes no context,
+because it reads the record and never asks tmux. Its second result reports
+whether the record holds any windows at all.
+[`Session.SearchWindows`][tmux-session-searchwindows] asks tmux:
+
+<!-- docs:record-reads -->
+
+```go
+// Given: ctx context.Context; renamed tmux.Session
+// Windows reads the record and takes no context. A session that came
+// from a call about the session carries no windows, and says so.
+if _, held := renamed.Windows(); !held {
+	fmt.Println("the record holds no windows")
+}
+// SearchWindows asks tmux.
+windows, err := renamed.SearchWindows(ctx, nil)
+if err != nil {
+	return fmt.Errorf("list windows: %w", err)
+}
+fmt.Println("tmux reports windows:", len(windows))
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked examples/object-model/output.txt -->
+This prints `the record holds no windows`, then `tmux reports windows: 1`.
+<!-- docs:end -->
+
+A record holds its windows when it came from a read of everything, which is
+what [`Server.Snapshot`][tmux-server-snapshot] returns.
 
 ### [`tmux.NewServer`][tmux-newserver]: choose which tmux to reach
+
+<!-- docs:private-server -->
+
+```go
+// A private server: a socket and an empty config of its own, so this
+// neither touches nor is changed by a tmux you already use.
+server, err := tmux.NewServer(tmux.ServerOptions{
+	SocketName: "libtmux-object-model",
+	ConfigFile: os.DevNull,
+})
+if err != nil {
+	return fmt.Errorf("configure tmux: %w", err)
+}
+```
+
+<!-- docs:end -->
 
 `NewServer` checks its configuration and starts nothing. With no
 [`SocketName`][tmux-serveroptions-socketname] or
 [`SocketPath`][tmux-serveroptions-socketpath] it reaches the server your own
 `tmux` command does, and with no
 [`ConfigFile`][tmux-serveroptions-configfile] tmux reads your configuration.
-A program that should behave the same everywhere names both, as
-[`../examples/object-model`](../examples/object-model) does. It is the whole
-program the blocks on this page come from.
+A program that should behave the same everywhere names both, as this one does.
 
 ## Method names
 
@@ -118,13 +271,13 @@ or what it looks like. Everything else returns only an error.
 
 ## Options and hooks
 
-### [`session.SetMouse(ctx, true)`][tmux-session-setmouse]: set an option, then read it back
+### [`Session.SetMouse`][tmux-session-setmouse]: set an option, then read it back
 
 Every tmux option and hook has a typed accessor. The tmux name maps to the Go
 name by one rule, given under "Naming and call shapes" in the package
 documentation. A setter returns only an error, because an option is not part
 of the record you hold. Read it back through
-[`Options`][tmux-session-options]:
+[`Session.Options`][tmux-session-options]:
 
 <!-- docs:options -->
 
@@ -147,14 +300,37 @@ fmt.Println("mouse:", mouse)
 This prints `mouse: true`.
 <!-- docs:end -->
 
+### [`Session.SetOption`][tmux-session-setoption]: an option by its tmux name
+
+For an option tmux has and this package has no accessor for, `SetOption` and
+[`Session.RawOption`][tmux-session-rawoption] take the name and the value as
+strings:
+
+<!-- docs:raw-option -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+// An option this package has no accessor for, such as one a plugin
+// defines, goes by its tmux name. tmux keeps user options under "@".
+settings := tmux.SetOptionOptions{}
+if err := session.SetOption(ctx, "@project", "libtmux", settings); err != nil {
+	return err
+}
+project, _, err := session.RawOption(ctx, "@project")
+if err != nil {
+	return err
+}
+fmt.Println("@project:", project)
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked examples/option-hook-editing/output.txt -->
+This prints `@project: libtmux`.
+<!-- docs:end -->
+
 [`../examples/option-hook-editing`](../examples/option-hook-editing) is the
-program this comes from. It sets a hook the same way.
-
-### [`session.SetOption`][tmux-session-setoption]: an option by its tmux name
-
-For an option tmux has and this package has no accessor for, such as one a
-plugin defines, `SetOption` and [`RawOption`][tmux-session-rawoption] take the
-name and the value as strings.
+program both blocks come from. It sets a hook the same way.
 
 ## Errors
 
@@ -183,21 +359,29 @@ This prints `session $999: not found`.
 ### [`Server.Cmd`][tmux-server-cmd]: a failed command is a result
 
 `Cmd` runs tmux arguments you write yourself. A command that ran and failed
-is data, not an error: [`CommandResult.ExitCode`][tmux-commandresult-exitcode]
-carries its status. A tmux that could not be reached, and arguments refused
-before anything was sent, are Go errors.
+is data, not an error:
+[`CommandResult.ExitCode`][tmux-commandresult-exitcode] carries its status. A
+tmux that could not be reached, and arguments refused before anything was
+sent, are Go errors.
 
-## Waiting for a pane
+<!-- docs:cmd-result -->
 
-### [`PaneObservation.WaitFor`][tmux-paneobservation-waitfor]: wait for what the command prints
+```go
+// Given: ctx context.Context; server tmux.Server
+// Cmd sends arguments you write yourself. A command tmux ran and
+// refused comes back as a result, with the error left nil.
+result, err := server.Cmd(ctx, "kill-window", "-t", "@999")
+if err != nil {
+	return fmt.Errorf("reach tmux: %w", err)
+}
+fmt.Println("kill-window exit status:", result.ExitCode)
+```
 
-Worth reading before writing a poll loop. A terminal echoes the command you
-typed, so searching the screen for what you are waiting for finds your own
-request. Wait for text the command prints and the typed line does not
-contain. [`../examples/pane-io`](../examples/pane-io) does that with
-`WaitFor`, which tmux wakes as the pane writes. "Execution modes" in the
-package documentation covers the other ways to wait, in the order worth
-reaching for them.
+<!-- docs:end -->
+
+<!-- docs:checked examples/object-model/output.txt -->
+No window has that id, so this prints `kill-window exit status: 1`.
+<!-- docs:end -->
 
 ## See also
 
@@ -214,6 +398,7 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 | [Reference](https://libtmux.org/en/go/latest/reference/) | Every exported identifier, method, and field, one page each |
 | [`tmuxtest/`](tmuxtest/) | A real tmux server for your tests |
 | [`../tmuxq/`](../tmuxq/) | Filtering helpers for the records this package returns |
+| [`../examples/pane-io`](../examples/pane-io) | Type into a pane and wait for what the command prints, not for what you typed |
 | [`../examples/`](../examples/) | Runnable programs |
 | [`../DESIGN.md`](../DESIGN.md) | Why the surface looks like this |
 | [`../BENCHMARKS.md`](../BENCHMARKS.md) | What each transport costs |
@@ -221,16 +406,15 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 [tmux-commandresult-exitcode]: https://libtmux.org/en/go/latest/reference/tmux-commandresult-exitcode/
 [tmux-errnotfound]: https://libtmux.org/en/go/latest/reference/tmux-errnotfound/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
-[tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
 [tmux-pane-capture]: https://libtmux.org/en/go/latest/reference/tmux-pane-capture/
 [tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
-[tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
-[tmux-server]: https://libtmux.org/en/go/latest/reference/tmux-server/
+[tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
 [tmux-server-cmd]: https://libtmux.org/en/go/latest/reference/tmux-server-cmd/
+[tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
+[tmux-server]: https://libtmux.org/en/go/latest/reference/tmux-server/
 [tmux-serveroptions-configfile]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-configfile/
 [tmux-serveroptions-socketname]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-socketname/
 [tmux-serveroptions-socketpath]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-socketpath/
-[tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
 [tmux-session-newwindow]: https://libtmux.org/en/go/latest/reference/tmux-session-newwindow/
 [tmux-session-options]: https://libtmux.org/en/go/latest/reference/tmux-session-options/
 [tmux-session-rawoption]: https://libtmux.org/en/go/latest/reference/tmux-session-rawoption/
@@ -240,7 +424,8 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 [tmux-session-setmouse]: https://libtmux.org/en/go/latest/reference/tmux-session-setmouse/
 [tmux-session-setoption]: https://libtmux.org/en/go/latest/reference/tmux-session-setoption/
 [tmux-session-windows]: https://libtmux.org/en/go/latest/reference/tmux-session-windows/
-[tmux-window]: https://libtmux.org/en/go/latest/reference/tmux-window/
+[tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
 [tmux-window-kill]: https://libtmux.org/en/go/latest/reference/tmux-window-kill/
 [tmux-window-link]: https://libtmux.org/en/go/latest/reference/tmux-window-link/
 [tmux-window-splitpane]: https://libtmux.org/en/go/latest/reference/tmux-window-splitpane/
+[tmux-window]: https://libtmux.org/en/go/latest/reference/tmux-window/
