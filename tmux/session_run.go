@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -74,6 +75,11 @@ func (result RunResult) clone() RunResult {
 // clean up; a bare [Session.Start] followed by [Running.Wait] leaves that
 // choice to the caller instead. [Server.RunShell] runs a command with no pane
 // at all.
+//
+// On a session bound to a [Connection], Run works as it does elsewhere: the
+// wait uses a control client of its own rather than a lane, so one lane is
+// enough, and the final screen is read through a scratch tmux buffer and a
+// temporary file that tmux writes and this process reads.
 func (s Session) Run(ctx context.Context, command string, options RunOptions) (RunResult, error) {
 	running, err := s.Start(ctx, command, options)
 	if err != nil {
@@ -100,6 +106,10 @@ func (s Session) Run(ctx context.Context, command string, options RunOptions) (R
 // outcome is read, whether or not Keep leaves the window itself in place.
 //
 // If Wait is never called, the window Start created is never removed.
+//
+// A session bound to a [Connection] can Start: [Running.Wait] holds a control
+// client of its own, not a lane, so [Running.Kill] and every other command stay
+// available while it waits.
 func (s Session) Start(
 	ctx context.Context,
 	command string,
@@ -231,6 +241,10 @@ func (r *Running) Pane() Pane {
 // command end, on a context no caller's cancellation reaches, because from
 // then on it belongs to every caller. A call whose context ends first reports
 // that context and leaves the window alone; a later call gets the outcome.
+//
+// On a [Connection]-bound session the wait holds a control client of its own
+// rather than a lane, and ending it closes that client. Closing the
+// connection ends it with [ErrControlClosed].
 func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 	finished := r.finishedSignal()
 	if !r.exited.Load() {
@@ -513,12 +527,32 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	// a missing status is the documented Signal case rather than an error.
 	result.Status, _ = finished.DeadStatus()
 	result.Signal, _ = finished.DeadSignal()
-	lines, err := finished.Capture(ctx, CapturePaneRequest{Start: CaptureBoundary, End: CaptureBoundary})
+	lines, err := captureFinishedScreen(ctx, finished)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("read screen: %w", err)
 	}
 	result.Lines = trimScreen(lines, r.fixedNotice)
 	return result, nil
+}
+
+// captureFinishedScreen reads pane's screen. A connection cannot print a
+// capture safely, so a bound pane stages it through a tmux buffer and a
+// scratch file, which tmux writes and this process reads.
+func captureFinishedScreen(ctx context.Context, pane Pane) ([]string, error) {
+	request := CapturePaneRequest{Start: CaptureBoundary, End: CaptureBoundary}
+	if !pane.server.ConnectionBound() {
+		return pane.Capture(ctx, request)
+	}
+	file, err := os.CreateTemp("", "libtmux-go-run-*")
+	if err != nil {
+		return nil, err
+	}
+	path := file.Name()
+	defer func() { _ = os.Remove(path) }()
+	if err := file.Close(); err != nil {
+		return nil, err
+	}
+	return pane.CaptureToFile(ctx, path, request)
 }
 
 // StreamTo copies what the command prints into destination as it prints it and
@@ -535,8 +569,8 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 // command's exit. [RunResult.Lines] is a screen capture rather than a
 // notification stream and remains the authoritative record of what the command
 // showed. Streaming needs a control client, which a [Connection]-bound value
-// does not have, so it returns [ErrConnectionRequiresProcess] there; Wait alone
-// does not.
+// does not have, so it returns [ErrConnectionRequiresProcess] there before
+// waiting and leaves the command running; Wait alone does not.
 func (r *Running) StreamTo(
 	ctx context.Context,
 	destination io.Writer,

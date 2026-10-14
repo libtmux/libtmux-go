@@ -106,8 +106,11 @@ func TestWaitForTextTimeoutIncludesPaneSetup(t *testing.T) {
 	}
 	const gate = "wait-text-setup-gate"
 	held := make(chan error, 1)
+	// A raw wait-for stays on the command lane, which is what holds it busy;
+	// Server.WaitFor on a connection takes a client of its own.
 	go func() {
-		held <- command.WaitFor(ctx, tmux.WaitForRequest{Channel: gate})
+		_, err := command.Cmd(ctx, "wait-for", gate)
+		held <- err
 	}()
 	waitForWaitTextLaneBlock(ctx, t, command)
 	release := func() {

@@ -247,6 +247,11 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 // client wait but cannot prove a preceding signal or lock did not take
 // effect. See [WaitForModeLock]: before tmux 3.8, abandoning a lock wait costs
 // that channel one unlock.
+//
+// On a [Connection]-bound server a wait or lock runs on a control client opened
+// for that call and closed when it ends, so canceling it, or a peer never
+// signaling, leaves every lane free. Closing the connection ends a parked call
+// with [ErrControlClosed].
 func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 	if err := validateServerCommandArgument(
 		"wait-for", "Channel", request.Channel, true,
@@ -274,7 +279,17 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 		)
 	}
 	arguments = append(arguments, "--", request.Channel)
-	result, err := s.literalCmd(ctx, arguments...)
+	if err := validateLiteralCommandArguments(arguments); err != nil {
+		return err
+	}
+	// A wait or lock can hold its client until another client acts, and tmux
+	// cannot cancel a command already sent, so a connection runs it on a
+	// client of its own rather than on a shared lane.
+	kind := commandServer
+	if request.Mode == WaitForModeWait || request.Mode == WaitForModeLock {
+		kind = commandBlocking
+	}
+	result, _, err := s.dispatchAs(ctx, kind, false, arguments...)
 	return requireRedactedServerCommandNoStderr("wait-for", result, err)
 }
 

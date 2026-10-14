@@ -16,6 +16,10 @@ type commandKind uint8
 const (
 	commandServer commandKind = iota
 	commandProcess
+	// commandBlocking is a server command that can hold its client until a
+	// peer acts, such as wait-for. A connection gives it a client of its own
+	// so abandoning it cannot strand a shared lane.
+	commandBlocking
 )
 
 // requireProcess marks exact-output and interactive operations. A plain
@@ -129,7 +133,7 @@ func (s Server) originalCommand(
 	connected bool,
 ) []string {
 	if connected {
-		if kind == commandServer {
+		if kind != commandProcess {
 			return slices.Clone(arguments)
 		}
 		return s.commandArguments(arguments)

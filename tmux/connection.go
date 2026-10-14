@@ -307,6 +307,10 @@ func newSessionConnectionArguments(
 
 func bindControlConnection(session Session, pool *controlLanePool) *Connection {
 	connection := &Connection{pool: pool}
+	unbound := session
+	pool.open = func(ctx context.Context) (*ControlClient, error) {
+		return unbound.server.openControl(ctx, unbound, controlCommands)
+	}
 	bound := session.server
 	bound.connection = connection
 	connection.server = bound
@@ -388,7 +392,7 @@ func (c *Connection) terminalError(kind commandKind) error {
 		return ErrControlClosed
 	default:
 	}
-	if kind != commandServer {
+	if kind == commandProcess {
 		return ErrConnectionRequiresProcess
 	}
 	return nil
@@ -402,6 +406,9 @@ func (c *Connection) run(
 ) (CommandResult, error) {
 	if err := c.routeError(ctx, kind); err != nil {
 		return CommandResult{ExitCode: -1}, err
+	}
+	if kind == commandBlocking {
+		return c.pool.runExclusive(ctx, arguments, commandList)
 	}
 	return c.pool.run(ctx, arguments, commandList)
 }

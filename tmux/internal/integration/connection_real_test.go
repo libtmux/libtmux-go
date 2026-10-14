@@ -395,3 +395,148 @@ func TestNewSessionConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 		)
 	}
 }
+
+// openOwnedConnection opens a connection on the server's first session and
+// closes it when the test ends.
+func openOwnedConnection(
+	ctx context.Context,
+	t *testing.T,
+	server tmux.Server,
+	options tmux.ConnectionOptions,
+) *tmux.Connection {
+	t.Helper()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	connection, err := sessions[0].OpenControl(ctx, options)
+	if err != nil {
+		t.Fatalf("OpenControl() error = %v", err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+	return connection
+}
+
+// awaitClientBeyond returns once the server counts more than lanes attached
+// clients, which a blocking call on a connection adds for its own duration.
+// It gives up after two seconds and leaves the caller's assertions to say
+// what that means.
+func awaitClientBeyond(ctx context.Context, t *testing.T, server tmux.Server, lanes int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	for ctx.Err() == nil {
+		clients, err := server.Clients(ctx)
+		if err == nil && len(clients) > lanes {
+			return
+		}
+	}
+}
+
+//libtmux:real-tmux
+func TestConnectionServesCommandsAfterACanceledWaitFor(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+	waitCtx, stopWaiting := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer stopWaiting()
+	err := connection.Server().WaitFor(waitCtx, tmux.WaitForRequest{Channel: "nobody-signals"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitFor() error = %v, want deadline exceeded", err)
+	}
+
+	nextCtx, stopNext := context.WithTimeout(ctx, 5*time.Second)
+	defer stopNext()
+	if _, err := connection.Server().Sessions(nextCtx); err != nil {
+		t.Fatalf("Sessions() after a canceled WaitFor error = %v, want the lane usable", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestConnectionCloseEndsAParkedWaitFor(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+	waited := make(chan error, 1)
+	go func() {
+		waited <- connection.Server().WaitFor(ctx, tmux.WaitForRequest{Channel: "nobody-signals"})
+	}()
+	awaitClientBeyond(ctx, t, server, 1)
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	select {
+	case err := <-waited:
+		if !errors.Is(err, tmux.ErrControlClosed) {
+			t.Fatalf("WaitFor() error = %v, want ErrControlClosed", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitFor() still parked after Close()")
+	}
+}
+
+//libtmux:real-tmux
+func TestSessionRunWorksOnAConnection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+	session := connection.Session()
+	before, err := connection.Server().Windows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := session.Run(ctx, "echo hello; exit 3", tmux.RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() on a connection error = %v", err)
+	}
+	if result.Status != 3 || !slices.Equal(result.Lines, []string{"hello"}) {
+		t.Fatalf("Run() = status %d, lines %q, want status 3, [hello]", result.Status, result.Lines)
+	}
+	after, err := connection.Server().Windows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("windows after Run = %d, want the %d it started with", len(after), len(before))
+	}
+}
+
+//libtmux:real-tmux
+func TestRunningKillWorksWhileWaitIsParkedOnOneLane(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{Lanes: 1})
+
+	running, err := connection.Session().Start(ctx, "sleep 30", tmux.RunOptions{})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	waited := make(chan error, 1)
+	go func() {
+		_, waitErr := running.Wait(ctx)
+		waited <- waitErr
+	}()
+	// The failure this guards is Kill queueing behind a parked wait.
+	awaitClientBeyond(ctx, t, server, 1)
+
+	killCtx, stopKill := context.WithTimeout(ctx, 2*time.Second)
+	defer stopKill()
+	if err := running.Kill(killCtx); err != nil {
+		t.Fatalf("Kill() while Wait is parked error = %v", err)
+	}
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Fatalf("Wait() after Kill error = %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("Wait() did not return after Kill")
+	}
+}

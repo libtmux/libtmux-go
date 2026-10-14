@@ -123,7 +123,16 @@ func (s Server) dispatch(
 	commandList bool,
 	args ...string,
 ) (CommandResult, []byte, error) {
-	result, err := s.runCommand(ctx, commandServer, args, nil, commandList)
+	return s.dispatchAs(ctx, commandServer, commandList, args...)
+}
+
+func (s Server) dispatchAs(
+	ctx context.Context,
+	kind commandKind,
+	commandList bool,
+	args ...string,
+) (CommandResult, []byte, error) {
+	result, err := s.runCommand(ctx, kind, args, nil, commandList)
 	commandResult := cloneCommandResult(CommandResult{
 		Command:   result.Command,
 		Stdout:    result.Stdout,

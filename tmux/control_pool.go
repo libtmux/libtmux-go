@@ -70,19 +70,37 @@ type controlLanePool struct {
 
 	stopOnce sync.Once
 
+	// open starts a client outside the lanes for a command that can block.
+	open func(context.Context) (*ControlClient, error)
+
 	mu      sync.Mutex
 	live    int
 	failure error
+	// exclusive holds the clients running blocking commands, so closing the
+	// pool ends them.
+	exclusive map[*ControlClient]struct{}
 }
 
 func (p *controlLanePool) closeContext(ctx context.Context) error {
 	p.stop()
-	return closeControlClientsContext(ctx, p.clients)
+	return closeControlClientsContext(ctx, p.closing())
 }
 
 func (p *controlLanePool) close() error {
 	p.stop()
-	return closeControlClients(p.clients)
+	return closeControlClients(p.closing())
+}
+
+// closing returns every client the pool owns. Call it after stop, which keeps
+// adopt from adding another.
+func (p *controlLanePool) closing() []*ControlClient {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	clients := slices.Clone(p.clients)
+	for client := range p.exclusive {
+		clients = append(clients, client)
+	}
+	return clients
 }
 
 func (p *controlLanePool) stop() {
@@ -103,6 +121,64 @@ func (p *controlLanePool) run(
 		return CommandResult{Command: slices.Clone(arguments), ExitCode: -1}, err
 	}
 	return controlCommandResults(arguments, results), nil
+}
+
+// runExclusive carries one command that can block on a client opened for it
+// alone. tmux has no way to cancel a command already sent to a control client,
+// so the client is closed when the command ends, however it ends; a shared
+// lane would stay occupied until a peer acted.
+func (p *controlLanePool) runExclusive(
+	ctx context.Context,
+	arguments []string,
+	commandList bool,
+) (CommandResult, error) {
+	failed := CommandResult{Command: slices.Clone(arguments), ExitCode: -1}
+	if err := ctx.Err(); err != nil {
+		return failed, err
+	}
+	select {
+	case <-p.stopped:
+		return failed, ErrControlClosed
+	default:
+	}
+	client, err := p.open(ctx)
+	if err != nil {
+		return failed, err
+	}
+	if !p.adopt(client) {
+		_ = client.Close()
+		return failed, ErrControlClosed
+	}
+	results, err := client.cmdUnobserved(ctx, commandList, arguments...)
+	p.mu.Lock()
+	delete(p.exclusive, client)
+	p.mu.Unlock()
+	_ = client.Close()
+	if err != nil {
+		select {
+		case <-p.stopped:
+			err = errors.Join(ErrControlClosed, err)
+		default:
+		}
+		return failed, err
+	}
+	return controlCommandResults(arguments, results), nil
+}
+
+// adopt records client as belonging to the pool, unless the pool has stopped.
+func (p *controlLanePool) adopt(client *ControlClient) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	select {
+	case <-p.stopped:
+		return false
+	default:
+	}
+	if p.exclusive == nil {
+		p.exclusive = make(map[*ControlClient]struct{})
+	}
+	p.exclusive[client] = struct{}{}
+	return true
 }
 
 func (p *controlLanePool) call(
@@ -183,7 +259,8 @@ func (p *controlLanePool) release(client *ControlClient, err error) {
 // connectionSurvives reports whether a failed command left its connection
 // usable. A rejected request never reached the wire, and a canceled command is
 // drained by the client before it writes another, so neither says anything
-// about the connection.
+// about the connection. Draining waits for tmux to finish the command, which
+// is why a command that can block never runs on a lane; see runExclusive.
 func connectionSurvives(err error) bool {
 	if errors.Is(err, ErrInvalidRequest) {
 		return true
