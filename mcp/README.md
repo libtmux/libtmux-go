@@ -41,7 +41,8 @@ settled. Pin an exact version.
 You need Go 1.26 or newer, and tmux 3.2a or newer on `PATH`. The install
 command above puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client
 launches it as a subprocess and speaks to it over stdin and stdout, so there
-is nothing to keep running yourself.
+is nothing to keep running yourself. If your shell cannot find
+`libtmux-mcp`, add that directory to `PATH`.
 
 ### `claude mcp add`: tell a client about it
 
@@ -284,7 +285,9 @@ that will not start needs:
 | `-tools` | the tools and toolsets a client would see |
 | `-doctor` | which socket it reaches, what is on it, and whether it is running inside that tmux itself |
 
-`-version` and `-tools` do not look for tmux. `-tools` and `-doctor` drive the
+`-version` needs no tmux. `-tools` asks the socket it would serve whether a
+tmux server runs there, because that decides whether `teardown` is in the
+default, so it needs the tmux executable. `-tools` and `-doctor` drive the
 server through its own protocol in memory, so they report what a client sees
 rather than what the code intends.
 
@@ -413,10 +416,15 @@ inherit, which is not what one already running has.
 [`examples/agent-workflow`](examples/agent-workflow) is the whole loop in one
 file. It works out which pane it is running in, splits a pane off, starts work
 there and waits for what it prints, runs a command and reads its exit status,
-then reads back what it built. From the repository root:
+then reads back what it built. It lives in the repository rather than the
+module you installed, so run it from a clone:
 
 ```console
-$ go -C mcp run ./examples/agent-workflow -socket-name demo
+$ git clone https://github.com/libtmux/libtmux-go.git
+```
+
+```console
+$ go -C libtmux-go/mcp run ./examples/agent-workflow -socket-name demo
 ```
 
 On a socket with nothing on it, it starts a session there and prints:
@@ -444,6 +452,12 @@ stdin and stdout. Clean up with `tmux -L demo kill-server`.
 
 ### [`mcp.NewServer`][mcp-newserver]: serve one tmux server from your own program
 
+[`mcp.Run`][mcp-run] serves a tmux server over standard input and output,
+which is all the `libtmux-mcp` command does. To serve it over another
+transport, build an [`Instance`][mcp-instance] and connect it yourself. This
+block comes from the package's own example test, which connects one end of
+the SDK's in-memory transport pair and gives the other end to a client:
+
 <!-- docs:mcp-embedding -->
 
 ```go
@@ -461,10 +475,14 @@ serverSession, err := instance.Connect(
 
 This package is named `mcp` and so is the SDK's, so a file using both has to
 rename one of them. The block imports this one as `tmuxmcp` and the SDK as
-`sdk`. `NewServer` returns an [`Instance`][mcp-instance];
-[close it][mcp-instance-close] when you have finished serving. A transport of
-your own must commit one response per successful write and be wrapped in
-[`AssumeResponseCommit`][mcp-assumeresponsecommit], as above. The
+`sdk`. `NewServer` checks the target and starts nothing;
+[close the instance][mcp-instance-close] when you have finished serving.
+
+The server needs to know that each response reaches the client as soon as
+the transport's write returns, rather than waiting in a buffer behind
+another. Standard input and output are known to. Any other transport must be
+wrapped in [`AssumeResponseCommit`][mcp-assumeresponsecommit] to say so, as
+the block does for the in-memory one. The
 [reference](https://libtmux.org/en/go/latest/mcp/reference/) has the rest of
 what an embedder is held to.
 
@@ -501,6 +519,7 @@ module of its own and `go get` on the tmux module never pulls it in.
 [mcp-instance-close]: https://libtmux.org/en/go/latest/mcp/reference/mcp-instance-close/
 [mcp-instance]: https://libtmux.org/en/go/latest/mcp/reference/mcp-instance/
 [mcp-newserver]: https://libtmux.org/en/go/latest/mcp/reference/mcp-newserver/
+[mcp-run]: https://libtmux.org/en/go/latest/mcp/reference/mcp-run/
 [mcp-socketenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketenvironmentvariable/
 [mcp-socketpathenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketpathenvironmentvariable/
 [mcp-tmuxconfigenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-tmuxconfigenvironmentvariable/

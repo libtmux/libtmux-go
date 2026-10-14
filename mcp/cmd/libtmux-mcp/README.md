@@ -53,7 +53,9 @@ List every tool the server exposes, as a client would see them:
 $ libtmux-mcp -tools
 ```
 
-Tool listing does not resolve or contact tmux.
+Tool listing needs the tmux executable: it asks the socket it would serve
+whether a tmux server runs there, because that decides whether the
+`teardown` toolset is in the default.
 
 Check that the server can reach the tmux it was pointed at:
 
