@@ -193,7 +193,18 @@ func TestCleanupTracksReplacementDaemonOnOwnedSocket(t *testing.T) {
 	if !waitForProcessDeath(firstPID, time.Now().Add(cleanupTimeout)) {
 		t.Fatalf("first tmux server pid %d remained alive", firstPID)
 	}
-	if result := runCommand(context.Background(), realServer, "new-session", "-d", "-s", "replacement"); result.ExitCode != 0 {
+	// A pane child still holding the dead daemon's listening socket resets the
+	// first connection; each attempt returns when it does, so this needs no sleep.
+	startReplacement := func() tmux.CommandResult {
+		deadline := time.Now().Add(cleanupTimeout)
+		for {
+			result := runCommand(context.Background(), realServer, "new-session", "-d", "-s", "replacement")
+			if !slices.Equal(result.Stderr, []string{lostServerMessage}) || time.Now().After(deadline) {
+				return result
+			}
+		}
+	}
+	if result := startReplacement(); result.ExitCode != 0 {
 		t.Fatalf("start replacement daemon: %#v", result)
 	}
 	replacementResult := runCommand(context.Background(), realServer, "display-message", "-p", "#{pid}")
