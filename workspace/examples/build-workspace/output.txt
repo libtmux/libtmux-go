@@ -1,0 +1,3 @@
+session project: 2 windows
+window editor: 2 panes
+window logs: 3 panes

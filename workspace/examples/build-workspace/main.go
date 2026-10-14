@@ -1,87 +1,82 @@
-// Command build-workspace builds an embedded tmuxp-style workspace, then
-// reports its topology.
+// Command build-workspace builds a tmuxp-style workspace and prints what tmux
+// made of it.
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"time"
+	"os"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/workspace"
 )
 
+// document is a workspace file. A program of your own would read one from
+// disk with os.ReadFile.
 const document = `
-session_name: example-project
-start_directory: /tmp
-environment:
-  PROJECT_ENV: development
-options:
-  history-limit: '5000'
+session_name: project
 windows:
   - window_name: editor
     layout: main-vertical
-    focus: true
     panes:
-      - shell: sh -c 'sleep 300'
-      - shell: sh -c 'sleep 300'
+      - echo editing
+      - echo testing
   - window_name: logs
     panes:
-      - shell: sh -c 'sleep 300'
+      - echo api
+      - echo worker
+      - echo database
 `
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(context.Background()); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	described, err := workspace.Parse([]byte(document))
+func run(ctx context.Context) (err error) {
+	// Parse refuses a field it does not know rather than dropping it, so a
+	// workspace that loads is one that was understood.
+	parsed, err := workspace.Parse([]byte(document))
 	if err != nil {
-		// Parse rejects a field it does not recognise and a value tmux could
-		// not accept, so a workspace that loads is one worth building.
-		return fmt.Errorf("parse: %w", err)
+		return fmt.Errorf("parse workspace: %w", err)
 	}
 
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
 	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-go-example-build-workspace",
+		SocketName: "libtmux-build-workspace",
+		ConfigFile: os.DevNull,
 	})
 	if err != nil {
-		return fmt.Errorf("construct tmux server: %w", err)
+		return fmt.Errorf("configure tmux: %w", err)
 	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
 	defer func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer killCancel()
-		_ = server.Kill(killCtx)
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
 	}()
 
-	session, err := workspace.Build(ctx, server, described)
+	session, err := workspace.Build(ctx, server, parsed)
 	if err != nil {
-		// Build is not atomic, so the returned session identifies whatever was
-		// created before the failure.
-		return fmt.Errorf("build %q: %w", described.SessionName, err)
+		return fmt.Errorf("build workspace: %w", err)
 	}
 
-	// The returned record comes from a creation call, so its relations are
-	// empty. Reading what exists means asking tmux again.
+	// Ask tmux what exists now, rather than repeating what the file asked for.
 	windows, err := session.SearchWindows(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("search windows: %w", err)
+		return fmt.Errorf("list windows: %w", err)
 	}
-	fmt.Printf("built %q with %d windows\n", described.SessionName, len(windows))
+	name, _ := session.Name()
+	fmt.Printf("session %s: %d windows\n", name, len(windows))
 	for _, window := range windows {
-		name, _ := window.Formats().WindowName()
-		index, _ := window.Formats().WindowIndex()
 		panes, err := window.SearchPanes(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("search panes: %w", err)
+			return fmt.Errorf("list panes: %w", err)
 		}
-		fmt.Printf("  window %d %-8s %d pane(s)\n", index, name, len(panes))
+		windowName, _ := window.Name()
+		fmt.Printf("window %s: %d panes\n", windowName, len(panes))
 	}
 	return nil
 }
