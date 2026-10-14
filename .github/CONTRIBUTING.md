@@ -197,7 +197,10 @@ The tests in `tmux/internal/generate/docs` hold a page to its source:
   `~/.tmux.conf` as its own, and compares what it prints with the
   `docs:output` block beside it. It needs a tmux and fails without one.
 - `TestPublishedRegionsCompileAlone` compiles each region alone with its
-  `given:` list as its only bindings.
+  `given:` list as its only bindings. A region under `mcp/` or `workspace/`
+  is left to that module's suite instead, because compiling it alone would
+  need the module's dependencies from the network; put it in a test or an
+  `Example` that suite runs.
 - `TestPublishedOutputIsComparedByATest` and
   `TestEveryExamplePagePublishesItsOutput` keep every published output tied to
   a test that compares it.
@@ -207,6 +210,8 @@ The tests in `tmux/internal/generate/docs` hold a page to its source:
   section that states another result than the one its heading printed.
 - `TestEveryREADMEFenceIsGeneratedOrPermitted` allows a README only
   `console`, `text`, `bibtex`, `json`, and `yaml` blocks by hand.
+- `TestEveryLinkLabelIsDefined` fails on a reference-style link label a
+  README uses without defining, or defines without using.
 - `TestReferenceLinksNameExportedAPI` holds every link to
   `libtmux.org/en/go/latest/reference/` to an identifier this module exports.
   The site names a page for the package, then the identifier, then a method
