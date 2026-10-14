@@ -143,11 +143,15 @@ screen. A shell echoes input before it executes it, so the capture can find the
 request rather than the result. `run_shell_command` frames one authored command,
 waits for its completion record, and returns its exit status and bounded output.
 
-For output the client did not author, use `wait_for_text`. It can match output
-already present or output that arrives later, and `stop` patterns turn known
-failure text into an early answer. Every wait has a ceiling: 300 seconds by
-default, configurable with `LIBTMUX_MCP_WAIT_MAX_SECONDS`. A longer requested
-timeout is clamped and disclosed in the response.
+For output the client did not author, use `wait_for_text`, and `stop`
+patterns turn known failure text into an early answer. Text already on the
+pane when it attaches ends the wait at once, with `outcome` set to
+`alreadyOnScreen`, `matchedAtEntry` true, and `found` false: it is not
+evidence of anything the wait saw happen, and a shell's echo of a command just
+typed reads the same. To wait only for output written after some point, pass
+the `cursor` an earlier `capture_since` returned. Every wait has a ceiling:
+300 seconds by default, configurable with `LIBTMUX_MCP_WAIT_MAX_SECONDS`. A
+longer requested timeout is clamped and disclosed in the response.
 
 Commands for `run_shell_command` are staged as private files and sourced by the
 pane's POSIX-compatible shell. They do not cross the interactive line editor.
