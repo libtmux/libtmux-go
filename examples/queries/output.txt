@@ -1,11 +1,12 @@
-active: editor.0 logs.0
-in the logs window: logs.0 logs.1
-in window 1 or later: logs.0 logs.1
-first in their window: editor.0 logs.0
-active and in logs: logs.0
-index 1, or in window 0: editor.0 logs.1
-not active: logs.1
-window name matches ^log: logs.0 logs.1
-windows named logs: 1
+3 panes, 2 active
+tmux.PaneActiveIs(true): editor.0 logs.1
+tmux.PaneIndexIs(0): editor.0 logs.0
+tmux.PaneFilter{WindowIndexGTE: new(1)}: logs.0 logs.1
+tmux.PaneFilter{Active: new(true), WindowIndex: new(1)}: logs.1
+tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}: logs.0 logs.1
+tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}: editor.0 logs.1
+tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}: logs.0
+tmux.WindowFilter{NameRegex: "^log"}: logs
+tmux.SessionNameIs("work"): work
 the first pane with index 1: logs.1
-exactly one pane has index 1
+the only pane with index 1: logs.1

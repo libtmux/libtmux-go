@@ -138,7 +138,7 @@ func TestEveryRegionIsQuoted(t *testing.T) {
 }
 
 var (
-	markdownChecked = regexp.MustCompile(`^<!-- docs:checked (\S+) -->$`)
+	markdownChecked = regexp.MustCompile(`^<!-- docs:checked (\S+(?: \S+)*) -->$`)
 	codeSpan        = regexp.MustCompile("`([^`]+)`")
 )
 
@@ -151,43 +151,110 @@ func squeeze(text string) string {
 	return strings.ReplaceAll(text, ",)", ")")
 }
 
-// uncheckedSpans returns the code spans in content's docs:checked blocks that
-// are not text from the Go file each block names. A table of expressions has
-// no room for whole programs, so its cells are held to one instead: every
-// span is something that program compiles and runs.
-func uncheckedSpans(root, content string) (spans []string, checked int, err error) {
-	var source string
-	open := false
+// afterLabel returns what line holds after "label: ", comparing the label
+// without regard to spacing, so a heading need not copy the spacing of the
+// line a program printed.
+func afterLabel(line, label string) (string, bool) {
+	want := squeeze(label) + ":"
+	seen := 0
+	for index, char := range line {
+		if seen == len(want) {
+			return strings.TrimSpace(line[index:]), true
+		}
+		if char == ' ' || char == '\t' {
+			continue
+		}
+		if seen >= len(want) || string(char) != want[seen:seen+len(string(char))] {
+			return "", false
+		}
+		seen += len(string(char))
+	}
+	return "", false
+}
+
+var headedByCode = regexp.MustCompile("^#+ `([^`]+)`")
+
+// uncheckedSpans returns what is wrong with content's docs:checked blocks. A
+// page that leads with expressions has no room for a whole program per
+// expression, so each block is held to one instead:
+//
+//   - every code span is text from a file the block names, which makes it
+//     something that program compiles and runs, or something it printed;
+//   - a section headed by a code span states, in a span of its own, what a
+//     named file prints after "<that span>: ", when a file prints such a line.
+//
+// The second rule is what ties a result to its expression: without it a stale
+// result passes for as long as the same text appears anywhere in the output.
+func uncheckedSpans(root, content string) (problems []string, checked int, err error) {
+	var (
+		open     bool
+		source   string
+		printed  []string
+		heading  string
+		expected string
+		stated   bool
+	)
+	endSection := func() {
+		if heading != "" && expected != "" && !stated {
+			problems = append(problems,
+				"the section headed `"+heading+"` does not state what it gave, `"+expected+"`")
+		}
+		heading, expected, stated = "", "", false
+	}
 	for line := range strings.SplitSeq(content, "\n") {
 		if match := markdownChecked.FindStringSubmatch(line); match != nil && !open {
-			if !filepath.IsLocal(filepath.FromSlash(match[1])) {
-				return nil, 0, fmt.Errorf("path %q must stay inside the repository", match[1])
+			var named strings.Builder
+			printed, open = nil, true
+			for name := range strings.FieldsSeq(match[1]) {
+				if !filepath.IsLocal(filepath.FromSlash(name)) {
+					return nil, 0, fmt.Errorf("path %q must stay inside the repository", name)
+				}
+				file, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+				if readErr != nil {
+					return nil, 0, readErr
+				}
+				named.WriteString(squeeze(string(file)) + "\n")
+				printed = append(printed, strings.Split(string(file), "\n")...)
 			}
-			file, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(match[1])))
-			if readErr != nil {
-				return nil, 0, readErr
-			}
-			source, open = squeeze(string(file)), true
+			source = named.String()
 			continue
 		}
 		if !open {
 			continue
 		}
 		if markdownEnd.MatchString(line) {
+			endSection()
 			open = false
 			continue
 		}
-		for _, span := range codeSpan.FindAllStringSubmatch(line, -1) {
+		if match := headedByCode.FindStringSubmatch(line); match != nil {
+			endSection()
+			heading = match[1]
+			for _, candidate := range printed {
+				if result, ok := afterLabel(candidate, heading); ok {
+					expected = result
+				}
+			}
+		}
+		isHeading := headedByCode.MatchString(line)
+		for index, span := range codeSpan.FindAllStringSubmatch(line, -1) {
 			checked++
 			if !strings.Contains(source, squeeze(span[1])) {
-				spans = append(spans, span[1])
+				problems = append(problems, "`"+span[1]+"` is not in the files its block names")
+			}
+			// The heading's own span is the expression, not its result.
+			if isHeading && index == 0 {
+				continue
+			}
+			if heading != "" && squeeze(span[1]) == squeeze(expected) {
+				stated = true
 			}
 		}
 	}
 	if open {
 		return nil, 0, errors.New("a docs:checked block is never closed")
 	}
-	return spans, checked, nil
+	return problems, checked, nil
 }
 
 // TestCheckedSpansAppearInTheirSource holds a docs:checked block to quoting
@@ -197,15 +264,14 @@ func TestCheckedSpansAppearInTheirSource(t *testing.T) {
 	total := 0
 	documents := readDocuments(t, root)
 	for _, name := range slices.Sorted(maps.Keys(documents)) {
-		spans, checked, err := uncheckedSpans(root, documents[name])
+		problems, checked, err := uncheckedSpans(root, documents[name])
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
 		total += checked
-		for _, span := range spans {
-			t.Errorf("%s shows `%s`, which is not in the program its block names",
-				name, span)
+		for _, problem := range problems {
+			t.Errorf("%s: %s", name, problem)
 		}
 	}
 	if total == 0 {
@@ -219,16 +285,39 @@ func TestUncheckedSpansAreFound(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	document := "`outside` is not checked.\n\n<!-- docs:checked main.go -->\n" +
-		"| `tmux.PaneFilter{Active: new(true), Index: new(1)}` | `new(2)` |\n" +
-		"<!-- docs:end -->\n\n`after` is not checked.\n"
-
-	spans, checked, err := uncheckedSpans(root, document)
-	if err != nil {
+	printed := "tmux.PaneFilter{Active: new(true), Index: new(1)}: editor.0 logs.1\nother: logs.0\n"
+	if err := os.WriteFile(filepath.Join(root, "output.txt"), []byte(printed), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if checked != 2 || len(spans) != 1 || spans[0] != "new(2)" {
-		t.Errorf("uncheckedSpans() = %q of %d, want only new(2) of 2", spans, checked)
+	const (
+		open    = "`outside` is not checked.\n\n<!-- docs:checked main.go output.txt -->\n"
+		heading = "### `tmux.PaneFilter{Active: new(true), Index: new(1)}`: a title\n\n"
+		closing = "<!-- docs:end -->\n\n`after` is not checked.\n"
+	)
+	for _, test := range []struct {
+		name, body string
+		want       []string
+	}{
+		{"states its result", "It selects `editor.0 logs.1`.\n", nil},
+		{
+			"a span from nowhere", "It selects `editor.0 logs.1`, not `new(2)`.\n",
+			[]string{"`new(2)` is not in the files its block names"},
+		},
+		{
+			"another line's result", "It selects `logs.0`.\n",
+			[]string{"the section headed `tmux.PaneFilter{Active: new(true), Index: new(1)}` " +
+				"does not state what it gave, `editor.0 logs.1`"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			problems, _, err := uncheckedSpans(root, open+heading+test.body+closing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(problems, test.want) {
+				t.Errorf("uncheckedSpans() = %q, want %q", problems, test.want)
+			}
+		})
 	}
 	if _, _, err := uncheckedSpans(root, "<!-- docs:checked main.go -->\n`x`\n"); err == nil {
 		t.Error("uncheckedSpans() error = nil for a block that never closes")

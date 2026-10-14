@@ -22,14 +22,13 @@ types, so it works on any slice or `iter.Seq`.
 $ go get github.com/libtmux/libtmux-go/tmuxq@latest
 ```
 
-**Contents** — [Asking a snapshot](#asking-a-snapshot) ·
-[Filters](#filters) · [Which helper](#which-helper) ·
+**Contents** — [Queries](#queries) · [Which helper](#which-helper) ·
 [On any slice](#on-any-slice) · [Why it is separate](#why-it-is-separate)
 
-## Asking a snapshot
+## Queries
 
-A snapshot is one read of a whole tmux server. `tmuxq.Matching` takes a slice
-from it and a filter, and returns the records the filter accepts:
+A query is one call: a slice from a snapshot, and a filter. Only the filter
+changes from one question to the next.
 
 <!-- docs:queries-read -->
 
@@ -51,58 +50,61 @@ if err != nil {
 
 <!-- docs:end -->
 
+Each filter below runs in [`examples/queries`](../examples/queries), against a
+server with two windows: `editor` holds one pane, and `logs` holds two, the
+second of them active. A result names each pane by its window and its index
+there.
+
+<!-- docs:checked examples/queries/main.go examples/queries/output.txt -->
+
+### `tmux.PaneActiveIs(true)`: the active pane of each window
+
+A window has exactly one active pane, so this selects one pane per window:
+`editor.0 logs.1`. It is shorthand for a filter with that one field set.
+
+### `tmux.PaneIndexIs(0)`: the first pane of each window
+
+The same shape for any single field. It selects `editor.0 logs.0`.
+
+### `tmux.PaneFilter{WindowIndexGTE: new(1)}`: a comparison
+
+A field name with a suffix compares rather than equals. This one selects the
+panes in window 1 or later: `logs.0 logs.1`.
+
+### `tmux.PaneFilter{Active: new(true), WindowIndex: new(1)}`: every field must hold
+
+The fields of one filter combine with AND, so this is the active pane of
+window 1 and nothing else: `logs.1`.
+
+### `tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}`: the pane's window
+
+`Window` filters a pane by the window it is in, and `Session` does the same
+for its session. This selects both panes of the window named `logs`:
+`logs.0 logs.1`.
+
+### `tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}`: either may hold
+
+`AnyOf` accepts a pane that any of its filters accepts. This selects panes
+with index 1 and panes in window 0: `editor.0 logs.1`.
+
+### `tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}`: everything else
+
+`Not` accepts what its filter refuses, here the one pane that is not active:
+`logs.0`.
+
+### `tmux.WindowFilter{NameRegex: "^log"}`: windows, by a pattern
+
+Windows and sessions have filters of their own, for `snapshot.Windows()` and
+`snapshot.Sessions()`. This selects the window named `logs`.
+
+<!-- docs:end -->
+
+A plain field name is an exact match. `In` takes several values, `Contains`
+and `Regex` match text, and `GT`, `GTE`, `LT`, and `LTE` compare numbers.
+
 `Matching` returns a fresh slice, so changing it cannot change the snapshot. A
 filter that matches nothing returns an empty slice, not an error; the error is
-for a filter that cannot be one, such as a regular expression that does not
-compile.
-
-## Filters
-
-Every other question is that call with a different filter. These select panes;
-`tmux.WindowFilter` and `tmux.SessionFilter` work the same way on
-`snapshot.Windows()` and `snapshot.Sessions()`.
-
-<!-- docs:checked examples/queries/main.go -->
-
-| Panes that | Filter |
-| --- | --- |
-| are active in their window | `tmux.PaneActiveIs(true)` |
-| are in the window named `logs` | `tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}` |
-| are in window 1 or later | `tmux.PaneFilter{WindowIndexGTE: new(1)}` |
-| are first in their window | `tmux.PaneIndexIs(0)` |
-| are active and in `logs` | `tmux.PaneFilter{Active: new(true), Window: &tmux.WindowFilter{Name: new("logs")}}` |
-| have index 1, or are in window 0 | `tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}` |
-| are not active | `tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}` |
-| are in a window whose name matches `^log` | `tmux.PaneFilter{Window: &tmux.WindowFilter{NameRegex: "^log"}}` |
-
-<!-- docs:end -->
-
-Fields of one filter combine with AND. A field takes the plain name for an
-exact match and a suffix for the rest: `In` for any of several values,
-`Contains` and `Regex` for text, and `GT`, `GTE`, `LT`, and `LTE` for numbers.
-
-Each cell above is an expression from
-[`examples/queries`](../examples/queries), which runs them all against a
-server holding two windows, `editor` with one pane and `logs` with two. It
-prints, naming each pane by its window and its index there:
-
-<!-- docs:output examples/queries/output.txt -->
-
-```text
-active: editor.0 logs.0
-in the logs window: logs.0 logs.1
-in window 1 or later: logs.0 logs.1
-first in their window: editor.0 logs.0
-active and in logs: logs.0
-index 1, or in window 0: editor.0 logs.1
-not active: logs.1
-window name matches ^log: logs.0 logs.1
-windows named logs: 1
-the first pane with index 1: logs.1
-exactly one pane has index 1
-```
-
-<!-- docs:end -->
+for a filter that cannot be one, such as a pattern that does not compile.
 
 ## Which helper
 
@@ -183,5 +185,5 @@ with the library.
 | | |
 | --- | --- |
 | [`../tmux/`](../tmux/) | The library, and where filters are declared |
-| [`../examples/queries`](../examples/queries) | The program behind the table, with notes |
+| [`../examples/queries`](../examples/queries) | The program that runs every query above |
 | [`../examples/filter-query`](../examples/filter-query) | Filtering in Go beside letting tmux filter |

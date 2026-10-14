@@ -8,22 +8,24 @@ Read a tmux server once, then ask that one read many things with `tmuxq`.
 $ go -C examples run ./queries
 ```
 
-It prints, naming each pane by its window and its index there:
+It prints each filter beside the panes it selected, naming a pane by its
+window and its index there:
 
 <!-- docs:output examples/queries/output.txt -->
 
 ```text
-active: editor.0 logs.0
-in the logs window: logs.0 logs.1
-in window 1 or later: logs.0 logs.1
-first in their window: editor.0 logs.0
-active and in logs: logs.0
-index 1, or in window 0: editor.0 logs.1
-not active: logs.1
-window name matches ^log: logs.0 logs.1
-windows named logs: 1
+3 panes, 2 active
+tmux.PaneActiveIs(true): editor.0 logs.1
+tmux.PaneIndexIs(0): editor.0 logs.0
+tmux.PaneFilter{WindowIndexGTE: new(1)}: logs.0 logs.1
+tmux.PaneFilter{Active: new(true), WindowIndex: new(1)}: logs.1
+tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}: logs.0 logs.1
+tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}: editor.0 logs.1
+tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}: logs.0
+tmux.WindowFilter{NameRegex: "^log"}: logs
+tmux.SessionNameIs("work"): work
 the first pane with index 1: logs.1
-exactly one pane has index 1
+the only pane with index 1: logs.1
 ```
 
 <!-- docs:end -->
@@ -75,13 +77,15 @@ func run(ctx context.Context) (err error) {
 		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
 	}()
 
-	// Two windows to tell apart: "editor" holds one pane, "logs" holds two.
+	// Two windows to tell apart: "editor" holds one pane, and "logs" holds
+	// two, the second of them active.
 	request := tmux.NewWindowRequest{Name: new("logs")}
 	logs, err := session.NewWindow(ctx, request)
 	if err != nil {
 		return fmt.Errorf("create window: %w", err)
 	}
-	if _, err := logs.SplitPane(ctx, tmux.SplitPaneRequest{}); err != nil {
+	split := tmux.SplitPaneRequest{Attach: true}
+	if _, err := logs.SplitPane(ctx, split); err != nil {
 		return fmt.Errorf("split window: %w", err)
 	}
 
@@ -97,44 +101,69 @@ func run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("match active panes: %w", err)
 	}
-	fmt.Println("active:", where(active))
+	fmt.Println(len(panes), "panes,", len(active), "active")
 
-	// Every other pane query is that call with a different filter.
+	// Every other pane query is that call with a different filter. Each is
+	// printed under its own source text, which the test holds it to.
 	for _, query := range []struct {
-		question string
-		filter   tmux.PaneFilter
+		source string
+		filter tmux.PaneFilter
 	}{
-		{"in the logs window", tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}},
-		{"in window 1 or later", tmux.PaneFilter{WindowIndexGTE: new(1)}},
-		{"first in their window", tmux.PaneIndexIs(0)},
-		{"active and in logs", tmux.PaneFilter{Active: new(true), Window: &tmux.WindowFilter{Name: new("logs")}}},
-		{"index 1, or in window 0", tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}},
-		{"not active", tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}},
-		{"window name matches ^log", tmux.PaneFilter{Window: &tmux.WindowFilter{NameRegex: "^log"}}},
+		{`tmux.PaneActiveIs(true)`, tmux.PaneActiveIs(true)},
+		{`tmux.PaneIndexIs(0)`, tmux.PaneIndexIs(0)},
+		{`tmux.PaneFilter{WindowIndexGTE: new(1)}`, tmux.PaneFilter{WindowIndexGTE: new(1)}},
+		{
+			`tmux.PaneFilter{Active: new(true), WindowIndex: new(1)}`,
+			tmux.PaneFilter{Active: new(true), WindowIndex: new(1)},
+		},
+		{
+			`tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}`,
+			tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}},
+		},
+		{
+			`tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}`,
+			tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}},
+		},
+		{
+			`tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}`,
+			tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}},
+		},
 	} {
 		matched, err := tmuxq.Matching(panes, query.filter)
 		if err != nil {
-			return fmt.Errorf("match panes %s: %w", query.question, err)
+			return fmt.Errorf("match panes with %s: %w", query.source, err)
 		}
-		fmt.Printf("%s: %s\n", query.question, where(matched))
+		fmt.Printf("%s: %s\n", query.source, where(matched))
 	}
 
-	// Windows and sessions take the same call.
-	windows, err := tmuxq.Matching(snapshot.Windows(), tmux.WindowNameIs("logs"))
+	// Windows and sessions have filters of their own.
+	windows, err := tmuxq.Matching(snapshot.Windows(), tmux.WindowFilter{NameRegex: "^log"})
 	if err != nil {
 		return fmt.Errorf("match windows: %w", err)
 	}
-	fmt.Println("windows named logs:", len(windows))
+	for _, window := range windows {
+		name, _ := window.Name()
+		fmt.Println(`tmux.WindowFilter{NameRegex: "^log"}:`, name)
+	}
+	sessions, err := tmuxq.Matching(snapshot.Sessions(), tmux.SessionNameIs("work"))
+	if err != nil {
+		return fmt.Errorf("match sessions: %w", err)
+	}
+	for _, session := range sessions {
+		name, _ := session.Name()
+		fmt.Println(`tmux.SessionNameIs("work"):`, name)
+	}
 
 	// The helpers that take a function of your own work on the same slices.
 	second := func(pane *tmux.Pane) bool { return pane.Index() == 1 }
 	if pane, ok := tmuxq.First(panes, second); ok {
 		fmt.Println("the first pane with index 1:", where([]tmux.Pane{pane}))
 	}
-	if _, err := tmuxq.ExactlyOne(panes, second); err != nil {
+	only, err := tmuxq.ExactlyOne(panes, second)
+	if err != nil {
 		return fmt.Errorf("find the only pane with index 1: %w", err)
 	}
-	fmt.Println("exactly one pane has index 1")
+	fmt.Println("the only pane with index 1:", where([]tmux.Pane{only}))
 	return nil
 }
 

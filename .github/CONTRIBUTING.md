@@ -165,10 +165,11 @@ Every Go block in a README is quoted from code a suite runs, by
 | `<!-- docs:output PATH -->` | a text file, as what a program printed |
 | `<!-- docs:NAME -->` | a named region of a Go file, as a fragment |
 
-A fourth, `<!-- docs:checked PATH -->`, quotes nothing. It holds every code
-span up to its `<!-- docs:end -->` to being text from the Go file it names,
-which is how a table of expressions too short for programs of their own stays
-compiled and run.
+A fourth, `<!-- docs:checked PATH ... -->`, quotes nothing. It holds every code
+span up to its `<!-- docs:end -->` to being text from one of the files it
+names, which keeps an expression too short for a program of its own compiled
+and run. A section headed by a code span must also state, in a span, what a
+named file prints after that span and a colon.
 
 `PATH` is slash-separated and relative to the repository root. A region is
 named where it is written, and ends at the next `// docs:end`:
@@ -202,7 +203,8 @@ The tests in `tmux/internal/generate/docs` hold a page to its source:
   a test that compares it.
 - `TestEveryRegionIsQuoted` fails on a region no document quotes.
 - `TestCheckedSpansAppearInTheirSource` fails on a code span in a
-  `docs:checked` block that is not in the program the block names.
+  `docs:checked` block that is not in the files the block names, and on a
+  section that states another result than the one its heading printed.
 - `TestEveryREADMEFenceIsGeneratedOrPermitted` allows a README only
   `console`, `text`, `bibtex`, `json`, and `yaml` blocks by hand.
 
