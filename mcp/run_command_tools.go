@@ -637,9 +637,10 @@ func (t *tools) awaitCommand(
 	output := waiting.output
 
 	completion := commandRun{
-		openedAt: waiting.openedPath,
-		statusAt: waiting.statusPath,
-		closedAt: waiting.closedPath,
+		openedAt:     waiting.openedPath,
+		statusAt:     waiting.statusPath,
+		closedAt:     waiting.closedPath,
+		wrapperPIDAt: wrapperPIDPath(waiting.openedPath),
 	}
 	status, ready, err := waitForCompletedCommand(waitCtx, completion)
 	if err == nil && ready {
@@ -696,18 +697,35 @@ func finishRunCommandDeadline(
 	return nil, output, nil
 }
 
+// errCommandWrapperGone reports a run whose wrapper ended without recording
+// a status, so no status is coming however long the caller waits.
+var errCommandWrapperGone = errors.New(
+	"run_shell_command lost its command: the shell running it ended without reporting a status; " +
+		"the pane was respawned or closed, or the tmux server exited")
+
 func waitForCompletedCommand(
 	waitCtx context.Context,
 	entry commandRun,
 ) (status int, ready bool, err error) {
 	ticker := time.NewTicker(commandCompletionPollInterval)
 	defer ticker.Stop()
+	presence := time.NewTicker(commandPresencePollInterval)
+	defer presence.Stop()
 	for {
 		status, ready, err = readCompletedCommand(entry)
 		if err != nil || ready {
 			return status, ready, err
 		}
 		select {
+		case <-presence.C:
+			if commandWrapperGone(entry.wrapperPIDAt) {
+				// It may have recorded its status on the way out.
+				status, ready, err = readCompletedCommand(entry)
+				if err != nil || ready {
+					return status, ready, err
+				}
+				return 0, false, errCommandWrapperGone
+			}
 		case <-ticker.C:
 		case <-waitCtx.Done():
 			status, ready, err = readCompletedCommand(entry)

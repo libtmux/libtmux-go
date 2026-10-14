@@ -4,6 +4,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,6 +119,54 @@ func TestRunShellCommandReportsAnInterrupt(t *testing.T) {
 	if result.err != nil || result.output.TimedOut || result.output.ExitStatus == nil ||
 		*result.output.ExitStatus != 130 {
 		t.Fatalf("interrupted run = (%+v, %v), want exit status 130 before the timeout",
+			result.output, result.err)
+	}
+}
+
+// A run whose shell goes away records no status. The call waiting on it
+// must say so, rather than wait out its timeout and report the command as
+// still running.
+//
+//libtmux:real-tmux
+func TestRunShellCommandReportsAShellThatWentAway(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+
+	started := filepath.Join(t.TempDir(), "started")
+	type outcome struct {
+		output runCommandOutput
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		_, output, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+			PaneID:         panes[0].ID().String(),
+			Command:        ": > " + shellQuote(started) + "; sleep 30",
+			TimeoutSeconds: 15,
+		})
+		done <- outcome{output, err}
+	}()
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(context.Context) (bool, error) {
+		_, err := os.Stat(started)
+		return err == nil, nil
+	}); err != nil {
+		t.Fatalf("the command never started: %v", err)
+	}
+	if _, err := panes[0].Respawn(ctx, tmux.RespawnRequest{Kill: true}); err != nil {
+		t.Fatal(err)
+	}
+	var result outcome
+	select {
+	case result = <-done:
+	case <-ctx.Done():
+		t.Fatal("the run never returned")
+	}
+	if !errors.Is(result.err, errCommandWrapperGone) || result.output.TimedOut {
+		t.Fatalf("run whose pane was respawned = (%+v, %v), want errCommandWrapperGone before the timeout",
 			result.output, result.err)
 	}
 }
