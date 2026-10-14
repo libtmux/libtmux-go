@@ -54,7 +54,10 @@ print the same thing on every machine and never touch a tmux you have open.
 server the test harness owns.
 
 The others take the server your `tmux` command reaches, make a session there,
-and kill that session on the way out. To keep those off a tmux you are using,
+and kill that session on the way out. They also read your tmux configuration,
+so an index or a count on one of those pages can differ under a `base-index`
+or a hook of your own; each page shows what a server with nothing else on it
+and no configuration prints. To keep those off a tmux you are using,
 give them a socket directory of their own:
 
 ```console

@@ -161,7 +161,10 @@ for _, session := range sessions {
 <!-- docs:end -->
 
 What comes back is a record: a `Session` you hold is what tmux said when you
-asked, not a live handle that changes underneath you.
+asked, not a live handle that changes underneath you. When no tmux server is
+running, a listing returns an error matching [`ErrNoServer`][tmux-errnoserver]
+rather than an empty list, so "nothing there" and "nobody to ask" stay
+different answers.
 
 To answer several questions from one moment, read the server once and filter
 that read in Go. [`tmuxq.Matching`][tmuxq-matching] takes any filter the
@@ -277,6 +280,9 @@ for {
 ```
 
 <!-- docs:end -->
+
+The first notification a new stream reads is `%session-changed`, tmux telling
+the client which session it joined; the rename follows it.
 
 A subscription goes further: tmux evaluates a format for you and reports it
 each time its value changes, so a program hears about a window count or a
@@ -501,6 +507,7 @@ Please use the following BibTeX template to cite libtmux-go in scientific discou
 MIT. See [`LICENSE`](LICENSE).
 
 [tmux]: https://github.com/tmux/tmux
+[tmux-errnoserver]: https://libtmux.org/en/go/latest/reference/tmux-errnoserver/
 [tmux-connectionoptions-lanes]: https://libtmux.org/en/go/latest/reference/tmux-connectionoptions-lanes/
 [tmux-newplan]: https://libtmux.org/en/go/latest/reference/tmux-newplan/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
