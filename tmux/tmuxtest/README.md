@@ -75,7 +75,8 @@ The pane echoes what `Type` sends, so the wait names the greeter's answer,
 `hello, world`, which the typed `world` does not contain. Waiting for the text
 you typed would pass without the program running.
 
-`TestMain` is required: `tmuxtest.Main` cleans up before returning the exit
+`TestMain` is required: [`tmuxtest.Main`][tmuxtest-main] cleans up before
+returning the exit
 code, and verifies each server's process died before removing its socket. The
 test holds no sleeps: each wait polls the screen until it holds, so a quick
 program costs milliseconds and a slow one is still waited for.
@@ -102,24 +103,27 @@ the pane showed 3 line(s):
 
 | Wait | Holds when |
 | --- | --- |
-| `WaitForText` | some line contains a string |
-| `WaitForLine` | some line is exactly a string |
-| `WaitForScreen` | a condition of your own returns true |
-| `WaitForShellReady` | the pane's shell will accept typing |
-| `TypeAndWait` | a command you typed has finished, pass or fail |
+| [`WaitForText`][tmuxtest-waitfortext] | some line contains a string |
+| [`WaitForLine`][tmuxtest-waitforline] | some line is exactly a string |
+| [`WaitForScreen`][tmuxtest-waitforscreen] | a condition of your own returns true |
+| [`WaitForShellReady`][tmuxtest-waitforshellready] | the pane's shell will accept typing |
+| [`TypeAndWait`][tmuxtest-typeandwait] | a command you typed has finished, pass or fail |
 
-`Screen` reads the pane without waiting. All of them read the visible screen
+[`Screen`][tmuxtest-screen] reads the pane without waiting. All of them read the visible screen
 rather than the scrollback, so what they search is what a failure prints.
 
-`RunInPane` gives its panes a POSIX shell with no start-up files and the prompt
+[`RunInPane`][tmuxtest-runinpane] gives its panes a POSIX shell with no
+start-up files and the prompt
 `tmuxtest$ `, so a pane shows the same thing on every machine rather than
 whatever prompt the person running the tests has configured. Ask for it on a
-server you build yourself with `ServerOptions.FixedShell`.
+server you build yourself with
+[`ServerOptions.FixedShell`][tmuxtest-serveroptions-fixedshell].
 
 ## Testing without a tmux
 
 Where the subject is your own code rather than tmux's behaviour,
-`tmuxtest.ScriptedTmux` writes an executable answering the invocations you
+[`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux] writes an executable answering
+the invocations you
 name and returns its path for `ServerOptions.Binary`. The test then needs no
 tmux installed:
 
@@ -223,3 +227,14 @@ file it is in is not one your change touched.
 | --- | --- |
 | [`../`](../) | The library under test |
 | [`../../examples/`](../../examples/) | Runnable programs |
+
+[tmuxtest-main]: https://libtmux.org/en/go/latest/reference/tmuxtest-main/
+[tmuxtest-runinpane]: https://libtmux.org/en/go/latest/reference/tmuxtest-runinpane/
+[tmuxtest-screen]: https://libtmux.org/en/go/latest/reference/tmuxtest-screen/
+[tmuxtest-scriptedtmux]: https://libtmux.org/en/go/latest/reference/tmuxtest-scriptedtmux/
+[tmuxtest-serveroptions-fixedshell]: https://libtmux.org/en/go/latest/reference/tmuxtest-serveroptions-fixedshell/
+[tmuxtest-typeandwait]: https://libtmux.org/en/go/latest/reference/tmuxtest-typeandwait/
+[tmuxtest-waitforline]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitforline/
+[tmuxtest-waitforscreen]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitforscreen/
+[tmuxtest-waitforshellready]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitforshellready/
+[tmuxtest-waitfortext]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitfortext/

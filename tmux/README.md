@@ -62,14 +62,17 @@ The session was created as `old`, so this prints `held record: old` and then
 
 Nothing refreshes a record behind you. A method that changes which object you
 hold, or what it looks like, hands back a new record, as `Session.Rename` does
-here; `Session.Refresh` and its counterparts ask tmux again when you want one.
+here; [`Session.Refresh`][tmux-session-refresh] and its counterparts ask tmux
+again when you want one.
 The name says which kind of read you are making: `session.Windows()` returns
 what the record already holds and never queries, while
 `session.SearchWindows(ctx, nil)` asks tmux.
 
-`NewServer` validates its configuration and starts nothing. With no
-`SocketName` or `SocketPath` it reaches the server your own `tmux` command
-does, and with no `ConfigFile` tmux reads your configuration, so a program
+[`NewServer`][tmux-newserver] validates its configuration and starts nothing.
+With no [`SocketName`][tmux-serveroptions-socketname] or
+[`SocketPath`][tmux-serveroptions-socketpath] it reaches the server your own
+`tmux` command does, and with no [`ConfigFile`][tmux-serveroptions-configfile]
+tmux reads your configuration, so a program
 that should behave the same everywhere names both.
 [`../examples/object-model`](../examples/object-model) is the whole program
 these blocks come from, and it does.
@@ -83,10 +86,10 @@ method without a search.
 
 | tmux | Go |
 | --- | --- |
-| `kill-pane` | `Pane.Kill` |
-| `rename-session` | `Session.Rename` |
-| `link-window` | `Window.Link` |
-| `split-window` | `Window.SplitPane` |
+| `kill-pane` | [`Pane.Kill`][tmux-pane-kill] |
+| `rename-session` | [`Session.Rename`][tmux-session-rename] |
+| `link-window` | [`Window.Link`][tmux-window-link] |
+| `split-window` | [`Window.SplitPane`][tmux-window-splitpane] |
 
 A noun naming a *different* object always stays, which is why
 `Session.NewWindow` and `Window.SplitPane` keep theirs.
@@ -147,7 +150,8 @@ if errors.Is(lookupErr, tmux.ErrNotFound) {
 <!-- docs:end -->
 
 A completed tmux command that failed is data, not an error, when you use
-`Server.Cmd`: `CommandResult.ExitCode` carries it. Transport and validation
+[`Server.Cmd`][tmux-server-cmd]: [`CommandResult.ExitCode`][tmux-commandresult-exitcode]
+carries it. Transport and validation
 failures are Go errors.
 
 ## Waiting for a pane
@@ -156,7 +160,8 @@ Worth reading before writing a poll loop: a terminal echoes the command you
 typed, so searching the screen for what you are waiting for finds your own
 request. Wait for text the command prints and the typed line does not contain.
 [`../examples/pane-io`](../examples/pane-io) does that with
-`PaneObservation.WaitFor`, which tmux wakes as the pane writes, and "Execution
+[`PaneObservation.WaitFor`][tmux-paneobservation-waitfor], which tmux wakes as
+the pane writes, and "Execution
 modes" in the package documentation covers the other ways to wait, in the
 order worth reaching for them.
 
@@ -175,8 +180,22 @@ settled. Pin an exact version.
 
 | | |
 | --- | --- |
+| [Reference](https://libtmux.org/en/go/latest/reference/) | Every exported identifier, method, and field, one page each |
 | [`tmuxtest/`](tmuxtest/) | A real tmux server for your tests |
 | [`../tmuxq/`](../tmuxq/) | Filtering helpers for the records this package returns |
 | [`../examples/`](../examples/) | Runnable programs |
 | [`../DESIGN.md`](../DESIGN.md) | Why the surface looks like this |
 | [`../BENCHMARKS.md`](../BENCHMARKS.md) | What each transport costs |
+
+[tmux-commandresult-exitcode]: https://libtmux.org/en/go/latest/reference/tmux-commandresult-exitcode/
+[tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
+[tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
+[tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
+[tmux-server-cmd]: https://libtmux.org/en/go/latest/reference/tmux-server-cmd/
+[tmux-serveroptions-configfile]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-configfile/
+[tmux-serveroptions-socketname]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-socketname/
+[tmux-serveroptions-socketpath]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-socketpath/
+[tmux-session-refresh]: https://libtmux.org/en/go/latest/reference/tmux-session-refresh/
+[tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
+[tmux-window-link]: https://libtmux.org/en/go/latest/reference/tmux-window-link/
+[tmux-window-splitpane]: https://libtmux.org/en/go/latest/reference/tmux-window-splitpane/
