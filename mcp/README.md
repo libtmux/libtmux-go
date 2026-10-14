@@ -38,17 +38,10 @@ settled. Pin an exact version.
 
 ## Quick start
 
-You need Go 1.26 or newer, and tmux 3.2a or newer on `PATH`.
-
-### `go install`: get the server
-
-```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
-```
-
-That puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client launches it
-as a subprocess and speaks to it over stdin and stdout, so there is nothing
-to keep running yourself.
+You need Go 1.26 or newer, and tmux 3.2a or newer on `PATH`. The install
+command above puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client
+launches it as a subprocess and speaks to it over stdin and stdout, so there
+is nothing to keep running yourself.
 
 ### `claude mcp add`: tell a client about it
 
@@ -71,14 +64,14 @@ $ gemini mcp add tmux libtmux-mcp
 ```
 
 Claude Desktop reads `claude_desktop_config.json`, and starts its servers
-without your shell's `PATH`. Give it the full path, which
+without your shell's `PATH`. In place of the path below, give it the one
 `command -v libtmux-mcp` prints:
 
 ```json
 {
   "mcpServers": {
     "tmux": {
-      "command": "/home/you/go/bin/libtmux-mcp"
+      "command": "/path/to/libtmux-mcp"
     }
   }
 }
@@ -126,6 +119,8 @@ The choice is made once, when the server starts, and a client cannot change
 it afterwards. [Settings](#settings) lists the other flags.
 
 ## What it feels like
+
+An exchange of the kind it makes possible, written for illustration:
 
 > **You:** Start the api server in a pane and tell me when it is listening.
 >
@@ -219,9 +214,10 @@ refuse, so [`split_window`][split_window] followed at once by
 cursors read pane output without taking over the view of someone attached, and
 [`get_pane_info`][get_pane_info] reports when a pane is already in a mode.
 
-A second [libtmux-mcp server](https://github.com/tmux-python/libtmux-mcp) for
-tmux is written in Python. The two serve the same tmux and answer to the same
-clients, and [PARITY.md](PARITY.md) sets out where they differ.
+There is also a
+[libtmux-mcp server written in Python](https://github.com/tmux-python/libtmux-mcp).
+The two serve the same tmux and answer to the same clients, and
+[PARITY.md](PARITY.md) sets out where they differ.
 
 ## Limiting what a client can do
 
@@ -352,14 +348,14 @@ This protects the pane you are in. It does not make the tools a sandbox.
 ## Known limits
 
 - **Every tool is annotated as destructive.** Each one, `list_sessions`
-  included, reports `readOnlyHint=false`, `destructiveHint=true`, and
-  `openWorldHint=true`. A client that skips approval for read-only tools
+  included, carries `destructiveHint=true` and `openWorldHint=true`, and none
+  carries `readOnlyHint`. A client that skips approval for read-only tools
   prompts on all of them. Classify by `tmuxEffects` in each tool's `_meta`
   instead.
-- **`tools/list` is large.** The reply for all forty-five tools is about
-  116 KB, and more than half of it is the `_meta` description, which repeats
-  each tool's text and schemas. The Python server shares that shape, so it is
-  not trimmed here.
+- **`tools/list` is large.** The reply is about 109 KB for the forty-one
+  tools granted by default and 116 KB for all forty-five. More than half of
+  it is the `_meta` description, which repeats each tool's text and schemas.
+  The Python server shares that shape, so it is not trimmed here.
 - **Four tools spell their results differently.** `run_shell_command`,
   `send_keys`, `paste_text`, and
   [`clear_pane_scrollback`][clear_pane_scrollback] return fields such as
