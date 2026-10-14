@@ -39,10 +39,13 @@ settled. Pin an exact version.
 ## Quick start
 
 You need Go 1.26 or newer, and tmux 3.2a or newer on `PATH`. The install
-command above puts `libtmux-mcp` in `$(go env GOPATH)/bin`. An MCP client
+command above puts `libtmux-mcp` in `$(go env GOPATH)/bin`, or in `GOBIN`
+when that is set. An MCP client
 launches it as a subprocess and speaks to it over stdin and stdout, so there
 is nothing to keep running yourself. If your shell cannot find
-`libtmux-mcp`, add that directory to `PATH`.
+`libtmux-mcp`, add that directory to `PATH`. The Python server installs a
+command of the same name; `command -v libtmux-mcp` shows which one comes
+first, and `libtmux-mcp -version` names this one.
 
 ### `claude mcp add`: tell a client about it
 
@@ -253,7 +256,8 @@ run anything you can.
 
 ### `_meta`: what each tool says about itself
 
-Every listed tool carries a description of what it reaches and changes, under
+`_meta` is the field MCP gives a server for data of its own. Every listed
+tool carries a description of what it reaches and changes there, under
 `_meta["com.git-pull.libtmux-mcp/capability"]`: which processes it can start
 or type into, what it does to tmux, what kinds of output it returns, whether
 that output may hold secrets or text a pane wrote, and how its arguments are
@@ -337,8 +341,8 @@ pane whose process is one of its own ancestors is its own.
 Typing into the pane with `isCaller` true reaches the terminal you are talking
 to the agent through. A note in a reply is something a model with a task does
 not always read, so a write to that pane asks you first, through MCP's
-elicitation request, and declining fails the call. A client that cannot show
-such a request is refused.
+elicitation request: a question the client puts to you on the server's
+behalf. Declining fails the call, and a client that cannot ask is refused.
 
 A write reached through a batch asks in the same way, and declining stops the
 batch there. With `synchronize-panes` on, the question covers every pane the

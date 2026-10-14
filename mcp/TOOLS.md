@@ -48,8 +48,8 @@ annotation. The annotations are identical across the sibling servers that share
 the manifest, so this server does not set them per tool.
 
 Each listed tool carries its `description`, `inputSchema`, and `outputSchema`
-twice: at the top level and inside the capability row. The repeat is about a
-third of the `tools/list` reply. A client that wants only one copy reads the
+twice: at the top level and inside the capability row. The repeat is about
+two fifths of the `tools/list` reply. A client that wants only one copy reads the
 top-level fields and ignores the row's.
 
 ### Finding out what is there
