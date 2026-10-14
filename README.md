@@ -116,10 +116,11 @@ exit status: 0
 
 <!-- docs:end -->
 
-To run it, save it as `main.go` in an empty directory, with tmux on `PATH`:
+To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
+on `PATH`:
 
 ```console
-$ go mod init hello && \
+$ go mod init demo && \
     go get github.com/libtmux/libtmux-go/tmux@latest && \
     go run .
 ```
@@ -163,8 +164,12 @@ for _, session := range sessions {
 
 <!-- docs:end -->
 
+Each block on this page is the body of a function that returns an error, with
+the values its first line names already in hand.
+
 [`examples/filter-query`](examples/filter-query) runs this and the two blocks
-below against a server holding one session.
+below. It reaches the tmux server your own `tmux` command does, so the output
+below is what it prints when that server holds nothing else.
 
 <!-- docs:checked examples/filter-query/output.txt -->
 This one prints `session: libtmux-filter`.
@@ -273,8 +278,9 @@ answer rather than the request.
 Runnable: [`examples/pane-io`](examples/pane-io), which goes on to read the
 pane as an `io.Reader`.
 
-Typing is the wrong way to move a payload: a shell reads what it is sent, and
-tmux caps a whole command at 16 KiB.
+Typing is the wrong way to move a payload. The shell in the pane reads quotes,
+`$`, and backslashes in it as shell syntax, and tmux limits one message from a
+client to 16 KiB (`MAX_IMSGSIZE`), which caps a command and its arguments.
 [`Server.LoadBufferFrom`][tmux-server-loadbufferfrom] fills a tmux buffer from
 an `io.Reader` instead, and [`Pane.CaptureTo`][tmux-pane-captureto] writes a
 scrollback to an `io.Writer`. [`examples/byte-streams`](examples/byte-streams)
@@ -553,9 +559,8 @@ See [`workspace/CLI.md`](workspace/CLI.md) for commands and output formats.
 
 ## Support and status
 
-Alpha software. Releases carry an -alpha prerelease tag, the API is not
-settled, and any release may change or remove exported identifiers without a
-deprecation period. Pin an exact version. Not recommended for production.
+Any release may change or remove exported identifiers without a deprecation
+period, so pin an exact version. Not recommended for production.
 
 - **No runtime dependencies.** The core module imports only the standard
   library.
