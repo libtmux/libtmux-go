@@ -1,0 +1,2 @@
+pane 0: 40 columns
+pane 1: 39 columns

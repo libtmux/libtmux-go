@@ -36,14 +36,13 @@ library is shaped.
 
 ## A whole program
 
-Most of the blocks on this page come from this one. It renames a session,
-reads it two ways, looks up one that is not there, and sends a command tmux
-refuses:
+This one splits a window into two panes side by side and reads back what tmux
+made:
 
-<!-- docs:file examples/object-model/main.go -->
+<!-- docs:file examples/layout/main.go -->
 
 ```go
-// Command object-model shows that the values tmux hands back are records.
+// Command layout builds two panes side by side and reads back what tmux made.
 package main
 
 import (
@@ -66,13 +65,15 @@ func run(ctx context.Context) (err error) {
 	// A private server: a socket and an empty config of its own, so this
 	// neither touches nor is changed by a tmux you already use.
 	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-object-model",
+		SocketName: "libtmux-layout",
 		ConfigFile: os.DevNull,
 	})
 	if err != nil {
 		return fmt.Errorf("configure tmux: %w", err)
 	}
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "work", WindowName: "editor",
+	})
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -81,42 +82,25 @@ func run(ctx context.Context) (err error) {
 		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
 	}()
 
-	// Rename hands back the session as tmux now reports it. The record
-	// already in hand keeps the name it had when tmux handed it over.
-	renamed, err := session.Rename(ctx, "new")
+	window, err := session.ResolveActiveWindow(ctx)
 	if err != nil {
-		return fmt.Errorf("rename session: %w", err)
+		return fmt.Errorf("find window: %w", err)
 	}
-	held, _ := session.Name()
-	current, _ := renamed.Name()
-	fmt.Println("held record:", held)
-	fmt.Println("returned record:", current)
-
-	// Windows reads the record and takes no context. A session that came
-	// from a call about the session carries no windows, and says so.
-	if _, held := renamed.Windows(); !held {
-		fmt.Println("the record holds no windows")
-	}
-	// SearchWindows asks tmux.
-	windows, err := renamed.SearchWindows(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("list windows: %w", err)
-	}
-	fmt.Println("tmux reports windows:", len(windows))
-
-	// A lookup that finds nothing is an error a caller can test for.
-	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
-	if errors.Is(lookupErr, tmux.ErrNotFound) {
-		fmt.Println("session $999: not found")
+	// Split the window's active pane, and put the new pane on the right.
+	split := tmux.SplitPaneRequest{Direction: tmux.PaneDirectionRight}
+	if _, err := window.SplitPane(ctx, split); err != nil {
+		return fmt.Errorf("split window: %w", err)
 	}
 
-	// Cmd sends arguments you write yourself. A command tmux ran and
-	// refused comes back as a result, with the error left nil.
-	result, err := server.Cmd(ctx, "kill-window", "-t", "@999")
+	// Read back what tmux made, rather than trusting what was asked for.
+	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
-		return fmt.Errorf("reach tmux: %w", err)
+		return fmt.Errorf("read tmux: %w", err)
 	}
-	fmt.Println("kill-window exit status:", result.ExitCode)
+	for _, pane := range snapshot.Panes() {
+		width, _ := pane.Width()
+		fmt.Printf("pane %d: %d columns\n", pane.Index(), width)
+	}
 	return nil
 }
 ```
@@ -134,15 +118,11 @@ $ go mod init demo && \
 
 It prints:
 
-<!-- docs:output examples/object-model/output.txt -->
+<!-- docs:output examples/layout/output.txt -->
 
 ```text
-held record: old
-returned record: new
-the record holds no windows
-tmux reports windows: 1
-session $999: not found
-kill-window exit status: 1
+pane 0: 40 columns
+pane 1: 39 columns
 ```
 
 <!-- docs:end -->
@@ -155,7 +135,7 @@ kill-window exit status: 1
 // A private server: a socket and an empty config of its own, so this
 // neither touches nor is changed by a tmux you already use.
 server, err := tmux.NewServer(tmux.ServerOptions{
-	SocketName: "libtmux-object-model",
+	SocketName: "libtmux-layout",
 	ConfigFile: os.DevNull,
 })
 if err != nil {
@@ -177,7 +157,9 @@ A program that should behave the same everywhere names both, as this one does.
 A [`Server`][tmux-server] reaches one tmux server. It holds
 [`Session`][tmux-session] values, each holding [`Window`][tmux-window] values,
 each holding [`Pane`][tmux-pane] values, and every one of them is a record:
-what tmux said when you asked.
+what tmux said when you asked. The blocks in this section and under Errors
+come from [`../examples/object-model`](../examples/object-model), a whole
+program you can run the same way.
 
 ### [`Session.Rename`][tmux-session-rename]: a change returns a new record
 

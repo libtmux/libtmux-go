@@ -17,6 +17,7 @@ what the program prints, on every supported tmux.
 | Example | Shows |
 | --- | --- |
 | [`quickstart/`](quickstart/) | Run a command in tmux and print its screen and exit status |
+| [`layout/`](layout/) | Split a window into two panes, then read back what tmux made |
 | [`object-model/`](object-model/) | Records, not live handles: what a rename returns, and a lookup that finds nothing |
 | [`testing-a-program/`](testing-a-program/) | A whole `go test` file that runs a program in a pane and waits for its answer |
 
@@ -59,8 +60,8 @@ dependencies:
 
 ## Which tmux they reach
 
-`quickstart`, `object-model`, `queries`, and `filter-query` start a tmux
-server of their own,
+`quickstart`, `layout`, `object-model`, `queries`, and `filter-query` start a
+tmux server of their own,
 on a private socket with an empty config, and kill it when they finish. They
 print the same thing on every machine and never touch a tmux you have open.
 `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a

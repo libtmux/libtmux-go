@@ -18,7 +18,6 @@ func main() {
 }
 
 func run(ctx context.Context) (err error) {
-	// docs:private-server
 	// A private server: a socket and an empty config of its own, so this
 	// neither touches nor is changed by a tmux you already use.
 	server, err := tmux.NewServer(tmux.ServerOptions{
@@ -28,7 +27,6 @@ func run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("configure tmux: %w", err)
 	}
-	// docs:end
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
