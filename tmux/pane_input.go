@@ -280,8 +280,8 @@ func (w paneWriter) Write(data []byte) (int, error) {
 	rest := string(data)
 	for rest != "" {
 		line, more, found := strings.Cut(rest, "\n")
-		if err := w.typeLine(line, found); err != nil {
-			return len(data) - len(rest), err
+		if typed, err := w.typeLine(line, found); err != nil {
+			return len(data) - len(rest) + typed, err
 		}
 		rest = more
 	}
@@ -289,24 +289,31 @@ func (w paneWriter) Write(data []byte) (int, error) {
 }
 
 // typeLine types line in pieces tmux accepts, then presses Enter when enter is
-// set.
-func (w paneWriter) typeLine(line string, enter bool) error {
-	for len(line) > paneWriterPiece {
-		piece := line[:paneWriterPiece]
+// set. On an error it returns how many bytes of line tmux had already taken,
+// so a caller resuming after them types nothing twice.
+func (w paneWriter) typeLine(line string, enter bool) (int, error) {
+	typed := 0
+	for len(line)-typed > paneWriterPiece {
+		piece := line[typed : typed+paneWriterPiece]
 		if err := w.pane.SendKeys(w.ctx, SendKeysRequest{
 			Command: &piece, Literal: true, SkipEnter: true,
 		}); err != nil {
-			return err
+			return typed, err
 		}
-		line = line[paneWriterPiece:]
+		typed += paneWriterPiece
 	}
-	if line == "" {
-		// An empty line is only the Enter key; send-keys needs no operand.
-		return w.pane.Enter(w.ctx)
+	if last := line[typed:]; last != "" {
+		if err := w.pane.SendKeys(w.ctx, SendKeysRequest{
+			Command: &last, Literal: true, SkipEnter: true,
+		}); err != nil {
+			return typed, err
+		}
+		typed += len(last)
 	}
-	return w.pane.SendKeys(w.ctx, SendKeysRequest{
-		Command: &line, Literal: true, SkipEnter: !enter,
-	})
+	if !enter {
+		return typed, nil
+	}
+	return typed, w.pane.Enter(w.ctx)
 }
 
 // Enter sends the Enter key to the receiver's exact linked pane. A completed
