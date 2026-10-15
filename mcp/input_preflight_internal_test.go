@@ -1296,8 +1296,10 @@ func requireRunCommandAvailable(
 	t.Helper()
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	for {
+		// The run returns as soon as true has; the budget only has to
+		// outlast a loaded machine starting the wrapper.
 		_, output, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
-			PaneID: pane.ID().String(), Command: "true", TimeoutSeconds: 1,
+			PaneID: pane.ID().String(), Command: "true", TimeoutSeconds: 10,
 		})
 		if err == nil {
 			if output.ExitStatus == nil || *output.ExitStatus != 0 {
