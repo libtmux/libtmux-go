@@ -42,7 +42,9 @@ var ErrOutcomeUnrecorded = errors.New("tmux: command outcome was never recorded"
 
 // RunResult reports how a command finished and what its terminal showed.
 type RunResult struct {
-	// Status is the command's exit status. It is zero when Signal is set.
+	// Status is the command's exit status, or -1 when the command did not
+	// exit on its own, as when a signal ended it, so zero always means it
+	// succeeded. [os.ProcessState.ExitCode] reads the same way.
 	Status int
 	// Signal is the signal that ended the command, when one did, and nil
 	// otherwise. Compare it with os.Kill or a syscall constant: tmux reports
@@ -557,7 +559,10 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	result.Pane = finished.ID()
 	// A signal-killed pane reports pane_dead_signal and no pane_dead_status, so
 	// a missing status is the documented Signal case rather than an error.
-	result.Status, _ = finished.DeadStatus()
+	result.Status = -1
+	if status, ok := finished.DeadStatus(); ok {
+		result.Status = status
+	}
 	reported, _ := finished.DeadSignal()
 	result.Signal = deadSignal(reported)
 	lines, err := captureFinishedScreen(ctx, finished)

@@ -354,6 +354,11 @@ func TestCommandKillStopsIt(t *testing.T) {
 	if reportsDeadSignal(ctx, t, server) && result.Signal != os.Kill {
 		t.Errorf("Wait() after Kill() signal = %v, want os.Kill; result = %+v", result.Signal, result)
 	}
+	// A killed command did not succeed, on every tmux, whether or not it
+	// says which signal ended it.
+	if result.Status != -1 {
+		t.Errorf("Wait() after Kill() status = %d, want -1", result.Status)
+	}
 }
 
 //libtmux:real-tmux
