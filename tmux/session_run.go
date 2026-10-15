@@ -100,6 +100,12 @@ func (reportedSignal) Signal() {}
 // bounded history; see [RunResult.Lines]. For a large output, have the
 // command write it to a file, or follow it with [Running.StreamTo].
 //
+// tmux runs command as default-shell -c command, so it is written in the
+// language of the session's default-shell option, which tmux takes from
+// $SHELL when it starts the server: under fish, echo $((1+2)) is an error.
+// For one language on every machine, set default-shell, or write the
+// command as sh -c '...'.
+//
 // A nonzero status is a result, not an error; the error reports what tmux
 // could not do. The wait is tmux's own signal, backed by a liveness check that
 // widens from a quarter second in case that signal is lost: it needs no tmux
