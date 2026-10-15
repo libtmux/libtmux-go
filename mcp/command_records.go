@@ -48,8 +48,18 @@ func (t *tools) attachCommandOutput(
 		return nil
 	}
 	closed, closedErr := readMark(closedPath)
-	if closedErr == nil && historyFilled(closed, now) {
-		handled, err := t.attachOutputBeforeTheEnd(ctx, pane, opened, openedPath, closed, now, limits, output)
+	// A command that has not closed is still writing, so the cursor stands at
+	// the end of what it has printed so far.
+	finish := closed
+	if closedErr != nil {
+		finish = mark{
+			historySize: now.historySize,
+			row:         now.historySize + now.cursorY,
+			column:      now.cursorX,
+		}
+	}
+	if (closedErr == nil || errors.Is(closedErr, os.ErrNotExist)) && historyFilled(finish, now) {
+		handled, err := t.attachOutputBeforeTheEnd(ctx, pane, opened, openedPath, finish, now, limits, output)
 		if err != nil || handled {
 			return err
 		}

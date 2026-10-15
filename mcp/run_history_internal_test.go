@@ -181,3 +181,66 @@ func TestRunShellCommandKeepsBlankRowsOnceTheHistoryFills(t *testing.T) {
 		}
 	}
 }
+
+// A run that times out in a pane whose history is full reports what the
+// command printed so far, as a run that finished would, or says it cannot.
+//
+//libtmux:real-tmux
+func TestRunShellCommandReturnsPartialOutputOnceTheHistoryFills(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, _ := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	pane := fullHistoryPane(ctx, t, target, instance)
+
+	want := make([]string, 0, 50)
+	for line := 1; line <= 50; line++ {
+		want = append(want, strconv.Itoa(line))
+	}
+	for attempt := range 3 {
+		_, ran, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+			PaneID: pane.ID().String(), Command: "seq 1 50; sleep 20", TimeoutSeconds: 2,
+		})
+		if err != nil || !ran.TimedOut || !slices.Equal(ran.Output, want) || ran.LinesMissed {
+			t.Fatalf("timed-out run %d = (output %q, timed out %t, missed %t, %v), want seq 1 50",
+				attempt, ran.Output, ran.TimedOut, ran.LinesMissed, err)
+		}
+		interruptRun(ctx, t, instance, target, pane)
+		_, ran, err = instance.tools.runCommand(callCtx, nil, runCommandInput{
+			PaneID: pane.ID().String(), Command: "seq 1 50", TimeoutSeconds: 10,
+		})
+		if err != nil || !slices.Equal(ran.Output, want) || ran.LinesMissed {
+			t.Fatalf("run %d of seq 1 50 = (output %q, missed %t, %v)",
+				attempt, ran.Output, ran.LinesMissed, err)
+		}
+	}
+
+	// More than the history and the screen hold together: the start is gone,
+	// the reply says so, and the end is what the command printed last.
+	_, ran, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+		PaneID: pane.ID().String(), Command: "seq 1 300; echo MID; sleep 20", TimeoutSeconds: 2,
+	})
+	if err != nil || !ran.TimedOut || !ran.LinesMissed || len(ran.Output) < 2 ||
+		ran.Output[len(ran.Output)-1] != "MID" || ran.Output[len(ran.Output)-2] != "300" {
+		t.Fatalf("timed-out run of seq 1 300 = (last %q, timed out %t, missed %t, %v), "+
+			"want the end of it with lines missed", lastLine(ran.Output), ran.TimedOut, ran.LinesMissed, err)
+	}
+}
+
+// interruptRun ends a run that timed out and waits for the pane to take
+// another.
+func interruptRun(
+	ctx context.Context,
+	t *testing.T,
+	instance *Instance,
+	target tmux.Server,
+	pane tmux.Pane,
+) {
+	t.Helper()
+	if err := pane.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-c"}}); err != nil {
+		t.Fatal(err)
+	}
+	requireRunCommandAvailable(ctx, t, instance, target, pane)
+}
