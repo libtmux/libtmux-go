@@ -47,11 +47,17 @@ func (t *tools) acquireRequestRuntime(
 
 // withRequestRuntime leases one provenance-bound server for the full handler
 // and makes terminal failures visible without retrying acted work.
+//
+// A tool that only reads is tried once more when its first attempt finds the
+// runtime's connection already lost, as it is on the first call after the
+// tmux server exits: the read did nothing, and the retry runs on a fresh
+// acquisition, which reports a missing server as the read tools document.
 func withRequestRuntime[In, Out any](
 	t *tools,
+	readOnly bool,
 	handler func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error),
 ) func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error) {
-	return func(
+	attempt := func(
 		ctx context.Context,
 		request *mcp.CallToolRequest,
 		input In,
@@ -64,6 +70,17 @@ func withRequestRuntime[In, Out any](
 		defer acquired.release()
 		result, output, err := handler(requestCtx, request, input)
 		t.runtime.observe(err)
+		return result, output, err
+	}
+	return func(
+		ctx context.Context,
+		request *mcp.CallToolRequest,
+		input In,
+	) (*mcp.CallToolResult, Out, error) {
+		result, output, err := attempt(ctx, request, input)
+		if readOnly && err != nil && isIntrinsicTerminalRuntimeError(err) && ctx.Err() == nil {
+			return attempt(ctx, request, input)
+		}
 		return result, output, err
 	}
 }

@@ -259,7 +259,7 @@ func registerDefinition[In, Out any](
 ) {
 	registered := boundDefinitionHandler(registry, handler)
 	if !definition.aggregate {
-		registered = withRequestRuntime(registry, registered)
+		registered = withRequestRuntime(registry, definition.readsOnly(), registered)
 	}
 	sdk.AddTool(server, definition.sdkTool(), registered)
 	if definition.aggregate {
@@ -276,8 +276,14 @@ func bindDefinitionDispatcher[In, Out any](
 	if definition.aggregate {
 		return
 	}
-	registered := withRequestRuntime(registry, boundDefinitionHandler(registry, handler))
+	registered := withRequestRuntime(
+		registry, definition.readsOnly(), boundDefinitionHandler(registry, handler))
 	installDispatcher(registry, definition, registered)
+}
+
+// readsOnly reports a tool whose only effect on tmux is to look.
+func (definition toolDefinition) readsOnly() bool {
+	return slices.Equal(definition.effects, []tmuxEffect{effectObserve})
 }
 
 func boundDefinitionHandler[In, Out any](
