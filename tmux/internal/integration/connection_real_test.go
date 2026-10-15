@@ -595,3 +595,89 @@ func TestRunningKillWorksWhileWaitIsParkedOnOneLane(t *testing.T) {
 		t.Fatal("Wait() did not return after Kill")
 	}
 }
+
+// tmux ends a waiting client with success when the server exits, so a bound
+// server must learn from outside its own lanes, which die with the server,
+// that the server is gone.
+//
+//libtmux:real-tmux
+func TestConnectionBlockingCommandReportsAServerKilledUnderIt(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		run  func(context.Context, tmux.Server, string) error
+	}{
+		{"WaitFor", func(ctx context.Context, server tmux.Server, _ string) error {
+			return server.WaitFor(ctx, tmux.WaitForRequest{Channel: "libtmux-killed"})
+		}},
+		{"RunShell", func(ctx context.Context, server tmux.Server, command string) error {
+			_, err := server.RunShell(ctx, tmux.RunShellRequest{Command: command})
+			return err
+		}},
+		{"IfShell", func(ctx context.Context, server tmux.Server, command string) error {
+			return server.IfShell(ctx, tmux.IfShellRequest{
+				ShellCommand: command, ThenCommand: "display-message x",
+			})
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			server := tmuxtest.NewServer(ctx, t)
+			connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+			// The shell command outlives the server, so it runs until the
+			// file goes, as in TestConnectionServesCommandsAfterACanceledShellCommand.
+			held := filepath.Join(t.TempDir(), "held")
+			if err := os.WriteFile(held, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			command := "while [ -e '" + held + "' ]; do sleep 0.05; done"
+
+			done := make(chan error, 1)
+			go func() { done <- test.run(ctx, connection.Server(), command) }()
+			awaitClientBeyond(ctx, t, server, 1)
+			if _, err := server.Cmd(ctx, "kill-server"); err != nil {
+				t.Fatalf("kill-server error = %v", err)
+			}
+			if err := os.Remove(held); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-done:
+				if !errors.Is(err, tmux.ErrNoServer) {
+					t.Fatalf("%s with the server killed under it = %v, want ErrNoServer", test.name, err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatalf("%s still parked after the server was killed", test.name)
+			}
+		})
+	}
+}
+
+// A connection closed under a parked call says nothing about the server, which
+// is healthy, so the call must not read as a server that exited.
+//
+//libtmux:real-tmux
+func TestConnectionClosedUnderABlockingCommandIsNotAGoneServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- connection.Server().WaitFor(ctx, tmux.WaitForRequest{Channel: "libtmux-closed"})
+	}()
+	awaitClientBeyond(ctx, t, server, 1)
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, tmux.ErrControlClosed) || errors.Is(err, tmux.ErrNoServer) {
+			t.Fatalf("WaitFor() after Close() = %v, want ErrControlClosed and not ErrNoServer", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitFor() still parked after Close()")
+	}
+}

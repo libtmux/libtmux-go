@@ -243,6 +243,7 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 	}
 
 	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background), arguments...)
+	err = s.blockingFailure(ctx, "run-shell", err)
 	if err := requireRedactedServerCommandNoStderr("run-shell", result, err); err != nil {
 		return nil, err
 	}
@@ -305,6 +306,7 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 		kind = commandBlocking
 	}
 	result, err := s.literalCmdAs(ctx, kind, arguments...)
+	err = s.blockingFailure(ctx, "wait-for", err)
 	if err := requireRedactedServerCommandNoStderr("wait-for", result, err); err != nil {
 		return err
 	}
@@ -320,11 +322,46 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 // error matching [ErrNoServer] when the server is gone; a failed look is no
 // evidence either way, and the command itself did complete.
 func (s Server) requireServerSurvived(ctx context.Context, subcommand string) error {
-	alive, err := s.IsAlive(ctx)
-	if (err == nil && !alive) || errors.Is(err, ErrNoServer) {
+	if s.serverGone(ctx) {
 		return fmt.Errorf("%s: the tmux server exited during the command: %w", subcommand, ErrNoServer)
 	}
 	return nil
+}
+
+// blockingFailure follows a blocking command that failed on a connection's
+// client. The server exiting ends that client's stream, which reads as a lost
+// client rather than a gone server, so a lost client is checked against the
+// server and reports [ErrNoServer] when it is gone. Any other failure,
+// including the caller's own cancellation, passes through.
+func (s Server) blockingFailure(ctx context.Context, subcommand string, err error) error {
+	if err == nil || s.connection == nil || ctx.Err() != nil ||
+		(!errors.Is(err, ErrControlClosed) && !errors.Is(err, ErrOutcomeUnknown)) {
+		return err
+	}
+	if !s.serverGone(ctx) {
+		return err
+	}
+	return fmt.Errorf("%s: the tmux server exited during the command: %w (%w)", subcommand, ErrNoServer, err)
+}
+
+// serverGone reports whether the server answers that it is gone. A bound
+// server asks through its connection first; once the server has exited that
+// connection fails with something other than [ErrNoServer], so a failed look
+// asks again through a process of its own. A look that fails both ways is no
+// evidence, which keeps a Connection closed while the server is healthy from
+// reading as a gone server.
+func (s Server) serverGone(ctx context.Context) bool {
+	alive, err := s.IsAlive(ctx)
+	if (err == nil && !alive) || errors.Is(err, ErrNoServer) {
+		return true
+	}
+	if err == nil || s.connection == nil || ctx.Err() != nil {
+		return false
+	}
+	process := s
+	process.connection = nil
+	alive, err = process.IsAlive(ctx)
+	return (err == nil && !alive) || errors.Is(err, ErrNoServer) || errors.Is(err, ErrDaemonReplaced)
 }
 
 // IfShell executes ThenCommand when ShellCommand succeeds and ElseCommand, if
@@ -364,6 +401,7 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 		arguments = append(arguments, *request.ElseCommand)
 	}
 	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background), arguments...)
+	err = s.blockingFailure(ctx, "if-shell", err)
 	if err := requireRedactedServerCommandNoStderr("if-shell", result, err); err != nil {
 		return err
 	}
