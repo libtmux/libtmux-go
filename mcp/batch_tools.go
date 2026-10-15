@@ -346,7 +346,6 @@ func batched[In, Out any](
 	return result, nil
 }
 
-// Absent arguments validate as an empty object rather than null.
 // explainBatchRejection says which operation of a rejected batch is wrong and
 // why. The batch's schema offers one shape per tool it can call, and a member
 // that fits none is reported as fitting none of them, which names neither the
@@ -394,6 +393,7 @@ func (t *tools) explainBatchRejection(name string, arguments json.RawMessage) st
 	return ""
 }
 
+// Absent arguments validate as an empty object rather than null.
 func argumentValue(arguments json.RawMessage) any {
 	var value any
 	if len(arguments) == 0 || json.Unmarshal(arguments, &value) != nil || value == nil {
