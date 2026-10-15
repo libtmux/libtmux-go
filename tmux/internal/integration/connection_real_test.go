@@ -419,17 +419,18 @@ func openOwnedConnection(
 
 // awaitClientBeyond returns once the server counts more than lanes attached
 // clients, which a blocking call on a connection adds for its own duration.
-// It gives up after two seconds and leaves the caller's assertions to say
-// what that means.
+// tmux announces no client attaching, so it asks, backing off between reads,
+// and fails the test when the client never appears: the caller's assertions
+// mean nothing without it.
 func awaitClientBeyond(ctx context.Context, t *testing.T, server tmux.Server, lanes int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	for ctx.Err() == nil {
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
 		clients, err := server.Clients(ctx)
-		if err == nil && len(clients) > lanes {
-			return
-		}
+		return err == nil && len(clients) > lanes, nil
+	}); err != nil {
+		t.Fatalf("the blocking call never attached a client of its own: %v", err)
 	}
 }
 
