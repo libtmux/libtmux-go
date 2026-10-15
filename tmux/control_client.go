@@ -73,6 +73,10 @@ type ControlClient struct {
 	closeErr       error
 	replyFence     controlReplyFence
 
+	// parser reads the stream. It lives here so a request can arm it to
+	// capture a command's output; see [controlCapture].
+	parser controlStreamParser
+
 	// dispatching excludes flags-0 frames after the attach reply.
 	dispatching atomic.Bool
 

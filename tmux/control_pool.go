@@ -127,10 +127,16 @@ func (p *controlLanePool) run(
 // alone. tmux has no way to cancel a command already sent to a control client,
 // so the client is closed when the command ends, however it ends; a shared
 // lane would stay occupied until a peer acted.
+//
+// tmux answers such a command with an empty frame and prints what it has to
+// say afterward as lines outside any frame, so the client reads them as the
+// command's result instead of as protocol. shellOutput says they are a shell
+// command's stdout; otherwise they are error text.
 func (p *controlLanePool) runExclusive(
 	ctx context.Context,
 	arguments []string,
 	commandList bool,
+	shellOutput bool,
 ) (CommandResult, error) {
 	failed := CommandResult{Command: slices.Clone(arguments), ExitCode: -1}
 	if err := ctx.Err(); err != nil {
@@ -149,7 +155,7 @@ func (p *controlLanePool) runExclusive(
 		_ = client.Close()
 		return failed, ErrControlClosed
 	}
-	results, err := client.cmdUnobserved(ctx, commandList, arguments...)
+	results, err := client.cmdCaptured(ctx, commandList, shellOutput, arguments...)
 	if err != nil {
 		// Closing waits out a command still in flight, which a canceled
 		// caller must not. The pool keeps the client until it has closed,

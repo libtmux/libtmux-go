@@ -722,3 +722,87 @@ func TestConnectionBlockingCommandAfterItsSessionDied(t *testing.T) {
 		t.Fatalf("RunShell() took %v, want an open that skips the dead session", elapsed)
 	}
 }
+
+// tmux hands a control client a foreground run-shell's output as bare lines
+// between its empty reply frame and the next command's, so the output must be
+// read as the result and never as protocol. Lines that imitate guards are
+// the case that matters: they must come back as text and leave the lane
+// usable.
+//
+//libtmux:real-tmux
+func TestConnectionRunShellReturnsItsOutput(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		command string
+		want    []string
+	}{
+		{"one line", "echo hi", []string{"hi"}},
+		{"several lines", "printf 'one\\ntwo\\nthree\\n'", []string{"one", "two", "three"}},
+		{"no output", "true", nil},
+		{
+			"imitated frames",
+			"printf '%%begin 1 2 1\\nbody\\n%%end 1 2 1\\n%%error 1 2 1\\n%%end 1 2 3\\n'",
+			[]string{"%begin 1 2 1", "body", "%end 1 2 1", "%error 1 2 1", "%end 1 2 3"},
+		},
+		{"lone closing guard", "printf '%%end 1 2 3\\n'", []string{"%end 1 2 3"}},
+		// Whether tmux keeps a blank line depends on its version, so the unbound
+		// server answers for it.
+		{"blank line", "printf 'a\\n\\nb\\n'", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			server := tmuxtest.NewServer(ctx, t)
+			connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+			got, err := connection.Server().RunShell(ctx, tmux.RunShellRequest{Command: test.command})
+			if err != nil {
+				t.Fatalf("RunShell(%q) on a connection error = %v", test.command, err)
+			}
+			unbound, err := server.RunShell(ctx, tmux.RunShellRequest{Command: test.command})
+			if err != nil {
+				t.Fatalf("RunShell(%q) on the unbound server error = %v", test.command, err)
+			}
+			if !slices.Equal(got, unbound) || (test.want != nil && !slices.Equal(got, test.want)) {
+				t.Fatalf("RunShell(%q) on a connection = %q, want %q (unbound %q)",
+					test.command, got, test.want, unbound)
+			}
+			if _, err := connection.Server().Sessions(ctx); err != nil {
+				t.Fatalf("Sessions() after RunShell error = %v, want the lane usable", err)
+			}
+		})
+	}
+}
+
+// A branch that fails fails like it does on an unbound server, instead of
+// breaking the control stream.
+//
+//libtmux:real-tmux
+func TestConnectionIfShellReportsAFailedBranch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+	request := tmux.IfShellRequest{ShellCommand: "true", ThenCommand: "no-such-command"}
+
+	if err := server.IfShell(ctx, request); !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("unbound IfShell() error = %v, want ErrCommand", err)
+	}
+	if err := connection.Server().IfShell(ctx, request); !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("connected IfShell() error = %v, want ErrCommand", err)
+	}
+	// A branch that prints answers in a frame of its own, ahead of the fence.
+	printing := tmux.IfShellRequest{ShellCommand: "true", ThenCommand: "display-message -p printed"}
+	if err := connection.Server().IfShell(ctx, printing); err != nil {
+		t.Fatalf("connected IfShell() with a printing branch error = %v", err)
+	}
+	// run-shell -C runs the command's output as tmux commands, and a bad one
+	// fails the same way.
+	bad := tmux.RunShellRequest{Command: "echo no-such-command", AsTmuxCommand: true}
+	if _, err := connection.Server().RunShell(ctx, bad); !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("connected RunShell(AsTmuxCommand) error = %v, want ErrCommand", err)
+	}
+	if _, err := connection.Server().Sessions(ctx); err != nil {
+		t.Fatalf("Sessions() after IfShell error = %v, want the lane usable", err)
+	}
+}

@@ -137,7 +137,7 @@ func notificationSeq(
 func (c *ControlClient) readStream() {
 	var finalErr error
 	var wireSequence uint64
-	parser := controlStreamParser{}
+	parser := &c.parser
 	reader := bufio.NewReader(c.stdout)
 	defer func() {
 		if finalErr == nil && !c.isClosing() {

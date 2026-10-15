@@ -431,8 +431,8 @@ func (c *Connection) run(
 	if err := c.routeError(ctx, kind); err != nil {
 		return CommandResult{ExitCode: -1}, err
 	}
-	if kind == commandBlocking {
-		return c.pool.runExclusive(ctx, arguments, commandList)
+	if kind.blocks() {
+		return c.pool.runExclusive(ctx, arguments, commandList, kind == commandBlockingOutput)
 	}
 	return c.pool.run(ctx, arguments, commandList)
 }

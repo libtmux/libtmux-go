@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // ErrControlProtocol identifies malformed tmux control-mode framing.
@@ -80,6 +81,11 @@ type controlFrame struct {
 	rawStdout    []byte
 	failed       bool
 	wireSequence uint64
+
+	// fence marks the reply to a capture request's fence command, and
+	// captured holds the lines that came before it.
+	fence    bool
+	captured [][]byte
 }
 
 func (f controlFrame) result(command []string) ControlCommandResult {
@@ -97,9 +103,102 @@ func (f controlFrame) result(command []string) ControlCommandResult {
 type controlStreamParser struct {
 	guard  *controlGuard
 	output bytes.Buffer
+
+	mu      sync.Mutex
+	capture *controlCapture
+}
+
+// controlCapture holds the lines tmux prints between a command's reply frame
+// and a fence of the caller's making. A foreground run-shell is answered with
+// an empty frame at once; its output follows later as bare lines outside any
+// frame, and nothing on the wire ends it. The fence is a command sent behind
+// it whose reply holds a nonce only the caller knows, and tmux runs it only
+// when the shell command is done, so what lies before it is the output.
+//
+// Those lines are the shell command's text, not tmux's protocol: one that
+// reads like a guard is just a line. They are kept apart from the parser's
+// framing until the fence proves where they end.
+type controlCapture struct {
+	nonce string
+	// started is set once the command's own reply frame has closed.
+	started bool
+	// fencing is set once the fence's opening guard has been recognized.
+	fencing bool
+	lines   [][]byte
+}
+
+// arm makes the parser capture what follows the next reply frame, up to the
+// fence frame that holds nonce. Call it before writing the command.
+func (p *controlStreamParser) arm(nonce string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.capture = &controlCapture{nonce: nonce}
+}
+
+func (p *controlStreamParser) activeCapture() *controlCapture {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.capture
+}
+
+func (p *controlStreamParser) disarm() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.capture = nil
 }
 
 func (p *controlStreamParser) consume(
+	line []byte,
+) (*controlFrame, []byte, error) {
+	capture := p.activeCapture()
+	if capture == nil {
+		return p.consumeFramed(line)
+	}
+	if capture.started && !capture.fencing {
+		return p.consumeCaptured(capture, line)
+	}
+	frame, notification, err := p.consumeFramed(line)
+	if frame != nil {
+		switch {
+		case capture.fencing:
+			frame.fence = true
+			frame.captured = capture.lines
+			p.disarm()
+		case frame.ownReply():
+			capture.started = true
+		}
+	}
+	return frame, notification, err
+}
+
+// consumeCaptured takes one line after the command's reply. Only a
+// well-formed notification is tmux's; every other line is the command's
+// output, whatever it looks like, until the fence arrives.
+func (p *controlStreamParser) consumeCaptured(
+	capture *controlCapture,
+	line []byte,
+) (*controlFrame, []byte, error) {
+	if string(line) == capture.nonce && len(capture.lines) != 0 {
+		last := len(capture.lines) - 1
+		if kind, guard, isGuard, err := parseControlGuard(capture.lines[last]); err == nil &&
+			isGuard && kind == controlGuardBegin {
+			capture.lines = capture.lines[:last]
+			capture.fencing = true
+			p.guard = &guard
+			p.output.Reset()
+			_, _ = p.output.Write(line)
+			_ = p.output.WriteByte('\n')
+			return nil, nil, nil
+		}
+	}
+	if _, err := ParseControlNotification(line); err == nil {
+		return nil, bytes.Clone(line), nil
+	}
+	capture.lines = append(capture.lines, bytes.Clone(line))
+	return nil, nil, nil
+}
+
+func (p *controlStreamParser) consumeFramed(
 	line []byte,
 ) (*controlFrame, []byte, error) {
 	kind, guard, isGuard, err := parseControlGuard(line)

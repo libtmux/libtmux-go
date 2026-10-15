@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -22,8 +23,14 @@ type controlRequest struct {
 	command   []string
 	line      string
 	fenceOnly bool
-	response  chan controlResponse
-	state     atomic.Uint32
+	// nonce, when set, makes this a capture request: a fence command holding
+	// nonce is sent behind the command, and the lines tmux prints before it
+	// are the command's output. shellOutput says those lines are a shell
+	// command's stdout, where otherwise they are tmux's own error text.
+	nonce       string
+	shellOutput bool
+	response    chan controlResponse
+	state       atomic.Uint32
 }
 
 type controlResponse struct {
@@ -146,6 +153,29 @@ func (c *ControlClient) cmdUnobserved(
 	commandList bool,
 	args ...string,
 ) ([]ControlCommandResult, error) {
+	return c.cmdWith(ctx, commandList, "", false, args...)
+}
+
+// cmdCaptured is cmdUnobserved for a command that can print after its reply
+// frame, as a foreground run-shell or if-shell does. The lines it prints come
+// back as results, never as protocol; see [controlCapture]. shellOutput says
+// the command prints a shell command's stdout.
+func (c *ControlClient) cmdCaptured(
+	ctx context.Context,
+	commandList bool,
+	shellOutput bool,
+	args ...string,
+) ([]ControlCommandResult, error) {
+	return c.cmdWith(ctx, commandList, rand.Text(), shellOutput, args...)
+}
+
+func (c *ControlClient) cmdWith(
+	ctx context.Context,
+	commandList bool,
+	nonce string,
+	shellOutput bool,
+	args ...string,
+) ([]ControlCommandResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -155,10 +185,12 @@ func (c *ControlClient) cmdUnobserved(
 		return nil, err
 	}
 	request := &controlRequest{
-		ctx:      ctx,
-		command:  command,
-		line:     line,
-		response: make(chan controlResponse, 1),
+		ctx:         ctx,
+		command:     command,
+		line:        line,
+		nonce:       nonce,
+		shellOutput: shellOutput,
+		response:    make(chan controlResponse, 1),
 	}
 	return c.submitControlRequest(request)
 }
@@ -264,6 +296,12 @@ func (c *ControlClient) executeControlRequest(
 	input := controlReplyFenceInput
 	if !request.fenceOnly {
 		input = request.line + "\n" + input
+		if request.nonce != "" {
+			// The nonce is letters and digits, so it needs no quoting.
+			c.parser.arm(request.nonce)
+			input = request.line + "\ndisplay-message -p " + request.nonce + "\n" +
+				controlReplyFenceInput
+		}
 	}
 	if _, err := io.WriteString(c.stdin, input); err != nil {
 		return request.finish(
@@ -275,6 +313,7 @@ func (c *ControlClient) executeControlRequest(
 	// A request can itself fail with the first fence's fingerprint. Hold that
 	// frame until the next one distinguishes request A,A,B from boundary A,B.
 	var pendingFirst *controlFrame
+	var captured [][]byte
 	for {
 		frame, err := c.nextOwnFrame(context.Background())
 		if err != nil {
@@ -283,8 +322,13 @@ func (c *ControlClient) executeControlRequest(
 				false,
 			)
 		}
+		if frame.fence {
+			captured = frame.captured
+			continue
+		}
 		if pendingFirst != nil {
 			if c.replyFence.second.matches(frame) {
+				results = append(results, request.capturedResults(captured)...)
 				return request.finish(controlResponse{results: results}, true)
 			}
 			results = append(results, pendingFirst.result(request.command))
@@ -296,6 +340,71 @@ func (c *ControlClient) executeControlRequest(
 		}
 		results = append(results, frame.result(request.command))
 	}
+}
+
+// capturedResults turns the lines a capture request collected into results.
+// A shell command's output is stdout. Otherwise the lines are tmux's own error
+// text, such as a branch that failed to parse, interleaved with the reply
+// frames of commands the command inserted; lines that do not form a frame are
+// errors.
+func (r *controlRequest) capturedResults(lines [][]byte) []ControlCommandResult {
+	if len(lines) == 0 {
+		return nil
+	}
+	if r.shellOutput {
+		return []ControlCommandResult{{
+			Command:   slices.Clone(r.command),
+			RawStdout: joinCapturedLines(lines),
+		}}
+	}
+	var results []ControlCommandResult
+	var bare, open [][]byte
+	flush := func() {
+		if len(bare) != 0 {
+			results = append(results, ControlCommandResult{
+				Command:   slices.Clone(r.command),
+				RawStdout: joinCapturedLines(bare),
+				Failed:    true,
+			})
+			bare = nil
+		}
+	}
+	var parser controlStreamParser
+	for _, line := range lines {
+		if parser.guard == nil {
+			kind, _, isGuard, err := parseControlGuard(line)
+			if err != nil || !isGuard || kind != controlGuardBegin {
+				bare = append(bare, line)
+				continue
+			}
+		}
+		open = append(open, line)
+		frame, _, err := parser.consumeFramed(line)
+		if err != nil {
+			bare = append(bare, open...)
+			open = nil
+			parser = controlStreamParser{}
+			continue
+		}
+		if frame != nil {
+			flush()
+			results = append(results, frame.result(r.command))
+			open = nil
+		}
+	}
+	// A frame that never closed is not a frame.
+	bare = append(bare, open...)
+	flush()
+	return results
+}
+
+func joinCapturedLines(lines [][]byte) []byte {
+	var joined []byte
+	for _, line := range lines {
+		joined = append(joined, line...)
+		joined = append(joined, '\n')
+	}
+	return joined
 }
 
 func (r *controlRequest) finish(

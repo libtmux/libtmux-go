@@ -156,7 +156,11 @@ type SourceFileRequest struct {
 //
 // On a [Connection]-bound server a foreground request runs on a control client
 // opened for that call and closed when it ends, as [Server.WaitFor] does, so a
-// slow or canceled command leaves every lane free.
+// slow or canceled command leaves every lane free. tmux sends that client the
+// command's output as lines outside any reply frame, so the client takes every
+// line before its own fence as output, whatever the line looks like. The one
+// exception is a line that is a well-formed control notification, such as
+// "%window-add @1", which a connection cannot tell from tmux's own and drops.
 //
 // A foreground command that tmux ends with success is checked against the
 // server, as in [Server.WaitFor], and returns an error matching [ErrNoServer]
@@ -242,7 +246,11 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 		}
 	}
 
-	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background), arguments...)
+	// Without -C, tmux prints the shell command's stdout; with it, tmux runs
+	// that output as commands, which answer in frames of their own.
+	result, err := s.literalCmdAs(
+		ctx, shellCommandKind(request.Background, !request.AsTmuxCommand), arguments...,
+	)
 	err = s.blockingFailure(ctx, "run-shell", err)
 	if err := requireRedactedServerCommandNoStderr("run-shell", result, err); err != nil {
 		return nil, err
@@ -400,7 +408,7 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if request.ElseCommand != nil {
 		arguments = append(arguments, *request.ElseCommand)
 	}
-	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background), arguments...)
+	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background, false), arguments...)
 	err = s.blockingFailure(ctx, "if-shell", err)
 	if err := requireRedactedServerCommandNoStderr("if-shell", result, err); err != nil {
 		return err
@@ -412,12 +420,16 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 }
 
 // shellCommandKind says how run-shell and if-shell occupy a client. tmux
-// answers a foreground one only when its shell command has finished, so it can
-// hold a client as long as that command runs; a background one is answered at
-// once.
-func shellCommandKind(background bool) commandKind {
-	if background {
+// holds a client's queue through a foreground one until its shell command has
+// finished, so it can hold a client as long as that command runs; a background
+// one is answered at once. prints says the command's stdout reaches a control
+// client as lines after the reply.
+func shellCommandKind(background, prints bool) commandKind {
+	switch {
+	case background:
 		return commandServer
+	case prints:
+		return commandBlockingOutput
 	}
 	return commandBlocking
 }
