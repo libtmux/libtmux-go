@@ -217,6 +217,9 @@ var commandServerUnreachableSuffixes = [...]string{
 
 // Fixed refusals contain no caller values and remain safe in redacted errors.
 var commandFixedRefusals = [...]string{
+	// The tmux client refuses a command larger than one message to the
+	// server, 16 KiB (MAX_IMSGSIZE), before sending it.
+	"command too long",
 	"no space for a new pane",
 	// tmux 3.2a through 3.6a word the same refusal without "a"; layout.c moved
 	// and reworded it at 3.7.
