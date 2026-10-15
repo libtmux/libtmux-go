@@ -47,7 +47,8 @@ func (t *tools) attachCommandOutput(
 		output.OutputUnavailable = err.Error()
 		return nil
 	}
-	if closed, err := readMark(closedPath); err == nil && historyFilled(closed, now) {
+	closed, closedErr := readMark(closedPath)
+	if closedErr == nil && historyFilled(closed, now) {
 		handled, err := t.attachOutputBeforeTheEnd(ctx, pane, opened, openedPath, closed, now, limits, output)
 		if err != nil || handled {
 			return err
@@ -65,7 +66,7 @@ func (t *tools) attachCommandOutput(
 	// way along it. A cursor at column zero means the last line ended, so that
 	// row holds whatever the shell drew next, and reading it returns a prompt
 	// as though the command had printed one.
-	if closed, err := readMark(closedPath); err == nil {
+	if closedErr == nil {
 		end := closed.row
 		if closed.column == 0 {
 			end--
