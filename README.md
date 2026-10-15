@@ -529,35 +529,23 @@ name instead, so a test of your own code needs no tmux installed.
 Three more ship as **separate modules**, so `go get` on the library pulls in
 none of them:
 
-| Module | Source | Reference | What it is |
-| --- | --- | --- | --- |
-| `mcp` | [`mcp/`](mcp/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp) | **A tmux server for AI agents** over the Model Context Protocol. Install it as a binary. |
-| `workspace` | [`workspace/`](workspace/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace) | Loads tmuxp-style YAML workspaces and builds them. Its CLI installs as a binary too. |
-| `benchmarks` | [`benchmarks/`](benchmarks/) | — | Prints what each way of reaching tmux costs. |
+| Module | What it is |
+| --- | --- |
+| [`mcp/`](mcp/) | A tmux server for AI agents, over the Model Context Protocol |
+| [`workspace/`](workspace/) | Loads tmuxp-style YAML workspaces and builds them, with a CLI |
+| [`benchmarks/`](benchmarks/) | Prints what each way of reaching tmux costs |
 
-### For agents
-
-[`mcp/`](mcp/) is a standalone Model Context Protocol server that gives an agent
-one tmux server: create panes, send keys, read output, wait for text.
+The MCP server:
 
 ```console
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
-See [`mcp/README.md`](mcp/README.md) for client configuration, and
-[`mcp/TOOLS.md`](mcp/TOOLS.md) for the tool reference.
-
-### For workspace automation
-
-[`workspace/`](workspace/) loads tmuxp-style YAML workspace files and builds
-them; its `tmux-workspace` CLI adds native workspace management, structured
-output, and optional Python compatibility.
+The workspace CLI:
 
 ```console
 $ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
 ```
-
-See [`workspace/CLI.md`](workspace/CLI.md) for commands and output formats.
 
 ## Support and status
 
