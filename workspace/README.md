@@ -369,7 +369,7 @@ a shell, with structured output and optional Python compatibility.
 The CLI and this library are separate implementations, and they read
 different dialects of the format: a file one accepts is not always a file the
 other accepts. The CLI is the tmuxp-compatible one. Build automation on it
-and parse its `--json` or `--ndjson` output. Where they differ today:
+and parse its `--json` or `--ndjson` output. Where they differ:
 
 | Behaviour | This library | `tmux-workspace` |
 | --- | --- | --- |

@@ -31,8 +31,8 @@ stopped: killed
 
 `test -t 1` held, so the command had a terminal, which one run through a pipe
 does not. tmux before 3.3 does not say which signal ended a pane, so the last
-line reads `stopped` there. The window the command ran in is removed once the result is read,
-and the session is killed on the way out.
+line reads `stopped` there. The window the command ran in is removed once the
+result is read, and the session is killed on the way out.
 
 ## What to look at
 
