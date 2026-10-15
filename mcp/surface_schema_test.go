@@ -488,6 +488,22 @@ func TestMistakesNameTheirRemedy(t *testing.T) {
 			map[string]any{"pane_id": " ", "text": "x"},
 			[]string{"pane_id is empty"},
 		},
+		// The same guard applies where a batch schema requires the id.
+		{
+			"blank pane id in a key batch", "send_keys_batch",
+			map[string]any{"operations": []any{
+				map[string]any{"pane_id": "", "keys": []any{"x"}},
+			}},
+			[]string{"operations[0].pane_id is empty", "%3", "list_panes"},
+		},
+		{
+			"blank pane id in a read batch", "call_read_tools_batch",
+			map[string]any{"operations": []any{
+				map[string]any{"tool": "list_sessions"},
+				map[string]any{"tool": "get_pane_info", "arguments": map[string]any{"pane_id": " "}},
+			}},
+			[]string{"operations[1].arguments.pane_id is empty", "%3", "list_panes"},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := session.CallTool(ctx, &sdk.CallToolParams{
