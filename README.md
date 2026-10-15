@@ -280,9 +280,8 @@ answer rather than the request.
 Runnable: [`examples/pane-io`](examples/pane-io), which goes on to read the
 pane as an `io.Reader`.
 
-Typing is the wrong way to move a payload. The shell in the pane reads quotes,
-`$`, and backslashes in it as shell syntax, and tmux limits one message from a
-client to 16 KiB (`MAX_IMSGSIZE`), which caps a command and its arguments.
+Typing is the wrong way to move a payload: the shell in the pane reads quotes,
+`$`, and backslashes in it as shell syntax.
 [`Server.LoadBufferFrom`][tmux-server-loadbufferfrom] fills a tmux buffer from
 an `io.Reader` instead, and [`Pane.CaptureTo`][tmux-pane-captureto] writes a
 scrollback to an `io.Writer`. [`examples/byte-streams`](examples/byte-streams)
