@@ -38,6 +38,23 @@ func TestRunnerReturnsNonzeroExitAndSplitOutputAsData(t *testing.T) {
 	}
 }
 
+func TestRunnerKeepsTheExitWhenCapturedOutputCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	readFailure := errors.New("read failure")
+	runner := Runner{readCapture: func(*capture) ([]byte, []byte, error) {
+		return nil, nil, readFailure
+	}}
+	result, err := runner.Run(context.Background(), helperRequest("lines"))
+	var unknown *OutcomeUnknownError
+	if !errors.As(err, &unknown) || !errors.Is(err, readFailure) {
+		t.Fatalf("Run() error = %v, want OutcomeUnknownError wrapping the read failure", err)
+	}
+	if result.ExitCode != 7 {
+		t.Errorf("ExitCode = %d, want the process's 7", result.ExitCode)
+	}
+}
+
 func TestRunnerPreservesRequestedBinaryInCommand(t *testing.T) {
 	testDirectory := t.TempDir()
 	requestedBinary := "tmux-runner-test"

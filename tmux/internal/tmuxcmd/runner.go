@@ -72,6 +72,9 @@ func (e *OutcomeUnknownError) Unwrap() error { return e.Err }
 // Runner executes tmux subprocess requests.
 type Runner struct {
 	WaitDelay time.Duration
+
+	// readCapture replaces reading the captured output files in tests.
+	readCapture func(*capture) (stdout, stderr []byte, err error)
 }
 
 // Run executes one request. Nonzero process exits are returned as Result data.
@@ -138,14 +141,19 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 	}
 
 	runErr := cmd.Run()
+	var readErr error
 	if request.Stdio == nil {
-		printed, warned, readErr := captured.read()
-		if readErr != nil {
-			return result, fmt.Errorf("read tmux output: %w", readErr)
+		read := (*capture).read
+		if r.readCapture != nil {
+			read = r.readCapture
 		}
-		result.RawStdout = printed
-		result.Stdout = SplitStdout(printed)
-		result.Stderr = SplitStderr(warned)
+		var printed, warned []byte
+		printed, warned, readErr = read(captured)
+		if readErr == nil {
+			result.RawStdout = printed
+			result.Stdout = SplitStdout(printed)
+			result.Stderr = SplitStderr(warned)
+		}
 	}
 
 	outcome := processExitOutcome(cmd.ProcessState, interrupted.Load())
@@ -153,8 +161,15 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 		outcome = processOutcomeCanceled
 	}
 	result.ExitCode = processResultExitCode(cmd.ProcessState, outcome)
-	if err := classifyRunError(runErr, ctx.Err(), outcome); err != nil {
-		return result, err
+	classified := classifyRunError(runErr, ctx.Err(), outcome)
+	if readErr != nil {
+		// The process ran, so the outcome stays unknown even when its exit
+		// was clean; the exit and any cancellation remain visible.
+		readErr = &OutcomeUnknownError{Err: fmt.Errorf("read tmux output: %w", readErr)}
+		return result, errors.Join(classified, readErr)
+	}
+	if classified != nil {
+		return result, classified
 	}
 	return result, nil
 }
