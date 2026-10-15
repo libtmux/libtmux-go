@@ -148,6 +148,8 @@ func (t *tools) runCommand(
 	running, _ := pane.Formats().PaneCurrentCommand()
 	result, output, err := t.awaitCommand(ctx, runCtx, awaiting{
 		pane:       pane,
+		identity:   started.identity,
+		panePID:    started.panePID,
 		statusPath: started.statusAt,
 		openedPath: started.openedAt,
 		closedPath: started.closedAt,
@@ -355,6 +357,7 @@ func (t *tools) startCommand(
 	}
 	started.pane = second.Source
 	started.paneID = second.Source.ID()
+	started.panePID, _ = second.Source.Formats().PanePID()
 	if err := t.runtime.deps.sendKeySequence(ctx, second.Source, dispatch); err != nil {
 		if errors.Is(err, tmux.ErrOutcomeUnknown) {
 			dispatched = true
@@ -496,6 +499,8 @@ func runsAShell(running string) bool {
 // wait reads as one step rather than eight parameters.
 type awaiting struct {
 	pane                               tmux.Pane
+	identity                           paneInputIdentity
+	panePID                            int
 	statusPath, openedPath, closedPath string
 	limits                             bounds
 	running                            string
@@ -503,9 +508,12 @@ type awaiting struct {
 }
 
 type commandRun struct {
-	pane          tmux.Pane
-	paneID        tmux.PaneID
-	identity      paneInputIdentity
+	pane     tmux.Pane
+	paneID   tmux.PaneID
+	identity paneInputIdentity
+	// panePID is the process the run was typed into. A respawned pane runs
+	// another, and the run is no longer in it.
+	panePID       int
 	directory     string
 	openedAt      string
 	closedAt      string
@@ -545,7 +553,7 @@ func (t *tools) reapCommandRun(run commandRun) {
 				probeCtx, cancel := context.WithTimeout(
 					context.Background(), commandPresenceProbeTimeout,
 				)
-				present, probeErr := commandRunPresent(probeCtx, run.pane, run.identity)
+				present, probeErr := commandRunPresent(probeCtx, run.pane, run.identity, run.panePID)
 				cancel()
 				if probeErr == nil && !present {
 					return
@@ -564,16 +572,24 @@ const (
 	commandPresenceProbeTimeout   = 2 * time.Second
 )
 
+// commandRunPresent reports whether the pane still holds the run: it exists,
+// it is not dead, and it runs the process the run was typed into. Respawning
+// a pane closes its terminal without signaling what ran there, so on macOS a
+// run's wrapper can outlive the pane's shell and never be seen to end.
 func commandRunPresent(
 	ctx context.Context,
 	pane tmux.Pane,
 	identity paneInputIdentity,
+	panePID int,
 ) (bool, error) {
 	refreshed, err := pane.Refresh(ctx)
 	if err == nil {
 		dead, present := refreshed.Formats().PaneDead()
 		if !present {
 			return true, errors.New("run_shell_command retained pane_dead state is unavailable")
+		}
+		if pid, known := refreshed.Formats().PanePID(); known && panePID != 0 && pid != panePID {
+			return false, nil
 		}
 		return !dead, nil
 	}
@@ -604,6 +620,15 @@ func commandWrapperGone(pidPath string) bool {
 	}
 	present, err := commandRunProcessPresent(pid)
 	return err == nil && !present
+}
+
+// commandRunStillInPane reports whether the run's pane still holds it, and
+// assumes it does when tmux cannot say.
+func commandRunStillInPane(ctx context.Context, run commandRun) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, commandPresenceProbeTimeout)
+	defer cancel()
+	present, err := commandRunPresent(probeCtx, run.pane, run.identity, run.panePID)
+	return err != nil || present
 }
 
 func commandRunDisappeared(err error) bool {
@@ -639,6 +664,9 @@ func (t *tools) awaitCommand(
 	output := waiting.output
 
 	completion := commandRun{
+		pane:         waiting.pane,
+		identity:     waiting.identity,
+		panePID:      waiting.panePID,
 		openedAt:     waiting.openedPath,
 		statusAt:     waiting.statusPath,
 		closedAt:     waiting.closedPath,
@@ -720,7 +748,7 @@ func waitForCompletedCommand(
 		}
 		select {
 		case <-presence.C:
-			if commandWrapperGone(entry.wrapperPIDAt) {
+			if commandWrapperGone(entry.wrapperPIDAt) || !commandRunStillInPane(waitCtx, entry) {
 				// It may have recorded its status on the way out.
 				status, ready, err = readCompletedCommand(entry)
 				if err != nil || ready {

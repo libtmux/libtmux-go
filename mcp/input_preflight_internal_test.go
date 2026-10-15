@@ -434,7 +434,7 @@ func TestCommandRunPresenceTreatsDeadPaneAsEnded(t *testing.T) {
 
 	present, err := commandRunPresent(ctx, pane, paneInputIdentity{
 		endpointID: 1, serverPID: 1, serverStartTime: 1, paneID: pane.ID().String(),
-	})
+	}, 0)
 	if err != nil || present {
 		t.Fatalf("dead pane presence = (%t, %v), want ended", present, err)
 	}

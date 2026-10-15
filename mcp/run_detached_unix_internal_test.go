@@ -38,6 +38,18 @@ func timedOutRun(ctx context.Context, t *testing.T, instance *Instance, target t
 	}
 }
 
+// ignoringHangups respawns pane as a shell that ignores SIGHUP, which every
+// command it runs inherits. Closing the pane's terminal then ends nothing it
+// ran, as on macOS, where a respawned pane's last command can outlive it.
+func ignoringHangups(ctx context.Context, t *testing.T, pane tmux.Pane) {
+	t.Helper()
+	command := "trap '' HUP; exec env ENV= PS1='" + tmuxtest.ShellPrompt + "' /bin/sh -i"
+	if _, err := pane.Respawn(ctx, tmux.RespawnRequest{Command: &command, Kill: true}); err != nil {
+		t.Fatal(err)
+	}
+	tmuxtest.WaitForShellReady(ctx, t, pane)
+}
+
 //libtmux:real-tmux
 func TestATimedOutRunTakesAnInterruptFromSendKeys(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -60,20 +72,28 @@ func TestATimedOutRunTakesAnInterruptFromSendKeys(t *testing.T) {
 
 //libtmux:real-tmux
 func TestRespawnEndsATimedOutRun(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	withoutCallerEnvironment(t)
-	target, _, panes := threePaneInputFixture(ctx, t)
-	instance := mustInternalMCPServer(t, target)
-	timedOutRun(ctx, t, instance, target, panes[0])
+	for _, hangups := range []string{"signaled", "ignored"} {
+		t.Run(hangups, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			withoutCallerEnvironment(t)
+			target, _, panes := threePaneInputFixture(ctx, t)
+			if hangups == "ignored" {
+				ignoringHangups(ctx, t, panes[0])
+			}
+			instance := mustInternalMCPServer(t, target)
+			timedOutRun(ctx, t, instance, target, panes[0])
 
-	// A respawned pane has a new shell, and the wrapper that would have
-	// recorded the run's status is gone with the old one.
-	if _, err := panes[0].Respawn(ctx, tmux.RespawnRequest{Kill: true}); err != nil {
-		t.Fatal(err)
+			// A respawned pane has a new shell, and the wrapper that would
+			// have recorded the run's status is no longer in it, whether or
+			// not it is still running somewhere.
+			if _, err := panes[0].Respawn(ctx, tmux.RespawnRequest{Kill: true}); err != nil {
+				t.Fatal(err)
+			}
+			tmuxtest.WaitForShellReady(ctx, t, panes[0])
+			requireRunCommandAvailable(ctx, t, instance, target, panes[0])
+		})
 	}
-	tmuxtest.WaitForShellReady(ctx, t, panes[0])
-	requireRunCommandAvailable(ctx, t, instance, target, panes[0])
 }
 
 //libtmux:real-tmux
@@ -129,10 +149,21 @@ func TestRunShellCommandReportsAnInterrupt(t *testing.T) {
 //
 //libtmux:real-tmux
 func TestRunShellCommandReportsAShellThatWentAway(t *testing.T) {
+	for _, hangups := range []string{"signaled", "ignored"} {
+		t.Run(hangups, func(t *testing.T) {
+			testRunShellCommandReportsAShellThatWentAway(t, hangups == "ignored")
+		})
+	}
+}
+
+func testRunShellCommandReportsAShellThatWentAway(t *testing.T, ignoreHangups bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	if ignoreHangups {
+		ignoringHangups(ctx, t, panes[0])
+	}
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 
