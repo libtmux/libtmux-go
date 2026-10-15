@@ -361,7 +361,10 @@ func TestNoDocumentationPinsAModuleVersion(t *testing.T) {
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" {
+			// The go tool ignores a name starting with "." or "_", such
+			// as a worktree checked out under .claude.
+			if name := entry.Name(); path != root &&
+				(strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
 				return filepath.SkipDir
 			}
 			return nil
