@@ -23,7 +23,7 @@ exited 3
 1
 2
 3
-stopped by signal 9
+stopped: killed
 ```
 
 <!-- docs:end -->
@@ -97,11 +97,11 @@ if err != nil {
 if err := <-stopped; err != nil {
 	return fmt.Errorf("stop command: %w", err)
 }
-if streamed.Signal == "" {
+if streamed.Signal == nil {
 	// tmux before 3.3 does not say which signal ended a pane.
 	fmt.Println("stopped")
 } else {
-	fmt.Println("stopped by signal", streamed.Signal)
+	fmt.Println("stopped:", streamed.Signal)
 }
 ```
 

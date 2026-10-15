@@ -38,7 +38,7 @@ func TestRunToCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if named, _ := tmux.ParseVersion("3.3"); !version.AtLeast(named) {
-		want = strings.Replace(want, "stopped by signal 9\n", "stopped\n", 1)
+		want = strings.Replace(want, "stopped: killed\n", "stopped\n", 1)
 	}
 	if printed != want {
 		t.Errorf("printed:\n%s\nwant the contents of output.txt:\n%s", printed, want)

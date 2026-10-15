@@ -42,9 +42,12 @@ var ErrOutcomeUnrecorded = errors.New("tmux: command outcome was never recorded"
 type RunResult struct {
 	// Status is the command's exit status. It is zero when Signal is set.
 	Status int
-	// Signal names the signal that ended the command, when one did. It is
-	// empty before tmux 3.3, which reports no signal for a dead pane.
-	Signal string
+	// Signal is the signal that ended the command, when one did, and nil
+	// otherwise. Compare it with os.Kill or a syscall constant: tmux reports
+	// a number on Linux and a name on macOS and the BSDs, and Signal holds
+	// the same value on each. It is nil before tmux 3.3, which reports no
+	// signal for a dead pane.
+	Signal os.Signal
 	// Lines is what the terminal showed when the command finished, its
 	// history included, without the blank lines tmux pads a screen with. A
 	// line the window's width wrapped is joined back into one. tmux keeps
@@ -62,6 +65,26 @@ func (result RunResult) clone() RunResult {
 	result.Lines = slices.Clone(result.Lines)
 	return result
 }
+
+// deadSignal turns tmux's pane_dead_signal into the signal it reports. A
+// name this platform has no number for keeps tmux's spelling.
+func deadSignal(reported string) os.Signal {
+	if reported == "" {
+		return nil
+	}
+	if signal, ok := platformSignal(reported); ok {
+		return signal
+	}
+	return reportedSignal(reported)
+}
+
+// reportedSignal is a signal tmux named that this platform has no number for.
+type reportedSignal string
+
+func (s reportedSignal) String() string { return string(s) }
+
+// Signal makes reportedSignal an [os.Signal].
+func (reportedSignal) Signal() {}
 
 // Run starts command in a new window of this session, waits for it to finish,
 // and reports its exit status and what its terminal showed. It is [os/exec]
@@ -531,7 +554,8 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	// A signal-killed pane reports pane_dead_signal and no pane_dead_status, so
 	// a missing status is the documented Signal case rather than an error.
 	result.Status, _ = finished.DeadStatus()
-	result.Signal, _ = finished.DeadSignal()
+	reported, _ := finished.DeadSignal()
+	result.Signal = deadSignal(reported)
 	lines, err := captureFinishedScreen(ctx, finished)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("read screen: %w", err)

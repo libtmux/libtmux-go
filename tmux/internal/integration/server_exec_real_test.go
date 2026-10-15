@@ -197,8 +197,8 @@ case "$*" in *'kill -s KILL --'*) ;; *) exec /bin/sh "$@" ;; esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Signal == "" {
-		t.Fatalf("Wait() reported no terminating signal: %+v", result)
+	if result.Signal != os.Kill {
+		t.Fatalf("Wait() signal = %v, want os.Kill; result = %+v", result.Signal, result)
 	}
 }
 

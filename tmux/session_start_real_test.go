@@ -351,8 +351,8 @@ func TestCommandKillStopsIt(t *testing.T) {
 	if elapsed := time.Since(started); elapsed > 5*time.Second {
 		t.Errorf("Wait() after Kill() took %s, want a prompt return", elapsed)
 	}
-	if reportsDeadSignal(ctx, t, server) && result.Signal == "" {
-		t.Errorf("Wait() after Kill() reported no signal, result = %+v", result)
+	if reportsDeadSignal(ctx, t, server) && result.Signal != os.Kill {
+		t.Errorf("Wait() after Kill() signal = %v, want os.Kill; result = %+v", result.Signal, result)
 	}
 }
 
@@ -670,8 +670,8 @@ func TestCommandStreamToKillsWhileStreaming(t *testing.T) {
 	if killErr := <-killed; killErr != nil {
 		t.Fatalf("Kill() error = %v", killErr)
 	}
-	if reportsDeadSignal(ctx, t, server) && result.Signal == "" {
-		t.Fatalf("StreamTo() = %+v, want the signal that killed the command", result)
+	if reportsDeadSignal(ctx, t, server) && result.Signal != os.Kill {
+		t.Fatalf("StreamTo() signal = %v, want os.Kill; result = %+v", result.Signal, result)
 	}
 }
 

@@ -3,4 +3,4 @@ exited 3
 1
 2
 3
-stopped by signal 9
+stopped: killed
