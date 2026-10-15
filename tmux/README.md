@@ -159,7 +159,8 @@ A [`Server`][tmux-server] reaches one tmux server. It holds
 each holding [`Pane`][tmux-pane] values, and every one of them is a record:
 what tmux said when you asked. The blocks in this section and under Errors
 come from [`../examples/object-model`](../examples/object-model), a whole
-program you can run the same way.
+program you can run from a clone with `go -C examples run ./object-model`;
+[`../examples/README.md`](../examples/README.md) has the commands to clone it.
 
 A block that starts with `// Given:` is the body of a function that returns
 an error, with the values that line names already in hand.

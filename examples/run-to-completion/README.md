@@ -124,7 +124,8 @@ line, and tmux can drop a line printed with nothing between it and the
 command's exit.
 
 **The streamed bytes are the terminal's.** Each line arrives ending `\r\n`,
-because that is what a program writing to a tty produces.
+because that is what a program writing to a tty produces. The output above
+shows them as a terminal draws them.
 
 ## Testing your own version
 

@@ -137,8 +137,8 @@ drives the same server your `tmux` command does.
 terminal: the command runs in a window of its own with a tty, and what comes
 back is its exit status and the screen tmux rendered. A nonzero status is a
 result, not an error.
-[`examples/run-to-completion`](examples/run-to-completion) shows one, on the
-tmux server you already use.
+[`examples/run-to-completion`](examples/run-to-completion) shows one, on a
+tmux server of its own.
 
 Every Go block on this page comes from a program or test that runs against a
 real tmux on every supported release, and each output shown is what that run
@@ -172,7 +172,8 @@ the values its first line names already in hand.
 
 [`examples/filter-query`](examples/filter-query) runs this and the two blocks
 below on a tmux server of its own. Like every example, it runs from a clone
-of the repository, with `go -C examples run ./filter-query`.
+of the repository, with `go -C examples run ./filter-query`;
+[`examples/README.md`](examples/README.md) has the commands to clone it.
 
 <!-- docs:checked examples/filter-query/output.txt -->
 This one prints `session: libtmux-filter`.

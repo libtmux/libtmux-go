@@ -75,7 +75,8 @@ Each filter below runs in [`examples/queries`](../examples/queries), against a
 server with one session, `work`, and two windows: `editor` holds one pane, and
 `logs` holds two, the second of them active. A result names each pane by its
 window and its index there, so `logs.1` is the pane with index 1 in the window
-named `logs`.
+named `logs`. Run it from a clone with `go -C examples run ./queries`;
+[`../examples/README.md`](../examples/README.md) has the commands to clone it.
 
 <!-- docs:checked examples/queries/main.go examples/queries/output.txt -->
 

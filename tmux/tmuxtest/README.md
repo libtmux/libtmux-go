@@ -83,8 +83,8 @@ $ go mod init demo && \
     go test
 ```
 
-It prints `ok` with the time the test took, or a failure that shows the
-screen, as below.
+It prints `PASS`, then `ok` with the time the test took, or a failure that
+shows the screen, as below.
 
 The test holds no sleeps. tmux tells each wait when the pane writes, and the
 wait reads the screen then, so a quick program costs milliseconds and a slow
