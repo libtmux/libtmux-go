@@ -182,13 +182,8 @@ tmux answers a command list with one merged stdout, so neither can share it.
 **More results than calls.** `SendKeys` with a command records the keys and the
 Enter that submits them, because that is the two tmux commands it sends.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./planned-build
 ```
-
-The example returns an error rather than printing a wrong answer if the plan
-stops grouping, if the split reports no pane, or if the last step does not read
-back the title an earlier step set — so those checks bite without the test
-repeating them.

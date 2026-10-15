@@ -120,14 +120,11 @@ and get the same answer.
 **Values, not handles.** A pane's index, title, and current command are already
 there. Reading them starts nothing.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./snapshot-browser
 ```
-
-The test asserts a line from each of the three levels, since a traversal that
-listed sessions and found no windows under them would still print something.
 
 ## See also
 

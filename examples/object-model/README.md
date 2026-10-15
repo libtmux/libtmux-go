@@ -133,7 +133,7 @@ when tmux could not be reached or the arguments could not be sent. A command
 that ran and failed, here `kill-window` on a window that does not exist, comes
 back with its exit status.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./object-model

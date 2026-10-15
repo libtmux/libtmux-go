@@ -89,14 +89,8 @@ fmt.Println("typed panes:", len(panes))
 The snapshot retains the captured hierarchy while repeated reads may observe
 later changes.
 
-These blocks are generated from [`main.go`](main.go). Editing the program
-rewrites them, so they cannot drift from code that compiles and runs.
-
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./filter-query
 ```
-
-The test asserts the live filter matched the session the example made, since a
-filter matching nothing would print a line just the same.

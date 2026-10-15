@@ -148,11 +148,8 @@ be misspelled.
 **Present, not just non-empty.** The accessor reports whether the hook is set
 separately from what it is set to.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./option-hook-editing
 ```
-
-The test asserts `true`: `false` would mean the write was accepted and the read
-did not find it, which is the failure worth catching.

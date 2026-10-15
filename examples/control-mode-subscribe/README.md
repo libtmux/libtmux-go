@@ -122,7 +122,7 @@ Filtering by `Kind()` is how you pick out the one you are waiting for.
 toward `session_attached`, which is why opening one is a choice rather than
 something the library does for you.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./control-mode-subscribe

@@ -129,7 +129,7 @@ so a connection-bound value refuses; `Server.LoadBuffer`,
 `Server.SaveBuffer` and `Pane.CaptureToFile` take a path and work over a
 connection.
 
-## Testing your own version
+## Running its test
 
 [`example_test.go`](example_test.go) runs this against a real tmux on a socket
 the test harness owns and removes, then decompresses the archive and checks the

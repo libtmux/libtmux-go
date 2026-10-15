@@ -243,7 +243,7 @@ absence with comma-ok, and `ExactlyOne` returns `tmuxq.ErrNoMatch` or
 filtering, and [`any-slice`](../any-slice) uses the same helpers with no tmux
 at all.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./queries

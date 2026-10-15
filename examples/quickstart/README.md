@@ -97,7 +97,7 @@ a signal.
 context is why the program is leaving. `main` calls `run` because `log.Fatal`
 skips deferred calls.
 
-## Testing your own version
+## Running its test
 
 [`example_test.go`](example_test.go) runs the program on a socket directory of
 its own and compares what it prints with [`output.txt`](output.txt):
@@ -105,7 +105,3 @@ its own and compares what it prints with [`output.txt`](output.txt):
 ```console
 $ go -C examples test ./quickstart
 ```
-
-The same file is pasted out of the [top-level README](../../README.md) into an
-empty module, built, and run on every change, so it is known to work as
-printed there.

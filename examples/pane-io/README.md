@@ -108,7 +108,7 @@ as `$ streamed 2 lines`. Comparing a whole line with the reply then never
 matches. The loop matches how the line ends, and the typed command, which ends
 in a quote, cannot match.
 
-## Testing your own version
+## Running its test
 
 [`example_test.go`](example_test.go) runs this against a real tmux on a socket
 the test harness owns and removes, and compares what it prints with

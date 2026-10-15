@@ -98,7 +98,7 @@ differently than asked would show here.
 **The two widths add up to one less than the window.** A detached window is
 80 columns wide, and tmux spends one column on the border between the panes.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./layout

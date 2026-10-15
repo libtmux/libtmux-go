@@ -71,7 +71,7 @@ protocol delimiters. A terminal connection refuses `Pane.Capture` instead of
 starting a hidden process. `Pane.CaptureToFile` stages the same capture through
 a tmux buffer and remains safe on the connection.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./fast-path

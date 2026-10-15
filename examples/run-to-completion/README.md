@@ -127,7 +127,7 @@ command's exit.
 because that is what a program writing to a tty produces. The output above
 shows them as a terminal draws them.
 
-## Testing your own version
+## Running its test
 
 [`example_test.go`](example_test.go) runs this against a real tmux on a socket
 the test harness owns and removes:

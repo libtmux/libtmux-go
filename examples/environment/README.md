@@ -128,11 +128,8 @@ the program is running in, without being told which one that is.
 terminal it was launched in would find the developer's pane instead of its own,
 so `tmuxtest` removes those variables from the environment it hands tmux.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./environment
 ```
-
-The test asserts both halves in the one line the example prints: either alone
-would pass while the other was broken.

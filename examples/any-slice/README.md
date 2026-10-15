@@ -69,7 +69,7 @@ a failure, so it is not an error.
 **`ExactlyOne` tells none from several.** It returns `tmuxq.ErrNoMatch` or
 `tmuxq.ErrMultipleMatches`, and `errors.Is` tells them apart.
 
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./any-slice
