@@ -302,10 +302,20 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 		return err
 	}
 	if kind == commandBlocking {
-		alive, err := s.IsAlive(ctx)
-		if (err == nil && !alive) || errors.Is(err, ErrNoServer) || errors.Is(err, ErrControlClosed) {
-			return fmt.Errorf("wait-for: the tmux server exited while waiting: %w", ErrNoServer)
-		}
+		return s.requireServerSurvived(ctx, "wait-for")
+	}
+	return nil
+}
+
+// requireServerSurvived follows a blocking command tmux ended with success.
+// tmux's client exits 0 when the server exits under it, with no output that
+// tells that from a real completion, so only the server can say. It returns an
+// error matching [ErrNoServer] when the server is gone; a failed look is no
+// evidence either way, and the command itself did complete.
+func (s Server) requireServerSurvived(ctx context.Context, subcommand string) error {
+	alive, err := s.IsAlive(ctx)
+	if (err == nil && !alive) || errors.Is(err, ErrNoServer) {
+		return fmt.Errorf("%s: the tmux server exited during the command: %w", subcommand, ErrNoServer)
 	}
 	return nil
 }

@@ -832,12 +832,16 @@ func (r *runShellGateRunner) recordedRequests() []tmuxcmd.Request {
 // it: with success. alive says what a later look at the server finds.
 type waitForExitRunner struct {
 	alive bool
+	// listErr, when set, fails the look at the server.
+	listErr error
 }
 
 func (r waitForExitRunner) Run(_ context.Context, request tmuxcmd.Request) (tmuxcmd.Result, error) {
 	switch {
 	case slices.Contains(request.Arguments, "-V"):
 		return tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}, nil
+	case slices.Contains(request.Arguments, "list-sessions") && r.listErr != nil:
+		return tmuxcmd.Result{}, r.listErr
 	case slices.Contains(request.Arguments, "list-sessions") && !r.alive:
 		return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"no server running on /tmp/tmux-0/test"}}, nil
 	default:
@@ -851,16 +855,18 @@ func TestWaitForReportsAServerThatExitedWhileWaiting(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
-		name  string
-		alive bool
-		want  error
+		name    string
+		alive   bool
+		listErr error
+		want    error
 	}{
-		{"server gone", false, ErrNoServer},
-		{"signalled", true, nil},
+		{"server gone", false, nil, ErrNoServer},
+		{"signalled", true, nil, nil},
+		{"connection closed while checking", true, ErrControlClosed, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dependencies := defaultServerDependencies()
-			dependencies.executor = waitForExitRunner{alive: test.alive}
+			dependencies.executor = waitForExitRunner{alive: test.alive, listErr: test.listErr}
 			executable, err := os.Executable()
 			if err != nil {
 				t.Fatal(err)
