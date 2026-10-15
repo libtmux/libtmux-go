@@ -594,8 +594,14 @@ func pasteAndRun(t *testing.T, absRoot string, program wholeBlock, printed strin
 			t.Fatal(err)
 		}
 	}
-	// t.TempDir names the subtest, and a socket path may hold only 103 bytes.
-	sockets, err := os.MkdirTemp("", "p") //nolint:usetesting // see above
+	// t.TempDir names the subtest, and a socket path may hold only 103 bytes,
+	// of which macOS's per-user TMPDIR alone takes about sixty, so the sockets
+	// go under /tmp where there is one.
+	base := ""
+	if info, err := os.Stat("/tmp"); err == nil && info.IsDir() {
+		base = "/tmp"
+	}
+	sockets, err := os.MkdirTemp(base, "p") //nolint:usetesting // see above
 	if err != nil {
 		t.Fatal(err)
 	}
