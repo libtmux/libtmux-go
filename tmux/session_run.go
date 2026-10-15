@@ -52,8 +52,10 @@ type RunResult struct {
 	Signal os.Signal
 	// Lines is what the terminal showed when the command finished, its
 	// history included, without the blank lines tmux pads a screen with. A
-	// line the window's width wrapped is joined back into one. tmux keeps
-	// at most the session's history-limit lines above the screen, 2000 by
+	// line the window's width wrapped is joined back into one, and each line
+	// ends at its last character that is not a space: a screen cannot tell
+	// spaces a program wrote from the blank cells after them. tmux keeps at
+	// most the session's history-limit lines above the screen, 2000 by
 	// default, so the start of a longer output is gone.
 	Lines []string
 	// Pane is the pane the command ran in. It is live only when the run kept
