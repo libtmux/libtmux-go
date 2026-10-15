@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -553,5 +555,43 @@ func TestAnUngrantedToolNamesItsToolset(t *testing.T) {
 	_, err = session.CallTool(ctx, &sdk.CallToolParams{Name: "kill_everything"})
 	if err == nil || strings.Contains(err.Error(), "toolset") {
 		t.Fatalf("a tool that does not exist = %v, want a plain unknown tool", err)
+	}
+}
+
+// A call refused for a blank required id is still a call, and the audit
+// record must show it as refused.
+//
+//libtmux:real-tmux
+func TestABlankIDRefusalIsAudited(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	auditPath := filepath.Join(t.TempDir(), "audit.jsonl")
+	t.Setenv(tmuxmcp.AuditEnvironmentVariable, auditPath)
+	request := tmux.NewSessionRequest{Name: "audited"}
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &request,
+	})
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+
+	result, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "send_keys", Arguments: map[string]any{"pane_id": "", "keys": []any{"x"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError {
+		t.Fatalf("send_keys with a blank pane_id answered %q, want an error", surfaceResultText(result))
+	}
+	record, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(record), `"tool":"send_keys"`) ||
+		!strings.Contains(string(record), `"outcome":"refused"`) {
+		t.Fatalf("audit record = %q, want send_keys refused", record)
 	}
 }

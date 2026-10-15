@@ -178,14 +178,16 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	}, serverOptions)
 	instance.server = server
 	instance.tools = tools
-	// Audit wraps the backstop so oversized refusals are recorded.
+	// Each middleware wraps those added before it. Audit wraps the backstop so
+	// oversized refusals are recorded, and both wrap namedArguments so its
+	// blank-id refusals are recorded too.
+	server.AddReceivingMiddleware(tools.namedArguments)
 	server.AddReceivingMiddleware(backstop())
 	writer, auditOwner := auditWriter()
 	if writer != nil {
 		server.AddReceivingMiddleware(audit(writer))
 	}
 	server.AddReceivingMiddleware(instance.scoped)
-	server.AddReceivingMiddleware(tools.namedArguments)
 
 	if err := registerToolManifest(server, tools); err != nil {
 		_ = instance.Close()
