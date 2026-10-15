@@ -483,7 +483,7 @@ func shellName(command string) string {
 // paneRunsAShell accepts a settled pane once a shell of either kind has the
 // foreground. One that is not POSIX will not become one, so there is nothing
 // more to wait for and the caller's own check refuses it by name.
-func paneRunsAShell(preflight paneInputPreflight) bool {
+func paneRunsAShell(_, preflight paneInputPreflight) bool {
 	shell := incompatibleRunCommandShell(preflight.Source)
 	return shell == "" || runsAShell(shell)
 }
