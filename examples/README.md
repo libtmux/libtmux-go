@@ -61,7 +61,7 @@ with what the program prints, on every supported tmux.
 
 ## In the other modules
 
-Two more live beside the modules they show, because each needs that module's
+These live beside the modules they show, because each needs that module's
 dependencies:
 
 | Example | Shows |

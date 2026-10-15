@@ -166,13 +166,13 @@ its own command and reports success before anything happened.
 That is the difference: not more access to tmux, but a better place to put
 the control loop, and a smaller bill for keeping it there.
 
-Three more things exist because an agent's context and its turn are the
-scarce resources, not tmux:
+Other parts of the design exist because an agent's context and its turn are
+the scarce resources, not tmux:
 
 - **Reads are bounded.** Captures keep the newest lines asked for and say
   what they left out. A search looks at no more than 200 panes, 20,000 lines,
   and 1,000,000 bytes, and matches for no more than five seconds.
-- **One call can make sixteen reads.**
+- **One call can make several reads.**
   [`call_read_tools_batch`][call_read_tools_batch] takes up to sixteen
   `inspect` calls, checks each against its own tool's schema, and answers with
   one row per call: its index, whether it succeeded, and whether its result
@@ -183,8 +183,8 @@ scarce resources, not tmux:
 
 ## The tools
 
-Forty-five tools, in four toolsets. A toolset is a named group of tools, and
-it is what an operator grants or withholds:
+The tools come in toolsets. A toolset is a named group of tools, and it is
+what an operator grants or withholds:
 
 - `inspect` reads tmux and what panes show, and changes nothing.
 - `manage` rearranges what exists: it renames, resizes, selects, and moves.
@@ -286,8 +286,8 @@ server started in. A bad path fails at startup, and nothing later can point
 the server at another tmux. A tmux server that is not running is not an
 error: tmux starts one when something asks it to.
 
-Three more flags answer a question and exit, which is what a config entry
-that will not start needs:
+Other flags answer a question and exit, which is what a config entry that
+will not start needs:
 
 | Flag | Answers |
 | --- | --- |
@@ -305,7 +305,7 @@ The environment sets the rest:
 
 | Variable | Does |
 | --- | --- |
-| [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable] | selects any unordered subset of the four toolsets |
+| [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable] | selects any unordered subset of the toolsets |
 | [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] | includes exact tool names after toolset expansion |
 | [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] | removes exact names after every inclusion |
 | [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] | selects an absolute socket path; mutually exclusive with `LIBTMUX_SOCKET` |
@@ -365,12 +365,12 @@ This protects the pane you are in. It does not make the tools a sandbox.
   carries `readOnlyHint`. A client that skips approval for read-only tools
   prompts on all of them. Classify by `tmuxEffects` in each tool's `_meta`
   instead.
-- **`tools/list` is large.** The reply is about 109 KB for the forty-one
-  tools granted by default and 116 KB for all forty-five. More than half of
+- **`tools/list` is large.** The reply is about 109 KB for the tools granted
+  by default and 116 KB for all of them. More than half of
   it is the `_meta` description, which repeats each tool's text and schemas.
   A client that wants a smaller reply can ignore `_meta`: each tool's text and
   schemas are also at the top level.
-- **Four tools spell their results differently.** `run_shell_command`,
+- **Some tools spell their results differently.** `run_shell_command`,
   `send_keys`, `paste_text`, and
   [`clear_pane_scrollback`][clear_pane_scrollback] return fields such as
   `exit_status`; every other tool returns fields such as `paneId`. Read a

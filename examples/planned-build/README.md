@@ -3,8 +3,8 @@
 Commands recorded rather than run, read before they are sent, then sent
 together.
 
-Two things make the indirection worth it. A step can name what an earlier step
-is *going* to create, so a build is written in one pass instead of stopping at
+The indirection pays for itself. A step can name what an earlier step is
+*going* to create, so a build is written in one pass instead of stopping at
 each split to learn a pane ID. And commands needing no answer travel in one tmux
 command list, so the window is built in fewer invocations than it has
 operations.
@@ -53,9 +53,9 @@ created here comes back nil, and that is not an error: it is the plan saying
 this one renders once the split reports. Anything it genuinely cannot render is
 an error, which is the point of reading a plan before sending it.
 
-**Explain says why each group ends.** Two things end one early: a command whose
-new object's ID a later step needs, and a command whose output is read. tmux
-answers a command list with one merged stdout, so neither can share it.
+**Explain says why each group ends.** A group ends early at a command whose
+new object's ID a later step needs, and at a command whose output is read.
+tmux answers a command list with one merged stdout, so neither can share it.
 
 **More results than calls.** `SendKeys` with a command records the keys and the
 Enter that submits them, because that is the two tmux commands it sends.

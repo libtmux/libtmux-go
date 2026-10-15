@@ -525,8 +525,8 @@ name instead, so a test of your own code needs no tmux installed.
 | `tmuxtest` | [`tmux/tmuxtest/`](tmux/tmuxtest/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest) | Run your program in a real tmux and assert on what it drew. |
 | `tmuxq` | [`tmuxq/`](tmuxq/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) | Model-free generic helpers for slices and `iter.Seq`. |
 
-Three more ship as **separate modules**, so `go get` on the library pulls in
-none of them:
+Others ship as **separate modules**, so `go get` on the library pulls in none
+of them:
 
 | Module | What it is |
 | --- | --- |
@@ -555,7 +555,7 @@ period, so pin an exact version. Not recommended for production.
   library.
 - **Go 1.26+**, rising with Go's own support window, about twice a year.
   tmux **3.2a through 3.8-rc2** across the core, workspace, and MCP modules,
-  tested on ten releases spanning that range.
+  tested on releases spanning that range.
 - **Unix.** Linux and macOS are tested on every change, and the BSDs, illumos,
   and Plan 9 build. A Windows build compiles, so a cross-platform program
   still builds, but there is no tmux there to reach.

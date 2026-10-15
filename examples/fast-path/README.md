@@ -1,7 +1,9 @@
 # fast-path
 
-The same ten reads run through a plain server and an owned connection. The
-example then shows which exact-capture operations each path supports.
+The same reads made two ways: through a plain server, which starts a tmux
+process for each command, and through a connection, one tmux client that
+carries them all. The example then shows which exact-capture operations each
+path supports.
 
 Both paths support tmux 3.2a through 3.8-rc2.
 

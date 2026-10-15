@@ -227,7 +227,7 @@ what [`Server.Snapshot`][tmux-server-snapshot] returns.
 
 ## Method names
 
-Three rules cover most of the surface, so a tmux command usually leads to its
+These rules cover most of the surface, so a tmux command usually leads to its
 Go method without a search.
 
 **The name drops the receiver's noun**, because the receiver already carries

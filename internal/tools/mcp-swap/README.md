@@ -5,8 +5,8 @@ them back.
 
 An MCP server cannot be exercised without a client, so the development loop is:
 rewrite every client's configuration to run the working tree, try it, restore
-what was there. Doing that by hand across eight client configurations is why
-it does not get done.
+what was there. Doing that by hand across every client's configuration is
+why it does not get done.
 
 ## Seeing what is configured now
 
@@ -89,7 +89,7 @@ $ go run ./internal/tools/mcp-swap use \
     --dry-run
 ```
 
-With no selectors, the tool considers all eight known configuration paths and
+With no selectors, the tool considers every known configuration path and
 updates the ones that exist. An explicit or implicit selection that has no
 existing configuration is an error rather than a successful no-op.
 
@@ -153,7 +153,7 @@ then replaces the retired setting while leaving unrelated environment values
 alone. Without that explicit migration, normal preflight lets the current MCP
 server reject the retired setting instead of silently widening authority.
 
-## The four server sources
+## Server sources
 
 The existing `--mode` interface remains available:
 

@@ -37,7 +37,7 @@ $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ## Answering questions without a client
 
 A misconfigured entry in somebody's agent CLI is hard to debug through the
-client that is failing to start it. These three flags answer without one:
+client that is failing to start it. These flags answer without one:
 
 ```console
 $ libtmux-mcp -version
