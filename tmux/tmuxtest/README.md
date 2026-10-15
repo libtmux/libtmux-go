@@ -144,6 +144,9 @@ shell on a server you build yourself with
 
 ## Testing without a tmux
 
+A block that starts with `// Given:` is the body of a test, with the values
+that line names already in hand.
+
 ### [`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux]: answer the commands you name
 
 Where the subject is your own code rather than tmux's behaviour,

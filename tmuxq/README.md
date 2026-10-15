@@ -38,6 +38,9 @@ about a pane, a window, or a session, and a filter that says which of them
 you want. [`Server.Snapshot`][tmux-server-snapshot] reads every record in one
 go, and only the filter changes from one question to the next.
 
+A block that starts with `// Given:` is the body of a function that returns
+an error, with the values that line names already in hand.
+
 <!-- docs:queries-read -->
 
 ```go

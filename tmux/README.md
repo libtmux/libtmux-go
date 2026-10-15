@@ -161,6 +161,9 @@ what tmux said when you asked. The blocks in this section and under Errors
 come from [`../examples/object-model`](../examples/object-model), a whole
 program you can run the same way.
 
+A block that starts with `// Given:` is the body of a function that returns
+an error, with the values that line names already in hand.
+
 ### [`Session.Rename`][tmux-session-rename]: a change returns a new record
 
 <!-- docs:records -->
