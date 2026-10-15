@@ -353,7 +353,21 @@ func TestWaitForBuildsExactArguments(t *testing.T) {
 				want = append(want, test.flag)
 			}
 			want = append(want, "--", "phase6")
-			assertServerExecArguments(t, runner, want)
+			requests := runner.recordedRequests()
+			// A wait or lock that tmux ends with success is followed by a
+			// look at the server, since tmux ends it the same way when the
+			// server exits.
+			wantRequests := 1
+			if test.mode == WaitForModeWait || test.mode == WaitForModeLock {
+				wantRequests = 2
+			}
+			if len(requests) != wantRequests {
+				t.Fatalf("request count = %d, want %d", len(requests), wantRequests)
+			}
+			assertRequestArguments(t, requests[0], want)
+			if wantRequests == 2 {
+				assertRequestArguments(t, requests[1], []string{"list-sessions"})
+			}
 		})
 	}
 }
@@ -812,4 +826,53 @@ func (r *runShellGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return withoutGlobalFlags(r.requests)
+}
+
+// waitForExitRunner answers a wait as tmux does when the server exits under
+// it: with success. alive says what a later look at the server finds.
+type waitForExitRunner struct {
+	alive bool
+}
+
+func (r waitForExitRunner) Run(_ context.Context, request tmuxcmd.Request) (tmuxcmd.Result, error) {
+	switch {
+	case slices.Contains(request.Arguments, "-V"):
+		return tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}, nil
+	case slices.Contains(request.Arguments, "list-sessions") && !r.alive:
+		return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"no server running on /tmp/tmux-0/test"}}, nil
+	default:
+		return tmuxcmd.Result{}, nil
+	}
+}
+
+// tmux ends a waiting client with success when its server exits, and a wait
+// must not read that as the channel being signalled.
+func TestWaitForReportsAServerThatExitedWhileWaiting(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		alive bool
+		want  error
+	}{
+		{"server gone", false, ErrNoServer},
+		{"signalled", true, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dependencies := defaultServerDependencies()
+			dependencies.executor = waitForExitRunner{alive: test.alive}
+			executable, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			server, err := newServer(ServerOptions{Binary: executable}, dependencies)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = server.WaitFor(context.Background(), WaitForRequest{Channel: "done"})
+			if !errors.Is(err, test.want) || (test.want == nil && err != nil) {
+				t.Fatalf("WaitFor() = %v, want %v", err, test.want)
+			}
+		})
+	}
 }

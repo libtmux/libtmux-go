@@ -256,6 +256,11 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 // for that call and closed when it ends, so canceling it, or a peer never
 // signaling, leaves every lane free. Closing the connection ends a parked call
 // with [ErrControlClosed].
+//
+// tmux ends a waiting client with success when the server exits, which reads
+// as a signal. A wait or lock that tmux ends that way is checked against the
+// server and returns an error matching [ErrNoServer] when the server is gone.
+// A signal followed at once by the server exiting reads the same way.
 func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 	if err := validateServerCommandArgument(
 		"wait-for", "Channel", request.Channel, true,
@@ -291,7 +296,16 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 		kind = commandBlocking
 	}
 	result, err := s.literalCmdAs(ctx, kind, arguments...)
-	return requireRedactedServerCommandNoStderr("wait-for", result, err)
+	if err := requireRedactedServerCommandNoStderr("wait-for", result, err); err != nil {
+		return err
+	}
+	if kind == commandBlocking {
+		alive, err := s.IsAlive(ctx)
+		if (err == nil && !alive) || errors.Is(err, ErrNoServer) || errors.Is(err, ErrControlClosed) {
+			return fmt.Errorf("wait-for: the tmux server exited while waiting: %w", ErrNoServer)
+		}
+	}
+	return nil
 }
 
 // IfShell executes ThenCommand when ShellCommand succeeds and ElseCommand, if
