@@ -180,8 +180,8 @@ windows:
 
 ## Using it
 
-A block that starts with `// Given:` is the body of a function that returns
-an error, with the values that line names already in hand.
+A block that starts with `// Given:` is the body of a function that prints
+what failed and returns, with the values that line names already in hand.
 
 ### [`workspace.Parse`][workspace-parse]: read a workspace
 
