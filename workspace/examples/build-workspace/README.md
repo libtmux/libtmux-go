@@ -7,6 +7,10 @@ program runs anywhere without one.
 
 ## Running it
 
+It runs from a clone of the repository;
+[`examples/README.md`](../../../examples/README.md) has the commands to clone
+it.
+
 ```console
 $ go -C workspace run ./examples/build-workspace
 ```
@@ -39,7 +43,7 @@ it, so they stay. A workspace whose panes each run something short-lived as
 their `shell` disappears before you can look at it, which is worth knowing
 before writing one.
 
-## Testing it
+## Running its test
 
 [`main_test.go`](main_test.go) runs the program against a real tmux, with a
 `~/.tmux.conf` that would change the output if the program read it, and

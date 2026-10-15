@@ -149,6 +149,9 @@ are left out, and each reply shows only the fields that answer the call:
 
 <!-- docs:end -->
 
+The example prints these with `-trace`; [its page](examples/agent-workflow)
+has the command.
+
 The agent drives tmux directly. Nothing is copy-pasted out of a terminal, and
 waiting for a server to come up is one call rather than a loop of screenshots.
 

@@ -16,13 +16,17 @@ of what comes back. The example grants itself the `inspect`, `manage`, and
 
 ## Running it
 
+It runs from a clone of the repository;
+[`examples/README.md`](../../../examples/README.md) has the commands to clone
+it.
+
 ```console
 $ go -C mcp run ./examples/agent-workflow -socket-name demo
 ```
 
-Without `-socket-name` it uses a socket of its own, and `-socket-name default`
-points it at the tmux you use. On a socket with nothing on it, it starts a
-session there and prints:
+Without `-socket-name` it uses a socket named `libtmux-agent-workflow`, and
+`-socket-name default` points it at the tmux you use. On a socket with nothing
+on it, it starts a session there and prints:
 
 <!-- docs:output mcp/examples/agent-workflow/output.txt -->
 
@@ -39,7 +43,16 @@ the window now holds 2 panes: %0 %1
 
 <!-- docs:end -->
 
-Clean up with `tmux -L demo kill-server`.
+It leaves that session running for you to attach to and look at, so a second
+run on the same socket works beside it and prints other pane ids. Clean up with
+`tmux -L demo kill-server`, or `tmux -L libtmux-agent-workflow kill-server`
+after a run without the flag.
+
+`-trace` also prints each call it makes and what came back, to standard error:
+
+```console
+$ go -C mcp run ./examples/agent-workflow -socket-name demo -trace
+```
 
 Pointed at a tmux you already use, it works beside what is there, so the pane
 ids differ. Run from inside that tmux, it reports its own pane and leaves it
@@ -79,7 +92,7 @@ asked for.
 **The example uses the real manifest.** In-memory transport changes no tool
 names, native schemas, metadata, filtering, or static capability disclosure.
 
-## Testing it
+## Running its test
 
 [`main_test.go`](main_test.go) runs the program against a real tmux on a
 socket of its own and compares what it prints with [`output.txt`](output.txt):

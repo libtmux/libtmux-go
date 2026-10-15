@@ -1,7 +1,7 @@
 # Examples
 
 Runnable programs, one per topic. Each starts what it needs in tmux and
-removes it on the way out, so running one leaves nothing behind there.
+removes it on the way out, so no tmux server is left running after one.
 `byte-streams` also writes an archive to your temporary directory, and names
 it.
 
@@ -77,7 +77,7 @@ the same thing on every machine and never touch a tmux you have open.
 `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
 server the test harness owns.
 
-All of them need tmux 3.2a or newer on `PATH`.
+Every example but `any-slice` needs tmux 3.2a or newer on `PATH`.
 
 ## Testing them
 
