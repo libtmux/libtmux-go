@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -35,7 +36,11 @@ type paneSummary struct {
 
 func main() {
 	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default")
+	traceCalls := flag.Bool("trace", false, "print the work calls and what came back, to standard error")
 	flag.Parse()
+	if *traceCalls {
+		traced = os.Stderr
+	}
 	if _, set := os.LookupEnv(tmuxmcp.ToolsetsEnvironmentVariable); !set {
 		if err := os.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "inspect,manage,execute"); err != nil {
 			fmt.Fprintln(os.Stderr, "agent-workflow:", err)
@@ -334,6 +339,9 @@ func call(
 	if result.IsError {
 		return fmt.Errorf("%s: %s", name, contentText(result))
 	}
+	if err := traceCall(name, arguments, result.StructuredContent); err != nil {
+		return fmt.Errorf("%s: trace: %w", name, err)
+	}
 	if into == nil {
 		return nil
 	}
@@ -345,6 +353,52 @@ func call(
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
+}
+
+// traced receives the work calls and what came back, when set.
+var traced io.Writer
+
+// tracedReplies names the work calls traced, and the fields of each reply
+// shown. A cursor is left out wherever it appears: it is a token that differs
+// on every run.
+var tracedReplies = map[string][]string{
+	"split_window":      {"paneId"},
+	"paste_text":        {"bytes"},
+	"wait_for_text":     {"outcome", "found", "matched"},
+	"run_shell_command": {"exit_status", "output", "timed_out"},
+}
+
+func traceCall(name string, arguments, reply any) error {
+	fields, shown := tracedReplies[name]
+	if traced == nil || !shown {
+		return nil
+	}
+	sent := map[string]any{}
+	if given, ok := arguments.(map[string]any); ok {
+		for key, value := range given {
+			if key != "cursor" {
+				sent[key] = value
+			}
+		}
+	}
+	kept := map[string]any{}
+	if replied, ok := reply.(map[string]any); ok {
+		for _, field := range fields {
+			if value, present := replied[field]; present {
+				kept[field] = value
+			}
+		}
+	}
+	request, err := json.Marshal(sent)
+	if err != nil {
+		return err
+	}
+	answer, err := json.Marshal(kept)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(traced, "→ %s %s\n← %s\n", name, request, answer)
+	return err
 }
 
 func contentText(result *sdk.CallToolResult) string {

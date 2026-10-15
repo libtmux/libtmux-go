@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,6 +52,10 @@ func TestAgentWorkflowPrintsItsPublishedOutput(t *testing.T) {
 		_ = os.RemoveAll(sockets)
 	})
 
+	var calls strings.Builder
+	traced = &calls
+	t.Cleanup(func() { traced = nil })
+
 	read, write, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -80,5 +85,12 @@ func TestAgentWorkflowPrintsItsPublishedOutput(t *testing.T) {
 	}
 	if string(printed) != string(want) {
 		t.Errorf("the program printed:\n%s\noutput.txt says it prints:\n%s", printed, want)
+	}
+	wantCalls, err := os.ReadFile("trace.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.String() != string(wantCalls) {
+		t.Errorf("the program made these calls:\n%s\ntrace.txt says it makes:\n%s", calls.String(), wantCalls)
 	}
 }

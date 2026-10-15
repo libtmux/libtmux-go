@@ -1,0 +1,8 @@
+→ split_window {"direction":"right","pane_id":"%0","percent":40}
+← {"paneId":"%1"}
+→ paste_text {"enter":true,"pane_id":"%1","text":"if sleep 1; then printf 'agent-workflow-%s\\n' ready; else printf 'agent-workflow-%s\\n' failed; fi"}
+← {"bytes":97}
+→ wait_for_text {"pane_id":"%1","patterns":["agent-workflow-ready"],"stop":["agent-workflow-failed"],"timeout":30}
+← {"found":true,"matched":"agent-workflow-ready","outcome":"matched"}
+→ run_shell_command {"command":"printf 'bounded work\\n'","pane_id":"%1","timeout":30}
+← {"exit_status":0,"output":["bounded work"],"timed_out":false}

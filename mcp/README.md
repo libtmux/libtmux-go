@@ -124,18 +124,24 @@ it afterwards. [Settings](#settings) lists the other flags.
 
 ## What it feels like
 
-An exchange of the kind it makes possible, written for illustration:
+These are the calls [`examples/agent-workflow`](examples/agent-workflow)
+makes to run work in a pane beside its own, and what came back. Cursor tokens
+are left out, and each reply shows only the fields that answer the call:
 
-> **You:** Start the api server in a pane and tell me when it is listening.
->
-> **Agent:** Created window `api` and started it. Waiting… it printed
-> `listening on :8080` after four seconds. The pane is `%3` if you want to
-> watch it.
+<!-- docs:output mcp/examples/agent-workflow/trace.txt -->
 
-> **You:** Run the auth tests in a new pane beside it.
->
-> **Agent:** Split `%3` to the right and ran `pytest tests/auth`. Exit status
-> 1 — two failures in `test_token_refresh`. Want the output?
+```text
+→ split_window {"direction":"right","pane_id":"%0","percent":40}
+← {"paneId":"%1"}
+→ paste_text {"enter":true,"pane_id":"%1","text":"if sleep 1; then printf 'agent-workflow-%s\\n' ready; else printf 'agent-workflow-%s\\n' failed; fi"}
+← {"bytes":97}
+→ wait_for_text {"pane_id":"%1","patterns":["agent-workflow-ready"],"stop":["agent-workflow-failed"],"timeout":30}
+← {"found":true,"matched":"agent-workflow-ready","outcome":"matched"}
+→ run_shell_command {"command":"printf 'bounded work\\n'","pane_id":"%1","timeout":30}
+← {"exit_status":0,"output":["bounded work"],"timed_out":false}
+```
+
+<!-- docs:end -->
 
 The agent drives tmux directly. Nothing is copy-pasted out of a terminal, and
 waiting for a server to come up is one call rather than a loop of screenshots.
