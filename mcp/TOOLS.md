@@ -1437,6 +1437,9 @@ Changes tmux state.
 | `output_unavailable` | string |
 | `running` | string |
 | `timeout_clamped` | boolean |
+| `truncated` | boolean |
+| `truncated_bytes` | integer |
+| `truncated_lines` | integer |
 
 ### `search_panes`
 

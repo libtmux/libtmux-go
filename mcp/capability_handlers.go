@@ -209,6 +209,9 @@ type runShellCommandCapabilityOutput struct {
 	Output                  []string `json:"output"`
 	OutputUnavailable       string   `json:"output_unavailable,omitempty"`
 	LinesMissed             bool     `json:"lines_missed,omitempty"`
+	Truncated               bool     `json:"truncated,omitempty"`
+	TruncatedLines          int      `json:"truncated_lines,omitempty"`
+	TruncatedBytes          int      `json:"truncated_bytes,omitempty"`
 	EffectiveTimeoutSeconds int      `json:"effective_timeout_seconds,omitempty"`
 	TimeoutClamped          bool     `json:"timeout_clamped,omitempty"`
 }
@@ -650,6 +653,9 @@ func (t *tools) catalogRunShellCommand(ctx context.Context, request *sdk.CallToo
 		ExitStatus: output.ExitStatus, TimedOut: output.TimedOut,
 		Running: output.Running, Output: output.Output, OutputUnavailable: output.OutputUnavailable,
 		LinesMissed:             output.LinesMissed,
+		Truncated:               output.Truncated,
+		TruncatedLines:          output.TruncatedLines,
+		TruncatedBytes:          output.TruncatedBytes,
 		EffectiveTimeoutSeconds: output.EffectiveTimeoutSeconds,
 		TimeoutClamped:          output.TimeoutClamped,
 	}
