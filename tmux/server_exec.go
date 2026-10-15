@@ -149,7 +149,9 @@ type SourceFileRequest struct {
 }
 
 // RunShell executes a shell command through tmux and returns an owned stdout
-// slice. A background request returns nil after tmux accepts the job.
+// slice. A background request returns nil after tmux accepts the job. tmux 3.3
+// and 3.4 hand a foreground command's output to no client, so the slice is
+// empty there whatever the command printed.
 // Unsupported optional flags follow [UnsupportedPolicy]. A completed stderr
 // result is an error; context cancellation can be observed with [errors.Is] but
 // does not establish that tmux did not start the job.

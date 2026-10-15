@@ -763,7 +763,17 @@ func TestConnectionRunShellReturnsItsOutput(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RunShell(%q) on the unbound server error = %v", test.command, err)
 			}
-			if !slices.Equal(got, unbound) || (test.want != nil && !slices.Equal(got, test.want)) {
+			// tmux 3.3 and 3.4 hand a foreground run-shell's output to no
+			// client, bound or not, so only the two agreeing is asked there.
+			version, err := server.Version(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			from33, _ := tmux.ParseVersion("3.3")
+			from35, _ := tmux.ParseVersion("3.5")
+			printsOutput := !version.AtLeast(from33) || version.AtLeast(from35)
+			if !slices.Equal(got, unbound) ||
+				(printsOutput && test.want != nil && !slices.Equal(got, test.want)) {
 				t.Fatalf("RunShell(%q) on a connection = %q, want %q (unbound %q)",
 					test.command, got, test.want, unbound)
 			}
