@@ -44,7 +44,8 @@ library, under [Packages](#packages).
 [Watch tmux](#watch-tmux-change) ·
 [Choosing a path](#choosing-how-to-reach-tmux) ·
 [Testing](#testing-your-own-code) · [Packages](#packages) ·
-[Support](#support-and-status) · [Documentation](#documentation)
+[Leaves out](#what-it-leaves-out) · [Support](#support-and-status) ·
+[Documentation](#documentation)
 
 ## Quick start
 
@@ -546,6 +547,19 @@ The workspace CLI:
 $ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
 ```
 
+## What it leaves out
+
+- **Live objects.** A [`Session`][tmux-session] or a [`Pane`][tmux-pane] is a
+  record of what tmux reported when it was read, and does not change when
+  tmux does. Read again, or subscribe, to see a change.
+- **A terminal emulator.** A capture and [`Session.Run`][tmux-session-run]
+  return the screen tmux drew. [`PaneObservation`][tmux-paneobservation]
+  returns the bytes a program wrote.
+- **Your tmux configuration file.** Options and hooks are read and set on a
+  running server, and nothing here edits `~/.tmux.conf`. tmux reads it when
+  it starts a server, unless
+  [`ServerOptions.ConfigFile`][tmux-serveroptions-configfile] names another.
+
 ## Support and status
 
 Any release may change or remove exported identifiers without a deprecation
@@ -616,7 +630,9 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
 [tmux-pane-openobservation]: https://libtmux.org/en/go/latest/reference/tmux-pane-openobservation/
 [tmux-pane-writer]: https://libtmux.org/en/go/latest/reference/tmux-pane-writer/
+[tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
+[tmux-paneobservation]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation/
 [tmux-plan-run]: https://libtmux.org/en/go/latest/reference/tmux-plan-run/
 [tmux-server-loadbufferfrom]: https://libtmux.org/en/go/latest/reference/tmux-server-loadbufferfrom/
 [tmux-server-panes]: https://libtmux.org/en/go/latest/reference/tmux-server-panes/
@@ -624,11 +640,13 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-server-sessions]: https://libtmux.org/en/go/latest/reference/tmux-server-sessions/
 [tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
 [tmux-server-windows]: https://libtmux.org/en/go/latest/reference/tmux-server-windows/
+[tmux-serveroptions-configfile]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-configfile/
 [tmux-serveroptions]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions/
 [tmux-session-opencontrol]: https://libtmux.org/en/go/latest/reference/tmux-session-opencontrol/
 [tmux-session-opennotifications]: https://libtmux.org/en/go/latest/reference/tmux-session-opennotifications/
 [tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
+[tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
 [tmux]: https://github.com/tmux/tmux
 [tmuxq-matching]: https://libtmux.org/en/go/latest/reference/tmuxq-matching/
 [tmuxtest-newserver]: https://libtmux.org/en/go/latest/reference/tmuxtest-newserver/
