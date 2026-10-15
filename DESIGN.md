@@ -348,8 +348,8 @@ always an extra materialization: measured against tmux 3.7d with
 `ServerOptions.CommandObserver`, a point lookup costs three tmux commands on a
 server whose identity has not been read yet and one after, and `Window.Rename`
 and `Pane.Select` each add one listing of the scope they changed.
-`Window.SelectLayout` adds none, because it returns `error`. A caller who wanted the
-fresh record would pay the same to call `Refresh`, and a caller who did not
+`Window.SelectLayout` adds none, because it returns `error`. A caller who wanted
+the fresh record would pay the same to call `Refresh`, and a caller who did not
 pays anyway. Nothing in tmux forces the choice either way: a stale view still
 resolves, because a record addresses its window as `@window`, and its pane as
 `$session:.%pane`, which a renumber or a move does not change. A window linked
@@ -766,8 +766,8 @@ are on a `PaneObservation`: each notification reaches one call, and a waiting
 call leaves when its context ends. Every end of a read matches
 `ErrControlClosed`; `os.ErrClosed` additionally marks a close the caller asked
 for and `ErrControlStreamLost` one tmux caused. A backlog overflow is not an
-end of the process, so it matches none of the three. `NotificationOptions.BacklogBytes` sizes
-that backlog.
+end of the process, so it matches none of the three.
+`NotificationOptions.BacklogBytes` sizes that backlog.
 
 A `NotificationStream` has no `Reconnect`, deliberately. A replacement client
 starts with none of the old one's subscriptions or pause hold, so resuming
@@ -878,9 +878,9 @@ environment, cancellation, cleanup, and control-client teardown.
 This is alpha. Releases carry an `-alpha` prerelease tag, and the lowest clean
 one is `v0.0.1-alpha.1`: semver permits `v0.0.0-alpha.1`, but `v0.0.0-` is the
 namespace the go command generates pseudo-versions in, so a real tag there reads
-as one. Under semver a prerelease sorts below its own release, and `v0.x` already
-carries no compatibility promise, so the tag says what the version number alone
-would leave implied.
+as one. Under semver a prerelease sorts below its own release, and `v0.x`
+already carries no compatibility promise, so the tag says what the version
+number alone would leave implied.
 
 Each module is tagged in its own directory, which is how the go command finds a
 module that does not sit at the repository root:
