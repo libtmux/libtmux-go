@@ -42,7 +42,7 @@ func RequireTmux(
 // the program does.
 func Program(t *testing.T, run func(context.Context) error) {
 	t.Helper()
-	PrivateSockets(t)
+	privateSockets(t)
 
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
@@ -65,12 +65,12 @@ func Server(t *testing.T, run func(context.Context, tmux.Server) error) {
 	MatchesFile(t, printed, "output.txt")
 }
 
-// PrivateSockets gives the rest of the test a tmux socket directory of its
+// privateSockets gives the rest of the test a tmux socket directory of its
 // own. A program that builds its server itself, rather than taking one from
 // the harness, then reaches neither the developer's tmux nor another test's.
 // Whatever server the program left running is killed before the directory is
 // removed.
-func PrivateSockets(t *testing.T) {
+func privateSockets(t *testing.T) {
 	t.Helper()
 
 	// t.TempDir names the test, and a socket path may hold only 103 bytes.
