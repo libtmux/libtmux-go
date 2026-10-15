@@ -67,6 +67,12 @@ Gemini CLI:
 $ gemini mcp add tmux libtmux-mcp
 ```
 
+Claude Code starts each server it lists, to check that it connects:
+
+```console
+$ claude mcp list
+```
+
 Claude Desktop reads `claude_desktop_config.json`, and starts its servers
 without your shell's `PATH`. In place of the path below, give it the one
 `command -v libtmux-mcp` prints:
