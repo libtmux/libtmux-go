@@ -25,7 +25,7 @@ func wrapperPIDPath(openedPath string) string {
 // would record no status. A trap is not inherited, so the command still dies
 // of the signal and the wrapper goes on to record that.
 func wrapperScript(
-	mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce string,
+	mark, column, openedPath, commandPath, trapPath, statusPath, closedPath, nonce string,
 ) string {
 	command := shellQuote(commandPath)
 	traps := shellQuote(trapPath)
@@ -65,6 +65,10 @@ func wrapperScript(
 		" || " + trapStatus + "=125\n" +
 		"fi\n" +
 		"\\trap : INT\n" +
+		// A shell with no line editor draws its prompt after the echo of keys
+		// typed before it was ready, which leaves the cursor along a row that
+		// holds the prompt. The output starts on a row of its own instead.
+		"case \"$(" + column + " 2>/dev/null)\" in ''|0) ;; *) command printf '\\n' ;; esac\n" +
 		publishRecord(mark, openedPath) +
 		"if command test \"$" + trapStatus + "\" -ne 0; then\n" +
 		"  " + status + "=125\n" +

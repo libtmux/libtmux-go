@@ -176,7 +176,7 @@ func TestWrapperRejectsOversizedTrapDeclarations(t *testing.T) {
 				t.Fatal(err)
 			}
 			script := filepath.Join(root, "script")
-			contents := wrapperScript("command printf '0 0 0 80 24\\n'", opened,
+			contents := wrapperScript("command printf '0 0 0 80 24\\n'", "command printf 0", opened,
 				command, traps, status, closed, "bounded")
 			if err := os.WriteFile(script, []byte(contents), 0o600); err != nil {
 				t.Fatal(err)

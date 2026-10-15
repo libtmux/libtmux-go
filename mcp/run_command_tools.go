@@ -249,16 +249,18 @@ func (t *tools) startCommand(
 	// newline from output ending mid-row. Files hide markers from the pane, and
 	// sourcing the caller's script inside a subshell keeps its syntax and an
 	// `exit` command from changing the bookkeeping wrapper's structure.
-	mark := fmt.Sprintf(
-		"%s -S %s display-message -p -t %s "+
-			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
-		shellQuote(route.executable),
-		shellQuote(route.socketPath),
-		shellQuote(route.paneID),
-	)
+	position := func(format string) string {
+		return fmt.Sprintf("%s -S %s display-message -p -t %s %s",
+			shellQuote(route.executable),
+			shellQuote(route.socketPath),
+			shellQuote(route.paneID),
+			shellQuote(format),
+		)
+	}
+	mark := position("#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}")
 	nonce := fmt.Sprintf("%x", sha256.Sum256([]byte(directory)))[:16]
 	script := wrapperScript(
-		mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce,
+		mark, position("#{cursor_x}"), openedPath, commandPath, trapPath, statusPath, closedPath, nonce,
 	)
 
 	if err := os.WriteFile(commandPath, []byte(input.Command+"\n"), 0o600); err != nil {
