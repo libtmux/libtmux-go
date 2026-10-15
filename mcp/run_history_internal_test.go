@@ -71,3 +71,41 @@ func lastLine(lines []string) string {
 	}
 	return lines[len(lines)-1]
 }
+
+// A terminal that does not echo shows no wrapper line to find the output
+// after. Once the history is nearly full, a short command must still come
+// back as only what it printed.
+//
+//libtmux:real-tmux
+func TestRunShellCommandReadsOutputWithoutEchoOnceTheHistoryFills(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, _ := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+
+	if _, err := target.Cmd(ctx, "set-option", "-g", "history-limit", "100"); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := target.Sessions(ctx)
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("Sessions() = (%d, %v)", len(sessions), err)
+	}
+	window := tmuxtest.NewWindow(ctx, t, sessions[0], tmux.NewWindowRequest{})
+	pane, err := window.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmuxtest.WaitForShellReady(ctx, t, pane)
+	// Fill the history, then stop the terminal echoing what is typed.
+	tmuxtest.TypeAndWait(ctx, t, pane, "seq 1 150; stty -echo")
+
+	_, ran, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+		PaneID: pane.ID().String(), Command: "echo hi", TimeoutSeconds: 10,
+	})
+	if err != nil || !slices.Equal(ran.Output, []string{"hi"}) || ran.LinesMissed {
+		t.Fatalf("run of echo hi = (output %q, missed %t, %v), want [hi]",
+			ran.Output, ran.LinesMissed, err)
+	}
+}

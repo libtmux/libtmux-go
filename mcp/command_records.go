@@ -48,7 +48,10 @@ func (t *tools) attachCommandOutput(
 		return nil
 	}
 	if closed, err := readMark(closedPath); err == nil && historyFilled(closed, now) {
-		return t.attachOutputBeforeTheEnd(ctx, pane, openedPath, closed, now, limits, output)
+		handled, err := t.attachOutputBeforeTheEnd(ctx, pane, opened, openedPath, closed, now, limits, output)
+		if err != nil || handled {
+			return err
+		}
 	}
 	// Convert absolute marks to current grid rows; tmux renumbers trimmed history.
 	request := tmux.CapturePaneRequest{
@@ -128,15 +131,22 @@ func historyFilled(closed mark, now paneState) bool {
 // reads far enough to find the line the wrapper was typed on, where the output
 // starts. When that line is out of reach, the start of the output is too, and
 // the reply says so.
+//
+// It returns false, having attached nothing, when the terminal showed no
+// wrapper line to look for and nothing says tmux discarded history under the
+// opening mark, which then still bounds the output.
 func (t *tools) attachOutputBeforeTheEnd(
 	ctx context.Context,
 	pane tmux.Pane,
+	opened mark,
 	openedPath string,
 	closed mark,
 	now paneState,
 	limits bounds,
 	output *runCommandOutput,
-) error {
+) (bool, error) {
+	_, promptErr := os.Stat(promptedPath(openedPath))
+	prompted := promptErr == nil
 	end := closed.row
 	if now.historySize < closed.historySize {
 		// The history filled again while the shell drew its prompt.
@@ -147,7 +157,7 @@ func (t *tools) attachOutputBeforeTheEnd(
 	}
 	if end < 0 {
 		output.Output = nil
-		return nil
+		return true, nil
 	}
 	// Enough rows for the output a reply can hold, then the whole history
 	// when the wrapper line is further back than that.
@@ -160,10 +170,10 @@ func (t *tools) attachOutputBeforeTheEnd(
 		})
 		if err != nil {
 			if t.runtime.isTerminalError(err) || isContextError(err) {
-				return err
+				return true, err
 			}
 			output.OutputUnavailable = err.Error()
-			return nil
+			return true, nil
 		}
 		for index, line := range lines {
 			lines[index] = strings.TrimRight(line, " ")
@@ -177,10 +187,23 @@ func (t *tools) attachOutputBeforeTheEnd(
 			break
 		}
 	}
+	if prompted {
+		if output.LinesMissed && closed.historySize >= opened.historySize {
+			// The prompt shared the row the keys were typed on, so the
+			// terminal did not echo them, and there was no wrapper line to
+			// find.
+			output.LinesMissed = false
+			return false, nil
+		}
+		if !output.LinesMissed && len(rest) > 0 {
+			// The shell drew its prompt on the row after the wrapper line.
+			rest = rest[1:]
+		}
+	}
 	kept, report := limits.apply(rest)
 	output.Output = kept
 	output.truncation = report
-	return nil
+	return true, nil
 }
 
 // moved reports grid renumbering at a stable pane size. Resize-induced history

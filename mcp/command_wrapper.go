@@ -14,6 +14,12 @@ func wrapperPIDPath(openedPath string) string {
 	return openedPath + ".pid"
 }
 
+// promptedPath is where a wrapper records that it found the cursor along a
+// row the shell's prompt holds, beside the record that says it has started.
+func promptedPath(openedPath string) string {
+	return openedPath + ".prompted"
+}
+
 // wrapperScript renders the bookkeeping wrapper the pane runs. Bash and zsh
 // trap declarations are carried as opaque code into the command subshell;
 // bookkeeping runs with ERR, DEBUG, errexit, and xtrace disabled. After timeout
@@ -66,9 +72,12 @@ func wrapperScript(
 		"fi\n" +
 		"\\trap : INT\n" +
 		// A shell with no line editor draws its prompt after the echo of keys
-		// typed before it was ready, which leaves the cursor along a row that
-		// holds the prompt. The output starts on a row of its own instead.
-		"case \"$(" + column + " 2>/dev/null)\" in ''|0) ;; *) command printf '\\n' ;; esac\n" +
+		// typed before it was ready, and a terminal that does not echo leaves
+		// the cursor after the prompt: either way the cursor is along a row
+		// that holds the prompt. The output starts on a row of its own
+		// instead, and the record says the row above it is a prompt.
+		"case \"$(" + column + " 2>/dev/null)\" in ''|0) ;; *) command printf '\\n'; : >| " +
+		shellQuote(promptedPath(openedPath)) + " 2>/dev/null ;; esac\n" +
 		publishRecord(mark, openedPath) +
 		"if command test \"$" + trapStatus + "\" -ne 0; then\n" +
 		"  " + status + "=125\n" +
