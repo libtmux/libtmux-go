@@ -109,3 +109,75 @@ func TestRunShellCommandReadsOutputWithoutEchoOnceTheHistoryFills(t *testing.T) 
 			ran.Output, ran.LinesMissed, err)
 	}
 }
+
+// fullHistoryPane returns a pane whose history has filled, so that tmux has
+// started discarding and renumbering it.
+func fullHistoryPane(
+	ctx context.Context,
+	t *testing.T,
+	target tmux.Server,
+	instance *Instance,
+) tmux.Pane {
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	t.Helper()
+	// A pane takes its history limit when it is created.
+	if _, err := target.Cmd(ctx, "set-option", "-g", "history-limit", "100"); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := target.Sessions(ctx)
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("Sessions() = (%d, %v)", len(sessions), err)
+	}
+	window := tmuxtest.NewWindow(ctx, t, sessions[0], tmux.NewWindowRequest{})
+	pane, err := window.ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmuxtest.WaitForShellReady(ctx, t, pane)
+	for attempt := range 6 {
+		_, ran, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+			PaneID: pane.ID().String(), Command: "seq 1 50", TimeoutSeconds: 10,
+		})
+		if err != nil || len(ran.Output) != 50 {
+			t.Fatalf("filling run %d = (%d lines, %v)", attempt, len(ran.Output), err)
+		}
+	}
+	return pane
+}
+
+// A full history must not change what a run returns. Blank rows the command
+// printed are its output, whichever way the output was read back.
+//
+//libtmux:real-tmux
+func TestRunShellCommandKeepsBlankRowsOnceTheHistoryFills(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, _ := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+	pane := fullHistoryPane(ctx, t, target, instance)
+
+	// Repeated, so that tmux discards history under some of the runs and not
+	// others.
+	for round := range 4 {
+		for _, test := range []struct {
+			command string
+			want    []string
+		}{
+			{`printf '\n\nlead\n'`, []string{"", "", "lead"}},
+			{`printf '\n'`, []string{""}},
+			{`printf 'a\n\nb\n'`, []string{"a", "", "b"}},
+			{`printf '\n\n\n\n\n\n\n\n\n\n\n\n'`, make([]string, 12)},
+			{`true`, nil},
+		} {
+			_, ran, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+				PaneID: pane.ID().String(), Command: test.command, TimeoutSeconds: 10,
+			})
+			if err != nil || !slices.Equal(ran.Output, test.want) || ran.LinesMissed {
+				t.Errorf("round %d run of %s = (output %q, missed %t, %v), want %q",
+					round, test.command, ran.Output, ran.LinesMissed, err, test.want)
+			}
+		}
+	}
+}
