@@ -30,11 +30,12 @@ func startingPane(ctx context.Context, t *testing.T, pane tmux.Pane) (release fu
 	if err := syscall.Mkfifo(gate, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// An interactive shell runs the file ENV names before its first prompt,
-	// and gives each command there the foreground. cat blocks opening the
+	// An interactive shell runs the file ENV names before its first prompt.
+	// bash, which is sh on macOS, turns on job control only after it, so the
+	// file does so itself to give cat the foreground. cat blocks opening the
 	// gate until something opens it for writing.
 	startup := filepath.Join(directory, "startup")
-	if err := os.WriteFile(startup, []byte("cat "+shellQuote(gate)+" >/dev/null\n"), 0o600); err != nil {
+	if err := os.WriteFile(startup, []byte("set -m\ncat "+shellQuote(gate)+" >/dev/null\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	before, err := panePID(ctx, pane)
