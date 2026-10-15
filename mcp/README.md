@@ -371,9 +371,9 @@ This protects the pane you are in. It does not make the tools a sandbox.
   carries `readOnlyHint`. A client that skips approval for read-only tools
   prompts on all of them. Classify by `tmuxEffects` in each tool's `_meta`
   instead.
-- **`tools/list` is large.** The reply is about 109 KB for the tools granted
-  by default and 116 KB for all of them. More than half of
-  it is the `_meta` description, which repeats each tool's text and schemas.
+- **`tools/list` is large.** The reply is about 116 KB with every toolset and
+  109 KB without `teardown`. More than half of it is the `_meta` description,
+  which repeats each tool's text and schemas.
   A client that wants a smaller reply can ignore `_meta`: each tool's text and
   schemas are also at the top level.
 - **Some tools spell their results differently.** `run_shell_command`,
