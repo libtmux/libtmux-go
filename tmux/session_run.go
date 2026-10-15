@@ -44,7 +44,7 @@ var ErrOutcomeUnrecorded = errors.New("tmux: command outcome was never recorded"
 type RunResult struct {
 	// Status is the command's exit status, or -1 when the command did not
 	// exit on its own, as when a signal ended it, so zero always means it
-	// succeeded. [os.ProcessState.ExitCode] reads the same way.
+	// succeeded. os.ProcessState.ExitCode reads the same way.
 	Status int
 	// Signal is the signal that ended the command, when one did, and nil
 	// otherwise. Compare it with os.Kill or a syscall constant: tmux reports
