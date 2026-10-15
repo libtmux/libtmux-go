@@ -117,16 +117,17 @@ func (h *packedHashes) UnmarshalJSON(raw []byte) error {
 
 // paneState is one tmux expansion so its grid coordinates describe one instant.
 type paneState struct {
-	pid         int
-	historySize int
-	height      int
-	cursorY     int
-	dead        bool
+	pid          int
+	historySize  int
+	height       int
+	cursorY      int
+	dead         bool
+	historyLimit int
 }
 
 // paneStateFormat uses a printable separator because tmux may rewrite control
 // characters when the client environment has no UTF-8 locale.
-const paneStateFormat = "#{pane_pid}|#{history_size}|#{pane_height}|#{cursor_y}|#{pane_dead}"
+const paneStateFormat = "#{pane_pid}|#{history_size}|#{pane_height}|#{cursor_y}|#{pane_dead}|#{history_limit}"
 
 // readPaneState asks tmux where the pane's grid stands.
 func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
@@ -143,7 +144,7 @@ func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
 		return paneState{}, fmt.Errorf("pane %s reported no state", pane.ID())
 	}
 	fields := strings.Split(printed[0], "|")
-	if len(fields) != 5 {
+	if len(fields) != 6 {
 		return paneState{}, fmt.Errorf("pane %s reported unreadable state %q", pane.ID(), printed[0])
 	}
 	numbers := make([]int, 4)
@@ -163,7 +164,17 @@ func readPaneState(ctx context.Context, pane tmux.Pane) (paneState, error) {
 		// tmux writes the flag as 1 or 0, and as empty on versions that do not
 		// set it for a live pane.
 		dead: strings.TrimSpace(fields[4]) == "1",
+		// Zero when unreadable, which only turns off the check that uses it.
+		historyLimit: atoiOrZero(fields[5]),
 	}, nil
+}
+
+func atoiOrZero(field string) int {
+	value, err := strconv.Atoi(strings.TrimSpace(field))
+	if err != nil {
+		return 0
+	}
+	return value
 }
 
 // captureSince reads what a pane wrote since a cursor.

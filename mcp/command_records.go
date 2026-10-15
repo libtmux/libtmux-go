@@ -47,6 +47,9 @@ func (t *tools) attachCommandOutput(
 		output.OutputUnavailable = err.Error()
 		return nil
 	}
+	if closed, err := readMark(closedPath); err == nil && historyFilled(closed, now) {
+		return t.attachOutputBeforeTheEnd(ctx, pane, openedPath, closed, now, limits, output)
+	}
 	// Convert absolute marks to current grid rows; tmux renumbers trimmed history.
 	request := tmux.CapturePaneRequest{
 		Start:       tmux.CaptureLine(opened.row - now.historySize),
@@ -104,6 +107,77 @@ func (t *tools) attachCommandOutput(
 	// Grid movement can put the wrapper echo before captured output on any path.
 	lines = afterTheWrapperEcho(lines, sourceScriptFor(openedPath))
 	kept, report := limits.apply(lines)
+	output.Output = kept
+	output.truncation = report
+	return nil
+}
+
+// historyFilled reports that the pane's history may have filled while the
+// command ran. Each time it fills, tmux discards its oldest tenth and
+// renumbers what is left, and only a history already in its last tenth when
+// the command closed can have done so.
+func historyFilled(closed mark, now paneState) bool {
+	if now.historyLimit <= 0 {
+		return false
+	}
+	return closed.historySize >= now.historyLimit-max(now.historyLimit/10, 1)
+}
+
+// attachOutputBeforeTheEnd reads a command's output back from its closing
+// mark when the history may have been renumbered under its opening mark. It
+// reads far enough to find the line the wrapper was typed on, where the output
+// starts. When that line is out of reach, the start of the output is too, and
+// the reply says so.
+func (t *tools) attachOutputBeforeTheEnd(
+	ctx context.Context,
+	pane tmux.Pane,
+	openedPath string,
+	closed mark,
+	now paneState,
+	limits bounds,
+	output *runCommandOutput,
+) error {
+	end := closed.row
+	if now.historySize < closed.historySize {
+		// The history filled again while the shell drew its prompt.
+		end -= max(now.historyLimit/10, 1)
+	}
+	if closed.column == 0 {
+		end--
+	}
+	if end < 0 {
+		output.Output = nil
+		return nil
+	}
+	// Enough rows for the output a reply can hold, then the whole history
+	// when the wrapper line is further back than that.
+	var rest []string
+	for _, start := range []int{max(end-2*limits.lines-now.height, 0), 0} {
+		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{
+			Start:       tmux.CaptureLine(start - now.historySize),
+			End:         tmux.CaptureLine(end - now.historySize),
+			JoinWrapped: true,
+		})
+		if err != nil {
+			if t.runtime.isTerminalError(err) || isContextError(err) {
+				return err
+			}
+			output.OutputUnavailable = err.Error()
+			return nil
+		}
+		for index, line := range lines {
+			lines[index] = strings.TrimRight(line, " ")
+		}
+		rest = afterTheWrapperEcho(lines, sourceScriptFor(openedPath))
+		// afterTheWrapperEcho hands back everything when it finds no
+		// wrapper line, and then tmux has discarded it with the start of
+		// the output, or it lies before what this read reached.
+		output.LinesMissed = len(rest) == len(lines)
+		if !output.LinesMissed || start == 0 {
+			break
+		}
+	}
+	kept, report := limits.apply(rest)
 	output.Output = kept
 	output.truncation = report
 	return nil
