@@ -110,7 +110,7 @@ func (c *paneInputCoordinator) acquire(
 		if _, found := c.detached[identity]; found && kind == paneInputReservationRun {
 			return paneInputLease{}, fmt.Errorf(
 				"%s refused for pane %s: an earlier run_shell_command is still active; "+
-					"wait for it, or interrupt it with send_keys C-c",
+					"wait for it, or interrupt it with send_keys and keys [\"C-c\"]",
 				tool, identity.paneID,
 			)
 		}
