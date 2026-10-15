@@ -71,6 +71,8 @@ type RunShellRequest struct {
 	TargetPane PaneID
 	// StartDirectory selects the job directory; nil omits it. It requires tmux
 	// 3.4; see UnsupportedPolicy.
+	// A directory that does not exist is not an error: tmux starts the
+	// process in the home directory instead, or in / without one.
 	StartDirectory *string
 	// ShowStderr requests job stderr and requires tmux 3.6; see
 	// UnsupportedPolicy.

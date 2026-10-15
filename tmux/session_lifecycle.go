@@ -40,6 +40,8 @@ type NewSessionRequest struct {
 	KillExisting bool
 	// StartDirectory expands ~ and ~/... for the current user. Named-user
 	// forms such as ~other are rejected; empty inherits tmux's default.
+	// A directory that does not exist is not an error: tmux starts the
+	// process in the home directory instead, or in / without one.
 	StartDirectory string
 	// WindowName names the initial window; empty lets tmux choose.
 	WindowName string

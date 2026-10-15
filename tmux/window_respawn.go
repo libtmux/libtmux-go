@@ -21,6 +21,8 @@ type RespawnRequest struct {
 	Command *string
 	// StartDirectory expands ~ and ~/... for the current user. Nil reuses the
 	// stored directory; a nonnil empty string selects the current directory.
+	// A directory that does not exist is not an error: tmux starts the
+	// process in the home directory instead, or in / without one.
 	StartDirectory *string
 	// Environment is emitted in lexically sorted key order; nil and an empty map
 	// both add no environment entries.

@@ -22,6 +22,8 @@ type RunOptions struct {
 	WindowName string
 	// StartDirectory expands ~ and ~/... for the current user; empty inherits
 	// the session's default.
+	// A directory that does not exist is not an error: tmux starts the
+	// process in the home directory instead, or in / without one.
 	StartDirectory string
 	// Environment is added to the command's environment. The map is not
 	// retained.
