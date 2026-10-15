@@ -5,12 +5,23 @@ removes it on the way out, so running one leaves nothing behind there.
 `byte-streams` also writes an archive to your temporary directory, and names
 it.
 
+They live in the repository rather than the module you install, so run them
+from a clone:
+
+```console
+$ git clone https://github.com/libtmux/libtmux-go.git
+```
+
+```console
+$ cd libtmux-go
+```
+
 ```console
 $ go -C examples run ./quickstart
 ```
 
-Every page shows the program's output, and a test compares that output with
-what the program prints, on every supported tmux.
+Every page of a program shows its output, and a test compares that output
+with what the program prints, on every supported tmux.
 
 ## Start here
 
@@ -60,25 +71,11 @@ dependencies:
 
 ## Which tmux they reach
 
-`quickstart`, `layout`, `object-model`, `queries`, and `filter-query` start a
-tmux server of their own,
-on a private socket with an empty config, and kill it when they finish. They
-print the same thing on every machine and never touch a tmux you have open.
+Each program starts a tmux server of its own, on a private socket with an
+empty config, and that server is gone when the program finishes. They print
+the same thing on every machine and never touch a tmux you have open.
 `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
 server the test harness owns.
-
-The others take the server your `tmux` command reaches, make a session there,
-and kill that session on the way out. They also read your tmux configuration,
-so an index or a count on one of those pages can differ under a `base-index`
-or a hook of your own; each page shows what a server with nothing else on it
-and no configuration prints. To keep those off a tmux you are using,
-give them a socket directory of their own:
-
-```console
-$ export TMUX_TMPDIR=/tmp/libtmux-go-examples && \
-    mkdir -p "$TMUX_TMPDIR" && \
-    unset TMUX TMUX_PANE
-```
 
 All of them need tmux 3.2a or newer on `PATH`.
 

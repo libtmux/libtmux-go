@@ -13,7 +13,8 @@ is the screen tmux rendered rather than the bytes the program wrote.
 $ go -C examples run ./run-to-completion
 ```
 
-On a tmux server with nothing else on it, it prints:
+It starts a tmux server of its own, on a private socket with an empty
+config, and prints:
 
 <!-- docs:output examples/run-to-completion/output.txt -->
 

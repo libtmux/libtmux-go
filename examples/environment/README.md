@@ -11,7 +11,8 @@ tells a process about where it is.
 $ go -C examples run ./environment
 ```
 
-On a tmux server with nothing else on it, it prints:
+It starts a tmux server of its own, on a private socket with an empty
+config, and prints:
 
 <!-- docs:output examples/environment/output.txt -->
 

@@ -11,7 +11,8 @@ one tmux command, and everything you ask of it afterwards is free.
 $ go -C examples run ./snapshot-browser
 ```
 
-On a tmux server with nothing else on it, it prints:
+It starts a tmux server of its own, on a private socket with an empty
+config, and prints:
 
 <!-- docs:output examples/snapshot-browser/output.txt -->
 
