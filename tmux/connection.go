@@ -313,19 +313,27 @@ func bindControlConnection(session Session, pool *controlLanePool) *Connection {
 	connection := &Connection{pool: pool}
 	unbound := session
 	pool.open = func(ctx context.Context) (*ControlClient, error) {
-		client, err := unbound.server.openControl(ctx, unbound, controlCommands)
-		if err == nil || ctx.Err() != nil {
-			return client, err
-		}
 		// tmux 3.6 moves the lanes of a destroyed session to another one, so
-		// a client of the same kind must follow rather than name the dead ID.
+		// a client of the same kind attaches to a session that exists rather
+		// than name the dead ID and wait for tmux to refuse it, which takes
+		// longer than a caller's deadline. A lane learns of the move from a
+		// notification that can trail it, so the server is asked.
+		target := unbound
 		sessions, listErr := unbound.server.Sessions(ctx)
-		if listErr != nil || slices.ContainsFunc(sessions, func(s Session) bool {
-			return s.ID() == unbound.ID()
-		}) || len(sessions) == 0 {
-			return nil, err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
 		}
-		return unbound.server.openControl(ctx, sessions[0], controlCommands)
+		if listErr == nil && len(sessions) != 0 && !slices.ContainsFunc(sessions, func(s Session) bool {
+			return s.ID() == unbound.ID()
+		}) {
+			target = sessions[0]
+		}
+		client, err := unbound.server.openControl(ctx, target, controlCommands)
+		if err != nil && ctx.Err() != nil {
+			// An attach that outlived the caller's context reports the context.
+			return nil, fmt.Errorf("%w (%w)", ctx.Err(), err)
+		}
+		return client, err
 	}
 	bound := session.server
 	bound.connection = connection

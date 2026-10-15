@@ -681,3 +681,44 @@ func TestConnectionClosedUnderABlockingCommandIsNotAGoneServer(t *testing.T) {
 		t.Fatal("WaitFor() still parked after Close()")
 	}
 }
+
+// Once the connection's own session is gone, a blocking call must still
+// return at its deadline with that deadline as the error, and must attach to
+// the session its lanes moved to rather than try the dead one first.
+//
+//libtmux:real-tmux
+func TestConnectionBlockingCommandAfterItsSessionDied(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	requireNoDetachOnDestroy(t, server)
+	original := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "survivor"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := original.Session().Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	const deadline = 100 * time.Millisecond
+	held, stop := context.WithTimeout(ctx, deadline)
+	defer stop()
+	started := time.Now()
+	err := original.Server().WaitFor(held, tmux.WaitForRequest{Channel: "libtmux-orphaned"})
+	elapsed := time.Since(started)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitFor() = %v, want the deadline", err)
+	}
+	if elapsed > deadline+100*time.Millisecond {
+		t.Fatalf("WaitFor() returned after %v, want about %v", elapsed, deadline)
+	}
+
+	// The next open must not pay for the dead session again.
+	started = time.Now()
+	if _, err := original.Server().RunShell(ctx, tmux.RunShellRequest{Command: "true"}); err != nil {
+		t.Fatalf("RunShell() error = %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 200*time.Millisecond {
+		t.Fatalf("RunShell() took %v, want an open that skips the dead session", elapsed)
+	}
+}
