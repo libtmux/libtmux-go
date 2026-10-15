@@ -290,3 +290,26 @@ func TestGivenCommentWrapsALongListWithoutSplittingADeclaration(t *testing.T) {
 		}
 	}
 }
+
+// A checkout nested under a hidden directory, such as a worktree under
+// .claude, holds a copy of every region. The walk skips it as the go tool
+// does, rather than finding each region twice.
+func TestRegionsSkipHiddenDirectories(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "example/main.go", sourceWithRegions)
+	write(t, root, ".claude/worktrees/agent/example/main.go", sourceWithRegions)
+	write(t, root, "_scratch/main.go", sourceWithRegions)
+	write(t, root, ".claude/worktrees/agent/README.md", "# Copy\n")
+
+	regions, err := collectRegions(root)
+	if err != nil {
+		t.Fatalf("collectRegions() error = %v, want the nested copies skipped", err)
+	}
+	if _, ok := regions["query"]; !ok {
+		t.Fatalf("collectRegions() = %v, want the query region", regions)
+	}
+	documents, err := findMarkdown(root)
+	if err != nil || len(documents) != 0 {
+		t.Fatalf("findMarkdown() = (%v, %v), want no documents", documents, err)
+	}
+}

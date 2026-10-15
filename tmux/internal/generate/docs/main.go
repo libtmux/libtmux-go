@@ -32,9 +32,20 @@ var (
 
 // skipDirectories excludes generated fixtures and dependency caches.
 var skipDirectories = map[string]bool{
-	".git":         true,
 	"testdata":     true,
 	"node_modules": true,
+}
+
+// skipDirectory reports a directory below the root that holds no published
+// source. The go tool ignores a name starting with "." or "_", so .git and a
+// worktree checked out under .claude are skipped here as well; walking a
+// nested checkout would find every region twice.
+func skipDirectory(path, root string, entry fs.DirEntry) bool {
+	if path == root {
+		return false
+	}
+	name := entry.Name()
+	return skipDirectories[name] || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }
 
 func main() {
@@ -97,7 +108,7 @@ func collectRegions(root string) (map[string]region, error) {
 			return err
 		}
 		if entry.IsDir() {
-			if skipDirectories[entry.Name()] {
+			if skipDirectory(path, root, entry) {
 				return fs.SkipDir
 			}
 			return nil
@@ -203,7 +214,7 @@ func findMarkdown(root string) ([]string, error) {
 			return err
 		}
 		if entry.IsDir() {
-			if skipDirectories[entry.Name()] {
+			if skipDirectory(path, root, entry) {
 				return fs.SkipDir
 			}
 			return nil
