@@ -227,3 +227,84 @@ func TestInputRefusesAShellThatGivesWayToAnotherProgram(t *testing.T) {
 		})
 	}
 }
+
+// Waiting out a change is for a pane that is starting. A program in an older
+// pane that exits between the preflight and dispatch hands the pane back to
+// its shell, and keys meant for that program, such as a command for a remote
+// host, would run locally. The pane was never starting, so the call is
+// refused.
+//
+//libtmux:real-tmux
+func TestInputRefusesAnOlderPaneWhoseProgramExits(t *testing.T) {
+	calls := map[string]func(*tools, context.Context, string) error{
+		"send_keys": func(tools *tools, ctx context.Context, paneID string) error {
+			_, _, err := tools.sendKeysBatch(ctx, nil,
+				sendKeysBatchInput{PaneID: paneID, Keys: []string{"x"}}, "send_keys")
+			return err
+		},
+		"paste_text": func(tools *tools, ctx context.Context, paneID string) error {
+			_, _, err := tools.pasteText(ctx, nil, pasteTextInput{PaneID: paneID, Text: "x"})
+			return err
+		},
+		"run_shell_command": func(tools *tools, ctx context.Context, paneID string) error {
+			_, _, err := tools.runCommand(ctx, nil, runCommandInput{
+				PaneID: paneID, Command: "true", TimeoutSeconds: 5,
+			})
+			return err
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			withoutCallerEnvironment(t)
+			target, _, panes := threePaneInputFixture(ctx, t)
+			instance := mustInternalMCPServer(t, target)
+			callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+			// Long enough for two equal readings, and no longer than a refusal
+			// needs to wait for them.
+			instance.runtime.deps.inputSettleGrace = 100 * time.Millisecond
+
+			// The pane has been running sleep, standing in for a REPL or ssh.
+			command := "sleep 30"
+			if err := panes[0].SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
+				t.Fatal(err)
+			}
+			if err := waitForForeground(ctx, panes[0], func(name string) bool {
+				return name == "sleep"
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			// The first reading sees sleep. Before the second, it exits and
+			// the pane shows its shell, which then holds for every reading
+			// after.
+			defaults := instance.runtime.deps
+			readings := 0
+			instance.runtime.deps.snapshot = func(
+				snapshotCtx context.Context,
+				server tmux.Server,
+			) (tmux.Snapshot, error) {
+				readings++
+				if readings == 2 {
+					if err := panes[0].SendKeySequence(snapshotCtx,
+						tmux.SendKeySequenceRequest{Keys: []string{"C-c"}}); err != nil {
+						return tmux.Snapshot{}, err
+					}
+					if err := waitForForeground(snapshotCtx, panes[0], runsAShell); err != nil {
+						return tmux.Snapshot{}, err
+					}
+				}
+				return defaults.snapshot(snapshotCtx, server)
+			}
+
+			err := call(instance.tools, callCtx, panes[0].ID().String())
+			if err == nil {
+				t.Fatalf("%s across sleep exiting to the shell = %v, want a refusal", name, err)
+			}
+			if readings < 2 {
+				t.Fatalf("%s read the pane %d times, want the exit to have landed", name, readings)
+			}
+		})
+	}
+}

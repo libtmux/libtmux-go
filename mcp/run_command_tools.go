@@ -209,8 +209,12 @@ func (t *tools) startCommand(
 				initial.Source.ID(),
 			)
 		}
-		initial = settled
-		started.pane = initial.Source
+		// A shell that took over from a program in an older pane is not the
+		// pane the caller inspected, so the refusal below names that program.
+		if incompatibleRunCommandShell(settled.Source) != "" || paneRunsAShell(initial, settled) {
+			initial = settled
+			started.pane = initial.Source
+		}
 	}
 	if shell := incompatibleRunCommandShell(initial.Source); shell != "" {
 		return started, fmt.Errorf(
@@ -482,11 +486,19 @@ func shellName(command string) string {
 }
 
 // paneRunsAShell accepts a settled pane once a shell of either kind has the
-// foreground. One that is not POSIX will not become one, so there is nothing
-// more to wait for and the caller's own check refuses it by name.
-func paneRunsAShell(_, preflight paneInputPreflight) bool {
-	shell := incompatibleRunCommandShell(preflight.Source)
-	return shell == "" || runsAShell(shell)
+// foreground and the caller did not inspect a program in it. One that is not
+// POSIX will not become one, so there is nothing more to wait for and the
+// caller's own check refuses it by name. A run typed after a program exits
+// would land in the shell behind it, so only a pane that was starting is let
+// through from one.
+func paneRunsAShell(initial, latest paneInputPreflight) bool {
+	shell := incompatibleRunCommandShell(latest.Source)
+	if shell != "" && !runsAShell(shell) {
+		return false
+	}
+	return incompatibleRunCommandShell(initial.Source) == "" ||
+		runsAShell(incompatibleRunCommandShell(initial.Source)) ||
+		paneIsStarting(initial.Source)
 }
 
 // runsAShell reports whether a pane's current command reads typed keys once it
