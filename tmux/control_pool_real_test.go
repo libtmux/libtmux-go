@@ -100,3 +100,38 @@ func TestConnectionBlockingCommandSurvivesItsSessionBeingKilled(t *testing.T) {
 		t.Fatalf("WaitFor() after the attached session was killed = %v", err)
 	}
 }
+
+// A canceled blocking command returns at its deadline. Closing the client it
+// ran on waits out the command in flight, and the caller must not wait for it.
+//
+//libtmux:real-tmux
+func TestConnectionBlockingCommandReturnsAtItsDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{Lanes: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const deadline = 200 * time.Millisecond
+	held, cancelHeld := context.WithTimeout(ctx, deadline)
+	defer cancelHeld()
+	started := time.Now()
+	err = connection.Server().WaitFor(held, tmux.WaitForRequest{Channel: "libtmux-deadline"})
+	elapsed := time.Since(started)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitFor() = %v, want the deadline", err)
+	}
+	if elapsed > deadline+150*time.Millisecond {
+		t.Fatalf("WaitFor() returned after %v, want about %v", elapsed, deadline)
+	}
+	// The client closed behind the call must not outlive the connection.
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+}
