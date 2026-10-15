@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -312,7 +313,19 @@ func bindControlConnection(session Session, pool *controlLanePool) *Connection {
 	connection := &Connection{pool: pool}
 	unbound := session
 	pool.open = func(ctx context.Context) (*ControlClient, error) {
-		return unbound.server.openControl(ctx, unbound, controlCommands)
+		client, err := unbound.server.openControl(ctx, unbound, controlCommands)
+		if err == nil || ctx.Err() != nil {
+			return client, err
+		}
+		// tmux 3.6 moves the lanes of a destroyed session to another one, so
+		// a client of the same kind must follow rather than name the dead ID.
+		sessions, listErr := unbound.server.Sessions(ctx)
+		if listErr != nil || slices.ContainsFunc(sessions, func(s Session) bool {
+			return s.ID() == unbound.ID()
+		}) || len(sessions) == 0 {
+			return nil, err
+		}
+		return unbound.server.openControl(ctx, sessions[0], controlCommands)
 	}
 	bound := session.server
 	bound.connection = connection
