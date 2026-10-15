@@ -35,7 +35,8 @@ type paneSummary struct {
 }
 
 func main() {
-	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default")
+	socketName := flag.String("socket-name", "libtmux-agent-workflow",
+		`tmux socket name; "default" is the one your tmux command uses`)
 	traceCalls := flag.Bool("trace", false, "print the work calls and what came back, to standard error")
 	flag.Parse()
 	if *traceCalls {
@@ -57,7 +58,8 @@ func main() {
 }
 
 func run(ctx context.Context, socketName string) error {
-	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: socketName})
+	// An empty config, so what it prints does not depend on yours.
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: socketName, ConfigFile: os.DevNull})
 	if err != nil {
 		return err
 	}

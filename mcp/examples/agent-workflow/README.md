@@ -20,7 +20,9 @@ of what comes back. The example grants itself the `inspect`, `manage`, and
 $ go -C mcp run ./examples/agent-workflow -socket-name demo
 ```
 
-On a socket with nothing on it, it starts a session there and prints:
+Without `-socket-name` it uses a socket of its own, and `-socket-name default`
+points it at the tmux you use. On a socket with nothing on it, it starts a
+session there and prints:
 
 <!-- docs:output mcp/examples/agent-workflow/output.txt -->
 
