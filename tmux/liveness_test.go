@@ -212,3 +212,35 @@ func mustNewServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
 	}
 	return server
 }
+
+// tmux's client exits 0 when the server is killed under a foreground command,
+// so a blocking command must check the server before it reports success.
+//
+//libtmux:real-tmux
+func TestForegroundShellCommandsReportAServerKilledUnderThem(t *testing.T) {
+	// The shell command ends its own server through the TMUX it inherits.
+	const endServer = "tmux kill-server"
+	for _, test := range []struct {
+		name string
+		run  func(context.Context, tmux.Server) error
+	}{
+		{"run-shell", func(ctx context.Context, server tmux.Server) error {
+			_, err := server.RunShell(ctx, tmux.RunShellRequest{Command: endServer})
+			return err
+		}},
+		{"if-shell", func(ctx context.Context, server tmux.Server) error {
+			return server.IfShell(ctx, tmux.IfShellRequest{
+				ShellCommand: endServer + "; true", ThenCommand: "display-message x",
+			})
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			server := tmuxtest.NewServer(ctx, t)
+			if err := test.run(ctx, server); !errors.Is(err, tmux.ErrNoServer) {
+				t.Fatalf("%s with the server killed under it = %v, want ErrNoServer", test.name, err)
+			}
+		})
+	}
+}

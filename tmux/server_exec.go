@@ -157,6 +157,10 @@ type SourceFileRequest struct {
 // On a [Connection]-bound server a foreground request runs on a control client
 // opened for that call and closed when it ends, as [Server.WaitFor] does, so a
 // slow or canceled command leaves every lane free.
+//
+// A foreground command that tmux ends with success is checked against the
+// server, as in [Server.WaitFor], and returns an error matching [ErrNoServer]
+// when the server exited under it.
 func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string, error) {
 	request.Delay = copyOptionalString(request.Delay)
 	request.StartDirectory = copyOptionalString(request.StartDirectory)
@@ -245,6 +249,9 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 	if request.Background {
 		return nil, nil
 	}
+	if err := s.requireServerSurvived(ctx, "run-shell"); err != nil {
+		return nil, err
+	}
 	return result.Stdout, nil
 }
 
@@ -325,7 +332,8 @@ func (s Server) requireServerSurvived(ctx context.Context, subcommand string) er
 // can interrupt delivery without proving that tmux did not execute a branch.
 //
 // On a [Connection]-bound server a foreground request runs on a control client
-// of its own, as [Server.RunShell] does.
+// of its own, as [Server.RunShell] does, and a server that exited under it is
+// reported the same way.
 func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if err := validateIfShellArguments(request); err != nil {
 		return err
@@ -356,7 +364,13 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 		arguments = append(arguments, *request.ElseCommand)
 	}
 	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background), arguments...)
-	return requireRedactedServerCommandNoStderr("if-shell", result, err)
+	if err := requireRedactedServerCommandNoStderr("if-shell", result, err); err != nil {
+		return err
+	}
+	if !request.Background {
+		return s.requireServerSurvived(ctx, "if-shell")
+	}
+	return nil
 }
 
 // shellCommandKind says how run-shell and if-shell occupy a client. tmux

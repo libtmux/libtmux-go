@@ -354,20 +354,10 @@ func TestWaitForBuildsExactArguments(t *testing.T) {
 			}
 			want = append(want, "--", "phase6")
 			requests := runner.recordedRequests()
-			// A wait or lock that tmux ends with success is followed by a
-			// look at the server, since tmux ends it the same way when the
-			// server exits.
-			wantRequests := 1
-			if test.mode == WaitForModeWait || test.mode == WaitForModeLock {
-				wantRequests = 2
-			}
-			if len(requests) != wantRequests {
-				t.Fatalf("request count = %d, want %d", len(requests), wantRequests)
+			if len(requests) != 1 {
+				t.Fatalf("request count = %d, want 1", len(requests))
 			}
 			assertRequestArguments(t, requests[0], want)
-			if wantRequests == 2 {
-				assertRequestArguments(t, requests[1], []string{"list-sessions"})
-			}
 		})
 	}
 }
@@ -825,7 +815,7 @@ func (r *runShellGateRunner) Run(_ context.Context, request tmuxcmd.Request) (tm
 func (r *runShellGateRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return withoutGlobalFlags(r.requests)
+	return withoutLivenessLooks(withoutGlobalFlags(r.requests))
 }
 
 // waitForExitRunner answers a wait as tmux does when the server exits under
