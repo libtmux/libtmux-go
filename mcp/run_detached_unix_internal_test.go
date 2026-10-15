@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -199,5 +200,27 @@ func testRunShellCommandReportsAShellThatWentAway(t *testing.T, ignoreHangups bo
 	if !errors.Is(result.err, errCommandWrapperGone) || result.output.TimedOut {
 		t.Fatalf("run whose pane was respawned = (%+v, %v), want errCommandWrapperGone before the timeout",
 			result.output, result.err)
+	}
+}
+
+// A run that times out still says what the command printed so far, which is
+// what a caller needs to decide whether to wait for it.
+//
+//libtmux:real-tmux
+func TestATimedOutRunReturnsWhatItPrintedSoFar(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	withoutCallerEnvironment(t)
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
+
+	_, ran, err := instance.tools.runCommand(callCtx, nil, runCommandInput{
+		PaneID: panes[0].ID().String(), Command: "echo started; sleep 30", TimeoutSeconds: 1,
+	})
+	if err != nil || !ran.TimedOut || !slices.Equal(ran.Output, []string{"started"}) ||
+		ran.OutputUnavailable != "" {
+		t.Fatalf("timed-out run = (output %q, unavailable %q, timed out %t, %v), want [started]",
+			ran.Output, ran.OutputUnavailable, ran.TimedOut, err)
 	}
 }

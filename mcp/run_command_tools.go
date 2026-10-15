@@ -58,7 +58,8 @@ type runCommandOutput struct {
 	Running string `json:"running,omitempty"`
 	// Output is pane-rendered output between the command's cursor marks. Wrapped
 	// terminal rows are rejoined and screen painting remains. Before tmux 3.6,
-	// tabs are irreversibly expanded to spaces.
+	// tabs are irreversibly expanded to spaces. On a timeout it holds what the
+	// command had printed so far.
 	Output []string `json:"output,omitempty"`
 	// OutputUnavailable says why Output is missing, and is absent when the
 	// command simply printed nothing. The status is the answer either way, so
@@ -682,7 +683,35 @@ func (t *tools) awaitCommand(
 	if !isOwnWaitDeadline(ctx, waitCtx, err) {
 		return nil, output, err
 	}
-	return finishRunCommandDeadline(completion, output, waiting.running)
+	result, output, err := finishRunCommandDeadline(completion, output, waiting.running)
+	if err != nil || !output.TimedOut {
+		return result, output, err
+	}
+	return result, t.attachOutputSoFar(ctx, waiting, output), nil
+}
+
+// attachOutputSoFar reads what a timed-out command has printed, from its
+// opening mark to the end of the screen, which is a caller's best guide to
+// whether to wait for the rest. The run's own time is over, so the read gets
+// a short time of its own, and a failed read leaves the reply as it was.
+func (t *tools) attachOutputSoFar(
+	ctx context.Context,
+	waiting awaiting,
+	output runCommandOutput,
+) runCommandOutput {
+	if _, err := readMark(waiting.openedPath); err != nil {
+		return output
+	}
+	readCtx, cancel := context.WithTimeout(ctx, commandPresenceProbeTimeout)
+	defer cancel()
+	partial := output
+	partial.OutputUnavailable = ""
+	if err := t.attachCommandOutput(readCtx, waiting.pane,
+		waiting.openedPath, waiting.closedPath, waiting.limits, &partial); err != nil ||
+		partial.OutputUnavailable != "" {
+		return output
+	}
+	return partial
 }
 
 func (t *tools) finishAwaitedCommand(
