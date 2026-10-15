@@ -362,7 +362,8 @@ This protects the pane you are in. It does not make the tools a sandbox.
 - **`tools/list` is large.** The reply is about 109 KB for the forty-one
   tools granted by default and 116 KB for all forty-five. More than half of
   it is the `_meta` description, which repeats each tool's text and schemas.
-  The Python server shares that shape, so it is not trimmed here.
+  A client that wants a smaller reply can ignore `_meta`: each tool's text and
+  schemas are also at the top level.
 - **Four tools spell their results differently.** `run_shell_command`,
   `send_keys`, `paste_text`, and
   [`clear_pane_scrollback`][clear_pane_scrollback] return fields such as
@@ -492,9 +493,8 @@ what an embedder is held to.
 
 ## See also
 
-This is a consumer of the [tmux module], not part of it. The tmux module
-takes no runtime dependency and speaking MCP needs one, so this lives in a
-module of its own and `go get` on the tmux module never pulls it in.
+This is a module of its own, so `go get` on the tmux library never pulls in
+the MCP SDK it needs.
 
 | | |
 | --- | --- |
@@ -502,11 +502,9 @@ module of its own and `go get` on the tmux module never pulls it in.
 | [`TOOLS.md`](TOOLS.md) | Every tool's arguments and results |
 | [`PARITY.md`](PARITY.md) | Where this server and the Python one differ |
 | [`MIGRATING.md`](MIGRATING.md) | Settings from earlier releases, and what replaced each |
-| [`REGISTRY.md`](REGISTRY.md) | Publishing an entry to the MCP registry |
 | [`cmd/libtmux-mcp`](cmd/libtmux-mcp) | The command a client launches |
 | [`examples/agent-workflow`](examples/agent-workflow) | The program above, as a directory you can run |
 | [`AGENTS.md`](AGENTS.md) | Testing the server through a real client, and by hand |
-| [`../internal/tools/mcp-swap`](../internal/tools/mcp-swap/) | Point the agent CLIs on this machine at a local build, and put them back |
 | [`../tmux/`](../tmux/) | The library this serves |
 
 [call_read_tools_batch]: https://libtmux.org/en/go/latest/mcp/tools/call_read_tools_batch/

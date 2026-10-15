@@ -385,9 +385,8 @@ and parse its `--json` or `--ndjson` output. Where they differ today:
 
 ## See also
 
-This is a consumer of the [tmux module], not part of it. The tmux module
-takes no runtime dependency and parsing YAML needs one, so this lives in a
-module of its own and `go get` on the tmux module never pulls it in.
+This is a module of its own, so `go get` on the tmux library never pulls in
+its YAML parser.
 
 | | |
 | --- | --- |

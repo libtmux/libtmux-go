@@ -5,6 +5,10 @@ Protocol clients. The repository-wide rules are in
 [`AGENTS.md`](../AGENTS.md) at the root and the files it routes to; this adds
 what only applies here.
 
+[`REGISTRY.md`](REGISTRY.md) covers publishing an entry to the MCP registry.
+[`mcp-swap`](../internal/tools/mcp-swap/) points the agent CLIs on a machine
+at a local build of the server, and puts them back.
+
 ## Testing the MCP server
 
 The Go tests drive the server over the SDK's in-memory transports. That misses

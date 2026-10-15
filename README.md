@@ -566,17 +566,12 @@ period, so pin an exact version. Not recommended for production.
 
 - **No runtime dependencies.** The core module imports only the standard
   library.
-- **Go 1.26+**, tmux **3.2a through 3.8-rc2** across the core, workspace, and
-  MCP modules. The compatibility matrix checks ten builds spanning that
-  range, the 3.8 release candidate included. The Go floor tracks upstream's
-  support window, which covers the two most recent releases, so it rises
-  whenever a Go release retires the oldest: roughly twice a year, and sooner
-  than a toolchain pinned for longer.
-- **Unix.** tmux is a Unix program, so driving one needs a Unix host: Linux and
-  macOS run the suites on every change, and the BSDs, illumos and Plan 9 build.
-  A Windows build compiles and resolves a tmux executable by Windows PATH and
-  PATHEXT rules, so a cross-platform program still builds; it has no tmux to
-  reach.
+- **Go 1.26+**, rising with Go's own support window, about twice a year.
+  tmux **3.2a through 3.8-rc2** across the core, workspace, and MCP modules,
+  tested on ten releases spanning that range.
+- **Unix.** Linux and macOS are tested on every change, and the BSDs, illumos,
+  and Plan 9 build. A Windows build compiles, so a cross-platform program
+  still builds, but there is no tmux there to reach.
 - **Tagged per directory.** Each module carries its own version: the tags are
   `mcp/vN` and `workspace/vN` beside the core's plain `vN`. Pin the exact ones
   you want in your own go.mod; the commands here fetch the newest.
