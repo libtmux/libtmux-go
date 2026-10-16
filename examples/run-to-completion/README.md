@@ -13,18 +13,26 @@ is the screen tmux rendered rather than the bytes the program wrote.
 $ go -C examples run ./run-to-completion
 ```
 
-```
-screen: /dev/pts/3
+It starts a tmux server of its own, on a private socket with an empty
+config, and prints:
+
+<!-- docs:output examples/run-to-completion/output.txt -->
+
+```text
+screen: stdout is a terminal
 exited 3
 1
 2
 3
-stopped by signal 9
+stopped: killed
 ```
 
-`tty` printed the pane's terminal, which a command run through a pipe could not
-have done. The window the command ran in is removed once the result is read,
-and the session is killed on the way out.
+<!-- docs:end -->
+
+`test -t 1` held, so the command had a terminal, which one run through a pipe
+does not. tmux before 3.3 does not say which signal ended a pane, so the last
+line reads `stopped` there. The window the command ran in is removed once the
+result is read, and the session is killed on the way out.
 
 ## What to look at
 
@@ -32,7 +40,9 @@ and the session is killed on the way out.
 
 ```go
 // Given: ctx context.Context; session tmux.Session
-result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
+// The command runs with a terminal, so test -t holds where a pipe fails.
+command := "test -t 1 && echo stdout is a terminal; exit 3"
+result, err := session.Run(ctx, command, tmux.RunOptions{})
 if err != nil {
 	return fmt.Errorf("run command: %w", err)
 }
@@ -48,10 +58,12 @@ fmt.Println("exited", result.Status)
 not do — start the window, wait, read the screen. What the command did is in
 `result.Status`, the way `exec.ExitError` carries it.
 
-**Nothing polls.** tmux runs a `pane-died` hook inside the server that signals
-a wait-for channel of this call's own, so `Run` returns when the process exits,
-not on the next tick of a loop. Nothing needs a tmux binary on the command's
-`PATH`.
+**tmux signals the exit.** tmux runs a `pane-died` hook inside the server that
+signals a wait-for channel of this call's own, so `Run` returns when the
+process exits, not on the next tick of a loop. A liveness check stands behind
+that signal in case tmux loses it, starting at a quarter second and asking
+less often the longer the command runs. Nothing needs a tmux binary on the
+command's `PATH`.
 
 **`Keep: true` leaves the window in place.** `result.Pane` then names a pane
 you can look at, which is what you want when a build fails and the screen is
@@ -86,7 +98,12 @@ if err != nil {
 if err := <-stopped; err != nil {
 	return fmt.Errorf("stop command: %w", err)
 }
-fmt.Println("stopped by signal", streamed.Signal)
+if streamed.Signal == nil {
+	// tmux before 3.3 does not say which signal ended a pane.
+	fmt.Println("stopped")
+} else {
+	fmt.Println("stopped:", streamed.Signal)
+}
 ```
 
 <!-- docs:end -->
@@ -107,9 +124,10 @@ line, and tmux can drop a line printed with nothing between it and the
 command's exit.
 
 **The streamed bytes are the terminal's.** Each line arrives ending `\r\n`,
-because that is what a program writing to a tty produces.
+because that is what a program writing to a tty produces. The output above
+shows them as a terminal draws them.
 
-## Testing your own version
+## Running its test
 
 [`example_test.go`](example_test.go) runs this against a real tmux on a socket
 the test harness owns and removes:

@@ -96,6 +96,12 @@ func (s Server) Executable() string {
 //
 // Only a standalone ";" separates commands. Other semicolons follow the selected
 // binding's parsing; typed operations keep values literal across bindings.
+//
+// On a [Connection]-bound server Cmd uses a lane, and tmux cannot cancel a
+// command already sent, so a command that waits on something outside tmux,
+// such as wait-for or a foreground run-shell, holds that lane until it
+// finishes even after ctx ends. [Server.WaitFor], [Server.RunShell], and
+// [Server.IfShell] take a client of their own instead.
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error) {
 	result, _, err := s.dispatch(ctx, true, args...)
 	return result, err
@@ -103,6 +109,20 @@ func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error) 
 
 func (s Server) literalCmd(ctx context.Context, args ...string) (CommandResult, error) {
 	result, _, err := s.literalCmdWithRaw(ctx, args...)
+	return result, err
+}
+
+// literalCmdAs is literalCmd for a command whose kind the caller knows, which
+// is how one that can hold its client keeps off a connection's shared lanes.
+func (s Server) literalCmdAs(
+	ctx context.Context,
+	kind commandKind,
+	args ...string,
+) (CommandResult, error) {
+	if err := validateLiteralCommandArguments(args); err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
+	result, _, err := s.dispatchAs(ctx, kind, false, args...)
 	return result, err
 }
 
@@ -123,7 +143,16 @@ func (s Server) dispatch(
 	commandList bool,
 	args ...string,
 ) (CommandResult, []byte, error) {
-	result, err := s.runCommand(ctx, commandServer, args, nil, commandList)
+	return s.dispatchAs(ctx, commandServer, commandList, args...)
+}
+
+func (s Server) dispatchAs(
+	ctx context.Context,
+	kind commandKind,
+	commandList bool,
+	args ...string,
+) (CommandResult, []byte, error) {
+	result, err := s.runCommand(ctx, kind, args, nil, commandList)
 	commandResult := cloneCommandResult(CommandResult{
 		Command:   result.Command,
 		Stdout:    result.Stdout,

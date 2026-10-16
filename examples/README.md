@@ -1,122 +1,102 @@
 # Examples
 
-Runnable programs, one per topic. Each creates its own tmux session and kills it
-on the way out, so running one leaves nothing behind.
+Runnable programs, one per topic. Each starts what it needs in tmux and
+removes it on the way out, so no tmux server is left running after one.
+`byte-streams` also writes an archive to your temporary directory, and names
+it.
 
-These are a **module of their own**, so an example reaching for a dependency can
-never put that dependency in the library's `go.mod`. Run them with `go -C`:
+They live in the repository rather than the module you install, so run them
+from a clone:
+
+```console
+$ git clone https://github.com/libtmux/libtmux-go.git
+```
+
+```console
+$ cd libtmux-go
+```
 
 ```console
 $ go -C examples run ./quickstart
 ```
 
-| Example | Shows | Read it for |
-| --- | --- | --- |
-| [`quickstart/`](quickstart/) | Session, window, split, send keys, capture | The shortest path from nothing to a pane running your command |
-| [`filter-query/`](filter-query/) | Snapshot predicates and live tmux filters | The two ways to ask tmux a question, and what each costs |
-| [`snapshot-browser/`](snapshot-browser/) | One read, whole hierarchy | Walking sessions, windows and panes without re-querying |
-| [`option-hook-editing/`](option-hook-editing/) | Typed options and hooks | Reading and writing tmux settings by their Go names |
-| [`environment/`](environment/) | Session and global environment | What tmux passes to the processes it starts |
-| [`fast-path/`](fast-path/) | Owned connection | Plain and connected reads, plus their exact-capture boundary |
-| [`planned-build/`](planned-build/) | Recording commands, then sending them | Naming a pane before it exists, and reading a plan before it runs |
-| [`control-mode-subscribe/`](control-mode-subscribe/) | An owned notification stream | Watching what tmux says on its own |
-| [`run-to-completion/`](run-to-completion/) | A command run in a pane to its exit status | `os/exec` for a program that needs a terminal |
-| [`pane-io/`](pane-io/) | A pane as `io.Writer` and `io.Reader` | Typing a line and scanning the reply with the standard interfaces |
-| [`byte-streams/`](byte-streams/) | Buffers and captures as streams | Moving a payload in and a scrollback out with no quoting and no temporary file |
+Every page of a program shows its output, and a test compares that output
+with what the program prints, on every supported tmux.
 
-Each directory has a page of its own explaining what to look at, and each has a
-test that runs the example against a real tmux and reads what it printed. The
-tests use a socket the harness owns and removes, so they reach neither your tmux
-nor the socket the examples use when you run them:
+## Start here
+
+| Example | Shows |
+| --- | --- |
+| [`quickstart/`](quickstart/) | Run a command in tmux and print its screen and exit status |
+| [`layout/`](layout/) | Split a window into two panes, then read back what tmux made |
+| [`object-model/`](object-model/) | Records, not live handles: what a rename returns, and a lookup that finds nothing |
+| [`testing-a-program/`](testing-a-program/) | A whole `go test` file that runs a program in a pane and waits for its answer |
+
+## Find things
+
+| Example | Shows |
+| --- | --- |
+| [`filter-query/`](filter-query/) | List sessions, filter one read in Go, or let tmux filter |
+| [`queries/`](queries/) | One read of the server, asked many things with `tmuxq` |
+| [`any-slice/`](any-slice/) | The `tmuxq` helpers on a slice of your own, with no tmux |
+| [`snapshot-browser/`](snapshot-browser/) | Walk sessions, windows, and panes from one read |
+
+## Drive panes
+
+| Example | Shows |
+| --- | --- |
+| [`run-to-completion/`](run-to-completion/) | `os/exec` for a program that needs a terminal, and a command stopped midway |
+| [`pane-io/`](pane-io/) | Type into a pane and wait for its answer; read a pane as an `io.Reader` |
+| [`byte-streams/`](byte-streams/) | Move a payload in and a scrollback out with no quoting and no temporary file |
+
+## Change and watch tmux
+
+| Example | Shows |
+| --- | --- |
+| [`option-hook-editing/`](option-hook-editing/) | Read and write tmux options and hooks by their Go names |
+| [`environment/`](environment/) | What tmux passes to the processes it starts |
+| [`planned-build/`](planned-build/) | Record commands, read the plan, then send it in fewer tmux invocations |
+| [`fast-path/`](fast-path/) | A plain server beside an owned connection |
+| [`control-mode-subscribe/`](control-mode-subscribe/) | Hear what tmux does as it happens, and subscribe to a value |
+
+## In the other modules
+
+These live beside the modules they show, because each needs that module's
+dependencies:
+
+| Example | Shows |
+| --- | --- |
+| [`workspace/examples/build-workspace`](../workspace/examples/build-workspace) | Build a tmuxp-style workspace and print what tmux made of it |
+| [`mcp/examples/agent-workflow`](../mcp/examples/agent-workflow) | Drive the tmux MCP server the way an agent does |
+
+## Which tmux they reach
+
+Each program starts a tmux server of its own, on a private socket with an
+empty config, and that server is gone when the program finishes. They print
+the same thing on every machine and never touch a tmux you have open.
+`any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
+server the test harness owns.
+
+Every example but `any-slice` needs tmux 3.2a or newer on `PATH`.
+
+## Testing them
+
+The tests run on sockets of their own, so they reach neither your tmux nor the
+one the examples use when you run them:
 
 ```console
 $ go -C examples test ./...
 ```
 
-## Quoting an example in the docs
-
-Every fenced Go block in this repository's Markdown that sits between `docs:`
-markers is a region of real Go that compiles and runs, copied in by
-`go generate`. The [top-level README](../README.md) is built that way, and so
-is every per-example README here that shows code, along with
-[`../tmux/tmuxtest/README.md`](../tmux/tmuxtest/README.md).
-
-A region is named where it is written:
-
-```go
-	// docs:quickstart
-	windowName := "work"
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: &windowName})
-	// docs:end
-```
-
-and a Markdown file asks for it by that name, between `<!-- docs:<name> -->`
-and `<!-- docs:end -->`. Everything between those two lines is replaced by a
-fenced `go` block holding the region. A block outside a marker pair is never
-touched, so a hand-written snippet says so by not being marked.
-
-What to know about the format:
-
-- A name is lowercase letters, digits and hyphens, and is unique across the
-  whole repository rather than within its file. Two regions sharing a name is
-  an error naming both files.
-- Shared leading tabs come off, so a region written inside a function reads at
-  column zero in the docs.
-- A region may live in any Go file this repository owns. Most are here, but
-  `tmuxtest-quickstart` is in a test,
-  [`screen_test.go`](../tmux/tmuxtest/screen_test.go), because that is where
-  the code it shows belongs.
-- A region that reads a binding it does not create says so on its marker,
-  after `given:`, as Go declarations separated by semicolons:
-
-  ```go
-  	// docs:watching given:ctx context.Context; session tmux.Session
-  ```
-
-  The generator prints that list as the block's first line, so a reader can
-  see what the snippet expects to already have.
-  `TestPublishedRegionsCompileAlone` compiles every published region as the
-  only code in a throwaway module, with
-  the declarations as its local variables, so the list has to be exactly right:
-  a binding the region uses and the marker omits fails as `undefined`, and one
-  the marker names and the region never touches fails as `declared and not
-  used`. Bindings the region creates itself need no declaration.
-
-The loop runs one way. Edit the program, then bring the quote across:
-
-```console
-$ go generate ./...
-```
-
-Editing the fenced block instead is undone the next time anyone runs that, and
-the gate it is paired with — `go generate ./... && git diff --exit-code` —
-fails on the difference.
-
-### The two mistakes it does not report
-
-Naming a region no Go file defines fails, with the file and line of the block
-that named it. So does a region that never ends, one that starts inside
-another, and a Markdown block that is never closed.
-
-Two mistakes pass quietly instead:
-
-- A Markdown marker has to begin at column zero. Indented, it is not a marker,
-  the block stays empty, and nothing says so.
-- A region nothing quotes is not an error, so renaming on the Markdown side
-  leaves the old region compiling and unread.
-
-## Requirements
-
-A tmux on `PATH`, version 3.2a or newer. To keep these off a tmux server you are
-using:
-
-```console
-$ export TMUX_TMPDIR=/tmp/libtmux-go-examples && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
-```
+These are a module of their own, so an example reaching for a dependency can
+never put that dependency in the library's `go.mod`. How the pages quote the
+programs, and the tests that hold them to it, are in
+[CONTRIBUTING.md](../.github/CONTRIBUTING.md#generated-documentation).
 
 ## See also
 
 | | |
 | --- | --- |
-| [`../tmux/`](../tmux/) | The library |
 | [`../README.md`](../README.md) | Start here |
+| [`../tmux/`](../tmux/) | How the library is shaped |
+| [`../tmux/tmuxtest/`](../tmux/tmuxtest/) | Testing a program in a real tmux |

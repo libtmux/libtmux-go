@@ -135,6 +135,133 @@ func samePaneInputMemberSignatures(left, right []paneInputMemberSignature) bool 
 	return true
 }
 
+// samePaneInputExceptForeground reports whether two readings agree on
+// everything but the command each pane has in the foreground.
+func samePaneInputExceptForeground(initial, final paneInputPreflight) bool {
+	withoutForeground := func(signature paneInputMemberSignature) paneInputMemberSignature {
+		signature.CurrentCommand = rawPaneFormat{}
+		return signature
+	}
+	return initial.Identity == final.Identity && initial.Caller == final.Caller &&
+		slices.Equal(initial.ConfiguredIDs, final.ConfiguredIDs) &&
+		samePaneInputMemberSignature(
+			withoutForeground(initial.Signature.Source),
+			withoutForeground(final.Signature.Source),
+		) &&
+		slices.EqualFunc(initial.Signature.Members, final.Signature.Members,
+			func(left, right paneInputMemberSignature) bool {
+				return samePaneInputMemberSignature(
+					withoutForeground(left), withoutForeground(right))
+			})
+}
+
+// A pane that has just been created has no settled foreground command. tmux
+// reports its own name until the pane's shell is running, then each program
+// the shell's start-up files run, and only then the shell. Input checked
+// against one of those and dispatched against the next was refused for a
+// change nobody made, which is what the first call after split_window met.
+const (
+	paneInputSettleGrace = 2 * time.Second
+	paneInputSettleStep  = 10 * time.Millisecond
+)
+
+// paneInputMayStart accepts a settled pane whose foreground command is the one
+// that was inspected, or that was not a shell and has become one in a pane that
+// was starting. A pane being created passes through tmux's own name and its
+// start-up programs on the way to a prompt, so a change into a shell is the
+// pane arriving. A non-shell program in an older pane that exits hands the pane
+// back to its shell just the same, but the keys were meant for that program,
+// such as a REPL or an ssh session, and would run locally, so it is refused. A
+// shell giving way to anything else is a program the caller never saw, such as
+// ssh, sudo, or an editor, and is refused too. A non-shell program that did
+// not change, such as vim, is unchanged and accepted.
+func paneInputMayStart(initial, latest paneInputPreflight) bool {
+	arrives := func(
+		before, after paneInputMemberSignature, inspected tmux.Pane,
+	) bool {
+		return before.CurrentCommand == after.CurrentCommand ||
+			(!runsAShell(before.CurrentCommand.Value) &&
+				runsAShell(after.CurrentCommand.Value) && paneIsStarting(inspected))
+	}
+	if !arrives(initial.Signature.Source, latest.Signature.Source, initial.Source) {
+		return false
+	}
+	for index := range min(len(initial.Signature.Members), len(latest.Signature.Members), len(initial.Panes)) {
+		if !arrives(initial.Signature.Members[index], latest.Signature.Members[index], initial.Panes[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+// paneIsStarting reports whether nothing has been drawn in a pane yet: its
+// cursor has not left the first cell and no line has scrolled into history.
+// tmux has no creation time for a pane, and a shell that has not drawn its
+// first prompt is what a starting pane looks like. A pane that has run a
+// program, even one that printed nothing, has echoed the command that started
+// it. Anything unreadable counts as not starting.
+func paneIsStarting(pane tmux.Pane) bool {
+	column, columnOK := pane.Formats().CursorX()
+	row, rowOK := pane.Formats().CursorY()
+	history, historyOK := pane.Formats().HistorySize()
+	return columnOK && rowOK && historyOK && column == 0 && row == 0 && history == 0
+}
+
+// settlePaneInput re-reads a pane until two readings in a row agree and ready
+// accepts the later one against initial, and returns those two. It stops
+// without an error when the grace or ctx ends, or when anything other than a
+// foreground command differs from initial. Unless ready accepted, it returns
+// initial itself as the earlier reading, so a change that ready refused is
+// still a difference for the caller's own comparison to name, however
+// steadily the pane has held it since. Only a failed read is an error.
+func (t *tools) settlePaneInput(
+	ctx context.Context,
+	initial, latest paneInputPreflight,
+	kind paneInputMembershipKind,
+	tool string,
+	ready func(initial, latest paneInputPreflight) bool,
+) (previous, final paneInputPreflight, err error) {
+	previous = initial
+	unsettled := func() paneInputPreflight {
+		if ready(initial, latest) {
+			return previous
+		}
+		return initial
+	}
+	deadline := time.Now().Add(t.runtime.deps.inputSettleGrace)
+	for step := paneInputSettleStep; ; step *= 2 {
+		if !samePaneInputExceptForeground(initial, latest) {
+			return initial, latest, nil
+		}
+		if samePaneInputPreflight(previous, latest) && ready(initial, latest) {
+			return previous, latest, nil
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return unsettled(), latest, nil
+		}
+		timer := time.NewTimer(min(step, remaining))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return unsettled(), latest, nil
+		case <-timer.C:
+		}
+		next, err := t.preflightPaneInput(ctx, initial.Source.ID().String(), "", kind, tool)
+		select {
+		case <-ctx.Done():
+			// The caller's time ran out mid-read. What was read before it
+			// still stands, and still differs.
+			return unsettled(), latest, nil
+		default:
+		}
+		if err != nil {
+			return previous, latest, err
+		}
+		previous, latest = latest, next
+	}
+}
+
 func parseStrictPaneFlag(name string, raw rawPaneFormat) (bool, error) {
 	if raw.Present {
 		switch raw.Value {
@@ -759,6 +886,12 @@ func (t *tools) sendKeysBatch(
 	if err != nil {
 		return nil, output, err
 	}
+	initial, preflight, err = t.settlePaneInput(
+		ctx, initial, preflight, paneInputConfigured, tool, paneInputMayStart,
+	)
+	if err != nil {
+		return nil, output, err
+	}
 	output.ResolvedPaneIDs = append([]string{}, preflight.ConfiguredIDs...)
 	if !slices.Equal(preflight.ConfiguredIDs, confirmedIDs) {
 		return nil, output, fmt.Errorf(
@@ -899,6 +1032,12 @@ func (t *tools) pasteText(
 	}
 	final, err := t.preflightPaneInput(
 		ctx, output.PaneID, "", paneInputTargetOnly, "paste_text",
+	)
+	if err != nil {
+		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
+	}
+	initial, final, err = t.settlePaneInput(
+		ctx, initial, final, paneInputTargetOnly, "paste_text", paneInputMayStart,
 	)
 	if err != nil {
 		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))

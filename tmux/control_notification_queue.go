@@ -14,8 +14,22 @@ const defaultControlNotificationLimit = 16 << 20
 
 const controlNotificationHeaderSize = 12
 
+// errControlNotificationsClosed is what a read reports once the caller closed
+// the client. It matches [ErrControlClosed], the one sentinel for every end of
+// a control client, and [os.ErrClosed], which earlier callers already test.
+var errControlNotificationsClosed = fmt.Errorf("%w: %w", ErrControlClosed, os.ErrClosed)
+
 // ErrControlNotificationOverflow identifies a watcher that did not consume
-// notifications before its bounded backlog filled.
+// notifications before its bounded backlog filled. Reads return the
+// notifications queued before the overflow and then this error; everything
+// tmux sent after it is dropped, so the stream is no longer a faithful record
+// even though the process is still running.
+//
+// Recover by closing the stream and opening another: a stream cannot be
+// resumed. The new one starts at tmux's present with no subscriptions armed
+// and nothing from the gap, so read the state that mattered directly from tmux
+// and Subscribe again; [NotificationStream] describes the steps and
+// [NotificationOptions.BacklogBytes] sizes the bound.
 var ErrControlNotificationOverflow = errors.New("tmux: control notification backlog overflow")
 
 // ControlNotificationOverflowError reports the backlog limit and the record
@@ -56,13 +70,46 @@ type controlNotificationQueue struct {
 	finished bool
 	err      error
 	closed   bool
+
+	// reader holds the one token that admits a caller of
+	// [ControlClient.NextNotification]. The queue's wake-up signal is a single
+	// buffered value, so two readers parked on it can leave a queued record
+	// unread; one reader at a time cannot.
+	reader chan struct{}
 }
 
 func newControlNotificationQueue(limit int) *controlNotificationQueue {
-	return &controlNotificationQueue{
-		ready: make(chan struct{}, 1),
-		limit: limit,
+	q := &controlNotificationQueue{
+		ready:  make(chan struct{}, 1),
+		reader: make(chan struct{}, 1),
+		limit:  limit,
 	}
+	q.releaseReader()
+	return q
+}
+
+// acquireReader waits for the reader token, or for ctx to end.
+func (q *controlNotificationQueue) acquireReader(ctx context.Context) error {
+	if q == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-q.reader:
+		if err := ctx.Err(); err != nil {
+			q.releaseReader()
+			return err
+		}
+		return nil
+	}
+}
+
+func (q *controlNotificationQueue) releaseReader() {
+	if q == nil {
+		return
+	}
+	q.reader <- struct{}{}
 }
 
 func (q *controlNotificationQueue) append(sequence uint64, record []byte) error {
@@ -72,7 +119,7 @@ func (q *controlNotificationQueue) append(sequence uint64, record []byte) error 
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.closed {
-		return os.ErrClosed
+		return errControlNotificationsClosed
 	}
 	if q.finished {
 		if q.err != nil {
@@ -178,7 +225,7 @@ func (q *controlNotificationQueue) take(after uint64) ([]byte, <-chan struct{}, 
 	defer q.mu.Unlock()
 	for {
 		if q.closed {
-			return nil, nil, os.ErrClosed
+			return nil, nil, errControlNotificationsClosed
 		}
 		if q.used == 0 {
 			if !q.finished {

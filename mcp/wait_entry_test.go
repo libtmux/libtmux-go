@@ -320,3 +320,42 @@ func TestWaitForTextResumesFromARealCursor(t *testing.T) {
 		t.Fatalf("wait_for_text with a real cursor = %+v, want matched/found immediately", waited)
 	}
 }
+
+// A client that reads only a result's content, not its structured content,
+// must still learn that a wait ran out. An empty text block reads as a call
+// that returned nothing, which a timed-out wait otherwise produced.
+//
+//libtmux:real-tmux
+func TestWaitForTextTimeoutSaysSoInContent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	request := tmux.NewSessionRequest{Name: "timeout-text"}
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		FixedShell: true, InitialSession: &request,
+	})
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+	snapshot, err := target.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane := snapshot.Panes()[0]
+	tmuxtest.WaitForShellReady(ctx, t, pane)
+
+	result, err := session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "wait_for_text",
+		Arguments: map[string]any{
+			"pane_id": pane.ID().String(), "patterns": []any{"NEVER-WRITTEN"},
+			"timeout": 1,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := surfaceResultText(result); !strings.Contains(text, "timeout") {
+		t.Fatalf("content = %q, want it to say the wait timed out", text)
+	}
+}

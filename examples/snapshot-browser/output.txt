@@ -1,0 +1,3 @@
+session $0 "libtmux-snapshot"
+  window @0:0
+    pane %0 index 0

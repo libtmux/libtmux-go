@@ -64,6 +64,8 @@ type DisplayPopupRequest struct {
 	// StartDirectory selects the popup working directory. Nil omits the option;
 	// nonnil empty is normalized to ".". The library expands a leading local ~
 	// before tmux expands formats in the resulting value.
+	// A directory that does not exist is not an error: tmux starts the
+	// process in the home directory instead, or in / without one.
 	StartDirectory *string
 	// Title is the popup title format. Nil leaves the tmux default.
 	Title *string

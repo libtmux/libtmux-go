@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -186,6 +187,11 @@ func (t *tools) listWindows(
 		return nil, listWindowsOutput{}, err
 	}
 	windows := snapshot.Windows()
+	if input.SessionName != "" && running && !hasSessionNamed(snapshot.Sessions(), input.SessionName) {
+		// An empty list for a misspelt session reads as a session with no windows.
+		return nil, listWindowsOutput{}, notFound(
+			tmux.ErrNotFound, "session", input.SessionName, "list_sessions")
+	}
 	summaries := make([]windowSummary, 0, len(windows))
 	for _, window := range windows {
 		panes, _ := window.Panes()
@@ -204,6 +210,13 @@ func (t *tools) listWindows(
 		Windows: summaries, Total: len(windows),
 		Skipped: len(windows) - len(summaries), ServerNote: noteWhenAbsent(running),
 	}, nil
+}
+
+func hasSessionNamed(sessions []tmux.Session, name string) bool {
+	return slices.ContainsFunc(sessions, func(session tmux.Session) bool {
+		actual, ok := session.Formats().SessionName()
+		return ok && actual == name
+	})
 }
 
 type listSessionsInput struct {

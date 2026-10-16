@@ -24,7 +24,12 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server, err := tmux.NewServer(tmux.ServerOptions{})
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-run-to-completion",
+		ConfigFile: os.DevNull,
+	})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
@@ -44,7 +49,9 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}()
 
 	// docs:run-to-completion given:ctx context.Context; session tmux.Session
-	result, err := session.Run(ctx, "tty; exit 3", tmux.RunOptions{})
+	// The command runs with a terminal, so test -t holds where a pipe fails.
+	command := "test -t 1 && echo stdout is a terminal; exit 3"
+	result, err := session.Run(ctx, command, tmux.RunOptions{})
 	if err != nil {
 		return fmt.Errorf("run command: %w", err)
 	}
@@ -75,7 +82,12 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err := <-stopped; err != nil {
 		return fmt.Errorf("stop command: %w", err)
 	}
-	fmt.Println("stopped by signal", streamed.Signal)
+	if streamed.Signal == nil {
+		// tmux before 3.3 does not say which signal ended a pane.
+		fmt.Println("stopped")
+	} else {
+		fmt.Println("stopped:", streamed.Signal)
+	}
 	// docs:end
 	return nil
 }

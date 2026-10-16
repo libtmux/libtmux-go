@@ -70,19 +70,37 @@ type controlLanePool struct {
 
 	stopOnce sync.Once
 
+	// open starts a client outside the lanes for a command that can block.
+	open func(context.Context) (*ControlClient, error)
+
 	mu      sync.Mutex
 	live    int
 	failure error
+	// exclusive holds the clients running blocking commands, so closing the
+	// pool ends them.
+	exclusive map[*ControlClient]struct{}
 }
 
 func (p *controlLanePool) closeContext(ctx context.Context) error {
 	p.stop()
-	return closeControlClientsContext(ctx, p.clients)
+	return closeControlClientsContext(ctx, p.closing())
 }
 
 func (p *controlLanePool) close() error {
 	p.stop()
-	return closeControlClients(p.clients)
+	return closeControlClients(p.closing())
+}
+
+// closing returns every client the pool owns. Call it after stop, which keeps
+// adopt from adding another.
+func (p *controlLanePool) closing() []*ControlClient {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	clients := slices.Clone(p.clients)
+	for client := range p.exclusive {
+		clients = append(clients, client)
+	}
+	return clients
 }
 
 func (p *controlLanePool) stop() {
@@ -105,6 +123,82 @@ func (p *controlLanePool) run(
 	return controlCommandResults(arguments, results), nil
 }
 
+// runExclusive carries one command that can block on a client opened for it
+// alone. tmux has no way to cancel a command already sent to a control client,
+// so the client is closed when the command ends, however it ends; a shared
+// lane would stay occupied until a peer acted.
+//
+// tmux answers such a command with an empty frame and prints what it has to
+// say afterward as lines outside any frame, so the client reads them as the
+// command's result instead of as protocol. shellOutput says they are a shell
+// command's stdout; otherwise they are error text.
+func (p *controlLanePool) runExclusive(
+	ctx context.Context,
+	arguments []string,
+	commandList bool,
+	shellOutput bool,
+) (CommandResult, error) {
+	failed := CommandResult{Command: slices.Clone(arguments), ExitCode: -1}
+	if err := ctx.Err(); err != nil {
+		return failed, err
+	}
+	select {
+	case <-p.stopped:
+		return failed, ErrControlClosed
+	default:
+	}
+	client, err := p.open(ctx)
+	if err != nil {
+		return failed, err
+	}
+	if !p.adopt(client) {
+		_ = client.Close()
+		return failed, ErrControlClosed
+	}
+	results, err := client.cmdCaptured(ctx, commandList, shellOutput, arguments...)
+	if err != nil {
+		// Closing waits out a command still in flight, which a canceled
+		// caller must not. The pool keeps the client until it has closed,
+		// so closing the pool still ends it.
+		go p.retire(client)
+	} else {
+		p.retire(client)
+	}
+	if err != nil {
+		select {
+		case <-p.stopped:
+			err = errors.Join(ErrControlClosed, err)
+		default:
+		}
+		return failed, err
+	}
+	return controlCommandResults(arguments, results), nil
+}
+
+// retire closes an exclusive client and then forgets it.
+func (p *controlLanePool) retire(client *ControlClient) {
+	_ = client.Close()
+	p.mu.Lock()
+	delete(p.exclusive, client)
+	p.mu.Unlock()
+}
+
+// adopt records client as belonging to the pool, unless the pool has stopped.
+func (p *controlLanePool) adopt(client *ControlClient) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	select {
+	case <-p.stopped:
+		return false
+	default:
+	}
+	if p.exclusive == nil {
+		p.exclusive = make(map[*ControlClient]struct{})
+	}
+	p.exclusive[client] = struct{}{}
+	return true
+}
+
 func (p *controlLanePool) call(
 	ctx context.Context,
 	arguments []string,
@@ -117,6 +211,14 @@ func (p *controlLanePool) call(
 	// Unobserved: both callers report their own, Server.runCommand for the
 	// commands it sends down this lane and Connection.Call for its own.
 	results, err := client.cmdUnobserved(ctx, commandList, arguments...)
+	if errors.Is(err, ErrOutcomeUnknown) && connectionSurvives(err) {
+		// The caller stopped waiting on a command tmux is still running.
+		// The lane answers nothing else until tmux finishes it, so it
+		// rejoins the pool only once a reply fence has crossed it, and a
+		// caller meanwhile takes a lane that is free.
+		go func() { p.release(client, client.crossReplyFence(context.Background())) }()
+		return results, err
+	}
 	p.release(client, err)
 	return results, err
 }
@@ -183,7 +285,8 @@ func (p *controlLanePool) release(client *ControlClient, err error) {
 // connectionSurvives reports whether a failed command left its connection
 // usable. A rejected request never reached the wire, and a canceled command is
 // drained by the client before it writes another, so neither says anything
-// about the connection.
+// about the connection. Draining waits for tmux to finish the command, which
+// is why a command that can block never runs on a lane; see runExclusive.
 func connectionSurvives(err error) bool {
 	if errors.Is(err, ErrInvalidRequest) {
 		return true

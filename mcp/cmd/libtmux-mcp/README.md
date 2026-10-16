@@ -37,13 +37,13 @@ $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ## Answering questions without a client
 
 A misconfigured entry in somebody's agent CLI is hard to debug through the
-client that is failing to start it. These three flags answer without one:
+client that is failing to start it. These flags answer without one:
 
 ```console
 $ libtmux-mcp -version
 ```
 
-```
+```text
 libtmux-mcp v0.0.1-alpha.12
 ```
 
@@ -53,7 +53,9 @@ List every tool the server exposes, as a client would see them:
 $ libtmux-mcp -tools
 ```
 
-Tool listing does not resolve or contact tmux.
+Tool listing needs the tmux executable: it asks the socket it would serve
+whether a tmux server runs there, because that decides whether the
+`teardown` toolset is in the default.
 
 Check that the server can reach the tmux it was pointed at:
 

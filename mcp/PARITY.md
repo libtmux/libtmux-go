@@ -63,6 +63,12 @@ longer changes every field's casing, but it still requires inspecting the
 chosen tool's schema: a similarly named workflow may use different selectors,
 bounds, or result fields.
 
+Go result fields are not uniformly cased. `run_shell_command`, `send_keys`,
+`paste_text`, and `clear_pane_scrollback` return snake_case fields such as
+`exit_status` and `pane_id`; every other tool, `wait_for_text` among them,
+returns camelCase fields such as `paneId`. The published `outputSchema` is the
+shared contract, so the casing is not changed here; read it per tool.
+
 The different inventories express different boundaries. Python offers broader
 buffer, option, environment, server-discovery, copy-mode, and pipe operations.
 Go exposes named settings and validated variable lookup, keeps one socket per

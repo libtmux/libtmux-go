@@ -1,12 +1,7 @@
 # quickstart
 
-A whole session, window, and pane lifecycle: make a session, add a window, split
-it, type a command into the new pane, and read the pane's output back until the
-command's line arrives.
-
-Start here. It is the shortest program that touches every level of the
-hierarchy — server, session, window, pane — and the only one that both writes to
-a pane and reads from it.
+Run a command in tmux and print what its terminal showed. Start here: it is the
+shortest program that does something you can see.
 
 ## Running it
 
@@ -14,40 +9,98 @@ a pane and reads from it.
 $ go -C examples run ./quickstart
 ```
 
-```
-libtmux ready
+It prints:
+
+<!-- docs:output examples/quickstart/output.txt -->
+
+```text
+hello from tmux
+exit status: 0
 ```
 
-`libtmux ready` is the pane's own output, captured back out of it. The session
-is killed on the way out, so nothing is left behind.
+<!-- docs:end -->
+
+## The program
+
+<!-- docs:file examples/quickstart/main.go -->
+
+```go
+// Command quickstart runs a command in tmux and prints what it showed.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context) (err error) {
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-quickstart",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux: %w", err)
+	}
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "demo"})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
+	}()
+
+	// The command runs in a window of its own, with a terminal.
+	result, err := session.Run(ctx, "echo hello from tmux", tmux.RunOptions{})
+	if err != nil {
+		return fmt.Errorf("run command: %w", err)
+	}
+	for _, line := range result.Lines {
+		fmt.Println(line)
+	}
+	fmt.Println("exit status:", result.Status)
+	return nil
+}
+```
+
+<!-- docs:end -->
 
 ## What to look at
 
-**Writing and reading are the standard interfaces.** `pane.Writer(ctx)` is an
-`io.Writer` whose newline is the Enter key, so `fmt.Fprintln` submits a line
-the way a person would. `output.Reader(ctx)` is an `io.Reader` over what the
-pane prints after the observation opened, so `bufio.Scanner` reads it back a
-line at a time and the program returns the moment the line arrives — no loop
-that captures and sleeps.
+**The server is the program's own.** `SocketName` gives it a socket nothing
+else uses, and `ConfigFile: os.DevNull` keeps your `~/.tmux.conf` out of it, so
+the program prints the same thing on every machine and never reaches a tmux you
+have open. `NewServer` starts nothing; the first command that needs a server
+starts one.
 
-**Open the reader before typing.** An observation starts when it is opened;
-typing afterwards means the reply cannot be missed.
+**`Session.Run` is `os/exec` for a program that needs a terminal.** The command
+runs in a window of its own with a tty, and what comes back is its exit status
+and the screen tmux rendered. A nonzero status is a result, not an error:
+[`run-to-completion`](../run-to-completion) shows one, and a command stopped by
+a signal.
 
-**The split runs `sh`.** A pane's default shell is your login shell, and what
-that does at startup is yours. A plain POSIX shell keeps the example about tmux.
+**Cleanup outlives the context.** The deferred `server.Kill` takes
+`context.WithoutCancel(ctx)`, so it still runs when a deadline or a cancelled
+context is why the program is leaving. `main` calls `run` because `log.Fatal`
+skips deferred calls.
 
-**`new("work")`** is Go 1.26's way to take the address of a literal. Request
-fields are pointers only where tmux distinguishes an empty value from an
-omitted one; the rest are plain values.
+## Running its test
 
-**The pane never refreshes.** The `pane` value is what tmux said when the split
-happened. Reading through the observation asks tmux for more; it does not
-update the value in hand.
-
-## Testing your own version
-
-[`example_test.go`](example_test.go) runs this against a real tmux on a socket
-the test harness owns and removes:
+[`example_test.go`](example_test.go) runs the program on a socket directory of
+its own and compares what it prints with [`output.txt`](output.txt):
 
 ```console
 $ go -C examples test ./quickstart

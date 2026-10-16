@@ -176,13 +176,13 @@ func TestWrapperRejectsOversizedTrapDeclarations(t *testing.T) {
 				t.Fatal(err)
 			}
 			script := filepath.Join(root, "script")
-			contents := wrapperScript("command printf '0 0 0 80 24\\n'", opened,
+			contents := wrapperScript("command printf '0 0 0 80 24\\n'", "command printf 0", opened,
 				command, traps, status, closed, "bounded")
 			if err := os.WriteFile(script, []byte(contents), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			setup := "readonly __libtmux_errexit=human __libtmux_status=human; " +
-				"trap_action=\": x$(command printf '%070000d' 0)\"; \\trap \"$trap_action\" ERR; " +
+				"trap_action=\": x$(\\printf '%070000d' 0)\"; \\trap \"$trap_action\" ERR; " +
 				"\\unset trap_action; . " + shellQuote(script) + "; " +
 				"[ \"$__libtmux_errexit:$__libtmux_status\" = human:human ]"
 			process := exec.Command(executable, "-f", "-c", setup)

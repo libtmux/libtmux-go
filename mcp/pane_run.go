@@ -56,6 +56,11 @@ type paneInputCoordinator struct {
 	mutex  sync.Mutex
 	next   uint64
 	active map[paneInputIdentity]paneInputReservation
+	// detached holds runs whose call has returned while their command may
+	// still be running. One refuses another run, which needs the shell's
+	// prompt, and lets input through, which is how a caller steers or
+	// interrupts what it started.
+	detached map[paneInputIdentity]uint64
 }
 
 var processPaneInputs paneInputCoordinator
@@ -102,6 +107,13 @@ func (c *paneInputCoordinator) acquire(
 				tool, identity.paneID,
 			)
 		}
+		if _, found := c.detached[identity]; found && kind == paneInputReservationRun {
+			return paneInputLease{}, fmt.Errorf(
+				"%s refused for pane %s: an earlier run_shell_command is still active; "+
+					"wait for it, or interrupt it with send_keys and keys [\"C-c\"]",
+				tool, identity.paneID,
+			)
+		}
 	}
 	c.next++
 	for _, identity := range wanted {
@@ -134,6 +146,27 @@ func (c *paneInputCoordinator) release(lease paneInputLease) {
 		active, found := c.active[identity]
 		if found && active.token == lease.token && active.kind == lease.kind {
 			delete(c.active, identity)
+		}
+		if token, found := c.detached[identity]; found && token == lease.token {
+			delete(c.detached, identity)
+		}
+	}
+}
+
+// detach marks a run's call as returned while its command may still be
+// running. The panes stop refusing input and go on refusing another run until
+// release.
+func (c *paneInputCoordinator) detach(lease paneInputLease) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.detached == nil {
+		c.detached = make(map[paneInputIdentity]uint64)
+	}
+	for _, identity := range lease.identities {
+		active, found := c.active[identity]
+		if found && active.token == lease.token && active.kind == lease.kind {
+			delete(c.active, identity)
+			c.detached[identity] = lease.token
 		}
 	}
 }

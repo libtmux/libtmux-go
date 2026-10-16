@@ -27,7 +27,10 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	return run(ctx, tmux.ServerOptions{SocketName: "libtmux-go-example-fast-path"})
+	return run(ctx, tmux.ServerOptions{
+		SocketName: "libtmux-fast-path",
+		ConfigFile: os.DevNull,
+	})
 }
 
 // run accepts options so tests can isolate the server.

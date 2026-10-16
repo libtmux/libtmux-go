@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -24,7 +25,12 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server, err := tmux.NewServer(tmux.ServerOptions{})
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-planned-build",
+		ConfigFile: os.DevNull,
+	})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
@@ -85,6 +91,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
 
+	// docs:planning-run given:ctx context.Context; server tmux.Server; plan *tmux.Plan
 	result, err := plan.Run(ctx, server)
 	if err != nil {
 		return fmt.Errorf("run plan: %w", err)
@@ -98,6 +105,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Printf("step %d %-16s %-8s created %q stdout %q\n",
 			index, op.Command, op.Status, op.Created, op.Stdout)
 	}
+	// docs:end
 	if result.Ops[1].Created == "" {
 		return errors.New("the split reported no pane ID")
 	}

@@ -40,6 +40,18 @@ Those hints do not claim that an unknown tmux configuration is harmless. The
 capability row below each tool gives the precise process reach, tmux effects,
 output classes, trust flags, and input interpreter boundaries.
 
+A client that skips approval for tools with `readOnlyHint=true` therefore asks
+about every call, including `list_sessions`. To classify a tool, read
+`tmuxEffects` in its capability row instead: `observe` alone is a read, and
+"Reads only" in the per-tool sections below states that effect, not the
+annotation. The annotations are identical across the sibling servers that share
+the manifest, so this server does not set them per tool.
+
+Each listed tool carries its `description`, `inputSchema`, and `outputSchema`
+twice: at the top level and inside the capability row. The repeat is about
+two fifths of the `tools/list` reply. A client that wants only one copy reads the
+top-level fields and ignores the row's.
+
 ### Finding out what is there
 
 | Tool | Does |
@@ -131,18 +143,26 @@ screen. A shell echoes input before it executes it, so the capture can find the
 request rather than the result. `run_shell_command` frames one authored command,
 waits for its completion record, and returns its exit status and bounded output.
 
-For output the client did not author, use `wait_for_text`. It can match output
-already present or output that arrives later, and `stop` patterns turn known
-failure text into an early answer. Every wait has a ceiling: 300 seconds by
-default, configurable with `LIBTMUX_MCP_WAIT_MAX_SECONDS`. A longer requested
-timeout is clamped and disclosed in the response.
+For output the client did not author, use `wait_for_text`, and `stop`
+patterns turn known failure text into an early answer. Text already on the
+pane when it attaches ends the wait at once, with `outcome` set to
+`alreadyOnScreen`, `matchedAtEntry` true, and `found` false: it is not
+evidence of anything the wait saw happen, and a shell's echo of a command just
+typed reads the same. To wait only for output written after some point, pass
+the `cursor` an earlier `capture_since` returned. Every wait has a ceiling:
+300 seconds by default, configurable with `LIBTMUX_MCP_WAIT_MAX_SECONDS`. A
+longer requested timeout is clamped and disclosed in the response.
 
 Commands for `run_shell_command` are staged as private files and sourced by the
 pane's POSIX-compatible shell. They do not cross the interactive line editor.
 A command runs in a subshell, so `cd`, `export`, `exit`, and other shell-state
 changes do not persist in the pane's interactive shell.
-A timeout can leave the pane's program running; inspect it with
-`get_pane_info`, then send `C-c` if interruption is intended.
+A timeout can leave the pane's program running. Until it ends, `send_keys` and
+`paste_text` reach it, and another `run_shell_command` on that pane is
+refused. Inspect it with `get_pane_info`, then send `C-c` if interruption is
+intended. The pane takes a new run once the command ends, is interrupted, or
+the pane is respawned. A command interrupted while a call still waits on it
+reports exit status 130.
 
 ### How large an argument can be
 
@@ -484,7 +504,12 @@ files use mode `0600`, and auditing is off unless configured.
 
 `list_sessions`, `list_windows`, and `list_panes` treat a missing server as an
 empty topology and include a `serverNote`. This lets a client orient before
-`create_session`. Reads requiring a live object and every mutation preserve
+`create_session`. On a running server, `list_windows` with a `session` that
+names no session is an error that points at `list_sessions`, not an empty list.
+An argument name a tool does not take is rejected with the names it does.
+
+A wait that ends without lines, such as a timeout, still puts its outcome in the
+text content, so a client reading `content` alone does not see an empty block. Reads requiring a live object and every mutation preserve
 tmux failures as tool errors; a mutation that silently did nothing would leave
 the caller with the wrong state.
 
@@ -601,7 +626,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | `list_sessions`, `list_windows`, `list_panes`, `get_server_info`, `get_session_info`, `get_window_info`, `get_pane_info`, `capture_pane`, `capture_since`, `snapshot_pane`, `search_panes`, `find_pane_by_position`, `get_tmux_variables`, `show_option`, `show_environment`, `show_hooks` |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -636,7 +661,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -670,7 +695,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -800,7 +825,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -831,7 +856,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -868,7 +893,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Returns | Type |
 | --- | --- |
@@ -906,7 +931,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -938,7 +963,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -966,7 +991,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1088,7 +1113,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Returns | Type |
 | --- | --- |
@@ -1115,7 +1140,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Returns | Type |
 | --- | --- |
@@ -1142,7 +1167,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1412,6 +1437,9 @@ Changes tmux state.
 | `output_unavailable` | string |
 | `running` | string |
 | `timeout_clamped` | boolean |
+| `truncated` | boolean |
+| `truncated_bytes` | integer |
+| `truncated_lines` | integer |
 
 ### `search_panes`
 
@@ -1431,7 +1459,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1743,7 +1771,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1776,7 +1804,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1807,7 +1835,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1870,7 +1898,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |
@@ -1999,7 +2027,7 @@ Belongs to the `inspect` toolset.
 | `nestedAuthority` | none |
 | `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
 
-Reads only. Repeating it changes nothing.
+Reads only (effect `observe`). Repeating it changes nothing.
 
 | Argument | Type | |
 | --- | --- | --- |

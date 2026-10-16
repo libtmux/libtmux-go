@@ -47,6 +47,23 @@ func (t *tools) attachCommandOutput(
 		output.OutputUnavailable = err.Error()
 		return nil
 	}
+	closed, closedErr := readMark(closedPath)
+	// A command that has not closed is still writing, so the cursor stands at
+	// the end of what it has printed so far.
+	finish := closed
+	if closedErr != nil {
+		finish = mark{
+			historySize: now.historySize,
+			row:         now.historySize + now.cursorY,
+			column:      now.cursorX,
+		}
+	}
+	if (closedErr == nil || errors.Is(closedErr, os.ErrNotExist)) && historyFilled(finish, now) {
+		handled, err := t.attachOutputBeforeTheEnd(ctx, pane, opened, openedPath, finish, now, limits, output)
+		if err != nil || handled {
+			return err
+		}
+	}
 	// Convert absolute marks to current grid rows; tmux renumbers trimmed history.
 	request := tmux.CapturePaneRequest{
 		Start:       tmux.CaptureLine(opened.row - now.historySize),
@@ -59,7 +76,7 @@ func (t *tools) attachCommandOutput(
 	// way along it. A cursor at column zero means the last line ended, so that
 	// row holds whatever the shell drew next, and reading it returns a prompt
 	// as though the command had printed one.
-	if closed, err := readMark(closedPath); err == nil {
+	if closedErr == nil {
 		end := closed.row
 		if closed.column == 0 {
 			end--
@@ -109,6 +126,194 @@ func (t *tools) attachCommandOutput(
 	return nil
 }
 
+// historyFilled reports that the pane's history may have filled while the
+// command ran. Each time it fills, tmux discards its oldest tenth and
+// renumbers what is left, and only a history already in its last tenth when
+// the command closed can have done so.
+func historyFilled(closed mark, now paneState) bool {
+	if now.historyLimit <= 0 {
+		return false
+	}
+	return closed.historySize >= now.historyLimit-max(now.historyLimit/10, 1)
+}
+
+// attachOutputBeforeTheEnd reads a command's output back from its closing
+// mark when the history may have been renumbered under its opening mark. It
+// reads far enough to find the line the wrapper was typed on, where the output
+// starts. When that line is out of reach, the start of the output is too, and
+// the reply says so.
+//
+// It returns false, having attached nothing, when the terminal showed no
+// wrapper line to look for and nothing says tmux discarded history under the
+// opening mark, which then still bounds the output.
+func (t *tools) attachOutputBeforeTheEnd(
+	ctx context.Context,
+	pane tmux.Pane,
+	opened mark,
+	openedPath string,
+	closed mark,
+	now paneState,
+	limits bounds,
+	output *runCommandOutput,
+) (bool, error) {
+	_, promptErr := os.Stat(promptedPath(openedPath))
+	prompted := promptErr == nil
+	end := closed.row
+	if now.historySize < closed.historySize {
+		// The history filled again while the shell drew its prompt.
+		end -= max(now.historyLimit/10, 1)
+	}
+	if closed.column == 0 {
+		end--
+	}
+	if end < 0 {
+		output.Output = nil
+		return true, nil
+	}
+	// Enough rows for the output a reply can hold, then the whole history
+	// when the wrapper line is further back than that.
+	var (
+		rest  []string
+		found bool
+		first int
+	)
+	echo := sourceScriptFor(openedPath)
+	for _, start := range []int{max(end-2*limits.lines-now.height, 0), 0} {
+		first = start
+		lines, err := readRows(ctx, pane, start-now.historySize, end-now.historySize, true)
+		if err != nil {
+			if t.runtime.isTerminalError(err) || isContextError(err) {
+				return true, err
+			}
+			output.OutputUnavailable = err.Error()
+			return true, nil
+		}
+		// Without a wrapper line, tmux has discarded it with the start of
+		// the output, or it lies before what this read reached.
+		rest, found = rowsAfterTheWrapperEcho(lines, echo)
+		if !found {
+			rest = lines
+		}
+		output.LinesMissed = !found
+		if found || start == 0 {
+			break
+		}
+	}
+	if prompted {
+		if output.LinesMissed && closed.historySize >= opened.historySize {
+			// The prompt shared the row the keys were typed on, so the
+			// terminal did not echo them, and there was no wrapper line to
+			// find.
+			output.LinesMissed = false
+			return false, nil
+		}
+		if !output.LinesMissed && len(rest) > 0 {
+			// The shell drew its prompt on the row after the wrapper line.
+			rest = rest[1:]
+		}
+	}
+	if found && (len(rest) == 0 || rest[0] == "") {
+		var err error
+		rest, err = t.withTheCommandsBlankRows(ctx, pane, rest, blankRows{
+			echo: echo, first: first - now.historySize, last: end - now.historySize,
+			opened: opened, closed: closed, prompted: prompted, limit: now.historyLimit,
+		})
+		if err != nil {
+			return true, err
+		}
+	}
+	kept, report := limits.apply(rest)
+	output.Output = kept
+	output.truncation = report
+	return true, nil
+}
+
+// readRows reads the grid rows from first to last, relative to the top of the
+// screen, with the padding that ends each row removed.
+func readRows(ctx context.Context, pane tmux.Pane, first, last int, join bool) ([]string, error) {
+	lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{
+		Start:       tmux.CaptureLine(first),
+		End:         tmux.CaptureLine(last),
+		JoinWrapped: join,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for index, line := range lines {
+		lines[index] = strings.TrimRight(line, " ")
+	}
+	return lines, nil
+}
+
+// blankRows is what separates the command's blank rows from the grid's, in a
+// read that began at the wrapper line.
+type blankRows struct {
+	echo        string
+	first, last int
+	opened      mark
+	closed      mark
+	prompted    bool
+	limit       int
+}
+
+// withTheCommandsBlankRows decides which blank rows after the wrapper line the
+// command printed. A redraw of the prompt can leave blank rows between the
+// echo and the output that are the grid's, and a command can open with blank
+// rows of its own, and nothing in the rows tells them apart. The marks do: the
+// output spans the rows between them. tmux moves the closing mark by a whole
+// number of the tenths it discards, so the rows after the echo, less the rows
+// the marks span, leave the grid's rows once whole tenths are taken out.
+//
+// rest is the read with its blank rows still on it, which tmux trims from the
+// end. It returns the rows without the grid's, or without any leading blank
+// when the marks cannot say.
+func (t *tools) withTheCommandsBlankRows(
+	ctx context.Context,
+	pane tmux.Pane,
+	rest []string,
+	read blankRows,
+) ([]string, error) {
+	withoutLeadingBlanks := func() []string {
+		for len(rest) > 0 && rest[0] == "" {
+			rest = rest[1:]
+		}
+		return rest
+	}
+	// Each grid row as a line, padded to the rows read, so blank rows count.
+	rows, err := readRows(ctx, pane, read.first, read.last, false)
+	if err != nil {
+		if t.runtime.isTerminalError(err) || isContextError(err) {
+			return nil, err
+		}
+		return withoutLeadingBlanks(), nil
+	}
+	rows = append(rows, make([]string, max(read.last-read.first+1-len(rows), 0))...)
+	after, found := rowsAfterTheWrapperEcho(rows, read.echo)
+	if read.prompted && len(after) > 0 {
+		after = after[1:]
+	}
+	spanned := read.closed.row - read.opened.row
+	if read.closed.column != 0 {
+		spanned++
+	}
+	extra := len(after) - spanned
+	if !found || extra < 0 {
+		return withoutLeadingBlanks(), nil
+	}
+	grids := extra % max(read.limit/10, 1)
+	leading := 0
+	for leading < len(after) && after[leading] == "" {
+		leading++
+	}
+	if grids > leading {
+		return withoutLeadingBlanks(), nil
+	}
+	if len(rest) == 0 {
+		return after[grids:], nil
+	}
+	return rest[grids:], nil
+}
+
 // moved reports grid renumbering at a stable pane size. Resize-induced history
 // changes are not comparable.
 func (f mark) moved(opened mark) bool {
@@ -126,6 +331,21 @@ func (f mark) erased(opened mark) bool {
 // afterTheWrapperEcho removes the sourced wrapper line, including an echo split
 // across wrapped rows.
 func afterTheWrapperEcho(lines []string, echo string) []string {
+	rest, found := rowsAfterTheWrapperEcho(lines, echo)
+	if !found {
+		// A shell that did not echo leaves no wrapper line to remove.
+		return lines
+	}
+	// Recovery-only blank rows precede the command output.
+	for len(rest) > 0 && rest[0] == "" {
+		rest = rest[1:]
+	}
+	return rest
+}
+
+// rowsAfterTheWrapperEcho returns the lines after the sourced wrapper line,
+// blank ones included, and whether the line was there.
+func rowsAfterTheWrapperEcho(lines []string, echo string) ([]string, bool) {
 	// Compared without spaces. A wrapped row that breaks on one of the echo's
 	// own spaces loses it to the padding trim, which cannot tell a space the
 	// grid added from a space the shell wrote.
@@ -155,15 +375,9 @@ func afterTheWrapperEcho(lines []string, echo string) []string {
 		}
 	}
 	if last < 0 {
-		// A shell that did not echo leaves no wrapper line to remove.
-		return lines
+		return lines, false
 	}
-	// Recovery-only blank rows precede the command output.
-	rest := lines[last+1:]
-	for len(rest) > 0 && rest[0] == "" {
-		rest = rest[1:]
-	}
-	return rest
+	return lines[last+1:], true
 }
 
 // echoRemnant is the shortest observed shell-redraw suffix, including its

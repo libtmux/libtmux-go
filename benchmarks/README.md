@@ -6,7 +6,7 @@ What each way of reaching tmux costs, printed as one table.
 $ go -C benchmarks run .
 ```
 
-```
+```text
 building a 6-pane window, tmux 3.7c
 12th Gen Intel(R) Core(TM) i7-12700H, 10 threads, linux, go1.26.5
 

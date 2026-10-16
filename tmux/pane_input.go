@@ -257,9 +257,19 @@ func sendKeysArguments(
 // read them; the program interprets what arrives. A line with a trailing
 // newline costs two tmux commands, the text and a separate Enter; buffering
 // whole lines still costs far less than writing bytes one at a time.
+//
+// A write of any size is typed whole, so [io.Copy] works: a line longer than
+// tmux takes in one command is sent in pieces.
 func (p Pane) Writer(ctx context.Context) io.Writer {
 	return paneWriter{ctx: ctx, pane: p}
 }
+
+// paneWriterPiece bounds the text in one send-keys. tmux takes at most 16 KiB
+// in one command, and a pane that checks its server's identity before each
+// command spells every byte outside printable ASCII in four. A piece may end
+// inside a UTF-8 character: tmux passes the bytes on, and the pane's program
+// reads them whole.
+const paneWriterPiece = 3 << 10
 
 type paneWriter struct {
 	ctx  context.Context
@@ -270,19 +280,40 @@ func (w paneWriter) Write(data []byte) (int, error) {
 	rest := string(data)
 	for rest != "" {
 		line, more, found := strings.Cut(rest, "\n")
-		if line == "" {
-			// An empty line is only the Enter key; send-keys needs no operand.
-			if err := w.pane.Enter(w.ctx); err != nil {
-				return len(data) - len(rest), err
-			}
-		} else if err := w.pane.SendKeys(w.ctx, SendKeysRequest{
-			Command: &line, Literal: true, SkipEnter: !found,
-		}); err != nil {
-			return len(data) - len(rest), err
+		if typed, err := w.typeLine(line, found); err != nil {
+			return len(data) - len(rest) + typed, err
 		}
 		rest = more
 	}
 	return len(data), nil
+}
+
+// typeLine types line in pieces tmux accepts, then presses Enter when enter is
+// set. On an error it returns how many bytes of line tmux had already taken,
+// so a caller resuming after them types nothing twice.
+func (w paneWriter) typeLine(line string, enter bool) (int, error) {
+	typed := 0
+	for len(line)-typed > paneWriterPiece {
+		piece := line[typed : typed+paneWriterPiece]
+		if err := w.pane.SendKeys(w.ctx, SendKeysRequest{
+			Command: &piece, Literal: true, SkipEnter: true,
+		}); err != nil {
+			return typed, err
+		}
+		typed += paneWriterPiece
+	}
+	if last := line[typed:]; last != "" {
+		if err := w.pane.SendKeys(w.ctx, SendKeysRequest{
+			Command: &last, Literal: true, SkipEnter: true,
+		}); err != nil {
+			return typed, err
+		}
+		typed += len(last)
+	}
+	if !enter {
+		return typed, nil
+	}
+	return typed, w.pane.Enter(w.ctx)
 }
 
 // Enter sends the Enter key to the receiver's exact linked pane. A completed

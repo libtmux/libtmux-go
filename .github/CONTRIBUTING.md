@@ -116,10 +116,8 @@ transports reach `crypto/tls` and `net/url`. Upgrade the toolchain rather than
 suppressing the finding.
 
 Generated code is checked in, so regenerate it and confirm the tree is
-unchanged rather than trusting that it is. The Go in the Markdown is generated
-too, quoted from programs that compile and run, so a snippet cannot drift from
-the code it came from. The markers, and what happens when one of them is wrong,
-are in [examples/README.md](../examples/README.md):
+unchanged rather than trusting that it is. The Go in the READMEs is generated
+too; [Generated documentation](#generated-documentation) has the markers.
 
 Run generators in every module that owns them:
 
@@ -154,6 +152,89 @@ builds; setting it intentionally narrows the run:
 ```console
 $ LIBTMUX_MATRIX_REQUIRED=1 bash scripts/matrix.sh
 ```
+
+### Generated documentation
+
+Every Go block in a README is quoted from code a suite runs, by
+`go generate`. Three markers do the quoting, each at column zero and closed by
+`<!-- docs:end -->`:
+
+| Marker | Quotes |
+| --- | --- |
+| `<!-- docs:file PATH -->` | a whole Go file, which a reader can paste and run |
+| `<!-- docs:output PATH -->` | a text file, as what a program printed |
+| `<!-- docs:NAME -->` | a named region of a Go file, as a fragment |
+
+A fourth, `<!-- docs:checked PATH ... -->`, quotes nothing. It holds every code
+span up to its `<!-- docs:end -->` to being text from one of the files it
+names, which keeps an expression too short for a program of its own compiled
+and run. A section headed by a code span must also state, in a span, what a
+named file prints after that span and a colon.
+
+`PATH` is slash-separated and relative to the repository root. A region is
+named where it is written, and ends at the next `// docs:end`:
+
+```text
+	// docs:pane-wait given:ctx context.Context; pane tmux.Pane
+	output, err := pane.OpenObservation(ctx)
+	// docs:end
+```
+
+A region name is lowercase letters, digits, and hyphens, and is unique across
+the repository. Shared leading tabs come off. `given:` lists the bindings the
+region reads but does not create, as Go declarations separated by semicolons;
+the generator prints them as the block's first line. The loop runs one way:
+edit the source, then regenerate. A marker indented from column zero is not a
+marker, and nothing reports it.
+
+The tests in `tmux/internal/generate/docs` hold a page to its source:
+
+- `TestPublishedMarkdownIsCurrent` fails when a generated block differs from
+  what its source renders, so a hand edit and a forgotten `go generate` both
+  fail without a clean tree to diff against.
+- `TestPastedProgramsBuildAndRun` takes each `docs:file` block back out of the
+  Markdown, builds it alone in an empty module, runs it with a hostile
+  `~/.tmux.conf` as its own, and compares what it prints with the
+  `docs:output` block beside it. It needs a tmux and fails without one. A
+  program under `mcp/` or `workspace/` cannot be built that way without the
+  network, so a test beside it runs it and compares its output, and this
+  check holds it to being a single file.
+- `TestPublishedRegionsCompileAlone` compiles each region alone with its
+  `given:` list as its only bindings. A region under `mcp/` or `workspace/`
+  is left to that module's suite instead, because compiling it alone would
+  need the module's dependencies from the network; put it in a test or an
+  `Example` that suite runs.
+- `TestPublishedOutputIsComparedByATest` and
+  `TestEveryExamplePagePublishesItsOutput` keep every published output tied to
+  a test that compares it.
+- `TestEveryRegionIsQuoted` fails on a region no document quotes.
+- `TestCheckedSpansAppearInTheirSource` fails on a code span in a
+  `docs:checked` block that is not in the files the block names, and on a
+  section that states another result than the one its heading printed.
+- `TestEveryREADMEFenceIsGeneratedOrPermitted` allows a README only
+  `console`, `text`, `bibtex`, `json`, and `yaml` blocks by hand.
+- `TestEveryLinkLabelIsDefined` fails on a reference-style link label a
+  README uses without defining, or defines without using.
+- `TestReferenceLinksNameExportedAPI` holds every link to
+  `libtmux.org/en/go/latest/reference/` to an identifier this module exports.
+  The site names a page for the package, then the identifier, then a method
+  or field of it, lowercased and joined by hyphens: `tmux-panefilter-active`.
+
+The index of tools in `mcp/README.md` is generated too, by
+`go -C mcp generate ./...`, between `<!-- toolsindex -->` and
+`<!-- toolsindex:end -->`. `TestREADMEToolLinksNameAdvertisedTools` in the
+`mcp` module holds every tool page that README links to a tool the server
+advertises.
+
+An example program takes one of two shapes. One a README quotes whole builds
+its own server, with a private `SocketName` and `ConfigFile: os.DevNull`, and
+is tested with `exampletest.Program`. One that shows a fragment takes its
+server as `run(ctx, server)` and is tested with `exampletest.Server`. Both
+compare standard output with `output.txt` exactly, so an example prints only
+what every machine prints alike. An example that types into a pane also runs
+under `exampletest.SlowShell`, where the shell's first prompt arrives after
+the typing, and `exampletest.MuteShell`, where only the terminal's echo can
+answer.
 
 ### The language floor
 

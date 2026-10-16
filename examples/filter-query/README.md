@@ -12,11 +12,19 @@ about how many answers you want from one read.
 $ go -C examples run ./filter-query
 ```
 
-```
+It starts a tmux server of its own, on a private socket with an empty
+config, and prints:
+
+<!-- docs:output examples/filter-query/output.txt -->
+
+```text
+session: libtmux-filter
 active panes: 1
 typed panes: 1
 live matches: 1
 ```
+
+<!-- docs:end -->
 
 ## What to look at
 
@@ -32,6 +40,7 @@ sessions, err := server.SearchSessions(ctx, &live)
 if err != nil {
 	return err
 }
+fmt.Println("live matches:", len(sessions))
 ```
 
 <!-- docs:end -->
@@ -52,11 +61,13 @@ active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
 if err != nil {
 	return err
 }
+fmt.Println("active panes:", len(active))
 ```
 
 <!-- docs:end -->
 
-Typed filters combine fields and captured relations without another tmux command:
+Typed filters combine fields and captured relations without another tmux
+command:
 
 <!-- docs:query-typed-in-go -->
 
@@ -70,6 +81,7 @@ panes, err := tmuxq.Matching(snapshot.Panes(), filter)
 if err != nil {
 	return err
 }
+fmt.Println("typed panes:", len(panes))
 ```
 
 <!-- docs:end -->
@@ -77,14 +89,8 @@ if err != nil {
 The snapshot retains the captured hierarchy while repeated reads may observe
 later changes.
 
-These blocks are generated from [`main.go`](main.go). Editing the program
-rewrites them, so they cannot drift from code that compiles and runs.
-
-## Testing your own version
+## Running its test
 
 ```console
 $ go -C examples test ./filter-query
 ```
-
-The test asserts the live filter matched the session the example made, since a
-filter matching nothing would print a line just the same.

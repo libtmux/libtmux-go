@@ -1,0 +1,2 @@
+the pane answered 6 x 7 = 42
+read the line: streamed 2 lines

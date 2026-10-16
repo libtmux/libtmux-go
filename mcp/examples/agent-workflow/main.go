@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -34,25 +35,31 @@ type paneSummary struct {
 }
 
 func main() {
-	socketName := flag.String("socket-name", "", "tmux socket name; empty uses tmux's default")
+	socketName := flag.String("socket-name", "libtmux-agent-workflow",
+		`tmux socket name; "default" is the one your tmux command uses`)
+	traceCalls := flag.Bool("trace", false, "print the work calls and what came back, to standard error")
 	flag.Parse()
+	if *traceCalls {
+		traced = os.Stderr
+	}
 	if _, set := os.LookupEnv(tmuxmcp.ToolsetsEnvironmentVariable); !set {
 		if err := os.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "inspect,manage,execute"); err != nil {
 			fmt.Fprintln(os.Stderr, "agent-workflow:", err)
 			os.Exit(1)
 		}
 	}
-	if err := run(*socketName); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	err := run(ctx, *socketName)
+	cancel()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "agent-workflow:", err)
 		os.Exit(1)
 	}
 }
 
-func run(socketName string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: socketName})
+func run(ctx context.Context, socketName string) error {
+	// An empty config, so what it prints does not depend on yours.
+	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: socketName, ConfigFile: os.DevNull})
 	if err != nil {
 		return err
 	}
@@ -66,8 +73,6 @@ func run(socketName string) error {
 	// act on the conversation itself, so the client proves that identity before
 	// choosing where to make room.
 	var server struct {
-		SocketPath       string `json:"socketPath"`
-		Version          string `json:"version"`
 		Alive            bool   `json:"alive"`
 		InsideThisServer bool   `json:"insideThisServer"`
 		CallerPaneID     string `json:"callerPaneId"`
@@ -89,7 +94,6 @@ func run(socketName string) error {
 			return err
 		}
 	}
-	fmt.Printf("tmux %s on %s\n", server.Version, server.SocketPath)
 
 	var before struct {
 		Panes []paneSummary `json:"panes"`
@@ -146,7 +150,7 @@ func run(socketName string) error {
 	// the shell's echoed command cannot satisfy wait_for_text prematurely.
 	if err := call(ctx, session, "paste_text", map[string]any{
 		"pane_id": split.PaneID,
-		"text": "sleep 2; if tmux -V; then printf 'agent-workflow-%s\\n' ready; " +
+		"text": "if sleep 1; then printf 'agent-workflow-%s\\n' ready; " +
 			"else printf 'agent-workflow-%s\\n' failed; fi",
 		"enter": true,
 	}, nil); err != nil {
@@ -162,12 +166,8 @@ func run(socketName string) error {
 	if err := call(ctx, session, "list_panes", nil, &working); err != nil {
 		return err
 	}
-	windowPanes := panesInWindow(working.Panes, windowID)
-	fmt.Printf("%d of %d panes in this window while work runs:\n",
-		len(windowPanes), working.Total)
-	for _, pane := range windowPanes {
-		fmt.Printf("  %s running %s\n", pane.ID, pane.CurrentCommand)
-	}
+	fmt.Printf("%d panes in this window while the work runs\n",
+		len(panesInWindow(working.Panes, windowID)))
 
 	// Wait for output rather than sleeping in the client. Known failure text
 	// stops the wait early, and the cursor makes pre-existing screen text
@@ -208,8 +208,7 @@ func run(socketName string) error {
 	if observed.LinesMissed {
 		return fmt.Errorf("tmux discarded output before it could be collected")
 	}
-	fmt.Printf("visible work produced %d new lines; keep the %d-byte cursor\n",
-		len(observed.Lines), len(observed.Cursor))
+	fmt.Printf("the work printed %s\n", waited.Matched)
 
 	// Bounded work is a separate workflow. run_shell_command waits with a fixed
 	// ceiling and returns a framed exit status and bounded output.
@@ -225,46 +224,34 @@ func run(socketName string) error {
 	}, &ran); err != nil {
 		return err
 	}
-	if ran.TimedOut {
-		fmt.Println("the command did not finish in time")
-	} else if ran.ExitStatus != nil {
-		fmt.Printf("exit %d, %d lines of output\n", *ran.ExitStatus, len(ran.Output))
-		for _, line := range ran.Output {
-			fmt.Println("  |", line)
-		}
+	if ran.TimedOut || ran.ExitStatus == nil {
+		return fmt.Errorf("the command did not finish in time")
+	}
+	fmt.Printf("the command exited %d and printed:\n", *ran.ExitStatus)
+	for _, line := range ran.Output {
+		fmt.Println("  |", line)
 	}
 
-	// Report what was built. The layout string is tmux's own, and
-	// select_layout takes it back, so this is also how a useful layout is saved.
-	var after struct {
-		Panes []paneSummary `json:"panes"`
-		Total int           `json:"total"`
-	}
-	if err := call(ctx, session, "list_panes", nil, &after); err != nil {
-		return err
-	}
-	windowPanes = panesInWindow(after.Panes, windowID)
-	fmt.Printf("%d panes in the affected window, %d on the server:\n",
-		len(windowPanes), after.Total)
-	for _, pane := range windowPanes {
-		fmt.Printf("  %s running %s at %d,%d %dx%d\n",
-			pane.ID, pane.CurrentCommand,
-			pane.Geometry.Left, pane.Geometry.Top,
-			pane.Geometry.Width, pane.Geometry.Height)
-	}
-
-	var window struct {
+	// Report what was built. get_window_info reads the window back rather
+	// than assuming the split produced what was asked for, and its layout
+	// string is tmux's own, which select_layout takes back.
+	var built struct {
 		Layout string        `json:"layout"`
-		Width  int           `json:"width"`
-		Height int           `json:"height"`
 		Panes  []paneSummary `json:"panes"`
 	}
 	if err := call(ctx, session, "get_window_info", map[string]any{
 		"window_id": windowID,
-	}, &window); err != nil {
+	}, &built); err != nil {
 		return err
 	}
-	fmt.Printf("window %dx%d, layout %s\n", window.Width, window.Height, window.Layout)
+	if built.Layout == "" {
+		return fmt.Errorf("tmux reported no layout for window %s", windowID)
+	}
+	fmt.Printf("the window now holds %d panes:", len(built.Panes))
+	for _, pane := range built.Panes {
+		fmt.Printf(" %s", pane.ID)
+	}
+	fmt.Println()
 	return nil
 }
 
@@ -354,6 +341,9 @@ func call(
 	if result.IsError {
 		return fmt.Errorf("%s: %s", name, contentText(result))
 	}
+	if err := traceCall(name, arguments, result.StructuredContent); err != nil {
+		return fmt.Errorf("%s: trace: %w", name, err)
+	}
 	if into == nil {
 		return nil
 	}
@@ -365,6 +355,52 @@ func call(
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
+}
+
+// traced receives the work calls and what came back, when set.
+var traced io.Writer
+
+// tracedReplies names the work calls traced, and the fields of each reply
+// shown. A cursor is left out wherever it appears: it is a token that differs
+// on every run.
+var tracedReplies = map[string][]string{
+	"split_window":      {"paneId"},
+	"paste_text":        {"bytes"},
+	"wait_for_text":     {"outcome", "found", "matched"},
+	"run_shell_command": {"exit_status", "output", "timed_out"},
+}
+
+func traceCall(name string, arguments, reply any) error {
+	fields, shown := tracedReplies[name]
+	if traced == nil || !shown {
+		return nil
+	}
+	sent := map[string]any{}
+	if given, ok := arguments.(map[string]any); ok {
+		for key, value := range given {
+			if key != "cursor" {
+				sent[key] = value
+			}
+		}
+	}
+	kept := map[string]any{}
+	if replied, ok := reply.(map[string]any); ok {
+		for _, field := range fields {
+			if value, present := replied[field]; present {
+				kept[field] = value
+			}
+		}
+	}
+	request, err := json.Marshal(sent)
+	if err != nil {
+		return err
+	}
+	answer, err := json.Marshal(kept)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(traced, "→ %s %s\n← %s\n", name, request, answer)
+	return err
 }
 
 func contentText(result *sdk.CallToolResult) string {

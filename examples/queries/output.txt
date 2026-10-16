@@ -1,0 +1,15 @@
+3 panes, 2 active
+tmux.PaneFilter{WindowIndexGTE: new(1)}: logs.0 logs.1
+tmux.PaneFilter{Active: new(true), WindowIndex: new(1)}: logs.1
+tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}: logs.0 logs.1
+tmux.PaneFilter{AnyOf: []tmux.PaneFilter{{Index: new(1)}, {WindowIndex: new(0)}}}: editor.0 logs.1
+tmux.PaneFilter{Not: &tmux.PaneFilter{Active: new(true)}}: logs.0
+tmux.PaneActiveIs(true): editor.0 logs.1
+tmux.PaneIndexIs(0): editor.0 logs.0
+tmux.WindowFilter{NameRegex: "^log"}: logs
+tmux.WindowFilter{Active: new(true)}: editor
+tmux.WindowNameIs("editor"): editor
+tmux.SessionFilter{NameContains: new("or")}: work
+tmux.SessionNameIs("work"): work
+the only active pane of window 1: logs.1
+the first pane with index 1: logs.1

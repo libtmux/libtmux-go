@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"slices"
@@ -15,19 +16,19 @@ import (
 	"unicode/utf8"
 )
 
-// defaultWaitDelay bounds two things with one number, which is all exec.Cmd
-// offers: how long a tmux process gets to finish writing after it exits, and
-// how long a cancelled one gets before its pipes are closed under it.
-// TestRunnerBoundsCancellationWhenDescendantHoldsOutputPipe pins the
-// cancellation half at this value, so widening it to stop a loaded machine
-// reporting exec.ErrWaitDelay for a healthy command would slow every
-// cancellation by the same amount.
+// defaultWaitDelay is how long a cancelled process, or one streaming into a
+// caller's files, gets before exec closes its pipes under it.
+// TestRunnerBoundsCancellationWhenDescendantHoldsOutputPipe pins it.
 //
-// The value is empirical. A daemonized tmux server does not hold the pipe:
-// proc_fork_and_daemon calls daemon(1, 0), which reopens the child's standard
-// descriptors on /dev/null, and 120 fresh-socket runs at this delay produced
-// no expiry. What makes a loaded machine report one is not identified, so
-// treat the number as measured rather than derived.
+// Captured output does not go through a pipe at all, so the delay never
+// decides whether a command that exited succeeded. Every tmux client hands a
+// copy of its standard output to the server (client.c sends it with
+// MSG_IDENTIFY_STDOUT), and the server closes that copy only once it has dealt
+// with the client leaving (server_client_lost). On a loaded machine that came
+// after the delay, so a pipe was still open when tmux had exited, and exec
+// reported ErrWaitDelay for a command that had succeeded: about 2 runs in 100
+// with 20 fresh servers at once on tmux 3.7d. A file has no other end to wait
+// for.
 const defaultWaitDelay = 100 * time.Millisecond
 
 // Request describes one subprocess invocation.
@@ -71,6 +72,9 @@ func (e *OutcomeUnknownError) Unwrap() error { return e.Err }
 // Runner executes tmux subprocess requests.
 type Runner struct {
 	WaitDelay time.Duration
+
+	// readCapture replaces reading the captured output files in tests.
+	readCapture func(*capture) (stdout, stderr []byte, err error)
 }
 
 // Run executes one request. Nonzero process exits are returned as Result data.
@@ -113,11 +117,11 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = defaultWaitDelay
 	}
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var captured *capture
 	if request.Stdio == nil {
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		captured = newCapture()
+		defer captured.release()
+		cmd.Stdout, cmd.Stderr = captured.writers()
 	} else {
 		if request.Stdio.Stdin == nil {
 			cmd.Stdin = os.Stdin
@@ -137,10 +141,19 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 	}
 
 	runErr := cmd.Run()
+	var readErr error
 	if request.Stdio == nil {
-		result.RawStdout = bytes.Clone(stdout.Bytes())
-		result.Stdout = SplitStdout(stdout.Bytes())
-		result.Stderr = SplitStderr(stderr.Bytes())
+		read := (*capture).read
+		if r.readCapture != nil {
+			read = r.readCapture
+		}
+		var printed, warned []byte
+		printed, warned, readErr = read(captured)
+		if readErr == nil {
+			result.RawStdout = printed
+			result.Stdout = SplitStdout(printed)
+			result.Stderr = SplitStderr(warned)
+		}
 	}
 
 	outcome := processExitOutcome(cmd.ProcessState, interrupted.Load())
@@ -148,10 +161,76 @@ func (r Runner) Run(ctx context.Context, request Request) (Result, error) {
 		outcome = processOutcomeCanceled
 	}
 	result.ExitCode = processResultExitCode(cmd.ProcessState, outcome)
-	if err := classifyRunError(runErr, ctx.Err(), outcome); err != nil {
-		return result, err
+	classified := classifyRunError(runErr, ctx.Err(), outcome)
+	if readErr != nil {
+		// The process ran, so the outcome stays unknown even when its exit
+		// was clean; the exit and any cancellation remain visible.
+		readErr = &OutcomeUnknownError{Err: fmt.Errorf("read tmux output: %w", readErr)}
+		return result, errors.Join(classified, readErr)
+	}
+	if classified != nil {
+		return result, classified
 	}
 	return result, nil
+}
+
+// capture collects what one tmux process prints. It uses two temporary
+// files when the temporary directory takes them, so that nothing waits on the
+// copy of standard output the server holds (see defaultWaitDelay), and pipes
+// otherwise: a read-only or missing TMPDIR still works, with the delay's
+// failure back in play on a loaded machine.
+type capture struct {
+	files   [2]*os.File
+	buffers [2]bytes.Buffer
+}
+
+func newCapture() *capture {
+	c := &capture{}
+	for index := range c.files {
+		file, err := os.CreateTemp("", "libtmux-go-tmux-*")
+		if err != nil {
+			c.release()
+			c.files = [2]*os.File{}
+			return c
+		}
+		c.files[index] = file
+	}
+	return c
+}
+
+// writers returns standard output's destination, then standard error's.
+func (c *capture) writers() (io.Writer, io.Writer) {
+	if c.files[0] == nil {
+		return &c.buffers[0], &c.buffers[1]
+	}
+	return c.files[0], c.files[1]
+}
+
+// read returns what the process printed to standard output and standard
+// error, in that order.
+func (c *capture) read() (stdout, stderr []byte, err error) {
+	if c.files[0] == nil {
+		return bytes.Clone(c.buffers[0].Bytes()), c.buffers[1].Bytes(), nil
+	}
+	var printed [2][]byte
+	for index, file := range c.files {
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return nil, nil, err
+		}
+		if printed[index], err = io.ReadAll(file); err != nil {
+			return nil, nil, err
+		}
+	}
+	return printed[0], printed[1], nil
+}
+
+func (c *capture) release() {
+	for _, file := range c.files {
+		if file != nil {
+			_ = file.Close()
+			_ = os.Remove(file.Name())
+		}
+	}
 }
 
 func classifyRunError(runErr, contextErr error, outcome processOutcome) error {

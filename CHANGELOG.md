@@ -14,6 +14,126 @@ Modules are tagged per directory, so each carries its own version: the core as
 - The install gate also runs `go install` for `tmux-workspace`, the command
   `workspace/CLI.md` documents, against the latest published workspace module.
   (#24)
+- The `mcp` tests now pass where the core utilities are one multi-call
+  program, as on Ubuntu 26.04. (#53)
+
+### tmux
+
+- `RunResult.Signal` is now an `os.Signal`, nil when no signal ended the
+  command, where it was tmux's text: `9` on Linux, `kill` on macOS and the
+  BSDs. Compare it with `os.Kill` or a `syscall` constant. (#53)
+- `RunResult.Status` is now -1 when the command did not exit on its own, as
+  when a signal ended it, where it read 0. Zero now always means success.
+  (#53)
+- `Session.Run` now joins lines the window's width wrapped. (#53)
+- `Pane.Writer` now types a write of any size, so `io.Copy` into a pane works;
+  a line over tmux's 16 KiB command limit used to fail with "command too
+  long". (#53)
+- `Server` methods no longer fail with `exec: WaitDelay expired before I/O
+  complete` on a loaded machine. (#53)
+- `Server.WaitFor`, `Server.RunShell`, and `Server.IfShell` now return an
+  error matching `ErrNoServer` when the tmux server exits under them, where
+  they returned success. (#53)
+- `Server.RunShell` and `Server.IfShell` on a connection-bound server now
+  return what the command printed, where any output broke the connection.
+  (#53)
+- `Server.WaitFor`, `Server.RunShell`, and `Server.IfShell` on a
+  connection-bound server now run on a control client of their own, so a
+  canceled or slow call no longer holds a lane. `Connection.Close` ends one
+  with `ErrControlClosed`. (#53)
+- `Session.Run`, `Session.Start`, and `Running.Wait` now work on a session
+  bound to a `Connection`, and `Running.Kill` no longer waits behind a `Wait`
+  parked on a single lane. (#53)
+- `Connection` no longer returns a lane to its pool before tmux finishes a
+  command whose caller stopped waiting, so the next caller no longer waits
+  behind it. (#53)
+- `PaneObservation` now keeps only its own pane's output, so a busy pane
+  beside it no longer fills the observation's queue and ends it. (#53)
+- `PaneObservation.WaitFor` no longer copies its retained text on every
+  write: one mebibyte in 80-byte writes takes 14 ms instead of 2.5 s, measured
+  with `go test -run '^$' -bench PaneObservationWaitForBatches ./tmux/`. (#53)
+- Add `NotificationOptions.BacklogBytes` to size a notification stream's
+  backlog. Zero keeps the 16 MiB default; less than 64 KiB is refused. (#53)
+- Remove `SubscriptionRequest.Session`, which selected nothing: tmux evaluates
+  a session-scoped subscription against the stream's own session. Delete it
+  from any request that sets it. (#53)
+- `ControlClient.NextNotification` and `NotificationStream.Next` now
+  serialize concurrent calls, so a queued notification is no longer left
+  unread behind a blocked reader. (#53)
+- `NotificationStream` reads after the stream ends now match
+  `ErrControlClosed`, and also `os.ErrClosed` after `Close` or
+  `ErrControlStreamLost` when tmux ended it. (#53)
+- `CommandError` now keeps tmux's "command too long" when it redacts the
+  command, where it said only that the command exited 1. (#53)
+
+### tmux/tmuxtest
+
+- `tmuxtest` cleanup no longer fails intermittently on Debian and Ubuntu
+  builds of tmux, which answer `server exited unexpectedly` for a moment after
+  `kill-server`. (#53)
+
+### workspace
+
+- The `build-workspace` example now builds on a tmux server and configuration
+  of its own, and its page publishes what it prints. (#53)
+
+### mcp
+
+- `send_keys`, `send_keys_batch`, `paste_text`, `run_shell_command`, and every
+  other tool now refuse a required pane, window, or session id sent empty,
+  inside batches too, and audit the refusal. An empty id used to mean the
+  active pane; send the id. (#53)
+- `run_shell_command` now finds its output once the pane's history has
+  filled, where it returned nothing or only the end, and reports
+  `lines_missed` when tmux discarded the start. (#53)
+- `run_shell_command` now reports `truncated`, `truncated_lines`, and
+  `truncated_bytes`. (#53)
+- `run_shell_command` now returns what a timed-out command printed so far,
+  where it returned no output. (#53)
+- `run_shell_command` no longer returns a prompt with the output when a shell
+  with no line editor, such as dash, draws it after the typed keys. (#53)
+- `run_shell_command` now says at once when its shell went away, because the
+  pane was respawned or tmux exited, where it waited out its timeout. (#53)
+- `run_shell_command` no longer leaves a pane refusing all input after a
+  timeout: `send_keys` and `paste_text` reach it, an interrupt or
+  `respawn_pane` frees it, and an interrupted run reports exit status 130.
+  (#53)
+- `run_shell_command`, `paste_text`, `send_keys`, and `send_keys_batch` now
+  wait up to two seconds for a new pane's shell, where they refused the pane.
+  A new pane that settles on anything but a shell is still refused. (#53)
+- `list_windows` now returns an error pointing at `list_sessions` when
+  `session` names no session, where it returned an empty list. (#53)
+- `list_sessions` and the other read-only tools now answer the first call
+  after the tmux server exits as they document an unreachable server, where
+  they returned the lost connection's error. (#53)
+- `wait_for_text` now fills its text content with the outcome when a wait
+  ends without lines, such as a timeout. (#53)
+- Every tool now rejects an unknown argument with the arguments it accepts,
+  on direct calls and inside `call_read_tools_batch`. (#53)
+- `call_read_tools_batch` now names the failing operation and its tool when it
+  rejects a batch. (#53)
+- Every tool from a toolset the server was not started with is now refused
+  with that toolset's name and `LIBTMUX_TOOLSETS`. (#53)
+- Every tool now refuses a malformed pane, window, or session id with what an
+  id looks like and which tool lists them. (#53)
+- `agent-workflow` now uses a socket of its own unless given `-socket-name`,
+  and takes `-trace` to print the calls it makes. (#53)
+
+### examples
+
+- Add `layout`, which splits a window and reads back the pane widths. (#53)
+- Add `queries`, which runs every filter the `tmuxq` README shows. (#53)
+- Add `any-slice`, which runs the `tmuxq` helpers on a slice with no tmux.
+  (#53)
+- Add `object-model`, which shows that a rename returns a new record and a
+  lookup that finds nothing. (#53)
+- Add `testing-a-program`, a whole test file that runs a program in a pane.
+  (#53)
+- `quickstart` is now a whole program that runs a command with `Session.Run`
+  and prints its screen and exit status. (#53)
+- Every example now starts a tmux server of its own, on a private socket with
+  an empty config, so it no longer reaches or reads the tmux you use. (#53)
+- Every example's page now shows its program and what it prints. (#53)
 
 ## v0.0.1-alpha.9, workspace/v0.0.1-alpha.9, mcp/v0.0.1-alpha.12
 

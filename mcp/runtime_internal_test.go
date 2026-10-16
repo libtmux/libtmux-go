@@ -397,7 +397,7 @@ func TestToolSurfaceHoldsItsUnboundLeaseThroughTheHandler(t *testing.T) {
 	registry := &tools{runtime: runtime}
 	entered := make(chan struct{})
 	finish := make(chan struct{})
-	handler := withRequestRuntime(registry, func(
+	handler := withRequestRuntime(registry, false, func(
 		_ context.Context,
 		_ *sdk.CallToolRequest,
 		_ struct{},

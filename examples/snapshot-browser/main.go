@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -22,7 +23,12 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server, err := tmux.NewServer(tmux.ServerOptions{})
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-snapshot-browser",
+		ConfigFile: os.DevNull,
+	})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
@@ -56,8 +62,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 			fmt.Printf("  window %s:%d\n", window.ID(), window.Index())
 			panes, _ := window.Panes()
 			for _, pane := range panes {
-				command, _ := pane.CurrentCommand()
-				fmt.Printf("    pane %s %q\n", pane.ID(), command)
+				fmt.Printf("    pane %s index %d\n", pane.ID(), pane.Index())
 			}
 		}
 	}

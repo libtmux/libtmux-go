@@ -38,6 +38,23 @@ func TestRunnerReturnsNonzeroExitAndSplitOutputAsData(t *testing.T) {
 	}
 }
 
+func TestRunnerKeepsTheExitWhenCapturedOutputCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	readFailure := errors.New("read failure")
+	runner := Runner{readCapture: func(*capture) ([]byte, []byte, error) {
+		return nil, nil, readFailure
+	}}
+	result, err := runner.Run(context.Background(), helperRequest("lines"))
+	var unknown *OutcomeUnknownError
+	if !errors.As(err, &unknown) || !errors.Is(err, readFailure) {
+		t.Fatalf("Run() error = %v, want OutcomeUnknownError wrapping the read failure", err)
+	}
+	if result.ExitCode != 7 {
+		t.Errorf("ExitCode = %d, want the process's 7", result.ExitCode)
+	}
+}
+
 func TestRunnerPreservesRequestedBinaryInCommand(t *testing.T) {
 	testDirectory := t.TempDir()
 	requestedBinary := "tmux-runner-test"
@@ -260,7 +277,11 @@ func TestClassifyRunErrorPreservesWaitDelayFailure(t *testing.T) {
 	}
 }
 
-func TestRunnerReportsWaitDelayWhenDescendantHoldsOutputPipeAfterExit(t *testing.T) {
+// A tmux client hands a copy of its standard output to the server, which can
+// hold it well after the client has exited. That must not fail a command that
+// succeeded, nor lose what it printed. A one-millisecond delay makes the hold
+// decisive: through a pipe, this reports exec.ErrWaitDelay.
+func TestRunnerSucceedsWhileAnotherProcessHoldsItsOutput(t *testing.T) {
 	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
 	request := helperRequest("exit-with-orphan-output-pipe")
 	request.Arguments = append(request.Arguments, pidPath)
@@ -276,11 +297,27 @@ func TestRunnerReportsWaitDelayWhenDescendantHoldsOutputPipeAfterExit(t *testing
 			}
 		}
 	}
-	if !errors.Is(err, exec.ErrWaitDelay) {
-		t.Fatalf("Run() error = %v, want exec.ErrWaitDelay", err)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want the parent process's success", err)
 	}
-	if result.ExitCode != 0 {
-		t.Fatalf("Run() exit code = %d, want the parent process's successful exit", result.ExitCode)
+	if result.ExitCode != 0 || !slices.Equal(result.Stdout, []string{"parent"}) {
+		t.Fatalf("Run() = (exit %d, stdout %q), want exit 0 and what the parent printed",
+			result.ExitCode, result.Stdout)
+	}
+}
+
+// Output goes to temporary files when it can. A temporary directory that
+// does not exist must not make every tmux command fail.
+func TestRunnerCapturesWithoutATemporaryDirectory(t *testing.T) {
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
+
+	result, err := (Runner{}).Run(context.Background(), helperRequest("lines"))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want the helper's output through pipes", err)
+	}
+	if !slices.Equal(result.Stdout, []string{"one", "", "three"}) ||
+		!slices.Equal(result.Stderr, []string{"warning", "second"}) || result.ExitCode != 7 {
+		t.Fatalf("Run() = (stdout %q, stderr %q, exit %d)", result.Stdout, result.Stderr, result.ExitCode)
 	}
 }
 
@@ -443,6 +480,7 @@ func TestRunnerHelperProcess(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		_, _ = fmt.Fprintln(os.Stdout, "parent")
 		os.Exit(0)
 	case "orphan-output-pipe":
 		child := exec.Command(

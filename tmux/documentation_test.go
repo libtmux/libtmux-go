@@ -214,7 +214,11 @@ func exampleTestFiles(t *testing.T, root string) []string {
 			return err
 		}
 		if entry.IsDir() {
-			if name := entry.Name(); name == ".git" || name == "testdata" {
+			// The go tool ignores a directory whose name starts with "." or
+			// "_", such as a worktree checked out under .claude, which would
+			// otherwise repeat every example.
+			name := entry.Name()
+			if path != root && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata") {
 				return filepath.SkipDir
 			}
 			return nil

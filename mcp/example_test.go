@@ -316,7 +316,7 @@ func Example_runningACommand() {
 
 	switch {
 	case ran.TimedOut && ran.Running != "":
-		fmt.Printf("the pane was running %s, not a shell\n", ran.Running)
+		fmt.Printf("timed out; the pane was running %s\n", ran.Running)
 	case ran.TimedOut:
 		fmt.Println("still running when the wait ended")
 	case ran.ExitStatus != nil && *ran.ExitStatus == 0:
@@ -372,6 +372,7 @@ func connectExampleClient(
 	target tmux.Server,
 ) (*sdk.ClientSession, func(), error) {
 	clientTransport, serverTransport := sdk.NewInMemoryTransports()
+	// docs:mcp-embedding given:ctx context.Context; target tmux.Server; serverTransport sdk.Transport
 	instance, err := tmuxmcp.NewServer(target)
 	if err != nil {
 		return nil, nil, err
@@ -379,6 +380,7 @@ func connectExampleClient(
 	serverSession, err := instance.Connect(
 		ctx, tmuxmcp.AssumeResponseCommit(serverTransport), nil,
 	)
+	// docs:end
 	if err != nil {
 		_ = instance.Close()
 		return nil, nil, err

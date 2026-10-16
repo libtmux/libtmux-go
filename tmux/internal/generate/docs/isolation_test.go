@@ -70,6 +70,9 @@ func TestPublishedRegionsCompileAlone(t *testing.T) {
 			t.Errorf("%s: published but defined in no Go file", name)
 			continue
 		}
+		if compiledByItsOwnModule(root, source) {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			if out, err := compileAlone(t, absRoot, source); err != nil {
@@ -80,6 +83,26 @@ func TestPublishedRegionsCompileAlone(t *testing.T) {
 			}
 		})
 	}
+}
+
+// compiledByItsOwnModule reports whether a region lives in a module that has
+// dependencies of its own. Compiling it alone would need those dependencies
+// from the network, which a gate may not use, so it is left to its module:
+// such a region sits in a test or an Example that module's suite compiles and
+// runs.
+func compiledByItsOwnModule(root string, source region) bool {
+	relative, err := filepath.Rel(root, source.origin)
+	if err != nil {
+		return false
+	}
+	return hasItsOwnDependencies(filepath.ToSlash(relative))
+}
+
+// hasItsOwnDependencies reports whether a path from the repository root is in
+// a module that needs more than the library to build.
+func hasItsOwnDependencies(relative string) bool {
+	module, _, _ := strings.Cut(relative, "/")
+	return module == "mcp" || module == "workspace"
 }
 
 // publishedRegions names every region the Markdown quotes, sorted and
@@ -135,19 +158,10 @@ func compileAlone(t *testing.T, absRoot string, source region) (string, error) {
 	}
 	b.WriteString("\treturn nil\n}\n\nfunc main() { _ = region() }\n")
 
-	write := func(name, body string) error {
-		return os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
-	}
-	if err := write("main.go", b.String()); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(b.String()), 0o644); err != nil {
 		return "", err
 	}
-	language, err := languageVersion(absRoot)
-	if err != nil {
-		return "", err
-	}
-	if err := write("go.mod", "module isolationcheck\n\ngo "+language+"\n\n"+
-		"require github.com/libtmux/libtmux-go v0.0.0\n\n"+
-		"replace github.com/libtmux/libtmux-go => "+absRoot+"\n"); err != nil {
+	if err := writeModule(dir, absRoot); err != nil {
 		return "", err
 	}
 
@@ -356,4 +370,17 @@ func TestIsolationCheckFailsForTheIntendedReasons(t *testing.T) {
 			}
 		})
 	}
+}
+
+// writeModule writes a go.mod into dir that resolves the library to the
+// checkout under test and nothing else.
+func writeModule(dir, absRoot string) error {
+	language, err := languageVersion(absRoot)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "go.mod"),
+		[]byte("module isolationcheck\n\ngo "+language+"\n\n"+
+			"require github.com/libtmux/libtmux-go v0.0.0\n\n"+
+			"replace github.com/libtmux/libtmux-go => "+absRoot+"\n"), 0o644)
 }

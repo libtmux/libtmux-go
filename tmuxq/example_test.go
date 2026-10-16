@@ -30,6 +30,35 @@ func Example() {
 	// shell
 }
 
+// activeOnly is a filter: anything that can compile itself into a predicate.
+// The tmux package generates one for each of its models.
+type activeOnly struct{}
+
+func (activeOnly) Predicate() (func(*pane) bool, error) {
+	return func(pane *pane) bool { return pane.active }, nil
+}
+
+func ExampleMatching() {
+	panes := []pane{
+		{name: "editor", active: true},
+		{name: "logs", active: false},
+		{name: "shell", active: true},
+	}
+
+	active, err := tmuxq.Matching(panes, activeOnly{})
+	if err != nil {
+		fmt.Println("invalid filter:", err)
+		return
+	}
+	for _, pane := range active {
+		fmt.Println(pane.name)
+	}
+
+	// Output:
+	// editor
+	// shell
+}
+
 func ExampleExactlyOne() {
 	noActivePanes := []pane{{name: "editor"}, {name: "logs"}}
 	_, err := tmuxq.ExactlyOne(noActivePanes, func(pane *pane) bool {

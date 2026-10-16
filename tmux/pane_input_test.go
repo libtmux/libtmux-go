@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"sync"
@@ -807,4 +808,33 @@ func (r *paneInputBlockingRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return withoutGlobalFlags(r.requests)
+}
+
+// A write that fails partway reports the bytes tmux had already taken, so a
+// caller resuming after them types nothing twice.
+func TestPaneWriterCountsWhatReachedThePane(t *testing.T) {
+	t.Parallel()
+
+	refused := versionResponse{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"refused"}}}
+	accepted := versionResponse{result: tmuxcmd.Result{}}
+	line := strings.Repeat("x", 2*paneWriterPiece+10) + "\n"
+	tests := []struct {
+		name      string
+		responses []versionResponse
+		want      int
+	}{
+		{name: "second piece", responses: []versionResponse{accepted, refused}, want: paneWriterPiece},
+		{name: "last piece", responses: []versionResponse{accepted, accepted, refused}, want: 2 * paneWriterPiece},
+		{name: "enter", responses: []versionResponse{accepted, accepted, accepted, refused}, want: len(line) - 1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runner := &versionQueueRunner{responses: test.responses}
+			writer := paneWithExactTestTarget(serverWithRunner(runner)).Writer(context.Background())
+			n, err := io.WriteString(writer, line)
+			if err == nil || n != test.want {
+				t.Fatalf("Write() = (%d, %v), want %d bytes and the refusal", n, err, test.want)
+			}
+		})
+	}
 }

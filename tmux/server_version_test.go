@@ -589,7 +589,24 @@ func (r *versionQueueRunner) callCount() int {
 func (r *versionQueueRunner) recordedRequests() []tmuxcmd.Request {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return withoutGlobalFlags(r.requests)
+	return withoutLivenessLooks(withoutGlobalFlags(r.requests))
+}
+
+// withoutLivenessLooks drops the list-sessions a foreground run-shell, if-shell
+// or wait-for sends after tmux reports success, so a test sees its own command.
+func withoutLivenessLooks(requests []tmuxcmd.Request) []tmuxcmd.Request {
+	kept := make([]tmuxcmd.Request, 0, len(requests))
+	for index, request := range requests {
+		if index > 0 && len(requests[index-1].Arguments) > 0 && slices.Equal(request.Arguments, []string{"list-sessions"}) &&
+			slices.Contains(
+				[]string{"run-shell", "if-shell", "wait-for"},
+				requests[index-1].Arguments[0],
+			) {
+			continue
+		}
+		kept = append(kept, request)
+	}
+	return kept
 }
 
 type blockingVersionRunner struct {

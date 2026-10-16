@@ -1,0 +1,4 @@
+open: test
+open: deploy
+first open: test
+the only open task: tmuxq: multiple matches

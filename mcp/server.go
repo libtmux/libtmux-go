@@ -4,16 +4,21 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -173,7 +178,10 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	}, serverOptions)
 	instance.server = server
 	instance.tools = tools
-	// Audit wraps the backstop so oversized refusals are recorded.
+	// Each middleware wraps those added before it. Audit wraps the backstop so
+	// oversized refusals are recorded, and both wrap namedArguments so its
+	// blank-id refusals are recorded too.
+	server.AddReceivingMiddleware(tools.namedArguments)
 	server.AddReceivingMiddleware(backstop())
 	writer, auditOwner := auditWriter()
 	if writer != nil {
@@ -456,6 +464,226 @@ func (t *tools) socketPath(_ context.Context) string {
 		return ""
 	}
 	return selection.Path
+}
+
+// namedArguments completes the SDK's unknown-argument rejection, which names
+// only the rejected argument, with the arguments the tool does accept. It also
+// says which toolset grants a tool this server was not started with, and what
+// an id looks like when one was malformed.
+func (t *tools) namedArguments(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, request mcp.Request) (mcp.Result, error) {
+		if method != "tools/call" {
+			return next(ctx, method, request)
+		}
+		params, ok := request.GetParams().(*mcp.CallToolParamsRaw)
+		if !ok {
+			return next(ctx, method, request)
+		}
+		if refusal := t.blankRequiredID(params.Name, params.Arguments); refusal != "" {
+			return &mcp.CallToolResult{
+				IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: refusal}},
+			}, nil
+		}
+		result, err := next(ctx, method, request)
+		if err != nil {
+			return result, t.withUngrantedTool(params.Name, err)
+		}
+		call, ok := result.(*mcp.CallToolResult)
+		if !ok || !call.IsError {
+			return result, err
+		}
+		for i, content := range call.Content {
+			if text, ok := content.(*mcp.TextContent); ok {
+				call.Content[i] = &mcp.TextContent{Text: withTargetShape(text.Text)}
+			}
+		}
+		if explained := t.explainBatchRejection(params.Name, params.Arguments); explained != "" {
+			call.Content = []mcp.Content{&mcp.TextContent{Text: explained}}
+			return result, err
+		}
+		for _, definition := range t.surface.tools {
+			if definition.name != params.Name {
+				continue
+			}
+			for i, content := range call.Content {
+				if text, ok := content.(*mcp.TextContent); ok {
+					call.Content[i] = &mcp.TextContent{
+						Text: withAcceptedArguments(errors.New(text.Text), definition.inputSchema).Error(),
+					}
+				}
+			}
+			break
+		}
+		return result, err
+	}
+}
+
+// idShapes is an example of each kind of id a tool can require, and the tool
+// that lists real ones.
+var idShapes = map[string][2]string{
+	"pane_id":       {"%3", "list_panes"},
+	"other_pane_id": {"%3", "list_panes"},
+	"window_id":     {"@3", "list_windows"},
+	"session_id":    {"$3", "list_sessions"},
+}
+
+// requiredIDs lists where a tool's input schema requires an id: in its own
+// arguments, in each element of an operations array, or, for an aggregate, in
+// the arguments of each operation, which are those of the tool it names.
+type requiredIDs struct {
+	top        []string
+	operations []string
+	nested     bool
+}
+
+// requiredIDsByTool is computed once so that a call to a tool without ids is
+// not decoded.
+var requiredIDsByTool = buildRequiredIDs(authoritativeToolManifest)
+
+func buildRequiredIDs(definitions []toolDefinition) map[string]requiredIDs {
+	idFields := func(schema *jsonschema.Schema) []string {
+		if schema == nil {
+			return nil
+		}
+		return slices.DeleteFunc(slices.Clone(schema.Required), func(field string) bool {
+			_, isID := idShapes[field]
+			return !isID
+		})
+	}
+	byTool := make(map[string]requiredIDs, len(definitions))
+	for _, definition := range definitions {
+		ids := requiredIDs{top: idFields(definition.inputSchema), nested: definition.aggregate}
+		if definition.inputSchema != nil && !definition.aggregate {
+			if operations := definition.inputSchema.Properties["operations"]; operations != nil {
+				ids.operations = idFields(operations.Items)
+			}
+		}
+		byTool[definition.name] = ids
+	}
+	return byTool
+}
+
+// blankRequiredID refuses a call whose schema requires an id that the call
+// sends empty, at the top level or inside a batch. A schema's required check
+// is met by an empty string, and the handlers read an empty id as "the active
+// one", which in a shared terminal can be the person's pane. A blank id is far
+// more likely a value the caller meant to fill in.
+func (t *tools) blankRequiredID(name string, arguments json.RawMessage) string {
+	ids := requiredIDsByTool[name]
+	if len(ids.top) == 0 && len(ids.operations) == 0 && !ids.nested {
+		return ""
+	}
+	if _, served := t.surface.byName[name]; !served {
+		return ""
+	}
+	var values map[string]json.RawMessage
+	if json.Unmarshal(arguments, &values) != nil {
+		return ""
+	}
+	if field := blankID(values, ids.top); field != "" {
+		return blankIDRefusal(field, field)
+	}
+	if len(ids.operations) == 0 && !ids.nested {
+		return ""
+	}
+	var operations []map[string]json.RawMessage
+	if json.Unmarshal(values["operations"], &operations) != nil {
+		return ""
+	}
+	for index, operation := range operations {
+		path := fmt.Sprintf("operations[%d].", index)
+		if !ids.nested {
+			if field := blankID(operation, ids.operations); field != "" {
+				return blankIDRefusal(path+field, field)
+			}
+			continue
+		}
+		var tool string
+		var called map[string]json.RawMessage
+		if json.Unmarshal(operation["tool"], &tool) != nil ||
+			json.Unmarshal(operation["arguments"], &called) != nil {
+			continue
+		}
+		if field := blankID(called, requiredIDsByTool[tool].top); field != "" {
+			return blankIDRefusal(path+"arguments."+field, field)
+		}
+	}
+	return ""
+}
+
+// blankID returns the first of fields that values sends as an empty string.
+func blankID(values map[string]json.RawMessage, fields []string) string {
+	for _, field := range fields {
+		var value string
+		if json.Unmarshal(values[field], &value) == nil && strings.TrimSpace(value) == "" {
+			return field
+		}
+	}
+	return ""
+}
+
+func blankIDRefusal(path, field string) string {
+	shape := idShapes[field]
+	return fmt.Sprintf("%s is empty; give an id such as %s, which %s reports",
+		path, shape[0], shape[1])
+}
+
+// withUngrantedTool adds, to the SDK's rejection of a tool it does not serve,
+// the toolset that would grant it, when the tool exists but this server was
+// not started with that toolset.
+func (t *tools) withUngrantedTool(name string, err error) error {
+	wire, ok := errors.AsType[*jsonrpc.Error](err)
+	if !ok || !strings.HasPrefix(wire.Message, "unknown tool") {
+		return err
+	}
+	if _, served := t.surface.byName[name]; served {
+		return err
+	}
+	for _, definition := range authoritativeToolManifest {
+		if definition.name != name {
+			continue
+		}
+		explained := *wire
+		explained.Message = fmt.Sprintf(
+			"%s: it belongs to the %s toolset, which this server was not started with; "+
+				"%s chooses the toolsets",
+			wire.Message, definition.toolset, ToolsetsEnvironmentVariable,
+		)
+		return &explained
+	}
+	return err
+}
+
+// targetShapes is what each kind of tmux id looks like, and the tool that
+// lists the real ones.
+var targetShapes = map[string]string{
+	"pane":    "a pane id looks like %3, and list_panes reports them",
+	"window":  "a window id looks like @3, and list_windows reports them",
+	"session": "a session id looks like $3, and list_sessions reports them",
+}
+
+// withTargetShape says what an id looks like after a rejection of a malformed
+// one, which otherwise names the value and not what was expected.
+func withTargetShape(text string) string {
+	for object, shape := range targetShapes {
+		if strings.Contains(text, tmux.ErrInvalidTarget.Error()+": "+object+" ") {
+			return text + "; " + shape
+		}
+	}
+	return text
+}
+
+// withAcceptedArguments appends the schema's argument names to an
+// unknown-argument rejection and leaves every other error alone.
+func withAcceptedArguments(err error, schema *jsonschema.Schema) error {
+	if !strings.Contains(err.Error(), "unexpected additional properties") || schema == nil {
+		return err
+	}
+	accepted := slices.Sorted(maps.Keys(schema.Properties))
+	if len(accepted) == 0 {
+		return fmt.Errorf("%w; this tool takes no arguments", err)
+	}
+	return fmt.Errorf("%w; this tool takes %s", err, strings.Join(accepted, ", "))
 }
 
 // toolFailure preserves a partial result; returning err makes the SDK discard it.

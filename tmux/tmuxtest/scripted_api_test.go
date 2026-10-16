@@ -21,6 +21,8 @@ import (
 func TestScriptedTmuxAnswersWithoutARealTmux(t *testing.T) {
 	t.Parallel()
 
+	ctx := context.Background()
+	// docs:scripted-tmux given:ctx context.Context; t *testing.T
 	binary := tmuxtest.ScriptedTmux(t,
 		tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
 		tmuxtest.ScriptedCommand{
@@ -32,10 +34,20 @@ func TestScriptedTmuxAnswersWithoutARealTmux(t *testing.T) {
 	)
 	server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
 	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
+		t.Fatal(err)
 	}
 
-	ctx := context.Background()
+	// The point of scripting a failure is that a caller can assert on how
+	// their own code classifies it.
+	result, err := server.Cmd(ctx, "kill-pane", "-t", "%7")
+	if err != nil {
+		t.Fatalf("Cmd() error = %v, want a completed failure", err)
+	}
+	if result.ExitCode != 1 {
+		t.Errorf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	// docs:end
+
 	version, err := server.Version(ctx)
 	if err != nil {
 		t.Fatalf("Version() error = %v", err)
@@ -50,16 +62,6 @@ func TestScriptedTmuxAnswersWithoutARealTmux(t *testing.T) {
 	}
 	if !alive {
 		t.Error("IsAlive() = false, want the scripted listing to answer")
-	}
-
-	// The point of scripting a failure is that a caller can assert on how
-	// their own code classifies it.
-	result, err := server.Cmd(ctx, "kill-pane", "-t", "%7")
-	if err != nil {
-		t.Fatalf("Cmd() error = %v, want a completed failure", err)
-	}
-	if result.ExitCode != 1 {
-		t.Errorf("ExitCode = %d, want 1", result.ExitCode)
 	}
 }
 

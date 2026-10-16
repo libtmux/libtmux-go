@@ -58,11 +58,12 @@ func TestEveryREADMELinkResolves(t *testing.T) {
 		directory := filepath.Dir(readme)
 		relative, _ := filepath.Rel(root, readme)
 
+		prose := outsideFences(string(contents))
 		targets := make([]string, 0, 16)
-		for _, match := range markdownLink.FindAllStringSubmatch(string(contents), -1) {
+		for _, match := range markdownLink.FindAllStringSubmatch(prose, -1) {
 			targets = append(targets, match[1])
 		}
-		for _, match := range markdownReference.FindAllStringSubmatch(string(contents), -1) {
+		for _, match := range markdownReference.FindAllStringSubmatch(prose, -1) {
 			targets = append(targets, match[1])
 		}
 
@@ -81,6 +82,25 @@ func TestEveryREADMELinkResolves(t *testing.T) {
 			}
 		}
 	}
+}
+
+// outsideFences returns contents without its fenced blocks. Code is not
+// Markdown: a generic function's signature, such as ask[T any](records []T),
+// reads as a link to anything that only looks for brackets and parentheses.
+func outsideFences(contents string) string {
+	var prose strings.Builder
+	fenced := false
+	for line := range strings.SplitSeq(contents, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			fenced = !fenced
+			continue
+		}
+		if !fenced {
+			prose.WriteString(line)
+			prose.WriteByte('\n')
+		}
+	}
+	return prose.String()
 }
 
 // findREADMEs returns every README in the repository, skipping what the go

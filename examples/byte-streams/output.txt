@@ -1,0 +1,2 @@
+pasted 42 bytes
+archived the pane's scrollback as gzip

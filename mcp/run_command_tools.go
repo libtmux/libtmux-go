@@ -58,7 +58,8 @@ type runCommandOutput struct {
 	Running string `json:"running,omitempty"`
 	// Output is pane-rendered output between the command's cursor marks. Wrapped
 	// terminal rows are rejoined and screen painting remains. Before tmux 3.6,
-	// tabs are irreversibly expanded to spaces.
+	// tabs are irreversibly expanded to spaces. On a timeout it holds what the
+	// command had printed so far.
 	Output []string `json:"output,omitempty"`
 	// OutputUnavailable says why Output is missing, and is absent when the
 	// command simply printed nothing. The status is the answer either way, so
@@ -148,6 +149,8 @@ func (t *tools) runCommand(
 	running, _ := pane.Formats().PaneCurrentCommand()
 	result, output, err := t.awaitCommand(ctx, runCtx, awaiting{
 		pane:       pane,
+		identity:   started.identity,
+		panePID:    started.panePID,
 		statusPath: started.statusAt,
 		openedPath: started.openedAt,
 		closedPath: started.closedAt,
@@ -191,6 +194,28 @@ func (t *tools) startCommand(
 			processPaneInputs.release(lease)
 		}
 	}()
+	if shell := incompatibleRunCommandShell(initial.Source); shell != "" && !runsAShell(shell) {
+		// No shell yet is what a pane still starting looks like, so give
+		// one time to appear before deciding there is none.
+		_, settled, err := t.settlePaneInput(
+			ctx, initial, initial, paneInputConfigured, "run_shell_command", paneRunsAShell,
+		)
+		if err != nil {
+			return started, err
+		}
+		if !samePaneInputExceptForeground(initial, settled) {
+			return started, fmt.Errorf(
+				"run_shell_command refused for pane %s: its state or placement changed before dispatch",
+				initial.Source.ID(),
+			)
+		}
+		// A shell that took over from a program in an older pane is not the
+		// pane the caller inspected, so the refusal below names that program.
+		if incompatibleRunCommandShell(settled.Source) != "" || paneRunsAShell(initial, settled) {
+			initial = settled
+			started.pane = initial.Source
+		}
+	}
 	if shell := incompatibleRunCommandShell(initial.Source); shell != "" {
 		return started, fmt.Errorf(
 			"run_shell_command requires a POSIX-compatible pane shell; pane %s is running %s; "+
@@ -231,16 +256,18 @@ func (t *tools) startCommand(
 	// newline from output ending mid-row. Files hide markers from the pane, and
 	// sourcing the caller's script inside a subshell keeps its syntax and an
 	// `exit` command from changing the bookkeeping wrapper's structure.
-	mark := fmt.Sprintf(
-		"%s -S %s display-message -p -t %s "+
-			"'#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}'",
-		shellQuote(route.executable),
-		shellQuote(route.socketPath),
-		shellQuote(route.paneID),
-	)
+	position := func(format string) string {
+		return fmt.Sprintf("%s -S %s display-message -p -t %s %s",
+			shellQuote(route.executable),
+			shellQuote(route.socketPath),
+			shellQuote(route.paneID),
+			shellQuote(format),
+		)
+	}
+	mark := position("#{history_size} #{cursor_y} #{cursor_x} #{pane_width} #{pane_height}")
 	nonce := fmt.Sprintf("%x", sha256.Sum256([]byte(directory)))[:16]
 	script := wrapperScript(
-		mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce,
+		mark, position("#{cursor_x}"), openedPath, commandPath, trapPath, statusPath, closedPath, nonce,
 	)
 
 	if err := os.WriteFile(commandPath, []byte(input.Command+"\n"), 0o600); err != nil {
@@ -256,6 +283,7 @@ func (t *tools) startCommand(
 	}
 	started.directory = directory
 	started.openedAt = openedPath
+	started.wrapperPIDAt = wrapperPIDPath(openedPath)
 	started.closedAt = closedPath
 	started.statusAt = statusPath
 	sourceScript := ". " + shellQuote(scriptPath)
@@ -272,6 +300,13 @@ func (t *tools) startCommand(
 	}
 	second, err := t.preflightPaneInput(
 		ctx, initial.Source.ID().String(), "", paneInputConfigured, "run_shell_command",
+	)
+	if err != nil {
+		_ = os.RemoveAll(directory)
+		return started, err
+	}
+	settledFrom, second, err := t.settlePaneInput(
+		ctx, initial, second, paneInputConfigured, "run_shell_command", paneRunsAShell,
 	)
 	if err != nil {
 		_ = os.RemoveAll(directory)
@@ -306,8 +341,8 @@ func (t *tools) startCommand(
 			second.Source.ID(),
 		)
 	}
-	if !samePaneInputMemberSignature(initial.Signature.Source, second.Signature.Source) ||
-		!samePaneInputMemberSignatures(initial.Signature.Members, second.Signature.Members) {
+	if !samePaneInputMemberSignature(settledFrom.Signature.Source, second.Signature.Source) ||
+		!samePaneInputMemberSignatures(settledFrom.Signature.Members, second.Signature.Members) {
 		_ = os.RemoveAll(directory)
 		return started, fmt.Errorf(
 			"run_shell_command refused for pane %s: its state or placement changed before dispatch",
@@ -327,6 +362,7 @@ func (t *tools) startCommand(
 	}
 	started.pane = second.Source
 	started.paneID = second.Source.ID()
+	started.panePID, _ = second.Source.Formats().PanePID()
 	if err := t.runtime.deps.sendKeySequence(ctx, second.Source, dispatch); err != nil {
 		if errors.Is(err, tmux.ErrOutcomeUnknown) {
 			dispatched = true
@@ -449,6 +485,22 @@ func shellName(command string) string {
 	return strings.ToLower(strings.TrimPrefix(filepath.Base(command), "-"))
 }
 
+// paneRunsAShell accepts a settled pane once a shell of either kind has the
+// foreground and the caller did not inspect a program in it. One that is not
+// POSIX will not become one, so there is nothing more to wait for and the
+// caller's own check refuses it by name. A run typed after a program exits
+// would land in the shell behind it, so only a pane that was starting is let
+// through from one.
+func paneRunsAShell(initial, latest paneInputPreflight) bool {
+	shell := incompatibleRunCommandShell(latest.Source)
+	if shell != "" && !runsAShell(shell) {
+		return false
+	}
+	return incompatibleRunCommandShell(initial.Source) == "" ||
+		runsAShell(incompatibleRunCommandShell(initial.Source)) ||
+		paneIsStarting(initial.Source)
+}
+
 // runsAShell reports whether a pane's current command reads typed keys once it
 // is ready. Anything else has taken them as its own input.
 func runsAShell(running string) bool {
@@ -460,6 +512,8 @@ func runsAShell(running string) bool {
 // wait reads as one step rather than eight parameters.
 type awaiting struct {
 	pane                               tmux.Pane
+	identity                           paneInputIdentity
+	panePID                            int
 	statusPath, openedPath, closedPath string
 	limits                             bounds
 	running                            string
@@ -467,13 +521,17 @@ type awaiting struct {
 }
 
 type commandRun struct {
-	pane          tmux.Pane
-	paneID        tmux.PaneID
-	identity      paneInputIdentity
+	pane     tmux.Pane
+	paneID   tmux.PaneID
+	identity paneInputIdentity
+	// panePID is the process the run was typed into. A respawned pane runs
+	// another, and the run is no longer in it.
+	panePID       int
 	directory     string
 	openedAt      string
 	closedAt      string
 	statusAt      string
+	wrapperPIDAt  string
 	configuredIDs []string
 	lease         paneInputLease
 	dispatched    bool
@@ -484,7 +542,13 @@ func (t *tools) finishCommandRun(run commandRun) {
 	_ = os.RemoveAll(run.directory)
 }
 
+// reapCommandRun follows a run whose call has returned without its status,
+// and frees the pane when the run ends. It ends when the wrapper records a
+// status, when the pane is gone, or when the wrapper's own process is: a
+// wrapper that was killed, or whose pane was respawned, records nothing.
+// Until then the pane takes input and refuses another run.
 func (t *tools) reapCommandRun(run commandRun) {
+	processPaneInputs.detach(run.lease)
 	go func() {
 		defer t.finishCommandRun(run)
 		completion := time.NewTicker(commandCompletionPollInterval)
@@ -502,9 +566,12 @@ func (t *tools) reapCommandRun(run commandRun) {
 				probeCtx, cancel := context.WithTimeout(
 					context.Background(), commandPresenceProbeTimeout,
 				)
-				present, probeErr := commandRunPresent(probeCtx, run.pane, run.identity)
+				present, probeErr := commandRunPresent(probeCtx, run.pane, run.identity, run.panePID)
 				cancel()
 				if probeErr == nil && !present {
+					return
+				}
+				if commandWrapperGone(run.wrapperPIDAt) {
 					return
 				}
 			}
@@ -518,16 +585,24 @@ const (
 	commandPresenceProbeTimeout   = 2 * time.Second
 )
 
+// commandRunPresent reports whether the pane still holds the run: it exists,
+// it is not dead, and it runs the process the run was typed into. Respawning
+// a pane closes its terminal without signaling what ran there, so on macOS a
+// run's wrapper can outlive the pane's shell and never be seen to end.
 func commandRunPresent(
 	ctx context.Context,
 	pane tmux.Pane,
 	identity paneInputIdentity,
+	panePID int,
 ) (bool, error) {
 	refreshed, err := pane.Refresh(ctx)
 	if err == nil {
 		dead, present := refreshed.Formats().PaneDead()
 		if !present {
 			return true, errors.New("run_shell_command retained pane_dead state is unavailable")
+		}
+		if pid, known := refreshed.Formats().PanePID(); known && panePID != 0 && pid != panePID {
+			return false, nil
 		}
 		return !dead, nil
 	}
@@ -542,6 +617,31 @@ func commandRunPresent(
 		return true, errors.Join(err, processErr)
 	}
 	return true, err
+}
+
+// commandWrapperGone reports whether a wrapper recorded its process and that
+// process no longer exists. A wrapper that has not started has recorded
+// nothing, and is not gone.
+func commandWrapperGone(pidPath string) bool {
+	recorded, err := os.ReadFile(pidPath)
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.ParseUint(strings.TrimSpace(string(recorded)), 10, 64)
+	if err != nil {
+		return false
+	}
+	present, err := commandRunProcessPresent(pid)
+	return err == nil && !present
+}
+
+// commandRunStillInPane reports whether the run's pane still holds it, and
+// assumes it does when tmux cannot say.
+func commandRunStillInPane(ctx context.Context, run commandRun) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, commandPresenceProbeTimeout)
+	defer cancel()
+	present, err := commandRunPresent(probeCtx, run.pane, run.identity, run.panePID)
+	return err != nil || present
 }
 
 func commandRunDisappeared(err error) bool {
@@ -577,9 +677,13 @@ func (t *tools) awaitCommand(
 	output := waiting.output
 
 	completion := commandRun{
-		openedAt: waiting.openedPath,
-		statusAt: waiting.statusPath,
-		closedAt: waiting.closedPath,
+		pane:         waiting.pane,
+		identity:     waiting.identity,
+		panePID:      waiting.panePID,
+		openedAt:     waiting.openedPath,
+		statusAt:     waiting.statusPath,
+		closedAt:     waiting.closedPath,
+		wrapperPIDAt: wrapperPIDPath(waiting.openedPath),
 	}
 	status, ready, err := waitForCompletedCommand(waitCtx, completion)
 	if err == nil && ready {
@@ -591,7 +695,35 @@ func (t *tools) awaitCommand(
 	if !isOwnWaitDeadline(ctx, waitCtx, err) {
 		return nil, output, err
 	}
-	return finishRunCommandDeadline(completion, output, waiting.running)
+	result, output, err := finishRunCommandDeadline(completion, output, waiting.running)
+	if err != nil || !output.TimedOut {
+		return result, output, err
+	}
+	return result, t.attachOutputSoFar(ctx, waiting, output), nil
+}
+
+// attachOutputSoFar reads what a timed-out command has printed, from its
+// opening mark to the end of the screen, which is a caller's best guide to
+// whether to wait for the rest. The run's own time is over, so the read gets
+// a short time of its own, and a failed read leaves the reply as it was.
+func (t *tools) attachOutputSoFar(
+	ctx context.Context,
+	waiting awaiting,
+	output runCommandOutput,
+) runCommandOutput {
+	if _, err := readMark(waiting.openedPath); err != nil {
+		return output
+	}
+	readCtx, cancel := context.WithTimeout(ctx, commandPresenceProbeTimeout)
+	defer cancel()
+	partial := output
+	partial.OutputUnavailable = ""
+	if err := t.attachCommandOutput(readCtx, waiting.pane,
+		waiting.openedPath, waiting.closedPath, waiting.limits, &partial); err != nil ||
+		partial.OutputUnavailable != "" {
+		return output
+	}
+	return partial
 }
 
 func (t *tools) finishAwaitedCommand(
@@ -636,18 +768,35 @@ func finishRunCommandDeadline(
 	return nil, output, nil
 }
 
+// errCommandWrapperGone reports a run whose wrapper ended without recording
+// a status, so no status is coming however long the caller waits.
+var errCommandWrapperGone = errors.New(
+	"run_shell_command lost its command: the shell running it ended without reporting a status; " +
+		"the pane was respawned or closed, or the tmux server exited")
+
 func waitForCompletedCommand(
 	waitCtx context.Context,
 	entry commandRun,
 ) (status int, ready bool, err error) {
 	ticker := time.NewTicker(commandCompletionPollInterval)
 	defer ticker.Stop()
+	presence := time.NewTicker(commandPresencePollInterval)
+	defer presence.Stop()
 	for {
 		status, ready, err = readCompletedCommand(entry)
 		if err != nil || ready {
 			return status, ready, err
 		}
 		select {
+		case <-presence.C:
+			if commandWrapperGone(entry.wrapperPIDAt) || !commandRunStillInPane(waitCtx, entry) {
+				// It may have recorded its status on the way out.
+				status, ready, err = readCompletedCommand(entry)
+				if err != nil || ready {
+					return status, ready, err
+				}
+				return 0, false, errCommandWrapperGone
+			}
 		case <-ticker.C:
 		case <-waitCtx.Done():
 			status, ready, err = readCompletedCommand(entry)

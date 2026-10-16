@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -27,6 +28,40 @@ func TestAdvertisedToolsHasNoTmuxOrRuntimeSideEffects(t *testing.T) {
 	}
 	if _, err := os.Stat(auditPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("AdvertisedTools() audit file error = %v, want no file", err)
+	}
+}
+
+var toolPageLink = regexp.MustCompile(
+	`https://libtmux\.org/en/go/latest/mcp/tools/([a-z0-9_]+)/`)
+
+// TestREADMEToolLinksNameAdvertisedTools holds every tool page the README
+// links to a tool the server advertises, and the README to linking every
+// tool. A renamed tool leaves its old link rendering as a link, and only
+// following it shows the page is gone.
+func TestREADMEToolLinksNameAdvertisedTools(t *testing.T) {
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read the README: %v", err)
+	}
+	tools, err := tmuxmcp.AdvertisedTools(context.Background())
+	if err != nil {
+		t.Fatalf("AdvertisedTools() error = %v", err)
+	}
+	advertised := map[string]bool{}
+	for _, tool := range tools {
+		advertised[tool.Name] = true
+	}
+	linked := map[string]bool{}
+	for _, match := range toolPageLink.FindAllStringSubmatch(string(readme), -1) {
+		linked[match[1]] = true
+		if !advertised[match[1]] {
+			t.Errorf("the README links to tools/%s/, which names no advertised tool", match[1])
+		}
+	}
+	for name := range advertised {
+		if !linked[name] {
+			t.Errorf("the README links to no page for %s; run go generate ./...", name)
+		}
 	}
 }
 

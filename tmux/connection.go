@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +55,9 @@ func (dialect controlDialect) clientFlags(profile controlClientProfile) []string
 type ConnectionOptions struct {
 	// Lanes is the number of concurrent command lanes. Zero opens one. Each
 	// lane is an attached tmux client and carries one command at a time.
+	// Waits and foreground shell commands sent through Server.WaitFor,
+	// Server.RunShell, and Server.IfShell take a client of their own rather
+	// than a lane; a raw command that blocks holds its lane until it ends.
 	Lanes int
 }
 
@@ -307,6 +311,30 @@ func newSessionConnectionArguments(
 
 func bindControlConnection(session Session, pool *controlLanePool) *Connection {
 	connection := &Connection{pool: pool}
+	unbound := session
+	pool.open = func(ctx context.Context) (*ControlClient, error) {
+		// tmux 3.6 moves the lanes of a destroyed session to another one, so
+		// a client of the same kind attaches to a session that exists rather
+		// than name the dead ID and wait for tmux to refuse it, which takes
+		// longer than a caller's deadline. A lane learns of the move from a
+		// notification that can trail it, so the server is asked.
+		target := unbound
+		sessions, listErr := unbound.server.Sessions(ctx)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if listErr == nil && len(sessions) != 0 && !slices.ContainsFunc(sessions, func(s Session) bool {
+			return s.ID() == unbound.ID()
+		}) {
+			target = sessions[0]
+		}
+		client, err := unbound.server.openControl(ctx, target, controlCommands)
+		if err != nil && ctx.Err() != nil {
+			// An attach that outlived the caller's context reports the context.
+			return nil, fmt.Errorf("%w (%w)", ctx.Err(), err)
+		}
+		return client, err
+	}
 	bound := session.server
 	bound.connection = connection
 	connection.server = bound
@@ -388,7 +416,7 @@ func (c *Connection) terminalError(kind commandKind) error {
 		return ErrControlClosed
 	default:
 	}
-	if kind != commandServer {
+	if kind == commandProcess {
 		return ErrConnectionRequiresProcess
 	}
 	return nil
@@ -402,6 +430,9 @@ func (c *Connection) run(
 ) (CommandResult, error) {
 	if err := c.routeError(ctx, kind); err != nil {
 		return CommandResult{ExitCode: -1}, err
+	}
+	if kind.blocks() {
+		return c.pool.runExclusive(ctx, arguments, commandList, kind == commandBlockingOutput)
 	}
 	return c.pool.run(ctx, arguments, commandList)
 }

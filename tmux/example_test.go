@@ -1904,15 +1904,18 @@ func ExamplePane_Writer() {
 	// shares a line with that output: the echo has no newline of its own yet.
 	writer := pane.Writer(ctx)
 	scanner := bufio.NewScanner(observation.Reader(ctx))
-	// Each newline is the Enter key, so each of these types one command.
-	for _, command := range []string{"printf 'one\\n'", "printf 'two\\n'"} {
-		if _, err := fmt.Fprintln(writer, command); err != nil {
+	// Each newline is the Enter key, so each pass types one command.
+	for _, word := range []string{"one", "two"} {
+		if _, err := fmt.Fprintln(writer, "printf '"+word+"\\n'"); err != nil {
 			fmt.Println("write:", err)
 			return
 		}
+		// These are the terminal's bytes: the echo comes first, and a shell
+		// still starting prints its prompt on the reply's line. The typed
+		// line ends in a quote, so only the reply ends in the word.
 		for scanner.Scan() {
-			if line := scanner.Text(); line == "one" || line == "two" {
-				fmt.Println(line)
+			if strings.HasSuffix(scanner.Text(), word) {
+				fmt.Println(word)
 				break
 			}
 		}
@@ -2003,8 +2006,10 @@ func ExamplePaneObservation_Reader() {
 		return
 	}
 	// The reader is a byte stream, so any consumer of an io.Reader works on
-	// it. The typed command echoes first; the exact line is the reply.
-	matched, err := regexp.MatchReader(`(?m)^ready\r?$`, bufio.NewReader(observation.Reader(ctx)))
+	// it. The typed command echoes first and ends in a quote; the reply is
+	// the line that ends in the word, whether or not a prompt precedes it.
+	reader := bufio.NewReader(observation.Reader(ctx))
+	matched, err := regexp.MatchReader(`(?m)\bready\r?$`, reader)
 	fmt.Println(matched, err)
 	// Output: true <nil>
 }
@@ -2061,6 +2066,108 @@ func ExamplePaneObservation_Notifications() {
 		}
 	}
 	// Output: heard the pane
+}
+
+// A stream that overflowed, or that tmux ended, cannot be resumed: close it,
+// open another, and arm its subscriptions again. Anything that happened in the
+// gap is not replayed, so read the state that matters from tmux first.
+func ExampleNotificationStream() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-go-example-stream-recovery",
+	})
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
+	defer killExampleServer(server)
+
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "watch"})
+	if err != nil {
+		fmt.Println("create session:", err)
+		return
+	}
+	// A small backlog and a reader that is busy elsewhere while a pane prints
+	// a mebibyte. A second stream, which sees no pane output, says when the
+	// pane is gone.
+	stream, err := session.OpenNotifications(ctx, tmux.NotificationOptions{
+		IncludePaneOutput: true,
+		BacklogBytes:      64 << 10,
+	})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+	done, err := session.OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("open notifications:", err)
+		return
+	}
+	defer func() { _ = done.Close() }()
+
+	if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{
+		Command: "sh -c 'yes xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | head -c 1048576'",
+	}); err != nil {
+		fmt.Println("new window:", err)
+		return
+	}
+	for notification, err := range done.Notifications(ctx) {
+		if err != nil {
+			fmt.Println("wait for the pane:", err)
+			return
+		}
+		// tmux 3.8 reports the window closing in the attached session as
+		// window-close; earlier releases as unlinked-window-close.
+		if kind := notification.Kind(); kind == tmux.ControlNotificationWindowClose ||
+			kind == tmux.ControlNotificationUnlinkedWindowClose {
+			break
+		}
+	}
+
+	// Reads return what was queued, then the overflow.
+	for err == nil {
+		_, err = stream.Next(ctx)
+	}
+	fmt.Println("overflowed:", errors.Is(err, tmux.ErrControlNotificationOverflow))
+	fmt.Println("ended:", errors.Is(err, tmux.ErrControlClosed))
+
+	// Recover: close, reopen, subscribe again.
+	if err := stream.Close(); err != nil {
+		fmt.Println("close:", err)
+		return
+	}
+	stream, err = session.OpenNotifications(ctx, tmux.NotificationOptions{})
+	if err != nil {
+		fmt.Println("reopen:", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+	if err := stream.Subscribe(ctx, tmux.SubscriptionRequest{
+		Name: "windows", Format: "#{session_windows}",
+	}); err != nil {
+		fmt.Println("subscribe:", err)
+		return
+	}
+	if _, err := session.NewWindow(ctx, tmux.NewWindowRequest{}); err != nil {
+		fmt.Println("new window:", err)
+		return
+	}
+	for notification, err := range stream.Notifications(ctx) {
+		if err != nil {
+			fmt.Println("notification:", err)
+			return
+		}
+		if change, ok := notification.Subscription(); ok && change.Value == "2" {
+			fmt.Println("recovered:", change.Name, "=", change.Value)
+			break
+		}
+	}
+	// Output:
+	// overflowed: true
+	// ended: false
+	// recovered: windows = 2
 }
 
 func ExampleNotificationStream_Subscribe() {

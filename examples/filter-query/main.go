@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
@@ -23,10 +24,16 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	server, err := tmux.NewServer(tmux.ServerOptions{})
+	// A private server: a socket and an empty config of its own, so this
+	// neither touches nor is changed by a tmux you already use.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-filter-query",
+		ConfigFile: os.DevNull,
+	})
 	if err != nil {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
+	defer func() { _ = server.Kill(context.WithoutCancel(ctx)) }()
 	return run(ctx, server)
 }
 
@@ -42,6 +49,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
+	if err := list(ctx, server); err != nil {
+		return err
+	}
+
 	// docs:query-in-go given:ctx context.Context; server tmux.Server
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
@@ -51,8 +62,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	// docs:end
 	fmt.Println("active panes:", len(active))
+	// docs:end
 
 	// docs:query-typed-in-go given:snapshot tmux.Snapshot
 	filter := tmux.PaneFilter{
@@ -63,8 +74,8 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	// docs:end
 	fmt.Println("typed panes:", len(panes))
+	// docs:end
 
 	// docs:query-in-tmux given:ctx context.Context; server tmux.Server
 	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
@@ -72,7 +83,23 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	// docs:end
 	fmt.Println("live matches:", len(sessions))
+	// docs:end
+	return nil
+}
+
+// list prints what the server holds now. It is a function of its own so the
+// region can use the names a reader would.
+func list(ctx context.Context, server tmux.Server) error {
+	// docs:list-sessions given:ctx context.Context; server tmux.Server
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		return fmt.Errorf("list sessions: %w", err)
+	}
+	for _, session := range sessions {
+		name, _ := session.Name()
+		fmt.Println("session:", name)
+	}
+	// docs:end
 	return nil
 }

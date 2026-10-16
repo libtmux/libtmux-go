@@ -203,3 +203,49 @@ func TestPaneContentCanCloseAFrameEarly(t *testing.T) {
 		t.Fatal("tmux's real guard after an early close must fail the connection")
 	}
 }
+
+// A foreground run-shell's output follows its reply as bare lines. Those lines
+// are the shell command's, so a guard among them is a line and the parser
+// still finds the fence, and tmux's own notifications are kept apart.
+func TestControlStreamParserCapturesLinesBetweenReplyAndFence(t *testing.T) {
+	t.Parallel()
+
+	parser := controlStreamParser{}
+	parser.arm("NONCE")
+	var frames []*controlFrame
+	var notifications []string
+	for _, line := range []string{
+		"%begin 10 1 1", "%end 10 1 1",
+		"hi", "%begin 1 2 1", "%end 1 2 3", "%error 1 2 1", "",
+		"%window-add @1",
+		"%begin 10 2 1", "NONCE", "%end 10 2 1",
+	} {
+		frame, notification, err := parser.consume([]byte(line))
+		if err != nil {
+			t.Fatalf("consume(%q) error = %v", line, err)
+		}
+		if frame != nil {
+			frames = append(frames, frame)
+		}
+		if notification != nil {
+			notifications = append(notifications, string(notification))
+		}
+	}
+	if len(frames) != 2 || frames[0].fence || !frames[1].fence {
+		t.Fatalf("frames = %#v, want the reply and then the fence", frames)
+	}
+	var captured []string
+	for _, line := range frames[1].captured {
+		captured = append(captured, string(line))
+	}
+	want := []string{"hi", "%begin 1 2 1", "%end 1 2 3", "%error 1 2 1", ""}
+	if !slices.Equal(captured, want) {
+		t.Fatalf("captured = %q, want %q", captured, want)
+	}
+	if !slices.Equal(notifications, []string{"%window-add @1"}) {
+		t.Fatalf("notifications = %q, want only the window-add", notifications)
+	}
+	if _, _, err := parser.consume([]byte("stray")); err == nil {
+		t.Fatal("consume(stray) after the fence error = nil, want the strict parser back")
+	}
+}

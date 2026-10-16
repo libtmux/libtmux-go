@@ -117,9 +117,13 @@
 // refused for a target it could not find matches [ErrNotFound], as does a
 // lookup that found nothing.
 //
-// Reads use a bool for legitimate absence. Materialized reads return (T, bool);
-// live reads return (T, bool, error), separating "not found" from "could not
-// ask." Collection failures are never converted to empty collections.
+// Reads use a bool for legitimate absence. A materialized read returns
+// (T, bool). A live read of a setting that may be unset, [Server.RawOption]
+// and [Session.RawHook] with their counterparts on each scope, returns
+// (T, bool, error), separating "not set" from "could not ask." A live lookup
+// of an object by its identity, such as [Server.Session], returns (T, error),
+// and one that finds nothing matches [ErrNotFound]. Collection failures are
+// never converted to empty collections.
 //
 // [CommandResult.RawStdout], [Pane.CaptureBytes], and
 // [Server.ShowBufferBytes] preserve byte output. Decoded line methods are the

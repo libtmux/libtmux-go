@@ -127,6 +127,9 @@ const (
 	perTestCleanupTries = 3
 	// cleanupRetryGap gives an in-progress daemon shutdown time to complete.
 	cleanupRetryGap = 100 * time.Millisecond
+	// lostServerMessage is what a tmux client reports when the connection it
+	// made is closed without a reply.
+	lostServerMessage = "server exited unexpectedly"
 )
 
 var (
@@ -626,12 +629,21 @@ func probeServerPID(record *serverRecord) (pid int, unavailable bool, err error)
 	return pid, false, nil
 }
 
+// serverUnavailable reports whether result says nobody is serving the socket.
+//
+// "server exited unexpectedly" counts. A distribution tmux built with systemd
+// support moves each new pane's child into its own cgroup before it closes the
+// descriptors it inherited from the server, and signals stay blocked until
+// then. A server killed in that window leaves its listening socket open in the
+// child, so a client connects and is reset when the child finally closes it.
+// Callers still require the recorded process to be gone.
 func serverUnavailable(result tmux.CommandResult) bool {
 	if result.ExitCode == 0 || len(result.Stdout) != 0 {
 		return false
 	}
 	for _, line := range result.Stderr {
-		if strings.HasPrefix(line, "no server running on ") {
+		if strings.HasPrefix(line, "no server running on ") ||
+			line == lostServerMessage {
 			return true
 		}
 		if strings.HasPrefix(line, "error connecting to ") &&

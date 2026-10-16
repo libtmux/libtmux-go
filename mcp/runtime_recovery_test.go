@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,9 +13,10 @@ import (
 // TestMCPSurvivesItsTmuxServerExiting pins that an MCP process must stay
 // up when its tmux server exits - the last session closing, kill-server, or a
 // first create_session that cannot reach a server. The call that hits the
-// loss reports it; the process itself keeps serving, and the next
-// create_session starts a new server rather than every future tool call
-// reliving the same stale failure forever.
+// loss reports it, a read as the read tools document an unreachable server;
+// the process itself keeps serving, and the next create_session starts a new
+// server rather than every future tool call reliving the same stale failure
+// forever.
 //
 //libtmux:real-tmux
 func TestMCPSurvivesItsTmuxServerExiting(t *testing.T) {
@@ -48,15 +50,18 @@ func TestMCPSurvivesItsTmuxServerExiting(t *testing.T) {
 	}
 
 	// The next tool call must report the loss, not hang and not take the
-	// whole process down with it.
+	// whole process down with it. A read reports it as the read tools
+	// document an unreachable server: an empty listing and a note, although
+	// it is the first call to find the runtime's connection lost.
 	listed, err := session.CallTool(ctx, &sdk.CallToolParams{
 		Name: "list_sessions", Arguments: map[string]any{},
 	})
 	if err != nil {
-		t.Fatalf("list_sessions after kill-server: transport error %v, want a tool isError result", err)
+		t.Fatalf("list_sessions after kill-server: transport error %v, want a result", err)
 	}
-	if !listed.IsError {
-		t.Fatalf("list_sessions after kill-server: IsError = false, want true (the daemon is gone)")
+	if text := surfaceResultText(listed); listed.IsError || !strings.Contains(text, "no tmux server") {
+		t.Fatalf("list_sessions after kill-server = %q (error %t), want an empty listing with a note",
+			text, listed.IsError)
 	}
 
 	// The MCP process is still up: create_session starts a new server.

@@ -71,6 +71,8 @@ type RunShellRequest struct {
 	TargetPane PaneID
 	// StartDirectory selects the job directory; nil omits it. It requires tmux
 	// 3.4; see UnsupportedPolicy.
+	// A directory that does not exist is not an error: tmux starts the
+	// process in the home directory instead, or in / without one.
 	StartDirectory *string
 	// ShowStderr requests job stderr and requires tmux 3.6; see
 	// UnsupportedPolicy.
@@ -147,10 +149,24 @@ type SourceFileRequest struct {
 }
 
 // RunShell executes a shell command through tmux and returns an owned stdout
-// slice. A background request returns nil after tmux accepts the job.
+// slice. A background request returns nil after tmux accepts the job. tmux 3.3
+// and 3.4 hand a foreground command's output to no client, so the slice is
+// empty there whatever the command printed.
 // Unsupported optional flags follow [UnsupportedPolicy]. A completed stderr
 // result is an error; context cancellation can be observed with [errors.Is] but
 // does not establish that tmux did not start the job.
+//
+// On a [Connection]-bound server a foreground request runs on a control client
+// opened for that call and closed when it ends, as [Server.WaitFor] does, so a
+// slow or canceled command leaves every lane free. tmux sends that client the
+// command's output as lines outside any reply frame, so the client takes every
+// line before its own fence as output, whatever the line looks like. The one
+// exception is a line that is a well-formed control notification, such as
+// "%window-add @1", which a connection cannot tell from tmux's own and drops.
+//
+// A foreground command that tmux ends with success is checked against the
+// server, as in [Server.WaitFor], and returns an error matching [ErrNoServer]
+// when the server exited under it.
 func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string, error) {
 	request.Delay = copyOptionalString(request.Delay)
 	request.StartDirectory = copyOptionalString(request.StartDirectory)
@@ -232,12 +248,20 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 		}
 	}
 
-	result, err := s.literalCmd(ctx, arguments...)
+	// Without -C, tmux prints the shell command's stdout; with it, tmux runs
+	// that output as commands, which answer in frames of their own.
+	result, err := s.literalCmdAs(
+		ctx, shellCommandKind(request.Background, !request.AsTmuxCommand), arguments...,
+	)
+	err = s.blockingFailure(ctx, "run-shell", err)
 	if err := requireRedactedServerCommandNoStderr("run-shell", result, err); err != nil {
 		return nil, err
 	}
 	if request.Background {
 		return nil, nil
+	}
+	if err := s.requireServerSurvived(ctx, "run-shell"); err != nil {
+		return nil, err
 	}
 	return result.Stdout, nil
 }
@@ -247,6 +271,16 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 // client wait but cannot prove a preceding signal or lock did not take
 // effect. See [WaitForModeLock]: before tmux 3.8, abandoning a lock wait costs
 // that channel one unlock.
+//
+// On a [Connection]-bound server a wait or lock runs on a control client opened
+// for that call and closed when it ends, so canceling it, or a peer never
+// signaling, leaves every lane free. Closing the connection ends a parked call
+// with [ErrControlClosed].
+//
+// tmux ends a waiting client with success when the server exits, which reads
+// as a signal. A wait or lock that tmux ends that way is checked against the
+// server and returns an error matching [ErrNoServer] when the server is gone.
+// A signal followed at once by the server exiting reads the same way.
 func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 	if err := validateServerCommandArgument(
 		"wait-for", "Channel", request.Channel, true,
@@ -274,13 +308,79 @@ func (s Server) WaitFor(ctx context.Context, request WaitForRequest) error {
 		)
 	}
 	arguments = append(arguments, "--", request.Channel)
-	result, err := s.literalCmd(ctx, arguments...)
-	return requireRedactedServerCommandNoStderr("wait-for", result, err)
+	// A wait or lock can hold its client until another client acts, and tmux
+	// cannot cancel a command already sent, so a connection runs it on a
+	// client of its own rather than on a shared lane.
+	kind := commandServer
+	if request.Mode == WaitForModeWait || request.Mode == WaitForModeLock {
+		kind = commandBlocking
+	}
+	result, err := s.literalCmdAs(ctx, kind, arguments...)
+	err = s.blockingFailure(ctx, "wait-for", err)
+	if err := requireRedactedServerCommandNoStderr("wait-for", result, err); err != nil {
+		return err
+	}
+	if kind == commandBlocking {
+		return s.requireServerSurvived(ctx, "wait-for")
+	}
+	return nil
+}
+
+// requireServerSurvived follows a blocking command tmux ended with success.
+// tmux's client exits 0 when the server exits under it, with no output that
+// tells that from a real completion, so only the server can say. It returns an
+// error matching [ErrNoServer] when the server is gone; a failed look is no
+// evidence either way, and the command itself did complete.
+func (s Server) requireServerSurvived(ctx context.Context, subcommand string) error {
+	if s.serverGone(ctx) {
+		return fmt.Errorf("%s: the tmux server exited during the command: %w", subcommand, ErrNoServer)
+	}
+	return nil
+}
+
+// blockingFailure follows a blocking command that failed on a connection's
+// client. The server exiting ends that client's stream, which reads as a lost
+// client rather than a gone server, so a lost client is checked against the
+// server and reports [ErrNoServer] when it is gone. Any other failure,
+// including the caller's own cancellation, passes through.
+func (s Server) blockingFailure(ctx context.Context, subcommand string, err error) error {
+	if err == nil || s.connection == nil || ctx.Err() != nil ||
+		(!errors.Is(err, ErrControlClosed) && !errors.Is(err, ErrOutcomeUnknown)) {
+		return err
+	}
+	if !s.serverGone(ctx) {
+		return err
+	}
+	return fmt.Errorf("%s: the tmux server exited during the command: %w (%w)", subcommand, ErrNoServer, err)
+}
+
+// serverGone reports whether the server answers that it is gone. A bound
+// server asks through its connection first; once the server has exited that
+// connection fails with something other than [ErrNoServer], so a failed look
+// asks again through a process of its own. A look that fails both ways is no
+// evidence, which keeps a Connection closed while the server is healthy from
+// reading as a gone server.
+func (s Server) serverGone(ctx context.Context) bool {
+	alive, err := s.IsAlive(ctx)
+	if (err == nil && !alive) || errors.Is(err, ErrNoServer) {
+		return true
+	}
+	if err == nil || s.connection == nil || ctx.Err() != nil {
+		return false
+	}
+	process := s
+	process.connection = nil
+	alive, err = process.IsAlive(ctx)
+	return (err == nil && !alive) || errors.Is(err, ErrNoServer) || errors.Is(err, ErrDaemonReplaced)
 }
 
 // IfShell executes ThenCommand when ShellCommand succeeds and ElseCommand, if
 // present, when it fails. A completed stderr result is an error; cancellation
 // can interrupt delivery without proving that tmux did not execute a branch.
+//
+// On a [Connection]-bound server a foreground request runs on a control client
+// of its own, as [Server.RunShell] does, and a server that exited under it is
+// reported the same way.
 func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if err := validateIfShellArguments(request); err != nil {
 		return err
@@ -310,8 +410,30 @@ func (s Server) IfShell(ctx context.Context, request IfShellRequest) error {
 	if request.ElseCommand != nil {
 		arguments = append(arguments, *request.ElseCommand)
 	}
-	result, err := s.literalCmd(ctx, arguments...)
-	return requireRedactedServerCommandNoStderr("if-shell", result, err)
+	result, err := s.literalCmdAs(ctx, shellCommandKind(request.Background, false), arguments...)
+	err = s.blockingFailure(ctx, "if-shell", err)
+	if err := requireRedactedServerCommandNoStderr("if-shell", result, err); err != nil {
+		return err
+	}
+	if !request.Background {
+		return s.requireServerSurvived(ctx, "if-shell")
+	}
+	return nil
+}
+
+// shellCommandKind says how run-shell and if-shell occupy a client. tmux
+// holds a client's queue through a foreground one until its shell command has
+// finished, so it can hold a client as long as that command runs; a background
+// one is answered at once. prints says the command's stdout reaches a control
+// client as lines after the reply.
+func shellCommandKind(background, prints bool) commandKind {
+	switch {
+	case background:
+		return commandServer
+	case prints:
+		return commandBlockingOutput
+	}
+	return commandBlocking
 }
 
 // SourceFile loads or parses one tmux configuration file. The path expands ~

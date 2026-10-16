@@ -1,0 +1,5 @@
+tmuxtest: pane %1 never showed a line containing "ready"
+the pane showed 3 line(s):
+    | tmuxtest$ printf 'loading widgets\nconnecting\n'; cat
+    | loading widgets
+    | connecting

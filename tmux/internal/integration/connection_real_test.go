@@ -395,3 +395,424 @@ func TestNewSessionConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 		)
 	}
 }
+
+// openOwnedConnection opens a connection on the server's first session and
+// closes it when the test ends.
+func openOwnedConnection(
+	ctx context.Context,
+	t *testing.T,
+	server tmux.Server,
+	options tmux.ConnectionOptions,
+) *tmux.Connection {
+	t.Helper()
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
+	}
+	connection, err := sessions[0].OpenControl(ctx, options)
+	if err != nil {
+		t.Fatalf("OpenControl() error = %v", err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+	return connection
+}
+
+// awaitClientBeyond returns once the server counts more than lanes attached
+// clients, which a blocking call on a connection adds for its own duration.
+// tmux announces no client attaching, so it asks, backing off between reads,
+// and fails the test when the client never appears: the caller's assertions
+// mean nothing without it.
+func awaitClientBeyond(ctx context.Context, t *testing.T, server tmux.Server, lanes int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := tmuxtest.WaitFor(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
+		clients, err := server.Clients(ctx)
+		return err == nil && len(clients) > lanes, nil
+	}); err != nil {
+		t.Fatalf("the blocking call never attached a client of its own: %v", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestConnectionServesCommandsAfterACanceledWaitFor(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+	waitCtx, stopWaiting := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer stopWaiting()
+	err := connection.Server().WaitFor(waitCtx, tmux.WaitForRequest{Channel: "nobody-signals"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitFor() error = %v, want deadline exceeded", err)
+	}
+
+	nextCtx, stopNext := context.WithTimeout(ctx, 5*time.Second)
+	defer stopNext()
+	if _, err := connection.Server().Sessions(nextCtx); err != nil {
+		t.Fatalf("Sessions() after a canceled WaitFor error = %v, want the lane usable", err)
+	}
+}
+
+// A foreground run-shell or if-shell holds its client until the shell command
+// finishes, and tmux cannot cancel it once sent. Canceling one must leave the
+// connection's only lane free for the next command.
+//
+//libtmux:real-tmux
+func TestConnectionServesCommandsAfterACanceledShellCommand(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		run  func(context.Context, tmux.Server, string) error
+	}{
+		{"RunShell", func(ctx context.Context, server tmux.Server, command string) error {
+			_, err := server.RunShell(ctx, tmux.RunShellRequest{Command: command})
+			return err
+		}},
+		{"IfShell", func(ctx context.Context, server tmux.Server, command string) error {
+			return server.IfShell(ctx, tmux.IfShellRequest{
+				ShellCommand: command, ThenCommand: "display-message done",
+			})
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			server := tmuxtest.NewServer(ctx, t)
+			connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+			// The shell command runs for as long as a file exists. tmux keeps
+			// running it after the call is canceled and will not exit while it
+			// runs, so the file sits in the test's own directory: removing
+			// that directory, which happens before the harness cleans up, is
+			// what lets the command go.
+			held := filepath.Join(t.TempDir(), "held")
+			if err := os.WriteFile(held, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			command := "while [ -e '" + held + "' ]; do sleep 0.05; done"
+
+			shellCtx, stopShell := context.WithTimeout(ctx, 200*time.Millisecond)
+			defer stopShell()
+			err := test.run(shellCtx, connection.Server(), command)
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("%s() error = %v, want deadline exceeded", test.name, err)
+			}
+
+			nextCtx, stopNext := context.WithTimeout(ctx, 3*time.Second)
+			defer stopNext()
+			if _, err := connection.Server().Sessions(nextCtx); err != nil {
+				t.Fatalf("Sessions() after a canceled %s error = %v, want the lane usable",
+					test.name, err)
+			}
+		})
+	}
+}
+
+//libtmux:real-tmux
+func TestConnectionCloseEndsAParkedWaitFor(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+	waited := make(chan error, 1)
+	go func() {
+		waited <- connection.Server().WaitFor(ctx, tmux.WaitForRequest{Channel: "nobody-signals"})
+	}()
+	awaitClientBeyond(ctx, t, server, 1)
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	select {
+	case err := <-waited:
+		if !errors.Is(err, tmux.ErrControlClosed) {
+			t.Fatalf("WaitFor() error = %v, want ErrControlClosed", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitFor() still parked after Close()")
+	}
+}
+
+//libtmux:real-tmux
+func TestSessionRunWorksOnAConnection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+	session := connection.Session()
+	before, err := connection.Server().Windows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := session.Run(ctx, "echo hello; exit 3", tmux.RunOptions{})
+	if err != nil {
+		t.Fatalf("Run() on a connection error = %v", err)
+	}
+	if result.Status != 3 || !slices.Equal(result.Lines, []string{"hello"}) {
+		t.Fatalf("Run() = status %d, lines %q, want status 3, [hello]", result.Status, result.Lines)
+	}
+	after, err := connection.Server().Windows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("windows after Run = %d, want the %d it started with", len(after), len(before))
+	}
+}
+
+//libtmux:real-tmux
+func TestRunningKillWorksWhileWaitIsParkedOnOneLane(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{Lanes: 1})
+
+	running, err := connection.Session().Start(ctx, "sleep 30", tmux.RunOptions{})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	waited := make(chan error, 1)
+	go func() {
+		_, waitErr := running.Wait(ctx)
+		waited <- waitErr
+	}()
+	// The failure this guards is Kill queueing behind a parked wait.
+	awaitClientBeyond(ctx, t, server, 1)
+
+	killCtx, stopKill := context.WithTimeout(ctx, 2*time.Second)
+	defer stopKill()
+	if err := running.Kill(killCtx); err != nil {
+		t.Fatalf("Kill() while Wait is parked error = %v", err)
+	}
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Fatalf("Wait() after Kill error = %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("Wait() did not return after Kill")
+	}
+}
+
+// tmux ends a waiting client with success when the server exits, so a bound
+// server must learn from outside its own lanes, which die with the server,
+// that the server is gone.
+//
+//libtmux:real-tmux
+func TestConnectionBlockingCommandReportsAServerKilledUnderIt(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		run  func(context.Context, tmux.Server, string) error
+	}{
+		{"WaitFor", func(ctx context.Context, server tmux.Server, _ string) error {
+			return server.WaitFor(ctx, tmux.WaitForRequest{Channel: "libtmux-killed"})
+		}},
+		{"RunShell", func(ctx context.Context, server tmux.Server, command string) error {
+			_, err := server.RunShell(ctx, tmux.RunShellRequest{Command: command})
+			return err
+		}},
+		{"IfShell", func(ctx context.Context, server tmux.Server, command string) error {
+			return server.IfShell(ctx, tmux.IfShellRequest{
+				ShellCommand: command, ThenCommand: "display-message x",
+			})
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			server := tmuxtest.NewServer(ctx, t)
+			connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+			// The shell command outlives the server, so it runs until the
+			// file goes, as in TestConnectionServesCommandsAfterACanceledShellCommand.
+			held := filepath.Join(t.TempDir(), "held")
+			if err := os.WriteFile(held, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			command := "while [ -e '" + held + "' ]; do sleep 0.05; done"
+
+			done := make(chan error, 1)
+			go func() { done <- test.run(ctx, connection.Server(), command) }()
+			awaitClientBeyond(ctx, t, server, 1)
+			if _, err := server.Cmd(ctx, "kill-server"); err != nil {
+				t.Fatalf("kill-server error = %v", err)
+			}
+			if err := os.Remove(held); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-done:
+				if !errors.Is(err, tmux.ErrNoServer) {
+					t.Fatalf("%s with the server killed under it = %v, want ErrNoServer", test.name, err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatalf("%s still parked after the server was killed", test.name)
+			}
+		})
+	}
+}
+
+// A connection closed under a parked call says nothing about the server, which
+// is healthy, so the call must not read as a server that exited.
+//
+//libtmux:real-tmux
+func TestConnectionClosedUnderABlockingCommandIsNotAGoneServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- connection.Server().WaitFor(ctx, tmux.WaitForRequest{Channel: "libtmux-closed"})
+	}()
+	awaitClientBeyond(ctx, t, server, 1)
+	if err := connection.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, tmux.ErrControlClosed) || errors.Is(err, tmux.ErrNoServer) {
+			t.Fatalf("WaitFor() after Close() = %v, want ErrControlClosed and not ErrNoServer", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitFor() still parked after Close()")
+	}
+}
+
+// Once the connection's own session is gone, a blocking call must still
+// return at its deadline with that deadline as the error, and must attach to
+// the session its lanes moved to rather than try the dead one first.
+//
+//libtmux:real-tmux
+func TestConnectionBlockingCommandAfterItsSessionDied(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	requireNoDetachOnDestroy(t, server)
+	original := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "survivor"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := original.Session().Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	const deadline = 100 * time.Millisecond
+	held, stop := context.WithTimeout(ctx, deadline)
+	defer stop()
+	started := time.Now()
+	err := original.Server().WaitFor(held, tmux.WaitForRequest{Channel: "libtmux-orphaned"})
+	elapsed := time.Since(started)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitFor() = %v, want the deadline", err)
+	}
+	if elapsed > deadline+100*time.Millisecond {
+		t.Fatalf("WaitFor() returned after %v, want about %v", elapsed, deadline)
+	}
+
+	// The next open must not pay for the dead session again.
+	started = time.Now()
+	if _, err := original.Server().RunShell(ctx, tmux.RunShellRequest{Command: "true"}); err != nil {
+		t.Fatalf("RunShell() error = %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 200*time.Millisecond {
+		t.Fatalf("RunShell() took %v, want an open that skips the dead session", elapsed)
+	}
+}
+
+// tmux hands a control client a foreground run-shell's output as bare lines
+// between its empty reply frame and the next command's, so the output must be
+// read as the result and never as protocol. Lines that imitate guards are
+// the case that matters: they must come back as text and leave the lane
+// usable.
+//
+//libtmux:real-tmux
+func TestConnectionRunShellReturnsItsOutput(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		command string
+		want    []string
+	}{
+		{"one line", "echo hi", []string{"hi"}},
+		{"several lines", "printf 'one\\ntwo\\nthree\\n'", []string{"one", "two", "three"}},
+		{"no output", "true", nil},
+		{
+			"imitated frames",
+			"printf '%%begin 1 2 1\\nbody\\n%%end 1 2 1\\n%%error 1 2 1\\n%%end 1 2 3\\n'",
+			[]string{"%begin 1 2 1", "body", "%end 1 2 1", "%error 1 2 1", "%end 1 2 3"},
+		},
+		{"lone closing guard", "printf '%%end 1 2 3\\n'", []string{"%end 1 2 3"}},
+		// Whether tmux keeps a blank line depends on its version, so the unbound
+		// server answers for it.
+		{"blank line", "printf 'a\\n\\nb\\n'", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			server := tmuxtest.NewServer(ctx, t)
+			connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+
+			got, err := connection.Server().RunShell(ctx, tmux.RunShellRequest{Command: test.command})
+			if err != nil {
+				t.Fatalf("RunShell(%q) on a connection error = %v", test.command, err)
+			}
+			unbound, err := server.RunShell(ctx, tmux.RunShellRequest{Command: test.command})
+			if err != nil {
+				t.Fatalf("RunShell(%q) on the unbound server error = %v", test.command, err)
+			}
+			// tmux 3.3 and 3.4 hand a foreground run-shell's output to no
+			// client, bound or not, so only the two agreeing is asked there.
+			version, err := server.Version(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			from33, _ := tmux.ParseVersion("3.3")
+			from35, _ := tmux.ParseVersion("3.5")
+			printsOutput := !version.AtLeast(from33) || version.AtLeast(from35)
+			if !slices.Equal(got, unbound) ||
+				(printsOutput && test.want != nil && !slices.Equal(got, test.want)) {
+				t.Fatalf("RunShell(%q) on a connection = %q, want %q (unbound %q)",
+					test.command, got, test.want, unbound)
+			}
+			if _, err := connection.Server().Sessions(ctx); err != nil {
+				t.Fatalf("Sessions() after RunShell error = %v, want the lane usable", err)
+			}
+		})
+	}
+}
+
+// A branch that fails fails like it does on an unbound server, instead of
+// breaking the control stream.
+//
+//libtmux:real-tmux
+func TestConnectionIfShellReportsAFailedBranch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{})
+	request := tmux.IfShellRequest{ShellCommand: "true", ThenCommand: "no-such-command"}
+
+	if err := server.IfShell(ctx, request); !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("unbound IfShell() error = %v, want ErrCommand", err)
+	}
+	if err := connection.Server().IfShell(ctx, request); !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("connected IfShell() error = %v, want ErrCommand", err)
+	}
+	// A branch that prints answers in a frame of its own, ahead of the fence.
+	printing := tmux.IfShellRequest{ShellCommand: "true", ThenCommand: "display-message -p printed"}
+	if err := connection.Server().IfShell(ctx, printing); err != nil {
+		t.Fatalf("connected IfShell() with a printing branch error = %v", err)
+	}
+	// run-shell -C runs the command's output as tmux commands, and a bad one
+	// fails the same way.
+	bad := tmux.RunShellRequest{Command: "echo no-such-command", AsTmuxCommand: true}
+	if _, err := connection.Server().RunShell(ctx, bad); !errors.Is(err, tmux.ErrCommand) {
+		t.Fatalf("connected RunShell(AsTmuxCommand) error = %v, want ErrCommand", err)
+	}
+	if _, err := connection.Server().Sessions(ctx); err != nil {
+		t.Fatalf("Sessions() after IfShell error = %v, want the lane usable", err)
+	}
+}

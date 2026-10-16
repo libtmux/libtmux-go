@@ -13,6 +13,26 @@ import (
 // session. It yields tmux notifications in wire order and must be closed.
 // Before tmux 3.6, destroying the attached session follows that session's
 // detach-on-destroy policy and may end the stream.
+//
+// A stream ends in one of three ways, and none can be resumed. A stream is one
+// tmux client, so a new one is a new client: it starts at tmux's present, with
+// no subscriptions armed, no pane held by PauseAfter, and none of what the old
+// stream had queued or tmux sent in the gap. To recover, close the old stream,
+// read whatever state matters from tmux directly, open another with
+// [Server.OpenNotifications] or [Session.OpenNotifications], and Subscribe
+// again. [ControlClient.Reconnect] is not offered here because it would have to
+// choose between dropping the subscriptions silently and replaying commands,
+// which the package never does.
+//
+//   - The caller closed it: reads return an error matching [ErrControlClosed]
+//     and [os.ErrClosed].
+//   - tmux ended it, because the server exited or the client fell too far
+//     behind: reads return an error matching [ErrControlClosed] and
+//     [ErrControlStreamLost], after the notifications queued before the end.
+//   - Its backlog filled: reads return a [ControlNotificationOverflowError]
+//     matching [ErrControlNotificationOverflow] after the queued prefix. The
+//     process is still running and tmux keeps sending, but everything after
+//     the overflow is dropped; close the stream.
 type NotificationStream struct {
 	client *ControlClient
 }
@@ -28,9 +48,34 @@ type NotificationOptions struct {
 	// rather than pausing it. tmux resolves this to whole seconds, and it
 	// governs pane output, so it requires IncludePaneOutput.
 	PauseAfter time.Duration
+	// BacklogBytes bounds the notifications this stream holds while the caller
+	// is not reading, counting each notification's text and a small fixed
+	// overhead. Zero means 16 MiB. Once a notification would cross the bound,
+	// reads return the queued prefix and then
+	// ErrControlNotificationOverflow. A larger bound trades memory for
+	// headroom on a chatty pane; a smaller one makes a slow reader fail sooner.
+	// It may not be below 64 KiB.
+	BacklogBytes int
+}
+
+// minNotificationBacklog is the smallest bound BacklogBytes accepts, well above
+// the largest single notification tmux sends.
+const minNotificationBacklog = 64 << 10
+
+func (o NotificationOptions) backlog() int {
+	if o.BacklogBytes == 0 {
+		return defaultControlNotificationLimit
+	}
+	return o.BacklogBytes
 }
 
 func (o NotificationOptions) validate() error {
+	if o.BacklogBytes != 0 && o.BacklogBytes < minNotificationBacklog {
+		return invalidServerCommandRequest(
+			"refresh-client", "BacklogBytes", strconv.Itoa(o.BacklogBytes),
+			"is below the 65536 byte minimum; zero selects the default",
+		)
+	}
 	if o.PauseAfter == 0 {
 		return nil
 	}
@@ -52,6 +97,10 @@ func (o NotificationOptions) validate() error {
 // OpenNotifications starts an owned observation-only stream attached to
 // session. Session must belong to the same configured server selector. A
 // connection-bound server returns [ErrConnectionRequiresProcess].
+//
+// The stream starts at tmux's present and holds nothing from before it opened.
+// When it ends or overflows it cannot be resumed; open another, as described
+// on [NotificationStream], and arm its subscriptions again.
 func (s Server) OpenNotifications(
 	ctx context.Context,
 	session Session,
@@ -64,7 +113,7 @@ func (s Server) OpenNotifications(
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
-	client, err := s.openControl(ctx, session, profile)
+	client, err := s.openControlWithBacklog(ctx, session, profile, options.backlog())
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +155,9 @@ func (s *NotificationStream) ContinuePane(ctx context.Context, pane PaneID) erro
 
 // SubscriptionRequest names a format for tmux to evaluate and report on this
 // stream whenever its value changes. Its zero value is invalid because Name and
-// Format are required. At most one of Session, Window, and Pane scopes the
-// evaluation; none evaluates against the stream's attached session.
+// Format are required. At most one of Window and Pane scopes the evaluation;
+// neither evaluates against the stream's attached session, which tmux
+// always uses for a session-scoped subscription and which cannot be selected.
 //
 // tmux stops evaluating a pane-scoped subscription once that pane's process has
 // exited, so a subscription that must observe pane death is scoped to the
@@ -118,11 +168,6 @@ type SubscriptionRequest struct {
 	Name string
 	// Format is the tmux format to evaluate, such as #{pane_current_command}.
 	Format string
-	// Session scopes evaluation to the stream's attached session. tmux always
-	// evaluates a session-scoped subscription against the control client's own
-	// session, so this only requests that scope; it is not a selector, and any
-	// value is equivalent to the stream's own session.
-	Session SessionID
 	// Window scopes evaluation to one window.
 	Window WindowID
 	// Pane scopes evaluation to one pane.
@@ -148,15 +193,9 @@ func (r SubscriptionRequest) validate() error {
 	if err := validateServerCommandArgument("refresh-client", "Format", r.Format, true); err != nil {
 		return err
 	}
-	scopes := 0
-	for _, set := range []bool{r.Session != "", r.Window != "", r.Pane != ""} {
-		if set {
-			scopes++
-		}
-	}
-	if scopes > 1 {
+	if r.Window != "" && r.Pane != "" {
 		return invalidServerCommandRequest(
-			"refresh-client", "Scope", "", "selects more than one of Session, Window, and Pane",
+			"refresh-client", "Scope", "", "selects both Window and Pane",
 		)
 	}
 	return nil
@@ -237,8 +276,13 @@ func (s Session) OpenNotifications(
 	return s.server.OpenNotifications(ctx, s, options)
 }
 
-// Next returns the next ordered control-mode notification. Exactly one caller
-// may use Next at a time.
+// Next returns the next ordered control-mode notification. Concurrent calls are
+// serialized: each notification goes to exactly one call, and a call waiting
+// its turn returns when ctx ends.
+//
+// A stream that has ended reports why: see [NotificationStream] for the errors
+// to match. A caller that wants to treat every end alike writes
+// errors.Is(err, [ErrControlClosed]).
 func (s *NotificationStream) Next(
 	ctx context.Context,
 ) (ControlNotification, error) {
@@ -248,8 +292,8 @@ func (s *NotificationStream) Next(
 	return s.client.NextNotification(ctx)
 }
 
-// Notifications returns [NotificationStream.Next] as a range loop; exactly one
-// iterator or direct read may run at a time. Malformed notifications yield
+// Notifications returns [NotificationStream.Next] as a range loop; reads from
+// several iterators or direct calls are serialized. Malformed notifications yield
 // their error and iteration continues; every other error ends the loop after
 // being yielded.
 func (s *NotificationStream) Notifications(

@@ -1,0 +1,8 @@
+no tmux server on that socket yet; starting one
+not running inside this tmux server; using active pane %0
+split into %1
+2 panes in this window while the work runs
+the work printed agent-workflow-ready
+the command exited 0 and printed:
+  | bounded work
+the window now holds 2 panes: %0 %1

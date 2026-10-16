@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -21,6 +22,8 @@ type RunOptions struct {
 	WindowName string
 	// StartDirectory expands ~ and ~/... for the current user; empty inherits
 	// the session's default.
+	// A directory that does not exist is not an error: tmux starts the
+	// process in the home directory instead, or in / without one.
 	StartDirectory string
 	// Environment is added to the command's environment. The map is not
 	// retained.
@@ -39,13 +42,23 @@ var ErrOutcomeUnrecorded = errors.New("tmux: command outcome was never recorded"
 
 // RunResult reports how a command finished and what its terminal showed.
 type RunResult struct {
-	// Status is the command's exit status. It is zero when Signal is set.
+	// Status is the command's exit status, or -1 when the command did not
+	// exit on its own, as when a signal ended it, so zero always means it
+	// succeeded. os.ProcessState.ExitCode reads the same way.
 	Status int
-	// Signal names the signal that ended the command, when one did. It is
-	// empty before tmux 3.3, which reports no signal for a dead pane.
-	Signal string
-	// Lines is what the terminal showed when the command finished, without
-	// the blank lines tmux pads a screen with.
+	// Signal is the signal that ended the command, when one did, and nil
+	// otherwise. Compare it with os.Kill or a syscall constant: tmux reports
+	// a number on Linux and a name on macOS and the BSDs, and Signal holds
+	// the same value on each. It is nil before tmux 3.3, which reports no
+	// signal for a dead pane.
+	Signal os.Signal
+	// Lines is what the terminal showed when the command finished, its
+	// history included, without the blank lines tmux pads a screen with. A
+	// line the window's width wrapped is joined back into one, and each line
+	// ends at its last character that is not a space: a screen cannot tell
+	// spaces a program wrote from the blank cells after them. tmux keeps at
+	// most the session's history-limit lines above the screen, 2000 by
+	// default, so the start of a longer output is gone.
 	Lines []string
 	// Pane is the pane the command ran in. It is live only when the run kept
 	// its window.
@@ -59,11 +72,39 @@ func (result RunResult) clone() RunResult {
 	return result
 }
 
+// deadSignal turns tmux's pane_dead_signal into the signal it reports. A
+// name this platform has no number for keeps tmux's spelling.
+func deadSignal(reported string) os.Signal {
+	if reported == "" {
+		return nil
+	}
+	if signal, ok := platformSignal(reported); ok {
+		return signal
+	}
+	return reportedSignal(reported)
+}
+
+// reportedSignal is a signal tmux named that this platform has no number for.
+type reportedSignal string
+
+func (s reportedSignal) String() string { return string(s) }
+
+// Signal makes reportedSignal an [os.Signal].
+func (reportedSignal) Signal() {}
+
 // Run starts command in a new window of this session, waits for it to finish,
 // and reports its exit status and what its terminal showed. It is [os/exec]
 // for a program that needs a terminal: the command runs with a tty, so it
 // sees isatty, colour, and a width, and what comes back is the screen tmux
-// rendered rather than the bytes the program wrote.
+// rendered rather than the bytes the program wrote. That screen holds a
+// bounded history; see [RunResult.Lines]. For a large output, have the
+// command write it to a file, or follow it with [Running.StreamTo].
+//
+// tmux runs command as default-shell -c command, so it is written in the
+// language of the session's default-shell option, which tmux takes from
+// $SHELL when it starts the server: under fish, echo $((1+2)) is an error.
+// For one language on every machine, set default-shell, or write the
+// command as sh -c '...'.
 //
 // A nonzero status is a result, not an error; the error reports what tmux
 // could not do. The wait is tmux's own signal, backed by a liveness check that
@@ -74,6 +115,11 @@ func (result RunResult) clone() RunResult {
 // clean up; a bare [Session.Start] followed by [Running.Wait] leaves that
 // choice to the caller instead. [Server.RunShell] runs a command with no pane
 // at all.
+//
+// On a session bound to a [Connection], Run works as it does elsewhere: the
+// wait uses a control client of its own rather than a lane, so one lane is
+// enough, and the final screen is read through a scratch tmux buffer and a
+// temporary file that tmux writes and this process reads.
 func (s Session) Run(ctx context.Context, command string, options RunOptions) (RunResult, error) {
 	running, err := s.Start(ctx, command, options)
 	if err != nil {
@@ -100,6 +146,10 @@ func (s Session) Run(ctx context.Context, command string, options RunOptions) (R
 // outcome is read, whether or not Keep leaves the window itself in place.
 //
 // If Wait is never called, the window Start created is never removed.
+//
+// A session bound to a [Connection] can Start: [Running.Wait] holds a control
+// client of its own, not a lane, so [Running.Kill] and every other command stay
+// available while it waits.
 func (s Session) Start(
 	ctx context.Context,
 	command string,
@@ -231,6 +281,10 @@ func (r *Running) Pane() Pane {
 // command end, on a context no caller's cancellation reaches, because from
 // then on it belongs to every caller. A call whose context ends first reports
 // that context and leaves the window alone; a later call gets the outcome.
+//
+// On a [Connection]-bound session the wait holds a control client of its own
+// rather than a lane, and ending it closes that client. Closing the
+// connection ends it with [ErrControlClosed].
 func (r *Running) Wait(ctx context.Context) (RunResult, error) {
 	finished := r.finishedSignal()
 	if !r.exited.Load() {
@@ -511,14 +565,40 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	result.Pane = finished.ID()
 	// A signal-killed pane reports pane_dead_signal and no pane_dead_status, so
 	// a missing status is the documented Signal case rather than an error.
-	result.Status, _ = finished.DeadStatus()
-	result.Signal, _ = finished.DeadSignal()
-	lines, err := finished.Capture(ctx, CapturePaneRequest{Start: CaptureBoundary, End: CaptureBoundary})
+	result.Status = -1
+	if status, ok := finished.DeadStatus(); ok {
+		result.Status = status
+	}
+	reported, _ := finished.DeadSignal()
+	result.Signal = deadSignal(reported)
+	lines, err := captureFinishedScreen(ctx, finished)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("read screen: %w", err)
 	}
 	result.Lines = trimScreen(lines, r.fixedNotice)
 	return result, nil
+}
+
+// captureFinishedScreen reads pane's screen. A connection cannot print a
+// capture safely, so a bound pane stages it through a tmux buffer and a
+// scratch file, which tmux writes and this process reads.
+func captureFinishedScreen(ctx context.Context, pane Pane) ([]string, error) {
+	request := CapturePaneRequest{
+		Start: CaptureBoundary, End: CaptureBoundary, JoinWrapped: true,
+	}
+	if !pane.server.ConnectionBound() {
+		return pane.Capture(ctx, request)
+	}
+	file, err := os.CreateTemp("", "libtmux-go-run-*")
+	if err != nil {
+		return nil, err
+	}
+	path := file.Name()
+	defer func() { _ = os.Remove(path) }()
+	if err := file.Close(); err != nil {
+		return nil, err
+	}
+	return pane.CaptureToFile(ctx, path, request)
 }
 
 // StreamTo copies what the command prints into destination as it prints it and
@@ -535,8 +615,8 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 // command's exit. [RunResult.Lines] is a screen capture rather than a
 // notification stream and remains the authoritative record of what the command
 // showed. Streaming needs a control client, which a [Connection]-bound value
-// does not have, so it returns [ErrConnectionRequiresProcess] there; Wait alone
-// does not.
+// does not have, so it returns [ErrConnectionRequiresProcess] there before
+// waiting and leaves the command running; Wait alone does not.
 func (r *Running) StreamTo(
 	ctx context.Context,
 	destination io.Writer,
@@ -615,6 +695,11 @@ const deadPaneNotice = "Pane is dead ("
 // when tmux wrote its fixed dead-pane notice, that notice, so lines hold only
 // what the command showed.
 func trimScreen(lines []string, fixedNotice bool) []string {
+	// Joining wrapped lines keeps the spaces that pad each row out to the
+	// window's width, which some tmux versions then leave in place.
+	for index, line := range lines {
+		lines[index] = strings.TrimRight(line, " ")
+	}
 	end := len(lines)
 	for end > 0 && strings.TrimSpace(lines[end-1]) == "" {
 		end--

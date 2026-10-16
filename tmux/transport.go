@@ -16,7 +16,20 @@ type commandKind uint8
 const (
 	commandServer commandKind = iota
 	commandProcess
+	// commandBlocking is a server command that can hold its client until a
+	// peer acts, such as wait-for. A connection gives it a client of its own
+	// so abandoning it cannot strand a shared lane.
+	commandBlocking
+	// commandBlockingOutput is commandBlocking for a shell command whose
+	// stdout tmux sends a control client as lines after its reply, such as a
+	// foreground run-shell.
+	commandBlockingOutput
 )
+
+// blocks reports whether a connection gives the command a client of its own.
+func (k commandKind) blocks() bool {
+	return k == commandBlocking || k == commandBlockingOutput
+}
 
 // requireProcess marks exact-output and interactive operations. A plain
 // Server starts its frozen executable; a connection-bound Server refuses.
@@ -129,7 +142,7 @@ func (s Server) originalCommand(
 	connected bool,
 ) []string {
 	if connected {
-		if kind == commandServer {
+		if kind != commandProcess {
 			return slices.Clone(arguments)
 		}
 		return s.commandArguments(arguments)

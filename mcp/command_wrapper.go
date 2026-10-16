@@ -7,13 +7,31 @@ import (
 
 const maximumInheritedTrapBytes = 64 * 1024
 
+// wrapperPIDPath is where a wrapper records its own process, beside the
+// record that says it has started. A run that was killed leaves no status,
+// and its process being gone is then the only sign that it ended.
+func wrapperPIDPath(openedPath string) string {
+	return openedPath + ".pid"
+}
+
+// promptedPath is where a wrapper records that it found the cursor along a
+// row the shell's prompt holds, beside the record that says it has started.
+func promptedPath(openedPath string) string {
+	return openedPath + ".prompted"
+}
+
 // wrapperScript renders the bookkeeping wrapper the pane runs. Bash and zsh
 // trap declarations are carried as opaque code into the command subshell;
 // bookkeeping runs with ERR, DEBUG, errexit, and xtrace disabled. After timeout
 // cleanup removes the directory a trailing stderr redirection would be too
 // late, because shells apply redirections left to right.
+//
+// The wrapper catches SIGINT. An interrupt reaches every process in the pane's
+// foreground, the wrapper among them, and one that died with the command
+// would record no status. A trap is not inherited, so the command still dies
+// of the signal and the wrapper goes on to record that.
 func wrapperScript(
-	mark, openedPath, commandPath, trapPath, statusPath, closedPath, nonce string,
+	mark, column, openedPath, commandPath, trapPath, statusPath, closedPath, nonce string,
 ) string {
 	command := shellQuote(commandPath)
 	traps := shellQuote(trapPath)
@@ -31,6 +49,9 @@ func wrapperScript(
 		"\\set +e\n" +
 		trapStatus + "=0\n" +
 		"\\umask 077\n" +
+		// A child's parent is this subshell, which has no portable name
+		// for its own process.
+		publishRecord(`command sh -c 'command printf %s "$PPID"'`, wrapperPIDPath(openedPath)) +
 		"if : >| " + traps + "; then\n" +
 		"  case \"${BASH_VERSION-}:${ZSH_VERSION-}\" in\n" +
 		"    ?*:*) if \\trap -p ERR DEBUG >| " + traps + "; then :; else " +
@@ -49,6 +70,14 @@ func wrapperScript(
 		"  { command printf '\\n'; command cat " + command + "; } >> " + traps +
 		" || " + trapStatus + "=125\n" +
 		"fi\n" +
+		"\\trap : INT\n" +
+		// A shell with no line editor draws its prompt after the echo of keys
+		// typed before it was ready, and a terminal that does not echo leaves
+		// the cursor after the prompt: either way the cursor is along a row
+		// that holds the prompt. The output starts on a row of its own
+		// instead, and the record says the row above it is a prompt.
+		"case \"$(" + column + " 2>/dev/null)\" in ''|0) ;; *) command printf '\\n'; : >| " +
+		shellQuote(promptedPath(openedPath)) + " 2>/dev/null ;; esac\n" +
 		publishRecord(mark, openedPath) +
 		"if command test \"$" + trapStatus + "\" -ne 0; then\n" +
 		"  " + status + "=125\n" +

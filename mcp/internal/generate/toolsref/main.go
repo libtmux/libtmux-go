@@ -1,5 +1,5 @@
 // Command toolsref regenerates the marked TOOLS.md region from tools and
-// schemas advertised over MCP.
+// schemas advertised over MCP, and the marked index of them in README.md.
 package main
 
 import (
@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,19 +23,26 @@ import (
 const (
 	openMarker  = "<!-- toolsref -->"
 	closeMarker = "<!-- toolsref:end -->"
+
+	indexOpenMarker  = "<!-- toolsindex -->"
+	indexCloseMarker = "<!-- toolsindex:end -->"
+
+	// toolPages is where the documentation site gives each tool its page.
+	toolPages = "https://libtmux.org/en/go/latest/mcp/tools/"
 )
 
 func main() {
 	output := flag.String("output", "TOOLS.md", "the markdown file to write into")
+	index := flag.String("index", "", "a markdown file to write the index of tools into")
 	check := flag.Bool("check", false, "fail instead of writing when the reference has drifted")
 	flag.Parse()
-	if err := run(*output, *check); err != nil {
+	if err := run(*output, *index, *check); err != nil {
 		fmt.Fprintln(os.Stderr, "toolsref:", err)
 		os.Exit(1)
 	}
 }
 
-func run(output string, check bool) error {
+func run(output, index string, check bool) error {
 	// Generate the complete surface rather than one deployment profile.
 	for _, name := range []string{
 		tmuxmcp.ToolsEnvironmentVariable,
@@ -56,25 +64,62 @@ func run(output string, check bool) error {
 	if err != nil {
 		return err
 	}
-	rendered := render(tools)
+	if err := write(output, openMarker, closeMarker, render(tools), len(tools), check); err != nil {
+		return err
+	}
+	if index == "" {
+		return nil
+	}
+	return write(index, indexOpenMarker, indexCloseMarker, renderIndex(tools), len(tools), check)
+}
 
+// write puts rendered between a document's markers, or with check reports
+// that what is there has drifted.
+func write(output, open, end, rendered string, tools int, check bool) error {
 	existing, err := os.ReadFile(output)
 	if err != nil {
 		return err
 	}
-	replaced, err := replaceRegion(string(existing), rendered)
+	replaced, err := replaceRegion(string(existing), open, end, rendered)
 	if err != nil {
 		return fmt.Errorf("%s: %w", filepath.Base(output), err)
 	}
 	if replaced == string(existing) {
 		fmt.Printf("toolsref: %s already matches the %d tools\n",
-			filepath.Base(output), len(tools))
+			filepath.Base(output), tools)
 		return nil
 	}
 	if check {
 		return fmt.Errorf("generated %s has drifted; run go generate ./... to refresh it", filepath.Base(output))
 	}
 	return os.WriteFile(output, []byte(replaced), 0o644) //nolint:gosec // documentation
+}
+
+// renderIndex lists every tool under the toolset that grants it, each linked
+// to its page, in the order an operator widens access.
+func renderIndex(tools []*sdk.Tool) string {
+	byToolset := map[string][]string{}
+	for _, tool := range tools {
+		capability, _ := tool.Meta[tmuxmcp.CapabilityMetaKey].(map[string]any)
+		toolset, _ := capability["toolset"].(string)
+		byToolset[toolset] = append(byToolset[toolset],
+			"[`"+tool.Name+"`]("+toolPages+tool.Name+"/)")
+	}
+	var out bytes.Buffer
+	fmt.Fprint(&out, "| Toolset | Tools |\n| --- | --- |\n")
+	for _, toolset := range []string{"inspect", "manage", "execute", "teardown"} {
+		names := byToolset[toolset]
+		slices.Sort(names)
+		fmt.Fprintf(&out, "| `%s` | %s |\n", toolset, strings.Join(names, ", "))
+		delete(byToolset, toolset)
+	}
+	// A toolset this list does not know is still shown, rather than dropped.
+	for _, toolset := range slices.Sorted(maps.Keys(byToolset)) {
+		names := byToolset[toolset]
+		slices.Sort(names)
+		fmt.Fprintf(&out, "| `%s` | %s |\n", toolset, strings.Join(names, ", "))
+	}
+	return out.String()
 }
 
 // listTools reads the advertised protocol surface through an in-memory client.
@@ -198,7 +243,7 @@ func classify(tool *sdk.Tool) string {
 	case slices.Contains(effects, "delete"):
 		return "**Deletes tmux state.** Repeating it can remove more state."
 	case slices.Equal(effects, []string{"observe"}):
-		return "Reads only. Repeating it changes nothing."
+		return "Reads only (effect `observe`). Repeating it changes nothing."
 	default:
 		return "Changes tmux state."
 	}
@@ -336,16 +381,16 @@ func writeTable(out *bytes.Buffer, heading string, properties []property) {
 }
 
 // replaceRegion refuses missing markers instead of appending generated output.
-func replaceRegion(document, rendered string) (string, error) {
-	open := strings.Index(document, openMarker)
+func replaceRegion(document, opening, closing, rendered string) (string, error) {
+	open := strings.Index(document, opening)
 	if open < 0 {
-		return "", fmt.Errorf("no %s marker", openMarker)
+		return "", fmt.Errorf("no %s marker", opening)
 	}
-	end := strings.Index(document[open:], closeMarker)
+	end := strings.Index(document[open:], closing)
 	if end < 0 {
-		return "", fmt.Errorf("no %s marker after %s", closeMarker, openMarker)
+		return "", fmt.Errorf("no %s marker after %s", closing, opening)
 	}
 	end += open
-	return document[:open+len(openMarker)] + "\n\n" + rendered +
+	return document[:open+len(opening)] + "\n\n" + rendered +
 		"\n" + document[end:], nil
 }
