@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
@@ -110,7 +111,7 @@ func TestServerVersionWaiterHonorsContext(t *testing.T) {
 
 	select {
 	case <-runner.started:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("first version probe did not start")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
@@ -142,7 +143,7 @@ func TestServerVersionWaiterRetriesAfterOwnerCancellation(t *testing.T) {
 
 	select {
 	case <-runner.started:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("version owner did not start")
 	}
 	waiterContext := t.Context()
@@ -157,7 +158,7 @@ func TestServerVersionWaiterRetriesAfterOwnerCancellation(t *testing.T) {
 	}()
 	select {
 	case <-observedWaiterContext.observed:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("version waiter did not observe the in-flight probe")
 	}
 	cancelOwner()

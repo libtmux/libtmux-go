@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestOpenControlRejectsInvalidSessionBeforeStartingProcess(t *testing.T) {
@@ -117,7 +119,7 @@ func TestControlClientCollectsAliasFramesThroughReplyFence(t *testing.T) {
 			string(got.results[1].RawStdout) != "two\n" {
 			t.Fatalf("Call() = (%#v, %v), want two frames", got.results, got.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Call() did not reach its reply fence")
 	}
 }
@@ -141,7 +143,7 @@ func TestControlClientCollectsNoFramesBeforeReplyFence(t *testing.T) {
 		if got.err != nil || len(got.results) != 0 {
 			t.Fatalf("Call() = (%#v, %v), want no frames", got.results, got.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Call() did not reach its empty reply fence")
 	}
 }
@@ -174,7 +176,7 @@ func TestControlClientCmdRejectsVariableReplyCount(t *testing.T) {
 				if !errors.Is(err, ErrControlReplyCount) {
 					t.Fatalf("Cmd() error = %v, want ErrControlReplyCount", err)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("Cmd() did not reject the variable reply count")
 			}
 		})
@@ -208,7 +210,7 @@ func TestControlClientPreservesAResultThatMatchesFenceA(t *testing.T) {
 			string(got.results[0].RawStdout) != client.replyFence.first.rawStdout {
 			t.Fatalf("Call() = (%#v, %v), want one request-owned A", got.results, got.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Call() did not finish on overlapping A,A,B")
 	}
 }
@@ -254,7 +256,7 @@ func TestControlClientCloseContextStartsWithCanceledContext(t *testing.T) {
 	}
 	select {
 	case <-client.closeDone:
-	case <-time.After(3 * time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("canceled CloseContext did not start shutdown")
 	}
 }
@@ -298,7 +300,7 @@ func TestControlClientReturnsProvenFramesWhenStreamEndsBeforeFence(t *testing.T)
 			t.Fatalf("Call() = (%#v, %v), want proven frame and unknown outcome",
 				got.results, got.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Call() did not report the interrupted reply")
 	}
 }
@@ -350,11 +352,11 @@ func TestControlClientDrainsCanceledWrittenCommandBeforeNextWrite(t *testing.T) 
 		if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrOutcomeUnknown) {
 			t.Fatalf("first Cmd() error = %v, want canceled unknown outcome", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("first Cmd() did not return after cancellation")
 	}
 
-	secondCtx, cancelSecond := context.WithTimeout(context.Background(), time.Second)
+	secondCtx, cancelSecond := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancelSecond()
 	secondResult := make(chan controlResponse, 1)
 	go func() {
@@ -381,7 +383,7 @@ func TestControlClientDrainsCanceledWrittenCommandBeforeNextWrite(t *testing.T) 
 			t.Fatalf("second command line = %q, want %q", line, want)
 		}
 		readRequestLoopFence(t, reader)
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("second command was not written after first frame")
 	}
 	completeControlRequest(client, controlFrame{number: 2, rawStdout: []byte("second\n")})
@@ -392,7 +394,7 @@ func TestControlClientDrainsCanceledWrittenCommandBeforeNextWrite(t *testing.T) 
 			string(response.results[0].RawStdout) != "second\n" {
 			t.Fatalf("second Cmd() = (%#v, %v)", response.results, response.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("second Cmd() did not receive its frame")
 	}
 }
@@ -499,12 +501,12 @@ func TestControlClientRequestStopWaitsForAcceptedFrame(t *testing.T) {
 		if response.err != nil || string(response.results[0].RawStdout) != "accepted\n" {
 			t.Fatalf("accepted Cmd() = (%#v, %v)", response.results, response.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("accepted Cmd() did not receive its frame")
 	}
 	select {
 	case <-client.requestDone:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("request stop did not finish after the accepted frame")
 	}
 }
@@ -537,7 +539,7 @@ func TestControlClientRequestStopReleasesQueuedCommands(t *testing.T) {
 			if !errors.Is(err, ErrControlClosed) {
 				t.Fatalf("Cmd() error = %v, want ErrControlClosed", err)
 			}
-		case <-time.After(time.Second):
+		case <-time.After(hangguard.Wait):
 			t.Fatal("command did not return after request stop")
 		}
 	}
@@ -577,7 +579,7 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 		_ = command.Process.Kill()
 		select {
 		case <-client.done:
-		case <-time.After(time.Second):
+		case <-time.After(hangguard.Wait):
 			t.Error("control helper process did not exit")
 		}
 		close(client.frames)
@@ -591,10 +593,10 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 	}()
 	select {
 	case <-writer.wrote:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("control command was not written")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	if err := client.CloseContext(ctx); err != nil {
 		t.Fatalf("CloseContext() error = %v", err)
@@ -604,7 +606,7 @@ func TestControlClientCloseEscalatesWhenFrameNeverArrives(t *testing.T) {
 		if !errors.Is(err, ErrControlClosed) {
 			t.Fatalf("blocked Cmd() error = %v, want ErrControlClosed", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("blocked Cmd() did not return after close")
 	}
 }
@@ -783,7 +785,7 @@ func newRequestLoopTestClient(t *testing.T) (*ControlClient, *bufio.Reader) {
 		_ = reader.Close()
 		select {
 		case <-client.requestDone:
-		case <-time.After(time.Second):
+		case <-time.After(hangguard.Wait):
 			t.Error("request loop did not stop")
 		}
 	})

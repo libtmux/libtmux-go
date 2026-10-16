@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -136,7 +137,7 @@ func TestSnapshotOnZeroSessionServerIsEmptyNotAnError(t *testing.T) {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})
@@ -172,7 +173,7 @@ func TestSnapshotOnZeroSessionServerIsEmptyNotAnError(t *testing.T) {
 
 func mustRealCommand(t *testing.T, server tmux.Server, arguments ...string) tmux.CommandResult {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	result, err := server.Cmd(ctx, arguments...)
 	if err != nil {
@@ -186,7 +187,7 @@ func mustRealCommand(t *testing.T, server tmux.Server, arguments ...string) tmux
 
 func startRealControlClient(t *testing.T, server tmux.Server, target string) *tmuxtest.ControlMode {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil {
@@ -208,7 +209,7 @@ func snapshotWithAttachedClient(
 	client *tmuxtest.ControlMode,
 ) tmux.Snapshot {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	for {
 		snapshot, err := server.Snapshot(ctx)

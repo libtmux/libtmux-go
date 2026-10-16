@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -191,7 +192,7 @@ func TestProgressReporterStopCancelsAndJoinsAnActiveWrite(t *testing.T) {
 
 	select {
 	case <-connection.writeStarted:
-	case <-time.After(3 * time.Second):
+	case <-time.After(hangguard.Wait):
 		_ = connection.Close()
 		t.Fatal("progress notification did not start")
 	}
@@ -208,7 +209,7 @@ func TestProgressReporterStopCancelsAndJoinsAnActiveWrite(t *testing.T) {
 			_ = connection.Close()
 			t.Fatal("stop returned while the progress write was still blocked")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		_ = connection.Close()
 		t.Fatal("stop did not cancel and join the progress write")
 	}
@@ -238,7 +239,7 @@ func TestProgressReporterStopBoundsANonCooperativeWrite(t *testing.T) {
 
 	select {
 	case <-connection.writeStarted:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("progress notification did not start")
 	}
 	stopped := make(chan struct{})
@@ -253,7 +254,7 @@ func TestProgressReporterStopBoundsANonCooperativeWrite(t *testing.T) {
 			t.Fatal("blocked progress write returned before transport release")
 		default:
 		}
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		connection.releaseWrite()
 		<-stopped
 		t.Fatal("reporter stop waited without a bound on the progress write")
@@ -361,7 +362,7 @@ func TestProgressWriteTimeoutBoundsToolAndInstanceShutdown(t *testing.T) {
 
 	select {
 	case <-gate.started:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("progress write did not start")
 	}
 	close(finish)
@@ -370,7 +371,7 @@ func TestProgressWriteTimeoutBoundsToolAndInstanceShutdown(t *testing.T) {
 		if callErr == nil {
 			t.Fatal("CallTool() succeeded after its progress write timed out")
 		}
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		gate.releasePhysicalWork()
 		t.Fatal("tool termination waited for the blocked progress write")
 	}
@@ -381,7 +382,7 @@ func TestProgressWriteTimeoutBoundsToolAndInstanceShutdown(t *testing.T) {
 	}
 	select {
 	case <-gate.closeStarted:
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("progress timeout did not start physical transport close")
 	}
 	select {
@@ -390,7 +391,7 @@ func TestProgressWriteTimeoutBoundsToolAndInstanceShutdown(t *testing.T) {
 	default:
 	}
 
-	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	closeCtx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	if err := instance.CloseContext(closeCtx); !errors.Is(err, errTransportCloseTimeout) {
 		t.Fatalf("Instance.CloseContext() error = %v, want transport close timeout", err)
@@ -411,12 +412,12 @@ func TestProgressWriteTimeoutBoundsToolAndInstanceShutdown(t *testing.T) {
 	gate.releasePhysicalWork()
 	select {
 	case <-gate.returned:
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("quarantined progress write did not leave after release")
 	}
 	select {
 	case <-gate.closeReturned:
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("quarantined transport close did not leave after release")
 	}
 }
@@ -425,7 +426,7 @@ func offerProgressTick(t *testing.T, ticks chan<- time.Time, tick time.Time) {
 	t.Helper()
 	select {
 	case ticks <- tick:
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("progress ticker blocked behind notification delivery")
 	}
 }
@@ -438,7 +439,7 @@ func receiveProgress(
 	select {
 	case params := <-writes:
 		return params
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("progress notification was not written")
 		return sdk.ProgressNotificationParams{}
 	}

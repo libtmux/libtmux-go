@@ -13,11 +13,8 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
-
-// waitBudget bounds a pane wait whose context has no deadline. Failures print
-// the last screen read.
-const waitBudget = 30 * time.Second
 
 // Screen returns the pane's visible lines, top to bottom, with tmux's trailing
 // blank lines removed.
@@ -90,6 +87,14 @@ func WaitForScreen(
 		return
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		if last == nil {
+			// The deadline ended the wait before its first read finished, so
+			// there is no screen to report yet. Read one, or the message
+			// says the pane was empty when it was only not read.
+			final, cancelFinal := context.WithTimeout(context.WithoutCancel(ctx), diagnosticReadBudget)
+			last, _ = readScreen(final, pane)
+			cancelFinal()
+		}
 		t.Fatalf("tmuxtest: pane %s never showed %s\n%s", pane.ID(), want, formatScreen(last))
 	}
 	t.Fatal(harnessFailure("wait for pane screen", err))
@@ -193,11 +198,15 @@ func waitForScreen(ctx context.Context, pane tmux.Pane, match func([]string) boo
 	return cmp.Or(readErr, err)
 }
 
+// diagnosticReadBudget bounds the one read a failed wait makes to describe the
+// screen, after its own deadline has passed.
+const diagnosticReadBudget = 5 * time.Second
+
 func waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, ok := ctx.Deadline(); ok {
 		return context.WithCancel(ctx)
 	}
-	return context.WithTimeout(ctx, waitBudget)
+	return context.WithTimeout(ctx, hangguard.Wait)
 }
 
 // readScreen removes the blank lines tmux pads to the pane height.

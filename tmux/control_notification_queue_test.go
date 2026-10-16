@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestControlNotificationQueueOwnsAndOrdersRecords(t *testing.T) {
@@ -54,7 +56,7 @@ func TestControlNotificationQueueNextHonorsContextWhileIdle(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("next() error = %v, want context canceled", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("next() did not unblock after context cancellation")
 	}
 }
@@ -191,7 +193,7 @@ func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 	case <-wake.observed:
 	case err := <-result:
 		t.Fatalf("NextNotification() bypassed reader ownership: %v", err)
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("NextNotification() did not wait for reader ownership")
 	}
 	cancelRead()
@@ -200,7 +202,7 @@ func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("NextNotification() error = %v, want context canceled", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("waiting reader did not honor context cancellation")
 	}
 	observation.state.releaseReadToken()
@@ -233,7 +235,7 @@ func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 	case <-wait.observed:
 	case err := <-activeDone:
 		t.Fatalf("owned read returned before cancellation: %v", err)
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("owned read did not reach notification waiting")
 	}
 	cancelActive()
@@ -242,7 +244,7 @@ func TestPaneObservationReaderOwnershipHonorsCancellation(t *testing.T) {
 		if !errors.Is(err, context.Canceled) || errors.Is(err, ErrPaneObservationLost) {
 			t.Fatalf("owned read error = %v, want retryable context cancellation", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("owned read did not honor context cancellation")
 	}
 	if err := queue.append(2, []byte("%output %1 active")); err != nil {
@@ -344,7 +346,7 @@ func TestPaneObservationExplicitCloseIsNotLoss(t *testing.T) {
 	case <-wake.observed:
 	case err := <-result:
 		t.Fatalf("NextNotification() returned before close: %v", err)
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("NextNotification() did not reach notification waiting")
 	}
 

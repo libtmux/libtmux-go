@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -178,7 +179,7 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cleanupCancel()
 		_ = server.Kill(cleanupCtx)
 	})

@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 	"golang.org/x/sys/unix"
 )
 
@@ -43,7 +43,7 @@ func TestTerminalRestoreClosedInput(t *testing.T) {
 		}
 		return
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), hangguard.Wait)
 	defer cancel()
 	process := tmuxtest.StartPTYProcess(ctx, t, os.Args[0], []string{"-test.run=^TestTerminalRestoreClosedInput$"}, append(os.Environ(), "GO_TERMINAL_RESTORE_TEST=1"))
 	if err := process.Wait(ctx); err != nil {

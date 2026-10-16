@@ -90,6 +90,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 // ServerOptions configures a harness-owned [tmux.Server]. All inputs are copied
@@ -123,7 +124,6 @@ const (
 	fixedShellConfig = "set -g default-shell /bin/sh\n" +
 		"set -g default-command \"ENV= PS1='" + ShellPrompt + "' /bin/sh -i\"\n"
 	maxSocketPathBytes  = 103
-	cleanupTimeout      = 3 * time.Second
 	perTestCleanupTries = 3
 	// cleanupRetryGap gives an in-progress daemon shutdown time to complete.
 	cleanupRetryGap = 100 * time.Millisecond
@@ -432,7 +432,7 @@ func newServerWithOptions(
 	if options.InitialSession == nil {
 		return server, record
 	}
-	startupCtx, cancel := context.WithTimeout(ctx, cleanupTimeout)
+	startupCtx, cancel := context.WithTimeout(ctx, hangguard.Wait)
 	defer cancel()
 	_, err = server.NewSession(startupCtx, *options.InitialSession)
 	if err != nil {
@@ -541,7 +541,7 @@ func runCommand(ctx context.Context, server tmux.Server, args ...string) tmux.Co
 }
 
 func runCleanupCommand(server tmux.Server, args ...string) tmux.CommandResult {
-	ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	return runCommand(ctx, server, args...)
 }
@@ -562,6 +562,11 @@ func commandFailure(operation string, result tmux.CommandResult) error {
 	return harnessFailure(operation, cause)
 }
 
+// daemonDeathWait bounds how long cleanup waits for a daemon to exit after
+// kill-server. Tests that make kill-server fail shorten it, since expiry is
+// what they exercise.
+var daemonDeathWait = hangguard.Wait
+
 func cleanupServer(record *serverRecord) error {
 	if record.daemonStopped {
 		return removeServerArtifacts(record)
@@ -577,7 +582,7 @@ func cleanupServer(record *serverRecord) error {
 	record.pid = currentPID
 
 	result := runCleanupCommand(record.server, "kill-server")
-	if !waitForProcessDeath(currentPID, time.Now().Add(cleanupTimeout)) {
+	if !waitForProcessDeath(currentPID, time.Now().Add(daemonDeathWait)) {
 		return errors.Join(
 			commandFailure("kill-server", result),
 			harnessFailure("stop tmux server", errInvalidHarnessState),

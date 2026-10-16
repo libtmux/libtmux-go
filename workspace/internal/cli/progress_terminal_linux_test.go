@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/sys/unix"
 )
@@ -48,7 +49,7 @@ func TestProgressDefaultsRequireCapableTerminal(t *testing.T) {
 		}
 		return
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), hangguard.Wait)
 	defer cancel()
 	process := tmuxtest.StartPTYProcess(ctx, t, os.Args[0], []string{"-test.run=^TestProgressDefaultsRequireCapableTerminal$"}, append(os.Environ(), "LIBTMUX_PROGRESS_TERMINAL_HELPER=1"))
 	if err := process.Wait(ctx); err != nil {
@@ -114,7 +115,7 @@ func TestProgressFollowsTerminalResize(t *testing.T) {
 				display.writes = nil
 				resize(size.rows, size.cols)
 			}()
-			deadline := time.Now().Add(time.Second)
+			deadline := time.Now().Add(hangguard.Wait)
 			for {
 				p.mu.Lock()
 				width, height, lines := p.width, p.height, p.lines
@@ -173,7 +174,7 @@ func TestProgressFollowsTerminalResize(t *testing.T) {
 	}
 	for _, lines := range []string{"-1", "2", "0"} {
 		t.Run(lines, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), hangguard.Wait)
 			defer cancel()
 			process := tmuxtest.StartPTYProcess(ctx, t, os.Args[0], []string{"-test.run=^TestProgressFollowsTerminalResize$"}, append(os.Environ(), "LIBTMUX_PROGRESS_RESIZE_HELPER=1", "LIBTMUX_PROGRESS_RESIZE_LINES="+lines))
 			if err := process.Wait(ctx); err != nil {

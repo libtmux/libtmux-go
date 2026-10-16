@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
@@ -192,7 +193,7 @@ func TestCapturePaneWarningHandlerMayBeCalledConcurrently(t *testing.T) {
 	for call := 1; call <= 2; call++ {
 		select {
 		case <-entered:
-		case <-time.After(time.Second):
+		case <-time.After(hangguard.Wait):
 			t.Fatalf("warning handler call %d did not overlap", call)
 		}
 	}

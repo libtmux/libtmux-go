@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestControlLanePoolSignalsEveryClientBeforeWaiting(t *testing.T) {
@@ -41,12 +43,12 @@ func TestControlLanePoolSignalsEveryClientBeforeWaiting(t *testing.T) {
 			defer release()
 			select {
 			case <-firstEntered:
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("first client did not begin resource close")
 			}
 			select {
 			case <-second.stopRequests:
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("second client was not signaled while the first waited")
 			}
 			release()

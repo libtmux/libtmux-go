@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestConnectionCallPreservesZeroAndMultipleFrames(t *testing.T) {
@@ -53,7 +55,7 @@ func TestConnectionCallPreservesZeroAndMultipleFrames(t *testing.T) {
 						t.Errorf("Call() frame %d = %#v, want command, payload, number, and failure preserved", index, result)
 					}
 				}
-			case <-time.After(time.Second):
+			case <-time.After(hangguard.Wait):
 				t.Fatal("Call() did not reach its reply fence")
 			}
 		})
@@ -83,7 +85,7 @@ func TestConnectionCallTreatsASemicolonAsAnArgument(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Call() error = %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("Call() did not complete")
 	}
 }

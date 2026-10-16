@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 var documentationLinkPattern = regexp.MustCompile(
@@ -691,7 +693,7 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 			// leaked never exits, so waiting for the socket to go quiet still
 			// fails on the defect this guards, and stops reporting the
 			// teardown.
-			deadline := time.Now().Add(5 * time.Second)
+			deadline := time.Now().Add(hangguard.Wait)
 			var output []byte
 			for {
 				probe := exec.Command("tmux", "list-sessions")

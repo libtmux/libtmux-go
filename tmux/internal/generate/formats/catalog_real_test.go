@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
@@ -34,7 +35,7 @@ func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cleanupCancel()
 		command := exec.CommandContext(cleanupCtx, "tmux", "-S", socket, "kill-server")
 		output, _ := command.CombinedOutput()
@@ -132,7 +133,7 @@ func attachCatalogClient(ctx context.Context, t *testing.T, socket string) {
 	})
 
 	// The inventory is only complete once tmux has registered the client.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(hangguard.Wait)
 	for {
 		listed := runCatalogTmux(ctx, t, socket, "list-clients", "-F", "#{client_name}")
 		if strings.TrimSpace(listed) != "" {

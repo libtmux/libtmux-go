@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -247,7 +248,7 @@ func TestBootstrapWaitsForAnUnboundRequestToDrain(t *testing.T) {
 		created <- creation{session: session, err: createErr}
 	}()
 
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(hangguard.Wait)
 	for {
 		runtime.mutex.Lock()
 		state := runtime.state
@@ -447,7 +448,7 @@ func TestToolSurfaceHoldsItsUnboundLeaseThroughTheHandler(t *testing.T) {
 
 func waitForRuntimeState(t *testing.T, runtime *tmuxRuntime, want runtimeState) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(hangguard.Wait)
 	for {
 		runtime.mutex.Lock()
 		state := runtime.state

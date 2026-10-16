@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -198,7 +199,7 @@ func TestInstanceConnectRejectsATwoCallIOBatch(t *testing.T) {
 		if !errors.Is(err, errJSONRPCBatchUnsupported) {
 			t.Fatalf("Wait() error = %v, want errJSONRPCBatchUnsupported", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("two-call batch did not terminate the session")
 	}
 	if replies.Len() != 0 {

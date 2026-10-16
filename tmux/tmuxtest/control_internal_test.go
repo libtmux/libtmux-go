@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestStartControlModeRequiresExplicitSocketProvenance(t *testing.T) {
@@ -147,7 +148,7 @@ func TestStartControlModeRejectsSessionFromAnotherServer(t *testing.T) {
 		)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	control, err := startControlMode(ctx, server, otherSession)
 	if control != nil {
@@ -187,7 +188,7 @@ func TestControlModeUsesServerProcessEnvironment(t *testing.T) {
 		ProcessEnvironment: environment,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	control, err := startControlMode(ctx, server, session)
 	if err != nil {
@@ -253,7 +254,7 @@ func TestControlModeCloseBoundsInheritedOutputPipes(t *testing.T) {
 		ProcessEnvironment: environment,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	control, err := startControlMode(ctx, server, session)
 	if err != nil {
@@ -330,7 +331,7 @@ func TestControlModeWaitThenDrainLargeProtocolOutput(t *testing.T) {
 		writeErr <- errors.Join(err, control.stdin.Close())
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	if err := control.Wait(ctx); err != nil {
 		t.Fatalf("Wait() before draining large output error = %v", err)
@@ -356,7 +357,7 @@ func TestControlModePreservesUTF8ProtocolOutput(t *testing.T) {
 	server := NewServer(context.Background(), t)
 	control := NewControlMode(context.Background(), t, server, onlyInternalControlSession(t, server))
 	const payload = "control-utf8-café-你好-λ"
-	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 
 	lineResult := make(chan struct {
@@ -470,7 +471,7 @@ func TestStartControlModeCleansFailedRegistrationProcessAndSpool(t *testing.T) {
 		ProcessEnvironment: environment,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	control, err := startControlMode(ctx, server, session)
 	if control != nil {
@@ -520,7 +521,7 @@ func TestControlModeCloseRemovesOutputSpool(t *testing.T) {
 
 func onlyInternalControlSession(t *testing.T, server tmux.Server) tmux.Session {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil {

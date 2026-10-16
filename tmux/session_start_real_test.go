@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -348,7 +349,7 @@ func TestCommandKillStopsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Wait() error = %v", err)
 	}
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
+	if elapsed := time.Since(started); elapsed > hangguard.Wait {
 		t.Errorf("Wait() after Kill() took %s, want a prompt return", elapsed)
 	}
 	if reportsDeadSignal(ctx, t, server) && result.Signal == "" {
@@ -515,7 +516,7 @@ func TestSessionRunUnchanged(t *testing.T) {
 // runtime work (GC, finalizers) can transiently hold the count above
 // baseline; this settles past that instead of asserting on a single sample.
 func settleGoroutines(baseline int) int {
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(hangguard.Wait)
 	last := runtime.NumGoroutine()
 	for time.Now().Before(deadline) {
 		if last <= baseline {
@@ -753,7 +754,7 @@ func (w *blockingWriter) Write(p []byte) (int, error) {
 //libtmux:real-tmux
 func TestCommandStreamToDoesNotHangOnAStuckDestination(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	session := oneSession(ctx, t, server)
 
@@ -767,13 +768,16 @@ func TestCommandStreamToDoesNotHangOnAStuckDestination(t *testing.T) {
 
 	destination := newBlockingWriter(t)
 	returned := make(chan error, 1)
-	go func() { _, streamErr := running.StreamTo(ctx, destination); returned <- streamErr }()
+	streamCtx, endStream := context.WithCancel(ctx)
+	defer endStream()
+	go func() { _, streamErr := running.StreamTo(streamCtx, destination); returned <- streamErr }()
 
 	select {
 	case <-destination.entered:
 	case <-time.After(20 * time.Second):
 		t.Fatal("the copy never reached the destination, so nothing was blocked")
 	}
+	endStream()
 	select {
 	case streamErr := <-returned:
 		if streamErr == nil {

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -40,7 +41,7 @@ func TestControlModeRegistersAndExposesProtocolOutput(t *testing.T) {
 		t.Fatalf("list-clients stdout = %#v, want %q", result.Stdout, control.ClientName())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	line := readControlLine(ctx, t, control)
 	if !strings.HasPrefix(line, "%") {
@@ -85,7 +86,7 @@ func TestControlModeCleanupRemovesClientAndIsIdempotent(t *testing.T) {
 		}
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	for {
 		result := controlCommand(t, server, "list-clients", "-F", "#{client_name}")
@@ -114,7 +115,7 @@ func TestControlModeCloseContextCanRetryAfterCancellation(t *testing.T) {
 		t.Fatalf("CloseContext(canceled) error = %v, want context canceled", err)
 	}
 
-	ctx, stop := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, stop := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer stop()
 	if err := control.CloseContext(ctx); err != nil {
 		t.Fatalf("CloseContext(retry) error = %v", err)
@@ -164,7 +165,7 @@ func TestControlModeReadReturnsClosedAfterClose(t *testing.T) {
 func TestControlModeCloseAndWaitAreConcurrent(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	control := tmuxtest.NewControlMode(context.Background(), t, server, onlyControlSession(t, server))
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 
 	const callers = 8
@@ -195,7 +196,7 @@ func TestControlModeWaitPreservesProtocolOutputUntilEOF(t *testing.T) {
 	control := tmuxtest.NewControlMode(context.Background(), t, server, onlyControlSession(t, server))
 	controlCommand(t, server, "kill-server")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	if err := control.Wait(ctx); errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Wait() error = %v, control client did not observe server exit", err)
@@ -208,7 +209,7 @@ func TestControlModeWaitPreservesProtocolOutputUntilEOF(t *testing.T) {
 
 func onlyControlSession(t *testing.T, server tmux.Server) tmux.Session {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	sessions, err := server.Sessions(ctx)
 	if err != nil {
@@ -222,7 +223,7 @@ func onlyControlSession(t *testing.T, server tmux.Server) tmux.Session {
 
 func controlCommand(t *testing.T, server tmux.Server, arguments ...string) tmux.CommandResult {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	result, err := server.Cmd(ctx, arguments...)
 	if err != nil {

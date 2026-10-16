@@ -6,9 +6,9 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -33,7 +33,7 @@ func TestRawSearchMethodsFilterRealTmuxListings(t *testing.T) {
 	mustRealCommand(t, server, "split-window", "-d", "-t", "work:needle")
 	mustRealCommand(t, server, "new-session", "-d", "-s", "other", "-n", "other")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 
 	sessionFilter := tmux.TmuxFilter("#{==:#{session_name},work}")

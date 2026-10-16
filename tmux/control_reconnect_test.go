@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
@@ -84,7 +85,7 @@ func TestControlClientReconnectSessionCrossesReplyFenceBeforeSampling(t *testing
 			got.session.Server().daemon == nil {
 			t.Fatalf("reconnectSession() = (%#v, %v), want materialized current session", got.session, got.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("reconnectSession() did not cross its reply fence")
 	}
 }
@@ -105,7 +106,7 @@ func TestControlClientReconnectCancellationAfterFenceIsNotIndeterminate(t *testi
 	var reconnectErr error
 	select {
 	case reconnectErr = <-result:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("reconnectSession() did not return after cancellation")
 	}
 	completeControlRequest(client)

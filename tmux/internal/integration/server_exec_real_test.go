@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -176,14 +177,14 @@ case "$*" in *'kill -s KILL --'*) ;; *) exec /bin/sh "$@" ;; esac
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cleanupCancel()
 		_ = server.WaitFor(cleanupCtx, tmux.WaitForRequest{
 			Channel: "release-kill-job", Mode: tmux.WaitForModeSignal,
 		})
 	})
 
-	killCtx, cancelKill := context.WithTimeout(ctx, 5*time.Second)
+	killCtx, cancelKill := context.WithTimeout(ctx, hangguard.Wait)
 	defer cancelKill()
 	killed := make(chan error, 1)
 	go func() { killed <- running.Kill(killCtx) }()
@@ -212,7 +213,7 @@ func TestWaitForSignalLockUnlockAndCancellation(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 
 	t.Run("signal", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cancel()
 		waited := make(chan error, 1)
 		go func() {
@@ -230,7 +231,7 @@ func TestWaitForSignalLockUnlockAndCancellation(t *testing.T) {
 	})
 
 	t.Run("lock and unlock", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer cancel()
 		request := tmux.WaitForRequest{Channel: "phase6-lock", Mode: tmux.WaitForModeLock}
 		if err := server.WaitFor(ctx, request); err != nil {
@@ -493,7 +494,7 @@ func TestWaitForTreatsLeadingDashChannelAsPositionalAgainstRealTmux(t *testing.T
 	}
 	// tmux remembers a signal that arrived with no waiter, so a later plain
 	// wait on the same channel returns at once instead of blocking.
-	waitCtx, waitCancel := context.WithTimeout(ctx, 3*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(ctx, hangguard.Wait)
 	defer waitCancel()
 	if err := server.WaitFor(waitCtx, tmux.WaitForRequest{Channel: "-dash-channel"}); err != nil {
 		t.Fatalf("WaitFor(wait) error = %v, want the remembered signal to return at once", err)

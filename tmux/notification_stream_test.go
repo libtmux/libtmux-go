@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 )
 
 func TestNotificationStreamReturnsTheNextNotification(t *testing.T) {
@@ -57,7 +59,7 @@ func TestNotificationStreamCloseContextStartsShutdownWhenCanceled(t *testing.T) 
 		t.Fatalf("CloseContext() error = %v, want context.Canceled", err)
 	}
 
-	readCtx, readCancel := context.WithTimeout(context.Background(), time.Second)
+	readCtx, readCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer readCancel()
 	if _, err := stream.Next(readCtx); !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("Next() after canceled CloseContext() error = %v, want os.ErrClosed", err)

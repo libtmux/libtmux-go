@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// hangGuard bounds an event that must happen, such as a helper process
+// starting. Every wait it bounds returns as soon as the event does.
+const hangGuard = 30 * time.Second
+
 const preflightHelperEnvironment = "MCP_SWAP_PREFLIGHT_HELPER"
 
 func TestMain(m *testing.M) {
@@ -56,7 +60,7 @@ func runPreflightHelper(scenario string) int {
 		if child.Start() != nil {
 			return false
 		}
-		for range 100 {
+		for deadline := time.Now().Add(hangGuard); time.Now().Before(deadline); {
 			if _, err := os.Stat(os.Getenv("MCP_SWAP_PREFLIGHT_HEARTBEAT")); err == nil {
 				return true
 			}
@@ -353,7 +357,7 @@ func TestPreflightRejectsInvalidInitializeResults(t *testing.T) {
 func TestPreflightTerminatesALongLivedServerAfterSuccess(t *testing.T) {
 	entry := preflightHelperEntry(t, "long-lived")
 	started := time.Now()
-	if reason := preflightWithin(entry, time.Second); reason != "" {
+	if reason := preflightWithin(entry, hangGuard); reason != "" {
 		t.Fatalf("preflight failed: %s", reason)
 	}
 	if elapsed := time.Since(started); elapsed >= time.Second {

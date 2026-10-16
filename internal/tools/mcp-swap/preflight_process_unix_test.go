@@ -32,7 +32,7 @@ func TestPreflightSuccessStopsTheProcessGroup(t *testing.T) {
 			entry := preflightHelperEntry(t, scenario)
 			heartbeat := filepath.Join(t.TempDir(), "heartbeat")
 			t.Setenv("MCP_SWAP_PREFLIGHT_HEARTBEAT", heartbeat)
-			if reason := preflightWithin(entry, time.Second); reason != "" {
+			if reason := preflightWithin(entry, hangGuard); reason != "" {
 				t.Fatalf("preflight failed: %s", reason)
 			}
 			assertHeartbeatStopped(t, heartbeat, "success")

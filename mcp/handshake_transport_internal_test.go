@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -114,7 +115,7 @@ func TestHeldHandshakeNotificationUsesBoundedSessionWrite(t *testing.T) {
 	}()
 	select {
 	case <-probe.writeStarted:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("held notification did not start after initialization")
 	}
 	select {
@@ -122,7 +123,7 @@ func TestHeldHandshakeNotificationUsesBoundedSessionWrite(t *testing.T) {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("initialized Read() error = %v, want deadline exceeded", err)
 		}
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("held notification bypassed the bounded session write")
 	}
 	if calls := probe.writes.Load(); calls != 1 {
@@ -135,13 +136,13 @@ func TestHeldHandshakeNotificationUsesBoundedSessionWrite(t *testing.T) {
 		if !errors.Is(err, errTransportCloseTimeout) {
 			t.Fatalf("tracked Close() error = %v, want transport close timeout", err)
 		}
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("tracked Close did not bound the quarantined handshake write")
 	}
 	releaseWrite()
 	select {
 	case <-probe.writeReturned:
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		t.Fatal("quarantined handshake write did not leave after release")
 	}
 }

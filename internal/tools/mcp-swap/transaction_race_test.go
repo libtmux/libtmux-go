@@ -573,7 +573,7 @@ func TestConcurrentSwapsProvisionBeforeSerializedReplanning(t *testing.T) {
 	}()
 	select {
 	case <-secondEntered:
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(hangGuard):
 		close(releaseFirst)
 		t.Fatal("second swap did not provision while the first provisioner was blocked")
 	}

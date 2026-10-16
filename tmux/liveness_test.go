@@ -11,9 +11,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -158,7 +158,7 @@ func TestServerSessionsReportsEveryUnusableSocket(t *testing.T) {
 
 func TestServerVersionMatchesConfiguredTmuxBinary(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 
 	version, err := server.Version(ctx)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/libtmux/libtmux-go/mcp/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -228,7 +229,7 @@ func TestWaitForChannelOwnsProgressUntilTheWaitReturns(t *testing.T) {
 	}()
 	select {
 	case <-connection.writeStarted:
-	case <-time.After(3 * time.Second):
+	case <-time.After(hangguard.Wait):
 		signalTestChannel(ctx, t, target, "progress-channel")
 		<-returned
 		_ = connection.Close()
@@ -241,7 +242,7 @@ func TestWaitForChannelOwnsProgressUntilTheWaitReturns(t *testing.T) {
 			got.output.EffectiveTimeoutSeconds != 4 || !got.output.TimeoutClamped {
 			t.Fatalf("wait_for_channel result = (%+v, %v)", got.output, got.err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(hangguard.Wait):
 		_ = connection.Close()
 		t.Fatal("wait_for_channel did not join its progress reporter")
 	}

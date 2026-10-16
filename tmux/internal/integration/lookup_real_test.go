@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -38,7 +39,7 @@ func TestLiveWindowAndPaneResolutionUsesTmuxCanonicalWinlink(t *testing.T) {
 	}
 
 	wantSession, wantIndex := realCanonicalWinlink(t, server, shared.ID().String())
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	window, err := server.Window(ctx, shared.ID())
 	if err != nil {
@@ -199,7 +200,7 @@ func relatedSessionPanes(t *testing.T, session tmux.Session) []tmux.Pane {
 
 func mustRealSnapshot(t *testing.T, server tmux.Server) tmux.Snapshot {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {

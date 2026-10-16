@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -25,7 +26,7 @@ func TestPTYProcessReturnsLiveAndFinalOutput(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = ready.Close() })
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	process := tmuxtest.StartPTYProcess(
 		ctx,
@@ -39,7 +40,7 @@ func TestPTYProcessReturnsLiveAndFinalOutput(t *testing.T) {
 		),
 	)
 
-	if err := ready.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+	if err := ready.SetReadDeadline(time.Now().Add(hangguard.Wait)); err != nil {
 		t.Fatalf("set readiness deadline: %v", err)
 	}
 	var notification [1]byte
@@ -48,7 +49,7 @@ func TestPTYProcessReturnsLiveAndFinalOutput(t *testing.T) {
 		t.Fatalf("await helper readiness: %v", err)
 	}
 
-	liveDeadline := time.NewTimer(2 * time.Second)
+	liveDeadline := time.NewTimer(hangguard.Wait)
 	defer liveDeadline.Stop()
 	for {
 		liveOutput := make(chan []byte, 1)
@@ -58,7 +59,7 @@ func TestPTYProcessReturnsLiveAndFinalOutput(t *testing.T) {
 			if bytes.Contains(output, []byte("live\r\n")) {
 				goto liveOutputReady
 			}
-		case <-time.After(250 * time.Millisecond):
+		case <-time.After(hangguard.Wait):
 			t.Fatal("Output blocked while helper remained alive")
 		}
 		select {
@@ -88,7 +89,7 @@ liveOutputReady:
 }
 
 func TestPTYProcessCloseContextCanRetryAfterCancellation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	process := tmuxtest.StartPTYProcess(
 		ctx,
@@ -119,7 +120,7 @@ func TestPTYProcessStartContextOwnsChildLifetime(t *testing.T) {
 	)
 	cancel()
 
-	ctx, stop := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, stop := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer stop()
 	if err := process.Wait(ctx); errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Wait() error = %v, child outlived its start context", err)
@@ -132,7 +133,7 @@ func TestPTYProcessStartContextOwnsChildLifetime(t *testing.T) {
 }
 
 func TestPTYProcessCloseAndWaitAreConcurrent(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	process := tmuxtest.StartPTYProcess(
 		ctx,
@@ -166,7 +167,7 @@ func TestPTYProcessCloseAndWaitAreConcurrent(t *testing.T) {
 }
 
 func TestPTYProcessWriteHonorsContextWhileChildDoesNotRead(t *testing.T) {
-	processCtx, stopProcess := context.WithTimeout(context.Background(), 5*time.Second)
+	processCtx, stopProcess := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer stopProcess()
 	process := tmuxtest.StartPTYProcess(
 		processCtx,
@@ -251,7 +252,7 @@ func TestPTYProcessOutputHelper(t *testing.T) {
 	if _, err := connection.Write([]byte{1}); err != nil {
 		t.Fatalf("notify parent: %v", err)
 	}
-	if err := connection.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+	if err := connection.SetReadDeadline(time.Now().Add(hangguard.Wait)); err != nil {
 		t.Fatalf("set release deadline: %v", err)
 	}
 	var release [1]byte

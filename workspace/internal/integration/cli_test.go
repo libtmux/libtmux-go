@@ -16,6 +16,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	"github.com/libtmux/libtmux-go/workspace/internal/cli"
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 )
 
 func TestMain(m *testing.M) { os.Exit(tmuxtest.Main(m)) }
@@ -474,7 +475,7 @@ windows:
 	if code != 0 || !json.Valid([]byte(out)) || diagnostic != "" {
 		t.Fatalf("load %d %s %s", code, out, diagnostic)
 	}
-	deadline := time.Now().Add(4 * time.Second)
+	deadline := time.Now().Add(hangguard.Wait)
 	for !time.Now().After(deadline) {
 		if a, e := os.ReadFile(filepath.Join(one, "result")); e == nil && string(a) == "session:window:" {
 			if b, e := os.ReadFile(filepath.Join(two, "result")); e == nil && string(b) == "session::pane" {

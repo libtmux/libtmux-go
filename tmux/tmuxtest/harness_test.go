@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -75,7 +76,7 @@ func TestMainKeepsANamedSocketInsideTheSuite(t *testing.T) {
 	defer cancel()
 	server := mustNewTmuxServer(t, tmux.ServerOptions{SocketName: "tmuxtest-named-socket"})
 	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})
@@ -298,7 +299,7 @@ func TestCleanupRemovesSocketAfterNormalReturn(t *testing.T) {
 	if _, err := os.Stat(socketPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("socket remains after cleanup: %v", err)
 	}
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(hangguard.Wait)
 	for processExists(pid) && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -425,7 +426,7 @@ func mustCmd(t *testing.T, server tmux.Server, args ...string) string {
 func mustResult(t *testing.T, server tmux.Server, args ...string) tmux.CommandResult {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 	result, err := server.Cmd(ctx, args...)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 	"github.com/libtmux/libtmux-go/workspace"
+	"github.com/libtmux/libtmux-go/workspace/internal/hangguard"
 )
 
 func TestMain(m *testing.M) {
@@ -345,7 +346,7 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 		ConfigFile: configuration,
 	})
 	t.Cleanup(func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	})
@@ -1033,7 +1034,7 @@ func TestAFirstWindowMayAskForTheIndexItAlreadyHas(t *testing.T) {
 				ConfigFile: configuration,
 			})
 			t.Cleanup(func() {
-				killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				killCtx, killCancel := context.WithTimeout(context.Background(), hangguard.Wait)
 				defer killCancel()
 				_ = server.Kill(killCtx)
 			})

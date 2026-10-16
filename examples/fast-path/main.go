@@ -37,7 +37,7 @@ func run(ctx context.Context, options tmux.ServerOptions) error {
 		return fmt.Errorf("configure tmux server: %w", err)
 	}
 	defer func() {
-		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		killCtx, killCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer killCancel()
 		_ = server.Kill(killCtx)
 	}()

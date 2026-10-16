@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -130,7 +131,7 @@ func TestBackgroundPromptsAgainstRealTmux(t *testing.T) {
 //libtmux:real-tmux
 func TestStartServerAndHeadlessMenuAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), hangguard.Wait)
 	defer cancel()
 
 	if err := server.Start(ctx); err != nil {

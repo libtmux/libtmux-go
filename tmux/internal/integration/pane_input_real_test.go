@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/hangguard"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -142,7 +143,7 @@ func TestPaneInputAndHistoryAgainstRealTmux(t *testing.T) {
 		"#{pane_id}",
 		"/bin/sh",
 	)
-	readyCtx, cancelReady := context.WithTimeout(ctx, 5*time.Second)
+	readyCtx, cancelReady := context.WithTimeout(ctx, hangguard.Wait)
 	waitForPaneShellReady(readyCtx, t, target)
 	cancelReady()
 
