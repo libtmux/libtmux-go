@@ -114,6 +114,9 @@ func (s Server) startControl(
 		return nil, err
 	}
 
+	if err := state.config.prepareSocketDirectory(); err != nil {
+		return nil, err
+	}
 	var notifications *controlNotificationQueue
 	if profile.retainsNotifications() {
 		notifications = newControlNotificationQueue(defaultControlNotificationLimit)

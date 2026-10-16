@@ -11,6 +11,20 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
+func ExampleNewServer_environmentDefaults() {
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		ProcessEnvironment: []string{
+			"PATH=" + os.Getenv("PATH"),
+			"LIBTMUX_SOCKET_PATH=/tmp/libtmux-go-test/example.sock",
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(server.SocketPath())
+	// Output: /tmp/libtmux-go-test/example.sock
+}
+
 // Construct a server handle for a private socket and check that construction
 // does not start tmux. Creating the first session starts the daemon.
 // The temporary server is stopped even when an operation fails.

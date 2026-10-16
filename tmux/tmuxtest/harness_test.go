@@ -373,13 +373,19 @@ func TestChildEnvironmentIgnoresInheritedTmuxPane(t *testing.T) {
 		t.Fatalf("could not find non-default pane: baseline=%q work=%q other=%q", baseline, work, other)
 	}
 	t.Setenv("TMUX_PANE", injected)
-	contaminated := mustNewTmuxServer(t, tmux.ServerOptions{
+	control := exec.CommandContext(t.Context(), server.Executable(), "-S"+server.SocketPath(), "display-message", "-p", "#{pane_id}")
+	control.Env = os.Environ()
+	output, err := control.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(output)) != injected {
+		t.Fatalf("unfiltered tmux pane = %q, error %v, want %q", output, err, injected)
+	}
+	configured := mustNewTmuxServer(t, tmux.ServerOptions{
 		SocketPath:         server.SocketPath(),
 		ConfigFile:         server.ConfigFile(),
 		ProcessEnvironment: os.Environ(),
 	})
-	if got := mustCmd(t, contaminated, "display-message", "-p", "#{pane_id}"); got != injected {
-		t.Fatalf("un-scrubbed control pane = %q, want inherited pane %q", got, injected)
+	if got := mustCmd(t, configured, "display-message", "-p", "#{pane_id}"); got != baseline {
+		t.Fatalf("configured child pane = %q, want default pane %q", got, baseline)
 	}
 	if got := mustCmd(t, server, "display-message", "-p", "#{pane_id}"); got != baseline {
 		t.Fatalf("default pane = %q after inherited pane %q, want %q", got, injected, baseline)

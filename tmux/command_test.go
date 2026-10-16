@@ -102,7 +102,6 @@ func TestServerBuildsTmuxGlobalArguments(t *testing.T) {
 	t.Parallel()
 
 	server := mustNewServer(ServerOptions{
-		SocketName: "ignored-name",
 		SocketPath: "/tmp/libtmux.sock",
 		ConfigFile: "/tmp/libtmux.conf",
 		Colors:     Color256,
@@ -133,13 +132,13 @@ func TestCommandArgumentsRequestUTF8ExceptWhenAttaching(t *testing.T) {
 
 	server := mustNewServer(ServerOptions{})
 	if got := server.commandArguments([]string{"list-sessions"}); !slices.Equal(
-		got, []string{"-u", "list-sessions"},
+		got, []string{"-u", "-S" + server.SocketPath(), "list-sessions"},
 	) {
 		t.Fatalf("commandArguments() = %#v, want -u first", got)
 	}
 	if got := server.inheritLocale().commandArguments(
 		[]string{"attach-session"},
-	); !slices.Equal(got, []string{"attach-session"}) {
+	); !slices.Equal(got, []string{"-S" + server.SocketPath(), "attach-session"}) {
 		t.Fatalf("inheritLocale().commandArguments() = %#v, want no -u", got)
 	}
 }
@@ -252,7 +251,7 @@ func TestConnectionArgumentsAreLiteralWhileRawSubcommandStaysRaw(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Cmd() error = %v", err)
 	}
-	want := []string{"-fconfig;", "-Lsocket;", "display-message", "raw;"}
+	want := []string{"-fconfig;", "-S" + server.SocketPath(), "display-message", "raw;"}
 	requests := runner.recordedRequests()
 	if len(requests) != 1 || !slices.Equal(requests[0].Arguments, want) {
 		t.Fatalf("Cmd() arguments = %#v, want %#v", requests, want)

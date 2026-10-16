@@ -10,10 +10,11 @@ import (
 )
 
 type snapshotServerIdentity struct {
-	version    Version
-	pid        string
-	startTime  string
-	socketPath string
+	version         Version
+	pid             string
+	startTime       string
+	socketPath      string
+	ownerGeneration string
 }
 
 // ErrDaemonReplaced identifies an operation refused because the tmux server
@@ -118,6 +119,9 @@ func sameMaterializedDaemon(left, right Server) bool {
 }
 
 func (s Server) withDaemon(identity snapshotServerIdentity) Server {
+	if identity.ownerGeneration == "" && s.daemon != nil && sameSnapshotIdentity(*s.daemon, identity) {
+		identity.ownerGeneration = s.daemon.ownerGeneration
+	}
 	s.daemon = &identity
 	return s
 }
@@ -147,6 +151,9 @@ func (s Server) guardCommand(
 		s.daemon.startTime,
 		escapeFormatLiteral(s.daemon.socketPath),
 	)
+	if s.daemon.ownerGeneration != "" {
+		condition = fmt.Sprintf("#{&&:%s,#{==:#{%s},%s}}", condition, ownerGenerationOption, s.daemon.ownerGeneration)
+	}
 	return []string{
 		"if-shell", "-F", condition, thenCommand, guard.failure,
 	}, guard, nil

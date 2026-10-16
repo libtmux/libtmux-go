@@ -1,7 +1,9 @@
 # Examples
 
-Runnable programs, one per topic. Each creates its own tmux session and kills it
-on the way out, so running one leaves nothing behind.
+Runnable programs, one per topic. The ordinary quick start opens a workspace
+and leaves it available. The named cleanup demonstrations show explicit remote
+resource ownership and teardown. Other existing examples retain their scoped
+session setup.
 
 These are a **module of their own**, so an example reaching for a dependency can
 never put that dependency in the library's `go.mod`. Run them with `go -C`:
@@ -12,7 +14,9 @@ $ go -C examples run ./quickstart
 
 | Example | Shows | Read it for |
 | --- | --- | --- |
-| [`quickstart/`](quickstart/) | Session, window, split, send keys, capture | The shortest path from nothing to a pane running your command |
+| [`quickstart/`](quickstart/) | Ensure a daemon; find or create a session and window | A copied program that leaves its workspace available |
+| [`session-cleanup/`](session-cleanup/) | Session ownership, pane I/O, deferred cleanup | Joining body and cleanup errors |
+| [`lifecycle/`](lifecycle/) | Adoption, discovery, find-or-create, cleanup errors | Owning remote resources on a disposable endpoint |
 | [`filter-query/`](filter-query/) | Snapshot predicates and live tmux filters | The two ways to ask tmux a question, and what each costs |
 | [`snapshot-browser/`](snapshot-browser/) | One read, whole hierarchy | Walking sessions, windows and panes without re-querying |
 | [`option-hook-editing/`](option-hook-editing/) | Typed options and hooks | Reading and writing tmux settings by their Go names |
@@ -76,11 +80,17 @@ What to know about the format:
   The generator prints that list as the block's first line, so a reader can
   see what the snippet expects to already have.
   `TestPublishedRegionsCompileAlone` compiles every published region as the
-  only code in a throwaway module, with
-  the declarations as its local variables, so the list has to be exactly right:
+  only code in a throwaway module. Complete programs keep their imports and
+  scope. Fragments use the declarations as local variables, so the list has to
+  be exactly right:
   a binding the region uses and the marker omits fails as `undefined`, and one
   the marker names and the region never touches fails as `declared and not
   used`. Bindings the region creates itself need no declaration.
+
+The README quick start displays the complete program. The external ordinary
+runner compiles it without added imports or scope and tests absent and running
+daemons through child environment defaults. The retained session cleanup
+program has its own tests for body failure, cleanup failure and joined errors.
 
 The loop runs one way. Edit the program, then bring the quote across:
 

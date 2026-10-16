@@ -169,9 +169,7 @@ func TestUnsupportedFeaturesDegradeOnRequest(t *testing.T) {
 }
 
 // TestDerivedHandleKeepsServerCoordination proves the handle NewSession returns
-// shares the version cache with the one that created it. The two differ in
-// their environment, not in the tmux they address, and re-probing costs a
-// process for an answer already held.
+// retains the configuration and version cache captured by its constructor.
 func TestDerivedHandleKeepsServerCoordination(t *testing.T) {
 	t.Parallel()
 
@@ -183,14 +181,14 @@ func TestDerivedHandleKeepsServerCoordination(t *testing.T) {
 		t.Fatalf("newSessionCommandServer() error = %v", err)
 	}
 
-	if derived.connectionState() == original.connectionState() {
-		t.Fatal("NewSession's handle shares the configuration it had to change")
+	if derived.connectionState() != original.connectionState() {
+		t.Fatal("NewSession changed its frozen configuration")
 	}
 	if derived.connectionState().coordination() != original.connectionState().coordination() {
 		t.Fatal("NewSession's handle started a second version cache for the same tmux")
 	}
 	if _, ok := lifecycleEnvironmentValue(
-		derived.ProcessEnvironment(), "TMUX",
+		derived.state.config.processEnvironment, "TMUX",
 	); ok {
 		t.Fatal("NewSession's handle kept TMUX in its environment")
 	}

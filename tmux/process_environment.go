@@ -49,6 +49,14 @@ func processEnvironmentValue(environment []string, name string) (string, bool) {
 	return "", false
 }
 
+func withoutTmuxContext(environment []string) []string {
+	return slices.DeleteFunc(slices.Clone(environment), func(entry string) bool {
+		name, _, found := splitProcessEnvironmentEntry(entry)
+		return found && (processEnvironmentKey(name) == processEnvironmentKey("TMUX") ||
+			processEnvironmentKey(name) == processEnvironmentKey("TMUX_PANE"))
+	})
+}
+
 func setProcessEnvironmentValue(environment []string, name, value string) []string {
 	key := processEnvironmentKey(name)
 	updated := make([]string, 0, len(environment)+1)

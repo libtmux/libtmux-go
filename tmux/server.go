@@ -32,10 +32,11 @@ type serverState struct {
 	shared   *serverShared
 }
 
-// serverShared coordinates version caching across handles that address the
-// same daemon with different process environments.
+// serverShared coordinates version caching and find-or-create across handles
+// that address the same daemon with different process environments.
 type serverShared struct {
-	version versionCache
+	version   versionCache
+	lifecycle chan struct{}
 }
 
 // coordination returns the daemon-scoped shared state.
@@ -189,10 +190,7 @@ func (s Server) commandArguments(args []string) []string {
 		return slices.Clone(args)
 	}
 	config := s.state.config
-	selectorFlag, selectorValue := effectiveSocketSelectorValues(
-		config.socketPath,
-		config.socketName,
-	)
+	selectorValue := config.socketSelection.Path
 	globalCount := 1
 	if config.colors != ColorDefault {
 		globalCount++
@@ -224,7 +222,7 @@ func (s Server) commandArguments(args []string) []string {
 		command = append(command, "-f"+config.configFile)
 	}
 	if selectorValue != "" {
-		command = append(command, selectorFlag+selectorValue)
+		command = append(command, "-S"+selectorValue)
 	}
 	return append(command, args...)
 }

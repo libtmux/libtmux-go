@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 func TestMain(m *testing.M) {
 	for _, argument := range os.Args[1:] {
 		if argument == "-test.run=^TestServerCommandHelperProcess$" {
+			os.Args = slices.DeleteFunc(os.Args, func(value string) bool { return strings.HasPrefix(value, "-S") })
 			os.Exit(m.Run())
 		}
 	}

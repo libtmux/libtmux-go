@@ -78,6 +78,12 @@ func (s Server) runCommand(
 		result = internalCommandResult(connectedResult)
 		err = connectionErr
 	} else {
+		if err := state.config.prepareSocketDirectory(); err != nil {
+			if observer != nil {
+				observeCommand(observer, args, started, s.commandTransport(), -1, err)
+			}
+			return tmuxcmd.Result{ExitCode: -1}, err
+		}
 		arguments := guarded
 		if !commandList {
 			arguments = escapeCommandListSeparators(arguments)
