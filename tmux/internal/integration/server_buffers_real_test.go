@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -142,7 +143,9 @@ func TestServerBuffersAgainstRealTmux(t *testing.T) {
 		t.Fatalf("ShowBuffer(dash data) = (%q, %v)", got, err)
 	}
 
-	if err := server.DeleteBuffer(ctx, &name); err != nil {
+	if err := server.DeleteBuffer(ctx, &name); errors.Is(err, tmux.ErrVersionTooLow) {
+		return // The fixture server owns these buffers through shutdown.
+	} else if err != nil {
 		t.Fatalf("DeleteBuffer() error = %v", err)
 	}
 	if _, err := server.ShowBuffer(ctx, &name); err == nil {

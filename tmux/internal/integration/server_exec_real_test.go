@@ -119,20 +119,18 @@ func TestRunShellExitSevenRemainsCompletedOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	version33, err := tmux.ParseVersion("3.3")
-	if err != nil {
-		t.Fatal(err)
-	}
 	output, err := server.RunShell(ctx, tmux.RunShellRequest{Command: "exit 7"})
+	if !version.AtLeast(version35) {
+		if !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("unsupported captured shell output: %q %v", output, err)
+		}
+		return
+	}
 	if err != nil {
-		t.Fatalf("RunShell(exit 7) error = %v, want nil", err)
+		t.Fatalf("RunShell(exit 7) error = %v", err)
 	}
-	if (!version.AtLeast(version33) || version.AtLeast(version35)) &&
-		!slices.Equal(output, []string{"'exit 7' returned 7"}) {
+	if !slices.Equal(output, []string{"'exit 7' returned 7"}) {
 		t.Fatalf("RunShell(exit 7) = %#v, want tmux completion output", output)
-	}
-	if version.AtLeast(version33) && !version.AtLeast(version35) && len(output) != 0 {
-		t.Fatalf("RunShell(exit 7) = %#v, want empty 3.3-3.4 passthrough", output)
 	}
 }
 
@@ -403,11 +401,14 @@ func TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.
 	}
 
 	output, err := server.RunShell(ctx, tmux.RunShellRequest{Command: command})
+	if !version.AtLeast(mustPaneModeVersion(t, "3.5")) {
+		if !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("uncaptured foreground job = %q %v, want version refusal", output, err)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatalf("RunShell() error = %v, want nil (the guard let a real job run)", err)
-	}
-	if !version.AtLeast(mustPaneModeVersion(t, "3.5")) {
-		return
 	}
 	if len(output) == 0 {
 		t.Fatalf("RunShell() output = %#v, want a job completion line", output)
