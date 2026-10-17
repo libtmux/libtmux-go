@@ -23,7 +23,7 @@
 //
 // # Lifecycle and transport
 //
-// The server requires tmux 3.2a or newer. [NewServer] validates a target
+// The server requires tmux 3.3a or newer. [NewServer] validates a target
 // without performing I/O, then returns an [Instance] that owns its sessions
 // and runtime resources. [Instance.Connect] checks the tmux version before
 // opening the transport and applies handshake ordering. Custom transports must
@@ -36,7 +36,7 @@
 // instance after serving. [Instance.Run] provides the same lifecycle for a
 // supplied transport; [Run] serves it over stdio.
 //
-// On tmux 3.2a through 3.5, destroying the session that supplied the runtime's
+// On tmux 3.3a through 3.5, destroying the session that supplied the runtime's
 // control client follows that session's detach-on-destroy policy and may end
 // the runtime. tmux 3.6 or newer can move the client to another remaining
 // session.

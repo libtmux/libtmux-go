@@ -362,7 +362,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tmux-version: ['3.2a', '3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c', '3.8-rc2']
+        tmux-version: ['3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c', '3.8-rc2']
     steps:
       - uses: actions/checkout@v7
 
@@ -412,3 +412,78 @@ jobs:
             echo "--- $module: full suite ---"
             (cd "$module" && go test -count=1 ./...)
           done
+
+  tmux-rejected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        rejected-version: ['3.0a', '3.1c', '3.2a', '3.3']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+      - name: Install tmux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
+            libutempter-dev bison autoconf automake pkg-config
+      - name: Cache supported and rejected tmux fixtures
+        id: version-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/tmux-version-builds
+          key: tmux-version-3.3a-3.7c-${{ matrix.rejected-version }}
+      - name: Build version-check fixtures
+        if: steps.version-cache.outputs.cache-hit != 'true'
+        env:
+          REJECTED_VERSION: ${{ matrix.rejected-version }}
+        run: |
+          # The unpatched 3.3 lane also builds 3.7c, the newer client the
+          # stale-executable test needs beside the 3.3a floor build.
+          releases="3.3a $REJECTED_VERSION"
+          if [ "$REJECTED_VERSION" = 3.3 ]; then releases="$releases 3.7c"; fi
+          for release in $releases; do
+            git clone --depth 1 --branch "$release" \
+              https://github.com/tmux/tmux.git "$RUNNER_TEMP/tmux-$release"
+            (
+              cd "$RUNNER_TEMP/tmux-$release"
+              sh autogen.sh
+              ./configure --prefix="$HOME/tmux-version-builds/$release"
+              make -j2 && make install
+            )
+          done
+      - name: Refuse unsupported daemons before effects
+        env:
+          REJECTED_VERSION: ${{ matrix.rejected-version }}
+        run: |
+          export PATH="$HOME/tmux-version-builds/3.3a/bin:$PATH"
+          export LIBTMUX_REJECTED_TMUX="$HOME/tmux-version-builds/$REJECTED_VERSION/bin/tmux"
+          export LIBTMUX_FLOOR_TMUX="$HOME/tmux-version-builds/3.3a/bin/tmux"
+          test "$(tmux -V)" = 'tmux 3.3a'
+          test "$("$LIBTMUX_REJECTED_TMUX" -V)" = "tmux $REJECTED_VERSION"
+          mkdir -p "$TMUX_TMPDIR"
+          # A skipped test or a filter that matches nothing must fail this job.
+          export LIBTMUX_REQUIRE_REJECTED=1
+          required='TestCoreMinimumRejectsExplicitOlderDaemon TestCoreMinimumOpaqueExecutableOn33a'
+          case "$REJECTED_VERSION" in
+            3.0a|3.1c)
+              export LIBTMUX_REQUIRE_PRE32=1
+              required="$required TestCoreMinimumRefusesDaemonBeforeProbeExisted TestCoreMinimumRefusesExecutableBeforeProbeExisted TestCoreMinimumRefusesPre32DaemonPromptly"
+              ;;
+          esac
+          set -o pipefail
+          go test -count=1 -timeout 2m -v ./tmux/internal/integration -run '^TestCoreMinimum' | tee "$RUNNER_TEMP/rejected.log"
+          for name in $required; do
+            grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/rejected.log" || { echo "::error::$name did not run and pass"; exit 1; }
+          done
+          if [ "$REJECTED_VERSION" = 3.3 ]; then
+            # A configured 3.7c executable replaced by the 3.3a floor build must
+            # be checked afresh, which needs both on hand.
+            name=TestCoreMinimumColdFeatureRequirementUsesFreshExecutable
+            PATH="$HOME/tmux-version-builds/3.7c/bin:$PATH" go test -count=1 -timeout 2m -v ./tmux/internal/integration -run "^$name\$" | tee "$RUNNER_TEMP/cold.log"
+            grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/cold.log" || { echo "::error::$name did not run and pass"; exit 1; }
+          fi

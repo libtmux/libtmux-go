@@ -40,7 +40,7 @@ matrix: no tmux matrix at $matrix
 Set LIBTMUX_TMUX_MATRIX to a directory holding one subdirectory per version,
 each with bin/tmux inside it:
 
-    \$LIBTMUX_TMUX_MATRIX/3.2a/bin/tmux
+    \$LIBTMUX_TMUX_MATRIX/3.3a/bin/tmux
     \$LIBTMUX_TMUX_MATRIX/3.7c/bin/tmux
 
 Skipping rather than failing: a checkout without a matrix can still run every
@@ -88,7 +88,7 @@ for module in "${modules[@]}"; do
     fi
 done
 
-supported_versions=(3.2a 3.3a 3.4 3.5 3.6 3.7 3.7a 3.7b 3.7c 3.8-rc2)
+supported_versions=(3.3a 3.4 3.5 3.6 3.7 3.7a 3.7b 3.7c 3.8-rc2)
 versions=()
 if [[ -n ${LIBTMUX_MATRIX_VERSIONS:-} ]]; then
     read -r -a versions <<< "$LIBTMUX_MATRIX_VERSIONS"
@@ -97,7 +97,7 @@ elif [[ $required == 1 ]]; then
 else
     for candidate in "$matrix"/*/; do
         version=$(basename "$candidate")
-        if [[ -x "$candidate/bin/tmux" ]]; then
+        if [[ -x "$candidate/bin/tmux" && " ${supported_versions[*]} " == *" $version "* ]]; then
             versions+=("$version")
         fi
     done

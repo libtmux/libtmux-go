@@ -7,7 +7,7 @@ import (
 
 var breakPanePrintSoleVersion = Version{raw: "3.6", major: 3, minor: 6}
 
-// MovePaneRequest configures move-pane on tmux 3.2a or later. Its zero value is
+// MovePaneRequest configures move-pane on tmux 3.3a or later. Its zero value is
 // invalid: exactly one complete TargetPane or TargetWindow handle is required.
 // Cross-object handles must be proven to share a daemon through connection
 // state or the same nonempty SocketPath; matching socket names alone are
@@ -52,7 +52,7 @@ type JoinPaneRequest struct {
 	Percentage *int
 }
 
-// BreakPaneRequest configures break-pane on tmux 3.2a or later. Its zero value
+// BreakPaneRequest configures break-pane on tmux 3.3a or later. Its zero value
 // moves the receiver to a detached new window with tmux's default name, except
 // for the documented raw-version 3.7 workaround in [Pane.BreakPane]. Empty
 // Name means omission and is validated before the version probe.

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// NewWindowRequest configures window creation on tmux 3.2a or later. Its zero
+// NewWindowRequest configures window creation on tmux 3.3a or later. Its zero
 // value uses inherited defaults; placement behavior depends on the receiver.
 // [Session.NewWindow] uses tmux's next free index. [Window.NewWindow] instead
 // targets the receiver's occupied index and normally returns a command error;

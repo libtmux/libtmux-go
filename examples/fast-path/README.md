@@ -5,7 +5,7 @@ process for each command, and through a connection, one tmux client that
 carries them all. The example then shows which exact-capture operations each
 path supports.
 
-Both paths support tmux 3.2a through 3.8-rc2.
+Both paths support tmux 3.3a through 3.8-rc2.
 
 ## Running it
 
