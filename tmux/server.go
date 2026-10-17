@@ -162,10 +162,11 @@ import (
 // which runs raw tmux arguments and returns a [CommandResult];
 // a completed nonzero exit is a result, not an error.
 type Server struct {
-	state          *serverState
-	connection     *Connection
-	daemon         *snapshotServerIdentity
-	startupVersion *Version
+	state           *serverState
+	connection      *Connection
+	daemon          *snapshotServerIdentity
+	startupVersion  *Version
+	requiredVersion Version
 	// probesIdentity marks the private identity bootstrap, which must never
 	// start a daemon.
 	probesIdentity bool
@@ -268,8 +269,9 @@ func (s Server) Executable() string {
 // Standalone -V and -h diagnose the configured executable without daemon version
 // checks. They do not qualify a later daemon operation.
 //
-// Only a standalone ";" separates commands. Other semicolons follow the selected
-// binding's parsing; typed operations keep values literal across bindings.
+// A standalone ";" separates commands across bindings. The subprocess path
+// also follows tmux's trailing-semicolon and escaping rules; typed operations
+// keep values literal across bindings.
 //
 // On a [Connection]-bound server Cmd uses a lane, and tmux cannot cancel a
 // command already sent, so a command that waits on something outside tmux,

@@ -23,6 +23,7 @@ func TestConnectionLeavesABusyLaneOutUntilItIsFree(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{Lanes: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -76,6 +77,7 @@ func TestConnectionBlockingCommandSurvivesItsSessionBeingKilled(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{Lanes: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +115,7 @@ func TestConnectionBlockingCommandReturnsAtItsDeadline(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{Lanes: 1})
 	if err != nil {
 		t.Fatal(err)

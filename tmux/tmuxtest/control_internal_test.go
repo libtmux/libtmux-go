@@ -71,6 +71,26 @@ func TestControlProcessEnvironmentRejectsPrivateInheritedSnapshot(t *testing.T) 
 	}
 }
 
+func TestStartControlModeRefusesOlderSupportedDaemon(t *testing.T) {
+	old := os.Getenv("LIBTMUX_OPTIONAL_OLD_TMUX")
+	if old == "" {
+		t.Skip("set LIBTMUX_OPTIONAL_OLD_TMUX to exact tmux3.3a")
+	}
+	server := NewServerWithOptions(t.Context(), t, ServerOptions{Binary: old, InitialSession: &tmux.NewSessionRequest{Name: "keeper"}})
+	session := onlyInternalControlSession(t, server)
+	client, err := startControlMode(t.Context(), server, session)
+	if client != nil {
+		_ = client.Close()
+	}
+	if !errors.Is(err, tmux.ErrVersionTooLow) {
+		t.Fatalf("native harness acquisition = %v, want version refusal", err)
+	}
+	clients, err := server.Clients(t.Context())
+	if err != nil || len(clients) != 0 {
+		t.Fatalf("refused harness left clients: %v %v", clients, err)
+	}
+}
+
 func TestControlCommandPrefixPinsTheEffectiveSocketPath(t *testing.T) {
 	t.Parallel()
 
@@ -186,14 +206,18 @@ func TestControlModeUsesServerProcessEnvironment(t *testing.T) {
 	}
 
 	proxyPath := filepath.Join(t.TempDir(), "tmux-environment-proxy")
+	declaredTemporary := t.TempDir()
 	proxy := []byte("#!/bin/sh\n" +
 		"if [ \"$LIBTMUX_CONTROL_REQUIRED\" != configured ]; then exit 91; fi\n" +
+		"if [ \"$TMPDIR\" != \"$LIBTMUX_CONTROL_EXPECTED_TMPDIR\" ]; then exit 92; fi\n" +
 		"exec \"$LIBTMUX_CONTROL_REAL_TMUX\" \"$@\"\n")
 	writeExecutableProxy(t, proxyPath, proxy)
 	environment := append(
 		scrubTmuxEnvironment(os.Environ()),
 		"LIBTMUX_CONTROL_REQUIRED=configured",
 		"LIBTMUX_CONTROL_REAL_TMUX="+prefix[0],
+		"TMPDIR="+declaredTemporary,
+		"LIBTMUX_CONTROL_EXPECTED_TMPDIR="+declaredTemporary,
 	)
 	server := mustNewTmuxServer(t, tmux.ServerOptions{
 		Binary:             proxyPath,
@@ -204,6 +228,7 @@ func TestControlModeUsesServerProcessEnvironment(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
 	defer cancel()
+	RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	control, err := startControlMode(ctx, server, session)
 	if err != nil {
 		t.Fatalf("startControlMode() error = %v", err)
@@ -270,6 +295,7 @@ func TestControlModeCloseBoundsInheritedOutputPipes(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
 	defer cancel()
+	RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	control, err := startControlMode(ctx, server, session)
 	if err != nil {
 		t.Fatalf("startControlMode() error = %v", err)
@@ -487,6 +513,7 @@ func TestStartControlModeCleansFailedRegistrationProcessAndSpool(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), controlStartTimeout)
 	defer cancel()
+	RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	control, err := startControlMode(ctx, server, session)
 	if control != nil {
 		_ = control.Close()

@@ -25,8 +25,8 @@ type HasSessionRequest struct {
 }
 
 // NewSessionRequest configures session creation. [Server.NewSession] creates a
-// detached session; [Server.NewSessionConnection] creates one attached to its
-// first control-mode lane. Its zero value uses tmux defaults. Width and Height
+// detached session; [Server.NewSessionConnection] also acquires an owned
+// control connection. Its zero value uses tmux defaults. Width and Height
 // are either zero or 1 through 65535; KillExisting requires Name. KillExisting
 // may remove a session before a later creation failure.
 //
@@ -356,5 +356,6 @@ func newSessionCommandServer(server Server) (Server, error) {
 		connection:      server.connection,
 		daemon:          server.daemon,
 		requiresProcess: server.requiresProcess,
+		requiredVersion: server.requiredVersion,
 	}, nil
 }

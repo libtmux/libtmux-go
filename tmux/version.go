@@ -11,10 +11,9 @@ import (
 const (
 	// MinimumSupportedVersion is the oldest tmux release supported by this package.
 	MinimumSupportedVersion = "3.3a"
-	// MinimumConnectionVersion is the oldest tmux feature level that supports
-	// terminal Connection ownership. Later releases may strengthen individual
-	// lifecycle guarantees without changing this floor.
-	MinimumConnectionVersion = MinimumSupportedVersion
+	// MinimumConnectionVersion qualifies owned control initialization. Ordinary
+	// subprocess operations retain MinimumSupportedVersion.
+	MinimumConnectionVersion = "3.7"
 	// MaximumTestedVersion is the newest numbered tmux feature level covered by
 	// this package's tests, and the level ParseVersion gives a bare master
 	// build.

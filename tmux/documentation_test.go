@@ -21,6 +21,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
 var documentationLinkPattern = regexp.MustCompile(
@@ -652,6 +655,16 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 	// README calls runnable and a reader cannot run.
 	for _, workflow := range exampleWorkflows(t) {
 		t.Run(workflow, func(t *testing.T) {
+			switch workflow {
+			case "byte-streams", "control-mode-subscribe", "fast-path", "pane-io", "run-to-completion":
+				server, err := tmux.NewServer(tmux.ServerOptions{
+					SocketPath: filepath.Join(t.TempDir(), "s"), ConfigFile: os.DevNull,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
+			}
 			binary := filepath.Join(t.TempDir(), "example")
 			build := exec.Command("go", "build", "-o", binary, "./"+workflow)
 			build.Dir = filepath.Join(moduleRoot, "examples")
