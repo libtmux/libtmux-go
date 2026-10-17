@@ -9,6 +9,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
+
 ### Development
 
 - The install gate also runs `go install` for `tmux-workspace`, the command
