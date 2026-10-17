@@ -58,13 +58,20 @@ func TestProcessCounterForwardsAndCountsRealTmux(t *testing.T) {
 	}
 }
 
-func TestMinimumSupportedTmuxHasConnectionRows(t *testing.T) {
-	version, err := tmux.ParseVersion(tmux.MinimumSupportedVersion)
-	if err != nil {
-		t.Fatalf("ParseVersion(%q) error = %v", tmux.MinimumSupportedVersion, err)
-	}
-	if !supportsOwnedConnections(version) {
-		t.Fatalf("tmux %s omitted connection rows", version)
+func TestConnectionRowsHaveTheirOwnMinimum(t *testing.T) {
+	for _, one := range []struct {
+		version   string
+		qualified bool
+	}{
+		{version: "3.3a"}, {version: "3.6"}, {version: "3.7", qualified: true},
+	} {
+		version, err := tmux.ParseVersion(one.version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := supportsOwnedConnections(version); got != one.qualified {
+			t.Fatalf("connection rows on %s = %t, want %t", version, got, one.qualified)
+		}
 	}
 }
 
@@ -159,8 +166,8 @@ func TestWaitingEventDrivenCostsFewerProcesses(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	probedVersion(ctx, t)
-	rows, err := measureWaits(ctx)
+	version := probedVersion(ctx, t)
+	rows, err := measureWaits(ctx, version)
 	if err != nil {
 		t.Fatalf("measureWaits() error = %v", err)
 	}
@@ -169,6 +176,12 @@ func TestWaitingEventDrivenCostsFewerProcesses(t *testing.T) {
 		byMode[r.mode] = r
 	}
 	polled, driven := byMode["polled capture"], byMode["event-driven"]
+	if !supportsOwnedConnections(version) {
+		if len(rows) != 1 || polled.processes == 0 {
+			t.Fatalf("older wait rows = %+v, want the measured polling lane", rows)
+		}
+		return
+	}
 	if polled.processes == 0 {
 		t.Error("the polled lane recorded no tmux invocations")
 	}

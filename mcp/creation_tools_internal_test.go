@@ -96,6 +96,7 @@ func TestCreateSessionReportsPartialIdentityAfterRefreshFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	instance := mustInternalMCPServer(t, target)
 	refreshFailure := errors.New("injected post-creation refresh failure")
 	create := instance.runtime.deps.newSessionConnection

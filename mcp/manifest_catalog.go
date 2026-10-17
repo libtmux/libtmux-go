@@ -237,7 +237,7 @@ func appendInspectDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogFindPaneByPosition),
 		defineTool(toolDefinition{
 			name: "wait_for_text", title: "Wait for pane text",
-			details: "Waits for new pane output without accepting executable input.",
+			details: "Waits for new pane output without accepting executable input. Requires tmux 3.7.",
 			toolset: toolsetInspect, processReach: processNone,
 			effects: effects(effectObserve), outputClasses: terminal,
 			mayExposeSecrets: true, mayReturnUntrustedContent: true,
@@ -525,7 +525,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogSendKeysBatch),
 		defineTool(toolDefinition{
 			name: "paste_text", title: "Paste text",
-			details: "Pastes literal text only to its target; optional Enter appends one newline to the same private buffer.",
+			details: "Pastes literal text only to its target; optional Enter appends one newline to the same private buffer. Non-empty text requires tmux 3.4 for safe named-buffer cleanup.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,

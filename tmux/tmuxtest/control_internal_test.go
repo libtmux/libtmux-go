@@ -490,6 +490,8 @@ func TestStartControlModeCleansFailedRegistrationProcessAndSpool(t *testing.T) {
 	proxyPath := filepath.Join(proxyDir, "tmux-failed-registration-proxy")
 	pidPath := filepath.Join(proxyDir, "failed-registration.pid")
 	proxy := []byte("#!/bin/sh\n" +
+		// The hook-free identity probe is run-shell -C, not a control client.
+		"case \" $* \" in *' run-shell '*) exec \"$LIBTMUX_CONTROL_REAL_TMUX\" \"$@\" ;; esac\n" +
 		"for argument in \"$@\"; do\n" +
 		"  if [ \"$argument\" = -C ]; then\n" +
 		"    printf '%s' \"$$\" > \"$LIBTMUX_CONTROL_PID_FILE\"\n" +

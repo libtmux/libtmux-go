@@ -37,7 +37,7 @@ func run() error {
 		return err
 	}
 	fmt.Print(table(rows, version, describeMachine()))
-	waits, err := measureWaits(ctx)
+	waits, err := measureWaits(ctx, version)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func probeVersion(ctx context.Context) (tmux.Version, error) {
 		return tmux.Version{}, err
 	}
 	defer h.close()
-	return h.server.Version(ctx)
+	return h.session.Server().Version(ctx)
 }
 
 func table(rows []row, version tmux.Version, machine string) string {

@@ -16,6 +16,7 @@ import (
 func (t *tools) orientationSnapshot(ctx context.Context) (tmux.Snapshot, bool, error) {
 	snapshot, err := t.tmux(ctx).Snapshot(ctx)
 	if errors.Is(err, tmux.ErrNoServer) {
+		t.runtime.observe(err)
 		return tmux.Snapshot{}, false, nil
 	}
 	return snapshot, err == nil, err
