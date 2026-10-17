@@ -315,7 +315,19 @@ func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 			if err == nil {
 				t.Fatal("Build() error = nil, want destroyed-session lifecycle error")
 			}
-			const prefix = "refresh built session after closing workspace connection: "
+			// Below the connection floor Build owns no connection, so the
+			// destroyed session is found while building rather than when
+			// refreshing after the connection closes.
+			prefix := "refresh built session after closing workspace connection: "
+			minimum, parseErr := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+			if parseErr != nil {
+				t.Fatal(parseErr)
+			}
+			if version, versionErr := server.Version(ctx); versionErr != nil {
+				t.Fatal(versionErr)
+			} else if !version.AtLeast(minimum) {
+				prefix = "resolve initial window: "
+			}
 			if !strings.HasPrefix(err.Error(), prefix) {
 				t.Fatalf("Build() error = %q, want prefix %q", err, prefix)
 			}
