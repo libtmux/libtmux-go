@@ -53,7 +53,12 @@ func workflowVersionNames(t *testing.T, root string) []string {
 	}
 	var versions []string
 	for entry := range strings.SplitSeq(string(matrix[1]), ",") {
-		versions = append(versions, strings.Trim(strings.TrimSpace(entry), `"'`))
+		name := strings.Trim(strings.TrimSpace(entry), `"'`)
+		// The master lane tracks upstream and is advisory; it is not a
+		// supported release, so no document promises it.
+		if name != "master" {
+			versions = append(versions, name)
+		}
 	}
 	return versions
 }

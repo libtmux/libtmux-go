@@ -139,6 +139,18 @@ chained                    37ms          10        0  7 panes on the server [0 0
 chained + connection        7ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
 ```
 
+## tmux 3.8
+
+```
+path                       wall   processes  clients  query answer
+----------------------------------------------------------------------------------------
+process                   124ms          17        0  7 panes on the server [0 0 1 2 3 4 5]
+connection                 22ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+concurrent x4              31ms           0        4  7 panes on the server [0 0 1 2 3 4 5]
+chained                    52ms          10        0  7 panes on the server [0 0 1 2 3 4 5]
+chained + connection       14ms           0        1  7 panes on the server [0 0 1 2 3 4 5]
+```
+
 ## What one MCP call costs
 
 The tables above measure the ways of reaching tmux. This measures the layer a
