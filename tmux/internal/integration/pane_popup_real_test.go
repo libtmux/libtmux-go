@@ -146,6 +146,7 @@ func TestDisplayPopupNoKeysAndCloseOnAnyKeyPrecedenceAgainstRealTmux(t *testing.
 	if !version.AtLeast(mustPaneModeVersion(t, "3.6")) {
 		t.Skip("NoKeys and CloseOnAnyKey require tmux 3.6")
 	}
+	requirePopupOverlay(ctx, t, server)
 	sessions, err := server.Sessions(ctx)
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
@@ -223,6 +224,7 @@ func TestDisplayPopupUsesExplicitClientAndLinkedPaneContextAgainstRealTmux(t *te
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	requirePopupOverlay(ctx, t, server)
 
 	snapshot := mustRealSnapshot(t, server)
 	firstSession := snapshot.Sessions()[0]
@@ -446,5 +448,20 @@ func waitForNewRealPTYClient(
 			t.Fatalf("no new client appeared: %v", ctx.Err())
 		case <-time.After(10 * time.Millisecond):
 		}
+	}
+}
+
+// requirePopupOverlay skips a test that depends on a popup being an overlay
+// bound to a client. From tmux 3.9 display-popup creates a floating pane in the
+// window, so there is no earlier popup to modify and the start directory
+// expands without the target client.
+func requirePopupOverlay(ctx context.Context, t *testing.T, server tmux.Server) {
+	t.Helper()
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatalf("Version() error = %v", err)
+	}
+	if version.AtLeast(mustPaneModeVersion(t, "next-3.9")) {
+		t.Skipf("tmux %s popups are floating panes, not client overlays", version)
 	}
 }

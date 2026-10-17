@@ -7,8 +7,11 @@ import (
 )
 
 var (
-	panePopupVersion33 = Version{raw: "3.3", major: 3, minor: 3}
 	panePopupVersion36 = Version{raw: "3.6", major: 3, minor: 6}
+	// panePopupVersion39 is where tmux made display-popup create a floating
+	// pane. No popup exists to modify, so -N, which only clears the
+	// automatic-close flags of an existing one, is no longer accepted.
+	panePopupVersion39 = Version{raw: "next-3.9", major: 3, minor: 9, development: -1}
 	// panePopupVersion38 is where tmux added an explicit refusal for a
 	// control-mode target client: cmd_display_popup_exec gained
 	// "if (tc->flags & CLIENT_CONTROL) return (CMD_RETURN_NORMAL);"
@@ -123,11 +126,11 @@ type displayPopupValues struct {
 // interprets Command as a shell command; outer-parser escaping does not quote
 // or neutralize that inner command.
 //
-// Title, BorderLines, Style, BorderStyle, Environment, and NoBorder require
-// tmux 3.3. CloseOnAnyKey and NoKeys require tmux 3.6. Unsupported fields follow
-// [UnsupportedPolicy]. On tmux 3.8 and later, an explicit TargetClient that
-// resolves to a control-mode client returns [ErrInvalidServerCommandRequest]
-// unless CloseExisting is set: tmux itself answers that combination exactly
+// CloseOnAnyKey and NoKeys require tmux 3.6. Unsupported fields follow
+// [UnsupportedPolicy]. NoKeys is omitted from tmux 3.9, whose popups are
+// floating panes with no earlier popup to modify. On tmux 3.8 and later, an
+// explicit TargetClient that resolves to a control-mode client returns
+// [ErrInvalidServerCommandRequest] unless CloseExisting is set: tmux itself answers that combination exactly
 // as it answers success, so nothing on the wire would otherwise say the
 // popup never ran. CloseExisting is exempt because tmux handles it before
 // that refusal on every version, clearing whatever overlay the target has -
@@ -190,10 +193,7 @@ func (p Pane) DisplayPopup(ctx context.Context, request DisplayPopupRequest) err
 	if values.startDirectory != nil {
 		arguments = append(arguments, "-d", *values.startDirectory)
 	}
-	arguments, err = appendPopupVersion33Arguments(p.server, arguments, values, current)
-	if err != nil {
-		return err
-	}
+	arguments = appendPopupStyleArguments(arguments, values)
 	arguments, err = appendPopupVersion36Arguments(p.server, arguments, values, current)
 	if err != nil {
 		return err
@@ -320,59 +320,30 @@ func requireDisplayPopupTargetSupportsOverlay(
 }
 
 func (values displayPopupValues) needsVersion() bool {
-	return values.title != nil || values.borderLines != nil || values.style != nil ||
-		values.borderStyle != nil || len(values.environment) != 0 || values.noBorder ||
-		values.closeOnAnyKey || values.noKeys
+	return values.closeOnAnyKey || values.noKeys
 }
 
-func appendPopupVersion33Arguments(
-	server Server,
-	arguments []string,
-	values displayPopupValues,
-	current Version,
-) ([]string, error) {
+func appendPopupStyleArguments(arguments []string, values displayPopupValues) []string {
 	for _, field := range []struct {
-		feature string
-		flag    string
-		value   *string
+		flag  string
+		value *string
 	}{
-		{feature: "title", flag: "-T", value: values.title},
-		{feature: "border_lines", flag: "-b", value: values.borderLines},
-		{feature: "style", flag: "-s", value: values.style},
-		{feature: "border_style", flag: "-S", value: values.borderStyle},
+		{flag: "-T", value: values.title},
+		{flag: "-b", value: values.borderLines},
+		{flag: "-s", value: values.style},
+		{flag: "-S", value: values.borderStyle},
 	} {
-		if field.value == nil {
-			continue
-		}
-		if current.AtLeast(panePopupVersion33) {
+		if field.value != nil {
 			arguments = append(arguments, field.flag, *field.value)
-		} else if err := server.unsupportedFeature(
-			"display-popup", field.feature, current, panePopupVersion33,
-		); err != nil {
-			return nil, err
 		}
 	}
-	if len(values.environment) != 0 {
-		if current.AtLeast(panePopupVersion33) {
-			for _, variable := range values.environment {
-				arguments = append(arguments, "-e"+variable)
-			}
-		} else if err := server.unsupportedFeature(
-			"display-popup", "environment", current, panePopupVersion33,
-		); err != nil {
-			return nil, err
-		}
+	for _, variable := range values.environment {
+		arguments = append(arguments, "-e"+variable)
 	}
 	if values.noBorder {
-		if current.AtLeast(panePopupVersion33) {
-			arguments = append(arguments, "-B")
-		} else if err := server.unsupportedFeature(
-			"display-popup", "no_border", current, panePopupVersion33,
-		); err != nil {
-			return nil, err
-		}
+		arguments = append(arguments, "-B")
 	}
-	return arguments, nil
+	return arguments
 }
 
 func appendPopupVersion36Arguments(
@@ -391,6 +362,10 @@ func appendPopupVersion36Arguments(
 		}
 	}
 	if values.noKeys {
+		if current.AtLeast(panePopupVersion39) {
+			// Nothing to clear: a new floating pane carries no configured flags.
+			return arguments, nil
+		}
 		if current.AtLeast(panePopupVersion36) {
 			arguments = append(arguments, "-N")
 		} else if err := server.unsupportedFeature(

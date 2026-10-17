@@ -24,40 +24,43 @@ type gatedFlag struct {
 	// reason is set only where the boundary is deliberately later than the
 	// release tmux started offering the flag.
 	reason string
+	// removed is the version from which tmux no longer offers the flag and the
+	// package stops sending it. Empty means the flag is still offered.
+	removed string
 }
 
 // gatedFlags is every flag the tmux package refuses below a version.
 var gatedFlags = []gatedFlag{
-	{"capture-pane", "-T", "join_wrapped", "3.4", ""},
-	{"capture-pane", "-M", "mouse_format", "3.6", ""},
-	{"capture-pane", "-H", "hyperlinks", "3.7", ""},
-	{"capture-pane", "-L", "line_numbers", "3.7", ""},
-	{"capture-pane", "-F", "format", "3.7", ""},
-	{"command-prompt", "-l", "literal", "3.6", ""},
-	{"command-prompt", "-C", "bspace_exit", "3.7", ""},
-	{"command-prompt", "-e", "no_freeze", "3.7", ""},
-	{"confirm-before", "-c", "confirm_key", "3.4", ""},
-	{"confirm-before", "-y", "default_yes", "3.4", ""},
-	{"copy-mode", "-d", "page_down", "3.5", ""},
-	{"display-menu", "-C", "starting_choice", "3.4", ""},
-	{"display-menu", "-b", "border_lines", "3.4", ""},
-	{"display-menu", "-s", "style", "3.4", ""},
-	{"display-menu", "-S", "border_style", "3.4", ""},
-	{"display-menu", "-H", "selected_style", "3.4", ""},
-	{"display-menu", "-M", "mouse", "3.5", ""},
-	{"display-message", "-l", "no_expand", "3.4", ""},
-	{"display-message", "-C", "update_pane", "3.6", ""},
-	{"display-popup", "-B", "no_border", "3.3", ""},
-	{"display-popup", "-e", "environment", "3.3", ""},
-	{"display-popup", "-N", "no_keys", "3.6", ""},
-	{"display-popup", "-k", "close_on_any_key", "3.6", ""},
-	{"kill-session", "-g", "group", "3.7", ""},
-	{"list-clients", "-f", "filter", "3.4", ""},
-	{"list-keys", "-F", "format", "3.7", ""},
-	{"paste-buffer", "-S", "no_vis", "3.7", ""},
-	{"run-shell", "-c", "start_directory", "3.4", ""},
-	{"run-shell", "-E", "show_stderr", "3.6", ""},
-	{"send-keys", "-K", "key_table", "3.4", ""},
+	{"capture-pane", "-T", "join_wrapped", "3.4", "", ""},
+	{"capture-pane", "-M", "mouse_format", "3.6", "", ""},
+	{"capture-pane", "-H", "hyperlinks", "3.7", "", ""},
+	{"capture-pane", "-L", "line_numbers", "3.7", "", ""},
+	{"capture-pane", "-F", "format", "3.7", "", ""},
+	{"command-prompt", "-l", "literal", "3.6", "", ""},
+	{"command-prompt", "-C", "bspace_exit", "3.7", "", ""},
+	{"command-prompt", "-e", "no_freeze", "3.7", "", ""},
+	{"confirm-before", "-c", "confirm_key", "3.4", "", ""},
+	{"confirm-before", "-y", "default_yes", "3.4", "", ""},
+	{"copy-mode", "-d", "page_down", "3.5", "", ""},
+	{"display-menu", "-C", "starting_choice", "3.4", "", ""},
+	{"display-menu", "-b", "border_lines", "3.4", "", ""},
+	{"display-menu", "-s", "style", "3.4", "", ""},
+	{"display-menu", "-S", "border_style", "3.4", "", ""},
+	{"display-menu", "-H", "selected_style", "3.4", "", ""},
+	{"display-menu", "-M", "mouse", "3.5", "", ""},
+	{"display-message", "-l", "no_expand", "3.4", "", ""},
+	{"display-message", "-C", "update_pane", "3.6", "", ""},
+	{"display-popup", "-B", "no_border", "3.3", "", ""},
+	{"display-popup", "-e", "environment", "3.3", "", ""},
+	{subcommand: "display-popup", flag: "-N", feature: "no_keys", minimum: "3.6", removed: "next-3.9"},
+	{"display-popup", "-k", "close_on_any_key", "3.6", "", ""},
+	{"kill-session", "-g", "group", "3.7", "", ""},
+	{"list-clients", "-f", "filter", "3.4", "", ""},
+	{"list-keys", "-F", "format", "3.7", "", ""},
+	{"paste-buffer", "-S", "no_vis", "3.7", "", ""},
+	{"run-shell", "-c", "start_directory", "3.4", "", ""},
+	{"run-shell", "-E", "show_stderr", "3.6", "", ""},
+	{"send-keys", "-K", "key_table", "3.4", "", ""},
 	{
 		subcommand: "refresh-client", flag: "-l", feature: "request_clipboard",
 		minimum: "3.4",
@@ -96,6 +99,13 @@ func TestNoFlagIsWithheldFromATmuxThatOffersIt(t *testing.T) {
 		}
 		offered := usageOffersFlag(strings.Join(usage, " "), gate.flag)
 		sent := running.AtLeast(minimum)
+		if gate.removed != "" {
+			removed, err := tmux.ParseVersion(gate.removed)
+			if err != nil {
+				t.Fatalf("ParseVersion(%q) = %v", gate.removed, err)
+			}
+			sent = sent && !running.AtLeast(removed)
+		}
 
 		switch {
 		case offered && !sent && gate.reason == "":
