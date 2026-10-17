@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -45,8 +46,23 @@ type ScriptedCommand struct {
 // control connection or a notification stream speaks tmux's control protocol,
 // which a script cannot, so code that opens one needs [NewServer] and a real
 // tmux.
+//
+// The private admission probe reports no daemon unless an entry explicitly
+// matches its complete format argument. Ordinary commands then use the
+// executable version supplied by the script's -V answer.
 func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	t.Helper()
+
+	const admissionFormat = "#{q:pid}|#{q:start_time}|#{q:socket_path}|#{q:version}="
+	if !slices.ContainsFunc(script, func(command ScriptedCommand) bool {
+		return slices.Contains(command.Contains, versionProbeFormat)
+	}) {
+		script = append([]ScriptedCommand{{
+			Contains: []string{versionProbeFormat},
+			Stderr:   "no server running on scripted socket\n",
+			ExitCode: 1,
+		}}, script...)
+	}
 
 	var body strings.Builder
 	body.WriteString("#!/bin/sh\n")
