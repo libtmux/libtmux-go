@@ -34,7 +34,8 @@ func (profile controlClientProfile) receivesPaneOutput() bool {
 // OpenControl starts a control-mode client attached to session. The startup
 // context bounds process start, attach framing, and client registration but
 // does not own the returned client's lifetime. Session must belong to the same
-// configured server selector.
+// configured server selector. Acquisition requires tmux 3.7 and a filesystem
+// that can hard-link the selected Unix socket into a private directory.
 func (s Server) OpenControl(
 	ctx context.Context,
 	session Session,
@@ -148,7 +149,12 @@ func (s Server) startControlWithBacklog(
 	if profile.retainsNotifications() {
 		notifications = newControlNotificationQueue(backlog)
 	}
-	arguments := s.commandArguments(startup)
+	launch, release, err := s.pinControlSocket(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = release() }()
+	arguments := launch.commandArguments(startup)
 	if s.daemon != nil {
 		arguments = append([]string{"-N"}, arguments...)
 	}
@@ -234,6 +240,9 @@ func (s Server) startControlWithBacklog(
 		return nil, client.failStartup(err)
 	}
 	client.clientName = clientName
+	if err := release(); err != nil {
+		return nil, client.failStartup(fmt.Errorf("release control carrier: %w", err))
+	}
 	go client.runRequests()
 	return client, nil
 }

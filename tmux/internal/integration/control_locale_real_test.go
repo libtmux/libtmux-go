@@ -34,6 +34,7 @@ func TestControlClientOpensWithoutAUTF8Locale(t *testing.T) {
 		t.Fatalf("Sessions() = (%d, %v), want one session", len(sessions), err)
 	}
 
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatalf("OpenControl without a locale: %v", err)
@@ -93,6 +94,7 @@ func TestTextSurvivesAServerWithoutAUTF8Locale(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", got, name)
 	}
 
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)

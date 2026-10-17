@@ -105,6 +105,7 @@ func TestCommandStreamsWhileRunning(t *testing.T) {
 	}
 	pane := running.Pane()
 
+	tmuxtest.RequireVersion(t.Context(), t, pane.Server(), tmux.MinimumConnectionVersion)
 	observation, err := pane.OpenObservation(ctx)
 	if err != nil {
 		t.Fatalf("OpenObservation() error = %v", err)
@@ -266,6 +267,7 @@ func TestCommandStreamUntilWaitCompletes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Start() error = %v", err)
 		}
+		tmuxtest.RequireVersion(t.Context(), t, running.Pane().Server(), tmux.MinimumConnectionVersion)
 		observation, err := running.Pane().OpenObservation(ctx)
 		if err != nil {
 			t.Fatalf("OpenObservation() error = %v", err)
@@ -292,6 +294,7 @@ func TestCommandStreamUntilWaitCompletes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Start() error = %v", err)
 		}
+		tmuxtest.RequireVersion(t.Context(), t, running.Pane().Server(), tmux.MinimumConnectionVersion)
 		observation, err := running.Pane().OpenObservation(ctx)
 		if err != nil {
 			t.Fatalf("OpenObservation() error = %v", err)
@@ -619,6 +622,7 @@ func TestCommandStreamToCopiesOutputAndTheOutcome(t *testing.T) {
 	}
 
 	destination := &syncedBuffer{}
+	tmuxtest.RequireVersion(ctx, t, running.Pane().Server(), tmux.MinimumConnectionVersion)
 	result, err := running.StreamTo(ctx, destination)
 	if err != nil {
 		t.Fatalf("StreamTo() error = %v", err)
@@ -668,6 +672,7 @@ func TestCommandStreamToKillsWhileStreaming(t *testing.T) {
 	}()
 
 	destination := &syncedBuffer{}
+	tmuxtest.RequireVersion(ctx, t, running.Pane().Server(), tmux.MinimumConnectionVersion)
 	result, err := running.StreamTo(ctx, destination)
 	if err != nil {
 		t.Fatalf("StreamTo() error = %v", err)
@@ -772,6 +777,7 @@ func TestCommandStreamToDoesNotHangOnAStuckDestination(t *testing.T) {
 
 	destination := newBlockingWriter(t)
 	returned := make(chan error, 1)
+	tmuxtest.RequireVersion(ctx, t, running.Pane().Server(), tmux.MinimumConnectionVersion)
 	go func() { _, streamErr := running.StreamTo(ctx, destination); returned <- streamErr }()
 
 	select {

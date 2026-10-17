@@ -178,12 +178,17 @@ func RunInPane(ctx context.Context, t testing.TB, command string) tmux.Pane {
 
 var errNilScreenMatch = errors.New("screen condition is nil")
 
-// waitForScreen reads the screen once, then again each time the pane writes,
-// until match accepts it. tmux pushes each write, so nothing is polled; the
-// observation opens before the first read so a write between the two is not
-// missed.
+// waitForScreen prefers a qualified observation, opened before the first
+// read. Older supported daemons use bounded polling of the same screen
+// condition; transport and daemon-replacement errors remain failures.
 func waitForScreen(ctx context.Context, pane tmux.Pane, match func([]string) bool) error {
 	observation, err := pane.OpenObservation(ctx)
+	if errors.Is(err, tmux.ErrVersionTooLow) {
+		return tmux.Poll(ctx, 10*time.Millisecond, func(ctx context.Context) (bool, error) {
+			screen, err := readScreen(ctx, pane)
+			return err == nil && match(screen), err
+		})
+	}
 	if err != nil {
 		return err
 	}

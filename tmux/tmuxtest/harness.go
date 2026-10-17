@@ -17,7 +17,8 @@
 //	}
 //
 // Failed waits print the last screen. [WaitForLine] matches a whole line,
-// [WaitForScreen] takes a condition, and [Screen] reads without waiting.
+// [WaitForScreen] takes a condition, and [Screen] reads without waiting. Screen
+// waits use notifications on qualified daemons and bounded polling below 3.7.
 //
 // [RunInPane] uses a startup-file-free POSIX shell and fixed [ShellPrompt]. Use
 // [ServerOptions.FixedShell] for the same behavior on a custom server.
@@ -62,8 +63,8 @@
 //
 // # Control clients and subprocesses
 //
-// [NewControlMode] attaches a tmux control client with one output reader and a
-// disk-backed spool. [StartPTYProcess] starts a child with a private controlling
+// [NewControlMode] requires tmux 3.7 before attaching a control client with one
+// output reader and a disk-backed spool. [StartPTYProcess] starts a child with a private controlling
 // terminal and a memory-backed transcript. Call [ControlMode.Close] or
 // [PTYProcess.Close] to release these owned resources.
 //
@@ -111,6 +112,23 @@ type ServerOptions struct {
 	// startup files and the prompt ShellPrompt. RunInPane sets it; the default
 	// preserves tmux process behavior for tests that need it.
 	FixedShell bool
+}
+
+// RequireVersion skips a feature's positive test when the selected daemon, or
+// the executable that would start it, is older than minimum. Other version-check
+// failures fail the test. Refusal tests should call the operation directly.
+func RequireVersion(ctx context.Context, t testing.TB, server tmux.Server, minimum string) {
+	t.Helper()
+	version, err := tmux.ParseVersion(minimum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.RequireVersion(ctx, version); err != nil {
+		if errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Skip(err)
+		}
+		t.Fatal(harnessFailure("qualify feature version", err))
+	}
 }
 
 // ShellPrompt is the prompt drawn when [ServerOptions.FixedShell] is enabled.

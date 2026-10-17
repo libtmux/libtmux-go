@@ -88,7 +88,7 @@ func (s Server) checkCore(ctx context.Context, absentCleanup bool) (Server, erro
 		return Server{}, err
 	}
 	if s.daemon != nil {
-		return s, requireSupportedVersion(s.daemon.version)
+		return s, s.requireDaemonVersion(s.daemon.version)
 	}
 	// Connections are checked before their creating control process starts and
 	// keep addressing that exact daemon for their entire lifetime.
@@ -97,7 +97,7 @@ func (s Server) checkCore(ctx context.Context, absentCleanup bool) (Server, erro
 	}
 	identity, err := s.probeServerIdentity(ctx, coreVersionIdentityFields())
 	if err == nil {
-		if err := requireSupportedVersion(identity.version); err != nil {
+		if err := s.requireDaemonVersion(identity.version); err != nil {
 			return Server{}, err
 		}
 		return s.withDaemon(identity), nil
@@ -112,7 +112,7 @@ func (s Server) checkCore(ctx context.Context, absentCleanup bool) (Server, erro
 	if err != nil {
 		return Server{}, err
 	}
-	if err := requireSupportedVersion(version); err != nil {
+	if err := s.requireDaemonVersion(version); err != nil {
 		return Server{}, err
 	}
 	s.startupVersion = &version
@@ -126,4 +126,14 @@ func coreVersionIdentityFields() []formatField {
 		{name: "socket_path"},
 		{name: "version"},
 	}
+}
+
+func (s Server) requireDaemonVersion(current Version) error {
+	if err := requireSupportedVersion(current); err != nil {
+		return err
+	}
+	if s.requiredVersion.raw != "" && !current.meetsMinimum(s.requiredVersion) {
+		return &VersionTooLowError{Current: current, Minimum: s.requiredVersion}
+	}
+	return nil
 }

@@ -27,6 +27,7 @@ func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testin
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)
@@ -178,6 +179,7 @@ func TestControlClientSurvivesItsStartupSession(t *testing.T) {
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "survivor"}); err != nil {
 		t.Fatal(err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, startup)
 	if err != nil {
 		t.Fatal(err)
@@ -233,6 +235,7 @@ func TestControlClientReplyFenceAgainstRealTmux(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)
@@ -286,6 +289,7 @@ func TestControlClientCanceledCallDrainsBeforeReuseAgainstRealTmux(t *testing.T)
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)
@@ -369,6 +373,7 @@ func TestControlClientPreservesCommandArgumentBytesAgainstRealTmux(t *testing.T)
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatal(err)
@@ -410,6 +415,7 @@ func TestControlClientReconnectsAfterWaitWithoutLosingExitNotification(t *testin
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatal(err)
@@ -465,6 +471,7 @@ func TestControlClientDemultiplexesPaneOutputAgainstRealTmux(t *testing.T) {
 	if err != nil || len(panes) != 1 {
 		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	client, err := server.OpenControl(ctx, sessions[0])
 	if err != nil {
 		t.Fatal(err)

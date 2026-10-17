@@ -31,7 +31,7 @@ func requireNoDetachOnDestroy(t *testing.T, server tmux.Server) {
 }
 
 //libtmux:real-tmux
-func TestNewSessionConnectionKeepsTheCreatingControlProcess(t *testing.T) {
+func TestNewSessionConnectionQualifiesColdDaemonBeforeAttach(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	realBinary, err := exec.LookPath("tmux")
@@ -70,6 +70,7 @@ exec "$LIBTMUX_CONNECTION_REAL_TMUX" "$@"
 		_ = server.Kill(killCtx)
 	})
 
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	created, connection, err := server.NewSessionConnection(
 		ctx,
 		tmux.NewSessionRequest{Name: "bootstrap", Width: 80, Height: 24},
@@ -93,11 +94,11 @@ exec "$LIBTMUX_CONNECTION_REAL_TMUX" "$@"
 		t.Fatalf("read tmux proxy invocations: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
-	if !slices.Contains(lines, "control creation") {
-		t.Fatalf("tmux proxy invocations = %q, want control-mode session creation", lines)
+	if slices.Contains(lines, "control creation") {
+		t.Fatalf("tmux proxy invocations = %q, cold creation must precede control", lines)
 	}
-	if slices.Contains(lines, "process creation") {
-		t.Fatalf("tmux proxy invocations = %q, want no process session creation", lines)
+	if !slices.Contains(lines, "process creation") {
+		t.Fatalf("tmux proxy invocations = %q, want ordinary process session creation", lines)
 	}
 	if err := connection.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
@@ -133,6 +134,7 @@ func TestNewSessionConnectionRetainsGuardedCreator(t *testing.T) {
 		t.Fatalf("install client-attached hook = (%#v, %v), want exit 0", result, err)
 	}
 
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	created, connection, err := sessions[0].Server().NewSessionConnection(
 		ctx,
 		tmux.NewSessionRequest{Name: "guarded-bootstrap"},
@@ -165,6 +167,7 @@ func TestConnectionOwnsTerminalControlLanes(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{Lanes: 2})
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)
@@ -220,6 +223,7 @@ func TestConnectionSurvivesAttachedSessionDestruction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, attached.Server(), tmux.MinimumConnectionVersion)
 	connection, err := attached.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -249,6 +253,7 @@ func TestNewSessionConnectionSurvivesCreatedSessionDestruction(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireNoDetachOnDestroy(t, server)
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	created, connection, err := server.NewSessionConnection(
 		ctx,
 		tmux.NewSessionRequest{Name: "created"},
@@ -322,6 +327,7 @@ func TestConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 		t.Fatalf("install replacement attach hook = (%#v, %v)", result, err)
 	}
 
+	tmuxtest.RequireVersion(t.Context(), t, stale.Server(), tmux.MinimumConnectionVersion)
 	connection, err := stale.OpenControl(ctx, tmux.ConnectionOptions{})
 	if connection != nil {
 		_ = connection.Close()
@@ -370,6 +376,7 @@ func TestNewSessionConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 		t.Fatalf("start replacement daemon: %v", err)
 	}
 
+	tmuxtest.RequireVersion(t.Context(), t, stale, tmux.MinimumConnectionVersion)
 	created, connection, err := stale.NewSessionConnection(
 		ctx,
 		tmux.NewSessionRequest{},
@@ -409,6 +416,7 @@ func openOwnedConnection(
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%d, %v), want one", len(sessions), err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	connection, err := sessions[0].OpenControl(ctx, options)
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)

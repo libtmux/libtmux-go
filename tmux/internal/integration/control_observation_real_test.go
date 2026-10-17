@@ -45,6 +45,7 @@ func TestPaneObservationLinearizesBaselineAndOutput(t *testing.T) {
 	if err := sessions[0].SetHook(ctx, "after-capture-pane", hook); err != nil {
 		t.Fatal(err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, panes[0].Server(), tmux.MinimumConnectionVersion)
 	observation, err := panes[0].OpenObservation(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -120,6 +121,7 @@ func TestPaneObservationOwnsLinkedSessionAndDetectsUnlink(t *testing.T) {
 		)
 	}
 
+	tmuxtest.RequireVersion(t.Context(), t, ownerPanes[0].Server(), tmux.MinimumConnectionVersion)
 	otherSessionObservation, err := ownerPanes[0].OpenObservation(ctx)
 	if err != nil {
 		t.Fatalf("OpenObservation(other session) error = %v", err)
@@ -161,6 +163,7 @@ func TestPaneObservationOwnsLinkedSessionAndDetectsUnlink(t *testing.T) {
 	if linkedWindow.ID() == "" || linkedPane.ID() == "" {
 		t.Fatal("linked window or pane view was not materialized")
 	}
+	tmuxtest.RequireVersion(t.Context(), t, linkedPane.Server(), tmux.MinimumConnectionVersion)
 	observation, err := linkedPane.OpenObservation(ctx)
 	if err != nil {
 		t.Fatalf("OpenObservation(linked pane) error = %v", err)
@@ -242,6 +245,7 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 	// A queued command's output can follow its prompt on the same terminal line.
 	tmuxtest.TypeAndWait(ctx, t, first, "PS1=''")
 
+	tmuxtest.RequireVersion(t.Context(), t, first.Server(), tmux.MinimumConnectionVersion)
 	observation, err := first.OpenObservation(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -302,6 +306,7 @@ func TestNotificationIteratorsRange(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
 	if err != nil {
 		t.Fatal(err)

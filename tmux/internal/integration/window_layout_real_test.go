@@ -189,6 +189,7 @@ func TestLayoutPreflightControlPlanRetainsKeeper(t *testing.T) {
 		t.Fatal(err)
 	}
 	keeper := sessions[0]
+	tmuxtest.RequireVersion(t.Context(), t, keeper.Server(), tmux.MinimumConnectionVersion)
 	connection, err := keeper.OpenControl(t.Context(), tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatal(err)
