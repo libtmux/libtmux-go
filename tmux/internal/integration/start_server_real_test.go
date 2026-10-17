@@ -38,7 +38,12 @@ func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			root := t.TempDir()
+			// Keep the complete native socket path short on macOS too.
+			root, err := os.MkdirTemp("", "ltg-cold-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.RemoveAll(root) })
 			if err := os.Mkdir(filepath.Join(root, "tmux-"+strconv.Itoa(os.Getuid())), 0o700); err != nil {
 				t.Fatalf("Mkdir() = %v", err)
 			}

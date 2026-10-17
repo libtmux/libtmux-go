@@ -237,7 +237,7 @@ func TestCoreVersionCheckCanceledContextDoesNotProbe(t *testing.T) {
 
 func rawAdmissionServer(t *testing.T, runner commandRunner) Server {
 	t.Helper()
-	server, err := NewServer(ServerOptions{Binary: "/bin/false"})
+	server, err := NewServer(ServerOptions{Binary: "false"})
 	if err != nil {
 		t.Fatal(err)
 	}
