@@ -5,36 +5,73 @@ import (
 	"errors"
 	"regexp"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 )
 
 var (
 	minimumSupportedVersion = Version{raw: MinimumSupportedVersion, major: 3, minor: 3}
-	admissionReleasePattern = regexp.MustCompile(
-		`^(next-)?[0-9]+\.[0-9]+(?:\.[0-9]+)?` +
-			`([a-z]?)(?:-(master|dev|rc[0-9]+))?$`,
+
+	// versionReleasePattern is the grammar tmux has reported through
+	// #{version}: a release with at most one patch letter, a release
+	// candidate (bare or numbered) of an unpatched release, or the development
+	// build next-X.Y. Suffixes such as -master or -dev never came from tmux.
+	versionReleasePattern = regexp.MustCompile(
+		`^(?:(next)-([0-9]+)\.([0-9]+)|([0-9]+)\.([0-9]+)(?:\.([0-9]+))?` +
+			`(?:([a-z])|-rc([0-9]*))?)$`,
 	)
 )
 
-// meetsMinimum keeps diagnostic parsing separate from qualified admission and
-// compares patch letters before a development suffix on the same numeric core.
+// Release stages order next-X.Y below X.Y-rc below X.Y, which a patch letter
+// then follows.
+const (
+	stageNext = iota
+	stageCandidate
+	stageRelease
+)
+
+// versionKey orders qualified tokens: major, minor, patch, stage, then the
+// candidate number or patch letter. ok is false outside the grammar.
+func versionKey(raw string) (key [6]int, ok bool) {
+	match := versionReleasePattern.FindStringSubmatch(raw)
+	if match == nil {
+		return key, false
+	}
+	number := func(text string) int {
+		value, err := strconv.Atoi(text)
+		if err != nil {
+			return 0
+		}
+		return value
+	}
+	if match[1] == "next" {
+		return [6]int{number(match[2]), number(match[3]), 0, stageNext, 0, 0}, true
+	}
+	key = [6]int{number(match[4]), number(match[5]), number(match[6]), stageRelease, 0, 0}
+	switch {
+	case match[7] != "":
+		key[4] = int(match[7][0]-'a') + 1
+	case strings.Contains(raw, "-rc"):
+		key[3] = stageCandidate
+		key[4] = number(match[8])
+	}
+	return key, true
+}
+
+// meetsMinimum keeps diagnostic parsing separate from the qualified version check. It
+// orders tokens by the grammar above, so a candidate or development build
+// ranks below the release it names.
 func (v Version) meetsMinimum(minimum Version) bool {
-	current := admissionReleasePattern.FindStringSubmatch(v.raw)
-	if current == nil {
+	current, ok := versionKey(v.raw)
+	if !ok {
 		return false
 	}
-	if v.major != minimum.major || v.minor != minimum.minor || v.patch != minimum.patch {
-		return v.Compare(minimum) > 0
-	}
-	required := admissionReleasePattern.FindStringSubmatch(minimum.raw)
-	if required == nil {
+	required, ok := versionKey(minimum.raw)
+	if !ok {
 		return false
 	}
-	if current[2] != required[2] {
-		return current[2] > required[2]
-	}
-	return v.development >= minimum.development && current[1] == "" &&
-		!strings.HasPrefix(current[3], "rc")
+	return slices.Compare(current[:], required[:]) >= 0
 }
 
 func requireSupportedVersion(current Version) error {
