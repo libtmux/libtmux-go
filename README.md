@@ -730,7 +730,7 @@ period, so pin an exact version. Not recommended for production.
 - **No runtime dependencies.** The core module imports only the standard
   library.
 - **Go 1.26+**, rising with Go's own support window, about twice a year.
-  tmux **3.3a through 3.8-rc2** across the core, workspace, and MCP modules,
+  tmux **3.3a through 3.8** across the core, workspace, and MCP modules,
   tested on releases spanning that range.
 - **Unix.** Linux and macOS are tested on every change, and the BSDs, illumos,
   and Plan 9 build. A Windows build compiles, so a cross-platform program

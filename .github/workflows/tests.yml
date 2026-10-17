@@ -348,21 +348,27 @@ jobs:
 
   # The supported tmux range is a claim the README makes, so something has to
   # check it. Ubuntu ships one tmux; version-specific breakage is why this
-  # exists -- 3.4 stopped taking split-window's -p that 3.3a and 3.5 both take,
-  # and pane_start_path does not exist before 3.3.
+  # exists -- 3.4 stopped taking split-window's -p that 3.3a and 3.5 both take.
   #
-  # 3.8-rc2 is in the list because this module carries code that only runs on
-  # tmux 3.8 and later - JSON layouts, twelve format fields, a popup guard,
-  # session-scoped subscriptions - and a release candidate gates as
-  # steadily as a release does. tmux -V reports it as "tmux 3.8-rc2", which
-  # this module reads as 3.8.
+  # This module carries code that only runs on tmux 3.8 and later - JSON
+  # layouts, twelve format fields, a popup guard, session-scoped subscriptions
+  # - so the list ends with the 3.8-rc2 candidate, the final 3.8 and tmux
+  # master. The version check ranks a candidate below its release, so 3.8-rc2 is
+  # checked as the build that precedes 3.8, not as 3.8. Master reports
+  # "next-X.Y"; it moves, so its lane is advisory. It runs every module's full
+  # suite and is expected to pass: a red master lane means upstream changed
+  # something this library has not followed yet, to fix in its own change, and
+  # it never blocks the one under review. The only tests that skip on master
+  # are the popup tests that need a client overlay, which tmux replaced with a
+  # floating pane.
   tmux-matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: ${{ matrix.tmux-version == 'master' }}
     strategy:
       fail-fast: false
       matrix:
-        tmux-version: ['3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c', '3.8-rc2']
+        tmux-version: ['3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c', '3.8-rc2', '3.8', 'master']
     steps:
       - uses: actions/checkout@v7
 
@@ -376,7 +382,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/tmux-builds/tmux-${{ matrix.tmux-version }}
-          key: tmux-${{ matrix.tmux-version }}
+          key: tmux-${{ matrix.tmux-version }}${{ matrix.tmux-version == 'master' && format('-{0}', github.run_id) || '' }}
 
       - name: Build tmux ${{ matrix.tmux-version }}
         if: steps.tmux-cache.outputs.cache-hit != 'true'
@@ -402,7 +408,12 @@ jobs:
           export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
           actual_version=$(tmux -V)
           expected_version="tmux $TMUX_VERSION"
-          if [ "$actual_version" != "$expected_version" ]; then
+          if [ "$TMUX_VERSION" = master ]; then
+            case "$actual_version" in
+              "tmux next-"*) ;;
+              *) echo "::error::expected a next-X.Y master build, got $actual_version" >&2; exit 1 ;;
+            esac
+          elif [ "$actual_version" != "$expected_version" ]; then
             echo "::error::expected $expected_version, got $actual_version" >&2
             exit 1
           fi
