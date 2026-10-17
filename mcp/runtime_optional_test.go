@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
@@ -105,5 +106,63 @@ func TestOlderPasteStagingRefusesBeforeTheFirstChunk(t *testing.T) {
 	err := registry.stageBuffer(t.Context(), target, "never-created", "text")
 	if !errors.Is(err, tmux.ErrVersionTooLow) || chunks != 0 {
 		t.Fatalf("unsafe staging = %v, wrote %d chunks", err, chunks)
+	}
+}
+
+// Below 3.7 there is no control observation, so wait_for_text must poll with
+// capture-pane instead of refusing, and must not attempt control first.
+func TestOlderWaitForTextPollsInsteadOfRefusing(t *testing.T) {
+	old := os.Getenv("LIBTMUX_OPTIONAL_OLD_TMUX")
+	if old == "" {
+		t.Skip("set LIBTMUX_OPTIONAL_OLD_TMUX to exact tmux3.3a")
+	}
+	record := filepath.Join(t.TempDir(), "control-attempt")
+	proxy := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+case "$*" in *' run-shell '*) exec "$MCP_OPTIONAL_BINARY" "$@" ;; esac
+for argument do
+    if [ "$argument" = -C ]; then printf 'unsafe\n' >> "$MCP_OPTIONAL_RECORD"; fi
+done
+exec "$MCP_OPTIONAL_BINARY" "$@"
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
+		Binary: proxy, FixedShell: true,
+		InitialSession:     &tmux.NewSessionRequest{Name: "keeper"},
+		ProcessEnvironment: append(os.Environ(), "MCP_OPTIONAL_RECORD="+record, "MCP_OPTIONAL_BINARY="+old),
+	})
+	instance := mustInternalMCPServer(t, target)
+	t.Cleanup(func() { _ = instance.Close() })
+	sessions, err := target.Sessions(ctx)
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("Sessions() = (%v, %v)", sessions, err)
+	}
+	pane, err := sessions[0].ResolveActivePane(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmuxtest.WaitForShellReady(ctx, t, pane)
+
+	const marker = "POLLED-MARKER-OK"
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		command := "echo " + marker
+		_ = pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command, Literal: true})
+	}()
+	_, output, err := instance.tools.waitForText(ctx, nil, waitForTextInput{
+		PaneID: pane.ID().String(), Patterns: []string{"POLLED-MARKER-O" + "K"},
+		SinceEntry: true, TimeoutSeconds: 15,
+	})
+	if err != nil {
+		t.Fatalf("wait_for_text on 3.3a = %v, want a polled wait", err)
+	}
+	if output.Outcome != outcomeMatched || !output.Found {
+		t.Fatalf("wait_for_text on 3.3a = %+v, want a match", output)
+	}
+	if data, err := os.ReadFile(record); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("polled wait attempted control: %q %v", data, err)
 	}
 }

@@ -2051,6 +2051,7 @@ Reads only (effect `observe`). Repeating it changes nothing.
 | `paneId` **required** | string |
 | `pendingInputOnly` **required** | boolean |
 | `truncated` **required** | boolean |
+| `endNote` | string |
 | `entryNote` | string |
 | `lines` | array |
 | `matched` | string |

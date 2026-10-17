@@ -324,7 +324,7 @@ func surfaceSweep() []surfaceStep {
 		{tool: "find_pane_by_position", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"window_id": f.window, "position": "top-left"}
 		}},
-		{tool: "wait_for_text", minimum: tmux.MinimumConnectionVersion, arguments: func(f *surfaceFixture) map[string]any {
+		{tool: "wait_for_text", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{
 				"pane_id": f.pane, "patterns": []any{"tmuxtest"}, "timeout": 5,
 			}
