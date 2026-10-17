@@ -35,6 +35,7 @@ anything is sent, and only on the releases that need it:
 - Raw `split-window -p` is refused on 3.4 alone.
 - Raw `break-pane` is refused on exact 3.7. Typed `BreakPane` with a name
   repairs it there.
+- A window or session name holding a colon or period is refused on exact 3.7.
 - Raw `select-layout` with an unparseable layout, an empty one, or `-o` is
   refused on 3.3a. A preset or a unique prefix of one, a classic layout string,
   and `-n`, `-p` and `-E` are sent.

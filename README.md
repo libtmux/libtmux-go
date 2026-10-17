@@ -56,6 +56,7 @@ Optional features have their own requirements:
 | Foreground `RunShell` captured client output without `TargetPane` | 3.5 |
 | Owned control clients, connections, notifications, pane observations | 3.7 |
 | Native raw `break-pane` and unnamed typed `BreakPane` on exact 3.7 | 3.7a |
+| Window and session names holding `:` or `.` on exact 3.7 | 3.7a |
 | Native raw `select-layout` with an unparseable layout, or `-o`, on 3.3a | 3.4 |
 
 On exact 3.7, typed `BreakPane` with an explicit name retains its naming repair.

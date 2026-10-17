@@ -43,6 +43,22 @@ func (s Server) checkCommandFeatures(arguments []string, commandList, raw bool) 
 						Subcommand: item[0], Feature: "percentage",
 					}
 				}
+			case matchesNativeCommand(item[0], "new-window", "neww", 5):
+				if err := checkExact37Name(current, item, "cFnet", "n"); err != nil {
+					return err
+				}
+			case matchesNativeCommand(item[0], "new-session", "new", 5):
+				if err := checkExact37Name(current, item, "cEFfnsttxy", "ns"); err != nil {
+					return err
+				}
+			case matchesNativeCommand(item[0], "rename-window", "renamew", 8):
+				if err := checkExact37Positional(current, item, "t"); err != nil {
+					return err
+				}
+			case matchesNativeCommand(item[0], "rename-session", "rename", 8):
+				if err := checkExact37Positional(current, item, "t"); err != nil {
+					return err
+				}
 			case matchesNativeCommand(item[0], "break-pane", "breakp", 2):
 				if raw && current.meetsMinimum(exactBreakPaneVersion) &&
 					!current.meetsMinimum(patchedBreakPaneVersion) {
@@ -109,4 +125,78 @@ func directCommandOptions(arguments []string, valued string) map[byte]bool {
 
 func matchesNativeCommand(verb, canonical, alias string, prefix int) bool {
 	return verb == alias || (len(verb) >= prefix && len(verb) <= len(canonical) && canonical[:len(verb)] == verb)
+}
+
+// checkExact37Name refuses a window or session name tmux 3.7 mishandles: only
+// that release rejects a colon or period in a name, so it is the only one
+// checked, and 3.7a and newer are left to tmux.
+func checkExact37Name(current Version, item []string, valued, names string) error {
+	if !isExact37(current) {
+		return nil
+	}
+	values, _ := directCommandValues(item, valued)
+	for _, flag := range names {
+		if name, ok := values[byte(flag)]; ok && strings.ContainsAny(name, ":.") {
+			return &VersionTooLowError{
+				Current: current, Minimum: patchedBreakPaneVersion,
+				Subcommand: item[0], Feature: "name_colon_or_period",
+			}
+		}
+	}
+	return nil
+}
+
+// checkExact37Positional applies the same refusal to the new name that
+// rename-window and rename-session take as their last operand.
+func checkExact37Positional(current Version, item []string, valued string) error {
+	if !isExact37(current) {
+		return nil
+	}
+	_, operands := directCommandValues(item, valued)
+	if len(operands) > 0 && strings.ContainsAny(operands[len(operands)-1], ":.") {
+		return &VersionTooLowError{
+			Current: current, Minimum: patchedBreakPaneVersion,
+			Subcommand: item[0], Feature: "name_colon_or_period",
+		}
+	}
+	return nil
+}
+
+func isExact37(current Version) bool {
+	return current.meetsMinimum(exactBreakPaneVersion) &&
+		!current.meetsMinimum(patchedBreakPaneVersion)
+}
+
+// directCommandValues returns the value of each valued flag in one command
+// item and the operands after its flags.
+func directCommandValues(arguments []string, valued string) (map[byte]string, []string) {
+	values := make(map[byte]string)
+	index := 1
+	for ; index < len(arguments); index++ {
+		argument := arguments[index]
+		if argument == "--" {
+			index++
+			break
+		}
+		if argument == "-" || !strings.HasPrefix(argument, "-") {
+			break
+		}
+		for offset := 1; offset < len(argument); offset++ {
+			flag := argument[offset]
+			if !strings.ContainsRune(valued, rune(flag)) {
+				continue
+			}
+			if offset < len(argument)-1 {
+				values[flag] = argument[offset+1:]
+			} else if index+1 < len(arguments) {
+				index++
+				values[flag] = arguments[index]
+			}
+			break
+		}
+	}
+	if index > len(arguments) {
+		index = len(arguments)
+	}
+	return values, arguments[index:]
 }
