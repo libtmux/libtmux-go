@@ -2,10 +2,13 @@ package tmux_test
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -54,6 +57,13 @@ func TestVersionCheckFiresNoUserHooks(t *testing.T) {
 	for range 3 {
 		cmd("list-sessions")
 	}
+	// A mirrored layout needs the daemon version, which layout validation
+	// reads without dispatching anything. Releases before 3.5 refuse it.
+	if err := server.ValidateLayouts(ctx, func(yield func(string, int) bool) {
+		yield("main-horizontal-mirrored", 1)
+	}); err != nil && !errors.Is(err, tmux.ErrVersionTooLow) {
+		t.Fatalf("ValidateLayouts() = %v", err)
+	}
 	if got := fired(afterDisplayMessage); got != "" {
 		t.Errorf("version check fired after-display-message: %q", got)
 	}
@@ -74,5 +84,37 @@ func TestVersionCheckFiresNoUserHooks(t *testing.T) {
 		if got := fired(commandError); got != "fired" {
 			t.Errorf("failing-command control did not fire command-error: %q", got)
 		}
+	}
+}
+
+// The probe reads the socket path back through tmux's own parser, so bytes the
+// parser treats specially must survive on every release.
+//
+//libtmux:real-tmux
+func TestVersionCheckRecoversUnusualSocketPaths(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	executable := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{}).Executable()
+	for _, name := range []string{"a b", "a'b", `a"b`, "a;b", "a#b", "a$b", "a~b", "a|b", "a=b", `a\b`, "a,b", "a''b"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			server, err := tmux.NewServer(tmux.ServerOptions{
+				Binary:     executable,
+				SocketPath: filepath.Join(root, name),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _, _ = server.Cmd(context.Background(), "kill-server") })
+			if _, err := server.Cmd(ctx, "new-session", "-d", "-s", "anchor", "sleep 60"); err != nil {
+				t.Fatalf("start daemon: %v", err)
+			}
+			// A path recovered wrongly would fail the replaced-daemon fence.
+			session, err := server.Cmd(ctx, "list-sessions", "-F", "#{session_name}")
+			if err != nil || session.ExitCode != 0 || strings.Join(session.Stdout, "") != "anchor" {
+				t.Fatalf("list-sessions = (%#v, %v)", session, err)
+			}
+		})
 	}
 }
