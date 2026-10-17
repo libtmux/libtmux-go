@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/examples/internal/exampletest"
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -20,6 +21,7 @@ func TestRunToCompletion(t *testing.T) {
 	defer cancel()
 
 	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	tmuxtest.RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	printed := exampletest.Output(t, func() error { return run(ctx, server) })
 	// The streamed lines are the terminal's bytes and end "\r\n"; the page
 	// shows them as a terminal draws them.

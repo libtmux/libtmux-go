@@ -25,5 +25,35 @@ its version until it exits, or pin the previous libtmux-go release.
 The check relies on tmux's built-in commands, so a `command-alias` that
 redefines one defeats it.
 
+## Optional feature checks
+
+Some operations need more than the 3.3a floor, or meet a defect in one release.
+Each is refused with [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] before
+anything is sent, and only on the releases that need it:
+
+- Named buffer deletion or rename needs 3.4.
+- Raw `split-window -p` is refused on 3.4 alone.
+- Raw `break-pane` is refused on exact 3.7. Typed `BreakPane` with a name
+  repairs it there.
+- Raw `select-layout` with an unparseable layout, an empty one, or `-o` is
+  refused on 3.3a. A preset or a unique prefix of one, a classic layout string,
+  and `-n`, `-p` and `-E` are sent.
+- Owned control clients, connections and observations need 3.7.
+
+The checks read the literal command, and resolve its name the way tmux does: an
+alias such as `breakp` or `new`, or a unique prefix such as `break-p`, in any
+item of a `;` list. They apply to `Server.Cmd`, `Connection.Call` and
+`ControlClient.Call` alike.
+
+tmux command strings nested in another command are not checked. That covers an
+`if-shell` or `run-shell -C` command, and the body of a brace block. A command
+there reaches tmux as written, so do not nest one this library would refuse.
+Shell programs and the contents of configured aliases are not checked either.
+
+The list above is what the capability manifest records. A flag that only one
+request field needs, such as a popup, search or `display-message` option, is
+documented on that field and refused where the request is built; the manifest
+does not list those.
+
 [tmux-errversiontoolow]: https://libtmux.org/en/go/latest/reference/tmux-errversiontoolow/
 [tmux-server-version]: https://libtmux.org/en/go/latest/reference/tmux-server-version/

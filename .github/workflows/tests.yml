@@ -85,7 +85,7 @@ jobs:
         run: |
           tmux -V
           go vet ./...
-          go test -race -count=1 -coverpkg=./... -coverprofile=coverage.out ./...
+          "$GITHUB_WORKSPACE/scripts/test-module.sh" "${{ matrix.module }}" -race -count=1 -coverpkg=./... -coverprofile=coverage.out
 
       # An artifact name cannot contain a path separator, and one module is
       # nested, so the separator becomes a dash.
@@ -388,8 +388,67 @@ jobs:
           mkdir -p "$TMUX_TMPDIR"
           for module in . examples workspace mcp benchmarks internal/tools; do
             echo "--- $module: full suite ---"
-            (cd "$module" && go test -count=1 ./...)
+            ./scripts/test-module.sh "$module" -count=1
           done
+
+      # Tests that put a 3.3a daemon beside this lane's newer client skip
+      # without a 3.3a build, and a lane that skips them proves nothing. Lanes
+      # from 3.7 up have the control client those tests start, so they build
+      # 3.3a, name it, and fail if any of the tests does not run and pass.
+      - name: Cache the tmux 3.3a build for the older-daemon tests
+        id: older-cache
+        if: contains(fromJSON('["3.7", "3.7a", "3.7b", "3.7c", "3.8-rc2", "3.8", "master"]'), matrix.tmux-version)
+        uses: actions/cache@v6
+        with:
+          path: ~/tmux-builds/tmux-3.3a
+          key: tmux-3.3a
+
+      - name: Build tmux 3.3a for the older-daemon tests
+        if: steps.older-cache.outcome == 'success' && steps.older-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
+            libutempter-dev bison autoconf automake pkg-config
+          git clone --depth 1 --branch 3.3a \
+            https://github.com/tmux/tmux.git ~/tmux-src-3.3a
+          cd ~/tmux-src-3.3a
+          sh autogen.sh
+          ./configure --prefix="$HOME/tmux-builds/tmux-3.3a"
+          make && make install
+
+      - name: Run the older-daemon tests against tmux ${{ matrix.tmux-version }}
+        if: steps.older-cache.outcome == 'success'
+        env:
+          TMUX_VERSION: ${{ matrix.tmux-version }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libevent-2.1-7
+          export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
+          export LIBTMUX_OPTIONAL_OLD_TMUX="$HOME/tmux-builds/tmux-3.3a/bin/tmux"
+          test "$("$LIBTMUX_OPTIONAL_OLD_TMUX" -V)" = 'tmux 3.3a'
+          mkdir -p "$TMUX_TMPDIR"
+          set -o pipefail
+          run_required() {
+            module=$1; shift
+            regex="^($(printf '%s|' "$@" | sed 's/|$//'))\$"
+            ./scripts/test-module.sh "$module" -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/older.log"
+            for name in "$@"; do
+              grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/older.log" || { echo "::error::$name did not run and pass"; exit 1; }
+            done
+          }
+          run_required . \
+            TestOptionalControlRejectsOlderSupportedDaemon \
+            TestOptionalColdControlRejectsOlderExecutable \
+            TestOptionalColdBootstrapKeepsItsFeatureFloor \
+            TestPinnedControlSocketPreventsReplacement \
+            TestOptionalRefusalsLeaveOlderCoreStateIntact \
+            TestStartControlModeRefusesOlderSupportedDaemon
+          run_required workspace TestWorkspaceChoosesAnEligibleTransport
+          run_required mcp \
+            TestOlderCoreRuntimeKeepsItsProcessLane \
+            TestOlderCoreRuntimeBootstrapsWithoutControl \
+            TestOlderPasteStagingRefusesBeforeTheFirstChunk \
+            TestOlderWaitForTextPollsInsteadOfRefusing
 
   tmux-rejected:
     runs-on: ubuntu-latest

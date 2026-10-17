@@ -436,6 +436,12 @@ elicitation request: a question the client puts to you on the server's behalf.
 
 ## Known limits
 
+- **Some tools require a newer tmux.** Startup and ordinary tools support
+  3.3a, including `capture_since` and `run_shell_command`. Non-empty
+  `paste_text` requires 3.4 before staging any buffer; `wait_for_text` requires
+  the qualified 3.7 control engine. Restricted tools return an explicit version
+  error on older supported daemons. The runtime uses subprocess commands below
+  3.7 and a retained control connection from 3.7.
 - **Every tool is annotated as destructive.** [`list_sessions`][list_sessions]
   included, each carries `destructiveHint=true` and no `readOnlyHint`. Classify
   by `tmuxEffects` in each tool's `_meta`.
@@ -448,8 +454,6 @@ elicitation request: a question the client puts to you on the server's behalf.
   `exit_status`; the rest return fields such as `paneId`.
 - **An empty `TMUX` counts as set.** Input tools refuse when `TMUX` or
   `TMUX_PANE` is set to nothing. Unset them instead.
-- **Before tmux 3.6, killing one session can end the server.** tmux 3.6 and
-  later move the server's connection to a session that remains.
 
 [The contract][contract-known-limits] gives the reason for each, and
 [PARITY.md](PARITY.md) covers the result spellings.

@@ -270,6 +270,9 @@ That workspace names its session `review`, so the block prints `review 2`.
   anything.
 - **A build is not atomic.** tmux has no transaction, so a failure partway
   through leaves what was already created. The returned session identifies it.
+- **A control connection from tmux 3.7.** Below tmux 3.7, `Build` uses
+  ordinary subprocess operations. On qualified tmux 3.7 or newer it holds a
+  control connection that tmux counts as a client until `Build` returns.
 - **The session carries no windows.** Ask tmux with
   [`Session.SearchWindows`][tmux-session-searchwindows], as the quick start
   does.
@@ -279,8 +282,8 @@ That workspace names its session `review`, so the block prints `review 2`.
 
 ### [`workspace.BuildInto`][workspace-buildinto]: build into a session you made
 
-When the session has to exist first, for example to keep the connection that
-created it,
+When the session has to exist first, for example to retain a connection on
+tmux 3.7 or newer,
 [`Workspace.InitialSessionRequest`][workspace-workspace-initialsessionrequest]
 gives the request that creates it and [`BuildInto`][workspace-buildinto] fills
 in the rest:

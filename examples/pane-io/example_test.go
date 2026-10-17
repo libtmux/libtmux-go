@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/examples/internal/exampletest"
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -19,8 +20,10 @@ func TestPaneIO(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	server := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t))
+		return run(ctx, server)
 	})
 
 	exampletest.MatchesFile(t, printed, "output.txt")
@@ -35,6 +38,7 @@ func TestPaneIOWhenTheShellStartsSlowly(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		Config: exampletest.SlowShell(t),
 	})
+	tmuxtest.RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	printed := exampletest.Output(t, func() error { return run(ctx, server) })
 
 	exampletest.MatchesFile(t, printed, "output.txt")
@@ -47,6 +51,7 @@ func TestPaneIODoesNotTakeItsEchoForAnAnswer(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{
 		Config: exampletest.MuteShell(t),
 	})
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
