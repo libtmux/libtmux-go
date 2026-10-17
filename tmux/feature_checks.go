@@ -5,6 +5,7 @@ import "strings"
 var (
 	namedBufferMinimumVersion   = Version{raw: "3.4", major: 3, minor: 4}
 	capturedShellMinimumVersion = Version{raw: "3.5", major: 3, minor: 5}
+	exactBreakPaneVersion       = Version{raw: "3.7", major: 3, minor: 7}
 	patchedBreakPaneVersion     = Version{raw: "3.7a", major: 3, minor: 7}
 )
 
@@ -18,6 +19,12 @@ func (s Server) checkCommandFeatures(arguments []string, commandList, raw bool) 
 	if s.startupVersion != nil {
 		current = *s.startupVersion
 	}
+	if s.connection != nil && current.raw == "" {
+		// OpenControl checks the version before attaching, so a connection carries its
+		// daemon. A fixture-built handle without one has no version to check;
+		// it must not be refused with an empty Current.
+		return nil
+	}
 	for _, item := range directCommandItems(arguments, commandList) {
 		if len(item) != 0 {
 			namedCleanup := false
@@ -28,8 +35,8 @@ func (s Server) checkCommandFeatures(arguments []string, commandList, raw bool) 
 				flags := directCommandOptions(item, "btn")
 				namedCleanup = flags['b'] && flags['n']
 			case matchesNativeCommand(item[0], "split-window", "splitw", 2):
-				if current.AtLeast(namedBufferMinimumVersion) &&
-					!current.AtLeast(capturedShellMinimumVersion) &&
+				if current.meetsMinimum(namedBufferMinimumVersion) &&
+					!current.meetsMinimum(capturedShellMinimumVersion) &&
 					directCommandOptions(item, "ceFlpt")['p'] {
 					return &VersionTooLowError{
 						Current: current, Minimum: capturedShellMinimumVersion,
@@ -37,7 +44,8 @@ func (s Server) checkCommandFeatures(arguments []string, commandList, raw bool) 
 					}
 				}
 			case matchesNativeCommand(item[0], "break-pane", "breakp", 2):
-				if raw && current.String() == "3.7" {
+				if raw && current.meetsMinimum(exactBreakPaneVersion) &&
+					!current.meetsMinimum(patchedBreakPaneVersion) {
 					return &VersionTooLowError{Current: current, Minimum: patchedBreakPaneVersion, Subcommand: item[0], Feature: "raw_break_pane"}
 				}
 			}

@@ -105,6 +105,13 @@ func (s Session) OpenControl(
 			"must not be negative",
 		)
 	}
+	// Check the version before attaching so the connection carries the version it was
+	// checked at, even when the session value came without a daemon identity.
+	checked, err := s.server.checkCore(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	s = s.withServer(checked)
 	if err := s.server.RequireVersion(ctx, controlMinimumVersion); err != nil {
 		return nil, err
 	}
