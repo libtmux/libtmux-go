@@ -27,6 +27,9 @@ Modules are tagged per directory, so each carries its own version: the core as
   daemon. Unversioned OpenBSD base tmux and bare `master` reports cannot
   establish the release floor and are refused. Construction and executable
   diagnostics remain available. (#57)
+- The version check now identifies the daemon with `run-shell -C`, so a user's
+  `after-display-message` and `command-error` hooks no longer fire during the
+  probe. (#57)
 - `Session.Run` no longer handles tmux 3.2's fixed dead-pane notice; supported
   releases disable the notice with `remain-on-exit-format`. Output resembling
   the old notice is preserved. (#57)
