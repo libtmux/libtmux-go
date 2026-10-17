@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -70,7 +71,7 @@ func (s Server) checkCore(ctx context.Context, absentCleanup bool) (Server, erro
 	if absentCleanup {
 		return s, nil
 	}
-	version, err := s.Version(ctx)
+	version, err := s.queryExecutableVersion(ctx, runtime.GOOS)
 	if err != nil {
 		return Server{}, err
 	}

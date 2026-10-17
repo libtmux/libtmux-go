@@ -62,12 +62,16 @@ func TestMinimumVersionCheckHonorsPatchLetters(t *testing.T) {
 func TestCoreVersionCheckRejectsSyntheticOpenBSDQualification(t *testing.T) {
 	for _, daemon := range []string{"", "openbsd-7.8"} {
 		t.Run("daemon="+daemon, func(t *testing.T) {
-			runner := &admissionRunner{daemon: daemon}
-			server := rawAdmissionServer(t, runner)
+			runner := &versionRunner{daemon: daemon, binary: "openbsd-7.8"}
+			server := rawVersionServer(t, runner)
 			server.state.shared.version.value = Version{raw: "openbsd-7.8", major: 3, minor: 7}
 			server.state.shared.version.valid = true
 			_, err := server.Cmd(t.Context(), "set-buffer", "unreached")
-			if !errors.Is(err, ErrVersionTooLow) || runner.effects != 0 || runner.binaryProbes != 0 {
+			wantProbes := 0
+			if daemon == "" {
+				wantProbes = 1
+			}
+			if !errors.Is(err, ErrVersionTooLow) || runner.effects != 0 || runner.binaryProbes != wantProbes {
 				t.Fatalf("synthetic capability authorized dispatch: %v, effects=%d, binary probes=%d", err, runner.effects, runner.binaryProbes)
 			}
 		})

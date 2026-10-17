@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -695,4 +696,34 @@ func degradingServerWithRunner(runner commandRunner) Server {
 		ServerOptions{Unsupported: DegradeUnsupported},
 		runner,
 	)
+}
+
+func TestExecutableVersionAcceptsOnlyItsNativePrefix(t *testing.T) {
+	for _, one := range []struct {
+		report  string
+		refused bool
+	}{
+		{report: "tmux 3.3a"},
+		{report: "{executable} 3.3a"},
+		{report: "another-program 3.3a", refused: true},
+		{report: "{executable}-suffix 3.3a", refused: true},
+		{report: "{executable} 3.3a extra", refused: true},
+	} {
+		t.Run(one.report, func(t *testing.T) {
+			runner := &versionQueueRunner{}
+			server := serverWithRunner(runner)
+			name := filepath.Base(server.state.config.executable)
+			runner.responses = []versionResponse{{result: tmuxcmd.Result{Stdout: []string{
+				strings.ReplaceAll(one.report, "{executable}", name),
+			}}}}
+			version, err := server.queryExecutableVersion(t.Context(), "linux")
+			if one.refused {
+				if !errors.Is(err, ErrVersionQuery) {
+					t.Fatalf("unrelated executable prefix accepted: %s %v", version, err)
+				}
+			} else if err != nil || version.String() != "3.3a" {
+				t.Fatalf("native executable version prefix rejected: %s %v", version, err)
+			}
+		})
+	}
 }

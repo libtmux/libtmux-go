@@ -209,3 +209,134 @@ func TestCoreMinimumBoundHandleDoesNotStartOlderExecutable(t *testing.T) {
 		t.Fatalf("control startup loaded an older executable's configuration: %v", err)
 	}
 }
+
+func TestCoreMinimumColdVersionCheckIgnoresCachedExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the executable replacement fixture uses a POSIX shell")
+	}
+	old := rejectedTmuxBinary(t)
+	modern, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	socket := filepath.Join(root, "s")
+	marker := filepath.Join(root, "started")
+	configuration := filepath.Join(root, "tmux.conf")
+	if err := os.WriteFile(configuration, []byte("set -s exit-empty off\nrun-shell "+strconv.Quote("printf started > "+strconv.Quote(marker))+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	proxy := filepath.Join(root, "tmux-proxy")
+	selectBinary := func(binary string) {
+		t.Helper()
+		if err := os.WriteFile(proxy, []byte("#!/bin/sh\nexec "+strconv.Quote(binary)+" \"$@\"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	selectBinary(modern)
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: proxy, SocketPath: socket, ConfigFile: configuration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached, err := server.Version(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	minimum, err := tmux.ParseVersion(tmux.MinimumSupportedVersion)
+	if err != nil || !cached.AtLeast(minimum) {
+		t.Fatalf("modern fixture = %s %v", cached, err)
+	}
+	selectBinary(old)
+	t.Cleanup(func() { _ = exec.Command(old, "-S", socket, "kill-server").Run() })
+	_, err = server.NewSession(t.Context(), tmux.NewSessionRequest{Name: "forbidden", Command: "sleep 300"})
+	if _, markerErr := os.Stat(marker); !errors.Is(markerErr, os.ErrNotExist) {
+		t.Fatalf("cached executable version check started old configuration: marker=%v operation=%v", markerErr, err)
+	}
+	if !errors.Is(err, tmux.ErrVersionTooLow) {
+		t.Fatalf("cached executable version check error = %v, want version refusal", err)
+	}
+	if _, socketErr := os.Stat(socket); !errors.Is(socketErr, os.ErrNotExist) {
+		t.Fatalf("cached executable version check created daemon socket: %v", socketErr)
+	}
+}
+
+func TestCoreMinimumColdFeatureRequirementUsesFreshExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the executable replacement fixture uses a POSIX shell")
+	}
+	olderSupported := os.Getenv("LIBTMUX_FLOOR_TMUX")
+	if olderSupported == "" {
+		t.Skip("set LIBTMUX_FLOOR_TMUX to exact tmux3.3a")
+	}
+	modern, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	proxy := filepath.Join(root, "tmux-proxy")
+	selectBinary := func(binary string) {
+		t.Helper()
+		if err := os.WriteFile(proxy, []byte("#!/bin/sh\nexec "+strconv.Quote(binary)+" \"$@\"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	selectBinary(modern)
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: proxy, SocketPath: filepath.Join(root, "s"), ConfigFile: os.DevNull})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached, err := server.Version(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	required, err := tmux.ParseVersion("3.7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cached.AtLeast(required) {
+		t.Skip("this counterexample needs a configured executable at least3.7")
+	}
+	selectBinary(olderSupported)
+	err = server.RequireVersion(t.Context(), required)
+	var refusal *tmux.VersionTooLowError
+	if !errors.As(err, &refusal) || refusal.Current.String() != "3.3a" || refusal.Minimum.String() != "3.7" {
+		t.Fatalf("cold feature requirement reused cached executable: %v", err)
+	}
+	// The independent diagnostic cache remains a cache; the version check does not
+	// invalidate or rewrite an unrelated observer's reported executable.
+	if diagnostic, err := server.Version(t.Context()); err != nil || diagnostic != cached {
+		t.Fatalf("cold version check changed diagnostic cache: %s %v", diagnostic, err)
+	}
+}
+
+func TestCoreMinimumOpaqueExecutableOn33a(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the opaque executable route uses Linux byte paths")
+	}
+	binary := os.Getenv("LIBTMUX_FLOOR_TMUX")
+	if binary == "" {
+		t.Skip("set LIBTMUX_FLOOR_TMUX to exact tmux3.3a")
+	}
+	directory := t.TempDir()
+	opaque := filepath.Join(directory, "tmux'"+string([]byte{0xff}))
+	if err := os.Symlink(binary, opaque); err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(directory, "s")
+	server, err := tmux.NewServer(tmux.ServerOptions{Binary: opaque, SocketPath: socket, ConfigFile: os.DevNull})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = exec.Command(binary, "-S", socket, "kill-server").Run() })
+	version, err := server.Version(t.Context())
+	if err != nil || version.String() != "3.3a" {
+		t.Fatalf("native opaque executable version = %s %v", version, err)
+	}
+	session, err := server.NewSession(t.Context(), tmux.NewSessionRequest{Name: "opaque", Command: "sleep 300"})
+	if err != nil || session.ID() == "" {
+		t.Fatalf("native opaque executable startup = %v %v", session, err)
+	}
+	if version, err := session.Server().Version(t.Context()); err != nil || version.String() != "3.3a" {
+		t.Fatalf("opaque daemon qualification = %s %v", version, err)
+	}
+}
