@@ -40,6 +40,22 @@ Modules are tagged per directory, so each carries its own version: the core as
   builds. Candidates and development builds rank below the release they name;
   `-master` and `-dev` suffixes are refused. (#57)
 
+### tmux/tmuxtest
+
+- Screen helpers use capture polling below tmux 3.7. Explicit control helpers
+  retain the control acquisition requirement. (#58)
+
+### workspace
+
+- `Build` keeps subprocess operations on tmux 3.3a through 3.6 and owns a
+  qualified control connection on newer daemons. (#58)
+
+### mcp
+
+- Startup, `capture_since`, and `run_shell_command` remain available on tmux
+  3.3a. Non-empty `paste_text` requires 3.4 before staging; `wait_for_text`
+  requires 3.7. (#58)
+
 ## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
 
 ### Development
@@ -101,24 +117,17 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux/tmuxtest
 
-- Screen helpers use capture polling below tmux 3.7. Explicit control helpers
-  retain the control acquisition requirement. (#58)
 - `tmuxtest` cleanup no longer fails intermittently on Debian and Ubuntu
   builds of tmux, which answer `server exited unexpectedly` for a moment after
   `kill-server`. (#53)
 
 ### workspace
 
-- `Build` keeps subprocess operations on tmux 3.3a through 3.6 and owns a
-  qualified control connection on newer daemons. (#58)
 - The `build-workspace` example now builds on a tmux server and configuration
   of its own, and its page publishes what it prints. (#53)
 
 ### mcp
 
-- Startup, `capture_since`, and `run_shell_command` remain available on tmux
-  3.3a. Non-empty `paste_text` requires 3.4 before staging; `wait_for_text`
-  requires 3.7. (#58)
 - `send_keys`, `send_keys_batch`, `paste_text`, `run_shell_command`, and every
   other tool now refuse a required pane, window, or session id sent empty,
   inside batches too, and audit the refusal. An empty id used to mean the
