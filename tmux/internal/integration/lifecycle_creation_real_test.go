@@ -52,16 +52,7 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSession(extended) error = %v", err)
 	}
-	minimum33, err := tmux.ParseVersion("3.3")
-	if err != nil {
-		t.Fatal(err)
-	}
 	wantWidth, wantHeight := 101, 31
-	if !version.AtLeast(minimum33) {
-		// tmux 3.2a stores -x/-y in default-size but creates the first
-		// detached window at its historical 80x24 default (23 pane rows).
-		wantWidth, wantHeight = 80, 23
-	}
 	if got, _ := session.Formats().WindowWidth(); got != wantWidth {
 		t.Fatalf("new session window width = %d, want %d on tmux %s", got, wantWidth, version)
 	}
@@ -224,7 +215,7 @@ func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 	if version.AtLeast(minimum34) {
 		storedFormatName, _ = sessions[0].Name()
 	} else {
-		// tmux 3.2a compares the raw -n operand for -S, although spawn expands
+		// Before tmux 3.4, -S compares the raw -n operand, although spawn expands
 		// that operand when it creates a window. Escape the creation operand
 		// so the stored name exercises the raw selection rule.
 		storedFormatName = "##{session_name}"

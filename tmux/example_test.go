@@ -197,7 +197,7 @@ func ExamplePane_SendKeys() {
 		return
 	}
 
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
 		Command: &command,
 		Literal: true,
@@ -1046,7 +1046,7 @@ func ExamplePane_Capture() {
 		fmt.Println("resolve pane:", err)
 		return
 	}
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -1542,7 +1542,7 @@ func ExamplePoll() {
 		fmt.Println("resolve pane:", err)
 		return
 	}
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -1666,7 +1666,7 @@ func ExamplePane_CaptureToFile() {
 		return
 	}
 
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -1955,7 +1955,7 @@ func ExamplePaneObservation_WaitFor() {
 	}
 	defer func() { _ = observation.Close() }()
 
-	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'build ready\\n'"); err != nil {
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf '\\nbuild ready\\n'"); err != nil {
 		fmt.Println("write:", err)
 		return
 	}
@@ -2343,7 +2343,7 @@ func ExamplePane_CaptureTo() {
 		fmt.Println("resolve pane:", err)
 		return
 	}
-	command := "printf 'captured\\n'"
+	command := "printf '\\ncaptured\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -2462,14 +2462,17 @@ func ExampleCommandObserver() {
 		// reader happens to be running.
 		SocketName: "libtmux-go-example-observer",
 		CommandObserver: func(trace tmux.CommandTrace) {
-			commands = append(commands, trace.Subcommand+" over "+trace.Transport.String())
+			if trace.Subcommand == "list-sessions" {
+				commands = append(commands, trace.Subcommand+" over "+trace.Transport.String())
+			}
 		},
 	})
 	if err != nil {
 		fmt.Println("new server:", err)
 		return
 	}
-	// The observer sees the command whether or not tmux liked it.
+	// Observers also see version probes. Select the command of interest;
+	// it is observed whether or not tmux liked it.
 	_, _ = server.Cmd(context.Background(), "list-sessions")
 	fmt.Println(commands[0])
 	// Output: list-sessions over process
