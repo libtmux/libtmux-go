@@ -44,7 +44,8 @@ func TestNewSessionConnectionQualifiesColdDaemonBeforeAttach(t *testing.T) {
 transport=process
 operation=other
 for argument do
-    if [ "$argument" = -C ]; then transport=control; fi
+    if [ "$argument" = run-shell ]; then probe=1; fi
+    if [ "$argument" = -C ] && [ -z "$probe" ]; then transport=control; fi
     if [ "$argument" = new-session ]; then operation=creation; fi
 done
 printf '%s %s\n' "$transport" "$operation" >> "$LIBTMUX_CONNECTION_INVOCATIONS"

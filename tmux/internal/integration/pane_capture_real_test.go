@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -133,7 +134,10 @@ func TestPaneCaptureAgainstRealTmux(t *testing.T) {
 		t.Fatalf("show-buffer stdout = %#v, want %#v", bufferResult.Stdout, wantLines)
 	}
 	deleteResult, err := server.Cmd(ctx, "delete-buffer", "-b", buffer)
-	requireCaptureCommandSuccess(t, "delete-buffer", deleteResult, err)
+	// The server fixture owns an older daemon's buffer until shutdown.
+	if !errors.Is(err, tmux.ErrVersionTooLow) {
+		requireCaptureCommandSuccess(t, "delete-buffer", deleteResult, err)
+	}
 
 	version, err := server.Version(ctx)
 	if err != nil {

@@ -175,8 +175,9 @@ var captureFileSequence atomic.Uint64
 // It is replaced and left for the caller. Concurrent calls must use distinct
 // paths. The scratch tmux buffer is deleted before return when possible.
 //
-// Validation and version gating match [Pane.Capture]. Capture, save, and
-// file-read failures return an error with no lines; buffer cleanup is best effort.
+// Safe named-buffer cleanup requires tmux 3.4 before staging. Other version
+// gates match [Pane.Capture]. Capture, save, and file-read failures return an
+// error with no lines; buffer cleanup is best effort.
 func (p Pane) CaptureToFile(
 	ctx context.Context,
 	path string,
@@ -191,6 +192,7 @@ func (p Pane) CaptureToFile(
 		os.Getpid(),
 		captureFileSequence.Add(1),
 	)
+	p.server.requiredVersion = namedBufferMinimumVersion
 	if err := p.CaptureToBuffer(ctx, buffer, request); err != nil {
 		return nil, err
 	}

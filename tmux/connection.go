@@ -378,6 +378,11 @@ func (c *Connection) Call(
 	if err := c.routeError(ctx, commandServer); err != nil {
 		return nil, err
 	}
+	// Args are one literal command, like ControlClient.Call, so the same
+	// gates apply before anything reaches a lane.
+	if err := c.Server().checkCommandFeatures(args, false, true); err != nil {
+		return nil, err
+	}
 	// Observed here rather than in the lane, because the lane is also how
 	// Server.runCommand sends and that reports its own.
 	server := c.Server()
