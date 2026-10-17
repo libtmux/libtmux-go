@@ -9,16 +9,6 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
-## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
-
-### Development
-
-- The install gate also runs `go install` for `tmux-workspace`, the command
-  `workspace/CLI.md` documents, against the latest published workspace module.
-  (#24)
-- The `mcp` tests now pass where the core utilities are one multi-call
-  program, as on Ubuntu 26.04. (#53)
-
 ### tmux
 
 - The core, workspace builder, and MCP consumer now require tmux 3.3a or newer.
@@ -33,6 +23,23 @@ Modules are tagged per directory, so each carries its own version: the core as
 - `Session.Run` no longer handles tmux 3.2's fixed dead-pane notice; supported
   releases disable the notice with `remain-on-exit-format`. Output resembling
   the old notice is preserved. (#57)
+- The version check accepts only the version forms tmux reports: releases with at most
+  one patch letter, `-rc` and `-rcN` candidates, and `next-X.Y` development
+  builds. Candidates and development builds rank below the release they name;
+  `-master` and `-dev` suffixes are refused. (#57)
+
+## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
+
+### Development
+
+- The install gate also runs `go install` for `tmux-workspace`, the command
+  `workspace/CLI.md` documents, against the latest published workspace module.
+  (#24)
+- The `mcp` tests now pass where the core utilities are one multi-call
+  program, as on Ubuntu 26.04. (#53)
+
+### tmux
+
 - `RunResult.Signal` is now an `os.Signal`, nil when no signal ended the
   command, where it was tmux's text: `9` on Linux, `kill` on macOS and the
   BSDs. Compare it with `os.Kill` or a `syscall` constant. (#53)
