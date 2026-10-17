@@ -58,11 +58,16 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 	defer func() { _ = connection.Close() }()
 
 	for _, route := range []struct {
-		name   string
-		server tmux.Server
-		want   tmux.CommandTransport
+		name       string
+		server     tmux.Server
+		want       tmux.CommandTransport
+		wantProbes int
 	}{
-		{name: "process", server: server, want: tmux.CommandTransportProcess},
+		{
+			name: "unbound process", server: server,
+			want: tmux.CommandTransportProcess, wantProbes: 1,
+		},
+		{name: "process", server: sessions[0].Server(), want: tmux.CommandTransportProcess},
 		{
 			name:   "connection",
 			server: connection.Server(),
@@ -80,12 +85,18 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 
 			mutex.Lock()
 			defer mutex.Unlock()
-			if len(traces) != 1 {
-				t.Fatalf("one list-sessions produced %d traces, want 1: %v",
-					len(traces), traces)
+			if len(traces) != 1+route.wantProbes {
+				t.Fatalf("one list-sessions produced %d traces, want command plus %d probes: %v",
+					len(traces), route.wantProbes, traces)
 			}
-			if traces[0].Subcommand != "list-sessions" || traces[0].Transport != route.want {
-				t.Errorf("trace = %v, want list-sessions over %v", traces[0], route.want)
+			for _, trace := range traces[:route.wantProbes] {
+				if trace.Subcommand != "display-message" || trace.Transport != tmux.CommandTransportProcess {
+					t.Errorf("admission probe trace = %v, want display-message over process", trace)
+				}
+			}
+			trace := traces[route.wantProbes]
+			if trace.Subcommand != "list-sessions" || trace.Transport != route.want {
+				t.Errorf("trace = %v, want list-sessions over %v", trace, route.want)
 			}
 		})
 	}
