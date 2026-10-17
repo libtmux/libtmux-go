@@ -9,10 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 )
-
-const controlRegistrationPoll = 10 * time.Millisecond
 
 type controlClientProfile uint8
 
@@ -288,35 +285,20 @@ func (c *ControlClient) nextStartupFrame(
 	return c.nextFrame(ctx)
 }
 
-// Use a printable separator because tmux rewrites control characters for clients
-// without a UTF-8 locale. Neither numeric PIDs nor client names contain it.
-const registrationFormat = "#{client_pid}" + string(formatFieldSeparator) + "#{client_name}"
-
+// waitForRegistration names the control client without asking tmux. tmux
+// calls a client with no terminal client-<pid> of its own process, so the name
+// follows from the spawned process; list-clients would fire a user's
+// after-list-clients hook and cost a poll. The accepted attach reply and the
+// calibrated fence already prove the client is attached.
 func (c *ControlClient) waitForRegistration(ctx context.Context) (ClientName, error) {
-	pid := strconv.Itoa(c.command.Process.Pid)
-	ticker := time.NewTicker(controlRegistrationPoll)
-	defer ticker.Stop()
-	for {
-		result, err := c.server.Cmd(ctx, "list-clients", "-F", registrationFormat)
-		if err != nil {
-			return "", err
-		}
-		if result.ExitCode == 0 {
-			for _, line := range result.Stdout {
-				clientPID, clientName, ok := strings.Cut(line, string(formatFieldSeparator))
-				if ok && clientPID == pid && strings.TrimSpace(clientName) != "" {
-					return ClientName(strings.TrimSpace(clientName)), nil
-				}
-			}
-		}
-		select {
-		case <-c.done:
-			return "", c.registrationExitError()
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-ticker.C:
-		}
+	select {
+	case <-c.done:
+		return "", c.registrationExitError()
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
 	}
+	return ClientName("client-" + strconv.Itoa(c.command.Process.Pid)), nil
 }
 
 func (c *ControlClient) failStartup(err error) error {
