@@ -95,6 +95,7 @@ func TestNotificationStreamZeroOptionsRetainsStructureWithoutPaneOutput(t *testi
 	if err != nil || len(panes) != 1 {
 		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	tmuxtest.WaitForShellReady(ctx, t, panes[0])
 	stream, err := server.OpenNotifications(ctx, sessions[0], tmux.NotificationOptions{})
 	if err != nil {
@@ -166,6 +167,7 @@ func TestNotificationStreamPauseAfterArmsTheServerHold(t *testing.T) {
 	if err != nil || len(panes) != 1 {
 		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	stream, err := server.OpenNotifications(ctx, sessions[0], tmux.NotificationOptions{
 		IncludePaneOutput: true,
 		PauseAfter:        time.Minute,
@@ -210,6 +212,7 @@ func TestNotificationStreamSubscribeReportsAFormatWhenItChanges(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -261,6 +264,7 @@ func TestNotificationStreamUnsubscribeStopsAName(t *testing.T) {
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -292,6 +296,7 @@ func TestNotificationStreamBacklogBytesBoundsWhatTheStreamHolds(t *testing.T) {
 		t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 	}
 	const limit = 64 << 10
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{
 		IncludePaneOutput: true,
 		BacklogBytes:      limit,
@@ -303,6 +308,7 @@ func TestNotificationStreamBacklogBytesBoundsWhatTheStreamHolds(t *testing.T) {
 
 	// A second, promptly read stream says when the pane has finished writing,
 	// so the first is read only after far more than its bound has arrived.
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	watcher, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{
 		IncludePaneOutput: true,
 	})
@@ -358,6 +364,7 @@ func TestNotificationStreamEndsMatchErrControlClosed(t *testing.T) {
 		if err != nil || len(sessions) != 1 {
 			t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 		}
+		tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 		stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
 		if err != nil {
 			t.Fatal(err)
@@ -377,6 +384,7 @@ func TestNotificationStreamEndsMatchErrControlClosed(t *testing.T) {
 		if err != nil || len(sessions) != 1 {
 			t.Fatalf("Sessions() = (%#v, %v), want one session", sessions, err)
 		}
+		tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 		stream, err := sessions[0].OpenNotifications(ctx, tmux.NotificationOptions{})
 		if err != nil {
 			t.Fatal(err)

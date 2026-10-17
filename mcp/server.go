@@ -28,9 +28,9 @@ var Version = buildVersion()
 
 const fallbackVersion = "v0.0.1-alpha.13"
 
-// minimumTmuxVersion follows the terminal Connection capability floor because
-// every MCP runtime owns one.
-const minimumTmuxVersion = tmux.MinimumConnectionVersion
+// minimumTmuxVersion is the subprocess baseline. Control acquisition has
+// its own, higher feature requirement.
+const minimumTmuxVersion = tmux.MinimumSupportedVersion
 
 const (
 	minimalOwnerEnvironment = "LIBTMUX_MCP_OWNER"

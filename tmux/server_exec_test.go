@@ -37,7 +37,7 @@ func TestRunShellBuildsExactArguments(t *testing.T) {
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}},
 		{result: tmuxcmd.Result{Stdout: []string{"alpha-beta"}}},
 	}}
-	server := serverWithRunner(runner)
+	server := versionedServerWithRunner(runner)
 
 	output, err := server.RunShell(context.Background(), RunShellRequest{
 		Command:        "echo #{1}-#{2}",
@@ -154,9 +154,9 @@ func TestRunShellWarnsAndOmitsUnsupportedFeatures(t *testing.T) {
 	}{
 		{
 			name:        "start directory before 3.4",
-			version:     "3.3",
-			request:     RunShellRequest{Command: "true", StartDirectory: &directory},
-			wantArgs:    []string{"run-shell", "--", "true"},
+			version:     "3.3a",
+			request:     RunShellRequest{Command: "true", Background: true, StartDirectory: &directory},
+			wantArgs:    []string{"run-shell", "-b", "--", "true"},
 			wantFeature: "start_directory",
 			wantMinimum: "3.4",
 		},
@@ -193,6 +193,7 @@ func TestRunShellWarnsAndOmitsUnsupportedFeatures(t *testing.T) {
 					warnings = append(warnings, warning)
 				},
 			}, runner)
+			server.state.executor.(*qualifiedCommandRunner).version = server.Version
 
 			if _, err := server.RunShell(context.Background(), test.request); err != nil {
 				t.Fatalf("RunShell() error = %v", err)
@@ -223,7 +224,7 @@ func TestRunShellOrdersWarningsAndExecutesOneReducedCommand(t *testing.T) {
 	directory := "/workspace"
 	var warnings []Warning
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}}},
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
 		{result: tmuxcmd.Result{}},
 	}}
 	server := serverWithOptionsAndRunner(ServerOptions{
@@ -232,9 +233,11 @@ func TestRunShellOrdersWarningsAndExecutesOneReducedCommand(t *testing.T) {
 			warnings = append(warnings, warning)
 		},
 	}, runner)
+	server.state.executor.(*qualifiedCommandRunner).version = server.Version
 
 	if _, err := server.RunShell(context.Background(), RunShellRequest{
 		Command:        "true",
+		Background:     true,
 		StartDirectory: &directory,
 		ShowStderr:     true,
 		Args:           []string{"ignored"},
@@ -246,7 +249,7 @@ func TestRunShellOrdersWarningsAndExecutesOneReducedCommand(t *testing.T) {
 		t.Fatalf("runner requests = %#v, want one version and one run-shell", requests)
 	}
 	assertRequestArguments(t, requests[0], []string{"-V"})
-	assertRequestArguments(t, requests[1], []string{"run-shell", "--", "true"})
+	assertRequestArguments(t, requests[1], []string{"run-shell", "-b", "--", "true"})
 	wantFeatures := []string{"start_directory", "show_stderr", "args"}
 	features := make([]string, len(warnings))
 	for index, warning := range warnings {
@@ -261,7 +264,7 @@ func TestRunShellClonesArgsBeforeVersionProbe(t *testing.T) {
 	t.Parallel()
 
 	runner := newRunShellGateRunner()
-	server := serverWithRunner(runner)
+	server := versionedServerWithRunner(runner)
 	arguments := []string{"before"}
 	response := make(chan error, 1)
 	go func() {
@@ -291,7 +294,7 @@ func TestRunShellCapturesPointerFieldsBeforeVersionProbe(t *testing.T) {
 	t.Parallel()
 
 	runner := newRunShellGateRunner()
-	server := serverWithRunner(runner)
+	server := versionedServerWithRunner(runner)
 	delay := "before-delay"
 	directory := "before-directory"
 	response := make(chan error, 1)

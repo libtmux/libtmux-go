@@ -307,6 +307,7 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 	if err != nil || len(sessions) == 0 {
 		t.Fatalf("Sessions() = (%d, %v), want at least one", len(sessions), err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatal(err)

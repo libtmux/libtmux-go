@@ -136,7 +136,8 @@ for version in "${versions[@]}"; do
     for module in "${modules[@]}"; do
         directory="$repository_root/$module"
         run_cells=$((run_cells + 1))
-        if (cd "$directory" && PATH="$matrix/$version/bin:$PATH" go test -count=1 ./... > "$log" 2>&1); then
+        if PATH="$matrix/$version/bin:$PATH" LIBTMUX_TMUX="$matrix/$version/bin/tmux" \
+            "$script_directory/test-module.sh" "$module" -count=1 > "$log" 2>&1; then
             printf '  %-14s ok\n' "$module"
         else
             printf '  %-14s FAILED\n' "$module"

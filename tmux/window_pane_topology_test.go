@@ -546,7 +546,7 @@ func TestBreakPaneUsesLiteral37Workaround(t *testing.T) {
 	}
 }
 
-func TestBreakPaneLimitsPlaceholderToLiteral37(t *testing.T) {
+func TestBreakPaneLeavesPatchedReleaseNamingNative(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
@@ -554,13 +554,6 @@ func TestBreakPaneLimitsPlaceholderToLiteral37(t *testing.T) {
 		name    string
 		want    []string
 	}{
-		{
-			version: "3.7",
-			want: []string{
-				"break-pane", "-P", "-F#{window_id}", "-d", "-n", "libtmux",
-				"-s", "$1:.%3", "-t", "$1:",
-			},
-		},
 		{
 			version: "3.7a",
 			want: []string{
@@ -597,6 +590,20 @@ func TestBreakPaneLimitsPlaceholderToLiteral37(t *testing.T) {
 			}
 			assertRequestArguments(t, requests[1], test.want)
 		})
+	}
+}
+
+func TestBreakPaneRefusesUnnamedExact37BeforeMutation(t *testing.T) {
+	t.Parallel()
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}, ExitCode: 0}},
+	}}
+	_, err := exactTestPane(serverWithRunner(runner)).BreakPane(context.Background(), BreakPaneRequest{})
+	if !errors.Is(err, ErrVersionTooLow) {
+		t.Fatalf("unnamed exact3.7 break: %v", err)
+	}
+	if got := len(runner.recordedRequests()); got != 1 {
+		t.Fatalf("unnamed refusal made %d requests, want version only", got)
 	}
 }
 

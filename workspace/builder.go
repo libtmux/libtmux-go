@@ -34,8 +34,8 @@ func (w Workspace) InitialSessionRequest() (tmux.NewSessionRequest, error) {
 // Every layout is checked against the selected daemon and desired pane count
 // before session creation. tmux validates geometry when applying each layout.
 //
-// Build creates the session and an attached control connection in one process,
-// uses that connection for the build, and closes it before returning. The
+// Build uses subprocess operations below tmux 3.7. On qualified newer daemons,
+// it owns a control connection during the build and closes it before return. The
 // returned Session is not bound to the closed connection. Build verifies that
 // the session remains reachable after closing it. An attached connection may
 // fire client hooks and policies.
@@ -49,6 +49,20 @@ func Build(ctx context.Context, server tmux.Server, workspace Workspace) (tmux.S
 	}
 	if err := workspace.validateLayouts(ctx, server); err != nil {
 		return tmux.Session{}, err
+	}
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+	if err != nil {
+		return tmux.Session{}, err
+	}
+	if err := server.RequireVersion(ctx, minimum); err != nil {
+		if !errors.Is(err, tmux.ErrVersionTooLow) {
+			return tmux.Session{}, err
+		}
+		created, err := server.NewSession(ctx, request)
+		if err != nil {
+			return created, err
+		}
+		return created, BuildInto(ctx, created, workspace)
 	}
 	created, connection, err := server.NewSessionConnection(
 		ctx,

@@ -233,12 +233,12 @@ func TestConnectionRejectsTmuxBeforeSupportedFloor(t *testing.T) {
 			t.Fatalf("connection error = %v, want VersionTooLowError", err)
 		}
 		if tooLow.Current.String() != "3.1" ||
-			tooLow.Minimum.String() != MinimumConnectionVersion {
+			tooLow.Minimum.String() != MinimumSupportedVersion {
 			t.Fatalf(
 				"version floor = %s -> %s, want 3.1 -> %s",
 				tooLow.Current,
 				tooLow.Minimum,
-				MinimumConnectionVersion,
+				MinimumSupportedVersion,
 			)
 		}
 		if calls != 1 {

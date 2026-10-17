@@ -12,11 +12,12 @@ This document defines the architecture of the Go module.
   routine, and the syntax it unlocks is taken rather than left on the table. No
   runtime dependency is accepted without a measured need and a focused bakeoff;
   the implementation is standard library only.
-- Core and MCP both require tmux 3.3a or newer. Format fields and command flags
-  retain the same version gates as the Python library. On tmux 3.6 and later,
-  retained control clients add `no-detach-on-destroy`, which strengthens
-  survival after their startup session is destroyed without raising either
-  support floor.
+- Core, workspace, and MCP retain a tmux 3.3a subprocess baseline. Owned control
+  acquisition requires 3.7; named buffer cleanup requires 3.4; captured
+  foreground shell output requires 3.5. Format fields and command flags keep
+  their individual version gates. Qualified control clients use
+  `no-detach-on-destroy` to survive destruction of their initial session when
+  another session remains.
 - Operations that may wait for or execute tmux take `context.Context` first,
   and no object stores one. The `io.Reader` and `io.Writer` adapters are the
   exception the interfaces force: `Read` and `Write` take no context, so
@@ -474,8 +475,10 @@ executable. There is no generic transport selector on `Server`.
 
 `Session.OpenControl` creates an owned `Connection` under the subprocess
 guard's parser assumptions. A connection established before replacement is
-the exact-daemon boundary. `Server.NewSessionConnection` creates a session and
-retains its creating control process as the first lane. Each connection owns
+the exact-daemon boundary. `Server.NewSessionConnection` retains its creating
+control process when a qualified daemon already exists. Cold startup first
+creates a detached session, then pins and attaches to its qualified socket. A
+failure after that creation returns the partial session. Each connection owns
 one or more internal command lanes and exposes bound `Server` and `Session`
 values. Records derived from those values retain the same owner.
 
@@ -694,10 +697,14 @@ validated request. No request stores a context.
 It opens one or more control-mode command lanes under the materialized
 session's daemon predicate and returns a `Connection`. Its `Server` and
 `Session` values retain a private pointer to that owner through every derived
-record. On tmux 3.6 and later, lanes set `no-detach-on-destroy`, so destroying
-the initial session moves their clients to another session when one exists
-without changing the retained session record. Earlier releases use the same
-control protocol and inherit the session's `detach-on-destroy` policy. The
+record. Acquisition requires tmux 3.7 before starting `-C`. A private hard-link
+carrier pins the probed Unix socket inode, and a second identity probe through
+it must match the selected daemon. A public-path replacement cannot redirect
+control initialization. Filesystems that cannot link that socket refuse the
+acquisition. The carrier survives until client registration, then is removed.
+Lanes set `no-detach-on-destroy`, so destroying the initial session moves their
+clients to another session when one exists without changing the retained
+session record. The
 binding is terminal: close makes later operations return
 `ErrControlClosed`, and retargeting the socket, opening another connection, or
 requesting an operation that needs a separate process cannot detach it.
@@ -758,8 +765,8 @@ continues past a record it could not parse because a tmux sending a
 notification kind this package does not know must not end a watcher.
 `Server.OpenNotifications` and `Session.OpenNotifications` wrap the same
 protocol in an owned, observation-only `NotificationStream` whose `Next`
-preserves wire order. Before tmux 3.6, destroying the attached session follows
-that session's `detach-on-destroy` policy and may end the stream.
+preserves wire order. Owned control clients and notification streams require
+tmux 3.7 before acquisition, including the raw `tmuxtest.ControlMode` fixture.
 
 Concurrent notification reads on one client or stream are serialized, as they
 are on a `PaneObservation`: each notification reaches one call, and a waiting
@@ -954,8 +961,8 @@ tmux's `-f` filter is a format, and a format containing `#(...)` reaches
 `format_job_get` and runs it as a shell job. It does not reproduce from a
 one-shot tmux client, because the job is filed under that client's job tree and
 `server_client_lost` frees it microseconds later; it reproduces first try over a
-control-mode client, which is what the MCP server holds open whenever the tmux
-server has a session. Passing a caller's filter through would therefore have
+control-mode client, which the MCP server holds open on qualified tmux 3.7
+or newer when the daemon has a session. Passing a caller's filter through would therefore have
 made every listing tool an execution vector while it still reported
 `readOnlyHint: true`, and only while the persistent client was present.
 Compiling typed criteria into `-f` was rejected for the same reason one level

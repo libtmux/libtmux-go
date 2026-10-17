@@ -21,6 +21,7 @@ func TestNewServerRejectsAConnectionBoundTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, session.Server(), tmux.MinimumConnectionVersion)
 	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -41,6 +42,7 @@ func TestRuntimeOwnsOneCommandConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	runtime := newRuntime(ctx, target)
 	command, err := runtime.command(ctx)
 	if err != nil {
@@ -91,6 +93,7 @@ func TestObserveNeverLeavesALostConnectionCurrent(t *testing.T) {
 	if _, err := target.NewSession(ctx, tmux.NewSessionRequest{Name: "runtime-observe-nil"}); err != nil {
 		t.Fatal(err)
 	}
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	runtime := newRuntime(ctx, target)
 	t.Cleanup(func() { _ = runtime.Close() })
 	if _, err := runtime.command(ctx); err != nil {
@@ -171,6 +174,7 @@ func TestAbsentRuntimeStaysUnboundUntilAtomicCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	runtime := newRuntime(ctx, target)
 	process, err := runtime.command(ctx)
 	if err != nil {

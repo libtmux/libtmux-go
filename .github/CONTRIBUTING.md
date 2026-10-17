@@ -68,6 +68,15 @@ $ go test \
     ./tmux/internal/integration/
 ```
 
+On supported releases below 3.7, run `scripts/test-module.sh MODULE` from
+any directory, adding ordinary `go test` flags after the module. It omits only
+fixed-output examples for unavailable optional features. The ordinary tests,
+including explicit version refusals, still run. Tests that require a qualified
+control client use `tmuxtest.RequireVersion`; 3.3a workspace and MCP subprocess
+behavior have separate native checks. The CI and local release matrix use the
+same module runner. Capture-to-file examples require 3.4; control examples
+require 3.7. This eligibility does not itself qualify a release matrix.
+
 The install gates run the documented version-suffixed commands, so they test
 the latest published MCP server and workspace CLI rather than compiling current
 source against old sibling releases:
@@ -143,7 +152,8 @@ version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
 tmux is on `PATH`, so run the supported releases before anything ships.
 `scripts/matrix.sh` runs every compatible module suite, given a directory of
 tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
-whole 3.3a-through-3.8 range, including the 3.8-rc2 candidate. With no matrix directory, the script skips
+whole 3.3a-through-3.8 range, including the 3.8-rc2 candidate and with the
+feature example omissions above. With no matrix directory, the script skips
 with an explanation rather than reporting a pass it did not earn. Set
 `LIBTMUX_MATRIX_REQUIRED=1` for a release gate, where absence must fail. With
 no explicit `LIBTMUX_MATRIX_VERSIONS`, required mode checks all nine supported

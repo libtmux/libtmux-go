@@ -241,6 +241,7 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	target, window, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	client := inputTestClient(ctx, t, target, nil)
 	if err := window.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
 		t.Fatal(err)

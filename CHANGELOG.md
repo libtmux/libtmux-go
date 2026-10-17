@@ -11,6 +11,24 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux
 
+- Owned control clients, connections, notifications, and pane observations
+  require tmux 3.7. Acquisition pins the selected socket before starting
+  control mode; filesystems unable to retain it refuse acquisition. Cold
+  creation can return a detached session if later attachment fails. (#58)
+- Named buffer deletion and rename, including `CaptureToFile` abort cleanup,
+  require tmux 3.4. Explicit named paste-and-delete remains available on 3.3a.
+  Foreground `RunShell` captured client output requires 3.5; pane-targeted,
+  background, and `AsTmuxCommand` jobs retain native output semantics. (#58)
+- Exact tmux 3.7 refuses a colon or period in window and session names passed
+  to `new-window -n`, `new-session -n` or `-s`, `rename-window` and
+  `rename-session`, before any effect. (#58)
+- Control acquisition names its client `client-<pid>` instead of polling
+  `list-clients`, so a user's `after-list-clients` hook no longer fires.
+  (#58)
+- Raw `break-pane` and unnamed typed `BreakPane` refuse exact tmux 3.7;
+  explicitly named typed calls retain the naming repair. Literal
+  `split-window -p` refuses defective tmux 3.4; typed percentage requests
+  keep their conversion. (#58)
 - The core, workspace builder, and MCP consumer now require tmux 3.3a or newer.
   Ordinary operations refuse older selected daemons, including unpatched 3.3,
   with `ErrVersionTooLow` before dispatch. A newer client cannot vouch for an older
@@ -27,6 +45,22 @@ Modules are tagged per directory, so each carries its own version: the core as
   one patch letter, `-rc` and `-rcN` candidates, and `next-X.Y` development
   builds. Candidates and development builds rank below the release they name;
   `-master` and `-dev` suffixes are refused. (#57)
+
+### tmux/tmuxtest
+
+- Screen helpers use capture polling below tmux 3.7. Explicit control helpers
+  retain the control acquisition requirement. (#58)
+
+### workspace
+
+- `Build` keeps subprocess operations on tmux 3.3a through 3.6 and owns a
+  qualified control connection on newer daemons. (#58)
+
+### mcp
+
+- Startup, `capture_since`, and `run_shell_command` remain available on tmux
+  3.3a. Non-empty `paste_text` requires 3.4 before staging; `wait_for_text`
+  polls with `capture-pane` below 3.7. (#58)
 
 ## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
 

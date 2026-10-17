@@ -74,7 +74,7 @@ top-level fields and ignores the row's.
 | `capture_since` | Reads only output after an opaque cursor |
 | `snapshot_pane` | Returns bounded pane content with pane metadata |
 | `search_panes` | Searches pane output under fixed pane, line, byte, pattern, and time ceilings |
-| `wait_for_text` | Waits for one of several success or failure patterns without polling |
+| `wait_for_text` | Waits for one of several success or failure patterns; follows control output from tmux 3.7 and polls `capture-pane` below it |
 | `show_environment` | Reads the tmux environment; values can contain secrets |
 | `show_hooks` / `show_option` | Reads configured commands and option state |
 | `call_read_tools_batch` | Runs up to sixteen permitted inspect operations serially with typed inner validation |
@@ -1214,7 +1214,7 @@ Changes tmux state.
 
 ### `paste_text`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes literal text only to its target; optional Enter appends one newline to the same private buffer.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes literal text only to its target; optional Enter appends one newline to the same private buffer. Non-empty text requires tmux 3.4 for safe named-buffer cleanup.
 
 Belongs to the `execute` toolset.
 
@@ -2011,7 +2011,7 @@ Changes tmux state.
 
 ### `wait_for_text`
 
-Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Waits for new pane output without accepting executable input.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Waits for new pane output without accepting executable input. Requires tmux 3.7.
 
 Belongs to the `inspect` toolset.
 

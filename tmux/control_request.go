@@ -126,6 +126,9 @@ func (c *ControlClient) Call(
 	ctx context.Context,
 	args ...string,
 ) ([]ControlCommandResult, error) {
+	if err := c.server.checkCommandFeatures(args, false, true); err != nil {
+		return nil, err
+	}
 	return c.cmd(ctx, false, args...)
 }
 
