@@ -12,7 +12,7 @@ This document defines the architecture of the Go module.
   routine, and the syntax it unlocks is taken rather than left on the table. No
   runtime dependency is accepted without a measured need and a focused bakeoff;
   the implementation is standard library only.
-- Core and MCP both require tmux 3.2a or newer. Format fields and command flags
+- Core and MCP both require tmux 3.3a or newer. Format fields and command flags
   retain the same version gates as the Python library. On tmux 3.6 and later,
   retained control clients add `no-detach-on-destroy`, which strengthens
   survival after their startup session is destroyed without raising either

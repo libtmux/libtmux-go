@@ -15,7 +15,9 @@ comparison cannot quietly measure different work. CI runs both and publishes
 what it printed, so these can be checked against another run.
 
 Recorded on 12th Gen Intel(R) Core(TM) i7-12700H, 10 threads, linux, go1.26.5.
-Each table below contains the same workload on a different tmux.
+Each table below contains the same workload on a different tmux. The 3.2a
+results are historical; ordinary support starts at tmux 3.3a. These measurements
+predate the command version check and do not measure its extra version probes.
 
 ## tmux 3.2a
 

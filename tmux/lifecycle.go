@@ -17,7 +17,7 @@ var (
 	ErrInvalidCommandOutput = errors.New("tmux: invalid lifecycle command output")
 )
 
-// PaneDirection selects where a tiled pane is created or moved on tmux 3.2a
+// PaneDirection selects where a tiled pane is created or moved on tmux 3.3a
 // or later. Its zero value places the pane below the target.
 type PaneDirection uint8
 

@@ -74,7 +74,7 @@ func TestGreeterAnswersALine(t *testing.T) {
 
 <!-- docs:end -->
 
-To run it, save it as `greeter_test.go` in an empty directory, with tmux 3.2a
+To run it, save it as `greeter_test.go` in an empty directory, with tmux 3.3a
 or newer on `PATH`:
 
 ```console

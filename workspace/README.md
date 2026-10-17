@@ -126,7 +126,7 @@ func run(ctx context.Context) (err error) {
 
 <!-- docs:end -->
 
-To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
+To run it, save it as `main.go` in an empty directory, with tmux 3.3a or newer
 on `PATH`:
 
 ```console

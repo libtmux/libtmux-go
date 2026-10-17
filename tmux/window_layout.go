@@ -14,7 +14,7 @@ import (
 // the last preset layout. Layout, Spread, Next, and Previous are mutually
 // exclusive and are validated before execution; an empty Layout is omitted
 // rather than passed explicitly. The request contains no retained
-// caller-owned storage and is supported on tmux 3.2a or later.
+// caller-owned storage and is supported on tmux 3.3a or later.
 type SelectLayoutRequest struct {
 	// Layout names a preset or supplies a tmux layout string - either the
 	// classic checksum-prefixed grammar every supported version accepts, or

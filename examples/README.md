@@ -77,7 +77,7 @@ the same thing on every machine and never touch a tmux you have open.
 `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
 server the test harness owns.
 
-Every example but `any-slice` needs tmux 3.2a or newer on `PATH`.
+Every example but `any-slice` needs tmux 3.3a or newer on `PATH`.
 
 ## Testing them
 

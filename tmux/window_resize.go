@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// WindowResizeDirection selects one directional resize operation on tmux 3.2a
+// WindowResizeDirection selects one directional resize operation on tmux 3.3a
 // or later. Its zero value selects no directional adjustment.
 type WindowResizeDirection uint8
 
