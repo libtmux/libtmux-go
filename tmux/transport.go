@@ -57,6 +57,28 @@ func (s Server) runCommand(
 	stdio *tmuxcmd.Stdio,
 	commandList bool,
 ) (tmuxcmd.Result, error) {
+	if _, err := s.stateForUse(); err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
+	absentCleanup := len(args) == 1 && args[0] == "kill-server"
+	admitted, err := s.admitCore(ctx, absentCleanup)
+	if err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
+	if absentCleanup && admitted.daemon == nil && admitted.connection == nil {
+		return tmuxcmd.Result{Command: s.originalCommand(kind, args, false), ExitCode: 0}, nil
+	}
+	return admitted.runAdmittedCommand(ctx, kind, args, stdio, commandList)
+}
+
+// runCheckedCommand also serves the private read-only identity bootstrap.
+func (s Server) runCheckedCommand(
+	ctx context.Context,
+	kind commandKind,
+	args []string,
+	stdio *tmuxcmd.Stdio,
+	commandList bool,
+) (tmuxcmd.Result, error) {
 	state, err := s.stateForUse()
 	if err != nil {
 		return tmuxcmd.Result{ExitCode: -1}, err
@@ -66,7 +88,7 @@ func (s Server) runCommand(
 		return tmuxcmd.Result{ExitCode: -1}, err
 	}
 	if guard != nil {
-		commandList = false
+		commandList = true
 	}
 	routeKind := kind
 	if s.requiresProcess {
@@ -95,9 +117,13 @@ func (s Server) runCommand(
 		if !commandList {
 			arguments = escapeCommandListSeparators(arguments)
 		}
+		arguments = s.commandArguments(arguments)
+		if s.daemon != nil {
+			arguments = append([]string{"-N"}, arguments...)
+		}
 		result, err = state.executor.Run(ctx, tmuxcmd.Request{
 			Binary:      state.config.executable,
-			Arguments:   s.commandArguments(arguments),
+			Arguments:   arguments,
 			Environment: slices.Clone(state.config.processEnvironment),
 			Directory:   state.config.directory,
 			Stdio:       stdio,

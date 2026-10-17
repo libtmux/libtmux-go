@@ -184,7 +184,7 @@ func (s Server) livePointWithTargetValidation(
 	if err != nil {
 		return formatValues{}, Version{}, snapshotServerIdentity{}, err
 	}
-	if !identity.version.AtLeast(minimum) {
+	if !identity.version.meetsMinimum(minimum) {
 		return formatValues{}, Version{}, snapshotServerIdentity{}, &VersionTooLowError{
 			Current: identity.version,
 			Minimum: minimum,

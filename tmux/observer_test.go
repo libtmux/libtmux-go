@@ -36,15 +36,15 @@ func TestCommandObserverReportsEveryCommand(t *testing.T) {
 
 	mutex.Lock()
 	defer mutex.Unlock()
-	if len(traces) != 2 {
+	if len(traces) != 4 {
 		t.Fatalf("traces = %#v, want one per command", traces)
 	}
-	if traces[0].Subcommand != "list-sessions" || traces[0].ExitCode != 0 {
+	if traces[1].Subcommand != "list-sessions" || traces[1].ExitCode != 0 {
 		t.Errorf("traces[0] = %v, want list-sessions exiting 0", traces[0])
 	}
 	// A completed tmux failure is reported through ExitCode, not Err, the way
 	// CommandResult reports one.
-	if traces[1].Subcommand != "kill-pane" || traces[1].ExitCode != 1 || traces[1].Err != nil {
+	if traces[3].Subcommand != "kill-pane" || traces[3].ExitCode != 1 || traces[3].Err != nil {
 		t.Errorf("traces[1] = %v, want kill-pane exiting 1 with no transport error", traces[1])
 	}
 	for index, trace := range traces {
@@ -73,10 +73,10 @@ func TestCommandTraceCarriesNoArgumentsOrOutput(t *testing.T) {
 	if _, err := server.Cmd(context.Background(), "show-buffer", secret); err != nil {
 		t.Fatalf("Cmd() error = %v", err)
 	}
-	if len(seen) != 1 {
+	if len(seen) != 2 {
 		t.Fatalf("traces = %#v, want one", seen)
 	}
-	if rendered := seen[0].String(); strings.Contains(rendered, secret) {
+	if rendered := seen[1].String(); strings.Contains(rendered, secret) {
 		t.Fatalf("trace rendered the caller's argument: %s", rendered)
 	}
 }

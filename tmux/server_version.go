@@ -146,28 +146,32 @@ func (e *versionTransportError) Error() string { return e.err.Error() }
 
 func (e *versionTransportError) Unwrap() error { return e.err }
 
-// Version returns the configured tmux binary's cached version. Failed probes
-// are not cached. A waiting caller can abandon an in-flight shared probe when
-// ctx ends without canceling the caller that owns the probe.
+// Version returns a materialized handle's daemon version or an unbound handle's
+// cached executable version. Failed probes are not cached. A waiting caller can
+// abandon an in-flight shared probe when ctx ends without canceling its owner.
 func (s Server) Version(ctx context.Context) (Version, error) {
 	return s.loadVersion(ctx, false)
 }
 
-// RefreshVersion invalidates the cached version and probes the binary again.
-// Canceling ctx stops this call's wait; it does not establish whether a probe
-// reached the configured binary.
+// RefreshVersion returns a materialized handle's daemon version or invalidates
+// an unbound handle's executable cache and probes again. Canceling ctx stops this
+// call's wait; it does not establish whether the executable received a probe.
 func (s Server) RefreshVersion(ctx context.Context) (Version, error) {
 	return s.loadVersion(ctx, true)
 }
 
 // RequireVersion returns a [VersionTooLowError] matching [ErrVersionTooLow]
-// when the configured binary is older than minimum.
+// when the selected daemon, or an executable creating it, is older than minimum.
 func (s Server) RequireVersion(ctx context.Context, minimum Version) error {
-	current, err := s.Version(ctx)
+	checked, err := s.checkCore(ctx, false)
 	if err != nil {
 		return err
 	}
-	if !current.AtLeast(minimum) {
+	current, err := checked.Version(ctx)
+	if err != nil {
+		return err
+	}
+	if !current.meetsMinimum(minimum) {
 		return &VersionTooLowError{Current: current, Minimum: minimum}
 	}
 	return nil

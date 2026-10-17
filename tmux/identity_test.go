@@ -300,7 +300,7 @@ func (r *daemonReplacementRunner) Run(
 ) (tmuxcmd.Result, error) {
 	r.requests = append(r.requests, request)
 	if index := slices.Index(request.Arguments, "if-shell"); index >= 0 {
-		failure := request.Arguments[len(request.Arguments)-1]
+		failure := request.Arguments[index+4]
 		return tmuxcmd.Result{
 			ExitCode: 1,
 			Stderr:   []string{"unknown command: " + failure},

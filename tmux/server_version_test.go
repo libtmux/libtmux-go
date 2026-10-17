@@ -396,10 +396,8 @@ func TestSnapshotIdentityUsesProbedOpenBSDCapabilities(t *testing.T) {
 func TestServerRequireVersionReturnsConcreteTooLowError(t *testing.T) {
 	t.Parallel()
 
-	runner := &versionQueueRunner{responses: []versionResponse{{
-		result: tmuxcmd.Result{Stdout: []string{"tmux 3.1"}, ExitCode: 0},
-	}}}
-	server := serverWithRunner(runner)
+	runner := &versionRunner{daemon: "3.1", binary: "3.8"}
+	server := rawVersionServer(t, runner)
 	minimum := mustParseVersion(t, MinimumSupportedVersion)
 
 	err := server.RequireVersion(context.Background(), minimum)
@@ -672,11 +670,19 @@ func serverWithOptionsAndRunner(options ServerOptions, runner commandRunner) Ser
 		resolveExecutable: func(string, []string, string) (string, error) {
 			return executable, nil
 		},
-		executor: runner,
+		executor: &qualifiedCommandRunner{inner: runner},
 	})
 	if err != nil {
 		panic(fmt.Sprintf("construct test server: %v", err))
 	}
+	return server
+}
+
+// versionedServerWithRunner gives the version check the daemon version supplied by a
+// feature gate fixture. Ordinary renderer fixtures use a qualified default.
+func versionedServerWithRunner(runner commandRunner) Server {
+	server := serverWithRunner(runner)
+	server.state.executor.(*qualifiedCommandRunner).version = server.Version
 	return server
 }
 

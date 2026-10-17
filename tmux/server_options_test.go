@@ -50,7 +50,7 @@ func TestNewServerSnapshotsEnvironmentAndResolverInputs(t *testing.T) {
 			resolvedCWD = cwd
 			return testExecutable(t), nil
 		},
-		executor: runner,
+		executor: &qualifiedCommandRunner{inner: runner},
 	})
 	if err != nil {
 		t.Fatalf("newServer() error = %v", err)
@@ -84,7 +84,7 @@ func TestNewServerSnapshotsEnvironmentAndResolverInputs(t *testing.T) {
 			filepath.Dir(testExecutable(t)),
 		)
 	}
-	if server.state.config.executable != testExecutable(t) || server.state.executor != runner {
+	if server.state.config.executable != testExecutable(t) || server.state.executor.(*qualifiedCommandRunner).inner != runner {
 		t.Fatalf("server binding = %#v, want resolved executable and supplied executor", server.state)
 	}
 	got := server.ProcessEnvironment()

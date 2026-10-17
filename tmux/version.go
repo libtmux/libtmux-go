@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	// MinimumSupportedVersion is the oldest tmux feature level supported by this package.
-	MinimumSupportedVersion = "3.2a"
+	// MinimumSupportedVersion is the oldest tmux release supported by this package.
+	MinimumSupportedVersion = "3.3a"
 	// MinimumConnectionVersion is the oldest tmux feature level that supports
 	// terminal Connection ownership. Later releases may strengthen individual
 	// lifecycle guarantees without changing this floor.

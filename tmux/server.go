@@ -14,9 +14,10 @@ import (
 // shares version-cache coordination; only the documented concurrent operations
 // are safe to share.
 type Server struct {
-	state      *serverState
-	connection *Connection
-	daemon     *snapshotServerIdentity
+	state          *serverState
+	connection     *Connection
+	daemon         *snapshotServerIdentity
+	startupVersion *Version
 	// requiresProcess marks exact-output and interactive operations that cannot
 	// cross a persistent control connection.
 	requiresProcess bool
@@ -94,6 +95,9 @@ func (s Server) Executable() string {
 // which command produced which line submits them separately. A list means the
 // same thing through either execution binding.
 //
+// Standalone -V and -h diagnose the configured executable without daemon version
+// checks. They do not qualify a later daemon operation.
+//
 // Only a standalone ";" separates commands. Other semicolons follow the selected
 // binding's parsing; typed operations keep values literal across bindings.
 //
@@ -103,6 +107,13 @@ func (s Server) Executable() string {
 // finishes even after ctx ends. [Server.WaitFor], [Server.RunShell], and
 // [Server.IfShell] take a client of their own instead.
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error) {
+	if len(args) == 1 && (args[0] == "-V" || args[0] == "-h") {
+		result, err := s.runExactArgv(ctx, args)
+		return cloneCommandResult(CommandResult{
+			Command: result.Command, Stdout: result.Stdout, RawStdout: result.RawStdout,
+			Stderr: result.Stderr, ExitCode: result.ExitCode,
+		}), err
+	}
 	result, _, err := s.dispatch(ctx, true, args...)
 	return result, err
 }

@@ -119,11 +119,13 @@ func sameMaterializedDaemon(left, right Server) bool {
 
 func (s Server) withDaemon(identity snapshotServerIdentity) Server {
 	s.daemon = &identity
+	s.startupVersion = nil
 	return s
 }
 
 func (s Server) withoutDaemon() Server {
 	s.daemon = nil
+	s.startupVersion = nil
 	return s
 }
 
@@ -131,25 +133,30 @@ func (s Server) guardCommand(
 	arguments []string,
 	commandList bool,
 ) ([]string, *daemonCommandGuard, error) {
-	if s.daemon == nil || s.boundToInstance() {
+	if (s.daemon == nil && s.startupVersion == nil) || s.boundToInstance() {
 		return arguments, nil, nil
 	}
-	thenCommand, err := encodeControlCommand(arguments, commandList)
-	if err != nil {
-		return nil, nil, err
+	if !commandList {
+		arguments = escapeCommandListSeparators(arguments)
 	}
 	guard := &daemonCommandGuard{
 		failure: "__libtmux_daemon_replaced_" + rand.Text() + "__",
 	}
-	condition := fmt.Sprintf(
-		"#{&&:#{==:#{pid},%s},#{==:#{start_time},%s},#{==:#{socket_path},%s}}",
-		s.daemon.pid,
-		s.daemon.startTime,
-		escapeFormatLiteral(s.daemon.socketPath),
-	)
-	return []string{
-		"if-shell", "-F", condition, thenCommand, guard.failure,
-	}, guard, nil
+	var condition string
+	if s.daemon == nil {
+		// A daemon can appear after the absent-socket probe. Its version must
+		// still match the executable checked to create it.
+		condition = "#{==:#{version}," + escapeFormatLiteral(s.startupVersion.String()) + "}"
+	} else {
+		condition = fmt.Sprintf(
+			"#{&&:#{==:#{pid},%s},#{&&:#{==:#{start_time},%s},#{==:#{socket_path},%s}}}",
+			s.daemon.pid,
+			s.daemon.startTime,
+			escapeFormatLiteral(s.daemon.socketPath),
+		)
+	}
+	guarded := []string{"if-shell", "-F", condition, "", guard.failure, ";"}
+	return append(guarded, arguments...), guard, nil
 }
 
 func escapeFormatLiteral(value string) string {
@@ -203,23 +210,26 @@ func (s Server) probeClosingIdentity(
 }
 
 func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdentity, error) {
+	return s.probeServerIdentity(ctx, snapshotIdentityFields())
+}
+
+func (s Server) probeServerIdentity(ctx context.Context, fields []formatField) (snapshotServerIdentity, error) {
 	if s.daemon != nil {
 		return *s.daemon, nil
 	}
-	fields := snapshotIdentityFields()
-	result, rawOutput, err := s.literalCmdWithRaw(
-		ctx,
-		"display-message",
-		"-p",
-		formatTemplate(fields),
-	)
+	result, err := s.runAdmittedCommand(ctx, commandServer,
+		[]string{"display-message", "-p", formatTemplate(fields)}, nil, false)
+	commandResult := cloneCommandResult(CommandResult{
+		Command: result.Command, Stdout: result.Stdout, RawStdout: result.RawStdout,
+		Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
 	if err != nil {
-		return snapshotServerIdentity{}, err
+		return snapshotServerIdentity{}, commandTransportFailure(err)
 	}
 	if result.ExitCode != 0 {
-		return snapshotServerIdentity{}, newCommandError("display-message", result)
+		return snapshotServerIdentity{}, newCommandError("display-message", commandResult)
 	}
-	rows, err := decodeFormatRecords(rawOutput, Version{}, fields)
+	rows, err := decodeFormatRecords(result.RawStdout, Version{}, fields)
 	if err != nil {
 		return snapshotServerIdentity{}, err
 	}
