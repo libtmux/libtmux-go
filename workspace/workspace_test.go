@@ -621,7 +621,7 @@ func TestFirstPaneShellRunsAsTheWindowCommand(t *testing.T) {
 	server, ctx := testServer(t)
 	described, err := workspace.Parse([]byte(
 		"session_name: first-pane-shell\nwindows:\n  - window_name: probe\n" +
-			"    panes:\n      - shell: cat\n      - shell: cat\n",
+			"    panes:\n      - shell: exec cat\n      - shell: exec cat\n",
 	))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -637,7 +637,7 @@ func TestFirstPaneShellRunsAsTheWindowCommand(t *testing.T) {
 	if len(panes) != 2 {
 		t.Fatalf("got %d panes, want 2", len(panes))
 	}
-	// tmux briefly reports the shell before exec replaces it, so poll.
+	// The explicit exec makes cat the process tmux reports as foreground.
 	for index, pane := range panes {
 		if err := tmux.Poll(ctx, 10*time.Millisecond, func(
 			ctx context.Context,
@@ -1227,7 +1227,8 @@ func TestBuildIntoSendsCommandsLiterallyAndSuppressesHistory(t *testing.T) {
 	recorded := filepath.Join(dir, "invocations")
 	proxy := filepath.Join(dir, "tmux")
 	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
-printf '%s\n' "$*" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+printf '%s\000' "$@" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+printf '\n' >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
 exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 `), 0o700); err != nil {
 		t.Fatalf("write tmux proxy: %v", err)
@@ -1261,20 +1262,23 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 	if err != nil {
 		t.Fatalf("read tmux invocations: %v", err)
 	}
-	sent := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.Contains(line, "send-keys") && strings.Contains(line, "probe-command") {
-			sent = line
+	var sent []string
+	for _, arguments := range recordedTmuxArguments(data) {
+		if index := slices.Index(arguments, "send-keys"); index >= 0 &&
+			slices.ContainsFunc(arguments, func(argument string) bool {
+				return strings.TrimPrefix(argument, " ") == "probe-command"
+			}) {
+			sent = arguments[index:]
 		}
 	}
-	if sent == "" {
-		t.Fatalf("no send-keys carried the command: %s", data)
+	if sent == nil {
+		t.Fatalf("no send-keys carried the command: %q", data)
 	}
-	if !strings.Contains(sent, "'-l'") {
-		t.Errorf("send-keys sent without -l, so a command that is also a tmux key name is read as that key: %s", sent)
+	if !slices.Contains(sent, "-l") {
+		t.Errorf("send-keys omitted literal input: %q", sent)
 	}
-	if !strings.Contains(sent, "' probe-command'") {
-		t.Errorf("send-keys sent without the leading space that keeps a command out of shell history: %s", sent)
+	if sent[len(sent)-1] != " probe-command" {
+		t.Errorf("send-keys omitted the space that suppresses shell history: %q", sent)
 	}
 }
 
@@ -1291,7 +1295,8 @@ func TestBuildIntoAppliesOptionsInNameOrder(t *testing.T) {
 	recorded := filepath.Join(dir, "invocations")
 	proxy := filepath.Join(dir, "tmux")
 	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
-printf '%s\n' "$*" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+printf '%s\000' "$@" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
+printf '\n' >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
 exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 `), 0o700); err != nil {
 		t.Fatalf("write tmux proxy: %v", err)
@@ -1332,9 +1337,12 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 		t.Fatalf("read tmux invocations: %v", err)
 	}
 	var applied []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, arguments := range recordedTmuxArguments(data) {
+		if !slices.Contains(arguments, "set-option") {
+			continue
+		}
 		for _, name := range names {
-			if strings.Contains(line, "'"+name+"'") {
+			if slices.Contains(arguments, name) {
 				applied = append(applied, name)
 			}
 		}
@@ -1342,4 +1350,15 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 	if !slices.IsSorted(applied) || len(applied) != len(names) {
 		t.Fatalf("options applied in %v, want every name once in sorted order", applied)
 	}
+}
+
+// recordedTmuxArguments preserves argument boundaries in proxy recordings.
+func recordedTmuxArguments(data []byte) [][]string {
+	var commands [][]string
+	for _, record := range strings.Split(string(data), "\x00\n") {
+		if record != "" {
+			commands = append(commands, strings.Split(record, "\x00"))
+		}
+	}
+	return commands
 }
