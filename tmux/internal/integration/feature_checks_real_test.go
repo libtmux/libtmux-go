@@ -153,7 +153,8 @@ func TestOptionalControlRejectsOlderSupportedDaemon(t *testing.T) {
 	proxy := filepath.Join(t.TempDir(), "tmux")
 	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
 for argument do
-    if [ "$argument" = -C ]; then printf 'unsafe\n' >> "$PIN_RECORD"; fi
+    if [ "$argument" = run-shell ]; then probe=1; fi
+    if [ "$argument" = -C ] && [ -z "$probe" ]; then printf 'unsafe\n' >> "$PIN_RECORD"; fi
 done
 exec "$PIN_REAL" "$@"
 `), 0o700); err != nil {
@@ -293,7 +294,8 @@ func TestPinnedControlSocketPreventsReplacement(t *testing.T) {
 control=no
 endpoint=
 for argument do
-    if [ "$argument" = -C ]; then control=yes; fi
+    if [ "$argument" = run-shell ]; then probe=1; fi
+    if [ "$argument" = -C ] && [ -z "$probe" ]; then control=yes; fi
     case "$argument" in -S*) endpoint=${argument#-S} ;; esac
 done
 if [ "$control" = yes ]; then
