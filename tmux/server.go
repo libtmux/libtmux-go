@@ -13,6 +13,153 @@ import (
 // is invalid. Copying a configured Server preserves its configuration and
 // shares version-cache coordination; only the documented concurrent operations
 // are safe to share.
+//
+// [NewServer] resolves the executable, socket, and environment once and does
+// not start tmux; creating the first session starts the daemon.
+// A plain Server starts a tmux process for each command it sends, so
+// discarding one leaves the daemon running; [Server.Kill] stops it.
+// A Server from [Connection.Server] sends its commands over that connection's
+// control lanes instead.
+// Operations on the zero Server return [ErrInvalidServer].
+//
+// # What is on here
+//
+// Operations on one session, window, or pane live on [Session], [Window], and
+// [Pane], such as [Session.NewWindow], [Window.SplitPane], [Pane.SendKeys], and
+// [Pane.Capture].
+// This type holds what belongs to the server as a whole, in the groups below.
+//
+// # Connecting
+//
+// [NewServer] validates one [ServerOptions] without starting tmux, and
+// [NewServerFromEnv] reads the server this process is already inside from TMUX.
+// [Server.IsAlive] answers whether anything is listening, and only an absent
+// server reports false; [Server.CheckAlive] makes an absent server an error.
+// [Server.Start] starts the daemon without a session, so with tmux's
+// exit-empty default it can exit before the next command.
+// [Server.Version] and [Server.RefreshVersion] report the configured tmux
+// binary, and [Server.RequireVersion] fails with [ErrVersionTooLow] when it is
+// older than a minimum.
+//
+// [Server.OpenControl] attaches a control-mode client to a session,
+// [Server.OpenNotifications] opens an observation-only [NotificationStream] on
+// one, and [Server.NewSessionConnection] creates a session together with a
+// [Connection].
+// [Server.ConnectionBound] reports whether a handle belongs to one.
+//
+// [Server.SocketPath], [Server.SocketSelection], [Server.ConfigFile],
+// [Server.Executable], and [Server.ProcessEnvironment] report what the handle
+// was built from.
+// [Server.WithSocketPath] and [Server.WithProcessEnvironmentValue] return a
+// copy that differs in that one setting.
+// [Server.Equal] compares two handles by socket, and [Server.String] names the
+// selector.
+//
+// # Finding one thing
+//
+// [Server.Session] and [Server.SessionByName] return one session,
+// [Server.Window] and [Server.Pane] take tmux IDs,
+// and [Server.Client] takes a client name.
+// A lookup that finds nothing returns an error matching [ErrNotFound],
+// or [ErrNoServer] when no server is running.
+// [Server.HasSession] returns a bool instead,
+// and a missing server counts as no session.
+//
+// # Listing everything
+//
+// [Server.Sessions], [Server.Windows], [Server.Panes], and [Server.Clients]
+// list one kind of record each; [Server.Windows] returns one per window link.
+// Failures, including [ErrNoServer], stay errors,
+// so an outage does not read as an empty server.
+// [Server.Snapshot] reads them together into a [Snapshot].
+// [Server.ListClients] returns tmux's own client lines instead of records.
+//
+// # Querying things and getting around
+//
+// [Server.SearchSessions], [Server.SearchWindows], [Server.SearchPanes], and
+// [Server.SearchClients] pass a [TmuxFilter] to tmux,
+// which drops the rows that do not match before any record exists.
+// [Session.SearchWindows], [Session.SearchPanes], and [Window.SearchPanes]
+// search below one record the same way.
+// To filter in Go instead, apply a [SessionFilter], [WindowFilter],
+// [PaneFilter], or [ClientFilter] to a slice with tmuxq.Matching.
+// tmuxq.Where, tmuxq.First, and tmuxq.ExactlyOne take a predicate function,
+// and tmuxq.ExactlyOne fails unless exactly one value matches.
+//
+// A [Snapshot] answers further questions without another command:
+// [Snapshot.SessionByID], [Snapshot.WindowByID], [Snapshot.PaneByID], and
+// [Snapshot.ClientByName].
+//
+// Records from a snapshot, and from the listings above, know their neighbors.
+// Go down with [Session.Windows], [Session.Panes], and [Window.Panes],
+// up with [Pane.Window], [Pane.Session], and [Window.Session],
+// and across to the focused child with [Session.ActiveWindow],
+// [Session.ActivePane], and [Window.ActivePane].
+// [Client.AttachedSession] reaches the session a client shows.
+// None of them queries tmux, and each reports false on a record from a search,
+// a lookup, or [Server.NewSession], which carries no relations.
+//
+// [Pane.ResolveWindow], [Pane.ResolveSession], [Window.ResolveSession],
+// [Session.ResolveActiveWindow], [Session.ResolveActivePane], and
+// [Window.ResolveActivePane] answer the same questions from live state,
+// for any record.
+//
+// # Changing things
+//
+// [Server.NewSession] creates a detached session and returns its record.
+// [Server.Kill] stops the daemon with everything in it,
+// and [Server.KillSession] ends the session a tmux target selects.
+//
+// # Options and hooks
+//
+// [Server.Options] reads the server's options as a [ServerOptionValues].
+// [Server.RawOption], [Server.SetOption], [Server.AppendOption], and
+// [Server.UnsetOption] work by name, which reaches an option the typed setters
+// do not cover.
+// Known options also have typed setters, such as [Server.SetEscapeTime] and
+// [Server.SetExitEmpty].
+//
+// [Server.GlobalSessionScope] and [Server.GlobalWindowScope] reach the defaults
+// that sessions and windows inherit, and the global hooks,
+// which are not methods of Server itself:
+// [GlobalSessionScope.Hooks], [GlobalSessionScope.SetHook],
+// [GlobalSessionScope.AppendHook], [GlobalSessionScope.UnsetHook], and
+// [GlobalSessionScope.RunHook], with the same on [GlobalWindowScope].
+//
+// # Everything else tmux keeps
+//
+// Paste buffers ([Server.ListBuffers], [Server.ShowBuffer],
+// [Server.ShowBufferBytes], [Server.SetBuffer], [Server.LoadBuffer],
+// [Server.LoadBufferFrom], [Server.SaveBuffer], [Server.SaveBufferTo],
+// [Server.DeleteBuffer]),
+// key bindings ([Server.BindKey], [Server.UnbindKey], [Server.ListKeys]),
+// the global environment ([Server.ShowEnvironment], [Server.GetEnvironment],
+// [Server.SetEnvironment], [Server.UnsetEnvironment],
+// [Server.RemoveEnvironment]),
+// configuration ([Server.SourceFile]),
+// shell commands ([Server.RunShell], [Server.IfShell]),
+// wait-for channels, to wait, signal, lock, or unlock ([Server.WaitFor]),
+// the message log ([Server.ShowMessages]),
+// format expansion ([Server.DisplayMessage]),
+// prompt history ([Server.ShowPromptHistory], [Server.ClearPromptHistory]),
+// the commands tmux has ([Server.ListCommands]),
+// access control ([Server.ServerAccess]),
+// and layout checks ([Server.ValidateLayouts]).
+//
+// # Things that need a terminal
+//
+// [Server.DisplayMenu], [Server.CommandPrompt], and [Server.ConfirmBefore] draw
+// on an attached client, and tmux refuses them without one.
+// [Server.AttachSession] attaches the caller's own terminal and blocks until it
+// detaches.
+// [Server.SwitchClient], [Server.DetachClient], [Server.DetachAllClients],
+// [Server.LockClient], [Server.SuspendClient], and [Server.RefreshClient] act
+// on a client and fail without one;
+// [Server.LockServer] locks every attached client.
+//
+// Anything tmux can do that is not here is reachable through [Server.Cmd],
+// which runs raw tmux arguments and returns a [CommandResult];
+// a completed nonzero exit is a result, not an error.
 type Server struct {
 	state      *serverState
 	connection *Connection
