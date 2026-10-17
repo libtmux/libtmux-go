@@ -55,8 +55,8 @@ type ScriptedCommand struct {
 func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	t.Helper()
 
-	const admissionFormat = "#{q:pid}|#{q:start_time}|#{q:socket_path}|#{q:version}="
-	const probeFormat = "#{q:#{q:pid}}|#{q:#{q:start_time}}|#{q:#{q:socket_path}}|#{q:#{q:version}}="
+	const versionProbeFormat = "#{q:pid}|#{q:start_time}|#{q:socket_path}|#{q:version}="
+	const probeFormat = "#{q:pid}|#{q:start_time}|#{q:version}|"
 	if !slices.ContainsFunc(script, func(command ScriptedCommand) bool {
 		return slices.Contains(command.Contains, versionProbeFormat)
 	}) {
@@ -73,7 +73,7 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	// random, so the script recovers it from the argument.
 	body.WriteString("marker=\n")
 	body.WriteString("for argument in \"$@\"; do\n")
-	fmt.Fprintf(&body, "  case $argument in libtmux-version-*%s) marker=${argument%%%%'#{'*};; esac\n",
+	fmt.Fprintf(&body, "  case $argument in libtmux-version-*%s*) marker=${argument%%%%'#{'*};; esac\n",
 		shellQuote(probeFormat))
 	body.WriteString("done\n")
 	// Written by ScriptedTmux; matching is on the whole argument list so a
@@ -111,7 +111,7 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 		fmt.Fprintf(&body, "if %s; then\n", condition.String())
 		if probe && command.Stdout != "" {
 			fmt.Fprintf(&body, "  printf 'unknown command: %%s%%s\\n' \"$marker\" %s >&2\n",
-				shellQuote(strings.TrimSuffix(command.Stdout, "\n")))
+				shellQuote(probeRecord(command.Stdout)))
 			body.WriteString("  exit 1\nfi\n")
 			continue
 		}
@@ -147,4 +147,16 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 // shellQuote renders value as one single-quoted shell word.
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+// probeRecord reorders a scripted pid|start_time|socket_path|version= record
+// into the order the probe reports: the socket path, whose bytes are
+// unconstrained, goes last.
+func probeRecord(stdout string) string {
+	record := strings.TrimSuffix(strings.TrimSuffix(stdout, "\n"), "=")
+	parts := strings.SplitN(record, "|", 4)
+	if len(parts) != 4 {
+		return strings.TrimSuffix(stdout, "\n")
+	}
+	return parts[0] + "|" + parts[1] + "|" + parts[3] + "|" + parts[2] + "="
 }

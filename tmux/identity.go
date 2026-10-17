@@ -230,14 +230,15 @@ func (s Server) probeServerIdentity(ctx context.Context, fields []formatField) (
 	if err != nil {
 		return snapshotServerIdentity{}, commandTransportFailure(err)
 	}
-	rendered, ok := identityProbeReport(marker, result.ExitCode, result.Stderr)
+	values, ok := identityProbeReport(marker, fields, result.ExitCode, result.Stderr)
 	if !ok {
 		return snapshotServerIdentity{}, newCommandError("run-shell", commandResult)
 	}
-	rows, err := decodeFormatRecords(rendered, Version{}, fields)
+	row, err := newFormatValues(Version{}, fields, values)
 	if err != nil {
 		return snapshotServerIdentity{}, err
 	}
+	rows := []formatValues{row}
 	if len(rows) != 1 {
 		return snapshotServerIdentity{}, newSnapshotDecodeError(
 			"server",
@@ -273,27 +274,53 @@ func randomIdentityProbeMarker() string {
 
 // identityProbeArguments builds the hook-free identity probe. Unlike
 // display-message, run-shell has no after-hook, and with -C the expanded
-// string fails in the parser before any command-error hook can fire. The
-// parser strips one level of quoting, so each field is quoted twice to reach
-// stderr in the form decodeFormatRecords expects.
+// string fails in the parser before any command-error hook can fire.
+//
+// tmux reports only the first unparseable word, so every field expands into
+// one. The parser removes backslash quoting before it prints that word, so the
+// socket path, the only field with arbitrary bytes, is single-quoted with its
+// own quotes re-opened and goes last; the others are quoted by #{q:}.
 func identityProbeArguments(marker string, fields []formatField) []string {
 	var template strings.Builder
 	template.WriteString(marker)
-	for index, field := range fields {
-		if index != 0 {
+	for _, field := range identityProbeOrder(fields) {
+		if field.name == "socket_path" {
+			template.WriteString(`'#{s/'/'\\''/:socket_path}'`)
+		} else {
+			template.WriteString("#{q:" + field.name + "}")
 			template.WriteByte(formatFieldSeparator)
 		}
-		template.WriteString("#{q:#{q:")
-		template.WriteString(field.name)
-		template.WriteString("}}")
 	}
 	template.WriteByte(formatRecordTerminator)
 	return []string{"run-shell", "-C", template.String()}
 }
 
-// identityProbeReport extracts the framed record from the refusal tmux prints
-// for the probe's marker word. Any other outcome is not an identity report.
-func identityProbeReport(marker string, exitCode int, stderr []string) ([]byte, bool) {
+// identityProbeOrder keeps the socket path, whose bytes are unconstrained,
+// last so it can be recovered without escaping rules.
+func identityProbeOrder(fields []formatField) []formatField {
+	ordered := make([]formatField, 0, len(fields))
+	for _, field := range fields {
+		if field.name != "socket_path" {
+			ordered = append(ordered, field)
+		}
+	}
+	for _, field := range fields {
+		if field.name == "socket_path" {
+			ordered = append(ordered, field)
+		}
+	}
+	return ordered
+}
+
+// identityProbeReport extracts the field values, in the order of fields, from
+// the refusal tmux prints for the probe's marker word. Anything other than one
+// matching line is not an identity report; a path with a newline is refused.
+func identityProbeReport(
+	marker string,
+	fields []formatField,
+	exitCode int,
+	stderr []string,
+) ([]string, bool) {
 	if exitCode != 1 || len(stderr) != 1 {
 		return nil, false
 	}
@@ -301,7 +328,24 @@ func identityProbeReport(marker string, exitCode int, stderr []string) ([]byte, 
 	if !ok {
 		return nil, false
 	}
-	return []byte(record + "\n"), true
+	record, ok = strings.CutSuffix(record, string(formatRecordTerminator))
+	if !ok {
+		return nil, false
+	}
+	ordered := identityProbeOrder(fields)
+	parts := strings.SplitN(record, string(formatFieldSeparator), len(ordered))
+	if len(parts) != len(ordered) {
+		return nil, false
+	}
+	byName := make(map[string]string, len(ordered))
+	for index, field := range ordered {
+		byName[field.name] = parts[index]
+	}
+	values := make([]string, len(fields))
+	for index, field := range fields {
+		values[index] = byName[field.name]
+	}
+	return values, true
 }
 
 func (s Server) normalizeSnapshotIdentityVersion(
