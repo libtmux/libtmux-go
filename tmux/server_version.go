@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -146,28 +147,32 @@ func (e *versionTransportError) Error() string { return e.err.Error() }
 
 func (e *versionTransportError) Unwrap() error { return e.err }
 
-// Version returns the configured tmux binary's cached version. Failed probes
-// are not cached. A waiting caller can abandon an in-flight shared probe when
-// ctx ends without canceling the caller that owns the probe.
+// Version returns a materialized handle's daemon version or an unbound handle's
+// cached executable version. Failed probes are not cached. A waiting caller can
+// abandon an in-flight shared probe when ctx ends without canceling its owner.
 func (s Server) Version(ctx context.Context) (Version, error) {
 	return s.loadVersion(ctx, false)
 }
 
-// RefreshVersion invalidates the cached version and probes the binary again.
-// Canceling ctx stops this call's wait; it does not establish whether a probe
-// reached the configured binary.
+// RefreshVersion returns a materialized handle's daemon version or invalidates
+// an unbound handle's executable cache and probes again. Canceling ctx stops this
+// call's wait; it does not establish whether the executable received a probe.
 func (s Server) RefreshVersion(ctx context.Context) (Version, error) {
 	return s.loadVersion(ctx, true)
 }
 
 // RequireVersion returns a [VersionTooLowError] matching [ErrVersionTooLow]
-// when the configured binary is older than minimum.
+// when the selected daemon, or an executable creating it, is older than minimum.
 func (s Server) RequireVersion(ctx context.Context, minimum Version) error {
-	current, err := s.Version(ctx)
+	checked, err := s.checkCore(ctx, false)
 	if err != nil {
 		return err
 	}
-	if !current.AtLeast(minimum) {
+	current, err := checked.Version(ctx)
+	if err != nil {
+		return err
+	}
+	if !current.meetsMinimum(minimum) {
 		return &VersionTooLowError{Current: current, Minimum: minimum}
 	}
 	return nil
@@ -180,6 +185,9 @@ func (s Server) loadVersion(ctx context.Context, refresh bool) (Version, error) 
 	}
 	if s.daemon != nil {
 		return s.daemon.version, nil
+	}
+	if s.startupVersion != nil {
+		return *s.startupVersion, nil
 	}
 	cache := &state.shared.version
 	for {
@@ -225,6 +233,20 @@ func (s Server) queryVersion(ctx context.Context) (Version, error) {
 }
 
 func (s Server) queryVersionForOS(ctx context.Context, goos string) (Version, error) {
+	version, err := s.queryExecutableVersion(ctx, goos)
+	if err != nil || !isOpenBSDVersionToken(version.String()) {
+		return version, err
+	}
+	return s.probeOpenBSDCapabilities(ctx, version.String())
+}
+
+// queryExecutableVersion reads only the current executable's report. The version check
+// never shares a diagnostic cache or starts a capability-probe daemon.
+func (s Server) queryExecutableVersion(ctx context.Context, goos string) (Version, error) {
+	state, err := s.stateForUse()
+	if err != nil {
+		return Version{}, &versionTransportError{err: err}
+	}
 	result, err := s.runExactArgv(ctx, []string{"-V"})
 	commandResult := cloneCommandResult(CommandResult{
 		Command:  result.Command,
@@ -235,14 +257,20 @@ func (s Server) queryVersionForOS(ctx context.Context, goos string) (Version, er
 	if err != nil {
 		return Version{}, &versionTransportError{err: err}
 	}
-	version, err := parseQueriedVersion(commandResult, goos)
-	if err != nil {
-		return Version{}, err
+	// Prefix matching needs the original bytes; the public text decoder
+	// escapes invalid UTF-8 in an otherwise valid executable basename.
+	if len(result.RawStdout) != 0 {
+		commandResult.Stdout = strings.Split(strings.TrimRight(string(result.RawStdout), "\n"), "\n")
 	}
-	if !isOpenBSDVersionToken(version.String()) {
-		return version, nil
+	// tmux 3.3a reports argv[0]'s basename; newer releases print "tmux".
+	// Accept that exact configured name without loosening the version token.
+	if len(commandResult.Stdout) == 1 {
+		name := filepath.Base(state.config.executable)
+		if token, ok := strings.CutPrefix(commandResult.Stdout[0], name+" "); ok {
+			commandResult.Stdout[0] = "tmux " + token
+		}
 	}
-	return s.probeOpenBSDCapabilities(ctx, version.String())
+	return parseQueriedVersion(commandResult, goos)
 }
 
 func parseQueriedVersion(result CommandResult, goos string) (Version, error) {

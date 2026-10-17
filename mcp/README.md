@@ -38,7 +38,7 @@ settled. Pin an exact version.
 
 ## Quick start
 
-You need Go 1.26 or newer, and tmux 3.2a or newer on `PATH`. The install
+You need Go 1.26 or newer, and tmux 3.3a or newer on `PATH`. The install
 command above puts `libtmux-mcp` in `$(go env GOPATH)/bin`, or in `GOBIN`
 when that is set. An MCP client
 launches it as a subprocess and speaks to it over stdin and stdout, so there

@@ -26,7 +26,7 @@ func TestServerHandleSupportsConcurrentCommands(t *testing.T) {
 		t.Fatalf("os.Executable() error = %v", err)
 	}
 	dependencies := defaultServerDependencies()
-	dependencies.executor = tmuxcmd.Runner{WaitDelay: drainStandInOutput}
+	dependencies.executor = &qualifiedCommandRunner{inner: tmuxcmd.Runner{WaitDelay: drainStandInOutput}}
 	server, err := newServer(ServerOptions{Binary: executable}, dependencies)
 	if err != nil {
 		t.Fatalf("newServer() error = %v", err)

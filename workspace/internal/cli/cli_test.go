@@ -146,7 +146,7 @@ func TestLegacyColorsPrecedeWorkspaceAndBackend(t *testing.T) {
 				args = append(args, mode)
 			}
 			code, out, diagnostic := invoke(t, args...)
-			if code != 2 || out != "" || !strings.Contains(diagnostic, "88-color") || !strings.Contains(diagnostic, "3.2a+") || (mode != "" && !json.Valid([]byte(diagnostic))) {
+			if code != 2 || out != "" || !strings.Contains(diagnostic, "88-color") || !strings.Contains(diagnostic, "3.3a+") || (mode != "" && !json.Valid([]byte(diagnostic))) {
 				t.Errorf("legacy colors %v: %d %q %q", args, code, out, diagnostic)
 			}
 		}

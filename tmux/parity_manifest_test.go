@@ -89,7 +89,7 @@ var parityStructuralKinds = map[string]bool{
 var parityPolicyValues = map[string]map[string]bool{
 	"tmux": {
 		"not-applicable":       true,
-		"minimum-3.2a":         true,
+		"minimum-3.3a":         true,
 		"source-version-gated": true,
 	},
 	"warning": {

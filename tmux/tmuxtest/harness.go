@@ -48,7 +48,7 @@
 // # Isolation and compatibility
 //
 // Each server uses a short private socket, harness-owned config, and environment
-// without tmux targeting variables. tmux 3.2a or newer is required. The harness
+// without tmux targeting variables. tmux 3.3a or newer is required. The harness
 // supports Unix; [StartPTYProcess] requires Linux. Cleanup uses stable tmux IDs,
 // remains owned by the creating test, and is bounded and retried.
 //

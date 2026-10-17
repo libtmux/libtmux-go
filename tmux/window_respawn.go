@@ -6,8 +6,8 @@ import (
 	"slices"
 )
 
-// RespawnRequest configures restarting a window's or pane's process on tmux
-// 3.2a or later. Its zero value reuses the stored command and directory and
+// RespawnRequest configures restarting a window's or pane's process on every
+// supported tmux. Its zero value reuses the stored command and directory and
 // requires the target process to be inactive. Nil pointer fields omit their
 // options; nonnil pointers are explicit, including empty strings. There are no
 // mutually exclusive fields. Arguments and environment entries are validated

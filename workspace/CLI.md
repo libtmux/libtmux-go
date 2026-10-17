@@ -1,7 +1,7 @@
 # tmux-workspace
 
 `tmux-workspace` manages tmuxp YAML and JSON workspaces through native Go
-services. It requires Go 1.26 to build and tmux 3.2a or later to load or capture
+services. It requires Go 1.26 to build and tmux 3.3a or later to load or capture
 sessions. Discovery, conversion, import, help and documentation generation do
 not require tmux.
 

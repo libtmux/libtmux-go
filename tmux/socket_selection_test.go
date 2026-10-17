@@ -207,7 +207,7 @@ func TestNamedSocketExecutionUsesFrozenResolvedDirectory(t *testing.T) {
 	}}}
 	dependencies := testServerDependencies(t, nil)
 	dependencies.getwd = func() (string, error) { return cwd, nil }
-	dependencies.executor = runner
+	dependencies.executor = &qualifiedCommandRunner{inner: runner}
 	server, err := newServer(ServerOptions{
 		SocketName:         "named",
 		ProcessEnvironment: []string{"TMUX_TMPDIR=appears-later"},

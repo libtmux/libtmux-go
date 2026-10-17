@@ -34,8 +34,23 @@ $ go get github.com/libtmux/libtmux-go/tmux@latest
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
-It needs Go 1.26 or newer and tmux 3.2a or newer, on a Unix host. A tmux
-server for AI agents and a tmuxp-style workspace builder ship beside the
+It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Ordinary
+operations check the selected daemon before dispatch and return
+`tmux.ErrVersionTooLow` for older releases, including unpatched 3.3. A newer
+client executable cannot vouch for an older daemon. With no daemon, the
+executable's fresh version report permits startup; a native precondition refuses
+a different version appearing before dispatch. `tmux.NewServer` still validates
+configuration without starting a process. `Server.Version` on an unbound
+handle and standalone `Cmd` calls with `-V` or `-h` diagnose the executable;
+they do not vouch for later daemon operations. Unversioned OpenBSD base tmux and
+bare `master` reports cannot establish this release floor and are refused.
+Other unknown suffixes are refused too. Capability probes remain diagnostic.
+
+Metadata and version-check commands must retain tmux's built-in semantics.
+Configured `command-alias` entries that redefine those commands fall outside
+this guarantee; tmux expands aliases before resolving canonical command names.
+
+A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
 
 **Contents** — [Quick start](#quick-start) ·
@@ -119,7 +134,7 @@ exit status: 0
 
 <!-- docs:end -->
 
-To run it, save it as `main.go` in an empty directory, with tmux 3.2a or newer
+To run it, save it as `main.go` in an empty directory, with tmux 3.3a or newer
 on `PATH`:
 
 ```console
@@ -569,7 +584,7 @@ period, so pin an exact version. Not recommended for production.
 - **No runtime dependencies.** The core module imports only the standard
   library.
 - **Go 1.26+**, rising with Go's own support window, about twice a year.
-  tmux **3.2a through 3.8-rc2** across the core, workspace, and MCP modules,
+  tmux **3.3a through 3.8** across the core, workspace, and MCP modules,
   tested on releases spanning that range.
 - **Unix.** Linux and macOS are tested on every change, and the BSDs, illumos,
   and Plan 9 build. A Windows build compiles, so a cross-platform program

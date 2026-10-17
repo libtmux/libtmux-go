@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// WindowResizeDirection selects one directional resize operation on tmux 3.2a
+// WindowResizeDirection selects one directional resize operation on tmux 3.3a
 // or later. Its zero value selects no directional adjustment.
 type WindowResizeDirection uint8
 
@@ -28,8 +28,8 @@ const (
 // reapply the current manual size. Direction requires a positive Adjustment;
 // that pair, dimensions, Expand, and Shrink are mutually exclusive and are
 // validated before execution. Zero Adjustment, Height, and Width omit their
-// modes; nonzero values must be positive. The request is supported on tmux
-// 3.2a or later.
+// modes; nonzero values must be positive. The request is supported on every
+// supported tmux.
 type ResizeWindowRequest struct {
 	// Direction selects a directional adjustment; zero selects another mode.
 	Direction WindowResizeDirection

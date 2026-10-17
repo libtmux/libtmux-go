@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// SelectWindowRequest selects one winlink in a [Session] on tmux 3.2a or
+// SelectWindowRequest selects one winlink in a [Session] on tmux 3.3a or
 // later. Its zero value is invalid: exactly one of WindowID and Index is
 // required. That mutual exclusion, stable-ID syntax, and a nonnegative Index
 // are validated before execution. Index is read during the call and is not

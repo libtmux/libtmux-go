@@ -250,7 +250,7 @@ func TestNewPaneCapturesPointersBeforeVersionProbe(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		_, err := (Window{
-			server: serverWithRunner(runner), sessionID: "$7", windowID: "@8",
+			server: versionedServerWithRunner(runner), sessionID: "$7", windowID: "@8",
 		}).NewPane(context.Background(), NewPaneRequest{
 			Width: &width, Height: &height, X: &x, Y: &y,
 			Style: &style, ActiveBorderStyle: &active,
@@ -878,7 +878,7 @@ func TestNewPaneBuildsPythonOptionOrderAndExactTarget(t *testing.T) {
 		{result: tmuxcmd.Result{Stderr: []string{"stop after argv capture"}, ExitCode: 7}},
 	}}
 	_, err := (Pane{
-		server: serverWithRunner(runner), sessionID: "$7", windowID: "@8", paneID: "%9",
+		server: versionedServerWithRunner(runner), sessionID: "$7", windowID: "@8", paneID: "%9",
 	}).NewPane(context.Background(), NewPaneRequest{
 		Width:               &width,
 		Height:              &height,
@@ -912,7 +912,7 @@ func TestWindowNewPaneRequiresTmux37BeforeMutation(t *testing.T) {
 		result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}, ExitCode: 0},
 	}}}
 	_, err := (Window{
-		server: serverWithRunner(runner), sessionID: "$7", windowID: "@8",
+		server: versionedServerWithRunner(runner), sessionID: "$7", windowID: "@8",
 	}).NewPane(context.Background(), NewPaneRequest{})
 	if !errors.Is(err, ErrVersionTooLow) {
 		t.Fatalf("Window.NewPane() error = %v, want ErrVersionTooLow", err)

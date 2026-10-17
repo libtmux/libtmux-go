@@ -187,9 +187,7 @@ func TestRawSearchMethodsPassFiltersAtEachScope(t *testing.T) {
 			if len(requests) != 3 {
 				t.Fatalf("search command count = %d, want opening, listing, closing", len(requests))
 			}
-			assertSnapshotRequest(t, requests[0], []string{
-				"display-message", "-p", formatTemplate(snapshotIdentityFields()),
-			})
+			assertSnapshotRequest(t, requests[0], identityProbeArgumentsFor(snapshotIdentityFields()))
 			wantArguments := append([]string{test.command}, test.extra...)
 			wantArguments = append(
 				wantArguments,
@@ -197,9 +195,7 @@ func TestRawSearchMethodsPassFiltersAtEachScope(t *testing.T) {
 				"-F"+formatTemplate(fields),
 			)
 			assertSnapshotRequest(t, requests[1], wantArguments)
-			assertSnapshotRequest(t, requests[2], []string{
-				"display-message", "-p", formatTemplate(snapshotIdentityFields()),
-			})
+			assertSnapshotRequest(t, requests[2], identityProbeArgumentsFor(snapshotIdentityFields()))
 		})
 	}
 }

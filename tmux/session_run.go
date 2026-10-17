@@ -49,8 +49,7 @@ type RunResult struct {
 	// Signal is the signal that ended the command, when one did, and nil
 	// otherwise. Compare it with os.Kill or a syscall constant: tmux reports
 	// a number on Linux and a name on macOS and the BSDs, and Signal holds
-	// the same value on each. It is nil before tmux 3.3, which reports no
-	// signal for a dead pane.
+	// the same value on each.
 	Signal os.Signal
 	// Lines is what the terminal showed when the command finished, its
 	// history included, without the blank lines tmux pads a screen with. A
@@ -184,18 +183,13 @@ func (s Session) Start(
 	if err := pane.SetRemainOnExit(ctx, RemainOnExitOn); err != nil {
 		return nil, err
 	}
-	// tmux writes a dead-pane notice into the screen itself. From 3.3 the
-	// notice is an option and an empty one writes nothing; before that its
-	// text is fixed and is removed from the capture instead.
+	// An empty notice keeps tmux's status text out of captured command output.
+	if err := pane.SetRemainOnExitFormat(ctx, ""); err != nil {
+		return nil, err
+	}
 	version, err := s.server.Version(ctx)
 	if err != nil {
 		return nil, err
-	}
-	fixedNotice := !version.AtLeast(remainOnExitFormatVersion33)
-	if !fixedNotice {
-		if err := pane.SetRemainOnExitFormat(ctx, ""); err != nil {
-			return nil, err
-		}
 	}
 	// Before 3.7, tmux drains pending terminal bytes on exit only when a
 	// pipe is open. Failing to install one only forfeits that compatibility
@@ -225,7 +219,6 @@ func (s Session) Start(
 		window:        window,
 		pane:          respawned,
 		channel:       channel,
-		fixedNotice:   fixedNotice,
 		keep:          options.Keep,
 		installedPipe: installedPipe,
 	}, nil
@@ -244,7 +237,6 @@ type Running struct {
 	window        Window
 	pane          Pane
 	channel       string
-	fixedNotice   bool
 	keep          bool
 	installedPipe bool
 	// settle answers how long to let tmux catch up before reporting that it
@@ -488,9 +480,7 @@ func (r *Running) settleFor(ctx context.Context) time.Duration {
 // does before reaping the command: server_destroy_pane closes the descriptor
 // and only then returns early when the status is not ready, and through tmux
 // 3.5a pane_dead is that closed descriptor and nothing more. Either field
-// being readable is proof the command has been reaped. Before tmux 3.3, which
-// added pane_dead_signal, a signaled command has neither field, and the wait
-// there ends on tmux's own signal rather than on anything this can see.
+// being readable is proof the command has been reaped.
 func outcomeRecorded(pane Pane) bool {
 	if _, ok := pane.DeadStatus(); ok {
 		return true
@@ -575,7 +565,7 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	if err != nil {
 		return RunResult{}, fmt.Errorf("read screen: %w", err)
 	}
-	result.Lines = trimScreen(lines, r.fixedNotice)
+	result.Lines = trimScreen(lines)
 	return result, nil
 }
 
@@ -684,33 +674,14 @@ func (r *Running) Kill(ctx context.Context) error {
 	return nil
 }
 
-var remainOnExitFormatVersion33 = Version{raw: "3.3", major: 3, minor: 3}
-
-// deadPaneNotice is the fixed text tmux 3.2a writes when a remain-on-exit
-// pane's process ends, which continues "status N" for an exit and "signal N"
-// for a signal. Later releases render remain-on-exit-format instead.
-const deadPaneNotice = "Pane is dead ("
-
-// trimScreen drops the blank lines tmux pads a screen to its height with and,
-// when tmux wrote its fixed dead-pane notice, that notice, so lines hold only
-// what the command showed.
-func trimScreen(lines []string, fixedNotice bool) []string {
+// trimScreen drops the blank lines tmux pads a screen to its height with.
+func trimScreen(lines []string) []string {
 	// Joining wrapped lines keeps the spaces that pad each row out to the
 	// window's width, which some tmux versions then leave in place.
 	for index, line := range lines {
 		lines[index] = strings.TrimRight(line, " ")
 	}
 	end := len(lines)
-	for end > 0 && strings.TrimSpace(lines[end-1]) == "" {
-		end--
-	}
-	// tmux 3.2a writes the notice on the screen's bottom row, below whatever
-	// blank rows separate it from the command's last line.
-	if fixedNotice && end > 0 {
-		if at := strings.Index(lines[end-1], deadPaneNotice); at >= 0 {
-			lines[end-1] = strings.TrimRight(lines[end-1][:at], " ")
-		}
-	}
 	for end > 0 && strings.TrimSpace(lines[end-1]) == "" {
 		end--
 	}

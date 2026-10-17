@@ -9,6 +9,25 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- The core, workspace builder, and MCP consumer now require tmux 3.3a or newer.
+  Ordinary operations refuse older selected daemons, including unpatched 3.3,
+  with `ErrVersionTooLow` before dispatch. A newer client cannot vouch for an older
+  daemon. Unversioned OpenBSD base tmux and bare `master` reports cannot
+  establish the release floor and are refused. Construction and executable
+  diagnostics remain available. (#57)
+- The version check now identifies the daemon with `run-shell -C`, so a user's
+  `after-display-message` and `command-error` hooks no longer fire during the
+  probe. (#57)
+- `Session.Run` no longer handles tmux 3.2's fixed dead-pane notice; supported
+  releases disable the notice with `remain-on-exit-format`. Output resembling
+  the old notice is preserved. (#57)
+- The version check accepts only the version forms tmux reports: releases with at most
+  one patch letter, `-rc` and `-rcN` candidates, and `next-X.Y` development
+  builds. Candidates and development builds rank below the release they name;
+  `-master` and `-dev` suffixes are refused. (#57)
+
 ## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
 
 ### Development

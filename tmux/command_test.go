@@ -20,7 +20,7 @@ import (
 func TestServerCmdReturnsNonzeroTmuxExitAsData(t *testing.T) {
 	t.Parallel()
 
-	server := mustNewServer(ServerOptions{Binary: os.Args[0]})
+	server := commandHelperServer(ServerOptions{Binary: os.Args[0]})
 	result, err := server.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -44,7 +44,7 @@ func TestServerCmdReturnsNonzeroTmuxExitAsData(t *testing.T) {
 func TestServerCmdReturnsExactRawStdout(t *testing.T) {
 	t.Parallel()
 
-	server := mustNewServer(ServerOptions{Binary: os.Args[0]})
+	server := commandHelperServer(ServerOptions{Binary: os.Args[0]})
 	result, err := server.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -315,7 +315,7 @@ func TestNewServerCopiesEnvironment(t *testing.T) {
 	t.Parallel()
 
 	environment := []string{"TMUX_GO_TEST=original"}
-	server := mustNewServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: environment})
+	server := commandHelperServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: environment})
 	environment[0] = "TMUX_GO_TEST=mutated"
 
 	result, err := server.Cmd(
@@ -335,7 +335,7 @@ func TestNewServerCopiesEnvironment(t *testing.T) {
 func TestServerProcessEnvironmentDistinguishesNilFromEmpty(t *testing.T) {
 	t.Setenv("TMUX_GO_TEST", "inherited")
 
-	inherited := mustNewServer(ServerOptions{Binary: os.Args[0]})
+	inherited := commandHelperServer(ServerOptions{Binary: os.Args[0]})
 	result, err := inherited.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -349,7 +349,7 @@ func TestServerProcessEnvironmentDistinguishesNilFromEmpty(t *testing.T) {
 		t.Fatalf("inherited Stdout = %#v, want %#v", result.Stdout, want)
 	}
 
-	empty := mustNewServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: []string{}})
+	empty := commandHelperServer(ServerOptions{Binary: os.Args[0], ProcessEnvironment: []string{}})
 	result, err = empty.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -367,7 +367,7 @@ func TestServerProcessEnvironmentDistinguishesNilFromEmpty(t *testing.T) {
 func TestServerCommandHelperDoesNotReenterTmuxSuite(t *testing.T) {
 	t.Parallel()
 
-	server := mustNewServer(ServerOptions{Binary: os.Args[0]})
+	server := commandHelperServer(ServerOptions{Binary: os.Args[0]})
 	result, err := server.Cmd(
 		context.Background(),
 		"-test.run=^TestServerCommandHelperProcess$",
@@ -419,7 +419,7 @@ func TestCommandResultsAndErrorsOwnTheirSlices(t *testing.T) {
 	shared.Stdout[0] = "source-mutated"
 	shared.RawStdout[0] = 'Y'
 	shared.Stderr[0] = "source-mutated"
-	if !slices.Equal(second.Command, []string{"tmux", "display-message"}) ||
+	if !slices.Equal(second.Command, server.originalCommand(commandServer, []string{"display-message"}, false)) ||
 		!slices.Equal(second.Stdout, []string{"output"}) ||
 		!slices.Equal(second.RawStdout, []byte("output\n")) ||
 		!slices.Equal(second.Stderr, []string{"warning"}) {
@@ -490,6 +490,12 @@ func assertExitOnlyCommandErrorRedacts(
 		t.Fatalf("CommandError result = %#v, want exit-code-only result", commandError.Result)
 	}
 	assertErrorGraphRedacts(t, err, secret)
+}
+
+func commandHelperServer(options ServerOptions) Server {
+	server := mustNewServer(options)
+	server.state.executor = &qualifiedCommandRunner{inner: server.state.executor}
+	return server
 }
 
 // Tests that point ServerOptions.Binary at this test binary run it as a fake

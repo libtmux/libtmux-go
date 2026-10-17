@@ -3,7 +3,7 @@ package tmux
 import "context"
 
 // SwapWindowRequest configures swapping the receiver with one exact winlink on
-// tmux 3.2a or later. Its zero value is invalid because Target must be a
+// tmux 3.3a or later. Its zero value is invalid because Target must be a
 // complete Window handle. The endpoints must be proven to share a daemon
 // through connection state or the same nonempty SocketPath; matching socket
 // names alone are insufficient. Validation completes before execution.
@@ -23,7 +23,7 @@ type WindowSwapResult struct {
 	Target Window
 }
 
-// SwapPaneDirection selects an adjacent pane for swap-pane on tmux 3.2a or
+// SwapPaneDirection selects an adjacent pane for swap-pane on tmux 3.3a or
 // later. Its zero value selects no adjacent pane.
 type SwapPaneDirection uint8
 
@@ -37,8 +37,8 @@ const (
 	SwapPaneDirectionDown
 )
 
-// SwapPaneRequest configures swapping with an exact or adjacent pane on tmux
-// 3.2a or later. Its zero value is invalid: exactly one complete Target or
+// SwapPaneRequest configures swapping with an exact or adjacent pane on every
+// supported tmux. Its zero value is invalid: exactly one complete Target or
 // Direction is required. An explicit Target must differ from the receiver and
 // must be proven to share a daemon through connection state or the same
 // nonempty SocketPath; matching socket names alone are insufficient. Invalid

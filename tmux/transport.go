@@ -57,6 +57,70 @@ func (s Server) runCommand(
 	stdio *tmuxcmd.Stdio,
 	commandList bool,
 ) (tmuxcmd.Result, error) {
+	if _, err := s.stateForUse(); err != nil {
+		return tmuxcmd.Result{ExitCode: -1}, err
+	}
+	absentCleanup := len(args) == 1 && args[0] == "kill-server"
+	// A command with a stream cannot be replayed, so it always probes. Others
+	// reuse the endpoint's checked identity: the if-shell fence refuses a
+	// replaced daemon before any effect, and a vanished one answers "no server
+	// running" to the -N client, so either outcome discards the record and
+	// repeats the command once after a fresh probe.
+	reuse := stdio == nil
+	for attempt := 0; ; attempt++ {
+		checked, cached, err := s.checkForDispatch(ctx, absentCleanup, reuse && attempt == 0)
+		if err != nil {
+			return tmuxcmd.Result{ExitCode: -1}, err
+		}
+		if absentCleanup && checked.daemon == nil && checked.connection == nil {
+			return tmuxcmd.Result{Command: s.originalCommand(kind, args, false), ExitCode: 0}, nil
+		}
+		result, err := checked.runCheckedCommand(ctx, kind, args, stdio, commandList)
+		if cached && (errors.Is(err, ErrDaemonReplaced) ||
+			(err == nil && result.ExitCode != 0 && neverReachedServer(result.Stderr))) {
+			s.state.coordination().rememberChecked(nil)
+			continue
+		}
+		return result, err
+	}
+}
+
+// checkForDispatch checks the daemon version for one ordinary dispatch. cached reports
+// that the identity came from the endpoint's record instead of a probe.
+func (s Server) checkForDispatch(
+	ctx context.Context,
+	absentCleanup, reuse bool,
+) (checked Server, cached bool, err error) {
+	if reuse && s.daemon == nil && s.connection == nil && !absentCleanup {
+		if remembered := s.state.coordination().checkedDaemon(); remembered != nil {
+			if err := ctx.Err(); err != nil {
+				return Server{}, false, err
+			}
+			bound := s.withDaemon(*remembered)
+			if err := requireSupportedVersion(bound.daemon.version); err != nil {
+				return Server{}, false, err
+			}
+			return bound, true, nil
+		}
+	}
+	checked, err = s.checkCore(ctx, absentCleanup)
+	if err != nil {
+		return Server{}, false, err
+	}
+	if s.daemon == nil && s.connection == nil && checked.daemon != nil {
+		s.state.coordination().rememberChecked(checked.daemon)
+	}
+	return checked, false, nil
+}
+
+// runCheckedCommand also serves the private read-only identity bootstrap.
+func (s Server) runCheckedCommand(
+	ctx context.Context,
+	kind commandKind,
+	args []string,
+	stdio *tmuxcmd.Stdio,
+	commandList bool,
+) (tmuxcmd.Result, error) {
 	state, err := s.stateForUse()
 	if err != nil {
 		return tmuxcmd.Result{ExitCode: -1}, err
@@ -66,7 +130,7 @@ func (s Server) runCommand(
 		return tmuxcmd.Result{ExitCode: -1}, err
 	}
 	if guard != nil {
-		commandList = false
+		commandList = true
 	}
 	routeKind := kind
 	if s.requiresProcess {
@@ -95,9 +159,13 @@ func (s Server) runCommand(
 		if !commandList {
 			arguments = escapeCommandListSeparators(arguments)
 		}
+		arguments = s.commandArguments(arguments)
+		if s.daemon != nil || s.probesIdentity {
+			arguments = append([]string{"-N"}, arguments...)
+		}
 		result, err = state.executor.Run(ctx, tmuxcmd.Request{
 			Binary:      state.config.executable,
-			Arguments:   s.commandArguments(arguments),
+			Arguments:   arguments,
 			Environment: slices.Clone(state.config.processEnvironment),
 			Directory:   state.config.directory,
 			Stdio:       stdio,
@@ -209,4 +277,17 @@ func exactArgvSubcommand(arguments []string) []string {
 		}
 	}
 	return arguments
+}
+
+// neverReachedServer reports stderr proving the command found no daemon at all
+// and so ran nothing; a server that exits during a command is not included.
+func neverReachedServer(stderr []string) bool {
+	for _, line := range stderr {
+		if strings.HasPrefix(line, "no server running on ") ||
+			(strings.HasPrefix(line, "error connecting to ") &&
+				strings.HasSuffix(line, " (No such file or directory)")) {
+			return true
+		}
+	}
+	return false
 }

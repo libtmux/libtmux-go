@@ -11,7 +11,7 @@ client, which the Go tests do not provide.
 
 ## Getting set up
 
-You need Go 1.26 or newer and tmux 3.2a or newer on `PATH`. Nothing else — the
+You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. Nothing else — the
 core module has no runtime dependencies.
 
 Give tmux a socket directory of its own before running anything, and drop the
@@ -143,14 +143,26 @@ version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
 tmux is on `PATH`, so run the supported releases before anything ships.
 `scripts/matrix.sh` runs every compatible module suite, given a directory of
 tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
-whole 3.2a-through-3.8-rc2 range. With no matrix directory, the script skips with
-an explanation rather than reporting a pass it did not earn. Set
+whole 3.3a-through-3.8 range, including the 3.8-rc2 candidate. With no matrix directory, the script skips
+with an explanation rather than reporting a pass it did not earn. Set
 `LIBTMUX_MATRIX_REQUIRED=1` for a release gate, where absence must fail. With
-no explicit `LIBTMUX_MATRIX_VERSIONS`, required mode checks all ten supported
+no explicit `LIBTMUX_MATRIX_VERSIONS`, required mode checks all nine supported
 builds; setting it intentionally narrows the run:
 
 ```console
 $ LIBTMUX_MATRIX_REQUIRED=1 bash scripts/matrix.sh
+```
+
+The old releases remain negative version-check fixtures. The rejected-version CI
+job starts 3.2a and unpatched 3.3 daemons, then verifies that ordinary commands,
+batches, plans and connection creation refuse them without mutation. Run one
+explicit fixture locally with a supported tmux on `PATH`. The stale-handle
+proof also needs a 3.3a daemon within the old client's protocol compatibility:
+
+```console
+$ LIBTMUX_REJECTED_TMUX=/path/to/old/tmux \
+    LIBTMUX_FLOOR_TMUX=/path/to/3.3a/tmux \
+    go test ./tmux/internal/integration -run '^TestCoreMinimum'
 ```
 
 ### Generated documentation

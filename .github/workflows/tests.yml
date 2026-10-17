@@ -351,18 +351,21 @@ jobs:
   # exists -- 3.4 stopped taking split-window's -p that 3.3a and 3.5 both take,
   # and pane_start_path does not exist before 3.3.
   #
-  # 3.8-rc2 is in the list because this module carries code that only runs on
-  # tmux 3.8 and later - JSON layouts, twelve format fields, a popup guard,
-  # session-scoped subscriptions - and a release candidate gates as
-  # steadily as a release does. tmux -V reports it as "tmux 3.8-rc2", which
-  # this module reads as 3.8.
+  # This module carries code that only runs on tmux 3.8 and later - JSON
+  # layouts, twelve format fields, a popup guard, session-scoped subscriptions
+  # - so the list ends with the 3.8-rc2 candidate, the final 3.8 and tmux
+  # master. The version check ranks a candidate below its release, so 3.8-rc2 is
+  # checked as the build that precedes 3.8, not as 3.8. Master reports
+  # "next-X.Y"; it moves, so its lane is advisory and shows upstream breakage
+  # without blocking a change.
   tmux-matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: ${{ matrix.tmux-version == 'master' }}
     strategy:
       fail-fast: false
       matrix:
-        tmux-version: ['3.2a', '3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c', '3.8-rc2']
+        tmux-version: ['3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c', '3.8-rc2', '3.8', 'master']
     steps:
       - uses: actions/checkout@v7
 
@@ -376,7 +379,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/tmux-builds/tmux-${{ matrix.tmux-version }}
-          key: tmux-${{ matrix.tmux-version }}
+          key: tmux-${{ matrix.tmux-version }}${{ matrix.tmux-version == 'master' && format('-{0}', github.run_id) || '' }}
 
       - name: Build tmux ${{ matrix.tmux-version }}
         if: steps.tmux-cache.outputs.cache-hit != 'true'
@@ -402,7 +405,12 @@ jobs:
           export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
           actual_version=$(tmux -V)
           expected_version="tmux $TMUX_VERSION"
-          if [ "$actual_version" != "$expected_version" ]; then
+          if [ "$TMUX_VERSION" = master ]; then
+            case "$actual_version" in
+              "tmux next-"*) ;;
+              *) echo "::error::expected a next-X.Y master build, got $actual_version" >&2; exit 1 ;;
+            esac
+          elif [ "$actual_version" != "$expected_version" ]; then
             echo "::error::expected $expected_version, got $actual_version" >&2
             exit 1
           fi
@@ -412,3 +420,53 @@ jobs:
             echo "--- $module: full suite ---"
             (cd "$module" && go test -count=1 ./...)
           done
+
+  tmux-rejected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        rejected-version: ['3.2a', '3.3']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: go.mod
+      - name: Install tmux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
+            libutempter-dev bison autoconf automake pkg-config
+      - name: Cache supported and rejected tmux fixtures
+        id: version-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/tmux-version-builds
+          key: tmux-version-3.3a-${{ matrix.rejected-version }}
+      - name: Build version-check fixtures
+        if: steps.version-cache.outputs.cache-hit != 'true'
+        env:
+          REJECTED_VERSION: ${{ matrix.rejected-version }}
+        run: |
+          for release in 3.3a "$REJECTED_VERSION"; do
+            git clone --depth 1 --branch "$release" \
+              https://github.com/tmux/tmux.git "$RUNNER_TEMP/tmux-$release"
+            (
+              cd "$RUNNER_TEMP/tmux-$release"
+              sh autogen.sh
+              ./configure --prefix="$HOME/tmux-version-builds/$release"
+              make -j2 && make install
+            )
+          done
+      - name: Refuse unsupported daemons before effects
+        env:
+          REJECTED_VERSION: ${{ matrix.rejected-version }}
+        run: |
+          export PATH="$HOME/tmux-version-builds/3.3a/bin:$PATH"
+          export LIBTMUX_REJECTED_TMUX="$HOME/tmux-version-builds/$REJECTED_VERSION/bin/tmux"
+          test "$(tmux -V)" = 'tmux 3.3a'
+          test "$("$LIBTMUX_REJECTED_TMUX" -V)" = "tmux $REJECTED_VERSION"
+          mkdir -p "$TMUX_TMPDIR"
+          go test -count=1 ./tmux/internal/integration -run '^TestCoreMinimum'

@@ -29,7 +29,7 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if !identity.version.AtLeast(minimum) {
+	if !identity.version.meetsMinimum(minimum) {
 		return Snapshot{}, &VersionTooLowError{Current: identity.version, Minimum: minimum}
 	}
 

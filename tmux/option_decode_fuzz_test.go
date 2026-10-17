@@ -34,7 +34,7 @@ func FuzzDecodeArgsEscapedValueRoundTrip(f *testing.F) {
 
 // pinnedArgsEscape37b is a test-only transcription of args_escape and
 // utf8_stravis from the tmux 3.7b tag. Table tests cover the one output-shape
-// difference at the supported 3.2a floor: percent did not trigger quoting.
+// difference in the historical 3.2a codec: percent did not trigger quoting.
 func pinnedArgsEscape37b(value []byte) []byte {
 	if len(value) == 0 {
 		return []byte("''")

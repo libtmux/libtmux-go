@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -45,11 +46,36 @@ type ScriptedCommand struct {
 // control connection or a notification stream speaks tmux's control protocol,
 // which a script cannot, so code that opens one needs [NewServer] and a real
 // tmux.
+//
+// The private version probe reports no daemon unless an entry explicitly
+// matches its complete format argument. An entry that does so answers with the
+// record in Stdout; the script reports it the way tmux does, as the refusal of
+// the probe's random command word on stderr. Ordinary commands then use the
+// executable version supplied by the script's -V answer.
 func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	t.Helper()
 
+	const versionProbeFormat = "#{q:pid}|#{q:start_time}|#{q:socket_path}|#{q:version}="
+	const probeFormat = "#{q:pid}|#{q:start_time}|#{q:version}|"
+	if !slices.ContainsFunc(script, func(command ScriptedCommand) bool {
+		return slices.Contains(command.Contains, versionProbeFormat)
+	}) {
+		script = append([]ScriptedCommand{{
+			Contains: []string{versionProbeFormat},
+			Stderr:   "no server running on scripted socket\n",
+			ExitCode: 1,
+		}}, script...)
+	}
+
 	var body strings.Builder
 	body.WriteString("#!/bin/sh\n")
+	// The hook-free probe is run-shell -C <marker><format>; the marker is
+	// random, so the script recovers it from the argument.
+	body.WriteString("marker=\n")
+	body.WriteString("for argument in \"$@\"; do\n")
+	fmt.Fprintf(&body, "  case $argument in libtmux-version-*%s*) marker=${argument%%%%'#{'*};; esac\n",
+		shellQuote(probeFormat))
+	body.WriteString("done\n")
 	// Written by ScriptedTmux; matching is on the whole argument list so a
 	// caller names a subcommand without restating the flags around it.
 	// Each argument is matched whole. Joining them into one string would let
@@ -72,11 +98,23 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 		}
 		var condition strings.Builder
 		condition.WriteString("true")
+		probe := false
 		for _, needle := range command.Contains {
+			if needle == versionProbeFormat {
+				probe = true
+				condition.WriteString(` && [ -n "$marker" ]`)
+				continue
+			}
 			fmt.Fprintf(&condition,
 				" && { needle=%s; match \"$@\"; }", shellQuote(needle))
 		}
 		fmt.Fprintf(&body, "if %s; then\n", condition.String())
+		if probe && command.Stdout != "" {
+			fmt.Fprintf(&body, "  printf 'unknown command: %%s%%s\\n' \"$marker\" %s >&2\n",
+				shellQuote(probeRecord(command.Stdout)))
+			body.WriteString("  exit 1\nfi\n")
+			continue
+		}
 		if command.Stdout != "" {
 			fmt.Fprintf(&body, "  printf %%s %s\n", shellQuote(command.Stdout))
 		}
@@ -109,4 +147,16 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 // shellQuote renders value as one single-quoted shell word.
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+// probeRecord reorders a scripted pid|start_time|socket_path|version= record
+// into the order the probe reports: the socket path, whose bytes are
+// unconstrained, goes last.
+func probeRecord(stdout string) string {
+	record := strings.TrimSuffix(strings.TrimSuffix(stdout, "\n"), "=")
+	parts := strings.SplitN(record, "|", 4)
+	if len(parts) != 4 {
+		return strings.TrimSuffix(stdout, "\n")
+	}
+	return parts[0] + "|" + parts[1] + "|" + parts[3] + "|" + parts[2] + "="
 }

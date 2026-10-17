@@ -125,15 +125,11 @@ func TestServerPointLookupsUseScopedFramedListings(t *testing.T) {
 			if len(requests) != 3 {
 				t.Fatalf("lookup command count = %d, want opening, listing, closing", len(requests))
 			}
-			assertSnapshotRequest(t, requests[0], []string{
-				"display-message", "-p", formatTemplate(snapshotIdentityFields()),
-			})
+			assertSnapshotRequest(t, requests[0], identityProbeArgumentsFor(snapshotIdentityFields()))
 			wantArguments := append([]string{test.command}, test.extra...)
 			wantArguments = append(wantArguments, "-F"+formatTemplate(fields))
 			assertSnapshotRequest(t, requests[1], wantArguments)
-			assertSnapshotRequest(t, requests[2], []string{
-				"display-message", "-p", formatTemplate(snapshotIdentityFields()),
-			})
+			assertSnapshotRequest(t, requests[2], identityProbeArgumentsFor(snapshotIdentityFields()))
 		})
 	}
 }
@@ -648,11 +644,10 @@ func TestServerPointLookupDetectsRestartBeforeReportingAbsence(t *testing.T) {
 
 	version := mustParseVersion(t, "3.7")
 	closing := versionResponse{result: tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(
+		ExitCode: 1, Stderr: identityProbeStderr(
 			snapshotIdentityFields(),
 			snapshotRowValues(version, map[string]string{"pid": "999", "start_time": "1000"}),
 		),
-		ExitCode: 0,
 	}}
 	tests := []struct {
 		name        string
@@ -917,17 +912,15 @@ func TestModelRefreshReturnsNewLiveValue(t *testing.T) {
 
 func liveIdentityResponse(version Version) versionResponse {
 	return versionResponse{result: tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(snapshotIdentityFields(), snapshotRowValues(version, nil)),
-		ExitCode:  0,
+		ExitCode: 1, Stderr: identityProbeStderr(snapshotIdentityFields(), snapshotRowValues(version, nil)),
 	}}
 }
 
 func changedLiveIdentityResponse(version Version) versionResponse {
 	return versionResponse{result: tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(
+		ExitCode: 1, Stderr: identityProbeStderr(
 			snapshotIdentityFields(),
 			snapshotRowValues(version, map[string]string{"pid": "999", "start_time": "1000"}),
 		),
-		ExitCode: 0,
 	}}
 }

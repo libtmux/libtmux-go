@@ -226,9 +226,6 @@ func TestNewSessionConnectionArgumentsUseControlDialect(t *testing.T) {
 func TestConnectionRejectsTmuxBeforeSupportedFloor(t *testing.T) {
 	t.Parallel()
 
-	response := versionResponse{result: tmuxcmd.Result{
-		Stdout: []string{"tmux 3.1"}, ExitCode: 0,
-	}}
 	assertFloor := func(t *testing.T, err error, calls int) {
 		t.Helper()
 		var tooLow *VersionTooLowError
@@ -245,13 +242,13 @@ func TestConnectionRejectsTmuxBeforeSupportedFloor(t *testing.T) {
 			)
 		}
 		if calls != 1 {
-			t.Fatalf("runner calls = %d, want only tmux -V", calls)
+			t.Fatalf("runner calls = %d, want only the daemon identity probe", calls)
 		}
 	}
 
 	t.Run("existing session", func(t *testing.T) {
-		runner := &versionQueueRunner{responses: []versionResponse{response}}
-		server := serverWithRunner(runner)
+		runner := &versionRunner{daemon: "3.1", binary: "3.8"}
+		server := rawVersionServer(t, runner)
 		connection, err := (Session{server: server, sessionID: "$1"}).OpenControl(
 			context.Background(),
 			ConnectionOptions{},
@@ -260,12 +257,12 @@ func TestConnectionRejectsTmuxBeforeSupportedFloor(t *testing.T) {
 			_ = connection.Close()
 			t.Fatal("OpenControl() returned a connection below the supported floor")
 		}
-		assertFloor(t, err, runner.callCount())
+		assertFloor(t, err, runner.requests)
 	})
 
 	t.Run("new session", func(t *testing.T) {
-		runner := &versionQueueRunner{responses: []versionResponse{response}}
-		server := serverWithRunner(runner)
+		runner := &versionRunner{daemon: "3.1", binary: "3.8"}
+		server := rawVersionServer(t, runner)
 		created, connection, err := server.NewSessionConnection(
 			context.Background(),
 			NewSessionRequest{},
@@ -277,7 +274,7 @@ func TestConnectionRejectsTmuxBeforeSupportedFloor(t *testing.T) {
 			}
 			t.Fatalf("NewSessionConnection() = (%#v, %#v), want zero and nil", created, connection)
 		}
-		assertFloor(t, err, runner.callCount())
+		assertFloor(t, err, runner.requests)
 	})
 }
 

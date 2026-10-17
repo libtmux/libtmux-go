@@ -78,7 +78,10 @@ func TestParseControlNotificationAgainstRealTmux(t *testing.T) {
 
 //libtmux:real-tmux
 func TestNotificationStreamZeroOptionsRetainsStructureWithoutPaneOutput(t *testing.T) {
-	server := tmuxtest.NewServer(context.Background(), t)
+	server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{
+		FixedShell:     true,
+		InitialSession: &tmux.NewSessionRequest{Command: "stty -echo; exec sh"},
+	})
 	// A ceiling rather than a delay: every wait below ends as soon as its
 	// condition holds. One tight enough to be exceeded on a loaded machine
 	// fails a test with nothing wrong with it.
@@ -92,6 +95,7 @@ func TestNotificationStreamZeroOptionsRetainsStructureWithoutPaneOutput(t *testi
 	if err != nil || len(panes) != 1 {
 		t.Fatalf("Panes() = (%#v, %v), want one pane", panes, err)
 	}
+	tmuxtest.WaitForShellReady(ctx, t, panes[0])
 	stream, err := server.OpenNotifications(ctx, sessions[0], tmux.NotificationOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +103,7 @@ func TestNotificationStreamZeroOptionsRetainsStructureWithoutPaneOutput(t *testi
 	t.Cleanup(func() { _ = stream.Close() })
 
 	const marker = "notification-stream-no-pane-output"
-	sendRealPaneCommand(ctx, t, panes[0], "printf '"+marker+"\\n'")
+	sendRealPaneCommand(ctx, t, panes[0], "printf '\\n"+marker+"\\n'")
 	waitForPaneCapture(ctx, t, panes[0], marker)
 	if _, err := sessions[0].Rename(ctx, "renamed"); err != nil {
 		t.Fatal(err)
