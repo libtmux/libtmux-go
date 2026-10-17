@@ -199,7 +199,7 @@ func TestDocumentedBlockingWorkflowsAgainstRealTmux(t *testing.T) {
 	if !errors.As(err, &commandError) {
 		t.Fatalf("strict Sessions() error = %v, want *CommandError", err)
 	}
-	if commandError.Subcommand != "display-message" || commandError.Result.ExitCode == 0 {
-		t.Fatalf("strict Sessions() CommandError = %#v, want display-message with nonzero exit", commandError)
+	if commandError.Subcommand != "run-shell" || commandError.Result.ExitCode == 0 {
+		t.Fatalf("strict Sessions() CommandError = %#v, want run-shell with nonzero exit", commandError)
 	}
 }

@@ -90,8 +90,8 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 					len(traces), route.wantProbes, traces)
 			}
 			for _, trace := range traces[:route.wantProbes] {
-				if trace.Subcommand != "display-message" || trace.Transport != tmux.CommandTransportProcess {
-					t.Errorf("admission probe trace = %v, want display-message over process", trace)
+				if trace.Subcommand != "run-shell" || trace.Transport != tmux.CommandTransportProcess {
+					t.Errorf("version probe trace = %v, want run-shell over process", trace)
 				}
 			}
 			trace := traces[route.wantProbes]
