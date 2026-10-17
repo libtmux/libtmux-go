@@ -202,12 +202,28 @@ func (t *tools) waitForText(
 		return finishTimeout(err)
 	}
 
-	observation, err := t.runtime.openObservation(waitCtx, processPane)
+	// Below tmux 3.7 no control observation exists, so the wait polls with
+	// capture-pane. That is chosen before any control client is attempted.
+	var observation paneTextSource
+	var entry []string
+	polling, err := controlObservationUnavailable(waitCtx, processPane)
 	if err != nil {
 		return finishTimeout(err)
 	}
-	defer t.runtime.releaseObservation(observation)
-	entry := observation.Baseline()
+	if polling {
+		polled, err := openPollingObservation(waitCtx, processPane)
+		if err != nil {
+			return finishTimeout(err)
+		}
+		observation, entry = polled, polled.Baseline()
+	} else {
+		controlled, err := t.runtime.openObservation(waitCtx, processPane)
+		if err != nil {
+			return finishTimeout(err)
+		}
+		defer t.runtime.releaseObservation(controlled)
+		observation, entry = controlled, controlled.Baseline()
+	}
 	// The server knows every key it sent this pane; a match confined to that
 	// unsubmitted line is not a match, however new the bytes look. Every read
 	// of it is fresh. It has to be for the cursor branch below, which reads
