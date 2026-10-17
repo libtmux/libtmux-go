@@ -197,7 +197,7 @@ func ExamplePane_SendKeys() {
 		return
 	}
 
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{
 		Command: &command,
 		Literal: true,
@@ -1046,7 +1046,7 @@ func ExamplePane_Capture() {
 		fmt.Println("resolve pane:", err)
 		return
 	}
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -1542,7 +1542,7 @@ func ExamplePoll() {
 		fmt.Println("resolve pane:", err)
 		return
 	}
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -1666,7 +1666,7 @@ func ExamplePane_CaptureToFile() {
 		return
 	}
 
-	command := "printf 'build ready\\n'"
+	command := "printf '\\nbuild ready\\n'"
 	if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &command}); err != nil {
 		fmt.Println("send keys:", err)
 		return
@@ -1955,7 +1955,7 @@ func ExamplePaneObservation_WaitFor() {
 	}
 	defer func() { _ = observation.Close() }()
 
-	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf 'build ready\\n'"); err != nil {
+	if _, err := fmt.Fprintln(pane.Writer(ctx), "printf '\\nbuild ready\\n'"); err != nil {
 		fmt.Println("write:", err)
 		return
 	}
