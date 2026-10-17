@@ -63,9 +63,9 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 		want       tmux.CommandTransport
 		wantProbes int
 	}{
-		{
+		{ // The earlier Sessions call checked this endpoint, so no probe repeats.
 			name: "unbound process", server: server,
-			want: tmux.CommandTransportProcess, wantProbes: 1,
+			want: tmux.CommandTransportProcess, wantProbes: 0,
 		},
 		{name: "process", server: sessions[0].Server(), want: tmux.CommandTransportProcess},
 		{

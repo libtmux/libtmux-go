@@ -36,16 +36,18 @@ func TestCommandObserverReportsEveryCommand(t *testing.T) {
 
 	mutex.Lock()
 	defer mutex.Unlock()
-	if len(traces) != 4 {
-		t.Fatalf("traces = %#v, want one per command", traces)
+	// The endpoint is probed once; the checked identity then serves both
+	// commands, each fenced.
+	if len(traces) != 3 {
+		t.Fatalf("traces = %#v, want one probe plus one per command", traces)
 	}
 	if traces[1].Subcommand != "list-sessions" || traces[1].ExitCode != 0 {
-		t.Errorf("traces[0] = %v, want list-sessions exiting 0", traces[0])
+		t.Errorf("traces[1] = %v, want list-sessions exiting 0", traces[1])
 	}
 	// A completed tmux failure is reported through ExitCode, not Err, the way
 	// CommandResult reports one.
-	if traces[3].Subcommand != "kill-pane" || traces[3].ExitCode != 1 || traces[3].Err != nil {
-		t.Errorf("traces[1] = %v, want kill-pane exiting 1 with no transport error", traces[1])
+	if traces[2].Subcommand != "kill-pane" || traces[2].ExitCode != 1 || traces[2].Err != nil {
+		t.Errorf("traces[2] = %v, want kill-pane exiting 1 with no transport error", traces[2])
 	}
 	for index, trace := range traces {
 		if trace.Transport != CommandTransportProcess {

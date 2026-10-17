@@ -118,3 +118,32 @@ func TestVersionCheckRecoversUnusualSocketPaths(t *testing.T) {
 		})
 	}
 }
+
+// An unbound handle reuses its checked daemon, so a daemon that is replaced or
+// gone must be noticed by the fence and the next command must still start or
+// find the new one.
+//
+//libtmux:real-tmux
+func TestVersionCheckCacheSurvivesDaemonReplacement(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
+	run := func(arguments ...string) string {
+		t.Helper()
+		result, err := server.Cmd(ctx, arguments...)
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("%s = (%+v, %v)", strings.Join(arguments, " "), result, err)
+		}
+		return strings.Join(result.Stdout, "\n")
+	}
+	run("new-session", "-d", "-s", "first", "sleep 60")
+	run("list-sessions")
+	run("kill-server")
+	// The cached identity now names a dead daemon: new-session must start a
+	// fresh one rather than fail on the -N client.
+	run("new-session", "-d", "-s", "second", "sleep 60")
+	if got := run("list-sessions", "-F", "#{session_name}"); got != "second" {
+		t.Fatalf("sessions after replacement = %q, want only second", got)
+	}
+}

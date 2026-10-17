@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
@@ -327,4 +329,87 @@ func (r *versionRunner) Run(_ context.Context, request tmuxcmd.Request) (tmuxcmd
 	}
 	r.effects++
 	return tmuxcmd.Result{Stdout: []string{"$1"}}, nil
+}
+
+// generationRunner is a daemon whose generation a test can advance or end.
+type generationRunner struct {
+	mu        sync.Mutex
+	pid       int
+	gone      bool
+	probes    int
+	commands  int
+	refusedBy int
+}
+
+func (r *generationRunner) Run(_ context.Context, request tmuxcmd.Request) (tmuxcmd.Result, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	arguments := exactArgvSubcommand(request.Arguments)
+	switch {
+	case slices.Equal(arguments, []string{"-V"}):
+		return tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}, nil
+	case slices.Equal(arguments, identityProbeArgumentsFor(coreVersionIdentityFields())):
+		r.probes++
+		if r.gone {
+			return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"no server running on /tmp/gen"}}, nil
+		}
+		return identityProbeResult(coreVersionIdentityFields(), map[string]string{
+			"version": "3.7", "pid": strconv.Itoa(r.pid), "start_time": "1", "socket_path": "/tmp/gen",
+		}), nil
+	case len(arguments) >= 7 && arguments[0] == "if-shell":
+		if r.gone {
+			return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"no server running on /tmp/gen"}}, nil
+		}
+		if !strings.Contains(arguments[2], "#{==:#{pid},"+strconv.Itoa(r.pid)+"}") {
+			r.refusedBy++
+			return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"unknown command: " + arguments[4]}}, nil
+		}
+		r.commands++
+		return tmuxcmd.Result{Stdout: []string{"ok"}}, nil
+	}
+	r.commands++
+	return tmuxcmd.Result{Stdout: []string{"ok"}}, nil
+}
+
+func TestVersionCheckIsCachedPerEndpointAndTheFenceInvalidatesIt(t *testing.T) {
+	t.Parallel()
+
+	runner := &generationRunner{pid: 100}
+	server := rawVersionServer(t, runner)
+	ctx := t.Context()
+	for range 3 {
+		if result, err := server.Cmd(ctx, "list-sessions"); err != nil || result.ExitCode != 0 {
+			t.Fatalf("Cmd() = (%+v, %v)", result, err)
+		}
+	}
+	if runner.probes != 1 || runner.commands != 3 {
+		t.Fatalf("probes = %d commands = %d, want one probe for three fenced commands",
+			runner.probes, runner.commands)
+	}
+
+	// A replacement daemon refuses the cached fence before any effect; the
+	// handle probes again and the command runs once on the new generation.
+	runner.mu.Lock()
+	runner.pid = 200
+	runner.mu.Unlock()
+	if result, err := server.Cmd(ctx, "list-sessions"); err != nil || result.ExitCode != 0 {
+		t.Fatalf("Cmd() after replacement = (%+v, %v)", result, err)
+	}
+	if runner.refusedBy != 1 || runner.probes != 2 || runner.commands != 4 {
+		t.Fatalf("refused = %d probes = %d commands = %d, want one refusal, one new probe, one effect",
+			runner.refusedBy, runner.probes, runner.commands)
+	}
+
+	// A vanished daemon answers the -N client with "no server running"; the
+	// record is dropped, so the next probe sees it absent instead of looping.
+	runner.mu.Lock()
+	runner.gone = true
+	runner.mu.Unlock()
+	result, _ := server.Cmd(ctx, "list-sessions")
+	if result.ExitCode == 0 && len(result.Stdout) != 0 {
+		t.Fatalf("Cmd() against a vanished daemon succeeded: %+v", result)
+	}
+	if runner.probes != 3 {
+		t.Fatalf("probes = %d, want the stale record dropped and one fresh probe", runner.probes)
+	}
 }

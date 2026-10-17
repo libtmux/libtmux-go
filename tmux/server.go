@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -40,6 +41,25 @@ type serverState struct {
 // same daemon with different process environments.
 type serverShared struct {
 	version versionCache
+
+	checkedMu sync.Mutex
+	checked   *snapshotServerIdentity
+}
+
+// checkedDaemon returns the identity last checked at this endpoint.
+func (s *serverShared) checkedDaemon() *snapshotServerIdentity {
+	s.checkedMu.Lock()
+	defer s.checkedMu.Unlock()
+	return s.checked
+}
+
+// rememberChecked records a version-checked identity, or forgets it when nil. The
+// if-shell fence on every dispatch is what proves the record still describes
+// the live daemon.
+func (s *serverShared) rememberChecked(identity *snapshotServerIdentity) {
+	s.checkedMu.Lock()
+	defer s.checkedMu.Unlock()
+	s.checked = identity
 }
 
 // coordination returns the daemon-scoped shared state.
