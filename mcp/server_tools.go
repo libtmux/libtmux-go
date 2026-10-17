@@ -2,7 +2,10 @@ package mcp
 
 import (
 	"context"
+	"errors"
+	"net"
 	"slices"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -24,6 +27,8 @@ type attachedClient struct {
 type getServerInfoOutput struct {
 	SocketPath          string           `json:"socketPath"`
 	Version             string           `json:"version"`
+	MinimumVersion      string           `json:"minimumVersion"`
+	VersionRefusal      string           `json:"versionRefusal,omitempty" jsonschema:"why this tmux is refused and how to fix it; set when the selected tmux is older than minimumVersion, and the counts are then unavailable"`
 	Alive               bool             `json:"alive"`
 	Sessions            int              `json:"sessions"`
 	Windows             int              `json:"windows"`
@@ -37,13 +42,34 @@ type getServerInfoOutput struct {
 	truncation
 }
 
+// reportRefusal answers for a refused tmux: the floor and the remedy, with the
+// version when the refusal knows it.
+func (getServerInfoOutput) reportRefusal(ctx context.Context, t *tools, err error) getServerInfoOutput {
+	output := getServerInfoOutput{
+		SocketPath:      t.socketPath(ctx),
+		MinimumVersion:  minimumTmuxVersion,
+		VersionRefusal:  err.Error(),
+		AttachedClients: []attachedClient{},
+	}
+	// A refused daemon is running, so alive says whether anything answers on
+	// the socket, not whether tmux would take a command.
+	output.Alive = socketAnswers(output.SocketPath)
+	if refused, ok := errors.AsType[*tmux.VersionTooLowError](err); ok {
+		output.Version = refused.Current.String()
+	}
+	return output
+}
+
 func (t *tools) getServerInfo(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
 	input getServerInfoInput,
 ) (*mcp.CallToolResult, getServerInfoOutput, error) {
 	caller := callerFromEnvironment()
-	output := getServerInfoOutput{CallerPaneID: caller.paneID, SocketPath: t.socketPath(ctx)}
+	output := getServerInfoOutput{
+		CallerPaneID: caller.paneID, SocketPath: t.socketPath(ctx),
+		MinimumVersion: minimumTmuxVersion,
+	}
 	if version, err := t.tmux(ctx).Version(ctx); err == nil {
 		output.Version = version.String()
 	}
@@ -127,4 +153,18 @@ func summarizeClients(clients []tmux.Client) []attachedClient {
 		})
 	}
 	return summaries
+}
+
+// socketAnswers reports whether a server accepts connections on path. It sends
+// nothing, so it works for a tmux the version check has refused.
+func socketAnswers(path string) bool {
+	if path == "" {
+		return false
+	}
+	connection, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		return false
+	}
+	_ = connection.Close()
+	return true
 }

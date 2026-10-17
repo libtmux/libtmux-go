@@ -216,13 +216,14 @@ func reportDoctor(target tmux.Server, socketOrigin string) error {
 		Clients          int    `json:"clients"`
 		InsideThisServer bool   `json:"insideThisServer"`
 		CallerPaneID     string `json:"callerPaneId"`
+		MinimumVersion   string `json:"minimumVersion"`
 	}
 	if err := callInto(ctx, session, "get_server_info", &info); err != nil {
 		return err
 	}
 
 	fmt.Println("libtmux-mcp doctor")
-	fmt.Printf("  tmux:    %s\n", orUnknown(info.Version))
+	fmt.Printf("  tmux:    %s (requires %s or newer)\n", orUnknown(info.Version), orUnknown(info.MinimumVersion))
 	fmt.Printf("  socket:  %s (from %s)\n", orUnknown(info.SocketPath), socketOrigin)
 	if info.Alive {
 		fmt.Printf("  holds:   %d sessions, %d windows, %d panes, %d clients attached\n",

@@ -15,6 +15,9 @@ const (
 	fixtureUnavailable = "unavailable"
 	fixtureNoServer    = "no-server"
 	fixtureHang        = "hang"
+
+	fixtureOldDaemonAppears = "old-daemon-appears"
+	flipFileEnvironment     = "LIBTMUX_MCP_TEST_FLIP_FILE"
 )
 
 func executableFixtureOptions(

@@ -261,6 +261,7 @@ func registerDefinition[In, Out any](
 	if !definition.aggregate {
 		registered = withRequestRuntime(registry, definition.readsOnly(), registered)
 	}
+	registered = withVersionRemedy(registry, registered)
 	sdk.AddTool(server, definition.sdkTool(), registered)
 	if definition.aggregate {
 		return
@@ -276,8 +277,8 @@ func bindDefinitionDispatcher[In, Out any](
 	if definition.aggregate {
 		return
 	}
-	registered := withRequestRuntime(
-		registry, definition.readsOnly(), boundDefinitionHandler(registry, handler))
+	registered := withVersionRemedy(registry, withRequestRuntime(
+		registry, definition.readsOnly(), boundDefinitionHandler(registry, handler)))
 	installDispatcher(registry, definition, registered)
 }
 
@@ -296,6 +297,36 @@ func boundDefinitionHandler[In, Out any](
 		input In,
 	) (*sdk.CallToolResult, Out, error) {
 		return handler(registry, ctx, request, input)
+	}
+}
+
+// refusalReporter is an output that can say a refused tmux in its own fields,
+// so a tool that exists to describe the server still answers.
+type refusalReporter[Out any] interface {
+	reportRefusal(context.Context, *tools, error) Out
+}
+
+// withVersionRemedy is the outermost wrapper of a tool, so a refusal raised
+// while acquiring the runtime carries the remedy as one raised in the handler
+// does. A tool whose output is a refusalReporter answers with it instead.
+func withVersionRemedy[In, Out any](
+	registry *tools,
+	handler func(context.Context, *sdk.CallToolRequest, In) (*sdk.CallToolResult, Out, error),
+) func(context.Context, *sdk.CallToolRequest, In) (*sdk.CallToolResult, Out, error) {
+	return func(
+		ctx context.Context,
+		request *sdk.CallToolRequest,
+		input In,
+	) (*sdk.CallToolResult, Out, error) {
+		result, output, err := handler(ctx, request, input)
+		explained := explainVersionRefusal(err)
+		if _, refused := errors.AsType[*versionRefusalError](explained); refused {
+			var zero Out
+			if reporter, ok := any(zero).(refusalReporter[Out]); ok {
+				return nil, reporter.reportRefusal(ctx, registry, explained), nil
+			}
+		}
+		return result, output, explained
 	}
 }
 

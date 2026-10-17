@@ -895,23 +895,25 @@ Belongs to the `inspect` toolset.
 
 Reads only (effect `observe`). Repeating it changes nothing.
 
-| Returns | Type |
-| --- | --- |
-| `alive` **required** | boolean |
-| `attachedClients` **required** | array |
-| `clients` **required** | integer |
-| `insideThisServer` **required** | boolean |
-| `panes` **required** | integer |
-| `sessions` **required** | integer |
-| `socketPath` **required** | string |
-| `truncated` **required** | boolean |
-| `version` **required** | string |
-| `windows` **required** | integer |
-| `callerPaneId` | string |
-| `messages` | array |
-| `messagesUnavailable` | string |
-| `truncatedBytes` | integer |
-| `truncatedLines` | integer |
+| Returns | Type | |
+| --- | --- | --- |
+| `alive` **required** | boolean | — |
+| `attachedClients` **required** | array | — |
+| `clients` **required** | integer | — |
+| `insideThisServer` **required** | boolean | — |
+| `minimumVersion` **required** | string | — |
+| `panes` **required** | integer | — |
+| `sessions` **required** | integer | — |
+| `socketPath` **required** | string | — |
+| `truncated` **required** | boolean | — |
+| `version` **required** | string | — |
+| `windows` **required** | integer | — |
+| `callerPaneId` | string | — |
+| `messages` | array | — |
+| `messagesUnavailable` | string | — |
+| `truncatedBytes` | integer | — |
+| `truncatedLines` | integer | — |
+| `versionRefusal` | string | why this tmux is refused and how to fix it; set when the selected tmux is older than minimumVersion, and the counts are then unavailable |
 
 ### `get_session_info`
 

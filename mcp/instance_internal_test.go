@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -101,6 +102,10 @@ func TestInstanceConnectChecksTheMCPVersionBeforeTransport(t *testing.T) {
 					tooLow.Minimum.String() != minimumTmuxVersion {
 					t.Fatalf("Connect() error = %#v, want current %s and minimum %s",
 						err, test.version, minimumTmuxVersion)
+				}
+				if !strings.Contains(err.Error(), "restart the tmux server") ||
+					!strings.Contains(err.Error(), BinaryEnvironmentVariable) {
+					t.Fatalf("Connect() error = %q, want the startup remedy", err)
 				}
 			}
 		})
