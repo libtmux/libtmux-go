@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -176,6 +177,9 @@ func (r *invocation) commandFailure(err error) *failure {
 	}
 	if err == nil {
 		return nil
+	}
+	if unsupportedTmux(err) {
+		code = "tmux_unsupported"
 	}
 	f := &failure{code, err.Error(), 1}
 	var specific *failure
@@ -604,4 +608,12 @@ func commandMetadata(cmd *cobra.Command) map[string]any {
 		children = append(children, commandMetadata(child))
 	}
 	return map[string]any{"name": cmd.Name(), "path": cmd.CommandPath(), "usage": cmd.Use, "description": cmd.Short, "aliases": cmd.Aliases, "positionals": cmd.Annotations, "flags": flags, "inherited_flags": inherited, "children": children}
+}
+
+// unsupportedTmux reports a refusal of the tmux in use: older than the floor,
+// or a version that names no release. Its message carries the remedy, so the
+// caller keeps the message and only the code names the cause.
+func unsupportedTmux(err error) bool {
+	var refused *tmux.VersionTooLowError
+	return errors.As(err, &refused) && refused.Feature == ""
 }

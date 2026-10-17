@@ -618,3 +618,234 @@ func TestPromptDefaultShowsTheDisplayHintNotTheBareFallback(t *testing.T) {
 		t.Fatalf("promptDefault = %q, %v, prompt %q, want y and [Y/n] shown", answer, err, errOut.String())
 	}
 }
+
+// fakeOldTmux puts a tmux 3.2a daemon on PATH, answering the version probe
+// the way tmux does, and a Python that records every invocation, so a test can
+// see whether a child ran.
+func fakeOldTmux(t *testing.T) (pythonLog string) {
+	t.Helper()
+	directory := t.TempDir()
+	tmuxScript := `#!/bin/sh
+for argument in "$@"; do
+  case $argument in
+    -V) echo 'tmux 3.2a'; exit 0 ;;
+    libtmux-version-*) probe=$argument ;;
+  esac
+done
+if [ -n "$probe" ]; then
+  marker=${probe%%'#{'*}
+  case $probe in
+    *'#{q:version}'*'#{q:pid}'*) record='3.2a|123|456|/tmp/fixture.sock=' ;;
+    *) record='123|456|3.2a|/tmp/fixture.sock=' ;;
+  esac
+  echo "unknown command: ${marker}${record}" >&2
+  exit 1
+fi
+echo 'the daemon must not be reached' >&2
+exit 1
+`
+	pythonLog = filepath.Join(directory, "python.log")
+	pythonScript := "#!/bin/sh\necho \"$@\" >> " + pythonLog + "\nexit 0\n"
+	for name, script := range map[string]string{"tmux": tmuxScript, "python-fixture": pythonScript} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", directory)
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
+	t.Setenv("TMUX_WORKSPACE_PYTHON", filepath.Join(directory, "python-fixture"))
+	return pythonLog
+}
+
+// The shell and the Python bridge run their own tmux, so a tmux below the
+// floor is refused before either child starts.
+func TestPythonChildrenAreNotStartedWithATmuxBelowTheFloor(t *testing.T) {
+	bridge := filepath.Join(t.TempDir(), "bridge.json")
+	if err := os.WriteFile(bridge, []byte(`{"session_name":"bridge","windows":[{"panes":[null]}],"plugins":["example.Plugin"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, args := range map[string][]string{
+		"shell":       {"shell", "--json"},
+		"bridge load": {"load", "-d", "--yes", "--json", bridge},
+	} {
+		t.Run(name, func(t *testing.T) {
+			pythonLog := fakeOldTmux(t)
+			code, out, diagnostic := invoke(t, args...)
+			if code != 1 || out != "" {
+				t.Fatalf("%d %q %q, want a refusal", code, out, diagnostic)
+			}
+			if got := errorCode(t, diagnostic); got != "tmux_unsupported" {
+				t.Fatalf("code = %q, want tmux_unsupported (%s)", got, diagnostic)
+			}
+			for _, want := range []string{"installed 3.2a", "upgrade tmux and restart its server"} {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("diagnostic %q lacks %q", diagnostic, want)
+				}
+			}
+			if _, err := os.Stat(pythonLog); !os.IsNotExist(err) {
+				contents, _ := os.ReadFile(pythonLog)
+				t.Fatalf("a Python child started: %s", contents)
+			}
+		})
+	}
+}
+
+// A refused tmux reaches the user as itself, with its remedy, from every
+// command that reads or builds, in text and JSON output: not as a missing
+// session or a generic tmux failure.
+func TestRefusedTmuxIsNamedByEveryCommand(t *testing.T) {
+	fakeOldTmux(t)
+	path := filepath.Join(t.TempDir(), "w.yaml")
+	if err := os.WriteFile(path, []byte("session_name: refused\nwindows:\n- panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, args := range map[string][]string{
+		"load json":   {"load", "-d", "--yes", "--json", path},
+		"load text":   {"load", "-d", "--yes", path},
+		"freeze json": {"freeze", "--json", "any"},
+		"freeze text": {"freeze", "--save-to", filepath.Join(t.TempDir(), "out.yaml"), "any"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			code, out, diagnostic := invoke(t, args...)
+			text := out + diagnostic
+			if code != 1 {
+				t.Fatalf("exit %d: %s", code, text)
+			}
+			for _, want := range []string{"installed 3.2a", "require 3.3a", "upgrade tmux and restart its server"} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("output lacks %q: %s", want, text)
+				}
+			}
+			if strings.Contains(text, "session_not_found") || strings.Contains(text, "tmux_failed") {
+				t.Fatalf("a refused tmux was reported as another failure: %s", text)
+			}
+			if strings.Contains(name, "json") && !strings.Contains(text, "tmux_unsupported") {
+				t.Fatalf("JSON output lacks the tmux_unsupported code: %s", text)
+			}
+		})
+	}
+}
+
+// A load against a refused tmux sent nothing, so it reports the refusal under
+// its own code and the error status, never effects it did not create. The
+// append path fails resolving the current session and the detached path
+// fails checking for an existing one; both are covered.
+func TestLoadAgainstARefusedTmuxIsANoEffectRefusal(t *testing.T) {
+	fakeOldTmux(t)
+	socket := filepath.Join(t.TempDir(), "fixture.sock")
+	if err := os.WriteFile(socket, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX", socket+",123,0")
+	t.Setenv("TMUX_PANE", "%0")
+	path := filepath.Join(t.TempDir(), "w.yaml")
+	if err := os.WriteFile(path, []byte("session_name: refused\nwindows:\n- panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, args := range map[string][]string{
+		"append":   {"--json", "load", "--append", "-S", socket, path},
+		"detached": {"--json", "load", "-d", "--yes", "-S", socket, path},
+	} {
+		t.Run(name, func(t *testing.T) {
+			code, out, diagnostic := invoke(t, args...)
+			text := out + diagnostic
+			if code != 1 {
+				t.Fatalf("exit %d: %s", code, text)
+			}
+			if got := errorCode(t, diagnostic); got != "tmux_unsupported" {
+				t.Fatalf("code = %q, want tmux_unsupported: %s", got, text)
+			}
+			var envelope struct {
+				Result *struct {
+					Status string `json:"status"`
+				} `json:"result"`
+			}
+			if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.Result != nil && envelope.Result.Status != "error" {
+				t.Fatalf("status = %q, want error: %s", envelope.Result.Status, text)
+			}
+			if name == "detached" && envelope.Result == nil {
+				t.Fatalf("a load that reached the build loop reports no result: %s", text)
+			}
+			if strings.Contains(text, "retained") {
+				t.Fatalf("a refusal that sent nothing reports retained effects: %s", text)
+			}
+			if !strings.Contains(text, "upgrade tmux and restart its server") {
+				t.Fatalf("output lacks the remedy: %s", text)
+			}
+		})
+	}
+}
+
+// fakeBrokenProbeTmux puts a tmux 3.3a on PATH whose version probe fails the
+// way an aliased run-shell does: neither a report nor a refusal.
+func fakeBrokenProbeTmux(t *testing.T) {
+	t.Helper()
+	directory := t.TempDir()
+	script := `#!/bin/sh
+for argument in "$@"; do
+  case $argument in
+    -V) echo 'tmux 3.3a'; exit 0 ;;
+    libtmux-version-*) echo 'display-message: too many arguments' >&2; exit 1 ;;
+  esac
+done
+echo 'the daemon must not be reached' >&2
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(directory, "tmux"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", directory)
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
+}
+
+// A version check that cannot finish sent nothing either, so the load reports
+// the failure under the error status and creates, retains and removes nothing.
+func TestLoadWhenTheVersionProbeFailsIsANoEffectFailure(t *testing.T) {
+	fakeBrokenProbeTmux(t)
+	path := filepath.Join(t.TempDir(), "w.yaml")
+	if err := os.WriteFile(path, []byte("session_name: probe\nwindows:\n- panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "--json", "load", "-d", "--yes", path)
+	text := out + diagnostic
+	if code != 1 {
+		t.Fatalf("exit %d: %s", code, text)
+	}
+	var envelope struct {
+		Code   string `json:"code"`
+		Result *struct {
+			Status string `json:"status"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(diagnostic), &envelope); err != nil {
+		t.Fatalf("invalid envelope %q: %v", diagnostic, err)
+	}
+	if envelope.Code != "tmux_failed" || envelope.Result == nil || envelope.Result.Status != "error" {
+		t.Fatalf("envelope = %+v, want tmux_failed under status error: %s", envelope, text)
+	}
+	if strings.Contains(text, "retained") || strings.Contains(text, "partial") {
+		t.Fatalf("a probe that sent nothing reports effects: %s", text)
+	}
+}
+
+// The refusal ends the text output once: the error line carries it, and a
+// warning above would repeat the same sentence.
+func TestTextLoadAgainstARefusedTmuxSaysTheRefusalOnce(t *testing.T) {
+	fakeOldTmux(t)
+	path := filepath.Join(t.TempDir(), "w.yaml")
+	if err := os.WriteFile(path, []byte("session_name: refused\nwindows:\n- panes: [blank]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := invoke(t, "load", "-d", "--yes", path)
+	if code != 1 {
+		t.Fatalf("exit %d: %s%s", code, out, diagnostic)
+	}
+	if got := strings.Count(out+diagnostic, "upgrade tmux and restart its server"); got != 1 {
+		t.Fatalf("the refusal appears %d times, want once: %s%s", got, out, diagnostic)
+	}
+}

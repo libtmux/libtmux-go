@@ -249,6 +249,13 @@ func (r *invocation) shell(cmd *cobra.Command, o *options, args []string) error 
 	if count > 1 {
 		return usage("Python shell selectors are mutually exclusive")
 	}
+	server, err := serverFor(o)
+	if err != nil {
+		return err
+	}
+	if err := requireSupportedTmux(r.ctx, server); err != nil {
+		return err
+	}
 	if err := r.checkPython(true); err != nil {
 		return err
 	}
