@@ -178,8 +178,8 @@ attached client resizes panes underneath the assertions.
 
 **One tmux is not enough.** Anything touching capture needs the supported
 range: `capture-pane -J` keeps the padding a row was padded with, and tmux only
-trims it itself from 3.4. A gate on the default tmux passes while 3.2a and 3.3a
-fail.
+trims it itself from 3.4. A gate on the default tmux passes while 3.3a and
+older supported builds fail.
 
 **Isolate a timing failure before believing it.** Three signs it is the machine
 and not the code: the failing test moves between runs, the failure reads as

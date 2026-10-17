@@ -51,8 +51,8 @@ type NewWindowRequest struct {
 	SelectExisting bool
 }
 
-// NewWindowDirection selects placement relative to the target winlink on tmux
-// 3.2a or later. Its zero value lets [Session.NewWindow] with nil Index use the
+// NewWindowDirection selects placement relative to the target winlink on every
+// supported tmux. Its zero value lets [Session.NewWindow] with nil Index use the
 // next free index, while [Window.NewWindow] keeps the receiver's exact occupied
 // target.
 type NewWindowDirection uint8

@@ -14,8 +14,8 @@ import (
 // ErrSessionExists identifies a named session that was not replaced.
 var ErrSessionExists = errors.New("tmux: session already exists")
 
-// HasSessionRequest selects exact or tmux-pattern session matching on tmux
-// 3.2a or later. Its zero value is invalid because Target is required.
+// HasSessionRequest selects exact or tmux-pattern session matching on every
+// supported tmux. Its zero value is invalid because Target is required.
 type HasSessionRequest struct {
 	// Target is the required session name or tmux session pattern.
 	Target string
