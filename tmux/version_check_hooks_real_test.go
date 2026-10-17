@@ -96,7 +96,7 @@ func TestVersionCheckRecoversUnusualSocketPaths(t *testing.T) {
 	defer cancel()
 
 	executable := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{}).Executable()
-	for _, name := range []string{"a b", "a'b", `a"b`, "a;b", "a#b", "a$b", "a~b", "a|b", "a=b", `a\b`, "a,b", "a''b"} {
+	for _, name := range []string{"a b", "a'b", `a"b`, "a;b", "a#b", "a$b", "a~b", "a|b", "a=b", `a\b`, "a{b}", "a}{b", "a,b", "a''b"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			server, err := tmux.NewServer(tmux.ServerOptions{

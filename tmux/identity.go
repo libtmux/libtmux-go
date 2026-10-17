@@ -149,11 +149,13 @@ func (s Server) guardCommand(
 		// still match the executable checked to create it.
 		condition = "#{==:#{version}," + escapeFormatLiteral(s.startupVersion.String()) + "}"
 	} else {
+		// pid and start_time identify the daemon generation. The socket path
+		// is not compared: no format escaping makes tmux match every byte of
+		// it (braces never match), and a handle addresses its socket with -S.
 		condition = fmt.Sprintf(
-			"#{&&:#{==:#{pid},%s},#{&&:#{==:#{start_time},%s},#{==:#{socket_path},%s}}}",
+			"#{&&:#{==:#{pid},%s},#{==:#{start_time},%s}}",
 			s.daemon.pid,
 			s.daemon.startTime,
-			escapeFormatLiteral(s.daemon.socketPath),
 		)
 	}
 	guarded := []string{"if-shell", "-F", condition, "", guard.failure, ";"}
