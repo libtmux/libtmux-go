@@ -60,8 +60,8 @@ type DetachAllClientsRequest struct {
 	ShellCommand *string
 }
 
-// ServerAccess changes or lists the server access-control entries. It requires
-// tmux 3.3 and returns [VersionTooLowError] below that floor. List returns an
+// ServerAccess changes or lists the server access-control entries. It is available
+// on every supported tmux. List returns an
 // owned snapshot, and reports a completed or transport failure rather than
 // answering with no entries; mutation completed stderr is an error.
 func (s Server) ServerAccess(

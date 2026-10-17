@@ -5,8 +5,8 @@ import (
 	"strconv"
 )
 
-// LinkWindowRequest configures linking a window into another session on tmux
-// 3.2a or later. Its zero value is invalid because TargetSession is required.
+// LinkWindowRequest configures linking a window into another session on every
+// supported tmux. Its zero value is invalid because TargetSession is required.
 // Nil TargetIndex asks tmux for a destination index; a nonnil value is
 // explicit and must be nonnegative. After and Before are mutually exclusive
 // and are rejected before execution. TargetIndex is read during the call and

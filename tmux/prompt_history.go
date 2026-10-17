@@ -33,8 +33,7 @@ type PromptHistoryRequest struct {
 }
 
 // ShowPromptHistory returns an owned snapshot of tmux prompt-history lines.
-// It requires tmux 3.3 or later and returns [VersionTooLowError] below that
-// floor. A tmux command or transport failure is returned rather than answered
+// It is available on every supported tmux. A tmux command or transport failure is returned rather than answered
 // with no history.
 func (s Server) ShowPromptHistory(
 	ctx context.Context,
@@ -60,8 +59,8 @@ func (s Server) ShowPromptHistory(
 }
 
 // ClearPromptHistory clears all tmux prompt history or one selected class.
-// Version, transport, and completed-stderr failures are returned. It requires
-// tmux 3.3 or later and returns [VersionTooLowError] below that floor.
+// Version, transport, and completed-stderr failures are returned. It is
+// available on every supported tmux.
 func (s Server) ClearPromptHistory(
 	ctx context.Context,
 	request PromptHistoryRequest,

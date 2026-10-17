@@ -37,8 +37,8 @@ const (
 	SwapPaneDirectionDown
 )
 
-// SwapPaneRequest configures swapping with an exact or adjacent pane on tmux
-// 3.2a or later. Its zero value is invalid: exactly one complete Target or
+// SwapPaneRequest configures swapping with an exact or adjacent pane on every
+// supported tmux. Its zero value is invalid: exactly one complete Target or
 // Direction is required. An explicit Target must differ from the receiver and
 // must be proven to share a daemon through connection state or the same
 // nonempty SocketPath; matching socket names alone are insufficient. Invalid

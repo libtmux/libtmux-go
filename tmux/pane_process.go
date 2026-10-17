@@ -43,8 +43,8 @@ type PipePaneRequest struct {
 	Toggle bool
 }
 
-// Respawn restarts the process in the receiver's exact linked pane on tmux
-// 3.2a or newer. Command, when present, is passed as one tmux shell-command
+// Respawn restarts the process in the receiver's exact linked pane on every
+// supported tmux. Command, when present, is passed as one tmux shell-command
 // operand; Go neither executes it locally nor adds inner-shell quoting. Final
 // semicolon protection applies only to tmux's outer command parser. See
 // [RespawnRequest] for zero-value, directory, environment, and Kill behavior.
