@@ -38,7 +38,7 @@ func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			// Keep the complete native socket path short on macOS too.
+			//nolint:usetesting // t.TempDir can exceed the Unix socket path limit.
 			root, err := os.MkdirTemp("", "ltg-cold-")
 			if err != nil {
 				t.Fatal(err)
