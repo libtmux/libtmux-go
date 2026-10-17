@@ -124,7 +124,7 @@ type waitForTextOutput struct {
 	truncation
 }
 
-// waitForText follows pane output without polling. Text already on the screen
+// waitForText follows pane output from tmux 3.7 control and polls below it. Text already on the screen
 // answers outcomeAlreadyOnScreen rather than a match, unless SinceEntry skips
 // the entry read; an authored command should use run_shell_command, which
 // reports its exit status.
