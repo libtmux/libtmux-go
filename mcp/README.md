@@ -371,8 +371,8 @@ This protects the pane you are in. It does not make the tools a sandbox.
 
 - **Some tools require a newer tmux.** Startup and ordinary tools support
   3.3a, including `capture_since` and `run_shell_command`. Non-empty `paste_text`
-  requires 3.4 before staging any buffer; `wait_for_text` requires the qualified
-  3.7 control engine. Restricted tools return an explicit version error on older
+  requires 3.4 before staging any buffer; `wait_for_text` polls with `capture-pane`
+  below 3.7 and follows control output from 3.7. Restricted tools return an explicit version error on older
   supported daemons. The runtime uses subprocess commands below 3.7 and a
   retained control connection from 3.7.
 

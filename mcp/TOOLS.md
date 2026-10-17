@@ -74,7 +74,7 @@ top-level fields and ignores the row's.
 | `capture_since` | Reads only output after an opaque cursor |
 | `snapshot_pane` | Returns bounded pane content with pane metadata |
 | `search_panes` | Searches pane output under fixed pane, line, byte, pattern, and time ceilings |
-| `wait_for_text` | Waits for one of several success or failure patterns without polling |
+| `wait_for_text` | Waits for one of several success or failure patterns; follows control output from tmux 3.7 and polls `capture-pane` below it |
 | `show_environment` | Reads the tmux environment; values can contain secrets |
 | `show_hooks` / `show_option` | Reads configured commands and option state |
 | `call_read_tools_batch` | Runs up to sixteen permitted inspect operations serially with typed inner validation |
