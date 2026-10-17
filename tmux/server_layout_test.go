@@ -21,16 +21,16 @@ func TestLayoutPreflightPreservesVersionProbeOutcomes(t *testing.T) {
 		want         error
 		cold         bool
 	}{
-		{"old daemon prefix", "main-h", versionResponse{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}}, nil, false},
-		{"new daemon ambiguity", "main-h", versionResponse{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7c"}}}, ErrInvalidServerCommandRequest, false},
-		{"old daemon mirror", "main-horizontal-m", versionResponse{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}}, ErrVersionTooLow, false},
-		{"new daemon mirror", "main-horizontal-m", versionResponse{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7c"}}}, nil, false},
+		{"old daemon prefix", "main-h", versionResponse{result: layoutVersionReply("3.2a")}, nil, false},
+		{"new daemon ambiguity", "main-h", versionResponse{result: layoutVersionReply("3.7c")}, ErrInvalidServerCommandRequest, false},
+		{"old daemon mirror", "main-horizontal-m", versionResponse{result: layoutVersionReply("3.2a")}, ErrVersionTooLow, false},
+		{"new daemon mirror", "main-horizontal-m", versionResponse{result: layoutVersionReply("3.7c")}, nil, false},
 		{"missing socket", "main-h", versionResponse{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"error connecting to /socket (No such file or directory)"}}}, nil, true},
 		{"exited endpoint", "main-h", versionResponse{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"no server running on /socket"}}}, nil, true},
 		{"permission", "main-h", versionResponse{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"error connecting to /socket (Permission denied)"}}}, ErrCommand, false},
 		{"live failure", "main-h", versionResponse{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"server exited unexpectedly"}}}, ErrCommand, false},
 		{"protocol", "main-h", versionResponse{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"protocol version mismatch"}}}, ErrCommand, false},
-		{"malformed version", "main-h", versionResponse{result: tmuxcmd.Result{Stdout: []string{"unknown"}}}, ErrVersionQuery, false},
+		{"malformed version", "main-h", versionResponse{result: layoutVersionReply("unknown")}, ErrVersionQuery, false},
 		{"canceled", "main-h", versionResponse{err: context.Canceled}, context.Canceled, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -43,7 +43,7 @@ func TestLayoutPreflightPreservesVersionProbeOutcomes(t *testing.T) {
 				t.Fatalf("ValidateLayouts() = %v, want %v", err, test.want)
 			}
 			requests := runner.recordedRequests()
-			assertRequestArguments(t, requests[0], []string{"display-message", "-p", "tmux #{version}"})
+			assertRequestArguments(t, requests[0], []string{"run-shell", "-C", testIdentityProbeMarker + "#{q:version}"})
 			wantCalls := 1
 			if test.cold {
 				wantCalls = 2
@@ -64,7 +64,7 @@ func TestLayoutPreflightPreservesVersionProbeOutcomes(t *testing.T) {
 func TestLayoutPreflightDoesNotChangeClientVersionCache(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7c"}}},
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
+		{result: layoutVersionReply("3.2a")},
 	}}
 	server := serverWithRunner(runner)
 	before, err := server.Version(t.Context())
@@ -118,7 +118,7 @@ func TestLayoutPreflightValidatesCompleteSequenceBeforeIO(t *testing.T) {
 
 func TestLayoutPreflightPlanUsesRunLocalDaemonVersion(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7c"}}},
+		{result: layoutVersionReply("3.7c")},
 		{result: tmuxcmd.Result{}},
 	}}
 	plan := NewPlan()

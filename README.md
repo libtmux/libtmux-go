@@ -37,8 +37,22 @@ $ go get github.com/libtmux/libtmux-go/tmux@latest
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
-It needs Go 1.26 or newer and tmux 3.2a or newer, on a Unix host. A tmux
-server for AI agents and a tmuxp-style workspace builder ship beside the
+It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Before an
+operation reaches a daemon older than 3.3a, including unpatched 3.3, it returns
+`tmux.ErrVersionTooLow` and sends nothing; a plan leaves its operations
+skipped. A tmux that names no release, such as OpenBSD's base tmux or a bare
+`master` build, is refused too, and its error says the version is unrecognized
+rather than too low. A tmux older than 3.2 cannot answer the check and is
+refused the same way. To fix it, upgrade tmux and restart its server, since a
+running daemon keeps its version until it exits, or pin the previous
+libtmux-go release.
+
+`Server.Version` and standalone `Cmd` calls with `-V` or `-h` report the
+executable, not a daemon, and do not clear later operations. The check relies
+on tmux's built-in commands, so a `command-alias` that redefines one defeats
+it.
+
+A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
 
 **Contents** — [Quick start](#quick-start) ·

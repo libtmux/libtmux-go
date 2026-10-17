@@ -157,12 +157,12 @@ func layoutNeedsVersion(value string) bool {
 
 var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 
-// layoutJSONVersion is the tmux feature level at which #{window_layout}
-// switched to a JSON subset for non-control clients and select-layout learned
-// to accept that shape back, alongside the classic grammar it still accepts.
+// layoutJSONVersion is the earliest build measured to report #{window_layout}
+// as a JSON subset for non-control clients and to accept that shape back in
+// select-layout, alongside the classic grammar it still accepts: 3.8-rc2.
 // tmux CHANGES, 3.7c to 3.8: "Layout strings now use a JSON subset format
 // which includes floating panes. The old format is still accepted."
-var layoutJSONVersion = Version{raw: "3.8", major: 3, minor: 8}
+var layoutJSONVersion = Version{raw: "3.8-rc2", major: 3, minor: 8, candidate: 3}
 
 func isClassicLayout(value string) bool {
 	_, valid := layout.Cells(value)

@@ -91,9 +91,7 @@ func TestClientResolveAttachmentUsesOneStrictSnapshotAndSessionFocus(t *testing.
 		t.Fatalf("ResolveAttachment() command count = %d, want one six-command Snapshot", len(requests))
 	}
 	identityFields := snapshotIdentityFields()
-	assertSnapshotRequest(t, requests[0], []string{
-		"display-message", "-p", formatTemplate(identityFields),
-	})
+	assertSnapshotRequest(t, requests[0], identityProbeArgumentsFor(identityFields))
 	assertSnapshotRequest(t, requests[1], []string{
 		"list-sessions", "-F" + formatTemplate(mustFormatFields(t, "list-sessions", version)),
 	})
@@ -106,9 +104,7 @@ func TestClientResolveAttachmentUsesOneStrictSnapshotAndSessionFocus(t *testing.
 	assertSnapshotRequest(t, requests[4], []string{
 		"list-clients", "-F" + formatTemplate(mustFormatFields(t, "list-clients", version)),
 	})
-	assertSnapshotRequest(t, requests[5], []string{
-		"display-message", "-p", formatTemplate(identityFields),
-	})
+	assertSnapshotRequest(t, requests[5], identityProbeArgumentsFor(identityFields))
 }
 
 func TestClientResolveAttachmentAbsenceAndPartialStates(t *testing.T) {

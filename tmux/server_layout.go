@@ -73,6 +73,34 @@ func (s Server) validateLayouts(ctx context.Context, layouts iter.Seq2[string, i
 }
 
 func (s Server) layoutVersion(ctx context.Context) (Version, error) {
+	if s.connection != nil {
+		// run-shell -C reports its refusal outside any reply block over
+		// control, so a bound handle asks its daemon directly.
+		return s.layoutVersionFromDisplay(ctx)
+	}
+	// run-shell has no after-hook, so reading the version does not fire a
+	// user's after-display-message hook; tmux reports it in the refusal of the
+	// marker word.
+	marker := newIdentityProbeMarker()
+	result, err := s.literalCmd(ctx, "run-shell", "-C", marker+"#{q:version}")
+	if err != nil {
+		return Version{}, err
+	}
+	if result.ExitCode == 1 && len(result.Stderr) == 1 {
+		if token, ok := strings.CutPrefix(result.Stderr[0], "unknown command: "+marker); ok {
+			if version, err := ParseVersion(token); err == nil {
+				return version, nil
+			}
+			return Version{}, newVersionQueryError(result, "layout version query returned an invalid version")
+		}
+	}
+	if s.daemon == nil && coldLayoutEndpoint(result) {
+		return s.Version(ctx)
+	}
+	return Version{}, newCommandError("run-shell", result)
+}
+
+func (s Server) layoutVersionFromDisplay(ctx context.Context) (Version, error) {
 	result, err := s.literalCmd(ctx, "display-message", "-p", "tmux #{version}")
 	if err != nil {
 		return Version{}, err

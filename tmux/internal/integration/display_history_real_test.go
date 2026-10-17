@@ -274,7 +274,7 @@ func TestPromptHistoryVersionGateAndTypesAgainstRealTmux(t *testing.T) {
 		}
 		return
 	}
-	currentMinimum, err := tmux.ParseVersion("3.8")
+	currentMinimum, err := tmux.ParseVersion("3.8-rc2")
 	if err != nil {
 		t.Fatal(err)
 	}

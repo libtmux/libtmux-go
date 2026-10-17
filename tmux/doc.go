@@ -1,5 +1,5 @@
-// Package tmux provides a typed, context-aware API for tmux 3.2a through
-// tmux 3.8-rc2.
+// Package tmux provides a typed, context-aware API for tmux 3.3a through
+// tmux 3.8.
 //
 //	import "github.com/libtmux/libtmux-go/tmux"
 //
@@ -10,6 +10,16 @@
 //
 // [NewServer] validates and snapshots configuration without starting tmux.
 // The zero [Server] is invalid and operations on it return [ErrInvalidServer].
+// Ordinary operations refuse daemons below [MinimumSupportedVersion], including
+// unpatched 3.3, with [ErrVersionTooLow] before dispatch. An absent endpoint is
+// checked by the executable that can create it. [Server.Version] remains an
+// executable diagnostic on an unbound handle; [Server.RequireVersion] checks
+// the selected daemon. Standalone Cmd -V and -h are executable diagnostics.
+// They do not qualify later daemon operations. Unversioned OpenBSD base tmux
+// and bare master reports are refused because they cannot establish a release;
+// the error calls them unrecognized rather than too low. A refusal sends
+// nothing: upgrade tmux and restart its server, or pin the previous release.
+// A tmux older than 3.2 cannot answer the check and is refused the same way.
 //
 // # Where to start
 //

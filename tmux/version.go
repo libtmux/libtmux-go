@@ -9,19 +9,19 @@ import (
 )
 
 const (
-	// MinimumSupportedVersion is the oldest tmux feature level supported by this package.
-	MinimumSupportedVersion = "3.2a"
+	// MinimumSupportedVersion is the oldest tmux release supported by this package.
+	MinimumSupportedVersion = "3.3a"
 	// MinimumConnectionVersion is the oldest tmux feature level that supports
 	// terminal Connection ownership. Later releases may strengthen individual
 	// lifecycle guarantees without changing this floor.
 	MinimumConnectionVersion = MinimumSupportedVersion
 	// MaximumTestedVersion is the newest numbered tmux feature level covered by
-	// this package's tests. The matrix also runs 3.8-rc2, which is a release
-	// candidate rather than a numbered feature level, so it does not raise this.
-	MaximumTestedVersion = "3.7"
+	// this package's tests, and the level ParseVersion gives a bare master
+	// build.
+	MaximumTestedVersion = "3.8"
 
 	latestTestedMajor = 3
-	latestTestedMinor = 7
+	latestTestedMinor = 8
 )
 
 // ErrInvalidVersion classifies [VersionError] through errors.Is.
@@ -34,6 +34,7 @@ var (
 		`^(?:(next)-)?([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?` +
 			`(?:([a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)|(-[a-z0-9]+(?:[.-][a-z0-9]+)*))?$`,
 	)
+	releaseCandidatePattern  = regexp.MustCompile(`(?:^|-)rc([0-9]*)$`)
 	openBSDVersionPattern    = regexp.MustCompile(`^openbsd-[0-9]+(?:\.[0-9]+)?$`)
 	legacyVersionPartPattern = regexp.MustCompile(`[0-9]+|[a-z]+|[.-]`)
 )
@@ -66,6 +67,9 @@ type Version struct {
 	minor       int
 	patch       int
 	development int
+	// candidate is zero for a release and one more than the candidate number
+	// for X.Y-rcN, so a bare -rc is one.
+	candidate int
 }
 
 // ParseVersion parses a raw tmux version token. It returns a [VersionError]
@@ -112,6 +116,17 @@ func ParseVersion(raw string) (Version, error) {
 		}
 		development = 1
 	}
+	candidate := 0
+	if rc := releaseCandidatePattern.FindStringSubmatch(qualifier); rc != nil {
+		candidate = 1
+		if rc[1] != "" {
+			number, err := strconv.Atoi(rc[1])
+			if err != nil {
+				return Version{}, &VersionError{Token: raw}
+			}
+			candidate = number + 1
+		}
+	}
 	if matches[1] == "next" {
 		// A "next-X.Y" token names the release its development track is
 		// heading toward, not one it has reached, so it ranks below X.Y:
@@ -126,6 +141,7 @@ func ParseVersion(raw string) (Version, error) {
 		minor:       minor,
 		patch:       patch,
 		development: development,
+		candidate:   candidate,
 	}, nil
 }
 
@@ -164,11 +180,17 @@ func (v Version) Patch() int {
 	return v.patch
 }
 
-// Compare compares numeric feature levels and returns -1, 0, or 1.
-// Release qualifiers other than master do not change the feature level.
+// Compare orders versions by feature level and returns -1, 0, or 1. Patch
+// letters share their release's level, but a development build ranks below
+// the release it names and a candidate below its release:
+//
+//	next-X.Y < X.Y-rc < X.Y-rcN < X.Y == X.Ya
+//
+// A feature gate therefore opens on a candidate only when it names that
+// candidate, so it names the earliest build measured to have the feature.
 func (v Version) Compare(other Version) int {
-	left := [...]int{v.major, v.minor, v.patch, v.development}
-	right := [...]int{other.major, other.minor, other.patch, other.development}
+	left := v.rank()
+	right := other.rank()
 	for i := range left {
 		if left[i] < right[i] {
 			return -1
@@ -178,6 +200,15 @@ func (v Version) Compare(other Version) int {
 		}
 	}
 	return 0
+}
+
+// rank is Compare's key. A release outranks every candidate of it.
+func (v Version) rank() [6]int {
+	final := 0
+	if v.candidate == 0 {
+		final = 1
+	}
+	return [6]int{v.major, v.minor, v.patch, v.development, final, v.candidate}
 }
 
 // CompareRelease compares raw release suffixes using libtmux's legacy order.

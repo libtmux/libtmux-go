@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-// SessionKillRequest configures kill-session on tmux 3.2a or later. Its zero
+// SessionKillRequest configures kill-session on tmux 3.3a or later. Its zero
 // value destroys the receiver session. AllExcept destroys other sessions
 // instead, while ClearAlerts is non-destructive. AllExcept, ClearAlerts, and
 // Group are mutually exclusive because tmux applies a hidden precedence when
@@ -25,7 +25,7 @@ type SessionKillRequest struct {
 	Group bool
 }
 
-// KillWindowRequest selects a window for [Session.KillWindow] on tmux 3.2a or
+// KillWindowRequest selects a window for [Session.KillWindow] on tmux 3.3a or
 // later. A zero request kills the receiver session's current window, and Index
 // is scoped to that session. Target is unrestricted tmux target syntax and may
 // select a window in another session. Target and Index are mutually exclusive
@@ -57,7 +57,7 @@ func (s Server) Kill(ctx context.Context) error {
 		return nil
 	}
 	commandErr := newCommandError("kill-server", result)
-	alive, probeErr := s.IsAlive(ctx)
+	alive, probeErr := s.cleanupServerAlive(ctx)
 	if probeErr != nil {
 		return errors.Join(
 			commandErr,
@@ -68,6 +68,25 @@ func (s Server) Kill(ctx context.Context) error {
 		return nil
 	}
 	return commandErr
+}
+
+// cleanupServerAlive permits an absent-server cleanup check without version-checking
+// another public operation or starting a daemon.
+func (s Server) cleanupServerAlive(ctx context.Context) (bool, error) {
+	result, err := s.runCheckedCommand(ctx, commandServer, []string{"list-sessions"}, nil, false)
+	if err != nil {
+		return false, commandTransportFailure(err)
+	}
+	if result.ExitCode == 0 {
+		return true, nil
+	}
+	commandErr := newCommandError("list-sessions", CommandResult{
+		ExitCode: result.ExitCode, Stderr: result.Stderr,
+	})
+	if errors.Is(commandErr, ErrNoServer) {
+		return false, nil
+	}
+	return false, commandErr
 }
 
 // KillSession terminates the session selected by tmux target syntax. Pattern

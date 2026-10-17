@@ -330,7 +330,7 @@ func TestDiscoverEnvironmentHierarchyRejectsServerChangeAfterListing(t *testing.
 		t.Fatal(err)
 	}
 	changedIdentity := liveIdentityResponse(version)
-	changedIdentity.result.RawStdout = framedSnapshotRecord(
+	changedIdentity.result.Stderr = identityProbeStderr(
 		snapshotIdentityFields(),
 		snapshotRowValues(version, map[string]string{"pid": "999", "start_time": "1000"}),
 	)

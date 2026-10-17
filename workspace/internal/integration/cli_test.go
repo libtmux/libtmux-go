@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -1126,7 +1127,7 @@ func TestNoLayoutChangeFollowsAPanesOwnCommand(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	shimDir := t.TempDir()
 	log := filepath.Join(shimDir, "argv.log")
-	shim := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + shellQuote(log) + "\nexec " + shellQuote(realTmux) + " \"$@\"\n"
+	shim := "#!/bin/sh\nprintf '%s\\000' \"$@\" >> " + shellQuote(log) + "\nprintf '\\n' >> " + shellQuote(log) + "\nexec " + shellQuote(realTmux) + " \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(shimDir, "tmux"), []byte(shim), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -1142,10 +1143,9 @@ func TestNoLayoutChangeFollowsAPanesOwnCommand(t *testing.T) {
 	}
 	var relevant []string
 	lastLayout, lastSendKeys := -1, -1
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-		// The library wraps every dispatched command in an if-shell daemon
-		// identity check, so the subcommand name arrives quoted.
-		isLayout, isSendKeys := strings.Contains(line, "'select-layout'"), strings.Contains(line, "'send-keys'")
+	for _, line := range strings.Split(string(data), "\x00\n") {
+		arguments := strings.Split(line, "\x00")
+		isLayout, isSendKeys := slices.Contains(arguments, "select-layout"), slices.Contains(arguments, "send-keys")
 		if isLayout || isSendKeys {
 			relevant = append(relevant, line)
 			if isLayout {

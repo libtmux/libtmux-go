@@ -200,7 +200,7 @@ func (s Server) searchSnapshotProjected(
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if !identity.version.AtLeast(minimum) {
+	if !identity.version.meetsMinimum(minimum) {
 		return Snapshot{}, &VersionTooLowError{Current: identity.version, Minimum: minimum}
 	}
 	if collection == searchClients && filter != nil &&

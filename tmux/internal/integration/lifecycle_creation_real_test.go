@@ -186,7 +186,7 @@ func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 	// occupied by existing itself, so from that version on tmux selects
 	// existing instead of creating a duplicate; before it, the exact-target
 	// form never matched -S at all and always created one.
-	minimum38, err := tmux.ParseVersion("3.8")
+	minimum38, err := tmux.ParseVersion("3.8-rc2")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"math/rand/v2"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -293,11 +294,15 @@ func TestStreamingCommandEndsWithItsContextWhileStderrIsHeld(t *testing.T) {
 	// Written by a child process, so no fork in this test binary can hold it
 	// open for writing when it runs.
 	write := exec.Command("/bin/sh", "-c", `cat >"$1" && chmod 700 "$1"`, "sh", binary)
-	write.Stdin = strings.NewReader("#!/bin/sh\ncat >/dev/null\nsleep 3 &\nexit 0\n")
+	target := tmuxtest.NewServer(t.Context(), t)
+	write.Stdin = strings.NewReader("#!/bin/sh\ncase \"$*\" in *run-shell*) exec \"$LIBTMUX_TEST_TARGET_BINARY\" \"$@\" ;; esac\ncat >/dev/null\nsleep 3 &\nexit 0\n")
 	if output, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("write %s: %v: %s", binary, err, output)
 	}
-	server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		Binary: binary, SocketPath: target.SocketPath(),
+		ProcessEnvironment: append(os.Environ(), "LIBTMUX_TEST_TARGET_BINARY="+target.Executable()),
+	})
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}

@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -851,3 +853,84 @@ func (w controlRejectWriteCloser) Write([]byte) (int, error) {
 }
 
 func (controlRejectWriteCloser) Close() error { return nil }
+
+// A control client for a known daemon must not start a tmux server of its
+// own on that socket, so its process gets -N first: before the socket flags
+// and before -C. A selector with no daemon yet may start one, so it gets none.
+func TestControlProcessForAKnownDaemonStartsNoServer(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		knownDaemon bool
+	}{
+		{name: "known daemon", knownDaemon: true},
+		{name: "no daemon yet"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			//nolint:usetesting // t.TempDir can exceed the Unix socket path limit.
+			directory, err := os.MkdirTemp("", "ctl")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.RemoveAll(directory) })
+			socket := filepath.Join(directory, "s")
+			listener, err := net.Listen("unix", socket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = listener.Close() })
+			record := filepath.Join(directory, "argv")
+			// The fixture answers the identity probe as a 3.7 daemon on the
+			// socket, so a startup that verifies the daemon first still reaches
+			// the process under test, which records its arguments.
+			script := filepath.Join(directory, "tmux")
+			contents := "#!/bin/sh\n" +
+				"for argument in \"$@\"; do\n" +
+				"  case $argument in\n" +
+				"    libtmux-version-*)\n" +
+				"      echo \"unknown command: ${argument%%'#{'*}3.7|1|2|" + socket + "=\" >&2\n" +
+				"      exit 1 ;;\n" +
+				"  esac\n" +
+				"done\n" +
+				"printf '%s\\n' \"$@\" > " + record + ".tmp && mv " + record + ".tmp " + record + "\n" +
+				"exit 0\n"
+			if err := os.WriteFile(script, []byte(contents), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			server := mustNewServer(ServerOptions{Binary: script, SocketPath: socket})
+			if test.knownDaemon {
+				server = server.withDaemon(snapshotServerIdentity{
+					version: mustParseVersion(t, "3.7"), pid: "1", startTime: "2", socketPath: socket,
+				})
+			}
+			var argv []string
+			_, err = server.startControlWithBacklog(
+				context.Background(), Session{}, controlCommands, 1,
+				[]string{"-C", "attach-session"},
+				func(*ControlClient) error {
+					deadline := time.Now().Add(10 * time.Second)
+					for time.Now().Before(deadline) {
+						if raw, err := os.ReadFile(record); err == nil {
+							argv = strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+							break
+						}
+						time.Sleep(5 * time.Millisecond)
+					}
+					return errors.New("recorded")
+				},
+			)
+			if err == nil || !strings.Contains(err.Error(), "recorded") {
+				t.Fatalf("startControlWithBacklog() error = %v, want the recorder's", err)
+			}
+			if len(argv) == 0 {
+				t.Fatal("the control process never recorded its arguments")
+			}
+			if got := argv[0] == "-N"; got != test.knownDaemon {
+				t.Fatalf("control process arguments = %q, want -N first = %t", argv, test.knownDaemon)
+			}
+		})
+	}
+}

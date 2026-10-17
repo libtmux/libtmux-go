@@ -856,7 +856,7 @@ func TestWaitForReportsAServerThatExitedWhileWaiting(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dependencies := defaultServerDependencies()
-			dependencies.executor = waitForExitRunner{alive: test.alive, listErr: test.listErr}
+			dependencies.executor = &qualifiedCommandRunner{inner: waitForExitRunner{alive: test.alive, listErr: test.listErr}}
 			executable, err := os.Executable()
 			if err != nil {
 				t.Fatal(err)

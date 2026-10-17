@@ -667,7 +667,7 @@ func TestHumanLoadFlushBeforeHandoff(t *testing.T) {
 }
 
 func TestHumanLoadClientProjection(t *testing.T) {
-	removed, err := tmux.ParseVersion("3.8")
+	removed, err := tmux.ParseVersion("3.8-rc2")
 	if err != nil {
 		t.Fatal(err)
 	}

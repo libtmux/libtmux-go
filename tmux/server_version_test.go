@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -358,13 +359,12 @@ func TestSnapshotIdentityUsesProbedOpenBSDCapabilities(t *testing.T) {
 	formatVersion := mustParseVersion(t, "3.7")
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(
+			ExitCode: 1, Stderr: identityProbeStderr(
 				snapshotIdentityFields(),
 				snapshotRowValues(formatVersion, map[string]string{
 					"version": "openbsd-7.8",
 				}),
 			),
-			ExitCode: 0,
 		}},
 		{result: tmuxcmd.Result{Stdout: []string{"tmux openbsd-7.8"}, ExitCode: 0}},
 		{result: tmuxcmd.Result{Stdout: []string{
@@ -396,10 +396,8 @@ func TestSnapshotIdentityUsesProbedOpenBSDCapabilities(t *testing.T) {
 func TestServerRequireVersionReturnsConcreteTooLowError(t *testing.T) {
 	t.Parallel()
 
-	runner := &versionQueueRunner{responses: []versionResponse{{
-		result: tmuxcmd.Result{Stdout: []string{"tmux 3.1"}, ExitCode: 0},
-	}}}
-	server := serverWithRunner(runner)
+	runner := &versionRunner{daemon: "3.1", binary: "3.8"}
+	server := rawVersionServer(t, runner)
 	minimum := mustParseVersion(t, MinimumSupportedVersion)
 
 	err := server.RequireVersion(context.Background(), minimum)
@@ -672,11 +670,19 @@ func serverWithOptionsAndRunner(options ServerOptions, runner commandRunner) Ser
 		resolveExecutable: func(string, []string, string) (string, error) {
 			return executable, nil
 		},
-		executor: runner,
+		executor: &qualifiedCommandRunner{inner: runner},
 	})
 	if err != nil {
 		panic(fmt.Sprintf("construct test server: %v", err))
 	}
+	return server
+}
+
+// versionedServerWithRunner gives the version check the daemon version supplied by a
+// feature gate fixture. Ordinary renderer fixtures use a qualified default.
+func versionedServerWithRunner(runner commandRunner) Server {
+	server := serverWithRunner(runner)
+	server.state.executor.(*qualifiedCommandRunner).version = server.Version
 	return server
 }
 
@@ -689,4 +695,34 @@ func degradingServerWithRunner(runner commandRunner) Server {
 		ServerOptions{Unsupported: DegradeUnsupported},
 		runner,
 	)
+}
+
+func TestExecutableVersionAcceptsOnlyItsNativePrefix(t *testing.T) {
+	for _, one := range []struct {
+		report  string
+		refused bool
+	}{
+		{report: "tmux 3.3a"},
+		{report: "{executable} 3.3a"},
+		{report: "another-program 3.3a", refused: true},
+		{report: "{executable}-suffix 3.3a", refused: true},
+		{report: "{executable} 3.3a extra", refused: true},
+	} {
+		t.Run(one.report, func(t *testing.T) {
+			runner := &versionQueueRunner{}
+			server := serverWithRunner(runner)
+			name := filepath.Base(server.state.config.executable)
+			runner.responses = []versionResponse{{result: tmuxcmd.Result{Stdout: []string{
+				strings.ReplaceAll(one.report, "{executable}", name),
+			}}}}
+			version, err := server.queryExecutableVersion(t.Context(), "linux")
+			if one.refused {
+				if !errors.Is(err, ErrVersionQuery) {
+					t.Fatalf("unrelated executable prefix accepted: %s %v", version, err)
+				}
+			} else if err != nil || version.String() != "3.3a" {
+				t.Fatalf("native executable version prefix rejected: %s %v", version, err)
+			}
+		})
+	}
 }

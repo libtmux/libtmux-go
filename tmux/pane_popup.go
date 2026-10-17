@@ -12,12 +12,12 @@ var (
 	// panePopupVersion38 is where tmux added an explicit refusal for a
 	// control-mode target client: cmd_display_popup_exec gained
 	// "if (tc->flags & CLIENT_CONTROL) return (CMD_RETURN_NORMAL);"
-	// (cmd-display-menu.c, 3.7c to 3.8-rc), matching tmux's own
-	// regress/control-client-popup.sh ("Popups require a tty overlay and
-	// cannot be displayed by a control client"). tmux answers CMD_RETURN_NORMAL
+	// (cmd-display-menu.c, 3.7c to 3.8-rc2, the earliest build measured),
+	// matching tmux's own regress/control-client-popup.sh ("Popups require a
+	// tty overlay and cannot be displayed by a control client"). tmux answers CMD_RETURN_NORMAL
 	// either way, so nothing distinguishes the refusal from success on the
 	// wire; a caller only learns the popup never ran, if they later look.
-	panePopupVersion38 = Version{raw: "3.8", major: 3, minor: 8}
+	panePopupVersion38 = Version{raw: "3.8-rc2", major: 3, minor: 8, candidate: 3}
 )
 
 // DisplayPopupRequest configures a popup overlay. Pointer and map values are

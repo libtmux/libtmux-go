@@ -17,8 +17,8 @@ var ErrConnectionRequiresProcess = errors.New(
 )
 
 var (
-	controlMinimumVersion32a = Version{
-		raw: MinimumConnectionVersion, major: 3, minor: 2,
+	controlMinimumVersion = Version{
+		raw: MinimumConnectionVersion, major: 3, minor: 3,
 	}
 	controlNoDetachVersion36 = Version{
 		raw: "3.6", major: 3, minor: 6,
@@ -106,7 +106,7 @@ func (s Session) OpenControl(
 			"must not be negative",
 		)
 	}
-	if err := s.server.RequireVersion(ctx, controlMinimumVersion32a); err != nil {
+	if err := s.server.RequireVersion(ctx, controlMinimumVersion); err != nil {
 		return nil, err
 	}
 	pool, err := s.server.openControlLanePool(ctx, s, options.Lanes)
@@ -163,7 +163,11 @@ func (s Server) NewSessionConnection(
 	if err != nil {
 		return Session{}, nil, err
 	}
-	if err := effective.RequireVersion(ctx, controlMinimumVersion32a); err != nil {
+	effective, err = effective.checkCore(ctx, false)
+	if err != nil {
+		return Session{}, nil, err
+	}
+	if err := effective.RequireVersion(ctx, controlMinimumVersion); err != nil {
 		return Session{}, nil, err
 	}
 	version, err := effective.Version(ctx)
