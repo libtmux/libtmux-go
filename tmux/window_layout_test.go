@@ -267,7 +267,7 @@ func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{{
-			result: tmuxcmd.Result{Stdout: []string{"tmux 3.7c"}},
+			result: layoutVersionReply("3.7c"),
 		}}}
 		err := (Window{
 			server:    serverWithRunner(runner),
@@ -291,7 +291,7 @@ func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.8"}}},
+			{result: layoutVersionReply("3.8")},
 			{result: tmuxcmd.Result{Stderr: []string{"stop after argv capture"}, ExitCode: 7}},
 		}}
 		err := (Window{
@@ -469,7 +469,7 @@ func TestLayoutPreflightPrefixesAndDaemonVersion(t *testing.T) {
 		}
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
+		{result: layoutVersionReply("3.2a")},
 		{result: tmuxcmd.Result{}},
 	}}
 	err := (Window{server: serverWithRunner(runner), sessionID: "$7", windowID: "@8"}).SelectLayout(
@@ -477,7 +477,7 @@ func TestLayoutPreflightPrefixesAndDaemonVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SelectLayout(main-h) on old daemon: %v", err)
 	}
-	assertRequestArguments(t, runner.recordedRequests()[0], []string{"display-message", "-p", "tmux #{version}"})
+	assertRequestArguments(t, runner.recordedRequests()[0], []string{"run-shell", "-C", testIdentityProbeMarker + "#{q:version}"})
 }
 
 func TestLayoutPreflightPlanRefusesEveryLayoutBeforeDispatch(t *testing.T) {
