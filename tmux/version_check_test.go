@@ -29,6 +29,17 @@ func TestMinimumVersionCheckHonorsPatchLetters(t *testing.T) {
 		{"3.10", true},
 		{"3.3a-master", true},
 		{"master", false},
+		{"3.4garbage", false},
+		{"9.9alpha", false},
+		{"3.7a-unknown", false},
+		{"next-3.9nonsense", false},
+		{"next-3.3a-master", false},
+		{"3.3a-dev", true},
+		{"3.3b-rc2", true},
+		{"3.3.1", true},
+		{"3.8-rc2", true},
+		{"next-3.8", true},
+		{"4.0", true},
 	} {
 		t.Run(test.raw, func(t *testing.T) {
 			version := mustParseVersion(t, test.raw)
@@ -63,8 +74,8 @@ func TestCoreVersionCheckRejectsSyntheticOpenBSDQualification(t *testing.T) {
 	}
 }
 
-func TestCoreAdmissionRejectsOldDaemonBeforeDispatch(t *testing.T) {
-	for _, version := range []string{"3.2a", "3.3", "3.3-rc2", "master"} {
+func TestCoreVersionCheckRejectsOldDaemonBeforeDispatch(t *testing.T) {
+	for _, version := range []string{"3.2a", "3.3", "3.3-rc2", "master", "3.4garbage", "9.9alpha"} {
 		for name, call := range map[string]func(Server) error{
 			"raw read": func(server Server) error {
 				_, err := server.Cmd(t.Context(), "display-message", "-p", "unreached")
@@ -165,8 +176,8 @@ func TestCoreVersionCheckRejectsReplacementAtMutation(t *testing.T) {
 	}
 }
 
-func TestCoreAdmissionChecksExecutableOnlyWithoutDaemon(t *testing.T) {
-	for _, version := range []string{"3.2a", "3.3", "master", "3.3a"} {
+func TestCoreVersionCheckChecksExecutableOnlyWithoutDaemon(t *testing.T) {
+	for _, version := range []string{"3.2a", "3.3", "master", "3.4garbage", "9.9alpha", "3.3a"} {
 		t.Run(version, func(t *testing.T) {
 			runner := &versionRunner{binary: version}
 			_, err := rawVersionServer(t, runner).Cmd(t.Context(), "new-session", "-d", "-s", "created")

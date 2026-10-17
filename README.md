@@ -36,14 +36,15 @@ settled. Pin an exact version.
 
 It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Ordinary
 operations check the selected daemon before dispatch and return
-`tmux.ErrVersionTooLow` for older releases, including unpatched 3.3. A newer client executable cannot
-admit an older daemon. With no daemon, the executable's version admits startup;
-a native precondition refuses a different version appearing before dispatch.
-`tmux.NewServer` still validates configuration without starting a process.
-`Server.Version` on an unbound handle and standalone `Cmd` calls with `-V` or
-`-h` diagnose the executable; they do not admit later daemon operations.
-Unversioned OpenBSD base tmux and bare `master` reports cannot establish this
-release floor and are refused. Capability probes remain diagnostic.
+`tmux.ErrVersionTooLow` for older releases, including unpatched 3.3. A newer
+client executable cannot admit an older daemon. With no daemon, the
+executable's version admits startup; a native precondition refuses a different
+version appearing before dispatch. `tmux.NewServer` still validates
+configuration without starting a process. `Server.Version` on an unbound
+handle and standalone `Cmd` calls with `-V` or `-h` diagnose the executable;
+they do not vouch for later daemon operations. Unversioned OpenBSD base tmux and
+bare `master` reports cannot establish this release floor and are refused.
+Other unknown suffixes are refused too. Capability probes remain diagnostic.
 
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).

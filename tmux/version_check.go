@@ -3,33 +3,37 @@ package tmux
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 )
 
-var minimumSupportedVersion = Version{raw: MinimumSupportedVersion, major: 3, minor: 3}
+var (
+	minimumSupportedVersion = Version{raw: MinimumSupportedVersion, major: 3, minor: 3}
+	admissionReleasePattern = regexp.MustCompile(
+		`^(next-)?[0-9]+\.[0-9]+(?:\.[0-9]+)?` +
+			`([a-z]?)(?:-(master|dev|rc[0-9]+))?$`,
+	)
+)
 
-// meetsMinimum preserves feature comparisons while honoring a minimum release's
-// patch letter. An unqualified or prerelease token cannot prove that patch.
+// meetsMinimum keeps diagnostic parsing separate from qualified admission and
+// compares patch letters before a development suffix on the same numeric core.
 func (v Version) meetsMinimum(minimum Version) bool {
-	if v.raw == "master" || isOpenBSDVersionToken(v.raw) {
+	current := admissionReleasePattern.FindStringSubmatch(v.raw)
+	if current == nil {
 		return false
 	}
 	if v.major != minimum.major || v.minor != minimum.minor || v.patch != minimum.patch {
 		return v.Compare(minimum) > 0
 	}
-	if v.development < minimum.development {
+	required := admissionReleasePattern.FindStringSubmatch(minimum.raw)
+	if required == nil {
 		return false
 	}
-	required := versionPattern.FindStringSubmatch(minimum.raw)
-	if len(required) <= 5 || len(required[5]) != 1 {
-		return true
+	if current[2] != required[2] {
+		return current[2] > required[2]
 	}
-	current := versionPattern.FindStringSubmatch(v.raw)
-	if len(current) <= 5 {
-		return false
-	}
-	patch := strings.TrimSuffix(current[5], "-master")
-	return len(patch) == 1 && patch >= required[5]
+	return v.development >= minimum.development && current[1] == "" &&
+		!strings.HasPrefix(current[3], "rc")
 }
 
 func requireSupportedVersion(current Version) error {
