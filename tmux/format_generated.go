@@ -5,336 +5,337 @@ package tmux
 import "time"
 
 var generatedFormatFields = [...]formatField{
-	{name: "active_window_index", scope: formatScopeSession, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "alternate_on", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "alternate_saved_x", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "alternate_saved_y", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "active_window_index", scope: formatScopeSession, kind: formatKindInt, minimum: Version{}},
+	{name: "alternate_on", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "alternate_saved_x", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "alternate_saved_y", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
 	{name: "bracket_paste_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
-	{name: "buffer_mode_format", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "buffer_name", scope: formatScopeBuffer, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "buffer_sample", scope: formatScopeBuffer, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "buffer_size", scope: formatScopeBuffer, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_activity", scope: formatScopeClient, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_cell_height", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_cell_width", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_control_mode", scope: formatScopeClient, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_created", scope: formatScopeClient, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_discarded", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_flags", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_height", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_key_table", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_last_session", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_mode_format", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_name", scope: formatScopeClient, kind: formatKindClientName, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_pid", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_prefix", scope: formatScopeClient, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_readonly", scope: formatScopeClient, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_session", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_termfeatures", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_termname", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_termtype", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_tty", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_uid", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_user", scope: formatScopeClient, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_utf8", scope: formatScopeClient, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_width", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "client_written", scope: formatScopeClient, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "command", scope: formatScopeContext, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "command_list_alias", scope: formatScopeContext, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "command_list_name", scope: formatScopeContext, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "command_list_usage", scope: formatScopeContext, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "config_files", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "copy_cursor_line", scope: formatScopeEvent, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "copy_cursor_word", scope: formatScopeEvent, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "copy_cursor_x", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "copy_cursor_y", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "current_file", scope: formatScopeContext, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "buffer_mode_format", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{}},
+	{name: "buffer_name", scope: formatScopeBuffer, kind: formatKindString, minimum: Version{}},
+	{name: "buffer_sample", scope: formatScopeBuffer, kind: formatKindString, minimum: Version{}},
+	{name: "buffer_size", scope: formatScopeBuffer, kind: formatKindInt, minimum: Version{}},
+	{name: "client_activity", scope: formatScopeClient, kind: formatKindTime, minimum: Version{}},
+	{name: "client_cell_height", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "client_cell_width", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "client_control_mode", scope: formatScopeClient, kind: formatKindBool, minimum: Version{}},
+	{name: "client_created", scope: formatScopeClient, kind: formatKindTime, minimum: Version{}},
+	{name: "client_discarded", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "client_flags", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_height", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "client_key_table", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_last_session", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_mode_format", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_name", scope: formatScopeClient, kind: formatKindClientName, minimum: Version{}},
+	{name: "client_pid", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "client_prefix", scope: formatScopeClient, kind: formatKindBool, minimum: Version{}},
+	{name: "client_readonly", scope: formatScopeClient, kind: formatKindBool, minimum: Version{}},
+	{name: "client_session", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_termfeatures", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_termname", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_termtype", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_tty", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_uid", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "client_user", scope: formatScopeClient, kind: formatKindString, minimum: Version{}},
+	{name: "client_utf8", scope: formatScopeClient, kind: formatKindBool, minimum: Version{}},
+	{name: "client_width", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "client_written", scope: formatScopeClient, kind: formatKindInt, minimum: Version{}},
+	{name: "command", scope: formatScopeContext, kind: formatKindString, minimum: Version{}},
+	{name: "command_list_alias", scope: formatScopeContext, kind: formatKindString, minimum: Version{}},
+	{name: "command_list_name", scope: formatScopeContext, kind: formatKindString, minimum: Version{}},
+	{name: "command_list_usage", scope: formatScopeContext, kind: formatKindString, minimum: Version{}},
+	{name: "config_files", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{}},
+	{name: "copy_cursor_line", scope: formatScopeEvent, kind: formatKindString, minimum: Version{}},
+	{name: "copy_cursor_word", scope: formatScopeEvent, kind: formatKindString, minimum: Version{}},
+	{name: "copy_cursor_x", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{}},
+	{name: "copy_cursor_y", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{}},
+	{name: "current_file", scope: formatScopeContext, kind: formatKindString, minimum: Version{}},
 	{name: "cursor_blinking", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "cursor_character", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "cursor_character", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
 	{name: "cursor_colour", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "cursor_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "cursor_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
 	{name: "cursor_shape", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
 	{name: "cursor_very_visible", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "cursor_x", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "cursor_y", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "history_added", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "history_all_bytes", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "history_bytes", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "history_collected", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "history_generation", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "history_limit", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "history_size", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "host", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "host_short", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "insert_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "keypad_cursor_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "keypad_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "last_window_index", scope: formatScopeSession, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "line", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "cursor_x", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "cursor_y", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "history_added", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "history_all_bytes", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "history_bytes", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "history_collected", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "history_generation", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "history_limit", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "history_size", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "host", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{}},
+	{name: "host_short", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{}},
+	{name: "image_support", scope: formatScopeUniversal, kind: formatKindBool, minimum: Version{raw: "next-3.9", major: 3, minor: 9, patch: 0, development: -1}},
+	{name: "insert_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "keypad_cursor_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "keypad_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "last_window_index", scope: formatScopeSession, kind: formatKindInt, minimum: Version{}},
+	{name: "line", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{}},
 	{name: "loop_last_flag", scope: formatScopeContext, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "mouse_all_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "mouse_any_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "mouse_button_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "mouse_sgr_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "mouse_standard_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "mouse_utf8_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "next_session_id", scope: formatScopeUniversal, kind: formatKindSessionID, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "origin_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_active", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_at_bottom", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_at_left", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_at_right", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_at_top", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_bg", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_bottom", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_command_running", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "pane_current_command", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_current_path", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_dead", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_dead_signal", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}},
-	{name: "pane_dead_status", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_dead_time", scope: formatScopePane, kind: formatKindTime, minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}},
-	{name: "pane_fg", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "mouse_all_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "mouse_any_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "mouse_button_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "mouse_sgr_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "mouse_standard_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "mouse_utf8_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "next_session_id", scope: formatScopeUniversal, kind: formatKindSessionID, minimum: Version{}},
+	{name: "origin_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_active", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_at_bottom", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_at_left", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_at_right", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_at_top", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_bg", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_bottom", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_command_running", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "pane_current_command", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_current_path", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_dead", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_dead_signal", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_dead_status", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_dead_time", scope: formatScopePane, kind: formatKindTime, minimum: Version{}},
+	{name: "pane_fg", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
 	{name: "pane_flags", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
 	{name: "pane_floating_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
-	{name: "pane_format", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_height", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_id", scope: formatScopePane, kind: formatKindPaneID, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_in_mode", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_index", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_input_off", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "pane_format", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_height", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_id", scope: formatScopePane, kind: formatKindPaneID, minimum: Version{}},
+	{name: "pane_in_mode", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_index", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_input_off", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
 	{name: "pane_key_mode", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.5", major: 3, minor: 5, patch: 0}},
-	{name: "pane_last", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_left", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_marked", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_marked_set", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_modal_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "pane_mode", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_output_generation", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "pane_path", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "pane_last", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_left", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_marked", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_marked_set", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_modal_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "pane_mode", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_output_generation", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "pane_path", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
 	{name: "pane_pb_progress", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
 	{name: "pane_pb_state", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
-	{name: "pane_pid", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_pipe", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "pane_pid", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_pipe", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
 	{name: "pane_pipe_pid", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
-	{name: "pane_private_modes", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "pane_right", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_search_string", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_start_command", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_start_command_list", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "pane_start_path", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_synchronized", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_tabs", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_title", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_top", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "pane_tty", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "pane_private_modes", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "pane_right", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_search_string", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_start_command", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_start_command_list", scope: formatScopePane, kind: formatKindString, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "pane_start_path", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_synchronized", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
+	{name: "pane_tabs", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_title", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
+	{name: "pane_top", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "pane_tty", scope: formatScopePane, kind: formatKindString, minimum: Version{}},
 	{name: "pane_unseen_changes", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}},
-	{name: "pane_unzoomed_height", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "pane_unzoomed_width", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "pane_width", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "pane_unzoomed_height", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "pane_unzoomed_width", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "pane_width", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
 	{name: "pane_x", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
 	{name: "pane_y", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
 	{name: "pane_z", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
 	{name: "pane_zoomed_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
-	{name: "pid", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "scroll_position", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "scroll_region_lower", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "scroll_region_upper", scope: formatScopePane, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "search_match", scope: formatScopeContext, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "selection_end_x", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "selection_end_y", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "selection_start_x", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "selection_start_y", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "pid", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{}},
+	{name: "scroll_position", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{}},
+	{name: "scroll_region_lower", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "scroll_region_upper", scope: formatScopePane, kind: formatKindInt, minimum: Version{}},
+	{name: "search_match", scope: formatScopeContext, kind: formatKindString, minimum: Version{}},
+	{name: "selection_end_x", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{}},
+	{name: "selection_end_y", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{}},
+	{name: "selection_start_x", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{}},
+	{name: "selection_start_y", scope: formatScopeEvent, kind: formatKindInt, minimum: Version{}},
 	{name: "server_sessions", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}},
 	{name: "session_active", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "session_activity", scope: formatScopeSession, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "session_activity", scope: formatScopeSession, kind: formatKindTime, minimum: Version{}},
 	{name: "session_activity_flag", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
 	{name: "session_alert", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "session_alerts", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_attached", scope: formatScopeSession, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_attached_list", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "session_alerts", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
+	{name: "session_attached", scope: formatScopeSession, kind: formatKindInt, minimum: Version{}},
+	{name: "session_attached_list", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
 	{name: "session_bell_flag", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "session_created", scope: formatScopeSession, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_format", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_group", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_group_attached", scope: formatScopeSession, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_group_attached_list", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_group_list", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_group_many_attached", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_group_size", scope: formatScopeSession, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_grouped", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_id", scope: formatScopeSession, kind: formatKindSessionID, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_last_attached", scope: formatScopeSession, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_many_attached", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_marked", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_name", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_path", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "session_created", scope: formatScopeSession, kind: formatKindTime, minimum: Version{}},
+	{name: "session_format", scope: formatScopeSession, kind: formatKindBool, minimum: Version{}},
+	{name: "session_group", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
+	{name: "session_group_attached", scope: formatScopeSession, kind: formatKindInt, minimum: Version{}},
+	{name: "session_group_attached_list", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
+	{name: "session_group_list", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
+	{name: "session_group_many_attached", scope: formatScopeSession, kind: formatKindBool, minimum: Version{}},
+	{name: "session_group_size", scope: formatScopeSession, kind: formatKindInt, minimum: Version{}},
+	{name: "session_grouped", scope: formatScopeSession, kind: formatKindBool, minimum: Version{}},
+	{name: "session_id", scope: formatScopeSession, kind: formatKindSessionID, minimum: Version{}},
+	{name: "session_last_attached", scope: formatScopeSession, kind: formatKindTime, minimum: Version{}},
+	{name: "session_many_attached", scope: formatScopeSession, kind: formatKindBool, minimum: Version{}},
+	{name: "session_marked", scope: formatScopeSession, kind: formatKindBool, minimum: Version{}},
+	{name: "session_name", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
+	{name: "session_path", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
 	{name: "session_silence_flag", scope: formatScopeSession, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "session_stack", scope: formatScopeSession, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "session_windows", scope: formatScopeSession, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "session_stack", scope: formatScopeSession, kind: formatKindString, minimum: Version{}},
+	{name: "session_windows", scope: formatScopeSession, kind: formatKindInt, minimum: Version{}},
 	{name: "sixel_support", scope: formatScopeUniversal, kind: formatKindBool, minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}},
-	{name: "socket_path", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "start_time", scope: formatScopeUniversal, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "socket_path", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{}},
+	{name: "start_time", scope: formatScopeUniversal, kind: formatKindTime, minimum: Version{}},
 	{name: "synchronized_output_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}},
-	{name: "tree_mode_format", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "uid", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "user", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "version", scope: formatScopeUniversal, kind: formatKindVersion, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_active", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_active_clients", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_active_clients_list", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_active_sessions", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_active_sessions_list", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_activity", scope: formatScopeWindow, kind: formatKindTime, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_activity_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_bell_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_bigger", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_cell_height", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_cell_width", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_end_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_flags", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_format", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_height", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_id", scope: formatScopeWindow, kind: formatKindWindowID, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_index", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_last_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_layout", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_linked", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_linked_sessions", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_linked_sessions_list", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_manual_height", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "window_manual_width", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.8", major: 3, minor: 8, patch: 0}},
-	{name: "window_marked_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_name", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_offset_x", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_offset_y", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_panes", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_raw_flags", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_silence_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_stack_index", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_start_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_visible_layout", scope: formatScopeWindow, kind: formatKindString, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_width", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "window_zoomed_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
-	{name: "wrap_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}},
+	{name: "tree_mode_format", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{}},
+	{name: "uid", scope: formatScopeUniversal, kind: formatKindInt, minimum: Version{}},
+	{name: "user", scope: formatScopeUniversal, kind: formatKindString, minimum: Version{}},
+	{name: "version", scope: formatScopeUniversal, kind: formatKindVersion, minimum: Version{}},
+	{name: "window_active", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_active_clients", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_active_clients_list", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_active_sessions", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_active_sessions_list", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_activity", scope: formatScopeWindow, kind: formatKindTime, minimum: Version{}},
+	{name: "window_activity_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_bell_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_bigger", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_cell_height", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_cell_width", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_end_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_flags", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_format", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_height", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_id", scope: formatScopeWindow, kind: formatKindWindowID, minimum: Version{}},
+	{name: "window_index", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_last_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_layout", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_linked", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_linked_sessions", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_linked_sessions_list", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_manual_height", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "window_manual_width", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}},
+	{name: "window_marked_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_name", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_offset_x", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_offset_y", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_panes", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_raw_flags", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_silence_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_stack_index", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_start_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "window_visible_layout", scope: formatScopeWindow, kind: formatKindString, minimum: Version{}},
+	{name: "window_width", scope: formatScopeWindow, kind: formatKindInt, minimum: Version{}},
+	{name: "window_zoomed_flag", scope: formatScopeWindow, kind: formatKindBool, minimum: Version{}},
+	{name: "wrap_flag", scope: formatScopePane, kind: formatKindBool, minimum: Version{}},
 }
 
-// ActiveWindowIndex returns tmux #{active_window_index} as int from materialized session-scoped fields (tmux 3.2a or later).
+// ActiveWindowIndex returns tmux #{active_window_index} as int from materialized session-scoped fields.
 func (v FormatValues) ActiveWindowIndex() (int, bool) { return v.values.getInt("active_window_index") }
 
-// AlternateOn returns tmux #{alternate_on} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// AlternateOn returns tmux #{alternate_on} as bool from materialized pane-scoped fields.
 func (v FormatValues) AlternateOn() (bool, bool) { return v.values.getBool("alternate_on") }
 
-// AlternateSavedX returns tmux #{alternate_saved_x} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// AlternateSavedX returns tmux #{alternate_saved_x} as int from materialized pane-scoped fields.
 func (v FormatValues) AlternateSavedX() (int, bool) { return v.values.getInt("alternate_saved_x") }
 
-// AlternateSavedY returns tmux #{alternate_saved_y} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// AlternateSavedY returns tmux #{alternate_saved_y} as int from materialized pane-scoped fields.
 func (v FormatValues) AlternateSavedY() (int, bool) { return v.values.getInt("alternate_saved_y") }
 
 // BracketPasteFlag returns tmux #{bracket_paste_flag} as bool from materialized pane-scoped fields (tmux 3.7 or later).
 func (v FormatValues) BracketPasteFlag() (bool, bool) { return v.values.getBool("bracket_paste_flag") }
 
-// BufferModeFormat returns tmux #{buffer_mode_format} as string from materialized universal-scoped fields (tmux 3.2a or later).
+// BufferModeFormat returns tmux #{buffer_mode_format} as string from materialized universal-scoped fields.
 func (v FormatValues) BufferModeFormat() (string, bool) {
 	return v.values.getString("buffer_mode_format")
 }
 
-// ClientActivity returns tmux #{client_activity} as time.Time from materialized client-scoped fields (tmux 3.2a or later).
+// ClientActivity returns tmux #{client_activity} as time.Time from materialized client-scoped fields.
 func (v FormatValues) ClientActivity() (time.Time, bool) { return v.values.getTime("client_activity") }
 
-// ClientCellHeight returns tmux #{client_cell_height} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientCellHeight returns tmux #{client_cell_height} as int from materialized client-scoped fields.
 func (v FormatValues) ClientCellHeight() (int, bool) { return v.values.getInt("client_cell_height") }
 
-// ClientCellWidth returns tmux #{client_cell_width} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientCellWidth returns tmux #{client_cell_width} as int from materialized client-scoped fields.
 func (v FormatValues) ClientCellWidth() (int, bool) { return v.values.getInt("client_cell_width") }
 
-// ClientControlMode returns tmux #{client_control_mode} as bool from materialized client-scoped fields (tmux 3.2a or later).
+// ClientControlMode returns tmux #{client_control_mode} as bool from materialized client-scoped fields.
 func (v FormatValues) ClientControlMode() (bool, bool) {
 	return v.values.getBool("client_control_mode")
 }
 
-// ClientCreated returns tmux #{client_created} as time.Time from materialized client-scoped fields (tmux 3.2a or later).
+// ClientCreated returns tmux #{client_created} as time.Time from materialized client-scoped fields.
 func (v FormatValues) ClientCreated() (time.Time, bool) { return v.values.getTime("client_created") }
 
-// ClientDiscarded returns tmux #{client_discarded} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientDiscarded returns tmux #{client_discarded} as int from materialized client-scoped fields.
 func (v FormatValues) ClientDiscarded() (int, bool) { return v.values.getInt("client_discarded") }
 
-// ClientFlags returns tmux #{client_flags} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientFlags returns tmux #{client_flags} as string from materialized client-scoped fields.
 func (v FormatValues) ClientFlags() (string, bool) { return v.values.getString("client_flags") }
 
-// ClientHeight returns tmux #{client_height} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientHeight returns tmux #{client_height} as int from materialized client-scoped fields.
 func (v FormatValues) ClientHeight() (int, bool) { return v.values.getInt("client_height") }
 
-// ClientKeyTable returns tmux #{client_key_table} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientKeyTable returns tmux #{client_key_table} as string from materialized client-scoped fields.
 func (v FormatValues) ClientKeyTable() (string, bool) { return v.values.getString("client_key_table") }
 
-// ClientLastSession returns tmux #{client_last_session} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientLastSession returns tmux #{client_last_session} as string from materialized client-scoped fields.
 func (v FormatValues) ClientLastSession() (string, bool) {
 	return v.values.getString("client_last_session")
 }
 
-// ClientModeFormat returns tmux #{client_mode_format} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientModeFormat returns tmux #{client_mode_format} as string from materialized client-scoped fields.
 func (v FormatValues) ClientModeFormat() (string, bool) {
 	return v.values.getString("client_mode_format")
 }
 
-// ClientName returns tmux #{client_name} as ClientName from materialized client-scoped fields (tmux 3.2a or later).
+// ClientName returns tmux #{client_name} as ClientName from materialized client-scoped fields.
 func (v FormatValues) ClientName() (ClientName, bool) { return v.values.getClientName("client_name") }
 
-// ClientPID returns tmux #{client_pid} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientPID returns tmux #{client_pid} as int from materialized client-scoped fields.
 func (v FormatValues) ClientPID() (int, bool) { return v.values.getInt("client_pid") }
 
-// ClientPrefix returns tmux #{client_prefix} as bool from materialized client-scoped fields (tmux 3.2a or later).
+// ClientPrefix returns tmux #{client_prefix} as bool from materialized client-scoped fields.
 func (v FormatValues) ClientPrefix() (bool, bool) { return v.values.getBool("client_prefix") }
 
-// ClientReadOnly returns tmux #{client_readonly} as bool from materialized client-scoped fields (tmux 3.2a or later).
+// ClientReadOnly returns tmux #{client_readonly} as bool from materialized client-scoped fields.
 func (v FormatValues) ClientReadOnly() (bool, bool) { return v.values.getBool("client_readonly") }
 
-// ClientSession returns tmux #{client_session} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientSession returns tmux #{client_session} as string from materialized client-scoped fields.
 func (v FormatValues) ClientSession() (string, bool) { return v.values.getString("client_session") }
 
-// ClientTermFeatures returns tmux #{client_termfeatures} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientTermFeatures returns tmux #{client_termfeatures} as string from materialized client-scoped fields.
 func (v FormatValues) ClientTermFeatures() (string, bool) {
 	return v.values.getString("client_termfeatures")
 }
 
-// ClientTermName returns tmux #{client_termname} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientTermName returns tmux #{client_termname} as string from materialized client-scoped fields.
 func (v FormatValues) ClientTermName() (string, bool) { return v.values.getString("client_termname") }
 
-// ClientTermType returns tmux #{client_termtype} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientTermType returns tmux #{client_termtype} as string from materialized client-scoped fields.
 func (v FormatValues) ClientTermType() (string, bool) { return v.values.getString("client_termtype") }
 
-// ClientTTY returns tmux #{client_tty} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientTTY returns tmux #{client_tty} as string from materialized client-scoped fields.
 func (v FormatValues) ClientTTY() (string, bool) { return v.values.getString("client_tty") }
 
-// ClientUID returns tmux #{client_uid} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientUID returns tmux #{client_uid} as int from materialized client-scoped fields.
 func (v FormatValues) ClientUID() (int, bool) { return v.values.getInt("client_uid") }
 
-// ClientUser returns tmux #{client_user} as string from materialized client-scoped fields (tmux 3.2a or later).
+// ClientUser returns tmux #{client_user} as string from materialized client-scoped fields.
 func (v FormatValues) ClientUser() (string, bool) { return v.values.getString("client_user") }
 
-// ClientUTF8 returns tmux #{client_utf8} as bool from materialized client-scoped fields (tmux 3.2a or later).
+// ClientUTF8 returns tmux #{client_utf8} as bool from materialized client-scoped fields.
 func (v FormatValues) ClientUTF8() (bool, bool) { return v.values.getBool("client_utf8") }
 
-// ClientWidth returns tmux #{client_width} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientWidth returns tmux #{client_width} as int from materialized client-scoped fields.
 func (v FormatValues) ClientWidth() (int, bool) { return v.values.getInt("client_width") }
 
-// ClientWritten returns tmux #{client_written} as int from materialized client-scoped fields (tmux 3.2a or later).
+// ClientWritten returns tmux #{client_written} as int from materialized client-scoped fields.
 func (v FormatValues) ClientWritten() (int, bool) { return v.values.getInt("client_written") }
 
-// ConfigFiles returns tmux #{config_files} as string from materialized universal-scoped fields (tmux 3.2a or later).
+// ConfigFiles returns tmux #{config_files} as string from materialized universal-scoped fields.
 func (v FormatValues) ConfigFiles() (string, bool) { return v.values.getString("config_files") }
 
 // CursorBlinking returns tmux #{cursor_blinking} as bool from materialized pane-scoped fields (tmux 3.6 or later).
 func (v FormatValues) CursorBlinking() (bool, bool) { return v.values.getBool("cursor_blinking") }
 
-// CursorCharacter returns tmux #{cursor_character} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// CursorCharacter returns tmux #{cursor_character} as string from materialized pane-scoped fields.
 func (v FormatValues) CursorCharacter() (string, bool) { return v.values.getString("cursor_character") }
 
 // CursorColour returns tmux #{cursor_colour} as string from materialized pane-scoped fields (tmux 3.6 or later).
 func (v FormatValues) CursorColour() (string, bool) { return v.values.getString("cursor_colour") }
 
-// CursorFlag returns tmux #{cursor_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// CursorFlag returns tmux #{cursor_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) CursorFlag() (bool, bool) { return v.values.getBool("cursor_flag") }
 
 // CursorShape returns tmux #{cursor_shape} as string from materialized pane-scoped fields (tmux 3.6 or later).
@@ -345,133 +346,136 @@ func (v FormatValues) CursorVeryVisible() (bool, bool) {
 	return v.values.getBool("cursor_very_visible")
 }
 
-// CursorX returns tmux #{cursor_x} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// CursorX returns tmux #{cursor_x} as int from materialized pane-scoped fields.
 func (v FormatValues) CursorX() (int, bool) { return v.values.getInt("cursor_x") }
 
-// CursorY returns tmux #{cursor_y} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// CursorY returns tmux #{cursor_y} as int from materialized pane-scoped fields.
 func (v FormatValues) CursorY() (int, bool) { return v.values.getInt("cursor_y") }
 
-// HistoryAdded returns tmux #{history_added} as int from materialized pane-scoped fields (tmux 3.8 or later).
+// HistoryAdded returns tmux #{history_added} as int from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) HistoryAdded() (int, bool) { return v.values.getInt("history_added") }
 
-// HistoryAllBytes returns tmux #{history_all_bytes} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// HistoryAllBytes returns tmux #{history_all_bytes} as string from materialized pane-scoped fields.
 func (v FormatValues) HistoryAllBytes() (string, bool) {
 	return v.values.getString("history_all_bytes")
 }
 
-// HistoryBytes returns tmux #{history_bytes} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// HistoryBytes returns tmux #{history_bytes} as int from materialized pane-scoped fields.
 func (v FormatValues) HistoryBytes() (int, bool) { return v.values.getInt("history_bytes") }
 
-// HistoryCollected returns tmux #{history_collected} as int from materialized pane-scoped fields (tmux 3.8 or later).
+// HistoryCollected returns tmux #{history_collected} as int from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) HistoryCollected() (int, bool) { return v.values.getInt("history_collected") }
 
-// HistoryGeneration returns tmux #{history_generation} as int from materialized pane-scoped fields (tmux 3.8 or later).
+// HistoryGeneration returns tmux #{history_generation} as int from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) HistoryGeneration() (int, bool) { return v.values.getInt("history_generation") }
 
-// HistoryLimit returns tmux #{history_limit} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// HistoryLimit returns tmux #{history_limit} as int from materialized pane-scoped fields.
 func (v FormatValues) HistoryLimit() (int, bool) { return v.values.getInt("history_limit") }
 
-// HistorySize returns tmux #{history_size} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// HistorySize returns tmux #{history_size} as int from materialized pane-scoped fields.
 func (v FormatValues) HistorySize() (int, bool) { return v.values.getInt("history_size") }
 
-// Host returns tmux #{host} as string from materialized universal-scoped fields (tmux 3.2a or later).
+// Host returns tmux #{host} as string from materialized universal-scoped fields.
 func (v FormatValues) Host() (string, bool) { return v.values.getString("host") }
 
-// HostShort returns tmux #{host_short} as string from materialized universal-scoped fields (tmux 3.2a or later).
+// HostShort returns tmux #{host_short} as string from materialized universal-scoped fields.
 func (v FormatValues) HostShort() (string, bool) { return v.values.getString("host_short") }
 
-// InsertFlag returns tmux #{insert_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// ImageSupport returns tmux #{image_support} as bool from materialized universal-scoped fields (tmux next-3.9 or later).
+func (v FormatValues) ImageSupport() (bool, bool) { return v.values.getBool("image_support") }
+
+// InsertFlag returns tmux #{insert_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) InsertFlag() (bool, bool) { return v.values.getBool("insert_flag") }
 
-// KeypadCursorFlag returns tmux #{keypad_cursor_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// KeypadCursorFlag returns tmux #{keypad_cursor_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) KeypadCursorFlag() (bool, bool) { return v.values.getBool("keypad_cursor_flag") }
 
-// KeypadFlag returns tmux #{keypad_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// KeypadFlag returns tmux #{keypad_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) KeypadFlag() (bool, bool) { return v.values.getBool("keypad_flag") }
 
-// LastWindowIndex returns tmux #{last_window_index} as int from materialized session-scoped fields (tmux 3.2a or later).
+// LastWindowIndex returns tmux #{last_window_index} as int from materialized session-scoped fields.
 func (v FormatValues) LastWindowIndex() (int, bool) { return v.values.getInt("last_window_index") }
 
-// Line returns tmux #{line} as int from materialized universal-scoped fields (tmux 3.2a or later).
+// Line returns tmux #{line} as int from materialized universal-scoped fields.
 func (v FormatValues) Line() (int, bool) { return v.values.getInt("line") }
 
-// MouseAllFlag returns tmux #{mouse_all_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// MouseAllFlag returns tmux #{mouse_all_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) MouseAllFlag() (bool, bool) { return v.values.getBool("mouse_all_flag") }
 
-// MouseAnyFlag returns tmux #{mouse_any_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// MouseAnyFlag returns tmux #{mouse_any_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) MouseAnyFlag() (bool, bool) { return v.values.getBool("mouse_any_flag") }
 
-// MouseButtonFlag returns tmux #{mouse_button_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// MouseButtonFlag returns tmux #{mouse_button_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) MouseButtonFlag() (bool, bool) { return v.values.getBool("mouse_button_flag") }
 
-// MouseSGRFlag returns tmux #{mouse_sgr_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// MouseSGRFlag returns tmux #{mouse_sgr_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) MouseSGRFlag() (bool, bool) { return v.values.getBool("mouse_sgr_flag") }
 
-// MouseStandardFlag returns tmux #{mouse_standard_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// MouseStandardFlag returns tmux #{mouse_standard_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) MouseStandardFlag() (bool, bool) {
 	return v.values.getBool("mouse_standard_flag")
 }
 
-// MouseUTF8Flag returns tmux #{mouse_utf8_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// MouseUTF8Flag returns tmux #{mouse_utf8_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) MouseUTF8Flag() (bool, bool) { return v.values.getBool("mouse_utf8_flag") }
 
-// NextSessionID returns tmux #{next_session_id} as SessionID from materialized universal-scoped fields (tmux 3.2a or later).
+// NextSessionID returns tmux #{next_session_id} as SessionID from materialized universal-scoped fields.
 func (v FormatValues) NextSessionID() (SessionID, bool) {
 	return v.values.getSessionID("next_session_id")
 }
 
-// OriginFlag returns tmux #{origin_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// OriginFlag returns tmux #{origin_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) OriginFlag() (bool, bool) { return v.values.getBool("origin_flag") }
 
-// PaneActive returns tmux #{pane_active} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneActive returns tmux #{pane_active} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneActive() (bool, bool) { return v.values.getBool("pane_active") }
 
-// PaneAtBottom returns tmux #{pane_at_bottom} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneAtBottom returns tmux #{pane_at_bottom} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneAtBottom() (bool, bool) { return v.values.getBool("pane_at_bottom") }
 
-// PaneAtLeft returns tmux #{pane_at_left} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneAtLeft returns tmux #{pane_at_left} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneAtLeft() (bool, bool) { return v.values.getBool("pane_at_left") }
 
-// PaneAtRight returns tmux #{pane_at_right} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneAtRight returns tmux #{pane_at_right} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneAtRight() (bool, bool) { return v.values.getBool("pane_at_right") }
 
-// PaneAtTop returns tmux #{pane_at_top} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneAtTop returns tmux #{pane_at_top} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneAtTop() (bool, bool) { return v.values.getBool("pane_at_top") }
 
-// PaneBG returns tmux #{pane_bg} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneBG returns tmux #{pane_bg} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneBG() (string, bool) { return v.values.getString("pane_bg") }
 
-// PaneBottom returns tmux #{pane_bottom} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneBottom returns tmux #{pane_bottom} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneBottom() (int, bool) { return v.values.getInt("pane_bottom") }
 
-// PaneCommandRunning returns tmux #{pane_command_running} as bool from materialized pane-scoped fields (tmux 3.8 or later).
+// PaneCommandRunning returns tmux #{pane_command_running} as bool from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) PaneCommandRunning() (bool, bool) {
 	return v.values.getBool("pane_command_running")
 }
 
-// PaneCurrentCommand returns tmux #{pane_current_command} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneCurrentCommand returns tmux #{pane_current_command} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneCurrentCommand() (string, bool) {
 	return v.values.getString("pane_current_command")
 }
 
-// PaneCurrentPath returns tmux #{pane_current_path} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneCurrentPath returns tmux #{pane_current_path} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneCurrentPath() (string, bool) {
 	return v.values.getString("pane_current_path")
 }
 
-// PaneDead returns tmux #{pane_dead} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneDead returns tmux #{pane_dead} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneDead() (bool, bool) { return v.values.getBool("pane_dead") }
 
-// PaneDeadSignal returns tmux #{pane_dead_signal} as string from materialized pane-scoped fields (tmux 3.3 or later).
+// PaneDeadSignal returns tmux #{pane_dead_signal} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneDeadSignal() (string, bool) { return v.values.getString("pane_dead_signal") }
 
-// PaneDeadStatus returns tmux #{pane_dead_status} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneDeadStatus returns tmux #{pane_dead_status} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneDeadStatus() (int, bool) { return v.values.getInt("pane_dead_status") }
 
-// PaneDeadTime returns tmux #{pane_dead_time} as time.Time from materialized pane-scoped fields (tmux 3.3 or later).
+// PaneDeadTime returns tmux #{pane_dead_time} as time.Time from materialized pane-scoped fields.
 func (v FormatValues) PaneDeadTime() (time.Time, bool) { return v.values.getTime("pane_dead_time") }
 
-// PaneFG returns tmux #{pane_fg} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneFG returns tmux #{pane_fg} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneFG() (string, bool) { return v.values.getString("pane_fg") }
 
 // PaneFlags returns tmux #{pane_flags} as string from materialized pane-scoped fields (tmux 3.7 or later).
@@ -480,51 +484,51 @@ func (v FormatValues) PaneFlags() (string, bool) { return v.values.getString("pa
 // PaneFloatingFlag returns tmux #{pane_floating_flag} as bool from materialized pane-scoped fields (tmux 3.7 or later).
 func (v FormatValues) PaneFloatingFlag() (bool, bool) { return v.values.getBool("pane_floating_flag") }
 
-// PaneFormat returns tmux #{pane_format} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneFormat returns tmux #{pane_format} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneFormat() (bool, bool) { return v.values.getBool("pane_format") }
 
-// PaneHeight returns tmux #{pane_height} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneHeight returns tmux #{pane_height} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneHeight() (int, bool) { return v.values.getInt("pane_height") }
 
-// PaneID returns tmux #{pane_id} as PaneID from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneID returns tmux #{pane_id} as PaneID from materialized pane-scoped fields.
 func (v FormatValues) PaneID() (PaneID, bool) { return v.values.getPaneID("pane_id") }
 
-// PaneInMode returns tmux #{pane_in_mode} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneInMode returns tmux #{pane_in_mode} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneInMode() (int, bool) { return v.values.getInt("pane_in_mode") }
 
-// PaneIndex returns tmux #{pane_index} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneIndex returns tmux #{pane_index} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneIndex() (int, bool) { return v.values.getInt("pane_index") }
 
-// PaneInputOff returns tmux #{pane_input_off} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneInputOff returns tmux #{pane_input_off} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneInputOff() (bool, bool) { return v.values.getBool("pane_input_off") }
 
 // PaneKeyMode returns tmux #{pane_key_mode} as string from materialized pane-scoped fields (tmux 3.5 or later).
 func (v FormatValues) PaneKeyMode() (string, bool) { return v.values.getString("pane_key_mode") }
 
-// PaneLast returns tmux #{pane_last} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneLast returns tmux #{pane_last} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneLast() (bool, bool) { return v.values.getBool("pane_last") }
 
-// PaneLeft returns tmux #{pane_left} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneLeft returns tmux #{pane_left} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneLeft() (int, bool) { return v.values.getInt("pane_left") }
 
-// PaneMarked returns tmux #{pane_marked} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneMarked returns tmux #{pane_marked} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneMarked() (bool, bool) { return v.values.getBool("pane_marked") }
 
-// PaneMarkedSet returns tmux #{pane_marked_set} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneMarkedSet returns tmux #{pane_marked_set} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneMarkedSet() (bool, bool) { return v.values.getBool("pane_marked_set") }
 
-// PaneModalFlag returns tmux #{pane_modal_flag} as bool from materialized pane-scoped fields (tmux 3.8 or later).
+// PaneModalFlag returns tmux #{pane_modal_flag} as bool from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) PaneModalFlag() (bool, bool) { return v.values.getBool("pane_modal_flag") }
 
-// PaneMode returns tmux #{pane_mode} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneMode returns tmux #{pane_mode} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneMode() (string, bool) { return v.values.getString("pane_mode") }
 
-// PaneOutputGeneration returns tmux #{pane_output_generation} as int from materialized pane-scoped fields (tmux 3.8 or later).
+// PaneOutputGeneration returns tmux #{pane_output_generation} as int from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) PaneOutputGeneration() (int, bool) {
 	return v.values.getInt("pane_output_generation")
 }
 
-// PanePath returns tmux #{pane_path} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PanePath returns tmux #{pane_path} as string from materialized pane-scoped fields.
 func (v FormatValues) PanePath() (string, bool) { return v.values.getString("pane_path") }
 
 // PanePBProgress returns tmux #{pane_pb_progress} as int from materialized pane-scoped fields (tmux 3.7 or later).
@@ -533,54 +537,54 @@ func (v FormatValues) PanePBProgress() (int, bool) { return v.values.getInt("pan
 // PanePBState returns tmux #{pane_pb_state} as string from materialized pane-scoped fields (tmux 3.7 or later).
 func (v FormatValues) PanePBState() (string, bool) { return v.values.getString("pane_pb_state") }
 
-// PanePID returns tmux #{pane_pid} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PanePID returns tmux #{pane_pid} as int from materialized pane-scoped fields.
 func (v FormatValues) PanePID() (int, bool) { return v.values.getInt("pane_pid") }
 
-// PanePipe returns tmux #{pane_pipe} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PanePipe returns tmux #{pane_pipe} as bool from materialized pane-scoped fields.
 func (v FormatValues) PanePipe() (bool, bool) { return v.values.getBool("pane_pipe") }
 
 // PanePipePID returns tmux #{pane_pipe_pid} as int from materialized pane-scoped fields (tmux 3.7 or later).
 func (v FormatValues) PanePipePID() (int, bool) { return v.values.getInt("pane_pipe_pid") }
 
-// PanePrivateModes returns tmux #{pane_private_modes} as string from materialized pane-scoped fields (tmux 3.8 or later).
+// PanePrivateModes returns tmux #{pane_private_modes} as string from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) PanePrivateModes() (string, bool) {
 	return v.values.getString("pane_private_modes")
 }
 
-// PaneRight returns tmux #{pane_right} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneRight returns tmux #{pane_right} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneRight() (int, bool) { return v.values.getInt("pane_right") }
 
-// PaneSearchString returns tmux #{pane_search_string} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneSearchString returns tmux #{pane_search_string} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneSearchString() (string, bool) {
 	return v.values.getString("pane_search_string")
 }
 
-// PaneStartCommand returns tmux #{pane_start_command} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneStartCommand returns tmux #{pane_start_command} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneStartCommand() (string, bool) {
 	return v.values.getString("pane_start_command")
 }
 
-// PaneStartCommandList returns tmux #{pane_start_command_list} as string from materialized pane-scoped fields (tmux 3.8 or later).
+// PaneStartCommandList returns tmux #{pane_start_command_list} as string from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) PaneStartCommandList() (string, bool) {
 	return v.values.getString("pane_start_command_list")
 }
 
-// PaneStartPath returns tmux #{pane_start_path} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneStartPath returns tmux #{pane_start_path} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneStartPath() (string, bool) { return v.values.getString("pane_start_path") }
 
-// PaneSynchronized returns tmux #{pane_synchronized} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneSynchronized returns tmux #{pane_synchronized} as bool from materialized pane-scoped fields.
 func (v FormatValues) PaneSynchronized() (bool, bool) { return v.values.getBool("pane_synchronized") }
 
-// PaneTabs returns tmux #{pane_tabs} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneTabs returns tmux #{pane_tabs} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneTabs() (string, bool) { return v.values.getString("pane_tabs") }
 
-// PaneTitle returns tmux #{pane_title} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneTitle returns tmux #{pane_title} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneTitle() (string, bool) { return v.values.getString("pane_title") }
 
-// PaneTop returns tmux #{pane_top} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneTop returns tmux #{pane_top} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneTop() (int, bool) { return v.values.getInt("pane_top") }
 
-// PaneTTY returns tmux #{pane_tty} as string from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneTTY returns tmux #{pane_tty} as string from materialized pane-scoped fields.
 func (v FormatValues) PaneTTY() (string, bool) { return v.values.getString("pane_tty") }
 
 // PaneUnseenChanges returns tmux #{pane_unseen_changes} as bool from materialized pane-scoped fields (tmux 3.4 or later).
@@ -588,15 +592,15 @@ func (v FormatValues) PaneUnseenChanges() (bool, bool) {
 	return v.values.getBool("pane_unseen_changes")
 }
 
-// PaneUnzoomedHeight returns tmux #{pane_unzoomed_height} as int from materialized pane-scoped fields (tmux 3.8 or later).
+// PaneUnzoomedHeight returns tmux #{pane_unzoomed_height} as int from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) PaneUnzoomedHeight() (int, bool) {
 	return v.values.getInt("pane_unzoomed_height")
 }
 
-// PaneUnzoomedWidth returns tmux #{pane_unzoomed_width} as int from materialized pane-scoped fields (tmux 3.8 or later).
+// PaneUnzoomedWidth returns tmux #{pane_unzoomed_width} as int from materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) PaneUnzoomedWidth() (int, bool) { return v.values.getInt("pane_unzoomed_width") }
 
-// PaneWidth returns tmux #{pane_width} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// PaneWidth returns tmux #{pane_width} as int from materialized pane-scoped fields.
 func (v FormatValues) PaneWidth() (int, bool) { return v.values.getInt("pane_width") }
 
 // PaneX returns tmux #{pane_x} as int from materialized pane-scoped fields (tmux 3.7 or later).
@@ -611,13 +615,13 @@ func (v FormatValues) PaneZ() (int, bool) { return v.values.getInt("pane_z") }
 // PaneZoomedFlag returns tmux #{pane_zoomed_flag} as bool from materialized pane-scoped fields (tmux 3.7 or later).
 func (v FormatValues) PaneZoomedFlag() (bool, bool) { return v.values.getBool("pane_zoomed_flag") }
 
-// PID returns tmux #{pid} as int from materialized universal-scoped fields (tmux 3.2a or later).
+// PID returns tmux #{pid} as int from materialized universal-scoped fields.
 func (v FormatValues) PID() (int, bool) { return v.values.getInt("pid") }
 
-// ScrollRegionLower returns tmux #{scroll_region_lower} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// ScrollRegionLower returns tmux #{scroll_region_lower} as int from materialized pane-scoped fields.
 func (v FormatValues) ScrollRegionLower() (int, bool) { return v.values.getInt("scroll_region_lower") }
 
-// ScrollRegionUpper returns tmux #{scroll_region_upper} as int from materialized pane-scoped fields (tmux 3.2a or later).
+// ScrollRegionUpper returns tmux #{scroll_region_upper} as int from materialized pane-scoped fields.
 func (v FormatValues) ScrollRegionUpper() (int, bool) { return v.values.getInt("scroll_region_upper") }
 
 // ServerSessions returns tmux #{server_sessions} as int from materialized universal-scoped fields (tmux 3.4 or later).
@@ -626,7 +630,7 @@ func (v FormatValues) ServerSessions() (int, bool) { return v.values.getInt("ser
 // SessionActive returns tmux #{session_active} as bool from materialized session-scoped fields (tmux 3.6 or later).
 func (v FormatValues) SessionActive() (bool, bool) { return v.values.getBool("session_active") }
 
-// SessionActivity returns tmux #{session_activity} as time.Time from materialized session-scoped fields (tmux 3.2a or later).
+// SessionActivity returns tmux #{session_activity} as time.Time from materialized session-scoped fields.
 func (v FormatValues) SessionActivity() (time.Time, bool) {
 	return v.values.getTime("session_activity")
 }
@@ -639,13 +643,13 @@ func (v FormatValues) SessionActivityFlag() (bool, bool) {
 // SessionAlert returns tmux #{session_alert} as string from materialized session-scoped fields (tmux 3.6 or later).
 func (v FormatValues) SessionAlert() (string, bool) { return v.values.getString("session_alert") }
 
-// SessionAlerts returns tmux #{session_alerts} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionAlerts returns tmux #{session_alerts} as string from materialized session-scoped fields.
 func (v FormatValues) SessionAlerts() (string, bool) { return v.values.getString("session_alerts") }
 
-// SessionAttached returns tmux #{session_attached} as int from materialized session-scoped fields (tmux 3.2a or later).
+// SessionAttached returns tmux #{session_attached} as int from materialized session-scoped fields.
 func (v FormatValues) SessionAttached() (int, bool) { return v.values.getInt("session_attached") }
 
-// SessionAttachedList returns tmux #{session_attached_list} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionAttachedList returns tmux #{session_attached_list} as string from materialized session-scoped fields.
 func (v FormatValues) SessionAttachedList() (string, bool) {
 	return v.values.getString("session_attached_list")
 }
@@ -653,61 +657,61 @@ func (v FormatValues) SessionAttachedList() (string, bool) {
 // SessionBellFlag returns tmux #{session_bell_flag} as bool from materialized session-scoped fields (tmux 3.6 or later).
 func (v FormatValues) SessionBellFlag() (bool, bool) { return v.values.getBool("session_bell_flag") }
 
-// SessionCreated returns tmux #{session_created} as time.Time from materialized session-scoped fields (tmux 3.2a or later).
+// SessionCreated returns tmux #{session_created} as time.Time from materialized session-scoped fields.
 func (v FormatValues) SessionCreated() (time.Time, bool) { return v.values.getTime("session_created") }
 
-// SessionFormat returns tmux #{session_format} as bool from materialized session-scoped fields (tmux 3.2a or later).
+// SessionFormat returns tmux #{session_format} as bool from materialized session-scoped fields.
 func (v FormatValues) SessionFormat() (bool, bool) { return v.values.getBool("session_format") }
 
-// SessionGroup returns tmux #{session_group} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionGroup returns tmux #{session_group} as string from materialized session-scoped fields.
 func (v FormatValues) SessionGroup() (string, bool) { return v.values.getString("session_group") }
 
-// SessionGroupAttached returns tmux #{session_group_attached} as int from materialized session-scoped fields (tmux 3.2a or later).
+// SessionGroupAttached returns tmux #{session_group_attached} as int from materialized session-scoped fields.
 func (v FormatValues) SessionGroupAttached() (int, bool) {
 	return v.values.getInt("session_group_attached")
 }
 
-// SessionGroupAttachedList returns tmux #{session_group_attached_list} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionGroupAttachedList returns tmux #{session_group_attached_list} as string from materialized session-scoped fields.
 func (v FormatValues) SessionGroupAttachedList() (string, bool) {
 	return v.values.getString("session_group_attached_list")
 }
 
-// SessionGroupList returns tmux #{session_group_list} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionGroupList returns tmux #{session_group_list} as string from materialized session-scoped fields.
 func (v FormatValues) SessionGroupList() (string, bool) {
 	return v.values.getString("session_group_list")
 }
 
-// SessionGroupManyAttached returns tmux #{session_group_many_attached} as bool from materialized session-scoped fields (tmux 3.2a or later).
+// SessionGroupManyAttached returns tmux #{session_group_many_attached} as bool from materialized session-scoped fields.
 func (v FormatValues) SessionGroupManyAttached() (bool, bool) {
 	return v.values.getBool("session_group_many_attached")
 }
 
-// SessionGroupSize returns tmux #{session_group_size} as int from materialized session-scoped fields (tmux 3.2a or later).
+// SessionGroupSize returns tmux #{session_group_size} as int from materialized session-scoped fields.
 func (v FormatValues) SessionGroupSize() (int, bool) { return v.values.getInt("session_group_size") }
 
-// SessionGrouped returns tmux #{session_grouped} as bool from materialized session-scoped fields (tmux 3.2a or later).
+// SessionGrouped returns tmux #{session_grouped} as bool from materialized session-scoped fields.
 func (v FormatValues) SessionGrouped() (bool, bool) { return v.values.getBool("session_grouped") }
 
-// SessionID returns tmux #{session_id} as SessionID from materialized session-scoped fields (tmux 3.2a or later).
+// SessionID returns tmux #{session_id} as SessionID from materialized session-scoped fields.
 func (v FormatValues) SessionID() (SessionID, bool) { return v.values.getSessionID("session_id") }
 
-// SessionLastAttached returns tmux #{session_last_attached} as time.Time from materialized session-scoped fields (tmux 3.2a or later).
+// SessionLastAttached returns tmux #{session_last_attached} as time.Time from materialized session-scoped fields.
 func (v FormatValues) SessionLastAttached() (time.Time, bool) {
 	return v.values.getTime("session_last_attached")
 }
 
-// SessionManyAttached returns tmux #{session_many_attached} as bool from materialized session-scoped fields (tmux 3.2a or later).
+// SessionManyAttached returns tmux #{session_many_attached} as bool from materialized session-scoped fields.
 func (v FormatValues) SessionManyAttached() (bool, bool) {
 	return v.values.getBool("session_many_attached")
 }
 
-// SessionMarked returns tmux #{session_marked} as bool from materialized session-scoped fields (tmux 3.2a or later).
+// SessionMarked returns tmux #{session_marked} as bool from materialized session-scoped fields.
 func (v FormatValues) SessionMarked() (bool, bool) { return v.values.getBool("session_marked") }
 
-// SessionName returns tmux #{session_name} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionName returns tmux #{session_name} as string from materialized session-scoped fields.
 func (v FormatValues) SessionName() (string, bool) { return v.values.getString("session_name") }
 
-// SessionPath returns tmux #{session_path} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionPath returns tmux #{session_path} as string from materialized session-scoped fields.
 func (v FormatValues) SessionPath() (string, bool) { return v.values.getString("session_path") }
 
 // SessionSilenceFlag returns tmux #{session_silence_flag} as bool from materialized session-scoped fields (tmux 3.6 or later).
@@ -715,19 +719,19 @@ func (v FormatValues) SessionSilenceFlag() (bool, bool) {
 	return v.values.getBool("session_silence_flag")
 }
 
-// SessionStack returns tmux #{session_stack} as string from materialized session-scoped fields (tmux 3.2a or later).
+// SessionStack returns tmux #{session_stack} as string from materialized session-scoped fields.
 func (v FormatValues) SessionStack() (string, bool) { return v.values.getString("session_stack") }
 
-// SessionWindows returns tmux #{session_windows} as int from materialized session-scoped fields (tmux 3.2a or later).
+// SessionWindows returns tmux #{session_windows} as int from materialized session-scoped fields.
 func (v FormatValues) SessionWindows() (int, bool) { return v.values.getInt("session_windows") }
 
 // SixelSupport returns tmux #{sixel_support} as bool from materialized universal-scoped fields (tmux 3.6 or later).
 func (v FormatValues) SixelSupport() (bool, bool) { return v.values.getBool("sixel_support") }
 
-// SocketPath returns tmux #{socket_path} as string from materialized universal-scoped fields (tmux 3.2a or later).
+// SocketPath returns tmux #{socket_path} as string from materialized universal-scoped fields.
 func (v FormatValues) SocketPath() (string, bool) { return v.values.getString("socket_path") }
 
-// StartTime returns tmux #{start_time} as time.Time from materialized universal-scoped fields (tmux 3.2a or later).
+// StartTime returns tmux #{start_time} as time.Time from materialized universal-scoped fields.
 func (v FormatValues) StartTime() (time.Time, bool) { return v.values.getTime("start_time") }
 
 // SynchronizedOutputFlag returns tmux #{synchronized_output_flag} as bool from materialized pane-scoped fields (tmux 3.7 or later).
@@ -735,159 +739,159 @@ func (v FormatValues) SynchronizedOutputFlag() (bool, bool) {
 	return v.values.getBool("synchronized_output_flag")
 }
 
-// TreeModeFormat returns tmux #{tree_mode_format} as string from materialized universal-scoped fields (tmux 3.2a or later).
+// TreeModeFormat returns tmux #{tree_mode_format} as string from materialized universal-scoped fields.
 func (v FormatValues) TreeModeFormat() (string, bool) { return v.values.getString("tree_mode_format") }
 
-// UID returns tmux #{uid} as int from materialized universal-scoped fields (tmux 3.2a or later).
+// UID returns tmux #{uid} as int from materialized universal-scoped fields.
 func (v FormatValues) UID() (int, bool) { return v.values.getInt("uid") }
 
-// User returns tmux #{user} as string from materialized universal-scoped fields (tmux 3.2a or later).
+// User returns tmux #{user} as string from materialized universal-scoped fields.
 func (v FormatValues) User() (string, bool) { return v.values.getString("user") }
 
-// Version returns tmux #{version} as Version from materialized universal-scoped fields (tmux 3.2a or later).
+// Version returns tmux #{version} as Version from materialized universal-scoped fields.
 func (v FormatValues) Version() (Version, bool) { return v.values.getVersion("version") }
 
-// WindowActive returns tmux #{window_active} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowActive returns tmux #{window_active} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowActive() (bool, bool) { return v.values.getBool("window_active") }
 
-// WindowActiveClients returns tmux #{window_active_clients} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowActiveClients returns tmux #{window_active_clients} as int from materialized window-scoped fields.
 func (v FormatValues) WindowActiveClients() (int, bool) {
 	return v.values.getInt("window_active_clients")
 }
 
-// WindowActiveClientsList returns tmux #{window_active_clients_list} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowActiveClientsList returns tmux #{window_active_clients_list} as string from materialized window-scoped fields.
 func (v FormatValues) WindowActiveClientsList() (string, bool) {
 	return v.values.getString("window_active_clients_list")
 }
 
-// WindowActiveSessions returns tmux #{window_active_sessions} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowActiveSessions returns tmux #{window_active_sessions} as int from materialized window-scoped fields.
 func (v FormatValues) WindowActiveSessions() (int, bool) {
 	return v.values.getInt("window_active_sessions")
 }
 
-// WindowActiveSessionsList returns tmux #{window_active_sessions_list} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowActiveSessionsList returns tmux #{window_active_sessions_list} as string from materialized window-scoped fields.
 func (v FormatValues) WindowActiveSessionsList() (string, bool) {
 	return v.values.getString("window_active_sessions_list")
 }
 
-// WindowActivity returns tmux #{window_activity} as time.Time from materialized window-scoped fields (tmux 3.2a or later).
+// WindowActivity returns tmux #{window_activity} as time.Time from materialized window-scoped fields.
 func (v FormatValues) WindowActivity() (time.Time, bool) { return v.values.getTime("window_activity") }
 
-// WindowActivityFlag returns tmux #{window_activity_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowActivityFlag returns tmux #{window_activity_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowActivityFlag() (bool, bool) {
 	return v.values.getBool("window_activity_flag")
 }
 
-// WindowBellFlag returns tmux #{window_bell_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowBellFlag returns tmux #{window_bell_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowBellFlag() (bool, bool) { return v.values.getBool("window_bell_flag") }
 
-// WindowBigger returns tmux #{window_bigger} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowBigger returns tmux #{window_bigger} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowBigger() (bool, bool) { return v.values.getBool("window_bigger") }
 
-// WindowCellHeight returns tmux #{window_cell_height} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowCellHeight returns tmux #{window_cell_height} as int from materialized window-scoped fields.
 func (v FormatValues) WindowCellHeight() (int, bool) { return v.values.getInt("window_cell_height") }
 
-// WindowCellWidth returns tmux #{window_cell_width} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowCellWidth returns tmux #{window_cell_width} as int from materialized window-scoped fields.
 func (v FormatValues) WindowCellWidth() (int, bool) { return v.values.getInt("window_cell_width") }
 
-// WindowEndFlag returns tmux #{window_end_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowEndFlag returns tmux #{window_end_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowEndFlag() (bool, bool) { return v.values.getBool("window_end_flag") }
 
-// WindowFlags returns tmux #{window_flags} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowFlags returns tmux #{window_flags} as string from materialized window-scoped fields.
 func (v FormatValues) WindowFlags() (string, bool) { return v.values.getString("window_flags") }
 
-// WindowFormat returns tmux #{window_format} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowFormat returns tmux #{window_format} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowFormat() (bool, bool) { return v.values.getBool("window_format") }
 
-// WindowHeight returns tmux #{window_height} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowHeight returns tmux #{window_height} as int from materialized window-scoped fields.
 func (v FormatValues) WindowHeight() (int, bool) { return v.values.getInt("window_height") }
 
-// WindowID returns tmux #{window_id} as WindowID from materialized window-scoped fields (tmux 3.2a or later).
+// WindowID returns tmux #{window_id} as WindowID from materialized window-scoped fields.
 func (v FormatValues) WindowID() (WindowID, bool) { return v.values.getWindowID("window_id") }
 
-// WindowIndex returns tmux #{window_index} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowIndex returns tmux #{window_index} as int from materialized window-scoped fields.
 func (v FormatValues) WindowIndex() (int, bool) { return v.values.getInt("window_index") }
 
-// WindowLastFlag returns tmux #{window_last_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowLastFlag returns tmux #{window_last_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowLastFlag() (bool, bool) { return v.values.getBool("window_last_flag") }
 
-// WindowLayout returns tmux #{window_layout} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowLayout returns tmux #{window_layout} as string from materialized window-scoped fields.
 func (v FormatValues) WindowLayout() (string, bool) { return v.values.getString("window_layout") }
 
-// WindowLinked returns tmux #{window_linked} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowLinked returns tmux #{window_linked} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowLinked() (bool, bool) { return v.values.getBool("window_linked") }
 
-// WindowLinkedSessions returns tmux #{window_linked_sessions} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowLinkedSessions returns tmux #{window_linked_sessions} as int from materialized window-scoped fields.
 func (v FormatValues) WindowLinkedSessions() (int, bool) {
 	return v.values.getInt("window_linked_sessions")
 }
 
-// WindowLinkedSessionsList returns tmux #{window_linked_sessions_list} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowLinkedSessionsList returns tmux #{window_linked_sessions_list} as string from materialized window-scoped fields.
 func (v FormatValues) WindowLinkedSessionsList() (string, bool) {
 	return v.values.getString("window_linked_sessions_list")
 }
 
-// WindowManualHeight returns tmux #{window_manual_height} as int from materialized window-scoped fields (tmux 3.8 or later).
+// WindowManualHeight returns tmux #{window_manual_height} as int from materialized window-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) WindowManualHeight() (int, bool) {
 	return v.values.getInt("window_manual_height")
 }
 
-// WindowManualWidth returns tmux #{window_manual_width} as int from materialized window-scoped fields (tmux 3.8 or later).
+// WindowManualWidth returns tmux #{window_manual_width} as int from materialized window-scoped fields (tmux 3.8-rc2 or later).
 func (v FormatValues) WindowManualWidth() (int, bool) { return v.values.getInt("window_manual_width") }
 
-// WindowMarkedFlag returns tmux #{window_marked_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowMarkedFlag returns tmux #{window_marked_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowMarkedFlag() (bool, bool) { return v.values.getBool("window_marked_flag") }
 
-// WindowName returns tmux #{window_name} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowName returns tmux #{window_name} as string from materialized window-scoped fields.
 func (v FormatValues) WindowName() (string, bool) { return v.values.getString("window_name") }
 
-// WindowOffsetX returns tmux #{window_offset_x} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowOffsetX returns tmux #{window_offset_x} as int from materialized window-scoped fields.
 func (v FormatValues) WindowOffsetX() (int, bool) { return v.values.getInt("window_offset_x") }
 
-// WindowOffsetY returns tmux #{window_offset_y} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowOffsetY returns tmux #{window_offset_y} as int from materialized window-scoped fields.
 func (v FormatValues) WindowOffsetY() (int, bool) { return v.values.getInt("window_offset_y") }
 
-// WindowPanes returns tmux #{window_panes} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowPanes returns tmux #{window_panes} as int from materialized window-scoped fields.
 func (v FormatValues) WindowPanes() (int, bool) { return v.values.getInt("window_panes") }
 
-// WindowRawFlags returns tmux #{window_raw_flags} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowRawFlags returns tmux #{window_raw_flags} as string from materialized window-scoped fields.
 func (v FormatValues) WindowRawFlags() (string, bool) { return v.values.getString("window_raw_flags") }
 
-// WindowSilenceFlag returns tmux #{window_silence_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowSilenceFlag returns tmux #{window_silence_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowSilenceFlag() (bool, bool) {
 	return v.values.getBool("window_silence_flag")
 }
 
-// WindowStackIndex returns tmux #{window_stack_index} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowStackIndex returns tmux #{window_stack_index} as int from materialized window-scoped fields.
 func (v FormatValues) WindowStackIndex() (int, bool) { return v.values.getInt("window_stack_index") }
 
-// WindowStartFlag returns tmux #{window_start_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowStartFlag returns tmux #{window_start_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowStartFlag() (bool, bool) { return v.values.getBool("window_start_flag") }
 
-// WindowVisibleLayout returns tmux #{window_visible_layout} as string from materialized window-scoped fields (tmux 3.2a or later).
+// WindowVisibleLayout returns tmux #{window_visible_layout} as string from materialized window-scoped fields.
 func (v FormatValues) WindowVisibleLayout() (string, bool) {
 	return v.values.getString("window_visible_layout")
 }
 
-// WindowWidth returns tmux #{window_width} as int from materialized window-scoped fields (tmux 3.2a or later).
+// WindowWidth returns tmux #{window_width} as int from materialized window-scoped fields.
 func (v FormatValues) WindowWidth() (int, bool) { return v.values.getInt("window_width") }
 
-// WindowZoomedFlag returns tmux #{window_zoomed_flag} as bool from materialized window-scoped fields (tmux 3.2a or later).
+// WindowZoomedFlag returns tmux #{window_zoomed_flag} as bool from materialized window-scoped fields.
 func (v FormatValues) WindowZoomedFlag() (bool, bool) { return v.values.getBool("window_zoomed_flag") }
 
-// WrapFlag returns tmux #{wrap_flag} as bool from materialized pane-scoped fields (tmux 3.2a or later).
+// WrapFlag returns tmux #{wrap_flag} as bool from materialized pane-scoped fields.
 func (v FormatValues) WrapFlag() (bool, bool) { return v.values.getBool("wrap_flag") }
 
-// ActiveWindowIndex returns tmux #{active_window_index} as int from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// ActiveWindowIndex returns tmux #{active_window_index} as int from this Session's materialized session-scoped fields.
 func (s Session) ActiveWindowIndex() (int, bool) { return s.formats.getInt("active_window_index") }
 
-// LastWindowIndex returns tmux #{last_window_index} as int from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// LastWindowIndex returns tmux #{last_window_index} as int from this Session's materialized session-scoped fields.
 func (s Session) LastWindowIndex() (int, bool) { return s.formats.getInt("last_window_index") }
 
 // Active returns tmux #{session_active} as bool from this Session's materialized session-scoped fields (tmux 3.6 or later).
 func (s Session) Active() (bool, bool) { return s.formats.getBool("session_active") }
 
-// Activity returns tmux #{session_activity} as time.Time from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Activity returns tmux #{session_activity} as time.Time from this Session's materialized session-scoped fields.
 func (s Session) Activity() (time.Time, bool) { return s.formats.getTime("session_activity") }
 
 // ActivityFlag returns tmux #{session_activity_flag} as bool from this Session's materialized session-scoped fields (tmux 3.6 or later).
@@ -896,188 +900,188 @@ func (s Session) ActivityFlag() (bool, bool) { return s.formats.getBool("session
 // Alert returns tmux #{session_alert} as string from this Session's materialized session-scoped fields (tmux 3.6 or later).
 func (s Session) Alert() (string, bool) { return s.formats.getString("session_alert") }
 
-// Alerts returns tmux #{session_alerts} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Alerts returns tmux #{session_alerts} as string from this Session's materialized session-scoped fields.
 func (s Session) Alerts() (string, bool) { return s.formats.getString("session_alerts") }
 
-// Attached returns tmux #{session_attached} as int from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Attached returns tmux #{session_attached} as int from this Session's materialized session-scoped fields.
 func (s Session) Attached() (int, bool) { return s.formats.getInt("session_attached") }
 
-// AttachedList returns tmux #{session_attached_list} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// AttachedList returns tmux #{session_attached_list} as string from this Session's materialized session-scoped fields.
 func (s Session) AttachedList() (string, bool) { return s.formats.getString("session_attached_list") }
 
 // BellFlag returns tmux #{session_bell_flag} as bool from this Session's materialized session-scoped fields (tmux 3.6 or later).
 func (s Session) BellFlag() (bool, bool) { return s.formats.getBool("session_bell_flag") }
 
-// Created returns tmux #{session_created} as time.Time from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Created returns tmux #{session_created} as time.Time from this Session's materialized session-scoped fields.
 func (s Session) Created() (time.Time, bool) { return s.formats.getTime("session_created") }
 
-// Format returns tmux #{session_format} as bool from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Format returns tmux #{session_format} as bool from this Session's materialized session-scoped fields.
 func (s Session) Format() (bool, bool) { return s.formats.getBool("session_format") }
 
-// Group returns tmux #{session_group} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Group returns tmux #{session_group} as string from this Session's materialized session-scoped fields.
 func (s Session) Group() (string, bool) { return s.formats.getString("session_group") }
 
-// GroupAttached returns tmux #{session_group_attached} as int from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// GroupAttached returns tmux #{session_group_attached} as int from this Session's materialized session-scoped fields.
 func (s Session) GroupAttached() (int, bool) { return s.formats.getInt("session_group_attached") }
 
-// GroupAttachedList returns tmux #{session_group_attached_list} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// GroupAttachedList returns tmux #{session_group_attached_list} as string from this Session's materialized session-scoped fields.
 func (s Session) GroupAttachedList() (string, bool) {
 	return s.formats.getString("session_group_attached_list")
 }
 
-// GroupList returns tmux #{session_group_list} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// GroupList returns tmux #{session_group_list} as string from this Session's materialized session-scoped fields.
 func (s Session) GroupList() (string, bool) { return s.formats.getString("session_group_list") }
 
-// GroupManyAttached returns tmux #{session_group_many_attached} as bool from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// GroupManyAttached returns tmux #{session_group_many_attached} as bool from this Session's materialized session-scoped fields.
 func (s Session) GroupManyAttached() (bool, bool) {
 	return s.formats.getBool("session_group_many_attached")
 }
 
-// GroupSize returns tmux #{session_group_size} as int from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// GroupSize returns tmux #{session_group_size} as int from this Session's materialized session-scoped fields.
 func (s Session) GroupSize() (int, bool) { return s.formats.getInt("session_group_size") }
 
-// Grouped returns tmux #{session_grouped} as bool from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Grouped returns tmux #{session_grouped} as bool from this Session's materialized session-scoped fields.
 func (s Session) Grouped() (bool, bool) { return s.formats.getBool("session_grouped") }
 
-// LastAttached returns tmux #{session_last_attached} as time.Time from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// LastAttached returns tmux #{session_last_attached} as time.Time from this Session's materialized session-scoped fields.
 func (s Session) LastAttached() (time.Time, bool) { return s.formats.getTime("session_last_attached") }
 
-// ManyAttached returns tmux #{session_many_attached} as bool from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// ManyAttached returns tmux #{session_many_attached} as bool from this Session's materialized session-scoped fields.
 func (s Session) ManyAttached() (bool, bool) { return s.formats.getBool("session_many_attached") }
 
-// Marked returns tmux #{session_marked} as bool from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Marked returns tmux #{session_marked} as bool from this Session's materialized session-scoped fields.
 func (s Session) Marked() (bool, bool) { return s.formats.getBool("session_marked") }
 
-// Name returns tmux #{session_name} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Name returns tmux #{session_name} as string from this Session's materialized session-scoped fields.
 func (s Session) Name() (string, bool) { return s.formats.getString("session_name") }
 
-// Path returns tmux #{session_path} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Path returns tmux #{session_path} as string from this Session's materialized session-scoped fields.
 func (s Session) Path() (string, bool) { return s.formats.getString("session_path") }
 
 // SilenceFlag returns tmux #{session_silence_flag} as bool from this Session's materialized session-scoped fields (tmux 3.6 or later).
 func (s Session) SilenceFlag() (bool, bool) { return s.formats.getBool("session_silence_flag") }
 
-// Stack returns tmux #{session_stack} as string from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// Stack returns tmux #{session_stack} as string from this Session's materialized session-scoped fields.
 func (s Session) Stack() (string, bool) { return s.formats.getString("session_stack") }
 
-// WindowCount returns tmux #{session_windows} as int from this Session's materialized session-scoped fields (tmux 3.2a or later).
+// WindowCount returns tmux #{session_windows} as int from this Session's materialized session-scoped fields.
 func (s Session) WindowCount() (int, bool) { return s.formats.getInt("session_windows") }
 
-// Active returns tmux #{window_active} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Active returns tmux #{window_active} as bool from this Window's materialized window-scoped fields.
 func (w Window) Active() (bool, bool) { return w.formats.getBool("window_active") }
 
-// ActiveClients returns tmux #{window_active_clients} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// ActiveClients returns tmux #{window_active_clients} as int from this Window's materialized window-scoped fields.
 func (w Window) ActiveClients() (int, bool) { return w.formats.getInt("window_active_clients") }
 
-// ActiveClientsList returns tmux #{window_active_clients_list} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// ActiveClientsList returns tmux #{window_active_clients_list} as string from this Window's materialized window-scoped fields.
 func (w Window) ActiveClientsList() (string, bool) {
 	return w.formats.getString("window_active_clients_list")
 }
 
-// ActiveSessions returns tmux #{window_active_sessions} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// ActiveSessions returns tmux #{window_active_sessions} as int from this Window's materialized window-scoped fields.
 func (w Window) ActiveSessions() (int, bool) { return w.formats.getInt("window_active_sessions") }
 
-// ActiveSessionsList returns tmux #{window_active_sessions_list} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// ActiveSessionsList returns tmux #{window_active_sessions_list} as string from this Window's materialized window-scoped fields.
 func (w Window) ActiveSessionsList() (string, bool) {
 	return w.formats.getString("window_active_sessions_list")
 }
 
-// Activity returns tmux #{window_activity} as time.Time from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Activity returns tmux #{window_activity} as time.Time from this Window's materialized window-scoped fields.
 func (w Window) Activity() (time.Time, bool) { return w.formats.getTime("window_activity") }
 
-// ActivityFlag returns tmux #{window_activity_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// ActivityFlag returns tmux #{window_activity_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) ActivityFlag() (bool, bool) { return w.formats.getBool("window_activity_flag") }
 
-// BellFlag returns tmux #{window_bell_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// BellFlag returns tmux #{window_bell_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) BellFlag() (bool, bool) { return w.formats.getBool("window_bell_flag") }
 
-// Bigger returns tmux #{window_bigger} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Bigger returns tmux #{window_bigger} as bool from this Window's materialized window-scoped fields.
 func (w Window) Bigger() (bool, bool) { return w.formats.getBool("window_bigger") }
 
-// CellHeight returns tmux #{window_cell_height} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// CellHeight returns tmux #{window_cell_height} as int from this Window's materialized window-scoped fields.
 func (w Window) CellHeight() (int, bool) { return w.formats.getInt("window_cell_height") }
 
-// CellWidth returns tmux #{window_cell_width} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// CellWidth returns tmux #{window_cell_width} as int from this Window's materialized window-scoped fields.
 func (w Window) CellWidth() (int, bool) { return w.formats.getInt("window_cell_width") }
 
-// EndFlag returns tmux #{window_end_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// EndFlag returns tmux #{window_end_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) EndFlag() (bool, bool) { return w.formats.getBool("window_end_flag") }
 
-// Flags returns tmux #{window_flags} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Flags returns tmux #{window_flags} as string from this Window's materialized window-scoped fields.
 func (w Window) Flags() (string, bool) { return w.formats.getString("window_flags") }
 
-// Format returns tmux #{window_format} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Format returns tmux #{window_format} as bool from this Window's materialized window-scoped fields.
 func (w Window) Format() (bool, bool) { return w.formats.getBool("window_format") }
 
-// Height returns tmux #{window_height} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Height returns tmux #{window_height} as int from this Window's materialized window-scoped fields.
 func (w Window) Height() (int, bool) { return w.formats.getInt("window_height") }
 
-// LastFlag returns tmux #{window_last_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// LastFlag returns tmux #{window_last_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) LastFlag() (bool, bool) { return w.formats.getBool("window_last_flag") }
 
-// Layout returns tmux #{window_layout} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Layout returns tmux #{window_layout} as string from this Window's materialized window-scoped fields.
 func (w Window) Layout() (string, bool) { return w.formats.getString("window_layout") }
 
-// Linked returns tmux #{window_linked} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Linked returns tmux #{window_linked} as bool from this Window's materialized window-scoped fields.
 func (w Window) Linked() (bool, bool) { return w.formats.getBool("window_linked") }
 
-// LinkedSessionCount returns tmux #{window_linked_sessions} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// LinkedSessionCount returns tmux #{window_linked_sessions} as int from this Window's materialized window-scoped fields.
 func (w Window) LinkedSessionCount() (int, bool) { return w.formats.getInt("window_linked_sessions") }
 
-// LinkedSessionsList returns tmux #{window_linked_sessions_list} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// LinkedSessionsList returns tmux #{window_linked_sessions_list} as string from this Window's materialized window-scoped fields.
 func (w Window) LinkedSessionsList() (string, bool) {
 	return w.formats.getString("window_linked_sessions_list")
 }
 
-// ManualHeight returns tmux #{window_manual_height} as int from this Window's materialized window-scoped fields (tmux 3.8 or later).
+// ManualHeight returns tmux #{window_manual_height} as int from this Window's materialized window-scoped fields (tmux 3.8-rc2 or later).
 func (w Window) ManualHeight() (int, bool) { return w.formats.getInt("window_manual_height") }
 
-// ManualWidth returns tmux #{window_manual_width} as int from this Window's materialized window-scoped fields (tmux 3.8 or later).
+// ManualWidth returns tmux #{window_manual_width} as int from this Window's materialized window-scoped fields (tmux 3.8-rc2 or later).
 func (w Window) ManualWidth() (int, bool) { return w.formats.getInt("window_manual_width") }
 
-// MarkedFlag returns tmux #{window_marked_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// MarkedFlag returns tmux #{window_marked_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) MarkedFlag() (bool, bool) { return w.formats.getBool("window_marked_flag") }
 
-// Name returns tmux #{window_name} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Name returns tmux #{window_name} as string from this Window's materialized window-scoped fields.
 func (w Window) Name() (string, bool) { return w.formats.getString("window_name") }
 
-// OffsetX returns tmux #{window_offset_x} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// OffsetX returns tmux #{window_offset_x} as int from this Window's materialized window-scoped fields.
 func (w Window) OffsetX() (int, bool) { return w.formats.getInt("window_offset_x") }
 
-// OffsetY returns tmux #{window_offset_y} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// OffsetY returns tmux #{window_offset_y} as int from this Window's materialized window-scoped fields.
 func (w Window) OffsetY() (int, bool) { return w.formats.getInt("window_offset_y") }
 
-// PaneCount returns tmux #{window_panes} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// PaneCount returns tmux #{window_panes} as int from this Window's materialized window-scoped fields.
 func (w Window) PaneCount() (int, bool) { return w.formats.getInt("window_panes") }
 
-// RawFlags returns tmux #{window_raw_flags} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// RawFlags returns tmux #{window_raw_flags} as string from this Window's materialized window-scoped fields.
 func (w Window) RawFlags() (string, bool) { return w.formats.getString("window_raw_flags") }
 
-// SilenceFlag returns tmux #{window_silence_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// SilenceFlag returns tmux #{window_silence_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) SilenceFlag() (bool, bool) { return w.formats.getBool("window_silence_flag") }
 
-// StackIndex returns tmux #{window_stack_index} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// StackIndex returns tmux #{window_stack_index} as int from this Window's materialized window-scoped fields.
 func (w Window) StackIndex() (int, bool) { return w.formats.getInt("window_stack_index") }
 
-// StartFlag returns tmux #{window_start_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// StartFlag returns tmux #{window_start_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) StartFlag() (bool, bool) { return w.formats.getBool("window_start_flag") }
 
-// VisibleLayout returns tmux #{window_visible_layout} as string from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// VisibleLayout returns tmux #{window_visible_layout} as string from this Window's materialized window-scoped fields.
 func (w Window) VisibleLayout() (string, bool) { return w.formats.getString("window_visible_layout") }
 
-// Width returns tmux #{window_width} as int from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// Width returns tmux #{window_width} as int from this Window's materialized window-scoped fields.
 func (w Window) Width() (int, bool) { return w.formats.getInt("window_width") }
 
-// ZoomedFlag returns tmux #{window_zoomed_flag} as bool from this Window's materialized window-scoped fields (tmux 3.2a or later).
+// ZoomedFlag returns tmux #{window_zoomed_flag} as bool from this Window's materialized window-scoped fields.
 func (w Window) ZoomedFlag() (bool, bool) { return w.formats.getBool("window_zoomed_flag") }
 
-// AlternateOn returns tmux #{alternate_on} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// AlternateOn returns tmux #{alternate_on} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) AlternateOn() (bool, bool) { return p.formats.getBool("alternate_on") }
 
-// AlternateSavedX returns tmux #{alternate_saved_x} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// AlternateSavedX returns tmux #{alternate_saved_x} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) AlternateSavedX() (int, bool) { return p.formats.getInt("alternate_saved_x") }
 
-// AlternateSavedY returns tmux #{alternate_saved_y} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// AlternateSavedY returns tmux #{alternate_saved_y} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) AlternateSavedY() (int, bool) { return p.formats.getInt("alternate_saved_y") }
 
 // BracketPasteFlag returns tmux #{bracket_paste_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
@@ -1086,13 +1090,13 @@ func (p Pane) BracketPasteFlag() (bool, bool) { return p.formats.getBool("bracke
 // CursorBlinking returns tmux #{cursor_blinking} as bool from this Pane's materialized pane-scoped fields (tmux 3.6 or later).
 func (p Pane) CursorBlinking() (bool, bool) { return p.formats.getBool("cursor_blinking") }
 
-// CursorCharacter returns tmux #{cursor_character} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// CursorCharacter returns tmux #{cursor_character} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) CursorCharacter() (string, bool) { return p.formats.getString("cursor_character") }
 
 // CursorColour returns tmux #{cursor_colour} as string from this Pane's materialized pane-scoped fields (tmux 3.6 or later).
 func (p Pane) CursorColour() (string, bool) { return p.formats.getString("cursor_colour") }
 
-// CursorFlag returns tmux #{cursor_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// CursorFlag returns tmux #{cursor_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) CursorFlag() (bool, bool) { return p.formats.getBool("cursor_flag") }
 
 // CursorShape returns tmux #{cursor_shape} as string from this Pane's materialized pane-scoped fields (tmux 3.6 or later).
@@ -1101,106 +1105,106 @@ func (p Pane) CursorShape() (string, bool) { return p.formats.getString("cursor_
 // CursorVeryVisible returns tmux #{cursor_very_visible} as bool from this Pane's materialized pane-scoped fields (tmux 3.6 or later).
 func (p Pane) CursorVeryVisible() (bool, bool) { return p.formats.getBool("cursor_very_visible") }
 
-// CursorX returns tmux #{cursor_x} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// CursorX returns tmux #{cursor_x} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) CursorX() (int, bool) { return p.formats.getInt("cursor_x") }
 
-// CursorY returns tmux #{cursor_y} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// CursorY returns tmux #{cursor_y} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) CursorY() (int, bool) { return p.formats.getInt("cursor_y") }
 
-// HistoryAdded returns tmux #{history_added} as int from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// HistoryAdded returns tmux #{history_added} as int from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) HistoryAdded() (int, bool) { return p.formats.getInt("history_added") }
 
-// HistoryAllBytes returns tmux #{history_all_bytes} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// HistoryAllBytes returns tmux #{history_all_bytes} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) HistoryAllBytes() (string, bool) { return p.formats.getString("history_all_bytes") }
 
-// HistoryBytes returns tmux #{history_bytes} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// HistoryBytes returns tmux #{history_bytes} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) HistoryBytes() (int, bool) { return p.formats.getInt("history_bytes") }
 
-// HistoryCollected returns tmux #{history_collected} as int from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// HistoryCollected returns tmux #{history_collected} as int from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) HistoryCollected() (int, bool) { return p.formats.getInt("history_collected") }
 
-// HistoryGeneration returns tmux #{history_generation} as int from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// HistoryGeneration returns tmux #{history_generation} as int from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) HistoryGeneration() (int, bool) { return p.formats.getInt("history_generation") }
 
-// HistoryLimit returns tmux #{history_limit} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// HistoryLimit returns tmux #{history_limit} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) HistoryLimit() (int, bool) { return p.formats.getInt("history_limit") }
 
-// HistorySize returns tmux #{history_size} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// HistorySize returns tmux #{history_size} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) HistorySize() (int, bool) { return p.formats.getInt("history_size") }
 
-// InsertFlag returns tmux #{insert_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// InsertFlag returns tmux #{insert_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) InsertFlag() (bool, bool) { return p.formats.getBool("insert_flag") }
 
-// KeypadCursorFlag returns tmux #{keypad_cursor_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// KeypadCursorFlag returns tmux #{keypad_cursor_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) KeypadCursorFlag() (bool, bool) { return p.formats.getBool("keypad_cursor_flag") }
 
-// KeypadFlag returns tmux #{keypad_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// KeypadFlag returns tmux #{keypad_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) KeypadFlag() (bool, bool) { return p.formats.getBool("keypad_flag") }
 
-// MouseAllFlag returns tmux #{mouse_all_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// MouseAllFlag returns tmux #{mouse_all_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) MouseAllFlag() (bool, bool) { return p.formats.getBool("mouse_all_flag") }
 
-// MouseAnyFlag returns tmux #{mouse_any_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// MouseAnyFlag returns tmux #{mouse_any_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) MouseAnyFlag() (bool, bool) { return p.formats.getBool("mouse_any_flag") }
 
-// MouseButtonFlag returns tmux #{mouse_button_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// MouseButtonFlag returns tmux #{mouse_button_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) MouseButtonFlag() (bool, bool) { return p.formats.getBool("mouse_button_flag") }
 
-// MouseSGRFlag returns tmux #{mouse_sgr_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// MouseSGRFlag returns tmux #{mouse_sgr_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) MouseSGRFlag() (bool, bool) { return p.formats.getBool("mouse_sgr_flag") }
 
-// MouseStandardFlag returns tmux #{mouse_standard_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// MouseStandardFlag returns tmux #{mouse_standard_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) MouseStandardFlag() (bool, bool) { return p.formats.getBool("mouse_standard_flag") }
 
-// MouseUTF8Flag returns tmux #{mouse_utf8_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// MouseUTF8Flag returns tmux #{mouse_utf8_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) MouseUTF8Flag() (bool, bool) { return p.formats.getBool("mouse_utf8_flag") }
 
-// OriginFlag returns tmux #{origin_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// OriginFlag returns tmux #{origin_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) OriginFlag() (bool, bool) { return p.formats.getBool("origin_flag") }
 
-// Active returns tmux #{pane_active} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Active returns tmux #{pane_active} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) Active() (bool, bool) { return p.formats.getBool("pane_active") }
 
-// AtBottom returns tmux #{pane_at_bottom} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// AtBottom returns tmux #{pane_at_bottom} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) AtBottom() (bool, bool) { return p.formats.getBool("pane_at_bottom") }
 
-// AtLeft returns tmux #{pane_at_left} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// AtLeft returns tmux #{pane_at_left} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) AtLeft() (bool, bool) { return p.formats.getBool("pane_at_left") }
 
-// AtRight returns tmux #{pane_at_right} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// AtRight returns tmux #{pane_at_right} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) AtRight() (bool, bool) { return p.formats.getBool("pane_at_right") }
 
-// AtTop returns tmux #{pane_at_top} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// AtTop returns tmux #{pane_at_top} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) AtTop() (bool, bool) { return p.formats.getBool("pane_at_top") }
 
-// BG returns tmux #{pane_bg} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// BG returns tmux #{pane_bg} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) BG() (string, bool) { return p.formats.getString("pane_bg") }
 
-// Bottom returns tmux #{pane_bottom} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Bottom returns tmux #{pane_bottom} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) Bottom() (int, bool) { return p.formats.getInt("pane_bottom") }
 
-// CommandRunning returns tmux #{pane_command_running} as bool from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// CommandRunning returns tmux #{pane_command_running} as bool from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) CommandRunning() (bool, bool) { return p.formats.getBool("pane_command_running") }
 
-// CurrentCommand returns tmux #{pane_current_command} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// CurrentCommand returns tmux #{pane_current_command} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) CurrentCommand() (string, bool) { return p.formats.getString("pane_current_command") }
 
-// CurrentPath returns tmux #{pane_current_path} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// CurrentPath returns tmux #{pane_current_path} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) CurrentPath() (string, bool) { return p.formats.getString("pane_current_path") }
 
-// Dead returns tmux #{pane_dead} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Dead returns tmux #{pane_dead} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) Dead() (bool, bool) { return p.formats.getBool("pane_dead") }
 
-// DeadSignal returns tmux #{pane_dead_signal} as string from this Pane's materialized pane-scoped fields (tmux 3.3 or later).
+// DeadSignal returns tmux #{pane_dead_signal} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) DeadSignal() (string, bool) { return p.formats.getString("pane_dead_signal") }
 
-// DeadStatus returns tmux #{pane_dead_status} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// DeadStatus returns tmux #{pane_dead_status} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) DeadStatus() (int, bool) { return p.formats.getInt("pane_dead_status") }
 
-// DeadTime returns tmux #{pane_dead_time} as time.Time from this Pane's materialized pane-scoped fields (tmux 3.3 or later).
+// DeadTime returns tmux #{pane_dead_time} as time.Time from this Pane's materialized pane-scoped fields.
 func (p Pane) DeadTime() (time.Time, bool) { return p.formats.getTime("pane_dead_time") }
 
-// FG returns tmux #{pane_fg} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// FG returns tmux #{pane_fg} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) FG() (string, bool) { return p.formats.getString("pane_fg") }
 
 // Flags returns tmux #{pane_flags} as string from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
@@ -1209,43 +1213,43 @@ func (p Pane) Flags() (string, bool) { return p.formats.getString("pane_flags") 
 // FloatingFlag returns tmux #{pane_floating_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
 func (p Pane) FloatingFlag() (bool, bool) { return p.formats.getBool("pane_floating_flag") }
 
-// Format returns tmux #{pane_format} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Format returns tmux #{pane_format} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) Format() (bool, bool) { return p.formats.getBool("pane_format") }
 
-// Height returns tmux #{pane_height} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Height returns tmux #{pane_height} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) Height() (int, bool) { return p.formats.getInt("pane_height") }
 
-// InMode returns tmux #{pane_in_mode} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// InMode returns tmux #{pane_in_mode} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) InMode() (int, bool) { return p.formats.getInt("pane_in_mode") }
 
-// InputOff returns tmux #{pane_input_off} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// InputOff returns tmux #{pane_input_off} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) InputOff() (bool, bool) { return p.formats.getBool("pane_input_off") }
 
 // KeyMode returns tmux #{pane_key_mode} as string from this Pane's materialized pane-scoped fields (tmux 3.5 or later).
 func (p Pane) KeyMode() (string, bool) { return p.formats.getString("pane_key_mode") }
 
-// Last returns tmux #{pane_last} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Last returns tmux #{pane_last} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) Last() (bool, bool) { return p.formats.getBool("pane_last") }
 
-// Left returns tmux #{pane_left} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Left returns tmux #{pane_left} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) Left() (int, bool) { return p.formats.getInt("pane_left") }
 
-// Marked returns tmux #{pane_marked} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Marked returns tmux #{pane_marked} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) Marked() (bool, bool) { return p.formats.getBool("pane_marked") }
 
-// MarkedSet returns tmux #{pane_marked_set} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// MarkedSet returns tmux #{pane_marked_set} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) MarkedSet() (bool, bool) { return p.formats.getBool("pane_marked_set") }
 
-// ModalFlag returns tmux #{pane_modal_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// ModalFlag returns tmux #{pane_modal_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) ModalFlag() (bool, bool) { return p.formats.getBool("pane_modal_flag") }
 
-// Mode returns tmux #{pane_mode} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Mode returns tmux #{pane_mode} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) Mode() (string, bool) { return p.formats.getString("pane_mode") }
 
-// OutputGeneration returns tmux #{pane_output_generation} as int from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// OutputGeneration returns tmux #{pane_output_generation} as int from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) OutputGeneration() (int, bool) { return p.formats.getInt("pane_output_generation") }
 
-// Path returns tmux #{pane_path} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Path returns tmux #{pane_path} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) Path() (string, bool) { return p.formats.getString("pane_path") }
 
 // PBProgress returns tmux #{pane_pb_progress} as int from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
@@ -1254,60 +1258,60 @@ func (p Pane) PBProgress() (int, bool) { return p.formats.getInt("pane_pb_progre
 // PBState returns tmux #{pane_pb_state} as string from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
 func (p Pane) PBState() (string, bool) { return p.formats.getString("pane_pb_state") }
 
-// ProcessPID returns tmux #{pane_pid} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// ProcessPID returns tmux #{pane_pid} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) ProcessPID() (int, bool) { return p.formats.getInt("pane_pid") }
 
-// Piping returns tmux #{pane_pipe} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Piping returns tmux #{pane_pipe} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) Piping() (bool, bool) { return p.formats.getBool("pane_pipe") }
 
 // PipePID returns tmux #{pane_pipe_pid} as int from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
 func (p Pane) PipePID() (int, bool) { return p.formats.getInt("pane_pipe_pid") }
 
-// PrivateModes returns tmux #{pane_private_modes} as string from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// PrivateModes returns tmux #{pane_private_modes} as string from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) PrivateModes() (string, bool) { return p.formats.getString("pane_private_modes") }
 
-// Right returns tmux #{pane_right} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Right returns tmux #{pane_right} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) Right() (int, bool) { return p.formats.getInt("pane_right") }
 
-// SearchString returns tmux #{pane_search_string} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// SearchString returns tmux #{pane_search_string} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) SearchString() (string, bool) { return p.formats.getString("pane_search_string") }
 
-// StartCommand returns tmux #{pane_start_command} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// StartCommand returns tmux #{pane_start_command} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) StartCommand() (string, bool) { return p.formats.getString("pane_start_command") }
 
-// StartCommandList returns tmux #{pane_start_command_list} as string from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// StartCommandList returns tmux #{pane_start_command_list} as string from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) StartCommandList() (string, bool) {
 	return p.formats.getString("pane_start_command_list")
 }
 
-// StartPath returns tmux #{pane_start_path} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// StartPath returns tmux #{pane_start_path} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) StartPath() (string, bool) { return p.formats.getString("pane_start_path") }
 
-// Synchronized returns tmux #{pane_synchronized} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Synchronized returns tmux #{pane_synchronized} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) Synchronized() (bool, bool) { return p.formats.getBool("pane_synchronized") }
 
-// Tabs returns tmux #{pane_tabs} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Tabs returns tmux #{pane_tabs} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) Tabs() (string, bool) { return p.formats.getString("pane_tabs") }
 
-// Title returns tmux #{pane_title} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Title returns tmux #{pane_title} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) Title() (string, bool) { return p.formats.getString("pane_title") }
 
-// Top returns tmux #{pane_top} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Top returns tmux #{pane_top} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) Top() (int, bool) { return p.formats.getInt("pane_top") }
 
-// TTY returns tmux #{pane_tty} as string from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// TTY returns tmux #{pane_tty} as string from this Pane's materialized pane-scoped fields.
 func (p Pane) TTY() (string, bool) { return p.formats.getString("pane_tty") }
 
 // UnseenChanges returns tmux #{pane_unseen_changes} as bool from this Pane's materialized pane-scoped fields (tmux 3.4 or later).
 func (p Pane) UnseenChanges() (bool, bool) { return p.formats.getBool("pane_unseen_changes") }
 
-// UnzoomedHeight returns tmux #{pane_unzoomed_height} as int from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// UnzoomedHeight returns tmux #{pane_unzoomed_height} as int from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) UnzoomedHeight() (int, bool) { return p.formats.getInt("pane_unzoomed_height") }
 
-// UnzoomedWidth returns tmux #{pane_unzoomed_width} as int from this Pane's materialized pane-scoped fields (tmux 3.8 or later).
+// UnzoomedWidth returns tmux #{pane_unzoomed_width} as int from this Pane's materialized pane-scoped fields (tmux 3.8-rc2 or later).
 func (p Pane) UnzoomedWidth() (int, bool) { return p.formats.getInt("pane_unzoomed_width") }
 
-// Width returns tmux #{pane_width} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// Width returns tmux #{pane_width} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) Width() (int, bool) { return p.formats.getInt("pane_width") }
 
 // X returns tmux #{pane_x} as int from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
@@ -1322,10 +1326,10 @@ func (p Pane) Z() (int, bool) { return p.formats.getInt("pane_z") }
 // ZoomedFlag returns tmux #{pane_zoomed_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
 func (p Pane) ZoomedFlag() (bool, bool) { return p.formats.getBool("pane_zoomed_flag") }
 
-// ScrollRegionLower returns tmux #{scroll_region_lower} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// ScrollRegionLower returns tmux #{scroll_region_lower} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) ScrollRegionLower() (int, bool) { return p.formats.getInt("scroll_region_lower") }
 
-// ScrollRegionUpper returns tmux #{scroll_region_upper} as int from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// ScrollRegionUpper returns tmux #{scroll_region_upper} as int from this Pane's materialized pane-scoped fields.
 func (p Pane) ScrollRegionUpper() (int, bool) { return p.formats.getInt("scroll_region_upper") }
 
 // SynchronizedOutputFlag returns tmux #{synchronized_output_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.7 or later).
@@ -1333,77 +1337,77 @@ func (p Pane) SynchronizedOutputFlag() (bool, bool) {
 	return p.formats.getBool("synchronized_output_flag")
 }
 
-// WrapFlag returns tmux #{wrap_flag} as bool from this Pane's materialized pane-scoped fields (tmux 3.2a or later).
+// WrapFlag returns tmux #{wrap_flag} as bool from this Pane's materialized pane-scoped fields.
 func (p Pane) WrapFlag() (bool, bool) { return p.formats.getBool("wrap_flag") }
 
-// Activity returns tmux #{client_activity} as time.Time from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Activity returns tmux #{client_activity} as time.Time from this Client's materialized client-scoped fields.
 func (c Client) Activity() (time.Time, bool) { return c.formats.getTime("client_activity") }
 
-// CellHeight returns tmux #{client_cell_height} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// CellHeight returns tmux #{client_cell_height} as int from this Client's materialized client-scoped fields.
 func (c Client) CellHeight() (int, bool) { return c.formats.getInt("client_cell_height") }
 
-// CellWidth returns tmux #{client_cell_width} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// CellWidth returns tmux #{client_cell_width} as int from this Client's materialized client-scoped fields.
 func (c Client) CellWidth() (int, bool) { return c.formats.getInt("client_cell_width") }
 
-// ControlMode returns tmux #{client_control_mode} as bool from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// ControlMode returns tmux #{client_control_mode} as bool from this Client's materialized client-scoped fields.
 func (c Client) ControlMode() (bool, bool) { return c.formats.getBool("client_control_mode") }
 
-// Created returns tmux #{client_created} as time.Time from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Created returns tmux #{client_created} as time.Time from this Client's materialized client-scoped fields.
 func (c Client) Created() (time.Time, bool) { return c.formats.getTime("client_created") }
 
-// Discarded returns tmux #{client_discarded} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Discarded returns tmux #{client_discarded} as int from this Client's materialized client-scoped fields.
 func (c Client) Discarded() (int, bool) { return c.formats.getInt("client_discarded") }
 
-// Flags returns tmux #{client_flags} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Flags returns tmux #{client_flags} as string from this Client's materialized client-scoped fields.
 func (c Client) Flags() (string, bool) { return c.formats.getString("client_flags") }
 
-// Height returns tmux #{client_height} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Height returns tmux #{client_height} as int from this Client's materialized client-scoped fields.
 func (c Client) Height() (int, bool) { return c.formats.getInt("client_height") }
 
-// KeyTable returns tmux #{client_key_table} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// KeyTable returns tmux #{client_key_table} as string from this Client's materialized client-scoped fields.
 func (c Client) KeyTable() (string, bool) { return c.formats.getString("client_key_table") }
 
-// LastSession returns tmux #{client_last_session} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// LastSession returns tmux #{client_last_session} as string from this Client's materialized client-scoped fields.
 func (c Client) LastSession() (string, bool) { return c.formats.getString("client_last_session") }
 
-// ModeFormat returns tmux #{client_mode_format} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// ModeFormat returns tmux #{client_mode_format} as string from this Client's materialized client-scoped fields.
 func (c Client) ModeFormat() (string, bool) { return c.formats.getString("client_mode_format") }
 
-// ProcessPID returns tmux #{client_pid} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// ProcessPID returns tmux #{client_pid} as int from this Client's materialized client-scoped fields.
 func (c Client) ProcessPID() (int, bool) { return c.formats.getInt("client_pid") }
 
-// Prefix returns tmux #{client_prefix} as bool from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Prefix returns tmux #{client_prefix} as bool from this Client's materialized client-scoped fields.
 func (c Client) Prefix() (bool, bool) { return c.formats.getBool("client_prefix") }
 
-// ReadOnly returns tmux #{client_readonly} as bool from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// ReadOnly returns tmux #{client_readonly} as bool from this Client's materialized client-scoped fields.
 func (c Client) ReadOnly() (bool, bool) { return c.formats.getBool("client_readonly") }
 
-// Session returns tmux #{client_session} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Session returns tmux #{client_session} as string from this Client's materialized client-scoped fields.
 func (c Client) Session() (string, bool) { return c.formats.getString("client_session") }
 
-// TermFeatures returns tmux #{client_termfeatures} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// TermFeatures returns tmux #{client_termfeatures} as string from this Client's materialized client-scoped fields.
 func (c Client) TermFeatures() (string, bool) { return c.formats.getString("client_termfeatures") }
 
-// TermName returns tmux #{client_termname} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// TermName returns tmux #{client_termname} as string from this Client's materialized client-scoped fields.
 func (c Client) TermName() (string, bool) { return c.formats.getString("client_termname") }
 
-// TermType returns tmux #{client_termtype} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// TermType returns tmux #{client_termtype} as string from this Client's materialized client-scoped fields.
 func (c Client) TermType() (string, bool) { return c.formats.getString("client_termtype") }
 
-// TTY returns tmux #{client_tty} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// TTY returns tmux #{client_tty} as string from this Client's materialized client-scoped fields.
 func (c Client) TTY() (string, bool) { return c.formats.getString("client_tty") }
 
-// ProcessUID returns tmux #{client_uid} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// ProcessUID returns tmux #{client_uid} as int from this Client's materialized client-scoped fields.
 func (c Client) ProcessUID() (int, bool) { return c.formats.getInt("client_uid") }
 
-// ProcessUser returns tmux #{client_user} as string from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// ProcessUser returns tmux #{client_user} as string from this Client's materialized client-scoped fields.
 func (c Client) ProcessUser() (string, bool) { return c.formats.getString("client_user") }
 
-// UTF8 returns tmux #{client_utf8} as bool from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// UTF8 returns tmux #{client_utf8} as bool from this Client's materialized client-scoped fields.
 func (c Client) UTF8() (bool, bool) { return c.formats.getBool("client_utf8") }
 
-// Width returns tmux #{client_width} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Width returns tmux #{client_width} as int from this Client's materialized client-scoped fields.
 func (c Client) Width() (int, bool) { return c.formats.getInt("client_width") }
 
-// Written returns tmux #{client_written} as int from this Client's materialized client-scoped fields (tmux 3.2a or later).
+// Written returns tmux #{client_written} as int from this Client's materialized client-scoped fields.
 func (c Client) Written() (int, bool) { return c.formats.getInt("client_written") }

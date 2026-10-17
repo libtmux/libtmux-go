@@ -399,6 +399,49 @@ func TestValidateFormatSpecAcceptsEveryClosedKind(t *testing.T) {
 	}
 }
 
+func TestGenerateFormatsDropsTheMinimumOfAFieldEverySupportedTmuxHas(t *testing.T) {
+	t.Parallel()
+
+	spec := formatSpec{Schema: 2, Floor: "3.3a", Fields: []fieldSpec{
+		{Name: "pane_title", Scope: "pane", Since: "3.2a", Kind: "string"},
+		{Name: "pane_unzoomed", Scope: "pane", Since: "3.3", Kind: "bool"},
+		{Name: "pane_floor", Scope: "pane", Since: "3.3a", Kind: "bool"},
+		{Name: "pane_later", Scope: "pane", Since: "3.4", Kind: "int"},
+		{Name: "pane_dev", Scope: "pane", Since: "next-3.9", Kind: "bool"},
+		{Name: "pane_candidate", Scope: "pane", Since: "3.8-rc2", Kind: "bool"},
+	}}
+	generated, err := generateFormats(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(generated)
+	for _, name := range []string{"pane_title", "pane_unzoomed", "pane_floor"} {
+		want := `{name: "` + name + `", scope: formatScopePane,`
+		start := strings.Index(text, want)
+		if start < 0 {
+			t.Fatalf("generated output has no %s line", name)
+		}
+		line, _, _ := strings.Cut(text[start:], "\n")
+		if !strings.HasSuffix(line, "minimum: Version{}},") {
+			t.Errorf("%s line = %q, want no minimum", name, line)
+		}
+	}
+	for name, minimum := range map[string]string{
+		"pane_later":     `Version{raw: "3.4", major: 3, minor: 4, patch: 0}`,
+		"pane_dev":       `Version{raw: "next-3.9", major: 3, minor: 9, patch: 0, development: -1}`,
+		"pane_candidate": `Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}`,
+	} {
+		if !strings.Contains(text, `{name: "`+name+`", scope: formatScopePane, kind: `) ||
+			!strings.Contains(text, "minimum: "+minimum+"},") {
+			t.Errorf("%s does not carry minimum %s", name, minimum)
+		}
+	}
+	if strings.Contains(text, "(tmux 3.2a or later)") || strings.Contains(text, "(tmux 3.3 or later)") ||
+		!strings.Contains(text, "(tmux 3.4 or later)") || !strings.Contains(text, "(tmux next-3.9 or later)") {
+		t.Errorf("accessor documentation names the wrong releases:\n%s", text)
+	}
+}
+
 func TestReadFormatSpecRejectsTrailingJSON(t *testing.T) {
 	t.Parallel()
 
@@ -596,8 +639,8 @@ func TestCheckedInFormatSpecGeneratesCheckedInOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read checked-in format spec: %v", err)
 	}
-	if len(spec.Fields) != 212 {
-		t.Fatalf("checked-in format fields = %d, want 212", len(spec.Fields))
+	if len(spec.Fields) != 213 {
+		t.Fatalf("checked-in format fields = %d, want 213", len(spec.Fields))
 	}
 	if spec.Schema != 2 {
 		t.Fatalf("checked-in format schema = %d, want 2", spec.Schema)
@@ -673,13 +716,15 @@ func TestGeneratedFormatAccessorsStaySearchableAndCompact(t *testing.T) {
 		for _, required := range []string{
 			"#{" + field.Name + "}",
 			field.Scope + "-scoped",
-			"tmux " + field.Since + " or later",
 			"as " + accessorKinds[field.Kind].returnType,
 			"materialized",
 		} {
 			if !strings.Contains(doc, required) {
 				t.Errorf("generated accessor %s documentation does not contain %q: %q", key, required, doc)
 			}
+		}
+		if got, want := strings.Contains(doc, "or later"), !spec.atFloor(field); got != want {
+			t.Errorf("generated accessor %s names a release = %t, want %t: %q", key, got, want, doc)
 		}
 	}
 	for _, receiver := range accessorReceivers {
@@ -701,7 +746,6 @@ func TestGeneratedFormatAccessorsStaySearchableAndCompact(t *testing.T) {
 			for _, required := range []string{
 				"#{" + field.Name + "}",
 				field.Scope + "-scoped",
-				"tmux " + field.Since + " or later",
 				"this " + receiver.typeName + "'s materialized",
 				"as " + accessorKinds[field.Kind].returnType,
 			} {
