@@ -6,7 +6,6 @@ import (
 )
 
 var (
-	serverInteractiveVersion33 = Version{raw: "3.3", major: 3, minor: 3}
 	serverInteractiveVersion34 = Version{raw: "3.4", major: 3, minor: 4}
 	serverInteractiveVersion35 = Version{raw: "3.5", major: 3, minor: 5}
 	serverInteractiveVersion36 = Version{raw: "3.6", major: 3, minor: 6}
@@ -189,9 +188,6 @@ func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest)
 	if err != nil {
 		return err
 	}
-	if !current.AtLeast(serverInteractiveVersion33) {
-		return &VersionTooLowError{Current: current, Minimum: serverInteractiveVersion33}
-	}
 
 	arguments := []string{"confirm-before", "-b"}
 	if values.hasPrompt {
@@ -236,9 +232,6 @@ func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest)
 	current, err := s.Version(ctx)
 	if err != nil {
 		return err
-	}
-	if !current.AtLeast(serverInteractiveVersion33) {
-		return &VersionTooLowError{Current: current, Minimum: serverInteractiveVersion33}
 	}
 
 	arguments := []string{"command-prompt", "-b"}

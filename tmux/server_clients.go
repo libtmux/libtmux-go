@@ -2,15 +2,12 @@ package tmux
 
 import "context"
 
-var (
-	serverClientsVersion33 = Version{raw: "3.3", major: 3, minor: 3}
-	// serverClientsClipboardVersion is where refresh-client -l becomes safe to
-	// send. tmux has accepted the flag since before the supported range, but
-	// 3.2a ends the server on it for any client and 3.3a for a client with a
-	// terminal, so the flag is withheld below this rather than gated on the
-	// kind of client a caller happens to target.
-	serverClientsClipboardVersion = Version{raw: "3.4", major: 3, minor: 4}
-)
+// serverClientsClipboardVersion is where refresh-client -l becomes safe to
+// send. tmux has accepted the flag since before the supported range, but 3.3a
+// ends the server on it for a client with a terminal, so the flag is withheld
+// below this rather than gated on the kind of client a caller happens to
+// target.
+var serverClientsClipboardVersion = Version{raw: "3.4", major: 3, minor: 4}
 
 // ServerAccessRequest configures tmux server access control. Its zero value is
 // invalid: List or exactly one nonempty Allow or Deny is required. Allow and
@@ -108,14 +105,6 @@ func (s Server) ServerAccess(
 		return nil, invalidServerCommandRequest(
 			"server-access", "User", "", "is required unless List is set",
 		)
-	}
-
-	current, err := s.Version(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !current.AtLeast(serverClientsVersion33) {
-		return nil, &VersionTooLowError{Current: current, Minimum: serverClientsVersion33}
 	}
 
 	arguments := []string{"server-access"}

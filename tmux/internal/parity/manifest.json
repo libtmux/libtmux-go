@@ -3051,8 +3051,7 @@
       "status": "generated",
       "go": [
         "tmux.ServerHookValues.WindowLinked",
-        "tmux.SessionHookValues.WindowLinked",
-        "tmux.WindowHookValues.WindowLinked"
+        "tmux.SessionHookValues.WindowLinked"
       ],
       "proof": [
         {
@@ -3163,8 +3162,7 @@
       "status": "generated",
       "go": [
         "tmux.ServerHookValues.WindowUnlinked",
-        "tmux.SessionHookValues.WindowUnlinked",
-        "tmux.WindowHookValues.WindowUnlinked"
+        "tmux.SessionHookValues.WindowUnlinked"
       ],
       "proof": [
         {

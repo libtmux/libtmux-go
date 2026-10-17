@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -42,7 +43,9 @@ var validKinds = map[string]bool{
 }
 
 type optionSpec struct {
-	Schema         int                `json:"schema"`
+	Schema int `json:"schema"`
+	// FeatureFloor is the oldest tmux the package supports. A variant or
+	// notification first offered at or below it gets no minimum.
 	FeatureFloor   string             `json:"featureFloor"`
 	FeatureCeiling string             `json:"featureCeiling"`
 	SourceTag      string             `json:"sourceTag"`
@@ -170,11 +173,11 @@ func validateOptionSpec(spec optionSpec) error {
 		return errors.New("option spec has no hooks")
 	}
 
-	optionNames, err := validateEntries("option", spec.Options, floor, ceiling)
+	optionNames, err := validateEntries("option", spec.Options, ceiling)
 	if err != nil {
 		return err
 	}
-	if _, err := validateEntries("hook", spec.Hooks, floor, ceiling); err != nil {
+	if _, err := validateEntries("hook", spec.Hooks, ceiling); err != nil {
 		return err
 	}
 	if err := validateSetterMethods(spec.Options); err != nil {
@@ -183,13 +186,13 @@ func validateOptionSpec(spec optionSpec) error {
 	if err := validateAliases(spec.Aliases, optionNames); err != nil {
 		return err
 	}
-	if err := validateNotifications(spec.Notifications, floor, ceiling); err != nil {
+	if err := validateNotifications(spec.Notifications, ceiling); err != nil {
 		return err
 	}
 	return nil
 }
 
-func validateNotifications(entries []notificationSpec, floor, ceiling specVersion) error {
+func validateNotifications(entries []notificationSpec, ceiling specVersion) error {
 	if len(entries) == 0 {
 		return errors.New("option spec has no control notifications")
 	}
@@ -227,8 +230,8 @@ func validateNotifications(entries []notificationSpec, floor, ceiling specVersio
 		if err != nil {
 			return fmt.Errorf("control notification %q: %w", entry.WireName, err)
 		}
-		if compareSpecVersion(version, floor) < 0 || compareSpecVersion(version, ceiling) > 0 {
-			return fmt.Errorf("control notification %q version %q is outside the feature range", entry.WireName, entry.Since)
+		if compareSpecVersion(version, ceiling) > 0 {
+			return fmt.Errorf("control notification %q version %q is newer than featureCeiling", entry.WireName, entry.Since)
 		}
 		if entry.PrefixArguments < 0 {
 			return fmt.Errorf("control notification %q has negative prefix argument count", entry.WireName)
@@ -292,7 +295,7 @@ func validateAliases(aliases []aliasSpec, optionNames map[string]struct{}) error
 	return nil
 }
 
-func validateEntries(kind string, entries []entrySpec, floor, ceiling specVersion) (map[string]struct{}, error) {
+func validateEntries(kind string, entries []entrySpec, ceiling specVersion) (map[string]struct{}, error) {
 	names := make(map[string]struct{}, len(entries))
 	goNames := make(map[string]string, len(entries))
 	previous := ""
@@ -315,14 +318,14 @@ func validateEntries(kind string, entries []entrySpec, floor, ceiling specVersio
 			return nil, fmt.Errorf("%ss %q and %q share Go name %q", kind, prior, entry.Name, entry.GoName)
 		}
 		goNames[entry.GoName] = entry.Name
-		if err := validateEntry(kind, entry, floor, ceiling); err != nil {
+		if err := validateEntry(kind, entry, ceiling); err != nil {
 			return nil, err
 		}
 	}
 	return names, nil
 }
 
-func validateEntry(entryKind string, entry entrySpec, floor, ceiling specVersion) error {
+func validateEntry(entryKind string, entry entrySpec, ceiling specVersion) error {
 	if len(entry.Variants) == 0 {
 		return fmt.Errorf("%s %q has no variants", entryKind, entry.Name)
 	}
@@ -332,8 +335,8 @@ func validateEntry(entryKind string, entry entrySpec, floor, ceiling specVersion
 		if err != nil {
 			return fmt.Errorf("%s %q variant %d: %w", entryKind, entry.Name, index, err)
 		}
-		if compareSpecVersion(version, floor) < 0 || compareSpecVersion(version, ceiling) > 0 {
-			return fmt.Errorf("%s %q variant %q is outside the feature range", entryKind, entry.Name, variant.Since)
+		if compareSpecVersion(version, ceiling) > 0 {
+			return fmt.Errorf("%s %q variant %q is newer than featureCeiling", entryKind, entry.Name, variant.Since)
 		}
 		if index != 0 && compareSpecVersion(priorVersion, version) >= 0 {
 			return fmt.Errorf("%s %q variants are not strictly increasing at %q", entryKind, entry.Name, variant.Since)
@@ -608,10 +611,59 @@ func compareSpecVersion(left, right specVersion) int {
 	return strings.Compare(left.suffix, right.suffix)
 }
 
+// foldToFloor removes what the floor makes unreachable. Of the variants at or
+// below it only the newest applies, and it, like a notification offered at or
+// below the floor, gets an empty Since: no minimum.
+func foldToFloor(spec optionSpec) optionSpec {
+	floor, _ := parseSpecVersion(spec.FeatureFloor)
+	atFloor := func(since string) bool {
+		version, _ := parseSpecVersion(since)
+		return compareSpecVersion(version, floor) <= 0
+	}
+	fold := func(entries []entrySpec) []entrySpec {
+		folded := slices.Clone(entries)
+		for index := range folded {
+			variants := slices.Clone(folded[index].Variants)
+			current := -1
+			for position, variant := range variants {
+				if atFloor(variant.Since) {
+					current = position
+				}
+			}
+			if current >= 0 {
+				variants = variants[current:]
+				variants[0].Since = ""
+			}
+			folded[index].Variants = variants
+		}
+		return folded
+	}
+	spec.Options = fold(spec.Options)
+	spec.Hooks = fold(spec.Hooks)
+	spec.Notifications = slices.Clone(spec.Notifications)
+	for index := range spec.Notifications {
+		if atFloor(spec.Notifications[index].Since) {
+			spec.Notifications[index].Since = ""
+		}
+	}
+	return spec
+}
+
+// versionLiteral is the Go value of a minimum; an empty since is no minimum.
+func versionLiteral(since string) string {
+	if since == "" {
+		return "Version{}"
+	}
+	version, _ := parseSpecVersion(since)
+	return fmt.Sprintf("Version{raw: %s, major: %d, minor: %d, patch: %d}",
+		strconv.Quote(since), version.major, version.minor, version.patch)
+}
+
 func generateOptions(spec optionSpec) ([]byte, error) {
 	if err := validateOptionSpec(spec); err != nil {
 		return nil, err
 	}
+	spec = foldToFloor(spec)
 
 	var output bytes.Buffer
 	output.WriteString("// Code generated by go generate; DO NOT EDIT.\n\n")
@@ -634,7 +686,7 @@ func generateOptions(spec optionSpec) ([]byte, error) {
 	writeAliases(&output, spec.Aliases)
 	writeDefinitions(&output, "generatedOptionDefinitions", spec.Options)
 	writeDefinitions(&output, "generatedHookDefinitions", spec.Hooks)
-	writeControlNotifications(&output, spec.Notifications)
+	writeControlNotifications(&output, spec.Notifications, spec.FeatureFloor)
 	writeCountConstants(&output, spec)
 	for _, surface := range generatedSurfaces(spec) {
 		writeSurface(&output, surface)
@@ -666,11 +718,15 @@ func writeControlNotificationTypes(output *bytes.Buffer) {
 	output.WriteString("}\n\n")
 }
 
-func writeControlNotifications(output *bytes.Buffer, entries []notificationSpec) {
+func writeControlNotifications(output *bytes.Buffer, entries []notificationSpec, floor string) {
 	output.WriteString("const (\n")
 	for _, entry := range entries {
 		constant := "ControlNotification" + entry.GoName
-		fmt.Fprintf(output, "// %s identifies the %s notification, available since tmux %s. Its wire grammar is %s.\n", constant, entry.WireName, entry.Since, notificationGrammar(entry))
+		available := ""
+		if entry.Since != "" {
+			available = ", available since tmux " + entry.Since
+		}
+		fmt.Fprintf(output, "// %s identifies the %s notification%s. Its wire grammar is %s.\n", constant, entry.WireName, available, notificationGrammar(entry))
 		fmt.Fprintf(output, "// ParseControlNotification returns its arguments as %s.\n", notificationArguments(entry))
 		if entry.AllowEmptyTail {
 			output.WriteString("// Its tail may be empty.\n")
@@ -685,23 +741,20 @@ func writeControlNotifications(output *bytes.Buffer, entries []notificationSpec)
 	output.WriteString(")\n\n")
 	output.WriteString("var generatedControlNotificationDefinitions = [...]generatedControlNotificationDefinition{\n")
 	for _, entry := range entries {
-		version, _ := parseSpecVersion(entry.Since)
 		fmt.Fprintf(
 			output,
-			"{kind: ControlNotification%s, minimum: Version{raw: %s, major: %d, minor: %d, patch: %d}, prefixArguments: %d, tail: generatedControlNotificationTail%s, allowEmptyTail: %t},\n",
+			"{kind: ControlNotification%s, minimum: %s, prefixArguments: %d, tail: generatedControlNotificationTail%s, allowEmptyTail: %t},\n",
 			entry.GoName,
-			strconv.Quote(entry.Since),
-			version.major,
-			version.minor,
-			version.patch,
+			versionLiteral(cmp.Or(entry.Since, floor)),
 			entry.PrefixArguments,
 			titleWord(entry.Tail),
 			entry.AllowEmptyTail,
 		)
 	}
 	output.WriteString("}\n\n")
-	output.WriteString("// MinimumVersion returns the oldest [Version] that emits k. It returns ok == false\n")
-	output.WriteString("// for the zero value and unknown kinds.\n")
+	output.WriteString("// MinimumVersion returns the oldest supported [Version] that emits k, which is\n")
+	output.WriteString("// [MinimumSupportedVersion] for a notification every supported tmux emits. It\n")
+	output.WriteString("// returns ok == false for the zero value and unknown kinds.\n")
 	output.WriteString("func (k ControlNotificationKind) MinimumVersion() (Version, bool) {\n")
 	output.WriteString("for _, definition := range generatedControlNotificationDefinitions {\n")
 	output.WriteString("if definition.kind == k { return definition.minimum, true }\n")
@@ -823,14 +876,10 @@ func writeDefinitions(output *bytes.Buffer, variable string, entries []entrySpec
 			entry.Style,
 		)
 		for _, variant := range entry.Variants {
-			version, _ := parseSpecVersion(variant.Since)
 			fmt.Fprintf(
 				output,
-				"{minimum: Version{raw: %s, major: %d, minor: %d, patch: %d}, kind: generatedOptionKind%s, scopes: %s, choices: %#v},\n",
-				strconv.Quote(variant.Since),
-				version.major,
-				version.minor,
-				version.patch,
+				"{minimum: %s, kind: generatedOptionKind%s, scopes: %s, choices: %#v},\n",
+				versionLiteral(variant.Since),
 				titleWord(strings.ToLower(variant.TmuxKind)),
 				generatedScopes(variant.Scopes),
 				variant.Choices,
@@ -1100,7 +1149,7 @@ func writeScalarSetter(output *bytes.Buffer, entry entrySpec, receiver string) {
 	}[receiver]
 	minimum := variantsForScope(entry, scope)[0].Since
 	valuesType, valuesSource := setterValueSurface(receiver)
-	fmt.Fprintf(output, "// %s stores the %q %s option as %s (tmux %s or later).\n", method, entry.Name, scope, entry.GoType, minimum)
+	fmt.Fprintf(output, "// %s stores the %q %s option as %s%s.\n", method, entry.Name, scope, entry.GoType, orLater(minimum))
 	fmt.Fprintf(output, "// Read it with [%s.%s] from %s; [%s.UnsetOption] restores inheritance or the global default.\n", valuesType, entry.GoName, valuesSource, receiver)
 	fmt.Fprintf(output, "func (%s %s) %s(ctx context.Context, value %s) error {\n", receiverName, receiver, method, entry.GoType)
 	switch receiver {
@@ -1154,7 +1203,7 @@ func writeArraySetter(output *bytes.Buffer, entry entrySpec, receiver string) {
 	}[receiver]
 	minimum := variantsForScope(entry, scope)[0].Since
 	valuesType, valuesSource := setterValueSurface(receiver)
-	fmt.Fprintf(output, "// %s replaces the complete %q %s option array with SparseArray[string], preserving holes and empty values (tmux %s or later).\n", method, entry.Name, scope, minimum)
+	fmt.Fprintf(output, "// %s replaces the complete %q %s option array with SparseArray[string], preserving holes and empty values%s.\n", method, entry.Name, scope, orLater(minimum))
 	fmt.Fprintf(output, "// Read it with [%s.%s] from %s; [%s.UnsetOption] restores inheritance or the global default.\n", valuesType, entry.GoName, valuesSource, receiver)
 	output.WriteString("// Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.\n")
 	fmt.Fprintf(output, "func (%s %s) %s(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {\n", receiverName, receiver, method)
@@ -1209,10 +1258,22 @@ func variantsForScope(entry entrySpec, scope string) []variantSpec {
 	return result
 }
 
+// orLater is the documentation tail naming the release an option first
+// appeared in, empty for one every supported tmux has.
+func orLater(since string) string {
+	if since == "" {
+		return ""
+	}
+	return " (tmux " + since + " or later)"
+}
+
 func documentedVariants(variants []variantSpec) string {
 	values := make([]string, 0, len(variants))
 	for _, variant := range variants {
-		value := fmt.Sprintf("%s since tmux %s", variant.TmuxKind, variant.Since)
+		value := variant.TmuxKind
+		if variant.Since != "" {
+			value += " since tmux " + variant.Since
+		}
 		if len(variant.Choices) != 0 {
 			choices := make([]string, len(variant.Choices))
 			for index, choice := range variant.Choices {

@@ -301,15 +301,6 @@ func rawOption(
 	if !indexed {
 		return "", true, nil
 	}
-	if hooks {
-		version, err := server.Version(ctx)
-		if err != nil {
-			return "", false, err
-		}
-		if !version.AtLeast(Version{major: 3, minor: 3}) {
-			return "", false, nil
-		}
-	}
 	present, err := queryIndexedOptionPresence(ctx, server, scope, name, base, index, hooks)
 	if err != nil {
 		return "", false, err

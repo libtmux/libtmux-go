@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
@@ -59,7 +58,6 @@ func TestServerAccessBuildsValidTmuxArguments(t *testing.T) {
 			t.Parallel()
 
 			runner := &versionQueueRunner{responses: []versionResponse{
-				{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}}},
 				{result: tmuxcmd.Result{Stdout: []string{"ignored mutation output"}}},
 			}}
 			output, err := serverWithRunner(runner).ServerAccess(
@@ -70,11 +68,10 @@ func TestServerAccessBuildsValidTmuxArguments(t *testing.T) {
 				t.Fatalf("ServerAccess() = (%#v, %v), want (nil, nil)", output, err)
 			}
 			requests := runner.recordedRequests()
-			if len(requests) != 2 {
-				t.Fatalf("runner requests = %#v, want version and server-access", requests)
+			if len(requests) != 1 {
+				t.Fatalf("runner requests = %#v, want only server-access", requests)
 			}
-			assertRequestArguments(t, requests[0], []string{"-V"})
-			assertRequestArguments(t, requests[1], test.want)
+			assertRequestArguments(t, requests[0], test.want)
 		})
 	}
 }
@@ -110,7 +107,6 @@ func TestServerAccessPlacesEveryFlagBeforeTheUser(t *testing.T) {
 			t.Parallel()
 
 			runner := &versionQueueRunner{responses: []versionResponse{
-				{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}}},
 				{result: test.result},
 			}}
 			output, err := serverWithRunner(runner).ServerAccess(
@@ -126,11 +122,10 @@ func TestServerAccessPlacesEveryFlagBeforeTheUser(t *testing.T) {
 				)
 			}
 			requests := runner.recordedRequests()
-			if len(requests) != 2 {
-				t.Fatalf("runner requests = %#v, want version and server-access", requests)
+			if len(requests) != 1 {
+				t.Fatalf("runner requests = %#v, want only server-access", requests)
 			}
-			assertRequestArguments(t, requests[0], []string{"-V"})
-			assertRequestArguments(t, requests[1], test.wantArgs)
+			assertRequestArguments(t, requests[0], test.wantArgs)
 		})
 	}
 }
@@ -140,7 +135,6 @@ func TestServerAccessListOwnsOutput(t *testing.T) {
 
 	source := []string{"alice (R)", "bob (W)"}
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}}},
 		{result: tmuxcmd.Result{Stdout: source}},
 	}}
 	output, err := serverWithRunner(runner).ServerAccess(
@@ -155,11 +149,10 @@ func TestServerAccessListOwnsOutput(t *testing.T) {
 		t.Fatalf("ServerAccess(list) aliases runner output: %#v", source)
 	}
 	requests := runner.recordedRequests()
-	if len(requests) != 2 {
-		t.Fatalf("runner requests = %#v, want version and server-access", requests)
+	if len(requests) != 1 {
+		t.Fatalf("runner requests = %#v, want only server-access", requests)
 	}
-	assertRequestArguments(t, requests[0], []string{"-V"})
-	assertRequestArguments(t, requests[1], []string{"server-access", "-l"})
+	assertRequestArguments(t, requests[0], []string{"server-access", "-l"})
 }
 
 func TestServerAccessValidatesBeforeVersionProbe(t *testing.T) {
@@ -257,106 +250,6 @@ func TestClientRequestsRejectNULBeforeExecutionOrVersionProbe(t *testing.T) {
 			if runner.callCount() != 0 {
 				t.Fatalf("runner calls = %d, want validation before version probe", runner.callCount())
 			}
-		})
-	}
-}
-
-func TestServerAccessRequiresTmux33(t *testing.T) {
-	t.Parallel()
-
-	runner := &versionQueueRunner{responses: []versionResponse{{
-		result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}},
-	}}}
-	_, err := serverWithRunner(runner).ServerAccess(
-		context.Background(),
-		ServerAccessRequest{List: true},
-	)
-	var tooLow *VersionTooLowError
-	if !errors.As(err, &tooLow) || tooLow.Current.String() != "3.2a" ||
-		tooLow.Minimum.String() != "3.3" {
-		t.Fatalf("ServerAccess() error = %#v, want current 3.2a minimum 3.3", err)
-	}
-	requests := runner.recordedRequests()
-	if len(requests) != 1 {
-		t.Fatalf("runner requests = %#v, want only version probe", requests)
-	}
-	assertRequestArguments(t, requests[0], []string{"-V"})
-}
-
-// TestServerAccessListReportsVersionProbeFailures proves the version probe a
-// listing depends on reports its failure rather than answering with an empty
-// list, which reads as a server granting nobody access.
-func TestServerAccessListReportsVersionProbeFailures(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		response     versionResponse
-		wantAnyError bool
-		wantError    error
-	}{
-		{
-			name:         "transport failure",
-			response:     versionResponse{err: errors.New("version transport failed")},
-			wantAnyError: true,
-		},
-		{
-			name: "completed failure",
-			response: versionResponse{result: tmuxcmd.Result{
-				Stderr: []string{"version command failed"}, ExitCode: 1,
-			}},
-			wantError: ErrVersionQuery,
-		},
-		{
-			name:      "context failure",
-			response:  versionResponse{err: context.DeadlineExceeded},
-			wantError: context.DeadlineExceeded,
-		},
-		{
-			name: "malformed successful output",
-			response: versionResponse{result: tmuxcmd.Result{
-				Stdout: []string{"not a tmux version"},
-			}},
-			wantError: ErrVersionQuery,
-		},
-		{
-			name: "invalid version token",
-			response: versionResponse{result: tmuxcmd.Result{
-				Stdout: []string{"tmux invalid!"},
-			}},
-			wantError: ErrVersionQuery,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			runner := &versionQueueRunner{responses: []versionResponse{test.response}}
-			output, err := serverWithRunner(runner).ServerAccess(
-				context.Background(),
-				ServerAccessRequest{List: true},
-			)
-			if output != nil {
-				t.Fatalf("ServerAccess(list) = %#v, want no output beside an error", output)
-			}
-			switch {
-			case test.wantAnyError:
-				if err == nil {
-					t.Fatal("ServerAccess(list) error = nil")
-				}
-			case test.wantError != nil:
-				if !errors.Is(err, test.wantError) {
-					t.Fatalf("ServerAccess(list) error = %v, want %v", err, test.wantError)
-				}
-			default:
-				t.Fatal("test has no expectation")
-			}
-			requests := runner.recordedRequests()
-			if len(requests) != 1 {
-				t.Fatalf("runner requests = %#v, want one version probe", requests)
-			}
-			assertRequestArguments(t, requests[0], []string{"-V"})
 		})
 	}
 }
@@ -492,38 +385,10 @@ func TestRefreshClientClipboardVersionFailuresAreMutationErrors(t *testing.T) {
 	}
 }
 
-func TestServerAccessCapturesUserBeforeVersionProbe(t *testing.T) {
-	t.Parallel()
-
-	runner := newClientVersionGateRunner()
-	server := serverWithRunner(runner)
-	allow := "before-user"
-	response := make(chan error, 1)
-	go func() {
-		_, err := server.ServerAccess(context.Background(), ServerAccessRequest{Allow: &allow})
-		response <- err
-	}()
-
-	<-runner.versionStarted
-	allow = "after-user"
-	close(runner.releaseVersion)
-	if err := <-response; err != nil {
-		t.Fatalf("ServerAccess() error = %v", err)
-	}
-	requests := runner.recordedRequests()
-	if len(requests) != 2 {
-		t.Fatalf("runner requests = %#v, want version and server-access", requests)
-	}
-	assertRequestArguments(t, requests[1], []string{
-		"server-access", "-a", "--", "before-user",
-	})
-}
-
 func TestServerAccessListReportsCommandFailure(t *testing.T) {
 	t.Parallel()
 
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7b"}}},
 		{result: tmuxcmd.Result{
 			Stdout:   []string{"partial"},
 			Stderr:   []string{"failure"},
@@ -912,9 +777,8 @@ func clientPointOperations() []clientPointOperation {
 	allow := "alice"
 	return []clientPointOperation{
 		{
-			name:         "server access",
-			subcommand:   "server-access",
-			versionProbe: true,
+			name:       "server access",
+			subcommand: "server-access",
 			operation: func(server Server) error {
 				_, err := server.ServerAccess(
 					context.Background(),
@@ -1002,41 +866,4 @@ func clientPointOperations() []clientPointOperation {
 			},
 		},
 	}
-}
-
-type clientVersionGateRunner struct {
-	versionStarted chan struct{}
-	releaseVersion chan struct{}
-
-	mu       sync.Mutex
-	requests []tmuxcmd.Request
-}
-
-func newClientVersionGateRunner() *clientVersionGateRunner {
-	return &clientVersionGateRunner{
-		versionStarted: make(chan struct{}),
-		releaseVersion: make(chan struct{}),
-	}
-}
-
-func (r *clientVersionGateRunner) Run(
-	_ context.Context,
-	request tmuxcmd.Request,
-) (tmuxcmd.Result, error) {
-	r.mu.Lock()
-	r.requests = append(r.requests, request)
-	call := len(r.requests)
-	r.mu.Unlock()
-	if call == 1 {
-		close(r.versionStarted)
-		<-r.releaseVersion
-		return tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}, nil
-	}
-	return tmuxcmd.Result{}, nil
-}
-
-func (r *clientVersionGateRunner) recordedRequests() []tmuxcmd.Request {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return withoutGlobalFlags(r.requests)
 }

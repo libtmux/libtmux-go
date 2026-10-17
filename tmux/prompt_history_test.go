@@ -40,9 +40,7 @@ func TestPromptHistoryBuildsExactArgumentsForClosedTypes(t *testing.T) {
 				t.Run(operation, func(t *testing.T) {
 					t.Parallel()
 
-					responses := []historyResponse{{result: tmuxcmd.Result{
-						Stdout: []string{"tmux 3.3"},
-					}}}
+					var responses []historyResponse
 					if operation == "show" {
 						responses = append(responses, historyResponse{result: tmuxcmd.Result{
 							Stdout: []string{"History for command:"},
@@ -63,15 +61,14 @@ func TestPromptHistoryBuildsExactArgumentsForClosedTypes(t *testing.T) {
 					}
 
 					requests := runner.recordedRequests()
-					if len(requests) != 2 {
-						t.Fatalf("runner requests = %#v, want version and %s", requests, operation)
+					if len(requests) != 1 {
+						t.Fatalf("runner requests = %#v, want only %s", requests, operation)
 					}
-					assertRequestArguments(t, requests[0], []string{"-V"})
 					arguments := []string{operation + "-prompt-history"}
 					if test.argument != "" {
 						arguments = append(arguments, "-T", test.argument)
 					}
-					assertRequestArguments(t, requests[1], arguments)
+					assertRequestArguments(t, requests[0], arguments)
 				})
 			}
 		})
@@ -133,120 +130,6 @@ func TestPromptHistoryRejectsOpenEndedTypesBeforeVersionProbe(t *testing.T) {
 	}
 }
 
-func TestPromptHistoryRequiresTmux33BeforeCommand(t *testing.T) {
-	t.Parallel()
-
-	for _, operation := range []struct {
-		name string
-		run  func(Server) error
-	}{
-		{
-			name: "show",
-			run: func(server Server) error {
-				_, err := server.ShowPromptHistory(context.Background(), PromptHistoryRequest{})
-				return err
-			},
-		},
-		{
-			name: "clear",
-			run: func(server Server) error {
-				return server.ClearPromptHistory(context.Background(), PromptHistoryRequest{})
-			},
-		},
-	} {
-		t.Run(operation.name, func(t *testing.T) {
-			t.Parallel()
-
-			runner := &historyQueueRunner{responses: []historyResponse{{result: tmuxcmd.Result{
-				Stdout: []string{"tmux 3.2a"},
-			}}}}
-			err := operation.run(historyServerWithRunner(runner))
-			var tooLow *VersionTooLowError
-			if !errors.As(err, &tooLow) || tooLow.Current.String() != "3.2a" ||
-				tooLow.Minimum.String() != "3.3" {
-				t.Fatalf("prompt history error = %#v, want current 3.2a minimum 3.3", err)
-			}
-			requests := runner.recordedRequests()
-			if len(requests) != 1 {
-				t.Fatalf("runner requests = %#v, want only version probe", requests)
-			}
-			assertRequestArguments(t, requests[0], []string{"-V"})
-		})
-	}
-}
-
-// TestShowPromptHistoryReportsVersionProbeFailures proves that a version probe
-// the listing depends on reports its failure rather than answering with an
-// empty history, which would read as a server holding no prompt history.
-func TestShowPromptHistoryReportsVersionProbeFailures(t *testing.T) {
-	t.Parallel()
-
-	transport := errors.New("version transport failed")
-	tests := []struct {
-		name         string
-		response     historyResponse
-		wantAnyError bool
-		wantError    error
-	}{
-		{
-			name:         "transport failure",
-			response:     historyResponse{err: transport},
-			wantAnyError: true,
-		},
-		{
-			name: "completed failure",
-			response: historyResponse{result: tmuxcmd.Result{
-				Stderr: []string{"version command failed"}, ExitCode: 1,
-			}},
-			wantError: ErrVersionQuery,
-		},
-		{
-			name:      "context failure",
-			response:  historyResponse{err: context.DeadlineExceeded},
-			wantError: context.DeadlineExceeded,
-		},
-		{
-			name: "malformed successful output",
-			response: historyResponse{result: tmuxcmd.Result{
-				Stdout: []string{"not a tmux version"},
-			}},
-			wantError: ErrVersionQuery,
-		},
-		{
-			name: "invalid version token",
-			response: historyResponse{result: tmuxcmd.Result{
-				Stdout: []string{"tmux invalid!"},
-			}},
-			wantError: ErrVersionQuery,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			runner := &historyQueueRunner{responses: []historyResponse{test.response}}
-			server := historyServerWithRunner(runner)
-			output, err := server.ShowPromptHistory(
-				context.Background(), PromptHistoryRequest{},
-			)
-			if output != nil {
-				t.Fatalf("ShowPromptHistory() = %#v, want no history beside an error", output)
-			}
-			if test.wantAnyError {
-				if err == nil {
-					t.Fatal("ShowPromptHistory() error = nil, want transport error")
-				}
-			} else if !errors.Is(err, test.wantError) {
-				t.Fatalf("ShowPromptHistory() error = %v, want %v", err, test.wantError)
-			}
-			if runner.callCount() != 1 {
-				t.Fatalf("runner calls = %d, want only version probe", runner.callCount())
-			}
-		})
-	}
-}
-
 func TestShowPromptHistoryCommandFollowsListPolicyAndOwnsOutput(t *testing.T) {
 	t.Parallel()
 
@@ -287,10 +170,7 @@ func TestShowPromptHistoryCommandFollowsListPolicyAndOwnsOutput(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			runner := &historyQueueRunner{responses: []historyResponse{
-				{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}}},
-				test.response,
-			}}
+			runner := &historyQueueRunner{responses: []historyResponse{test.response}}
 			server := historyServerWithRunner(runner)
 			output, err := server.ShowPromptHistory(
 				context.Background(), PromptHistoryRequest{},
@@ -317,7 +197,7 @@ func TestShowPromptHistoryCommandFollowsListPolicyAndOwnsOutput(t *testing.T) {
 	}
 }
 
-func TestClearPromptHistoryIsLoudAfterVersionGate(t *testing.T) {
+func TestClearPromptHistoryIsLoud(t *testing.T) {
 	t.Parallel()
 
 	transport := errors.New("clear transport failed")
@@ -342,10 +222,7 @@ func TestClearPromptHistoryIsLoudAfterVersionGate(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			runner := &historyQueueRunner{responses: []historyResponse{
-				{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}}},
-				test.response,
-			}}
+			runner := &historyQueueRunner{responses: []historyResponse{test.response}}
 			err := historyServerWithRunner(runner).ClearPromptHistory(
 				context.Background(), PromptHistoryRequest{},
 			)
@@ -354,34 +231,6 @@ func TestClearPromptHistoryIsLoudAfterVersionGate(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestPromptHistoryOperationsShareOneSuccessfulVersionProbe(t *testing.T) {
-	t.Parallel()
-
-	runner := &historyQueueRunner{responses: []historyResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}}},
-		{result: tmuxcmd.Result{Stdout: []string{"History for command:"}}},
-		{result: tmuxcmd.Result{}},
-	}}
-	server := historyServerWithRunner(runner)
-	if _, err := server.ShowPromptHistory(
-		context.Background(), PromptHistoryRequest{Type: PromptTypeCommand},
-	); err != nil {
-		t.Fatalf("ShowPromptHistory() error = %v", err)
-	}
-	if err := server.ClearPromptHistory(
-		context.Background(), PromptHistoryRequest{Type: PromptTypeCommand},
-	); err != nil {
-		t.Fatalf("ClearPromptHistory() error = %v", err)
-	}
-	requests := runner.recordedRequests()
-	if len(requests) != 3 {
-		t.Fatalf("runner requests = %#v, want one version and two history calls", requests)
-	}
-	assertRequestArguments(t, requests[0], []string{"-V"})
-	assertRequestArguments(t, requests[1], []string{"show-prompt-history", "-T", "command"})
-	assertRequestArguments(t, requests[2], []string{"clear-prompt-history", "-T", "command"})
 }
 
 type historyResponse struct {

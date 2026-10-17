@@ -645,3 +645,31 @@ func (r *snapshotProbeRunner) Run(_ context.Context, request tmuxcmd.Request) (t
 	}
 	return tmuxcmd.Result{}, errors.New("the refusal must precede every listing")
 }
+
+// MinimumVersion is what a caller hands RequireVersion: a notification every
+// supported tmux emits asks for the floor, which the daemon meets, and one
+// added later still refuses the daemon that predates it.
+func TestRequireVersionAcceptsAControlNotificationMinimum(t *testing.T) {
+	for _, test := range []struct {
+		daemon string
+		kind   ControlNotificationKind
+		want   bool
+	}{
+		{daemon: "3.3a", kind: ControlNotificationWindowAdd, want: true},
+		{daemon: "3.4", kind: ControlNotificationWindowAdd, want: true},
+		{daemon: "3.4", kind: ControlNotificationMessage, want: true},
+		{daemon: "3.3a", kind: ControlNotificationMessage},
+	} {
+		t.Run(test.daemon+" "+string(test.kind), func(t *testing.T) {
+			minimum, ok := test.kind.MinimumVersion()
+			if !ok {
+				t.Fatalf("%s has no minimum version", test.kind)
+			}
+			runner := &versionRunner{daemon: test.daemon, binary: "3.8"}
+			err := rawVersionServer(t, runner).RequireVersion(t.Context(), minimum)
+			if got := err == nil; got != test.want {
+				t.Fatalf("RequireVersion(%q) on %s = %v, want success = %t", minimum, test.daemon, err, test.want)
+			}
+		})
+	}
+}

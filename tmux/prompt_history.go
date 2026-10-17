@@ -5,8 +5,6 @@ import (
 	"strconv"
 )
 
-var promptHistoryVersion33 = Version{raw: "3.3", major: 3, minor: 3}
-
 // PromptType selects one closed tmux prompt-history class. The zero value
 // selects all prompt types.
 type PromptType uint8
@@ -43,14 +41,6 @@ func (s Server) ShowPromptHistory(
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.Version(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !current.AtLeast(promptHistoryVersion33) {
-		return nil, &VersionTooLowError{Current: current, Minimum: promptHistoryVersion33}
-	}
-
 	arguments := []string{"show-prompt-history"}
 	if hasPromptType {
 		arguments = append(arguments, "-T", promptType)
@@ -69,14 +59,6 @@ func (s Server) ClearPromptHistory(
 	if err != nil {
 		return err
 	}
-	current, err := s.Version(ctx)
-	if err != nil {
-		return err
-	}
-	if !current.AtLeast(promptHistoryVersion33) {
-		return &VersionTooLowError{Current: current, Minimum: promptHistoryVersion33}
-	}
-
 	arguments := []string{"clear-prompt-history"}
 	if hasPromptType {
 		arguments = append(arguments, "-T", promptType)

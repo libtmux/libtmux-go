@@ -96,7 +96,6 @@ type sessionHookSignatures interface {
 
 type windowHookSignatures interface {
 	PaneDied() tmux.OptionValue[tmux.SparseArray[string]]
-	WindowLinked() tmux.OptionValue[tmux.SparseArray[string]]
 	WindowResized() tmux.OptionValue[tmux.SparseArray[string]]
 }
 
@@ -520,7 +519,7 @@ func TestGeneratedOptionAndHookMethodCounts(t *testing.T) {
 		{name: "pane options", value: tmux.PaneOptionValues{}, want: 19},
 		{name: "server hooks", value: tmux.ServerHookValues{}, want: 57},
 		{name: "session hooks", value: tmux.SessionHookValues{}, want: 57},
-		{name: "window hooks", value: tmux.WindowHookValues{}, want: 13},
+		{name: "window hooks", value: tmux.WindowHookValues{}, want: 11},
 		{name: "pane hooks", value: tmux.PaneHookValues{}, want: 7},
 	}
 	for _, test := range tests {
