@@ -160,8 +160,8 @@ func (r *deadPaneRunner) Run(
 	switch {
 	case slices.Contains(request.Arguments, "-V"):
 		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
-	case slices.Contains(request.Arguments, "display-message"):
-		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+	case isIdentityProbeRequest(request):
+		return tmuxcmd.Result{ExitCode: 1, Stderr: identityProbeStderr(
 			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
 		)}, nil
 	case slices.Contains(request.Arguments, "list-panes"):
@@ -272,8 +272,8 @@ func (r *aliveThenDeadRunner) Run(
 	switch {
 	case slices.Contains(request.Arguments, "-V"):
 		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
-	case slices.Contains(request.Arguments, "display-message"):
-		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+	case isIdentityProbeRequest(request):
+		return tmuxcmd.Result{ExitCode: 1, Stderr: identityProbeStderr(
 			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
 		)}, nil
 	case slices.Contains(request.Arguments, "list-panes"):
@@ -382,8 +382,8 @@ func (r *finishingRunner) Run(
 	switch {
 	case slices.Contains(request.Arguments, "-V"):
 		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
-	case slices.Contains(request.Arguments, "display-message"):
-		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+	case isIdentityProbeRequest(request):
+		return tmuxcmd.Result{ExitCode: 1, Stderr: identityProbeStderr(
 			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
 		)}, nil
 	case slices.Contains(request.Arguments, "list-panes"):
@@ -425,8 +425,8 @@ func (r *unreadableOutcomeRunner) Run(
 	switch {
 	case slices.Contains(request.Arguments, "-V"):
 		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
-	case slices.Contains(request.Arguments, "display-message"):
-		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+	case isIdentityProbeRequest(request):
+		return tmuxcmd.Result{ExitCode: 1, Stderr: identityProbeStderr(
 			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
 		)}, nil
 	case slices.Contains(request.Arguments, "list-panes"):
@@ -487,8 +487,8 @@ func (r *claimedWhileWaitingRunner) Run(
 	switch {
 	case slices.Contains(request.Arguments, "-V"):
 		return tmuxcmd.Result{Stdout: []string{"tmux " + r.version.String()}}, nil
-	case slices.Contains(request.Arguments, "display-message"):
-		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(
+	case isIdentityProbeRequest(request):
+		return tmuxcmd.Result{ExitCode: 1, Stderr: identityProbeStderr(
 			snapshotIdentityFields(), snapshotRowValues(r.version, nil),
 		)}, nil
 	case slices.Contains(request.Arguments, "wait-for"):

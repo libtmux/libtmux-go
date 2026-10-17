@@ -235,7 +235,41 @@ func TestCoreVersionCheckCanceledContextDoesNotProbe(t *testing.T) {
 	}
 }
 
-func rawAdmissionServer(t *testing.T, runner commandRunner) Server {
+// The identity probe is run-shell -C, which carries no after-hook, and -N so a
+// vanished daemon is never restarted by the probing client.
+func TestCoreVersionCheckProbeIsHookFreeAndNeverStartsADaemon(t *testing.T) {
+	t.Parallel()
+
+	runner := &probeRecorder{}
+	server := rawVersionServer(t, runner)
+	// The absent daemon then asks for the executable's version, which this
+	// recorder refuses; only the first command matters here.
+	_, _ = server.Cmd(t.Context(), "list-sessions")
+	if len(runner.requests) == 0 {
+		t.Fatal("no command reached the executor")
+	}
+	probe := runner.requests[0]
+	index := slices.Index(probe, "run-shell")
+	if index < 0 || !slices.Contains(probe[:index], "-N") ||
+		len(probe) != index+3 || probe[index+1] != "-C" ||
+		!strings.HasPrefix(probe[index+2], identityProbeMarkerPrefix) {
+		t.Fatalf("first command = %#v, want -N run-shell -C <marker>...", probe)
+	}
+	for _, argument := range probe {
+		if argument == "display-message" {
+			t.Fatalf("identity probe %#v uses display-message, which fires user hooks", probe)
+		}
+	}
+}
+
+type probeRecorder struct{ requests [][]string }
+
+func (r *probeRecorder) Run(_ context.Context, request tmuxcmd.Request) (tmuxcmd.Result, error) {
+	r.requests = append(r.requests, slices.Clone(request.Arguments))
+	return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"no server running on /tmp/absent"}}, nil
+}
+
+func rawVersionServer(t *testing.T, runner commandRunner) Server {
 	t.Helper()
 	server, err := NewServer(ServerOptions{Binary: "false"})
 	if err != nil {
@@ -270,17 +304,16 @@ func (r *versionRunner) Run(_ context.Context, request tmuxcmd.Request) (tmuxcmd
 		r.binaryProbes++
 		return tmuxcmd.Result{Stdout: []string{"tmux " + r.binary}}, nil
 	}
-	if len(arguments) == 3 && arguments[0] == "display-message" && arguments[1] == "-p" &&
-		strings.Contains(arguments[2], "#{q:version}") {
+	if slices.Equal(arguments, identityProbeArgumentsFor(coreVersionIdentityFields())) {
 		if r.malformed {
-			return tmuxcmd.Result{RawStdout: []byte("malformed")}, nil
+			return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"unknown command: malformed"}}, nil
 		}
 		if r.daemon == "" {
 			return tmuxcmd.Result{ExitCode: 1, Stderr: []string{"no server running on /tmp/absent"}}, nil
 		}
-		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(coreAdmissionIdentityFields(), map[string]string{
-			"version": r.daemon, "pid": "123", "start_time": "456", "socket_path": "/tmp/admission.sock",
-		})}, nil
+		return identityProbeResult(coreVersionIdentityFields(), map[string]string{
+			"version": r.daemon, "pid": "123", "start_time": "456", "socket_path": "/tmp/version.sock",
+		}), nil
 	}
 	if len(arguments) >= 7 && arguments[0] == "if-shell" && arguments[1] == "-F" {
 		r.guarded++

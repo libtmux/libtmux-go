@@ -295,7 +295,7 @@ func TestStreamingCommandEndsWithItsContextWhileStderrIsHeld(t *testing.T) {
 	// open for writing when it runs.
 	write := exec.Command("/bin/sh", "-c", `cat >"$1" && chmod 700 "$1"`, "sh", binary)
 	target := tmuxtest.NewServer(t.Context(), t)
-	write.Stdin = strings.NewReader("#!/bin/sh\ncase \"$*\" in *display-message*) exec \"$LIBTMUX_TEST_TARGET_BINARY\" \"$@\" ;; esac\ncat >/dev/null\nsleep 3 &\nexit 0\n")
+	write.Stdin = strings.NewReader("#!/bin/sh\ncase \"$*\" in *run-shell*) exec \"$LIBTMUX_TEST_TARGET_BINARY\" \"$@\" ;; esac\ncat >/dev/null\nsleep 3 &\nexit 0\n")
 	if output, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("write %s: %v: %s", binary, err, output)
 	}

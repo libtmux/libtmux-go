@@ -118,7 +118,7 @@ func (s Server) runCheckedCommand(
 			arguments = escapeCommandListSeparators(arguments)
 		}
 		arguments = s.commandArguments(arguments)
-		if s.daemon != nil {
+		if s.daemon != nil || s.probesIdentity {
 			arguments = append([]string{"-N"}, arguments...)
 		}
 		result, err = state.executor.Run(ctx, tmuxcmd.Request{

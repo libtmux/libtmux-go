@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -217,8 +218,11 @@ func (s Server) probeServerIdentity(ctx context.Context, fields []formatField) (
 	if s.daemon != nil {
 		return *s.daemon, nil
 	}
-	result, err := s.runAdmittedCommand(ctx, commandServer,
-		[]string{"display-message", "-p", formatTemplate(fields)}, nil, false)
+	marker := newIdentityProbeMarker()
+	probe := s
+	probe.probesIdentity = true
+	result, err := probe.runCheckedCommand(ctx, commandServer,
+		identityProbeArguments(marker, fields), nil, false)
 	commandResult := cloneCommandResult(CommandResult{
 		Command: result.Command, Stdout: result.Stdout, RawStdout: result.RawStdout,
 		Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -226,10 +230,11 @@ func (s Server) probeServerIdentity(ctx context.Context, fields []formatField) (
 	if err != nil {
 		return snapshotServerIdentity{}, commandTransportFailure(err)
 	}
-	if result.ExitCode != 0 {
-		return snapshotServerIdentity{}, newCommandError("display-message", commandResult)
+	rendered, ok := identityProbeReport(marker, result.ExitCode, result.Stderr)
+	if !ok {
+		return snapshotServerIdentity{}, newCommandError("run-shell", commandResult)
 	}
-	rows, err := decodeFormatRecords(result.RawStdout, Version{}, fields)
+	rows, err := decodeFormatRecords(rendered, Version{}, fields)
 	if err != nil {
 		return snapshotServerIdentity{}, err
 	}
@@ -247,6 +252,56 @@ func (s Server) probeServerIdentity(ctx context.Context, fields []formatField) (
 		return snapshotServerIdentity{}, err
 	}
 	return s.normalizeSnapshotIdentityVersion(ctx, identity)
+}
+
+// identityProbeMarkerPrefix opens the private word the identity probe asks
+// tmux to run. No command carries that name, so tmux refuses it and reports
+// the word, with every format already expanded, on stderr.
+const identityProbeMarkerPrefix = "libtmux-version-"
+
+// newIdentityProbeMarker is replaced only by this package's tests, which pin
+// the marker so scripted executors can answer the probe.
+var newIdentityProbeMarker = randomIdentityProbeMarker
+
+func randomIdentityProbeMarker() string {
+	random := make([]byte, 8)
+	if _, err := rand.Read(random); err != nil {
+		panic("tmux: read random bytes: " + err.Error())
+	}
+	return identityProbeMarkerPrefix + hex.EncodeToString(random) + "-"
+}
+
+// identityProbeArguments builds the hook-free identity probe. Unlike
+// display-message, run-shell has no after-hook, and with -C the expanded
+// string fails in the parser before any command-error hook can fire. The
+// parser strips one level of quoting, so each field is quoted twice to reach
+// stderr in the form decodeFormatRecords expects.
+func identityProbeArguments(marker string, fields []formatField) []string {
+	var template strings.Builder
+	template.WriteString(marker)
+	for index, field := range fields {
+		if index != 0 {
+			template.WriteByte(formatFieldSeparator)
+		}
+		template.WriteString("#{q:#{q:")
+		template.WriteString(field.name)
+		template.WriteString("}}")
+	}
+	template.WriteByte(formatRecordTerminator)
+	return []string{"run-shell", "-C", template.String()}
+}
+
+// identityProbeReport extracts the framed record from the refusal tmux prints
+// for the probe's marker word. Any other outcome is not an identity report.
+func identityProbeReport(marker string, exitCode int, stderr []string) ([]byte, bool) {
+	if exitCode != 1 || len(stderr) != 1 {
+		return nil, false
+	}
+	record, ok := strings.CutPrefix(stderr[0], "unknown command: "+marker)
+	if !ok {
+		return nil, false
+	}
+	return []byte(record + "\n"), true
 }
 
 func (s Server) normalizeSnapshotIdentityVersion(

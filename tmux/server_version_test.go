@@ -359,13 +359,12 @@ func TestSnapshotIdentityUsesProbedOpenBSDCapabilities(t *testing.T) {
 	formatVersion := mustParseVersion(t, "3.7")
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(
+			ExitCode: 1, Stderr: identityProbeStderr(
 				snapshotIdentityFields(),
 				snapshotRowValues(formatVersion, map[string]string{
 					"version": "openbsd-7.8",
 				}),
 			),
-			ExitCode: 0,
 		}},
 		{result: tmuxcmd.Result{Stdout: []string{"tmux openbsd-7.8"}, ExitCode: 0}},
 		{result: tmuxcmd.Result{Stdout: []string{

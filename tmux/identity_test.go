@@ -374,11 +374,10 @@ func TestStreamingDaemonGuardClassifiesAReplacement(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{ExitCode: 1}},
 		{result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(
+			ExitCode: 1, Stderr: identityProbeStderr(
 				snapshotIdentityFields(),
 				snapshotRowValues(version, map[string]string{"pid": "999"}),
 			),
-			ExitCode: 0,
 		}},
 	}}
 	server := serverWithRunner(runner)

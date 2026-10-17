@@ -41,7 +41,7 @@ func runExecutableFixture() {
 	if mode == fixtureVersion31 || mode == fixtureVersion32a ||
 		mode == fixtureVersion33a || mode == fixtureVersion36 {
 		for _, argument := range os.Args[1:] {
-			if strings.Contains(argument, "#{q:version}") && strings.Contains(argument, "#{q:pid}") {
+			if strings.HasPrefix(argument, "libtmux-version-") && strings.Contains(argument, "#{q:pid}") {
 				fmt.Fprintln(os.Stderr, "no server running on version fixture socket")
 				os.Exit(1)
 			}

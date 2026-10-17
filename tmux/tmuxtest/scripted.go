@@ -47,13 +47,16 @@ type ScriptedCommand struct {
 // which a script cannot, so code that opens one needs [NewServer] and a real
 // tmux.
 //
-// The private admission probe reports no daemon unless an entry explicitly
-// matches its complete format argument. Ordinary commands then use the
+// The private version probe reports no daemon unless an entry explicitly
+// matches its complete format argument. An entry that does so answers with the
+// record in Stdout; the script reports it the way tmux does, as the refusal of
+// the probe's random command word on stderr. Ordinary commands then use the
 // executable version supplied by the script's -V answer.
 func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 	t.Helper()
 
 	const admissionFormat = "#{q:pid}|#{q:start_time}|#{q:socket_path}|#{q:version}="
+	const probeFormat = "#{q:#{q:pid}}|#{q:#{q:start_time}}|#{q:#{q:socket_path}}|#{q:#{q:version}}="
 	if !slices.ContainsFunc(script, func(command ScriptedCommand) bool {
 		return slices.Contains(command.Contains, versionProbeFormat)
 	}) {
@@ -66,6 +69,13 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 
 	var body strings.Builder
 	body.WriteString("#!/bin/sh\n")
+	// The hook-free probe is run-shell -C <marker><format>; the marker is
+	// random, so the script recovers it from the argument.
+	body.WriteString("marker=\n")
+	body.WriteString("for argument in \"$@\"; do\n")
+	fmt.Fprintf(&body, "  case $argument in libtmux-version-*%s) marker=${argument%%%%'#{'*};; esac\n",
+		shellQuote(probeFormat))
+	body.WriteString("done\n")
 	// Written by ScriptedTmux; matching is on the whole argument list so a
 	// caller names a subcommand without restating the flags around it.
 	// Each argument is matched whole. Joining them into one string would let
@@ -88,11 +98,23 @@ func ScriptedTmux(t testing.TB, script ...ScriptedCommand) string {
 		}
 		var condition strings.Builder
 		condition.WriteString("true")
+		probe := false
 		for _, needle := range command.Contains {
+			if needle == versionProbeFormat {
+				probe = true
+				condition.WriteString(` && [ -n "$marker" ]`)
+				continue
+			}
 			fmt.Fprintf(&condition,
 				" && { needle=%s; match \"$@\"; }", shellQuote(needle))
 		}
 		fmt.Fprintf(&body, "if %s; then\n", condition.String())
+		if probe && command.Stdout != "" {
+			fmt.Fprintf(&body, "  printf 'unknown command: %%s%%s\\n' \"$marker\" %s >&2\n",
+				shellQuote(strings.TrimSuffix(command.Stdout, "\n")))
+			body.WriteString("  exit 1\nfi\n")
+			continue
+		}
 		if command.Stdout != "" {
 			fmt.Fprintf(&body, "  printf %%s %s\n", shellQuote(command.Stdout))
 		}

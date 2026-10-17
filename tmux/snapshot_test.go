@@ -390,8 +390,7 @@ func TestServerSnapshotUsesVersionedFramedListings(t *testing.T) {
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(identityFields, snapshotRowValues(version, nil)),
-			ExitCode:  0,
+			ExitCode: 1, Stderr: identityProbeStderr(identityFields, snapshotRowValues(version, nil)),
 		}},
 		{result: tmuxcmd.Result{
 			RawStdout: framedSnapshotRecord(sessionFields, snapshotRowValues(version, map[string]string{
@@ -403,8 +402,7 @@ func TestServerSnapshotUsesVersionedFramedListings(t *testing.T) {
 		{result: tmuxcmd.Result{RawStdout: nil, ExitCode: 0}},
 		{result: tmuxcmd.Result{RawStdout: nil, ExitCode: 0}},
 		{result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(identityFields, snapshotRowValues(version, nil)),
-			ExitCode:  0,
+			ExitCode: 1, Stderr: identityProbeStderr(identityFields, snapshotRowValues(version, nil)),
 		}},
 	}}
 	server := serverWithRunner(runner)
@@ -420,9 +418,7 @@ func TestServerSnapshotUsesVersionedFramedListings(t *testing.T) {
 	if len(requests) != 6 {
 		t.Fatalf("Snapshot() command count = %d, want two identity probes plus four listings", len(requests))
 	}
-	assertSnapshotRequest(t, requests[0], []string{
-		"display-message", "-p", formatTemplate(identityFields),
-	})
+	assertSnapshotRequest(t, requests[0], identityProbeArgumentsFor(identityFields))
 	assertSnapshotRequest(t, requests[1], []string{
 		"list-sessions", "-F" + formatTemplate(sessionFields),
 	})
@@ -447,9 +443,7 @@ func TestServerSnapshotUsesVersionedFramedListings(t *testing.T) {
 	assertSnapshotRequest(t, requests[4], []string{
 		"list-clients", "-F" + formatTemplate(clientFields),
 	})
-	assertSnapshotRequest(t, requests[5], []string{
-		"display-message", "-p", formatTemplate(identityFields),
-	})
+	assertSnapshotRequest(t, requests[5], identityProbeArgumentsFor(identityFields))
 }
 
 func TestServerSnapshotReportsListFailure(t *testing.T) {
@@ -457,8 +451,7 @@ func TestServerSnapshotReportsListFailure(t *testing.T) {
 
 	version := mustParseVersion(t, "3.7")
 	identity := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(snapshotIdentityFields(), snapshotRowValues(version, nil)),
-		ExitCode:  0,
+		ExitCode: 1, Stderr: identityProbeStderr(snapshotIdentityFields(), snapshotRowValues(version, nil)),
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: identity},
@@ -491,10 +484,9 @@ func TestServerSnapshotRejectsMalformedVersionInLenientMode(t *testing.T) {
 	version := mustParseVersion(t, "3.7")
 	runner := &versionQueueRunner{responses: []versionResponse{{
 		result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(snapshotIdentityFields(), snapshotRowValues(version, map[string]string{
+			ExitCode: 1, Stderr: identityProbeStderr(snapshotIdentityFields(), snapshotRowValues(version, map[string]string{
 				"version": "not-a-version",
 			})),
-			ExitCode: 0,
 		},
 	}}}
 	server := serverWithRunner(runner)
@@ -509,10 +501,9 @@ func TestServerSnapshotRejectsUnsupportedTmuxVersion(t *testing.T) {
 	version := mustParseVersion(t, "3.7")
 	runner := &versionQueueRunner{responses: []versionResponse{{
 		result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(snapshotIdentityFields(), snapshotRowValues(version, map[string]string{
+			ExitCode: 1, Stderr: identityProbeStderr(snapshotIdentityFields(), snapshotRowValues(version, map[string]string{
 				"version": "3.1",
 			})),
-			ExitCode: 0,
 		},
 	}}}
 	server := serverWithRunner(runner)
@@ -571,14 +562,12 @@ func TestServerSnapshotRejectsRestartAfterEmptyListings(t *testing.T) {
 	version := mustParseVersion(t, "3.7")
 	fields := snapshotIdentityFields()
 	opening := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, nil)),
-		ExitCode:  0,
+		ExitCode: 1, Stderr: identityProbeStderr(fields, snapshotRowValues(version, nil)),
 	}
 	closing := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, map[string]string{
+		ExitCode: 1, Stderr: identityProbeStderr(fields, snapshotRowValues(version, map[string]string{
 			"pid": "999",
 		})),
-		ExitCode: 0,
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: opening},
@@ -600,14 +589,12 @@ func TestServerSnapshotRejectsRestartAfterLenientListingFailure(t *testing.T) {
 	version := mustParseVersion(t, "3.7")
 	fields := snapshotIdentityFields()
 	opening := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, nil)),
-		ExitCode:  0,
+		ExitCode: 1, Stderr: identityProbeStderr(fields, snapshotRowValues(version, nil)),
 	}
 	closing := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, map[string]string{
+		ExitCode: 1, Stderr: identityProbeStderr(fields, snapshotRowValues(version, map[string]string{
 			"pid": "999",
 		})),
-		ExitCode: 0,
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: opening},
@@ -626,14 +613,12 @@ func TestStrictServerSnapshotReportsRestartAndListingFailure(t *testing.T) {
 	version := mustParseVersion(t, "3.7")
 	fields := snapshotIdentityFields()
 	opening := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, nil)),
-		ExitCode:  0,
+		ExitCode: 1, Stderr: identityProbeStderr(fields, snapshotRowValues(version, nil)),
 	}
 	closing := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(fields, snapshotRowValues(version, map[string]string{
+		ExitCode: 1, Stderr: identityProbeStderr(fields, snapshotRowValues(version, map[string]string{
 			"pid": "999",
 		})),
-		ExitCode: 0,
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: opening},
@@ -656,8 +641,7 @@ func TestSnapshotReportsListingFailureWhenServerDisappears(t *testing.T) {
 
 	version := mustParseVersion(t, "3.7")
 	opening := tmuxcmd.Result{
-		RawStdout: framedSnapshotRecord(snapshotIdentityFields(), snapshotRowValues(version, nil)),
-		ExitCode:  0,
+		ExitCode: 1, Stderr: identityProbeStderr(snapshotIdentityFields(), snapshotRowValues(version, nil)),
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: opening},

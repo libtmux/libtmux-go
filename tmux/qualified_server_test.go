@@ -19,8 +19,8 @@ type qualifiedCommandRunner struct {
 
 func (r *qualifiedCommandRunner) Run(ctx context.Context, request tmuxcmd.Request) (tmuxcmd.Result, error) {
 	arguments := exactArgvSubcommand(request.Arguments)
-	fields := coreAdmissionIdentityFields()
-	if slices.Equal(arguments, []string{"display-message", "-p", formatTemplate(fields)}) {
+	fields := coreVersionIdentityFields()
+	if slices.Equal(arguments, identityProbeArgumentsFor(fields)) {
 		version := "3.7a"
 		if r.version != nil {
 			current, err := r.version(ctx)
@@ -29,10 +29,10 @@ func (r *qualifiedCommandRunner) Run(ctx context.Context, request tmuxcmd.Reques
 			}
 			version = current.String()
 		}
-		return tmuxcmd.Result{RawStdout: framedSnapshotRecord(fields, map[string]string{
+		return identityProbeResult(fields, map[string]string{
 			"version": version, "pid": qualifiedRendererPID, "start_time": "1789012345",
 			"socket_path": "/tmp/libtmux-qualified-renderer.sock",
-		})}, nil
+		}), nil
 	}
 	if len(arguments) >= 7 && arguments[0] == "if-shell" && arguments[1] == "-F" &&
 		strings.Contains(arguments[2], "#{==:#{pid},"+qualifiedRendererPID+"}") {

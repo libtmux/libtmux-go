@@ -79,9 +79,12 @@ func TestControlCommandPrefixPinsTheEffectiveSocketPath(t *testing.T) {
 	proxy := filepath.Join(t.TempDir(), "tmux")
 	writeExecutableProxy(t, proxy, []byte(`#!/bin/sh
 case "$*" in
-    *'#{q:version}'*)
-        printf '123|456|/fixture/control.sock|3.7d=\n'
-        exit 0
+    *'#{q:#{q:version}}'*)
+        for argument in "$@"; do
+            case $argument in libtmux-version-*) marker=${argument%%'#{'*};; esac
+        done
+        printf 'unknown command: %s123|456|/fixture/control.sock|3.7d=\n' "$marker" >&2
+        exit 1
         ;;
 esac
 printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"

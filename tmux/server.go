@@ -18,6 +18,9 @@ type Server struct {
 	connection     *Connection
 	daemon         *snapshotServerIdentity
 	startupVersion *Version
+	// probesIdentity marks the private identity bootstrap, which must never
+	// start a daemon.
+	probesIdentity bool
 	// requiresProcess marks exact-output and interactive operations that cannot
 	// cross a persistent control connection.
 	requiresProcess bool

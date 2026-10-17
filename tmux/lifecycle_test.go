@@ -1584,6 +1584,12 @@ var defaultGlobalArguments = []string{"-u"}
 func withoutGlobalFlags(requests []tmuxcmd.Request) []tmuxcmd.Request {
 	stripped := slices.Clone(requests)
 	for index, request := range stripped {
+		// The identity probe never starts a daemon, so it carries -N first.
+		if len(request.Arguments) > 1 && request.Arguments[0] == "-N" &&
+			request.Arguments[1] == defaultGlobalArguments[0] {
+			request.Arguments = slices.Clone(request.Arguments[1:])
+			stripped[index] = request
+		}
 		if len(request.Arguments) == 0 ||
 			request.Arguments[0] != defaultGlobalArguments[0] {
 			continue
