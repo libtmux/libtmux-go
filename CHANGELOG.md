@@ -21,6 +21,15 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux
 
+- The core, workspace builder, and MCP consumer now require tmux 3.3a or newer.
+  Ordinary operations refuse older selected daemons, including unpatched 3.3,
+  with `ErrVersionTooLow` before dispatch. A newer client cannot vouch for an older
+  daemon. Unversioned OpenBSD base tmux and bare `master` reports cannot
+  establish the release floor and are refused. Construction and executable
+  diagnostics remain available. (#57)
+- `Session.Run` no longer handles tmux 3.2's fixed dead-pane notice; supported
+  releases disable the notice with `remain-on-exit-format`. Output resembling
+  the old notice is preserved. (#57)
 - `RunResult.Signal` is now an `os.Signal`, nil when no signal ended the
   command, where it was tmux's text: `9` on Linux, `kill` on macOS and the
   BSDs. Compare it with `os.Kill` or a `syscall` constant. (#53)
