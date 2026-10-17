@@ -22,6 +22,11 @@ func TestFastPath(t *testing.T) {
 	defer cancel()
 
 	options := tmux.ServerOptions{SocketPath: filepath.Join(t.TempDir(), "tmux.sock")}
+	server, err := tmux.NewServer(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmuxtest.RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	printed := exampletest.Output(t, func() error { return run(ctx, options) })
 
 	exampletest.MatchesFile(t, printed, "output.txt")

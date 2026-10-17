@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/examples/internal/exampletest"
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -22,9 +23,11 @@ func TestByteStreams(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	server := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	archive := filepath.Join(t.TempDir(), "screen.gz")
 	printed := exampletest.Output(t, func() error {
-		return run(ctx, tmuxtest.NewServer(ctx, t), archive)
+		return run(ctx, server, archive)
 	})
 
 	exampletest.MatchesFile(t, printed, "output.txt")

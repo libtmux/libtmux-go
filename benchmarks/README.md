@@ -24,9 +24,9 @@ chained + connection        8ms           0        1  7 panes on the server [0 0
 **The last column checks equivalence.** Every row runs one `SearchPanes` query
 against the same six-pane topology. Only cost should differ.
 
-Every supported tmux release has every row. Before tmux 3.6, destroying the
-session attached to a connection follows that session's `detach-on-destroy`
-policy and may end the connection; this workload keeps its attached session.
+Control connection and event-driven rows require tmux 3.7. Older supported
+releases still measure subprocess, chained commands, and polling. An absent
+optional row reports eligibility; it supplies no measurement for that engine.
 
 **Count invocations, not milliseconds.** Wall clock moves with the machine and
 what else is running. The process column does not.

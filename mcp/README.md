@@ -369,6 +369,13 @@ This protects the pane you are in. It does not make the tools a sandbox.
 
 ## Known limits
 
+- **Some tools require a newer tmux.** Startup and ordinary tools support
+  3.3a, including `capture_since` and `run_shell_command`. Non-empty `paste_text`
+  requires 3.4 before staging any buffer; `wait_for_text` requires the qualified
+  3.7 control engine. Restricted tools return an explicit version error on older
+  supported daemons. The runtime uses subprocess commands below 3.7 and a
+  retained control connection from 3.7.
+
 - **Every tool is annotated as destructive.** Each one, `list_sessions`
   included, carries `destructiveHint=true` and `openWorldHint=true`, and none
   carries `readOnlyHint`. A client that skips approval for read-only tools
@@ -389,10 +396,6 @@ This protects the pane you are in. It does not make the tools a sandbox.
 - **An empty `TMUX` is not an absent one.** Input tools refuse when `TMUX` or
   `TMUX_PANE` is set to nothing, because the server then cannot tell whether
   it is in a pane. Unset them instead.
-- **Before tmux 3.6, killing one session can end the server.** The server
-  holds a connection attached to the first session it reached, and that
-  session's `detach-on-destroy` option decides what happens when it goes.
-  tmux 3.6 and later move the connection to a session that remains.
 - **Nothing but tools.** There is one resource, and no prompts, resource
   templates, completions, or background job handles.
 

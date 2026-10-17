@@ -261,15 +261,17 @@ windows of its own: `session.Windows()` reports none. Ask tmux for them with
 does, or read everything at once with
 [`Server.Snapshot`][tmux-server-snapshot].
 
-While it runs, `Build` holds one connection to tmux and sends every command
-over it. tmux counts that connection as a client: it shows in `list-clients`
-and counts toward `session_attached` until `Build` closes it, which it does
-before it returns.
+`Build` uses ordinary subprocess operations on tmux 3.3a, 3.4, 3.5, and 3.6. On
+qualified tmux 3.7 or newer, it holds a control connection during the build.
+tmux counts that connection as a client until `Build` closes it before
+returning. A cold daemon is first created through an ordinary detached command,
+then qualified for control attachment. A later attachment failure can leave the
+created session, which the error return identifies.
 
 ### [`workspace.BuildInto`][workspace-buildinto]: build into a session you made
 
-When the session has to exist first, for example to keep the connection that
-created it,
+When the session has to exist first, for example to retain a connection on
+tmux 3.7 or newer,
 [`Workspace.InitialSessionRequest`][workspace-workspace-initialsessionrequest]
 gives the request that creates it and `BuildInto` fills in the rest:
 

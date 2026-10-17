@@ -1214,7 +1214,7 @@ Changes tmux state.
 
 ### `paste_text`
 
-Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes literal text only to its target; optional Enter appends one newline to the same private buffer.
+Send input to a pane's program; a shell that receives it runs it with your user's permissions. Pastes literal text only to its target; optional Enter appends one newline to the same private buffer. Non-empty text requires tmux 3.4 for safe named-buffer cleanup.
 
 Belongs to the `execute` toolset.
 
@@ -2011,7 +2011,7 @@ Changes tmux state.
 
 ### `wait_for_text`
 
-Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Waits for new pane output without accepting executable input.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Waits for new pane output without accepting executable input. Requires tmux 3.7.
 
 Belongs to the `inspect` toolset.
 

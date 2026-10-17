@@ -50,6 +50,31 @@ Metadata and version-check commands must retain tmux's built-in semantics.
 Configured `command-alias` entries that redefine those commands fall outside
 this guarantee; tmux expands aliases before resolving canonical command names.
 
+Optional features have their own requirements:
+
+| Operation | Required tmux |
+| --- | --- |
+| Ordinary subprocess operations, polling, workspace builds, MCP startup | 3.3a |
+| Named buffer deletion or rename; `CaptureToFile`; MCP `paste_text` staging | 3.4 |
+| Foreground `RunShell` captured client output without `TargetPane` | 3.5 |
+| Owned control clients, connections, notifications, pane observations | 3.7 |
+| Native raw `break-pane` and unnamed typed `BreakPane` on exact 3.7 | 3.7a |
+
+On exact 3.7, typed `BreakPane` with an explicit name retains its naming repair.
+The restriction does not affect older supported versions. Raw percentage
+`split-window -p` is refused only on tmux 3.4, where its percentage behavior
+is defective; typed percentage requests retain their `-l N%` repair. Direct named
+`paste-buffer -d -b` retains tmux's exact lookup semantics on 3.3a. Raw `Cmd`
+returns native client output and does not promise capture of nested shell-job
+stdout. Background, pane-targeted, and `AsTmuxCommand` requests retain their
+native semantics and individual flag requirements.
+
+These checks cover library operations, plans, staging, and literal argv command
+items in flat batches. Opaque tmux scripts, shell programs, and configured alias
+contents retain native semantics. Control startup pins the qualified Unix
+socket in a private directory before `-C`; it fails if the filesystem cannot
+hard-link that socket. The carrier is removed once the client is registered.
+
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
 
