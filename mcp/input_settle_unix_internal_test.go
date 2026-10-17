@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
 // A pane that has just started has a foreground command that is still moving:
@@ -126,6 +127,7 @@ func TestPasteTextWaitsOutAForegroundCommandThatChanges(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	release := startingPane(ctx, t, panes[0])
@@ -187,6 +189,9 @@ func TestInputRefusesAShellThatGivesWayToAnotherProgram(t *testing.T) {
 			defer cancel()
 			withoutCallerEnvironment(t)
 			target, _, panes := threePaneInputFixture(ctx, t)
+			if name == "paste_text" {
+				tmuxtest.RequireVersion(ctx, t, target, "3.4")
+			}
 			instance := mustInternalMCPServer(t, target)
 			callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 			// Long enough for two equal readings, and no longer than a refusal
@@ -259,6 +264,9 @@ func TestInputRefusesAnOlderPaneWhoseProgramExits(t *testing.T) {
 			defer cancel()
 			withoutCallerEnvironment(t)
 			target, _, panes := threePaneInputFixture(ctx, t)
+			if name == "paste_text" {
+				tmuxtest.RequireVersion(ctx, t, target, "3.4")
+			}
 			instance := mustInternalMCPServer(t, target)
 			callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 			// Long enough for two equal readings, and no longer than a refusal

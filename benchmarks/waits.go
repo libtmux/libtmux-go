@@ -29,13 +29,16 @@ const waitRounds = 10
 // prepares once and then waits waitRounds times, which is how a caller uses
 // it - a wait that opened its own stream every time would be measuring the
 // opening.
-func measureWaits(ctx context.Context) ([]row, error) {
-	lanes := []struct {
+func measureWaits(ctx context.Context, version tmux.Version) ([]row, error) {
+	type waitLane struct {
 		name    string
 		prepare func(context.Context, tmux.Pane) (waiter, error)
-	}{
+	}
+	lanes := []waitLane{
 		{name: "polled capture", prepare: pollingWaiter},
-		{name: "event-driven", prepare: observingWaiter},
+	}
+	if supportsOwnedConnections(version) {
+		lanes = append(lanes, waitLane{name: "event-driven", prepare: observingWaiter})
 	}
 	rows := make([]row, 0, len(lanes))
 	for _, lane := range lanes {

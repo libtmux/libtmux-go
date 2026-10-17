@@ -99,6 +99,7 @@ func TestWaitForTextTimeoutIncludesPaneSetup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve active pane error = %v", err)
 	}
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	instance := mustInternalMCPServer(t, target)
 	command, err := instance.runtime.command(ctx)
 	if err != nil {
@@ -158,6 +159,7 @@ func TestInstanceCloseJoinsTimedOutPaneObservations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve active pane error = %v", err)
 	}
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	instance := mustInternalMCPServer(t, target)
 	for range 2 {
 		_, output, err := instance.tools.waitForText(ctx, nil, waitForTextInput{

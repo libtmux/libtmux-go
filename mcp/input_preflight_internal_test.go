@@ -791,6 +791,7 @@ func TestPasteTextDropsBracketsWhenItAsksForEnter(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	defaults := instance.runtime.deps
@@ -1683,6 +1684,7 @@ func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, window, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	if err := window.SetOption(ctx, "synchronize-panes", "on", tmux.SetOptionOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -1802,6 +1804,7 @@ func TestPasteReservationIsSharedAcrossInstances(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	firstInstance := mustInternalMCPServer(t, target)
 	secondInstance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
@@ -1866,6 +1869,7 @@ func TestPasteReservationCoversFinalPreflight(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	firstInstance := mustInternalMCPServer(t, target)
 	secondInstance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
@@ -1928,6 +1932,7 @@ func TestPasteRechecksTargetAfterBufferSetup(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	defaults := defaultMCPDependencies()
@@ -1967,6 +1972,7 @@ func TestPasteRefusesPlacementTransition(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, window, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	defaults := defaultMCPDependencies()
@@ -2005,6 +2011,7 @@ func TestPasteCleansBufferAfterRequestCancellation(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	instance := mustInternalMCPServer(t, target)
 	baseCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 	callCtx, cancelCall := context.WithCancel(baseCtx)
@@ -2061,6 +2068,7 @@ func TestPasteTextStagesPayloadsBeyondTmuxCommandLimit(t *testing.T) {
 	defer cancel()
 	withoutCallerEnvironment(t)
 	target, _, panes := threePaneInputFixture(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, target, "3.4")
 	instance := mustInternalMCPServer(t, target)
 	callCtx := withAcquiredServer(ctx, &runtimeAcquisition{server: target})
 

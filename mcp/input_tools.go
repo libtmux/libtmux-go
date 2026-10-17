@@ -1028,6 +1028,9 @@ func (t *tools) pasteText(
 		bracket = *input.Bracket
 	}
 	if err := t.stageBuffer(ctx, server, name, contents); err != nil {
+		if errors.Is(err, tmux.ErrVersionTooLow) {
+			return nil, output, err
+		}
 		return nil, output, errors.Join(err, t.deletePasteBuffer(server, name))
 	}
 	final, err := t.preflightPaneInput(
@@ -1095,6 +1098,13 @@ func (t *tools) stageBuffer(
 	name string,
 	contents string,
 ) error {
+	minimum, err := tmux.ParseVersion("3.4")
+	if err != nil {
+		return err
+	}
+	if err := server.RequireVersion(ctx, minimum); err != nil {
+		return err
+	}
 	for chunk, more := range bufferChunks(contents, maximumBufferCommandBytes) {
 		if err := t.runtime.deps.setBuffer(ctx, server, tmux.SetBufferRequest{
 			Data: chunk, Name: &name, Append: more,

@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,7 +34,8 @@ type surfaceFixture struct {
 
 // surfaceStep is one tool called with arguments the fixture supplies.
 type surfaceStep struct {
-	tool string
+	tool    string
+	minimum string
 	// arguments are built rather than fixed, because most of them name an id
 	// that only exists once the sweep has run.
 	arguments func(*surfaceFixture) map[string]any
@@ -79,6 +81,22 @@ func TestEveryToolAnswersTheSchemaItPublishes(t *testing.T) {
 		result, err := session.CallTool(ctx, &sdk.CallToolParams{
 			Name: one.tool, Arguments: one.arguments(held),
 		})
+		if one.minimum != "" {
+			minimum, parseErr := tmux.ParseVersion(one.minimum)
+			if parseErr != nil {
+				t.Fatal(parseErr)
+			}
+			if errors.Is(target.RequireVersion(ctx, minimum), tmux.ErrVersionTooLow) {
+				text := surfaceResultText(result)
+				if err != nil {
+					text = err.Error()
+				}
+				if (err == nil && !result.IsError) || !strings.Contains(text, "version too low") || !strings.Contains(text, one.minimum) {
+					t.Fatalf("%s did not report its %s requirement: %s", one.tool, one.minimum, text)
+				}
+				continue
+			}
+		}
 		if err != nil {
 			if one.mayFail {
 				continue
@@ -306,7 +324,7 @@ func surfaceSweep() []surfaceStep {
 		{tool: "find_pane_by_position", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"window_id": f.window, "position": "top-left"}
 		}},
-		{tool: "wait_for_text", arguments: func(f *surfaceFixture) map[string]any {
+		{tool: "wait_for_text", minimum: tmux.MinimumConnectionVersion, arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{
 				"pane_id": f.pane, "patterns": []any{"tmuxtest"}, "timeout": 5,
 			}
@@ -354,7 +372,7 @@ func surfaceSweep() []surfaceStep {
 				map[string]any{"pane_id": f.pane, "keys": []any{"Escape"}},
 			}}
 		}},
-		{tool: "paste_text", arguments: func(f *surfaceFixture) map[string]any {
+		{tool: "paste_text", minimum: "3.4", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"pane_id": f.pane, "text": "swept"}
 		}},
 		{tool: "set_synchronize_panes", arguments: func(f *surfaceFixture) map[string]any {

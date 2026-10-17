@@ -24,6 +24,7 @@ func TestWaitForTextSeparatesAnEchoFromOutput(t *testing.T) {
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &request,
 	})
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	session, closeSession, err := connectExampleClient(ctx, target)
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +87,7 @@ func TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching(t *testing.T
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &request,
 	})
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	session, closeSession, err := connectExampleClient(ctx, target)
 	if err != nil {
 		t.Fatal(err)
@@ -196,6 +198,7 @@ func TestWaitForTextAlreadyOnScreenDistinguishesPendingFromRealOutput(t *testing
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &request,
 	})
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	session, closeSession, err := connectExampleClient(ctx, target)
 	if err != nil {
 		t.Fatal(err)
@@ -273,6 +276,7 @@ func TestWaitForTextResumesFromARealCursor(t *testing.T) {
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &request,
 	})
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	session, closeSession, err := connectExampleClient(ctx, target)
 	if err != nil {
 		t.Fatal(err)
@@ -333,6 +337,7 @@ func TestWaitForTextTimeoutSaysSoInContent(t *testing.T) {
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		FixedShell: true, InitialSession: &request,
 	})
+	tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
 	session, closeSession, err := connectExampleClient(ctx, target)
 	if err != nil {
 		t.Fatal(err)

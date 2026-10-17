@@ -164,7 +164,7 @@ func TestBuildIntoRequiresAMaterializedSession(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestBuildCreatesTheSessionOnItsOwnedConnection(t *testing.T) {
+func TestBuildOwnsTheConnectionAfterItsColdBootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
@@ -219,14 +219,18 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	creation := slices.Index(lines, "process creation")
+	if creation < 0 || slices.Index(lines[creation+1:], "process creation") >= 0 {
+		t.Fatalf("tmux invocations = %q, want one detached process creation", lines)
+	}
+	if slices.Contains(lines, "control creation") {
+		t.Fatalf("tmux invocations = %q, want detached creation before attachment", lines)
+	}
 	if version.AtLeast(minimum) {
-		if !slices.Contains(lines, "control creation") {
-			t.Fatalf("tmux invocations = %q, want control-mode session creation", lines)
+		if slices.Index(lines, "control other") <= creation {
+			t.Fatalf("tmux invocations = %q, want control attachment after creation", lines)
 		}
-		if slices.Contains(lines, "process creation") {
-			t.Fatalf("tmux invocations = %q, want no process session creation", lines)
-		}
-	} else if !slices.Contains(lines, "process creation") {
+	} else if slices.Contains(lines, "control other") {
 		t.Fatalf("tmux invocations = %q, want process fallback on tmux %s", lines, version)
 	}
 	if session.Server().ConnectionBound() {
@@ -360,6 +364,7 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitialSessionRequest() error = %v", err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	_, connection, err := server.NewSessionConnection(
 		ctx,
 		request,
