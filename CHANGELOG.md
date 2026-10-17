@@ -11,6 +11,18 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux
 
+- Owned control clients, connections, notifications, and pane observations
+  require tmux 3.7. Acquisition pins the selected socket before starting
+  control mode; filesystems unable to retain it refuse acquisition. Cold
+  creation can return a detached session if later attachment fails. (#58)
+- Named buffer deletion and rename, including `CaptureToFile` abort cleanup,
+  require tmux 3.4. Explicit named paste-and-delete remains available on 3.3a.
+  Foreground `RunShell` captured client output requires 3.5; pane-targeted,
+  background, and `AsTmuxCommand` jobs retain native output semantics. (#58)
+- Raw `break-pane` and unnamed typed `BreakPane` refuse exact tmux 3.7;
+  explicitly named typed calls retain the naming repair. Literal
+  `split-window -p` refuses defective tmux 3.4; typed percentage requests
+  keep their conversion. (#58)
 - The core, workspace builder, and MCP consumer now require tmux 3.3a or newer.
   Ordinary operations refuse older selected daemons, including unpatched 3.3,
   with `ErrVersionTooLow` before dispatch. A newer client cannot vouch for an older
@@ -89,17 +101,24 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux/tmuxtest
 
+- Screen helpers use capture polling below tmux 3.7. Explicit control helpers
+  retain the control acquisition requirement. (#58)
 - `tmuxtest` cleanup no longer fails intermittently on Debian and Ubuntu
   builds of tmux, which answer `server exited unexpectedly` for a moment after
   `kill-server`. (#53)
 
 ### workspace
 
+- `Build` keeps subprocess operations on tmux 3.3a through 3.6 and owns a
+  qualified control connection on newer daemons. (#58)
 - The `build-workspace` example now builds on a tmux server and configuration
   of its own, and its page publishes what it prints. (#53)
 
 ### mcp
 
+- Startup, `capture_since`, and `run_shell_command` remain available on tmux
+  3.3a. Non-empty `paste_text` requires 3.4 before staging; `wait_for_text`
+  requires 3.7. (#58)
 - `send_keys`, `send_keys_batch`, `paste_text`, `run_shell_command`, and every
   other tool now refuse a required pane, window, or session id sent empty,
   inside batches too, and audit the refusal. An empty id used to mean the
