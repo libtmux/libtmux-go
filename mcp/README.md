@@ -235,6 +235,10 @@ the stop pattern. It gets `"outcome":"matched"`.
 A wait longer than the ceiling is shortened, and the reply says so. The
 ceiling is [`LIBTMUX_MCP_WAIT_MAX_SECONDS`][mcp-waitceilingenvironmentvariable].
 
+If the pane goes away mid-wait, the reply's `outcome` is `paneDied` and `lines`
+holds what it wrote first. If only the output stream ends and the pane is
+alive, it is `streamLost`. [The contract][contract-wait-ends] has the rest.
+
 ### [`run_shell_command`][run_shell_command]: run a command and read its exit status
 
 [`run_shell_command`][run_shell_command] waits for the command and returns its
@@ -438,10 +442,11 @@ elicitation request: a question the client puts to you on the server's behalf.
 
 - **Some tools require a newer tmux.** Startup and ordinary tools support
   3.3a, including `capture_since` and `run_shell_command`. Non-empty
-  `paste_text` requires 3.4 before staging any buffer; `wait_for_text` requires
-  the qualified 3.7 control engine. Restricted tools return an explicit version
-  error on older supported daemons. The runtime uses subprocess commands below
-  3.7 and a retained control connection from 3.7.
+  `paste_text` requires 3.4 before staging any buffer; `wait_for_text` polls
+  with `capture-pane` below 3.7 and follows control output from 3.7. Restricted
+  tools return an explicit version error on older supported daemons. The
+  runtime uses subprocess commands below 3.7 and a retained control connection
+  from 3.7.
 - **Every tool is annotated as destructive.** [`list_sessions`][list_sessions]
   included, each carries `destructiveHint=true` and no `readOnlyHint`. Classify
   by `tmuxEffects` in each tool's `_meta`.
@@ -628,6 +633,7 @@ It serves one tmux server over stdin and stdout. Reference:
 [contract-known-limits]: docs/contracts.md#known-limits
 [contract-settings]: docs/contracts.md#settings-and-precedence
 [contract-troubleshooting]: docs/contracts.md#troubleshooting
+[contract-wait-ends]: docs/contracts.md#how-a-wait-ends
 [contract-which-tmux]: docs/contracts.md#which-tmux-it-serves
 [get_pane_info]: https://libtmux.org/en/go/latest/mcp/tools/get_pane_info/
 [get_server_info]: https://libtmux.org/en/go/latest/mcp/tools/get_server_info/

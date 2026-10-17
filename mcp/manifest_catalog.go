@@ -237,7 +237,16 @@ func appendInspectDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogFindPaneByPosition),
 		defineTool(toolDefinition{
 			name: "wait_for_text", title: "Wait for pane text",
-			details: "Waits for new pane output without accepting executable input. Requires tmux 3.7.",
+			details: "Waits for new pane output without accepting executable input. " +
+				"Follows control output from tmux 3.7 and polls capture-pane below it, " +
+				"joining wrapped lines on both. outcome says why it ended: matched, " +
+				"alreadyOnScreen, stopped, output, idle, timeout, paneDied or streamLost. " +
+				"paneDied means the pane was killed, its program exited under " +
+				"remain-on-exit, its window or session went, or the server stopped; " +
+				"lines holds the output it wrote first. The wait asks tmux once a " +
+				"second whether the pane is dead, and tmux's answer decides. streamLost " +
+				"means the pane is still alive but its output stream ended, so lines " +
+				"may be incomplete: read it again with capture_since.",
 			toolset: toolsetInspect, processReach: processNone,
 			effects: effects(effectObserve), outputClasses: terminal,
 			mayExposeSecrets: true, mayReturnUntrustedContent: true,

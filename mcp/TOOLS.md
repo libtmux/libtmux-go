@@ -74,7 +74,7 @@ top-level fields and ignores the row's.
 | `capture_since` | Reads only output after an opaque cursor |
 | `snapshot_pane` | Returns bounded pane content with pane metadata |
 | `search_panes` | Searches pane output under fixed pane, line, byte, pattern, and time ceilings |
-| `wait_for_text` | Waits for one of several success or failure patterns without polling |
+| `wait_for_text` | Waits for one of several success or failure patterns; follows control output from tmux 3.7 and polls `capture-pane` below it |
 | `show_environment` | Reads the tmux environment; values can contain secrets |
 | `show_hooks` / `show_option` | Reads configured commands and option state |
 | `call_read_tools_batch` | Runs up to sixteen permitted inspect operations serially with typed inner validation |
@@ -2013,7 +2013,7 @@ Changes tmux state.
 
 ### `wait_for_text`
 
-Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Waits for new pane output without accepting executable input. Requires tmux 3.7.
+Read pane output; accepts no client-supplied executable input. Returned content may be sensitive or untrusted. Waits for new pane output without accepting executable input. Follows control output from tmux 3.7 and polls capture-pane below it, joining wrapped lines on both. outcome says why it ended: matched, alreadyOnScreen, stopped, output, idle, timeout, paneDied or streamLost. paneDied means the pane was killed, its program exited under remain-on-exit, its window or session went, or the server stopped; lines holds the output it wrote first. The wait asks tmux once a second whether the pane is dead, and tmux's answer decides. streamLost means the pane is still alive but its output stream ended, so lines may be incomplete: read it again with capture_since.
 
 Belongs to the `inspect` toolset.
 
