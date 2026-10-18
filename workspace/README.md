@@ -245,20 +245,20 @@ That workspace names its session `review`, so the block prints `review 2`.
 <!-- docs:end -->
 
 A workspace that half exists is never what the caller wanted, so `Build` and
-`BuildInto` check every layout before they change anything: that the tmux
-they were handed knows the layout by that name, and that the layout has room
-for the panes its window asks for. A failure tmux raises while building, such
-as an option it does not know, is a tmux command error, and the tmux
-package's own errors classify it.
+[`BuildInto`][workspace-buildinto] check every layout before they change
+anything: that the tmux they were handed knows the layout by that name, and that
+the layout has room for the panes its window asks for. A failure tmux raises
+while building, such as an option it does not know, is a tmux command error, and
+the tmux package's own errors classify it.
 
 `Build` is not atomic. tmux has no transaction, so a failure partway through
 leaves what was already created in place. The returned session identifies it,
 so you can kill it.
 
-The session `Build` returns came from a creation call, so it carries no
-windows of its own: `session.Windows()` reports none. Ask tmux for them with
-[`Session.SearchWindows`][tmux-session-searchwindows], as the quick start
-does, or read everything at once with
+The session `Build` returns came from a creation call, so it carries no windows
+of its own: [`session.Windows()`][tmux-session-windows] reports none. Ask tmux
+for them with [`Session.SearchWindows`][tmux-session-searchwindows], as the
+quick start does, or read everything at once with
 [`Server.Snapshot`][tmux-server-snapshot].
 
 While it runs, `Build` holds one connection to tmux and sends every command
@@ -502,6 +502,7 @@ its YAML parser.
 [tmux module]: ../tmux/
 [tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
 [tmux-session-searchwindows]: https://libtmux.org/en/go/latest/reference/tmux-session-searchwindows/
+[tmux-session-windows]: https://libtmux.org/en/go/latest/reference/tmux-session-windows/
 [workspace-bool]: https://libtmux.org/en/go/latest/workspace/reference/workspace-bool/
 [workspace-build]: https://libtmux.org/en/go/latest/workspace/reference/workspace-build/
 [workspace-buildinto]: https://libtmux.org/en/go/latest/workspace/reference/workspace-buildinto/

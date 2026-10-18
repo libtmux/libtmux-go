@@ -39,8 +39,8 @@ settled. Pin an exact version.
 ## Quick start
 
 You need Go 1.26 or newer, and tmux 3.2a or newer on `PATH`. The install
-command above puts `libtmux-mcp` in `$(go env GOPATH)/bin`, or in `GOBIN`
-when that is set. An MCP client
+command above puts [`libtmux-mcp`][libtmux-mcp-command] in
+`$(go env GOPATH)/bin`, or in `GOBIN` when that is set. An MCP client
 launches it as a subprocess and speaks to it over stdin and stdout, so there
 is nothing to keep running yourself. If your shell cannot find
 `libtmux-mcp`, add that directory to `PATH`. The Python server installs a
@@ -143,8 +143,8 @@ $ claude mcp add tmux -- libtmux-mcp -socket-name default
 The choice is made once, when the server starts, and a client cannot change
 it afterwards. [Settings](#settings) lists the other flags.
 
-A workspace that `tmux-workspace load -L project` built lives on the socket
-`project`. To let a client read it and change nothing:
+A workspace that [`tmux-workspace load -L project`][workspace-cli] built lives
+on the socket `project`. To let a client read it and change nothing:
 
 ```console
 $ claude mcp add tmux \
@@ -216,8 +216,8 @@ the scarce resources, not tmux:
 
 ## The tools
 
-The tools come in toolsets. A toolset is a named group of tools, and it is
-what an operator grants or withholds:
+The tools come in [toolsets][topic-tool-selection]. A toolset is a named group
+of tools, and it is what an operator grants or withholds:
 
 - `inspect` reads tmux and what panes show, and changes nothing.
 - `manage` rearranges what exists: it renames, resizes, selects, and moves.
@@ -300,7 +300,8 @@ removes it from what `call_read_tools_batch` may call. A name that matches no
 tool, or an empty item in either list, stops the server at startup, before it
 opens tmux.
 
-This lists the default tools without `send_keys` and `send_keys_batch`:
+This lists the default tools without [`send_keys`][send_keys] and
+[`send_keys_batch`][send_keys_batch]:
 
 ```console
 $ LIBTMUX_EXCLUDE_TOOLS=send_keys,send_keys_batch libtmux-mcp -tools
@@ -415,11 +416,11 @@ This protects the pane you are in. It does not make the tools a sandbox.
 
 ## Known limits
 
-- **Every tool is annotated as destructive.** Each one, `list_sessions`
-  included, carries `destructiveHint=true` and `openWorldHint=true`, and none
-  carries `readOnlyHint`. A client that skips approval for read-only tools
-  prompts on all of them. Classify by `tmuxEffects` in each tool's `_meta`
-  instead.
+- **Every tool is annotated as destructive.** Each one,
+  [`list_sessions`][list_sessions] included, carries `destructiveHint=true` and
+  `openWorldHint=true`, and none carries `readOnlyHint`. A client that skips
+  approval for read-only tools prompts on all of them. Classify by
+  `tmuxEffects` in each tool's `_meta` instead.
 - **`tools/list` is large.** The reply is about 116 KB with every toolset and
   109 KB without `teardown`. More than half of it is the `_meta` description,
   which repeats each tool's text and schemas.
@@ -574,6 +575,8 @@ the MCP SDK it needs.
 [get_pane_info]: https://libtmux.org/en/go/latest/mcp/tools/get_pane_info/
 [get_server_info]: https://libtmux.org/en/go/latest/mcp/tools/get_server_info/
 [Go MCP SDK]: https://github.com/modelcontextprotocol/go-sdk
+[libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
+[list_sessions]: https://libtmux.org/en/go/latest/mcp/tools/list_sessions/
 [mcp-assumeresponsecommit]: https://libtmux.org/en/go/latest/mcp/reference/mcp-assumeresponsecommit/
 [mcp-auditenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-auditenvironmentvariable/
 [mcp-binaryenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-binaryenvironmentvariable/
@@ -592,8 +595,11 @@ the MCP SDK it needs.
 [paste_text]: https://libtmux.org/en/go/latest/mcp/tools/paste_text/
 [run_shell_command]: https://libtmux.org/en/go/latest/mcp/tools/run_shell_command/
 [send_keys]: https://libtmux.org/en/go/latest/mcp/tools/send_keys/
+[send_keys_batch]: https://libtmux.org/en/go/latest/mcp/tools/send_keys_batch/
 [show_environment]: https://libtmux.org/en/go/latest/mcp/tools/show_environment/
 [snapshot_pane]: https://libtmux.org/en/go/latest/mcp/tools/snapshot_pane/
 [split_window]: https://libtmux.org/en/go/latest/mcp/tools/split_window/
 [tmux module]: ../tmux/
+[topic-tool-selection]: https://libtmux.org/en/go/latest/mcp/topics/tool-selection/
 [wait_for_text]: https://libtmux.org/en/go/latest/mcp/tools/wait_for_text/
+[workspace-cli]: https://libtmux.org/en/go/latest/workspace/cli/

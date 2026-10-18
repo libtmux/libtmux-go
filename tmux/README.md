@@ -262,10 +262,10 @@ or what it looks like. Everything else returns only an error.
 
 ### [`Session.SetMouse`][tmux-session-setmouse]: set an option, then read it back
 
-Every tmux option and hook has a typed accessor. The tmux name maps to the Go
-name by one rule, given under "Naming and call shapes" in the package
-documentation. A setter returns only an error, because an option is not part
-of the record you hold. Read it back through
+Every tmux option and hook has a [typed accessor][topic-options-and-hooks]. The
+tmux name maps to the Go name by one rule, given under "Naming and call shapes"
+in the [package documentation][tmux-package]. A setter returns only an error,
+because an option is not part of the record you hold. Read it back through
 [`Session.Options`][tmux-session-options]:
 
 <!-- docs:options -->
@@ -325,8 +325,8 @@ program both blocks come from. It sets a hook the same way.
 
 ### [`tmux.ErrNotFound`][tmux-errnotfound]: a lookup that found nothing
 
-Failures are classified by what tmux refused, so a missing target and a
-misspelled option are different checks:
+Failures are [classified by what tmux refused][topic-errors], so a missing
+target and a misspelled option are different checks:
 
 <!-- docs:not-found -->
 
@@ -502,11 +502,11 @@ $ tmux-workspace load \
 
 ### [`mcp`](https://github.com/libtmux/libtmux-go/tree/master/mcp): a tmux server for agents
 
-Serves one tmux server to Model Context Protocol clients, as the `libtmux-mcp`
-command or from a program of your own. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
-[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the
-[tool reference](https://libtmux.org/en/go/latest/mcp/tools/).
+Serves one tmux server to Model Context Protocol clients, as the
+[`libtmux-mcp`][libtmux-mcp-command] command or from a program of your own.
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
+[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the [tool
+reference](https://libtmux.org/en/go/latest/mcp/tools/).
 
 Install the command:
 
@@ -547,9 +547,11 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 | [`../DESIGN.md`](../DESIGN.md) | Why the surface looks like this |
 | [`../BENCHMARKS.md`](../BENCHMARKS.md) | What each transport costs |
 
+[libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [tmux-commandresult-exitcode]: https://libtmux.org/en/go/latest/reference/tmux-commandresult-exitcode/
 [tmux-errnotfound]: https://libtmux.org/en/go/latest/reference/tmux-errnotfound/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
+[tmux-package]: https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux
 [tmux-pane-capture]: https://libtmux.org/en/go/latest/reference/tmux-pane-capture/
 [tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
 [tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
@@ -578,4 +580,6 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 [tmuxq-where]: https://libtmux.org/en/go/latest/reference/tmuxq-where/
 [tmuxtest-main]: https://libtmux.org/en/go/latest/reference/tmuxtest-main/
 [tmuxtest-newserver]: https://libtmux.org/en/go/latest/reference/tmuxtest-newserver/
+[topic-errors]: https://libtmux.org/en/go/latest/topics/errors-and-exceptions/
+[topic-options-and-hooks]: https://libtmux.org/en/go/latest/topics/options-and-hooks/
 [workspace-file]: https://github.com/libtmux/libtmux-go/tree/master/workspace#a-workspace-file
