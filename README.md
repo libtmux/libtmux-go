@@ -140,9 +140,9 @@ result, not an error.
 [`examples/run-to-completion`](examples/run-to-completion) shows one, on a
 tmux server of its own.
 
-Every Go block on this page comes from a program or test that runs against a
-real tmux on every supported release, and each output shown is what that run
-printed.
+Every Go block on this page comes from a program or test that runs on every
+supported release, against a real tmux wherever the block uses one, and each
+output shown is what that run printed.
 
 ## Find sessions, windows, and panes
 
@@ -521,32 +521,159 @@ name instead, so a test of your own code needs no tmux installed.
 
 ## Packages
 
-| Package | Source | Reference | What it is |
-| --- | --- | --- | --- |
-| `tmux` | [`tmux/`](tmux/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) | The library. Sessions, windows, panes, options, hooks, formats, filters, snapshots, plans. |
-| `tmuxtest` | [`tmux/tmuxtest/`](tmux/tmuxtest/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest) | Run your program in a real tmux and assert on what it drew. |
-| `tmuxq` | [`tmuxq/`](tmuxq/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) | Model-free generic helpers for slices and `iter.Seq`. |
+Each heading links to its directory on GitHub. `tmux`, `tmuxq`, and `tmuxtest`
+are packages of the module `go get` fetches. `workspace` and `mcp` are modules
+of their own, so `go get` on the library pulls in neither.
 
-Others ship as **separate modules**, so `go get` on the library pulls in none
-of them:
+### [`tmux`](https://github.com/libtmux/libtmux-go/tree/master/tmux): the library
 
-| Module | What it is |
-| --- | --- |
-| [`mcp/`](mcp/) | A tmux server for AI agents, over the Model Context Protocol |
-| [`workspace/`](workspace/) | Loads tmuxp-style YAML workspaces and builds them, with a CLI |
-| [`benchmarks/`](benchmarks/) | Prints what each way of reaching tmux costs |
+Sessions, windows, panes, options, hooks, formats, filters, snapshots, and
+plans, with no dependency outside the standard library. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) and
+[libtmux.org](https://libtmux.org/en/go/latest/reference/).
 
-The MCP server:
+[`Session.Run`][tmux-session-run] runs a command in a window of its own, with
+a terminal. A nonzero exit status is a result, not an error:
+
+<!-- docs:run-to-completion -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+// The command runs with a terminal, so test -t holds where a pipe fails.
+command := "test -t 1 && echo stdout is a terminal; exit 3"
+result, err := session.Run(ctx, command, tmux.RunOptions{})
+if err != nil {
+	return fmt.Errorf("run command: %w", err)
+}
+for _, line := range result.Lines {
+	fmt.Println("screen:", line)
+}
+fmt.Println("exited", result.Status)
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked examples/run-to-completion/output.txt -->
+This prints `screen: stdout is a terminal`, then `exited 3`.
+<!-- docs:end -->
+
+### [`tmuxq`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq): filters for any slice
+
+Helpers that find records in a slice or an `iter.Seq`. The package imports no
+tmux type, so they work on a slice of your own as well as on the records
+`tmux` returns. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) and
+[libtmux.org](https://libtmux.org/en/go/latest/reference/).
+
+[`tmuxq.Where`][tmuxq-where] keeps what a function accepts, and
+[`tmuxq.First`][tmuxq-first] returns the first match. This needs no tmux:
+
+<!-- docs:tmuxq-slice -->
+
+```go
+type task struct {
+	name string
+	done bool
+}
+tasks := []task{{"build", true}, {"test", false}, {"deploy", false}}
+open := func(t *task) bool { return !t.done }
+
+for _, t := range tmuxq.Where(tasks, open) {
+	fmt.Println("open:", t.name)
+}
+first, _ := tmuxq.First(tasks, open)
+fmt.Println("first open:", first.name)
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked examples/any-slice/output.txt -->
+This prints `open: test` and `open: deploy`, then `first open: test`.
+<!-- docs:end -->
+
+### [`tmuxtest`](https://github.com/libtmux/libtmux-go/tree/master/tmux/tmuxtest): a real tmux for tests
+
+Runs your program in a real pane and lets a test assert on what it drew. The
+server, its sessions, and its panes end with the test. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
+and [libtmux.org](https://libtmux.org/en/go/latest/reference/).
+
+[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test whose subject is tmux
+itself a server on a socket of its own. This is the body of a test, in a
+package whose `TestMain` calls [`tmuxtest.Main`][tmuxtest-main], as in
+[the test above](#testing-your-own-code):
+
+<!-- docs:new-server -->
+
+```go
+// Given: ctx context.Context; t *testing.T
+server := tmuxtest.NewServer(ctx, t)
+
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+if err != nil {
+	t.Fatal(err)
+}
+if name, _ := session.Name(); name != "under-test" {
+	t.Errorf("session name = %q, want under-test", name)
+}
+```
+
+<!-- docs:end -->
+
+### [`workspace`](https://github.com/libtmux/libtmux-go/tree/master/workspace): tmuxp-style workspaces
+
+Loads tmuxp-style YAML workspace files and builds them in tmux, from Go or with
+the `tmux-workspace` command. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
+[libtmux.org](https://libtmux.org/en/go/latest/workspace/reference/), and the
+[command reference](https://libtmux.org/en/go/latest/workspace/cli/).
+
+Install the command:
+
+```console
+$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+```
+
+With a [workspace file][workspace-file] saved as `project.yaml`, build it on a
+tmux socket named `project` without attaching to it:
+
+```console
+$ tmux-workspace load \
+    -L project \
+    -d \
+    ./project.yaml
+```
+
+### [`mcp`](https://github.com/libtmux/libtmux-go/tree/master/mcp): a tmux server for agents
+
+Serves one tmux server to Model Context Protocol clients, as the `libtmux-mcp`
+command or from a program of your own. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
+[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the
+[tool reference](https://libtmux.org/en/go/latest/mcp/tools/).
+
+Install the command:
 
 ```console
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
-The workspace CLI:
+An MCP client starts the server itself and speaks to it over stdin and stdout.
+Register it with Claude Code:
 
 ```console
-$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+$ claude mcp add tmux -- libtmux-mcp
 ```
+
+Check which socket it reaches, and what that holds, without a client:
+
+```console
+$ libtmux-mcp -doctor
+```
+
+The [`benchmarks`](https://github.com/libtmux/libtmux-go/tree/master/benchmarks)
+module is a tool rather than a library. It prints what each way of reaching
+tmux costs.
 
 ## What it leaves out
 
@@ -649,8 +776,12 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
 [tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
 [tmux]: https://github.com/tmux/tmux
+[tmuxq-first]: https://libtmux.org/en/go/latest/reference/tmuxq-first/
 [tmuxq-matching]: https://libtmux.org/en/go/latest/reference/tmuxq-matching/
+[tmuxq-where]: https://libtmux.org/en/go/latest/reference/tmuxq-where/
+[tmuxtest-main]: https://libtmux.org/en/go/latest/reference/tmuxtest-main/
 [tmuxtest-newserver]: https://libtmux.org/en/go/latest/reference/tmuxtest-newserver/
 [tmuxtest-runinpane]: https://libtmux.org/en/go/latest/reference/tmuxtest-runinpane/
 [tmuxtest-scriptedtmux]: https://libtmux.org/en/go/latest/reference/tmuxtest-scriptedtmux/
 [tmuxtest-waitfortext]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitfortext/
+[workspace-file]: https://github.com/libtmux/libtmux-go/tree/master/workspace#a-workspace-file
