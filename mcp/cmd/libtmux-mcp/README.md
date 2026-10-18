@@ -85,6 +85,47 @@ native manifest. Every listed tool carries the same capability row under
 schema version, frozen surface, effective names, connection provenance, and
 common trust boundary.
 
+## Choosing what it serves
+
+`-socket-path` names the socket by its absolute path where `-socket-name` names
+it by name, and `-binary` names the tmux executable. `-doctor` reports what a
+choice selects:
+
+```console
+$ libtmux-mcp \
+    -doctor \
+    -socket-path /tmp/my-application.sock
+```
+
+The environment makes the same choices, which is how a client's configuration
+sets them:
+
+```console
+$ LIBTMUX_SOCKET=my-application libtmux-mcp -doctor
+```
+
+`LIBTMUX_TOOLSETS` narrows what the server offers. This lists only the tools
+that read tmux:
+
+```console
+$ LIBTMUX_TOOLSETS=inspect libtmux-mcp -tools
+```
+
+A client that reads a JSON configuration passes the flags as `args` and the
+environment as `env`:
+
+```json
+{
+  "mcpServers": {
+    "tmux": {
+      "command": "/path/to/libtmux-mcp",
+      "args": ["-socket-name", "my-application"],
+      "env": { "LIBTMUX_TOOLSETS": "inspect" }
+    }
+  }
+}
+```
+
 ## Worth knowing
 
 **`libtmux-mcp: terminated signal received` is not a fault.** It is the server
@@ -97,6 +138,8 @@ environment hides the bugs that only appear under a curated one.
 
 ## See also
 
+- [Reference](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp) — this command on pkg.go.dev
 - [`mcp/README.md`](../../README.md) — client configuration
 - [`mcp/TOOLS.md`](../../TOOLS.md) — the tool reference
+- [Tool pages](https://libtmux.org/en/go/latest/mcp/tools/) — one page for each tool
 - [`mcp-swap`](../../../internal/tools/mcp-swap) — point the agent CLIs on this machine at a local build

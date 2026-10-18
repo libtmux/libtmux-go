@@ -107,6 +107,16 @@ libtmux-mcp doctor
 Then ask the client for something only tmux can do, such as "create a tmux
 session called demo and tell me what panes it has".
 
+### `libtmux-mcp -tools`: see what a client would be offered
+
+```console
+$ libtmux-mcp -tools
+```
+
+It prints the tools the server would advertise: each one's toolset, which
+processes it can reach, and a sentence on what it does. Give it the flags and
+environment the client gives the server, because they decide the listing.
+
 ### `-socket-name`: choose which tmux it drives
 
 With no flag, the server drives a tmux server of its own, on a socket named
@@ -127,6 +137,15 @@ $ claude mcp add tmux -- libtmux-mcp -socket-name default
 
 The choice is made once, when the server starts, and a client cannot change
 it afterwards. [Settings](#settings) lists the other flags.
+
+A workspace that `tmux-workspace load -L project` built lives on the socket
+`project`. To let a client read it and change nothing:
+
+```console
+$ claude mcp add tmux \
+    -e LIBTMUX_TOOLSETS=inspect \
+    -- libtmux-mcp -socket-name project
+```
 
 ## What it feels like
 
@@ -252,13 +271,34 @@ ask for it by name.
 
 A value that is set and empty grants no toolset. There is no `none` keyword.
 
+To see the effect without a client, list what the server offers with one
+toolset:
+
+```console
+$ LIBTMUX_TOOLSETS=inspect libtmux-mcp -tools
+```
+
+A client gets the same selection from the environment it starts the server
+with:
+
+```console
+$ claude mcp add tmux \
+    -e LIBTMUX_TOOLSETS=inspect \
+    -- libtmux-mcp -socket-name default
+```
+
 ### [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] and [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable]: name exact tools
 
 `LIBTMUX_TOOLS` adds tools by name to what the toolsets grant, and
 `LIBTMUX_EXCLUDE_TOOLS` then removes tools by name. Excluding a tool also
 removes it from what `call_read_tools_batch` may call. A name that matches no
 tool, or an empty item in either list, stops the server at startup, before it
-opens tmux.
+opens tmux. This lists the default tools without `send_keys` and
+`send_keys_batch`:
+
+```console
+$ LIBTMUX_EXCLUDE_TOOLS=send_keys,send_keys_batch libtmux-mcp -tools
+```
 
 `LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, and
 `LIBTMUX_MCP_PROMPTS_AS_TOOLS` are names from earlier releases. Setting one

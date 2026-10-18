@@ -366,8 +366,110 @@ rejected.
 
 ## The tmux-workspace CLI
 
-The [`tmux-workspace` CLI](CLI.md) loads, builds, and manages workspaces from
-a shell, with structured output and optional Python compatibility.
+The `tmux-workspace` command loads, builds, and manages workspaces from a
+shell, with structured output and optional Python compatibility.
+[`CLI.md`](CLI.md) has every command and option, and
+[libtmux.org](https://libtmux.org/en/go/latest/workspace/cli/) renders it as a
+page.
+
+### `go install`: get the command
+
+```console
+$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+```
+
+The command lands in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when
+`GOBIN` is unset. The examples below use a tmux socket named `project`, which
+keeps them off the tmux server you have open.
+
+### `tmux-workspace load`: build a workspace
+
+Save the file under [A workspace file](#a-workspace-file) as `project.yaml`.
+This builds it without attaching:
+
+```console
+$ tmux-workspace load \
+    -L project \
+    -d \
+    ./project.yaml
+```
+
+It prints `Loaded project` and the new session's id, and `tmux -L project
+attach` joins the session.
+Without `-d`, `load` attaches the terminal to the session, and it needs a
+terminal to do so. A second load of the same file finds the session by its
+name and reuses it. For a script, `--json` prints a summary of what loaded
+and never prompts:
+
+```console
+$ tmux-workspace load \
+    -L project \
+    -d \
+    --json \
+    ./project.yaml
+```
+
+### `tmux-workspace ls`: find workspace files
+
+```console
+$ tmux-workspace ls --tree
+```
+
+It lists a `.tmuxp.yaml`, `.tmuxp.yml`, or `.tmuxp.json` file in the current
+directory and each parent up to your home directory, and the files in the first
+workspace directory that exists: `$TMUXP_CONFIGDIR`, `$XDG_CONFIG_HOME/tmuxp`
+or `~/.config/tmuxp`, then `~/.tmuxp`. A file in that directory loads by its
+name, as `tmux-workspace load project`.
+
+### `tmux-workspace search`: find a workspace by what it holds
+
+```console
+$ tmux-workspace search \
+    --field window \
+    logs
+```
+
+It prints the name and path of each workspace with a window matching `logs`.
+Without `--field`, a term matches every field.
+
+### `tmux-workspace freeze`: capture a running session
+
+```console
+$ tmux-workspace freeze \
+    -L project \
+    --save-to ./frozen.yaml \
+    project
+```
+
+It writes the session named `project` to `frozen.yaml`, a workspace file that
+`load` accepts. With `--json` in place of `--save-to`, it prints the document.
+
+### `tmux-workspace convert`: change a document's format
+
+```console
+$ tmux-workspace convert \
+    --save-to ./project.json \
+    ./project.yaml
+```
+
+YAML becomes JSON, and JSON becomes YAML. Keys that native loading does not use
+are kept.
+
+### `tmux-workspace import`: bring in a tmuxinator or teamocil file
+
+```console
+$ tmux-workspace import tmuxinator \
+    --json \
+    ./sample.yml
+```
+
+It prints the document the file describes, and refuses what a native workspace
+cannot express rather than dropping it. `import teamocil` takes the same
+arguments.
+
+Remove what these commands built with `tmux -L project kill-server`.
+
+### Where the CLI and this library differ
 
 The CLI and this library are separate implementations, and they read
 different dialects of the format: a file one accepts is not always a file the
