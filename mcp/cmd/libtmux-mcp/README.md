@@ -51,7 +51,7 @@ $ libtmux-mcp -version
 ```
 
 ```text
-libtmux-mcp v0.0.1-alpha.13
+libtmux-mcp v0.0.1-alpha.14
 ```
 
 List every tool the server exposes, as a client would see them:
