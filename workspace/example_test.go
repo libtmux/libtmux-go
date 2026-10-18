@@ -115,8 +115,12 @@ func ExampleBuildInto() {
 // A misspelled key fails the parse rather than being dropped, so a workspace
 // that does not do what its author meant says so before anything is built.
 func ExampleParse_unknownField() {
+	// docs:parse-unknown
+	// The key is windows, so window fails the parse.
 	_, err := workspace.Parse([]byte("session_name: review\nwindow:\n  - {}\n"))
 	fmt.Println(err != nil)
+	// docs:end
+
 	// Output: true
 }
 
