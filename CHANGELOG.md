@@ -11,6 +11,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### Development
 
+- CI no longer runs the module tests on macOS. macOS stays supported on a
+  best-effort basis, and CI coverage for it is highly limited. (#74)
 - Move the long contract paragraphs of the `mcp`, `workspace`, and `tmux`
   READMEs to `mcp/docs/contracts.md`, `workspace/docs/contracts.md`, and
   `tmux/docs/contracts.md`. Each README keeps short bullets and links its page.
