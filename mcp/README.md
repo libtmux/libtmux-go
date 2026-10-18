@@ -28,28 +28,34 @@ Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
 **Contents** — [Quick start](#quick-start) ·
-[What it feels like](#what-it-feels-like) ·
-[When it earns its keep](#when-it-earns-its-keep) · [The tools](#the-tools) ·
+[Connect another client](#connect-another-client) ·
+[Choose which tmux it drives](#choose-which-tmux-it-drives) ·
+[See an agent work](#see-an-agent-work) ·
+[Run work and wait for it](#run-work-and-wait-for-it) ·
+[The tools](#the-tools) ·
 [Limiting what a client can do](#limiting-what-a-client-can-do) ·
 [Settings](#settings) · [The pane it runs in](#the-pane-it-runs-in) ·
 [Known limits](#known-limits) · [Troubleshooting](#troubleshooting) ·
 [An agent-shaped program](#an-agent-shaped-program) ·
-[Embedding it](#embedding-it) · [See also](#see-also)
+[Embedding it](#embedding-it) · [Packages](#packages) ·
+[What it leaves out](#what-it-leaves-out) ·
+[Support and status](#support-and-status) · [See also](#see-also)
 
 ## Quick start
 
-You need Go 1.26 or newer, and tmux 3.3a or newer on `PATH`. The install
-command above puts [`libtmux-mcp`][libtmux-mcp-command] in
-`$(go env GOPATH)/bin`, or in `GOBIN` when that is set. An MCP client
-launches it as a subprocess and speaks to it over stdin and stdout, so there
-is nothing to keep running yourself. If your shell cannot find
-`libtmux-mcp`, add that directory to `PATH`. The Python server installs a
-command of the same name; `command -v libtmux-mcp` shows which one comes
-first, and `libtmux-mcp -version` names this one.
+You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. The install
+command above puts [`libtmux-mcp`][libtmux-mcp-command] in `GOBIN` when that is
+set, and in `$(go env GOPATH)/bin` otherwise.
 
-### `claude mcp add`: tell a client about it
+An MCP client launches it as a subprocess and speaks to it over stdin and
+stdout, so nothing stays running. If your shell cannot find `libtmux-mcp`, add
+that directory to `PATH`.
 
-#### Claude Code
+The Python server installs a command of the same name. Run
+`command -v libtmux-mcp` to see which one comes first, and
+`libtmux-mcp -version` to name this one.
+
+### `claude mcp add`: tell Claude Code about it
 
 ```console
 $ claude mcp add tmux -- libtmux-mcp
@@ -61,23 +67,47 @@ Claude Code starts each server it lists, to check that it connects:
 $ claude mcp list
 ```
 
-#### Codex CLI
+### [`libtmux-mcp -doctor`][guide-diagnose-startup]: check what it reaches
+
+```console
+$ libtmux-mcp -doctor
+```
+
+It answers without a client in the way, and prints something like this:
+
+```text
+libtmux-mcp doctor
+  tmux:    3.6 (requires 3.3a or newer)
+  socket:  /tmp/tmux-1000/libtmux-mcp (from default dedicated socket)
+  holds:   nothing — no tmux server is running on that socket
+           (not a fault; tmux starts one when something asks it to)
+  caller:  not running inside a tmux pane
+```
+
+Then ask the client for something only tmux can do, such as "create a tmux
+session called demo and tell me what panes it has".
+
+## Connect another client
+
+Each client takes the same command and the same flags. [Connect an MCP
+client][guide-connect-client] on libtmux.org covers startup and shutdown.
+
+### `codex mcp add`: Codex CLI
 
 ```console
 $ codex mcp add tmux -- libtmux-mcp
 ```
 
-#### Gemini CLI
+### `gemini mcp add`: Gemini CLI
 
 ```console
 $ gemini mcp add tmux libtmux-mcp
 ```
 
-#### Claude Desktop
+### `claude_desktop_config.json`: Claude Desktop
 
-Claude Desktop reads `claude_desktop_config.json`, and starts its servers
-without your shell's `PATH`. In place of the path below, give it the one
-`command -v libtmux-mcp` prints. Flags go in `args` and the environment in
+Claude Desktop starts its servers without your shell's `PATH`, so give it the
+path `command -v libtmux-mcp` prints. Flags go in `args` and the environment in
 `env`:
 
 ```json
@@ -92,42 +122,19 @@ without your shell's `PATH`. In place of the path below, give it the one
 }
 ```
 
-### `libtmux-mcp -doctor`: check what it reaches
+## Choose which tmux it drives
 
-```console
-$ libtmux-mcp -doctor
-```
+The choice is made once, when the server starts. A client cannot change it
+afterwards. [Settings](#settings) lists the other flags, and
+[the contract][contract-which-tmux] has the precedence rules.
 
-It answers without a client in the way, and prints something like this:
-
-```text
-libtmux-mcp doctor
-  tmux:    3.6
-  socket:  /tmp/tmux-1000/libtmux-mcp (from default dedicated socket)
-  holds:   nothing — no tmux server is running on that socket
-           (not a fault; tmux starts one when something asks it to)
-  caller:  not running inside a tmux pane
-```
-
-Then ask the client for something only tmux can do, such as "create a tmux
-session called demo and tell me what panes it has".
-
-### `libtmux-mcp -tools`: see what a client would be offered
-
-```console
-$ libtmux-mcp -tools
-```
-
-It prints the tools the server would advertise: each one's toolset, which
-processes it can reach, and a sentence on what it does. Give it the flags and
-environment the client gives the server, because they decide the listing.
-
-### `-socket-name`: choose which tmux it drives
+### [`-socket-name`][guide-choose-a-server]: pick a socket by name
 
 With no flag, the server drives a tmux server of its own, on a socket named
-`libtmux-mcp`, which it starts with a minimal configuration the package
-ships. An agent given that cannot touch the sessions you already have. Once
-it has made a session, watch it work from another terminal:
+`libtmux-mcp`, started with a minimal configuration the package ships. An agent
+given that cannot touch the sessions you already have.
+
+Once it has made a session, watch it work from another terminal:
 
 ```console
 $ tmux -L libtmux-mcp attach
@@ -140,11 +147,8 @@ usual one `default`:
 $ claude mcp add tmux -- libtmux-mcp -socket-name default
 ```
 
-The choice is made once, when the server starts, and a client cannot change
-it afterwards. [Settings](#settings) lists the other flags.
-
-A workspace that [`tmux-workspace load -L project`][workspace-cli] built lives
-on the socket `project`. To let a client read it and change nothing:
+A workspace that [`tmux-workspace load -L project`][workspace-cli-load] built
+lives on the socket `project`. To let a client read it and change nothing:
 
 ```console
 $ claude mcp add tmux \
@@ -152,11 +156,29 @@ $ claude mcp add tmux \
     -- libtmux-mcp -socket-name project
 ```
 
-## What it feels like
+### [`-socket-path` and `-binary`][guide-choose-a-server]: an exact socket and tmux
 
-These are the calls [`examples/agent-workflow`](examples/agent-workflow)
-makes to run work in a pane beside its own, and what came back. Cursor tokens
-are left out, and each reply shows only the fields that answer the call:
+`-socket-path` names the socket by its absolute path, and `-binary` names the
+tmux executable. `-doctor` reports what a choice selects:
+
+```console
+$ libtmux-mcp \
+    -doctor \
+    -socket-path /tmp/my-application.sock
+```
+
+The environment makes the same choices, which is how a client's configuration
+sets them:
+
+```console
+$ LIBTMUX_SOCKET=my-application libtmux-mcp -doctor
+```
+
+## See an agent work
+
+These are the calls [`examples/agent-workflow`](examples/agent-workflow) makes
+to run work in a pane beside its own, and what came back. Cursor tokens are
+left out, and each reply shows only the fields that answer the call:
 
 <!-- docs:output mcp/examples/agent-workflow/trace.txt -->
 
@@ -173,46 +195,74 @@ are left out, and each reply shows only the fields that answer the call:
 
 <!-- docs:end -->
 
-The example prints these with `-trace`; [its page](examples/agent-workflow)
-has the command.
+The example prints these with `-trace`, and [its page](examples/agent-workflow)
+has the command. The agent drives tmux directly, so nothing is copy-pasted out
+of a terminal, and waiting for a server to come up is one call.
 
-The agent drives tmux directly. Nothing is copy-pasted out of a terminal, and
-waiting for a server to come up is one call rather than a loop of screenshots.
+## Run work and wait for it
 
-## When it earns its keep
+For one `tmux send-keys`, shelling out is shorter. The server earns its keep
+once the agent has to **wait**, **watch**, **inspect**, or **leave your
+terminal alone**.
 
-For one `tmux send-keys`, it does not. Shelling out does that in a line, and
-this server is a subprocess in the way.
+A dev server printing its port, a test run finishing, or a deploy log settling
+turns a shell-out into a polling loop. That loop reads the shell's echo of its
+own command and reports success before anything happened.
 
-It earns its keep the moment the agent has to **wait**, **watch**,
-**inspect**, or **avoid disturbing the terminal a person is using**. A dev
-server printing its port, a test run finishing, a deploy log settling: those
-are where a shell-out turns into a polling loop that reads the shell's echo of
-its own command and reports success before anything happened.
+### [`split_window`][split_window]: make room beside your pane
 
-- [`run_shell_command`][run_shell_command] waits for the command and returns
-  its exit status and output, without reading the screen at all.
-- [`wait_for_text`][wait_for_text] watches what a pane writes.
-- [`capture_since`][capture_since] returns what a pane wrote since the last
-  look, rather than its whole screen again.
+[`split_window`][split_window] adds a pane and returns its id. A new pane is
+given time to start, so [`run_shell_command`][run_shell_command] can follow at
+once.
 
-That is the difference: not more access to tmux, but a better place to put
-the control loop, and a smaller bill for keeping it there.
+<!-- docs:checked mcp/examples/agent-workflow/trace.txt -->
+The trace splits `%0` to the right with `"percent":40` and gets back
+`{"paneId":"%1"}`.
+<!-- docs:end -->
+
+### [`wait_for_text`][wait_for_text]: wait for what a pane prints
+
+[`wait_for_text`][wait_for_text] watches a pane and returns when a pattern
+appears, or when a `stop` pattern appears first.
+[`capture_since`][capture_since] returns what a pane wrote since the last
+look.
+
+<!-- docs:checked mcp/examples/agent-workflow/trace.txt -->
+The trace waits for `agent-workflow-ready` and names `agent-workflow-failed` as
+the stop pattern. It gets `"outcome":"matched"`.
+<!-- docs:end -->
+
+A wait longer than the ceiling is shortened, and the reply says so. The
+ceiling is [`LIBTMUX_MCP_WAIT_MAX_SECONDS`][mcp-waitceilingenvironmentvariable].
+
+### [`run_shell_command`][run_shell_command]: run a command and read its exit status
+
+[`run_shell_command`][run_shell_command] waits for the command and returns its
+exit status and output, without reading the screen at all.
+[`send_keys`][send_keys] and [`paste_text`][paste_text] send input and return.
+
+<!-- docs:checked mcp/examples/agent-workflow/trace.txt -->
+The trace runs a command that prints `"bounded work"` and gets back
+`"exit_status":0`.
+<!-- docs:end -->
+
+[`run_shell_command`][run_shell_command] refuses a pane linked with others by
+`synchronize-panes`, because one exit status cannot describe several panes.
+
+### Keep reads small
 
 Other parts of the design exist because an agent's context and its turn are
-the scarce resources, not tmux:
+the scarce resources.
 
-- **Reads are bounded.** Captures keep the newest lines asked for and say
-  what they left out. A search looks at no more than 200 panes, 20,000 lines,
-  and 1,000,000 bytes, and matches for no more than five seconds.
+- **Reads are bounded.** Captures keep the newest lines asked for and say what
+  they left out. Searches have fixed limits, which
+  [the contract][contract-bounded-reads] lists.
 - **One call can make several reads.**
-  [`call_read_tools_batch`][call_read_tools_batch] takes up to sixteen
-  `inspect` calls, checks each against its own tool's schema, and answers with
-  one row per call: its index, whether it succeeded, and whether its result
-  was cut short. The whole reply is at most 1,000,000 bytes.
+  [`call_read_tools_batch`][call_read_tools_batch] answers a list of `inspect`
+  calls with one row each.
 - **Checking is not capturing.** The listing tools report what exists without
-  reading what any pane shows. [`snapshot_pane`][snapshot_pane] is the one
-  call that returns a pane's metadata and its content together.
+  reading what any pane shows. [`snapshot_pane`][snapshot_pane] returns a pane's
+  metadata and content together.
 
 ## The tools
 
@@ -236,45 +286,33 @@ of tools, and it is what an operator grants or withholds:
 <!-- toolsindex:end -->
 
 [TOOLS.md](TOOLS.md) has every tool's arguments and what it returns, and the
-documentation site gives each tool the page linked above. That is reference
-material, read by search rather than read through, which is why it is not
-here.
+documentation site gives each tool the page linked above. That reference is
+for searching, which is why it is not here.
 
-**Input goes where tmux sends it.** With `synchronize-panes` on, tmux types
-into every pane of the window, not only the one named.
-[`send_keys`][send_keys] reports the panes it found linked that way before it
-sent anything. `run_shell_command` refuses a pane linked with others, because
-one exit status cannot describe several panes. [`paste_text`][paste_text]
-reaches its target only.
+Three behaviours matter before you grant `execute`:
 
-**A pane that has just been created is given time to start.** Until a new
-pane's shell reaches its prompt, tmux reports whatever its start-up files are
-running. Input tools wait up to two seconds for that to settle rather than
-refuse, so [`split_window`][split_window] followed at once by
-`run_shell_command` works.
+- **Input goes where tmux sends it.** With `synchronize-panes` on, tmux types
+  into every pane of the window. [`send_keys`][send_keys] reports the linked
+  panes before it sends.
+- **A new pane is given time to start.** Input tools wait for its shell to
+  reach the prompt, so [`split_window`][split_window] then
+  [`run_shell_command`][run_shell_command] works.
+- **Copy mode is left to the person.** Reads never take over an attached
+  view, and [`get_pane_info`][get_pane_info] reports when a pane is in a mode.
 
-**Copy mode is left to the person.** Captures, snapshots, searches, and
-cursors read pane output without taking over the view of someone attached, and
-[`get_pane_info`][get_pane_info] reports when a pane is already in a mode.
-
-There is also a
-[libtmux-mcp server written in Python](https://github.com/tmux-python/libtmux-mcp).
-The two serve the same tmux and answer to the same clients, and
-[PARITY.md](PARITY.md) sets out where they differ.
+[The contract][contract-input] has the rest of each.
 
 ## Limiting what a client can do
 
 ### [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable]: choose the toolsets
 
-It takes the names of the toolsets to grant, separated by commas, in any
-order. Without it the server grants `inspect`, `manage`, and `execute`.
+It takes toolset names separated by commas, in any order. Without it the
+server grants `inspect`, `manage`, and `execute`.
 
-`teardown` joins that default in one case only: no socket was chosen, and
-this process is the one that started the tmux server on the `libtmux-mcp`
-socket. There is then nothing of yours for a kill to reach. Everywhere else,
-ask for it by name.
-
-A value that is set and empty grants no toolset. There is no `none` keyword.
+- `teardown` joins that default only when this process started the tmux server
+  on the `libtmux-mcp` socket. Everywhere else, ask for it by name.
+- A value that is set and empty grants no toolset, and there is no `none`
+  keyword.
 
 To see the effect without a client, list what the server offers with one
 toolset:
@@ -294,11 +332,11 @@ $ claude mcp add tmux \
 
 ### [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] and [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable]: name exact tools
 
-`LIBTMUX_TOOLS` adds tools by name to what the toolsets grant, and
-`LIBTMUX_EXCLUDE_TOOLS` then removes tools by name. Excluding a tool also
-removes it from what `call_read_tools_batch` may call. A name that matches no
-tool, or an empty item in either list, stops the server at startup, before it
-opens tmux.
+[`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] adds tools by name to what the
+toolsets grant, and
+[`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] then removes
+tools by name. Excluding a tool also removes it from what
+[`call_read_tools_batch`][call_read_tools_batch] may call.
 
 This lists the default tools without [`send_keys`][send_keys] and
 [`send_keys_batch`][send_keys_batch]:
@@ -307,25 +345,29 @@ This lists the default tools without [`send_keys`][send_keys] and
 $ LIBTMUX_EXCLUDE_TOOLS=send_keys,send_keys_batch libtmux-mcp -tools
 ```
 
-`LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, and
-`LIBTMUX_MCP_PROMPTS_AS_TOOLS` are names from earlier releases. Setting one
-stops startup with what to set instead, and [MIGRATING.md](MIGRATING.md) maps
-each earlier setting to its current one.
+A name that matches no tool, or an empty item in either list, stops the
+server at startup, before it opens tmux.
 
-Choosing tools shapes what a client is offered. It is not a sandbox: every
-call runs with your user's authority, and a client holding `send_keys` can
-run anything you can.
+Choosing tools shapes what a client is offered. Every call runs with your
+user's authority. [The contract][contract-exact-tools] covers the variables
+from earlier releases.
 
-### `_meta`: what each tool says about itself
+### [`libtmux-mcp -tools`][guide-inspect-the-selection]: see what a client would be offered
 
-`_meta` is the field MCP gives a server for data of its own. Every listed
-tool carries a description of what it reaches and changes there, under
-`_meta["com.git-pull.libtmux-mcp/capability"]`: which processes it can start
-or type into, what it does to tmux, what kinds of output it returns, whether
-that output may hold secrets or text a pane wrote, and how its arguments are
-kept from being read as tmux syntax.
-[`tmux://capabilities`][mcp-capabilitiesresourceuri] is the server's one
-resource, and reports the same descriptions beside the selection in force.
+```console
+$ libtmux-mcp -tools
+```
+
+It prints the tools the server would advertise: each one's toolset, which
+processes it can reach, and a sentence on what it does. Give it the flags and
+environment the client gives the server, because they decide the listing.
+
+### [`tmux://capabilities`][mcp-capabilitiesresourceuri]: what each tool says about itself
+
+Each tool describes what it reaches and changes, under
+`_meta["com.git-pull.libtmux-mcp/capability"]`. The server's one resource,
+`tmux://capabilities`, reports the same descriptions beside the selection in
+force. [The contract][contract-capability-disclosure] lists them.
 
 ## Settings
 
@@ -335,12 +377,7 @@ Flags choose the tmux server once, at startup:
 | --- | --- |
 | `-socket-path` | an explicit socket path; when set, it wins over everything else |
 | `-socket-name` | a tmux socket name; when set, it wins over both socket variables below |
-| `-binary` | the tmux executable; empty uses `LIBTMUX_TMUX_BIN`, then finds `tmux` on `PATH` |
-
-The tmux executable is resolved once, from the environment and directory the
-server started in. A bad path fails at startup, and nothing later can point
-the server at another tmux. A tmux server that is not running is not an
-error: tmux starts one when something asks it to.
+| `-binary` | the tmux executable; empty uses [`LIBTMUX_TMUX_BIN`][mcp-binaryenvironmentvariable], then finds `tmux` on `PATH` |
 
 Other flags answer a question and exit, which is what a config entry that
 will not start needs:
@@ -351,12 +388,6 @@ will not start needs:
 | `-tools` | the tools and toolsets a client would see |
 | `-doctor` | which socket it reaches, what is on it, and whether it is running inside that tmux itself |
 
-`-version` needs no tmux. `-tools` asks the socket it would serve whether a
-tmux server runs there, because that decides whether `teardown` is in the
-default, so it needs the tmux executable. `-tools` and `-doctor` drive the
-server through its own protocol in memory, so they report what a client sees
-rather than what the code intends.
-
 The environment sets the rest:
 
 | Variable | Does |
@@ -364,127 +395,100 @@ The environment sets the rest:
 | [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable] | selects any unordered subset of the toolsets |
 | [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] | includes exact tool names after toolset expansion |
 | [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] | removes exact names after every inclusion |
-| [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] | selects an absolute socket path; mutually exclusive with `LIBTMUX_SOCKET` |
+| [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] | selects an absolute socket path; mutually exclusive with [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] |
 | [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] | names the tmux socket when no socket flag selects one |
 | [`LIBTMUX_TMUX_CONFIG`][mcp-tmuxconfigenvironmentvariable] | selects a nonempty absolute tmux configuration path |
 | [`LIBTMUX_TMUX_BIN`][mcp-binaryenvironmentvariable] | selects the tmux executable when `-binary` is empty |
 | [`LIBTMUX_MCP_WAIT_MAX_SECONDS`][mcp-waitceilingenvironmentvariable] | the longest any one wait may run; 300 by default |
 | [`LIBTMUX_AUDIT`][mcp-auditenvironmentvariable] | `stderr`, or a path, to record every call |
 
-The names match the Python server's, so an operator running both writes one
-thing. A flag wins over its variable, and everything is fixed when the server
-starts.
+- **A flag wins over its variable,** and everything is fixed when the server
+  starts. The names match the Python server's.
+- **The tmux executable is resolved once.** A bad path fails at startup. A tmux
+  server that is not running is fine, because tmux starts one on demand.
+- **A long wait is shortened.** The reply says so in `effectiveTimeoutSeconds`
+  and `timeoutClamped`.
 
-A wait longer than the ceiling is shortened rather than refused, and the reply
-says so in `effectiveTimeoutSeconds` and `timeoutClamped`. A long wait blocks
-nothing else in the server. What it costs is the agent's turn, and MCP gives
-an agent no way to change its mind in the middle of a call.
+[The contract][contract-settings] has the full text.
 
 ## The pane it runs in
 
 ### `isCaller`: knowing its own pane
 
-A pane this server runs in is the terminal the conversation is happening
-through. Killing it, clearing it, or typing into it is not like doing those
-things to any other pane, so every pane the server reports carries `isCaller`:
-true when it is this one, false when it is not, and null when the server is not
-in a pane at all. [`get_server_info`][get_server_info] answers the same question
-directly.
+Every pane the server reports carries `isCaller`: true for the pane it runs
+in, false for any other, and null when the server is not in a pane at all.
+[`get_server_info`][get_server_info] answers the same question directly.
 
-tmux tells a process in a pane which pane it is through `TMUX_PANE` and `TMUX`,
-and that is the first thing checked. It is not enough on its own: an MCP client
-starts its servers with an environment it chooses, and most choose one
-carrying neither. So when the environment says nothing, the server finds the
-pane another way. It descends from whatever tmux started in that pane, so the
-pane whose process is one of its own ancestors is its own.
+The server reads `TMUX_PANE` and `TMUX` first. When they say nothing, it finds
+the pane whose process is one of its own ancestors.
 
 ### Asking before it types into your terminal
 
-Typing into the pane with `isCaller` true reaches the terminal you are talking
-to the agent through. A note in a reply is something a model with a task does
-not always read, so a write to that pane asks you first, through MCP's
-elicitation request: a question the client puts to you on the server's
-behalf. Declining fails the call, and a client that cannot ask is refused.
+A write to the pane with `isCaller` true asks you first, through MCP's
+elicitation request: a question the client puts to you on the server's behalf.
 
-A write reached through a batch asks in the same way, and declining stops the
-batch there. With `synchronize-panes` on, the question covers every pane the
-input would reach, so a write that would arrive in your pane by way of another
-still asks. A linked pane that is dead or in a mode refuses the whole write
-before anyone is asked.
+- Declining fails the call, and a client that cannot ask is refused.
+- A batch asks the same way, and declining stops the batch there.
+- With `synchronize-panes` on, the question covers every pane the input would
+  reach.
 
-This protects the pane you are in. It does not make the tools a sandbox.
+[The contract][contract-caller-pane] has the rest.
 
 ## Known limits
 
-- **Every tool is annotated as destructive.** Each one,
-  [`list_sessions`][list_sessions] included, carries `destructiveHint=true` and
-  `openWorldHint=true`, and none carries `readOnlyHint`. A client that skips
-  approval for read-only tools prompts on all of them. Classify by
-  `tmuxEffects` in each tool's `_meta` instead.
-- **`tools/list` is large.** The reply is about 116 KB with every toolset and
-  109 KB without `teardown`. More than half of it is the `_meta` description,
-  which repeats each tool's text and schemas.
-  A client that wants a smaller reply can ignore `_meta`: each tool's text and
-  schemas are also at the top level.
-- **Some tools spell their results differently.** `run_shell_command`,
-  `send_keys`, `paste_text`, and
+- **Every tool is annotated as destructive.** [`list_sessions`][list_sessions]
+  included, each carries `destructiveHint=true` and no `readOnlyHint`. Classify
+  by `tmuxEffects` in each tool's `_meta`.
+- **`tools/list` is large.** More than half of it is the `_meta`
+  description. A client that wants a smaller reply can ignore `_meta`.
+- **Some tools spell results differently.**
+  [`run_shell_command`][run_shell_command], [`send_keys`][send_keys],
+  [`paste_text`][paste_text], and
   [`clear_pane_scrollback`][clear_pane_scrollback] return fields such as
-  `exit_status`; every other tool returns fields such as `paneId`. Read a
-  tool's schema rather than guessing, and see [PARITY.md](PARITY.md) for why.
-- **One tmux server for the life of the process.** A client cannot name
-  another socket in a call.
-- **An empty `TMUX` is not an absent one.** Input tools refuse when `TMUX` or
-  `TMUX_PANE` is set to nothing, because the server then cannot tell whether
-  it is in a pane. Unset them instead.
-- **Before tmux 3.6, killing one session can end the server.** The server
-  holds a connection attached to the first session it reached, and that
-  session's `detach-on-destroy` option decides what happens when it goes.
-  tmux 3.6 and later move the connection to a session that remains.
-- **Nothing but tools.** There is one resource, and no prompts, resource
-  templates, completions, or background job handles.
+  `exit_status`; the rest return fields such as `paneId`.
+- **An empty `TMUX` counts as set.** Input tools refuse when `TMUX` or
+  `TMUX_PANE` is set to nothing. Unset them instead.
+- **Before tmux 3.6, killing one session can end the server.** tmux 3.6 and
+  later move the server's connection to a session that remains.
+
+[The contract][contract-known-limits] gives the reason for each, and
+[PARITY.md](PARITY.md) covers the result spellings.
 
 ## Troubleshooting
 
-**Ask the server first.** `-doctor` answers most of what follows without a
-client in the way:
+Ask the server first. `-doctor` answers most of what follows without a client
+in the way:
 
 ```console
 $ libtmux-mcp -doctor -socket-name default
 ```
 
-**The client shows no tmux tools.** The server never started. Run the exact
-command from your client's config by hand: a bad `-binary`, or a path that is
-not on the client's `PATH`, fails at startup and says so.
+- **The client shows no tmux tools.** The server never started. Run the
+  command from your client's config by hand.
+- **Tools are missing.** [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable],
+  [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable], or
+  [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] shaped the
+  listing. `-tools` prints what a client receives.
+- **It sees none of your sessions.** Without `-socket-name` it drives a tmux
+  server of its own. `-doctor` names the socket.
+- **It reaches the wrong tmux.** A client's environment is not your shell's,
+  so `TMUX_TMPDIR` from your profile may be unset for it.
+- **Sessions you can see are reported as nothing there.** Compare the tmux
+  version `-doctor` prints with `tmux -V`, and point `-binary` at the right one.
+- **A command works in your shell but not through a tool.**
+  [`show_environment`][show_environment] reports what a new pane would inherit.
 
-**Tools are missing rather than failing.** `LIBTMUX_TOOLSETS`, `LIBTMUX_TOOLS`,
-or `LIBTMUX_EXCLUDE_TOOLS` shaped what is offered. `-tools` prints what a
-client receives.
-
-**It sees none of your sessions.** Without `-socket-name` it drives a tmux
-server of its own. `-doctor` names the socket it reaches.
-
-**It reaches the wrong tmux.** A client's environment is not your shell's:
-`TMUX_TMPDIR` set in your profile is not set for a server the client started.
-
-**Sessions you can see are reported as nothing there.** Compare the tmux
-version `-doctor` prints with your shell's `tmux -V`. A client starts its
-servers with a `PATH` of its own, which can find a different tmux than the one
-that started your sessions, and a tmux client cannot talk to a server of
-another version. It reports `server exited unexpectedly`, which reads the same
-as a server that has gone. Point `-binary` at the tmux your sessions belong to.
-
-**A command works in your shell but not through a tool.** The pane's shell is
-not your shell. It has the environment tmux gave it when it started.
-[`show_environment`][show_environment] reports what a *new* pane would
-inherit, which is not what one already running has.
+[The contract][contract-troubleshooting] explains each.
 
 ## An agent-shaped program
 
 [`examples/agent-workflow`](examples/agent-workflow) is the whole loop in one
-file. It works out which pane it is running in, splits a pane off, starts work
-there and waits for what it prints, runs a command and reads its exit status,
-then reads back what it built. It lives in the repository rather than the
-module you installed, so run it from a clone:
+file. It finds its own pane, splits one off, starts work there and waits for
+what it prints, runs a command and reads its exit status, then reads back what
+it built.
+
+It lives in the repository, outside the module you installed, so run it from a
+clone:
 
 ```console
 $ git clone https://github.com/libtmux/libtmux-go.git
@@ -511,18 +515,19 @@ the window now holds 2 panes: %0 %1
 
 <!-- docs:end -->
 
-The client and server are joined in memory, so it is one program rather than
-two. The tool names, schemas, and results are the ones a client sees over
-stdin and stdout. Clean up with `tmux -L demo kill-server`.
+The client and server are joined in memory, so it is one program. The tool
+names, schemas, and results are the ones a client sees over stdin and stdout.
+Clean up with `tmux -L demo kill-server`.
 
 ## Embedding it
 
 ### [`mcp.NewServer`][mcp-newserver]: serve one tmux server from your own program
 
 [`mcp.Run`][mcp-run] serves a tmux server over standard input and output,
-which is all the `libtmux-mcp` command does. To serve it over another
-transport, build an [`Instance`][mcp-instance] and connect it yourself. This
-block comes from the package's own example test, which connects one end of
+which is all the `libtmux-mcp` command does. For another transport, build an
+[`Instance`][mcp-instance] and connect it yourself.
+
+This block comes from the package's own example test. It connects one end of
 the SDK's in-memory transport pair and gives the other end to a client:
 
 <!-- docs:mcp-embedding -->
@@ -540,27 +545,64 @@ serverSession, err := instance.Connect(
 
 <!-- docs:end -->
 
-This package is named `mcp` and so is the SDK's, so a file using both has to
-rename one of them. The block imports this one as `tmuxmcp` and the SDK as
-`sdk`. `NewServer` checks the target and starts nothing;
-[close the instance][mcp-instance-close] when you have finished serving.
+This package is named `mcp` and so is the SDK's, so the block imports this one
+as `tmuxmcp` and the SDK as `sdk`. [`NewServer`][mcp-newserver] checks the
+target and starts nothing.
 
-The server needs to know that each response reaches the client as soon as
-the transport's write returns, rather than waiting in a buffer behind
-another. Standard input and output are known to. Any other transport must be
-wrapped in [`AssumeResponseCommit`][mcp-assumeresponsecommit] to say so, as
-the block does for the in-memory one. The
-[reference](https://libtmux.org/en/go/latest/mcp/reference/) has the rest of
-what an embedder is held to.
+### [`mcp.AssumeResponseCommit`][mcp-assumeresponsecommit]: say a transport writes each response at once
+
+Standard input and output are known to deliver each response as soon as the
+write returns. Wrap any other transport in
+[`AssumeResponseCommit`][mcp-assumeresponsecommit], as the block does for the
+in-memory one.
+
+[Close the instance][mcp-instance-close] when you have finished serving. The
+[reference][mcp-reference] has the rest of what an embedder is held to, and
+[the contract][contract-embedding] has the full text.
+
+## Packages
+
+### [`mcp`](https://github.com/libtmux/libtmux-go/tree/master/mcp): the server as a library
+
+[`mcp.Run`][mcp-run] and [`mcp.NewServer`][mcp-newserver] serve a tmux server
+to a client. Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
+and [libtmux.org][mcp-reference].
+
+### [`libtmux-mcp`](https://github.com/libtmux/libtmux-go/tree/master/mcp/cmd/libtmux-mcp): the command a client launches
+
+It serves one tmux server over stdin and stdout. Reference:
+[pkg.go.dev][libtmux-mcp-command] and the
+[command README](cmd/libtmux-mcp/README.md).
+
+## What it leaves out
+
+- **A second tmux server.** The server serves one tmux server for the life of
+  the process, and a client cannot name another socket in a call.
+- **Anything but tools.** There is one resource, and no prompts, resource
+  templates, completions, or background job handles.
+- **Confinement.** Toolsets shape what a client is offered. Every call runs
+  with your user's authority, so a client holding [`send_keys`][send_keys] can
+  run anything you can.
+- **The Python server's per-call socket.** The socket is chosen once, at
+  launch. [PARITY.md](PARITY.md) lists the other differences.
+
+## Support and status
+
+- **Go 1.26+ and tmux 3.3a or newer.** The server refuses an older tmux before
+  the MCP transport starts. CI runs tmux 3.3a through 3.8.
+- **Linux, including WSL, and macOS.** On macOS, CI runs this module's tests
+  against Homebrew's current tmux. The matrix runs on Linux.
+- **A module of its own.** `go get` on the tmux library never pulls in the MCP
+  SDK.
+- **Tagged as `mcp/vN`.** Pin an exact version in your own `go.mod`; the
+  commands here fetch the newest.
 
 ## See also
-
-This is a module of its own, so `go get` on the tmux library never pulls in
-the MCP SDK it needs.
 
 | | |
 | --- | --- |
 | [Reference](https://libtmux.org/en/go/latest/mcp/reference/) | Every exported identifier, method, and field, one page each |
+| [`docs/contracts.md`](docs/contracts.md) | What the server promises beyond this page |
 | [`TOOLS.md`](TOOLS.md) | Every tool's arguments and results |
 | [`PARITY.md`](PARITY.md) | Where this server and the Python one differ |
 | [`MIGRATING.md`](MIGRATING.md) | Settings from earlier releases, and what replaced each |
@@ -568,13 +610,28 @@ the MCP SDK it needs.
 | [`examples/agent-workflow`](examples/agent-workflow) | The program above, as a directory you can run |
 | [`AGENTS.md`](AGENTS.md) | Testing the server through a real client, and by hand |
 | [`../tmux/`](../tmux/) | The library this serves |
+| [libtmux-mcp in Python](https://github.com/tmux-python/libtmux-mcp) | A server for the same tmux and the same clients |
 
 [call_read_tools_batch]: https://libtmux.org/en/go/latest/mcp/tools/call_read_tools_batch/
 [capture_since]: https://libtmux.org/en/go/latest/mcp/tools/capture_since/
 [clear_pane_scrollback]: https://libtmux.org/en/go/latest/mcp/tools/clear_pane_scrollback/
+[contract-bounded-reads]: docs/contracts.md#bounded-reads-and-batches
+[contract-capability-disclosure]: docs/contracts.md#capability-disclosure
+[contract-caller-pane]: docs/contracts.md#the-pane-the-server-runs-in
+[contract-embedding]: docs/contracts.md#embedding-the-server
+[contract-exact-tools]: docs/contracts.md#exact-tools-and-exclusions
+[contract-input]: docs/contracts.md#input-and-synchronized-panes
+[contract-known-limits]: docs/contracts.md#known-limits
+[contract-settings]: docs/contracts.md#settings-and-precedence
+[contract-troubleshooting]: docs/contracts.md#troubleshooting
+[contract-which-tmux]: docs/contracts.md#which-tmux-it-serves
 [get_pane_info]: https://libtmux.org/en/go/latest/mcp/tools/get_pane_info/
 [get_server_info]: https://libtmux.org/en/go/latest/mcp/tools/get_server_info/
 [Go MCP SDK]: https://github.com/modelcontextprotocol/go-sdk
+[guide-choose-a-server]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#choose-a-server
+[guide-connect-client]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/
+[guide-diagnose-startup]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#diagnose-startup
+[guide-inspect-the-selection]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#inspect-the-selection
 [libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [list_sessions]: https://libtmux.org/en/go/latest/mcp/tools/list_sessions/
 [mcp-assumeresponsecommit]: https://libtmux.org/en/go/latest/mcp/reference/mcp-assumeresponsecommit/
@@ -585,6 +642,7 @@ the MCP SDK it needs.
 [mcp-instance-close]: https://libtmux.org/en/go/latest/mcp/reference/mcp-instance-close/
 [mcp-instance]: https://libtmux.org/en/go/latest/mcp/reference/mcp-instance/
 [mcp-newserver]: https://libtmux.org/en/go/latest/mcp/reference/mcp-newserver/
+[mcp-reference]: https://libtmux.org/en/go/latest/mcp/reference/
 [mcp-run]: https://libtmux.org/en/go/latest/mcp/reference/mcp-run/
 [mcp-socketenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketenvironmentvariable/
 [mcp-socketpathenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketpathenvironmentvariable/
@@ -602,4 +660,4 @@ the MCP SDK it needs.
 [tmux module]: ../tmux/
 [topic-tool-selection]: https://libtmux.org/en/go/latest/mcp/topics/tool-selection/
 [wait_for_text]: https://libtmux.org/en/go/latest/mcp/tools/wait_for_text/
-[workspace-cli]: https://libtmux.org/en/go/latest/workspace/cli/
+[workspace-cli-load]: https://libtmux.org/en/go/latest/workspace/cli/load/

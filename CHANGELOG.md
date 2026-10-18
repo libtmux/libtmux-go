@@ -9,6 +9,14 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### Development
+
+- Move the long contract paragraphs of the `mcp`, `workspace`, and `tmux`
+  READMEs to `mcp/docs/contracts.md`, `workspace/docs/contracts.md`, and
+  `tmux/docs/contracts.md`. Each README keeps short bullets and links its page.
+- The `workspace` README quotes `ExampleParse_unknownField`, so the refusal of
+  an unknown field is shown by a test that runs.
+
 ## v0.0.1-alpha.11, workspace/v0.0.1-alpha.11, mcp/v0.0.1-alpha.14
 
 ### Development

@@ -26,15 +26,17 @@ $ go get github.com/libtmux/libtmux-go/tmux@latest
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
-**Contents** — [A whole program](#a-whole-program) · [Records](#records) ·
+**Contents** — [Quick start](#quick-start) · [Records](#records) ·
 [Method names](#method-names) · [Options and hooks](#options-and-hooks) ·
-[Errors](#errors) · [Packages](#packages) · [See also](#see-also)
+[Errors](#errors) · [Packages](#packages) ·
+[What it leaves out](#what-it-leaves-out) ·
+[Support and status](#support-and-status) · [See also](#see-also)
 
 New here? The [top-level README](../README.md) opens with a program that runs
 a command in tmux and prints what it showed. This page is about how the
 library is shaped.
 
-## A whole program
+## Quick start
 
 This one splits a window into two panes side by side and reads back what tmux
 made:
@@ -145,11 +147,14 @@ if err != nil {
 
 <!-- docs:end -->
 
-`NewServer` checks its configuration and starts nothing. With no
-[`SocketName`][tmux-serveroptions-socketname] or
-[`SocketPath`][tmux-serveroptions-socketpath] it reaches the server your own
-`tmux` command does, and with no
-[`ConfigFile`][tmux-serveroptions-configfile] tmux reads your configuration.
+[`NewServer`][tmux-newserver] checks its configuration and starts nothing.
+
+- With no [`SocketName`][tmux-serveroptions-socketname] or
+  [`SocketPath`][tmux-serveroptions-socketpath], it reaches the server your own
+  `tmux` command does.
+- With no [`ConfigFile`][tmux-serveroptions-configfile], tmux reads your
+  configuration.
+
 A program that should behave the same everywhere names both, as this one does.
 
 ## Records
@@ -157,9 +162,11 @@ A program that should behave the same everywhere names both, as this one does.
 A [`Server`][tmux-server] reaches one tmux server. It holds
 [`Session`][tmux-session] values, each holding [`Window`][tmux-window] values,
 each holding [`Pane`][tmux-pane] values, and every one of them is a record:
-what tmux said when you asked. The blocks in this section and under Errors
-come from [`../examples/object-model`](../examples/object-model), a whole
-program you can run from a clone with `go -C examples run ./object-model`;
+what tmux said when you asked.
+
+The blocks in this section and under Errors come from
+[`../examples/object-model`](../examples/object-model), a whole program you can
+run from a clone with `go -C examples run ./object-model`.
 [`../examples/README.md`](../examples/README.md) has the commands to clone it.
 
 A block that starts with `// Given:` is the body of a function that returns
@@ -198,9 +205,10 @@ a pane ask tmux again when you want one.
 ### [`Session.Windows`][tmux-session-windows]: read what the record holds
 
 The name says which kind of read you are making. `Windows` takes no context,
-because it reads the record and never asks tmux. Its second result reports
-whether the record holds any windows at all, and a session handed back by
-`Rename` holds none.
+because it reads the record and never asks tmux.
+
+Its second result reports whether the record holds any windows at all, and a
+session handed back by `Rename` holds none.
 [`Session.SearchWindows`][tmux-session-searchwindows] asks tmux:
 
 <!-- docs:record-reads -->
@@ -245,14 +253,14 @@ it:
 | `split-window` | [`Window.SplitPane`][tmux-window-splitpane] |
 
 A noun naming a *different* object always stays, which is why
-[`Session.NewWindow`][tmux-session-newwindow] and `Window.SplitPane` keep
-theirs.
+[`Session.NewWindow`][tmux-session-newwindow] and
+[`Window.SplitPane`][tmux-window-splitpane] keep theirs.
 
 **The parameters say what is required.** A method takes only a context when
-the receiver names everything ([`Window.Kill`][tmux-window-kill]), typed
-positional values when every value is required (`Session.Rename`), and a
-request value when any field is optional
-([`Pane.Capture`][tmux-pane-capture]).
+the receiver names everything ([`Window.Kill`][tmux-window-kill]), typed values
+when all are required ([`Session.Rename`][tmux-session-rename]), and a request
+value when any is
+optional ([`Pane.Capture`][tmux-pane-capture]).
 
 **The result says what changed.** A method hands back a new record, read from
 tmux after the change, when the command changes which object you are holding
@@ -264,9 +272,10 @@ or what it looks like. Everything else returns only an error.
 
 Every tmux option and hook has a [typed accessor][topic-options-and-hooks]. The
 tmux name maps to the Go name by one rule, given under "Naming and call shapes"
-in the [package documentation][tmux-package]. A setter returns only an error,
-because an option is not part of the record you hold. Read it back through
-[`Session.Options`][tmux-session-options]:
+in the [package documentation][tmux-package].
+
+A setter returns only an error, because an option is not part of the record you
+hold. Read it back through [`Session.Options`][tmux-session-options]:
 
 <!-- docs:options -->
 
@@ -348,7 +357,7 @@ This prints `session $999: not found`.
 ### [`Server.Cmd`][tmux-server-cmd]: a failed command is a result
 
 `Cmd` runs tmux arguments you write yourself. A command that ran and failed
-is data, not an error:
+comes back as data:
 [`CommandResult.ExitCode`][tmux-commandresult-exitcode] carries its status. A
 tmux that could not be reached, and arguments refused before anything was
 sent, are Go errors.
@@ -390,7 +399,7 @@ plans, with no dependency outside the standard library. Reference:
 [libtmux.org](https://libtmux.org/en/go/latest/reference/).
 
 [`Session.Run`][tmux-session-run] runs a command in a window of its own, with
-a terminal. A nonzero exit status is a result, not an error:
+a terminal. A nonzero exit status arrives in the result:
 
 <!-- docs:run-to-completion -->
 
@@ -527,6 +536,27 @@ Check which socket it reaches, and what that holds, without a client:
 $ libtmux-mcp -doctor
 ```
 
+## What it leaves out
+
+- **Live objects.** A [`Session`][tmux-session] or a [`Pane`][tmux-pane] is a
+  record of what tmux reported when it was read.
+  [`Session.Refresh`][tmux-session-refresh] asks again.
+- **A terminal emulator.** [A capture][tmux-pane-capture] returns the screen
+  tmux drew.
+- **Your tmux configuration file.** Nothing here edits `~/.tmux.conf`, and
+  [`ServerOptions.ConfigFile`][tmux-serveroptions-configfile] names another
+  file for tmux to read.
+
+## Support and status
+
+- **No runtime dependencies.** The module imports only the standard library.
+- **Go 1.26+ and tmux 3.3a or newer.** An older tmux gets
+  [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] and nothing is sent. CI runs
+  tmux 3.3a through 3.8, and [the contract][contract-version] has the details.
+- **Linux, including WSL, and macOS.** On macOS, CI runs this module's tests
+  against Homebrew's current tmux.
+- **Alpha.** Any release may change exported identifiers. Pin an exact version.
+
 ## See also
 
 The package documentation is written to be read start to finish. It covers
@@ -540,6 +570,7 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 | | |
 | --- | --- |
 | [Reference](https://libtmux.org/en/go/latest/reference/) | Every exported identifier, method, and field, one page each |
+| [`docs/contracts.md`](docs/contracts.md) | What the library promises: the tmux version check |
 | [`tmuxtest/`](tmuxtest/) | A real tmux server for your tests |
 | [`../tmuxq/`](../tmuxq/) | Filtering helpers for the records this package returns |
 | [`../examples/pane-io`](../examples/pane-io) | Type into a pane and wait for what the command prints, not for what you typed |
@@ -547,9 +578,11 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 | [`../DESIGN.md`](../DESIGN.md) | Why the surface looks like this |
 | [`../BENCHMARKS.md`](../BENCHMARKS.md) | What each transport costs |
 
+[contract-version]: docs/contracts.md#the-tmux-version-check
 [libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [tmux-commandresult-exitcode]: https://libtmux.org/en/go/latest/reference/tmux-commandresult-exitcode/
 [tmux-errnotfound]: https://libtmux.org/en/go/latest/reference/tmux-errnotfound/
+[tmux-errversiontoolow]: https://libtmux.org/en/go/latest/reference/tmux-errversiontoolow/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
 [tmux-package]: https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux
 [tmux-pane-capture]: https://libtmux.org/en/go/latest/reference/tmux-pane-capture/

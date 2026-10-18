@@ -26,14 +26,15 @@ $ go get github.com/libtmux/libtmux-go/tmux/tmuxtest@latest
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
-**Contents** — [Testing a program](#testing-a-program) ·
-[The waits](#the-waits) · [Testing without a tmux](#testing-without-a-tmux) ·
+**Contents** — [Quick start](#quick-start) · [The waits](#the-waits) ·
+[Testing without a tmux](#testing-without-a-tmux) ·
 [Testing tmux itself](#testing-tmux-itself) ·
 [What it guarantees](#what-it-guarantees) ·
 [Keeping your suite to itself](#keeping-your-suite-to-itself) ·
-[See also](#see-also)
+[What it leaves out](#what-it-leaves-out) ·
+[Support and status](#support-and-status) · [See also](#see-also)
 
-## Testing a program
+## Quick start
 
 ### [`tmuxtest.RunInPane`][tmuxtest-runinpane]: run your program in a real pane
 
@@ -90,25 +91,27 @@ The test holds no sleeps. tmux tells each wait when the pane writes, and the
 wait reads the screen then, so a quick program costs milliseconds and a slow
 one is still waited for.
 
-### [`tmuxtest.WaitForLine`][tmuxtest-waitforline]: wait for the answer, not the echo
+### [`tmuxtest.WaitForLine`][tmuxtest-waitforline]: wait for the answer the program prints
 
 A terminal shows what is typed into it, so the pane holds the `world` that
-[`tmuxtest.Type`][tmuxtest-type] sent before the greeter has read it. The wait
-names the greeter's answer, `hello, world`, which the typed text does not
-contain. Waiting for the text you typed would pass without the program
+[`tmuxtest.Type`][tmuxtest-type] sent before the greeter has read it.
+
+The wait names the greeter's answer, `hello, world`, which the typed text does
+not contain. Waiting for the text you typed would pass without the program
 running.
 
 ### [`tmuxtest.Main`][tmuxtest-main]: clean up after the suite
 
-`TestMain` is required. `Main` runs the tests, then stops every server they
-started and checks that each server's process died before removing its
-socket, and only then hands back the exit code.
+`TestMain` is required. [`Main`][tmuxtest-main] runs the tests, then stops
+every server they started. It checks that each server's process died before
+removing its socket, and only then hands back the exit code.
 
 ### [`tmuxtest.WaitForText`][tmuxtest-waitfortext]: a failed wait shows the screen
 
-The failure carries the screen the pane last held, which is what you would
-have added a print statement to see. This is a real one, from
-`WaitForText(ctx, t, pane, "ready")` on a program that never got that far:
+The failure carries the screen the pane last held, which is what a print
+statement would have shown. This is a real one, from
+[`WaitForText(ctx, t, pane, "ready")`][tmuxtest-waitfortext] on a program that
+never got that far:
 
 <!-- docs:output tmux/tmuxtest/testdata/wait-failure.txt -->
 
@@ -136,10 +139,11 @@ the pane showed 3 line(s):
 the visible screen rather than the scrollback, so what they search is what a
 failure prints.
 
-`RunInPane` gives its panes a POSIX shell that reads no start-up files and
-shows the prompt `tmuxtest$ `, so a pane looks the same on every machine
-whatever prompt the person running the tests has configured. Ask for that
-shell on a server you build yourself with
+[`RunInPane`][tmuxtest-runinpane] gives its panes a POSIX shell that reads no
+start-up files and shows the prompt `tmuxtest$ `, so a pane looks the same on
+every machine whatever prompt the person running the tests has configured.
+
+Ask for that shell on a server you build yourself with
 [`tmuxtest.ServerOptions.FixedShell`][tmuxtest-serveroptions-fixedshell].
 
 ## Testing without a tmux
@@ -150,10 +154,10 @@ that line names already in hand.
 ### [`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux]: answer the commands you name
 
 Where the subject is your own code rather than tmux's behaviour,
-`ScriptedTmux` writes an executable that answers the invocations you name,
-and returns its path for
-[`tmux.ServerOptions.Binary`][tmux-serveroptions-binary].
-The test then needs no tmux installed:
+[`ScriptedTmux`][tmuxtest-scriptedtmux] writes an executable that answers the
+invocations you name, and returns its path for
+[`tmux.ServerOptions.Binary`][tmux-serveroptions-binary]. The test then needs no
+tmux installed:
 
 <!-- docs:scripted-tmux -->
 
@@ -187,10 +191,11 @@ if result.ExitCode != 1 {
 <!-- docs:end -->
 
 [`Contains`][tmuxtest-scriptedcommand-contains] matches whole arguments, so
-`kill-pane` answers that subcommand whatever flags surround it. A script
-answers commands only. A control connection or a notification stream speaks
-tmux's own protocol, which a script cannot, so code that opens one needs a
-real tmux and the server below.
+`kill-pane` answers that subcommand whatever flags surround it.
+
+A script answers commands only. A control connection or a notification stream
+speaks tmux's own protocol, which a script cannot, so code that opens one needs
+a real tmux and the server below.
 
 ## Testing tmux itself
 
@@ -217,8 +222,8 @@ if name, _ := session.Name(); name != "under-test" {
 
 <!-- docs:end -->
 
-The server dies with the test. `TestMain` with `tmuxtest.Main`, as in the test
-above, is required here too.
+The server dies with the test. `TestMain` with
+[`tmuxtest.Main`][tmuxtest-main], as in the test above, is required here too.
 
 [`tmuxtest.NewSession`][tmuxtest-newsession] and
 [`tmuxtest.NewWindow`][tmuxtest-newwindow] make a session or a window on a
@@ -241,12 +246,34 @@ server you already hold, and remove it when the test ends.
 
 ## Keeping your suite to itself
 
-There is nothing to set up. `tmuxtest.Main` gives each run of a suite a
-temporary directory of its own and points the test process's `TMPDIR`,
-`GOTMPDIR`, and `TMUX_TMPDIR` at it until the suite ends. Two checkouts
-running their suites on one machine then share no socket, and neither shares
-one with a tmux you are using. The directory's path is kept short, because a
-socket path may hold only about a hundred bytes.
+There is nothing to set up. [`tmuxtest.Main`][tmuxtest-main] gives each run of
+a suite a temporary directory of its own and points the test process's
+`TMPDIR`, `GOTMPDIR`, and `TMUX_TMPDIR` at it until the suite ends.
+
+- Two checkouts running their suites on one machine share no socket, and
+  neither shares one with a tmux you are using.
+- The directory's path is kept short, because a socket path may hold only about
+  a hundred bytes.
+
+## What it leaves out
+
+- **Your tmux configuration.** Each server gets a generated minimal config, so
+  your `~/.tmux.conf` cannot change a result.
+- **A shared server.** Every server is private to one test and removed when
+  the test ends.
+- **A tmux for code that only builds commands.**
+  [`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux] answers the commands you
+  name, so such a test needs no tmux installed.
+
+## Support and status
+
+- **Go 1.26+ and tmux 3.3a or newer.** CI runs this package's tests on tmux
+  3.3a through 3.8.
+- **Linux, including WSL, and macOS.** On macOS, CI runs the package's tests
+  against Homebrew's current tmux.
+- **Part of the tmux module.** It adds no dependency outside the standard
+  library and the tmux package.
+- **Alpha.** Any release may change exported identifiers. Pin an exact version.
 
 ## See also
 
